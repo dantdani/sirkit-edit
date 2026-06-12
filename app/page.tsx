@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect, useReducer, type Dispatch, type SetStateAction } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, type Dispatch, type SetStateAction } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -24,6 +24,7 @@ import {
 import { getKeyBindings } from "./lib/keybindings";
 import { GRID, snap, pointEquals, closestPointOnSegment, distance, pinWorldPos, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, pointStrictlyOnWireInterior } from "./lib/geometry";
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
+import { classifyNets } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
 import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
@@ -486,8 +487,20 @@ const VALUE_LABEL: Record<SchComponentType, { x: number; y: number; anchor: stri
   capacitor:        { x: 0,  y: 24, anchor: "middle" },
   inductor:         { x: 0,  y: 20, anchor: "middle" },
   diode:            { x: 0,  y: 22, anchor: "middle" },
-  "voltage-source": { x: 22, y: 4,  anchor: "start"  },
-  "current-source": { x: 22, y: 4,  anchor: "start"  },
+  "voltage-source": { x: 22, y: 6,  anchor: "start"  },
+  "current-source": { x: 22, y: 6,  anchor: "start"  },
+  ground:           null,
+};
+
+// Reference designator (R1, C2, V1…), placed opposite the value. Grounds are
+// conventionally unlabeled.
+const REFDES_LABEL: Record<SchComponentType, { x: number; y: number; anchor: string } | null> = {
+  resistor:         { x: 0,  y: -14, anchor: "middle" },
+  capacitor:        { x: 0,  y: -16, anchor: "middle" },
+  inductor:         { x: 0,  y: -12, anchor: "middle" },
+  diode:            { x: 0,  y: -14, anchor: "middle" },
+  "voltage-source": { x: 22, y: -7,  anchor: "start"  },
+  "current-source": { x: 22, y: -7,  anchor: "start"  },
   ground:           null,
 };
 
@@ -505,6 +518,7 @@ function ComponentSymbol({
 }) {
   const bb = COMP_BBOX[comp.type];
   const vl = VALUE_LABEL[comp.type];
+  const rl = REFDES_LABEL[comp.type];
 
   let shape: React.ReactNode;
   switch (comp.type) {
@@ -541,6 +555,16 @@ function ComponentSymbol({
           x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12}
           fill="#ef4444" fillOpacity={0.15} stroke="#ef4444" strokeWidth={0.75} rx={2}
         />
+      )}
+      {rl && comp.id && (
+        <text
+          x={rl.x} y={rl.y}
+          textAnchor={rl.anchor as "middle" | "start"}
+          fontSize={10} fontFamily="monospace" fill="#d4d4d8"
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          {comp.id}
+        </text>
       )}
       {vl && comp.value && (
         <text
@@ -596,6 +620,29 @@ function KicadPlaceholder({ instance }: { instance: KicadComponentInstance }) {
   );
 }
 
+// Subtle, dark-theme-friendly panel tints so multi-pin ICs read as labeled
+// blocks (à la a block diagram). Picked by a stable hash of the category so
+// connectors, MCUs, regulators, etc. get visually distinct — but consistent —
+// backgrounds.
+const BLOCK_TINTS: { fill: string; stroke: string }[] = [
+  { fill: "rgba(96,165,250,0.06)",  stroke: "rgba(96,165,250,0.40)" },  // blue
+  { fill: "rgba(74,222,128,0.06)",  stroke: "rgba(74,222,128,0.40)" },  // green
+  { fill: "rgba(167,139,250,0.06)", stroke: "rgba(167,139,250,0.40)" }, // violet
+  { fill: "rgba(251,191,36,0.06)",  stroke: "rgba(251,191,36,0.40)" },  // amber
+  { fill: "rgba(45,212,191,0.06)",  stroke: "rgba(45,212,191,0.40)" },  // teal
+  { fill: "rgba(244,114,182,0.06)", stroke: "rgba(244,114,182,0.40)" }, // rose
+];
+
+function categoryTint(category: string): { fill: string; stroke: string } {
+  let h = 0;
+  for (let i = 0; i < category.length; i++) h = (h * 31 + category.charCodeAt(i)) >>> 0;
+  return BLOCK_TINTS[h % BLOCK_TINTS.length];
+}
+
+// Parts with at least this many pins render as a tinted block; 2–4-pin passives
+// keep their bare symbol art.
+const BLOCK_MIN_PINS = 5;
+
 function KicadInstanceView({
   instance, part, selected, deleteHovered, zoom, pointerEvents,
   onMouseDown, onMouseEnter, onMouseLeave,
@@ -620,9 +667,21 @@ function KicadInstanceView({
 
   const box = kicadPinBox(instance, part);
   const pad = 8;
+  const block = part.pins.length >= BLOCK_MIN_PINS ? categoryTint(part.mainCategory) : null;
 
   return (
     <g>
+      {/* Block panel behind multi-pin ICs — keeps the real pin geometry (so
+          wiring is unchanged) but reads as a labeled block. */}
+      {block && (
+        <rect
+          x={box.minX - pad} y={box.minY - pad}
+          width={box.maxX - box.minX + pad * 2} height={box.maxY - box.minY + pad * 2}
+          rx={6} fill={block.fill} stroke={block.stroke} strokeWidth={1 / zoom}
+          style={{ pointerEvents: "none" }}
+        />
+      )}
+
       {/* Symbol body — the transform applies mm→px scale, rotation, and origin. */}
       <g
         transform={`translate(${instance.x},${instance.y}) rotate(${instance.rotation}) scale(${KICAD_SCALE_PX_PER_MM})`}
@@ -721,8 +780,9 @@ function SchematicEditor({
   const kicadComponentsRef = useRef(kicadComponents);
   kicadComponentsRef.current = kicadComponents;
 
-  // Re-render when async KiCad part data arrives in the cache.
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
+  // Re-render when async KiCad part data arrives in the cache. `partVersion`
+  // bumps on each load so derived data keyed on the cache recomputes.
+  const [partVersion, forceRender] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
     const unsubs = kicadComponents.map((k) => subscribeToPart(k.partId, forceRender));
     for (const k of kicadComponents) {
@@ -739,6 +799,13 @@ function SchematicEditor({
   const kicadPinPoints: Point[] = kicadPinSites.flatMap((s) => s.pins);
   const kicadPinSitesRef = useRef(kicadPinSites);
   kicadPinSitesRef.current = kicadPinSites;
+
+  // Net classification for diagram-style rendering (colored power rails, net
+  // labels). Recomputed when topology changes or a KiCad part loads.
+  const nets = useMemo(() => {
+    void partVersion; // recompute when an async KiCad part lands in the cache
+    return classifyNets(components, wires, kicadComponents, getCachedPart);
+  }, [components, wires, kicadComponents, partVersion]);
 
   const dragRef = useRef<{
     type: "pan" | "group";
@@ -1182,7 +1249,7 @@ function SchematicEditor({
                 )}
                 <polyline
                   points={pts} fill="none"
-                  stroke="#a1a1aa" strokeWidth={1.5 / zoom} strokeLinecap="round" strokeLinejoin="round"
+                  stroke={nets.wireColor(wire)} strokeWidth={1.5 / zoom} strokeLinecap="round" strokeLinejoin="miter"
                   style={{ pointerEvents: "none" }}
                 />
                 {/* Fat transparent hit target — tool-gated so wire mode and
@@ -1219,6 +1286,19 @@ function SchematicEditor({
           {/* Junction dots */}
           {junctions.map((j, i) => (
             <circle key={i} cx={j.x} cy={j.y} r={2.5 / zoom} fill="#a1a1aa" style={{ pointerEvents: "none" }} />
+          ))}
+
+          {/* Net labels — name power/ground rails (e.g. "5V", "3V3", "GND"). */}
+          {nets.labels.map((l, i) => (
+            <text
+              key={i}
+              x={l.point.x + 4} y={l.point.y - 4}
+              textAnchor="start" fontSize={9} fontFamily="monospace" fill={l.color}
+              stroke="#09090b" strokeWidth={0.6 / zoom}
+              style={{ paintOrder: "stroke", pointerEvents: "none", userSelect: "none" }}
+            >
+              {l.name}
+            </text>
           ))}
 
           {/* Components — pointer-events gated so wire/placement clicks
