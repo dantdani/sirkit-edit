@@ -1857,7 +1857,6 @@ export default function Home() {
   // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
-  const [genPrompt, setGenPrompt]       = useState("");
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
     explanation: string;
@@ -2154,7 +2153,6 @@ export default function Home() {
         setPendingReplace({ state, explanation, prompt });
       } else {
         applySchematic(state, explanation, prompt);
-        setGenPrompt("");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generation failed";
@@ -2374,46 +2372,6 @@ export default function Home() {
               <ViewTab icon={Activity}     label="Sim"       active={view === "sim"}       onClick={() => setView("sim")} />
             </div>
 
-            {/* AI Prompt bar — available in the Schematic view (Theory + Build) */}
-            {view === "schematic" && (
-              <div className="shrink-0">
-                <div className="h-11 flex items-center gap-2 px-3 border-b border-zinc-800 bg-zinc-950">
-                  {isGenerating
-                    ? <Loader2 className="size-4 text-teal-400 animate-spin shrink-0" />
-                    : <Sparkles className="size-4 text-teal-400 shrink-0" />
-                  }
-                  <Input
-                    value={genPrompt}
-                    onChange={(e) => setGenPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleGenerateSchematic(genPrompt);
-                      }
-                    }}
-                    placeholder={mode === "build"
-                      ? "Describe a circuit with real parts — e.g. 'ESP32 with USB-C and an LED'"
-                      : "Describe a circuit and press Enter — e.g. '9V LED dimmer'"}
-                    disabled={isGenerating}
-                    className="flex-1 bg-zinc-900 border-zinc-800 text-xs h-7"
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!genPrompt.trim() || isGenerating}
-                    onClick={() => handleGenerateSchematic(genPrompt)}
-                    className="shrink-0"
-                  >
-                    {isGenerating ? "Generating…" : "Generate"}
-                  </Button>
-                </div>
-                {genError && (
-                  <div className="px-3 py-1.5 text-xs text-red-400 bg-zinc-950 border-b border-zinc-800">
-                    {genError}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="flex-1 min-h-0 relative">
               {view === "schematic" ? (
                 <>
@@ -2545,7 +2503,6 @@ export default function Home() {
                 if (pendingReplace) {
                   applySchematic(pendingReplace.state, pendingReplace.explanation, pendingReplace.prompt);
                   setPendingReplace(null);
-                  setGenPrompt("");
                 }
               }}>Replace</Button>
             </DialogFooter>
@@ -2589,6 +2546,11 @@ export default function Home() {
               </div>
             </div>
 
+            {genError && (
+              <div className="px-3 py-1.5 text-xs text-red-400 border-t border-zinc-800 shrink-0">
+                {genError}
+              </div>
+            )}
             <div className="border-t border-zinc-800 p-3">
               <Textarea
                 value={input}
@@ -2597,14 +2559,30 @@ export default function Home() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 }}
                 className="min-h-20 resize-none border-zinc-800 bg-zinc-900/60 text-sm"
-                placeholder="Describe what you want to build..."
-                disabled={loading}
+                placeholder={mode === "build"
+                  ? "Ask a question, or describe a circuit and hit Generate — e.g. 'ESP32 with USB-C and an LED'"
+                  : "Ask a question, or describe a circuit and hit Generate — e.g. '9V LED dimmer'"}
+                disabled={loading || isGenerating}
               />
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-xs text-zinc-500">⇧ Enter for newline</div>
-                <Button size="sm" disabled={!input.trim() || loading} onClick={send}>
-                  {loading ? "…" : "Generate"}
-                </Button>
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="text-xs text-zinc-500">Enter to ask · ⇧Enter newline</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!input.trim() || loading || isGenerating}
+                    onClick={send}
+                  >
+                    {loading ? "…" : "Ask"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!input.trim() || loading || isGenerating}
+                    onClick={() => { const t = input; setInput(""); handleGenerateSchematic(t); }}
+                  >
+                    {isGenerating ? "Generating…" : "Generate"}
+                  </Button>
+                </div>
               </div>
             </div>
           </aside>
