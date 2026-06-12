@@ -146,6 +146,40 @@ function pinExists(part: AiPartResult, pin: string): boolean {
   );
 }
 
+/**
+ * Keep exactly one cache breakpoint on the last content block of the most
+ * recent message. Re-running this every turn lets each iteration of the
+ * tool-use loop reuse the cached prefix (system + tools + all prior search
+ * results) instead of re-billing the full, growing transcript — search
+ * results dominate the token volume here. The prompt cache allows at most 4
+ * breakpoints, so we clear the previous position before setting the new one.
+ */
+function moveCacheBreakpoint(messages: Anthropic.MessageParam[]): void {
+  for (const m of messages) {
+    if (typeof m.content === "string") continue;
+    for (const block of m.content) {
+      delete (block as { cache_control?: unknown }).cache_control;
+    }
+  }
+
+  const last = messages[messages.length - 1];
+  if (!last) return;
+
+  if (typeof last.content === "string") {
+    last.content = [
+      { type: "text", text: last.content, cache_control: { type: "ephemeral" } },
+    ];
+    return;
+  }
+
+  const lastBlock = last.content[last.content.length - 1];
+  if (lastBlock) {
+    (lastBlock as { cache_control?: { type: "ephemeral" } }).cache_control = {
+      type: "ephemeral",
+    };
+  }
+}
+
 export async function POST(req: Request): Promise<Response> {
   let prompt: unknown;
   try {
@@ -166,11 +200,21 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
+      // Cache the static system+tools prefix (reused across every request) and
+      // the growing transcript within this loop (reused across iterations).
+      moveCacheBreakpoint(messages);
+
       const response = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 8192,
         temperature: 0,
-        system: SYSTEM_PROMPT,
+        system: [
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
         tools: [SEARCH_PARTS_TOOL, SUBMIT_SCHEMATIC_TOOL],
         messages,
       });
@@ -199,51 +243,96 @@ export async function POST(req: Request): Promise<Response> {
         continue;
       }
 
-      const submitCall = toolUses.find((b) => b.name === "submit_schematic");
-      if (submitCall) {
-        return finalizeSubmission(submitCall.input, returnedParts);
-      }
-
-      // Execute every search_parts call in parallel; feed results back.
-      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
-        toolUses
-          .filter((b) => b.name === "search_parts")
-          .map(async (block) => {
-            const { query, category } = block.input as {
-              query?: unknown;
-              category?: unknown;
-            };
-            if (typeof query !== "string" || query.trim() === "") {
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: JSON.stringify({ error: "query is required" }),
-              };
-            }
-            try {
-              const results = await searchPartsForAI(
-                query,
-                typeof category === "string" ? category : undefined,
-                SEARCH_LIMIT,
-              );
-              for (const r of results) returnedParts.set(r.partId, r);
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: JSON.stringify(results),
-              };
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              return {
-                type: "tool_result" as const,
-                tool_use_id: block.id,
-                content: JSON.stringify({ error: message }),
-              };
-            }
-          }),
+      // Run every search_parts call in parallel, keeping the structured results
+      // so we can dedup across this turn's searches before serializing.
+      const searchBlocks = toolUses.filter((b) => b.name === "search_parts");
+      const rawSearches = await Promise.all(
+        searchBlocks.map(async (block) => {
+          const { query, category } = block.input as {
+            query?: unknown;
+            category?: unknown;
+          };
+          if (typeof query !== "string" || query.trim() === "") {
+            return { block, error: "query is required", results: [] as AiPartResult[] };
+          }
+          try {
+            const results = await searchPartsForAI(
+              query,
+              typeof category === "string" ? category : undefined,
+              SEARCH_LIMIT,
+            );
+            // returnedParts always holds the FULL result (used for submission
+            // validation); dedup below only trims what we echo back to the model.
+            for (const r of results) returnedParts.set(r.partId, r);
+            return { block, error: null as string | null, results };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { block, error: message, results: [] as AiPartResult[] };
+          }
+        }),
       );
 
-      messages.push({ role: "user", content: toolResults });
+      // Dedup across the batch: a part already returned in full by an earlier
+      // search this turn comes back as a slim pointer (no pin list) from later
+      // searches — saves tokens on the overlap without hiding the match.
+      const seenPartIds = new Set<string>();
+      const searchResults: Anthropic.ToolResultBlockParam[] = rawSearches.map(
+        ({ block, error, results }) => {
+          if (error !== null) {
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              content: JSON.stringify({ error }),
+            };
+          }
+          const payload = results.map((r) => {
+            if (seenPartIds.has(r.partId)) {
+              return {
+                partId: r.partId,
+                name: r.name,
+                mpn: r.mpn,
+                mainCategory: r.mainCategory,
+                note: "Already returned in an earlier search this turn — reuse this partId; full pin list is in that result.",
+              };
+            }
+            seenPartIds.add(r.partId);
+            return r;
+          });
+          return {
+            type: "tool_result" as const,
+            tool_use_id: block.id,
+            content: JSON.stringify(payload),
+          };
+        },
+      );
+
+      // Handle a submission, if present. On success we're done. On a validation
+      // failure we feed the error back as a tool_result so the model can fix it
+      // within the loop (bounded by MAX_ITERATIONS) rather than failing the
+      // whole request on a one-shot mistake.
+      const submitResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
+        const result = finalizeSubmission(block.input, returnedParts);
+        if (result.ok) {
+          return Response.json({
+            ok: true,
+            netlist: result.netlist,
+            explanation: result.explanation,
+          });
+        }
+        submitResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          is_error: true,
+          content: result.error,
+        });
+      }
+
+      // Every tool_use in the assistant turn must receive a matching tool_result.
+      messages.push({
+        role: "user",
+        content: [...searchResults, ...submitResults],
+      });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -253,16 +342,21 @@ export async function POST(req: Request): Promise<Response> {
   return Response.json({ ok: false, error: "Max iterations reached" }, { status: 500 });
 }
 
+type FinalizeResult =
+  | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
+  | { ok: false; error: string };
+
 /**
  * Validate the submitted netlist against the parts that were actually surfaced
- * by search. Rejects unknown partIds (Claude usually self-corrects on retry, but
- * one-shot just fails). Drops connections that reference non-existent pins and
- * surfaces a warning in the explanation rather than failing the whole design.
+ * by search. On unknown partIds it returns a structured error (the caller feeds
+ * this back into the tool loop so the model can self-correct). Drops connections
+ * that reference non-existent pins and surfaces a warning in the explanation
+ * rather than failing the whole design.
  */
 function finalizeSubmission(
   raw: unknown,
   returnedParts: Map<string, AiPartResult>,
-): Response {
+): FinalizeResult {
   const input = raw as {
     components?: BuildLogicalComponent[];
     connections?: BuildLogicalConnection[];
@@ -272,14 +366,20 @@ function finalizeSubmission(
   const connections = Array.isArray(input.connections) ? input.connections : [];
   const explanation = typeof input.explanation === "string" ? input.explanation : "";
 
-  // Every referenced partId must have come from a search result.
-  for (const c of rawComponents) {
-    if (!returnedParts.has(c.partId)) {
-      return Response.json(
-        { ok: false, error: `invalid partId in netlist: ${c.partId}` },
-        { status: 400 },
-      );
-    }
+  // Every referenced partId must have come from a search result. Report all
+  // offenders at once so the model can fix them in a single retry.
+  const invalid = rawComponents.filter((c) => !returnedParts.has(c.partId));
+  if (invalid.length > 0) {
+    const offenders = invalid
+      .map((c) => `${c.refDes} (partId "${c.partId}")`)
+      .join(", ");
+    return {
+      ok: false,
+      error:
+        `These components reference partIds that were never returned by search_parts: ${offenders}. ` +
+        `Every partId must be copied exactly from a search_parts result — never the part name or MPN. ` +
+        `Search for the missing parts (or reuse a partId you already found) and call submit_schematic again.`,
+    };
   }
 
   // Sanitize the new layout fields: coerce role into the union (the model can
@@ -346,5 +446,5 @@ function finalizeSubmission(
     explanation: fullExplanation,
   };
 
-  return Response.json({ ok: true, netlist, explanation: fullExplanation });
+  return { ok: true, netlist, explanation: fullExplanation };
 }
