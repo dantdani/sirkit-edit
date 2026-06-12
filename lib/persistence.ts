@@ -148,6 +148,18 @@ function isWire(v: unknown): boolean {
   );
 }
 
+function isNetLabel(v: unknown): boolean {
+  if (typeof v !== "object" || v === null) return false;
+  const l = v as Record<string, unknown>;
+  return (
+    typeof l["id"] === "string" &&
+    isPoint(l["position"]) &&
+    typeof l["name"] === "string" &&
+    (l["kind"] === "label" || l["kind"] === "power" || l["kind"] === "ground") &&
+    (l["orientation"] === 0 || l["orientation"] === 90 || l["orientation"] === 180 || l["orientation"] === 270)
+  );
+}
+
 function isKicadInstance(v: unknown): boolean {
   if (typeof v !== "object" || v === null) return false;
   const k = v as Record<string, unknown>;
@@ -193,6 +205,13 @@ export function importProjectJSON(json: string): SavedProject | { error: string 
     return { error: "Invalid kicadComponents array" };
   }
   state["kicadComponents"] = Array.isArray(kicad) ? kicad : [];
+
+  // netLabels is optional; migrate older saves to [] and validate when present.
+  const labels = state["netLabels"];
+  if (labels !== undefined && (!Array.isArray(labels) || !labels.every(isNetLabel))) {
+    return { error: "Invalid netLabels array" };
+  }
+  state["netLabels"] = Array.isArray(labels) ? labels : [];
 
   const now = Date.now();
   return saveProject({

@@ -135,8 +135,15 @@ Your workflow for every request:
 Rules for connections:
 - Reference pins by either name OR number, in the form "refDes.pin". For an ESP32 you might write "U1.GND" or "U1.13"; both work.
 - Use refDes prefixes following EE convention: U for ICs, R for resistors, C for capacitors, L for inductors, D for diodes, Q for transistors, V for voltage sources (none here — power comes from a connector or regulator), J for connectors, Y for crystals, SW for switches, FB for ferrite beads.
-- Every power pin (VCC, VDD, +3V3) must connect to a power source.
-- Every ground pin must connect to a common ground (use the literal name "GND" in connection strings to denote ground rail; the frontend will create the ground component).
+- Every connection is either kind "wire" ({ "kind": "wire", "from": "U1.TX", "to": "U2.RX" }) or kind "label" ({ "kind": "label", "pin": "U1.VDD", "labelName": "+3V3", "labelKind": "power" }). A label attaches a named net flag to one pin; every label sharing the same name is electrically one net.
+
+CONNECTION STRATEGY — DEFAULT TO LABELS WHEN APPROPRIATE:
+- Every power pin (any pin whose name matches VCC, VDD, +3V3, +5V, +12V, VBUS, VIN) gets a LABEL connection with the appropriate power name and labelKind "power". Do NOT use wires for power distribution. Each power pin gets its own label; multiple labels with the same name share an electrical net automatically.
+- Every ground pin (any pin whose name matches GND, VSS, AGND, DGND, EGND) gets a LABEL connection with name "GND" and labelKind "ground". Do NOT use wires for ground distribution.
+- For signal nets that connect to 3 OR MORE pins (high fan-out, e.g. a clock distributed to multiple chips), use LABELS at each pin (labelKind "label").
+- For signal nets that connect to exactly 2 pins on different functional groups that will sit far apart on the schematic (e.g. an input connector on the left and a regulator on the far right), use a LABEL pair — otherwise use a wire.
+- For all other signals (2-pin nets within the same functional group, decoupling caps, local feedback), use wires.
+- Label names are uppercase, alphanumeric + underscore (power rails may start with "+"). Examples: "VCC", "+3V3", "GND", "MOSI", "SCK", "CS_FLASH", "LED_R", "BTN_BOOT".
 
 Rules for component roles:
 Every component must include a "role" field selected from: input, processor, output, indicator, regulator, source, connector, passive, support.
@@ -216,10 +223,37 @@ export const BUILD_SUBMIT_SCHEMATIC_TOOL: Anthropic.Tool = {
         items: {
           type: "object",
           properties: {
-            from: { type: "string" },
-            to: { type: "string" },
+            kind: {
+              type: "string",
+              enum: ["wire", "label"],
+              description:
+                '"wire" connects two pins directly; "label" attaches a named net flag to one pin (same-name labels form one net)',
+            },
+            from: {
+              type: "string",
+              description: 'For kind="wire": source pin as "refDes.pin"',
+            },
+            to: {
+              type: "string",
+              description: 'For kind="wire": destination pin as "refDes.pin"',
+            },
+            pin: {
+              type: "string",
+              description: 'For kind="label": the pin the label attaches to, as "refDes.pin"',
+            },
+            labelName: {
+              type: "string",
+              description:
+                'For kind="label": the net name, uppercase — e.g. "GND", "+3V3", "MOSI"',
+            },
+            labelKind: {
+              type: "string",
+              enum: ["label", "power", "ground"],
+              description:
+                'For kind="label": "power" for supply rails, "ground" for ground, "label" for signals (default: inferred from the name)',
+            },
           },
-          required: ["from", "to"],
+          required: ["kind"],
         },
       },
       explanation: { type: "string" },

@@ -17,8 +17,9 @@ import type {
   BuildLogicalNetlist,
   BuildLogicalComponent,
   BuildLogicalConnection,
+  NetLabelKind,
 } from "@/lib/schematic-types";
-import { normalizeComponentRole } from "@/lib/schematic-types";
+import { normalizeComponentRole, inferNetLabelKind } from "@/lib/schematic-types";
 import { searchPartsForAI, type AiPartResult } from "@/app/lib/parts-search";
 import {
   BUILD_SYSTEM_PROMPT,
@@ -262,11 +263,11 @@ function finalizeSubmission(
 ): FinalizeResult {
   const input = raw as {
     components?: BuildLogicalComponent[];
-    connections?: BuildLogicalConnection[];
+    connections?: unknown[];
     explanation?: string;
   };
   const rawComponents = Array.isArray(input.components) ? input.components : [];
-  const connections = Array.isArray(input.connections) ? input.connections : [];
+  const rawConnections = Array.isArray(input.connections) ? input.connections : [];
   const explanation = typeof input.explanation === "string" ? input.explanation : "";
 
   // Every referenced partId must have come from a search result. Report all
@@ -317,25 +318,63 @@ function finalizeSubmission(
   const validConnections: BuildLogicalConnection[] = [];
   const warnings: string[] = [];
 
-  for (const conn of connections) {
-    const endpoints = [conn.from, conn.to];
-    let ok = true;
-    for (const ep of endpoints) {
-      const parsed = parseEndpoint(ep);
-      if ("ground" in parsed) continue; // ground rail sentinel — always valid
-      const part = partByRefDes.get(parsed.refDes);
-      if (!part) {
-        ok = false;
-        warnings.push(`dropped connection ${conn.from} → ${conn.to}: unknown component "${parsed.refDes}"`);
-        break;
+  // A pin endpoint is valid when it names a known component and an existing
+  // pin on it. Returns an error string, or null when valid.
+  function pinError(ep: string): string | null {
+    const parsed = parseEndpoint(ep);
+    if ("ground" in parsed) return null; // ground rail sentinel — always valid
+    const part = partByRefDes.get(parsed.refDes);
+    if (!part) return `unknown component "${parsed.refDes}"`;
+    if (!pinExists(part, parsed.pin)) return `pin "${parsed.pin}" not found on ${parsed.refDes}`;
+    return null;
+  }
+
+  const VALID_LABEL_KINDS: readonly NetLabelKind[] = ["label", "power", "ground"];
+
+  for (const rawConn of rawConnections) {
+    if (typeof rawConn !== "object" || rawConn === null) continue;
+    const conn = rawConn as {
+      kind?: unknown; from?: unknown; to?: unknown;
+      pin?: unknown; labelName?: unknown; labelKind?: unknown;
+    };
+
+    // Label connection: attach a named net flag to a single pin.
+    if (conn.kind === "label" || (typeof conn.pin === "string" && typeof conn.labelName === "string")) {
+      const pin = typeof conn.pin === "string" ? conn.pin.trim() : "";
+      const name = typeof conn.labelName === "string"
+        ? conn.labelName.trim().toUpperCase()
+        : "";
+      if (pin === "" || name === "") {
+        warnings.push(`dropped label connection: requires both "pin" and "labelName"`);
+        continue;
       }
-      if (!pinExists(part, parsed.pin)) {
-        ok = false;
-        warnings.push(`dropped connection ${conn.from} → ${conn.to}: pin "${parsed.pin}" not found on ${parsed.refDes}`);
-        break;
+      const err = pinError(pin);
+      if (err) {
+        warnings.push(`dropped label "${name}" on ${pin}: ${err}`);
+        continue;
       }
+      const labelKind =
+        typeof conn.labelKind === "string" &&
+        (VALID_LABEL_KINDS as readonly string[]).includes(conn.labelKind)
+          ? (conn.labelKind as NetLabelKind)
+          : inferNetLabelKind(name);
+      validConnections.push({ kind: "label", pin, labelName: name, labelKind });
+      continue;
     }
-    if (ok) validConnections.push(conn);
+
+    // Wire connection (kind "wire" or legacy { from, to }).
+    if (typeof conn.from !== "string" || typeof conn.to !== "string") {
+      warnings.push(`dropped malformed connection ${JSON.stringify(rawConn).slice(0, 120)}`);
+      continue;
+    }
+    const fromErr = pinError(conn.from);
+    const toErr = pinError(conn.to);
+    const err = fromErr ?? toErr;
+    if (err) {
+      warnings.push(`dropped connection ${conn.from} → ${conn.to}: ${err}`);
+      continue;
+    }
+    validConnections.push({ kind: "wire", from: conn.from, to: conn.to });
   }
 
   const fullExplanation =

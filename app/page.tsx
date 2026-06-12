@@ -19,14 +19,14 @@ import {
   Settings2, Search, MessageSquare, Circle, Triangle, Zap, Sigma, BatteryCharging,
   Cpu, Component, ChevronDown, ChevronRight, ChevronLeft, Check, AlertTriangle,
   FolderOpen, Package, Maximize2, Minimize2, ChevronsDown, MousePointer, Pencil,
-  Scissors, Sparkles, Loader2, Move, Crosshair, GripVertical, X, CircleDot,
+  Scissors, Sparkles, Loader2, Move, Crosshair, GripVertical, X, CircleDot, Tag,
 } from "lucide-react";
 import { getKeyBindings } from "./lib/keybindings";
 import { GRID, snap, pointEquals, closestPointOnSegment, distance, pinWorldPos, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, pointStrictlyOnWireInterior } from "./lib/geometry";
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
-import { classifyNets } from "./lib/nets";
+import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist } from "@/lib/schematic-types";
+import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuild } from "@/lib/build-auto-layout";
@@ -41,8 +41,27 @@ type View = "schematic" | "pcb" | "3d" | "bom" | "sim";
 type LeftPanel = "projects" | "library" | null;
 type Message = { id: string; role: "user" | "assistant"; content: string };
 // "kicad-place" carries no partId itself — the part to place lives in separate
-// state (placementPartId), so Tool stays a simple string union.
-type Tool = "select" | "wire" | "delete" | "junction" | SchComponentType | "kicad-place";
+// state (placementPartId), so Tool stays a simple string union. Likewise
+// "netlabel-place" carries no name/kind — those live in pendingNetLabel.
+type Tool =
+  | "select" | "wire" | "delete" | "junction"
+  | SchComponentType
+  | "kicad-place"
+  | "label"            // generic net-label tool: click opens a name input
+  | "netlabel-place";  // quick-place of a preset label (GND, +3V3, …)
+
+// Preset for the quick-place buttons in the toolbar.
+type PendingNetLabel = { name: string; kind: NetLabelKind };
+
+const QUICK_LABELS: PendingNetLabel[] = [
+  { name: "GND",  kind: "ground" },
+  { name: "+3V3", kind: "power" },
+  { name: "+5V",  kind: "power" },
+  { name: "VCC",  kind: "power" },
+];
+
+// Hit-test radius for net labels (delete / drag).
+const NET_LABEL_HIT_RADIUS = 15;
 type SimMode = "probe" | "move";
 
 type AnalysisType = "tran" | "ac" | "dc" | "op";
@@ -221,7 +240,7 @@ function isPlacementTool(t: Tool): boolean {
 
 // True only for the seven Theory placement tools (narrows to SchComponentType).
 function isTheoryPlacementTool(t: Tool): t is SchComponentType {
-  return isPlacementTool(t) && t !== "kicad-place";
+  return isPlacementTool(t) && t !== "kicad-place" && t !== "label" && t !== "netlabel-place";
 }
 
 // Reference-designator prefix for a KiCad part, from its "Reference" property
@@ -590,6 +609,109 @@ function GhostSymbol({ type, x, y, rotation }: { type: SchComponentType; x: numb
   );
 }
 
+// ─── Net label rendering ──────────────────────────────────────────────────────
+
+// Display colors for net-label glyphs/text, slightly lighter than the wire
+// palette so labels read on the dark canvas.
+const LABEL_ROLE_COLORS: Record<NetRole, string> = {
+  power: "#f87171",   // red-400
+  ground: "#71717a",  // zinc-500
+  signal: "#2dd4bf",  // teal-400
+  unknown: "#a1a1aa", // zinc-400
+};
+
+/**
+ * A net label glyph anchored at label.position (the electrical connection
+ * point sits at the local origin). Natural directions: power flags point up,
+ * ground symbols hang down, generic flags extend east; `orientation` rotates
+ * the glyph clockwise from there.
+ */
+function NetLabelGlyph({
+  label, role, zoom, ghost, deleteHovered, pointerEvents,
+  onMouseDown, onMouseEnter, onMouseLeave,
+}: {
+  label: NetLabel;
+  role: NetRole;
+  zoom: number;
+  ghost?: boolean;
+  deleteHovered?: boolean;
+  pointerEvents?: "auto" | "none";
+  onMouseDown?: (e: React.MouseEvent) => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
+  const name = label.name.trim().toUpperCase();
+  let body: React.ReactNode;
+
+  if (label.kind === "ground") {
+    const showName = name !== "GND" && name !== "0";
+    body = (
+      <>
+        <line x1={0} y1={0} x2={0} y2={10} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
+        <line x1={-6} y1={10} x2={6} y2={10} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
+        <line x1={-4} y1={14} x2={4} y2={14} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
+        <line x1={-2} y1={18} x2={2} y2={18} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
+        {showName && (
+          <text x={0} y={28} textAnchor="middle" fontSize={9} fontFamily="monospace" fill="#71717a"
+            style={{ userSelect: "none" }}>
+            {name}
+          </text>
+        )}
+      </>
+    );
+  } else if (label.kind === "power") {
+    body = (
+      <>
+        <line x1={0} y1={0} x2={0} y2={-10} stroke="#f87171" strokeWidth={1} strokeLinecap="round" />
+        <polygon points="-5,-10 5,-10 0,-18" fill="#f87171" />
+        <text x={0} y={-22} textAnchor="middle" fontSize={9} fontFamily="monospace" fill="#f87171"
+          style={{ userSelect: "none" }}>
+          {name}
+        </text>
+      </>
+    );
+  } else {
+    const color = LABEL_ROLE_COLORS[role];
+    // Flag width tracks the name so the pentagon encloses the text.
+    const textW = Math.max(12, name.length * 5.6);
+    const flagEnd = 12 + textW + 6;
+    body = (
+      <>
+        <line x1={0} y1={0} x2={10} y2={0} stroke={color} strokeWidth={1} strokeLinecap="round" />
+        <polygon
+          points={`10,-6 ${flagEnd},-6 ${flagEnd + 6},0 ${flagEnd},6 10,6`}
+          fill={color} fillOpacity={0.12} stroke={color} strokeWidth={0.75} strokeLinejoin="round"
+        />
+        <text x={14} y={3} textAnchor="start" fontSize={9} fontFamily="monospace" fill={color}
+          style={{ userSelect: "none" }}>
+          {name}
+        </text>
+      </>
+    );
+  }
+
+  return (
+    <g
+      transform={`translate(${label.position.x},${label.position.y}) rotate(${label.orientation})`}
+      opacity={ghost ? 0.5 : 1}
+      style={{ pointerEvents: pointerEvents ?? "none", cursor: deleteHovered ? "crosshair" : "grab" }}
+      onMouseDown={onMouseDown}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      {/* Hit target around the anchor (15px world radius). */}
+      <circle cx={0} cy={0} r={NET_LABEL_HIT_RADIUS} fill="transparent" />
+      {deleteHovered && (
+        <circle cx={0} cy={0} r={NET_LABEL_HIT_RADIUS} fill="#ef4444" fillOpacity={0.15}
+          stroke="#ef4444" strokeWidth={0.75 / zoom} style={{ pointerEvents: "none" }} />
+      )}
+      {/* Anchor tick — marks the exact connection point. */}
+      <circle cx={0} cy={0} r={1.5} fill="#71717a" style={{ pointerEvents: "none" }} />
+      {body}
+    </g>
+  );
+}
+
 // ─── KiCad instance rendering ──────────────────────────────────────────────────
 
 // Bounding box (world coords) of an instance's pin sites — drives the selection
@@ -740,6 +862,8 @@ function SchematicEditor({
   kicadComponents, setKicadComponents,
   selectedKicadId, setSelectedKicadId,
   placementPartId,
+  netLabels, setNetLabels,
+  pendingNetLabel, setPendingNetLabel,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -757,6 +881,10 @@ function SchematicEditor({
   selectedKicadId: string | null;
   setSelectedKicadId: (id: string | null) => void;
   placementPartId: string | null;
+  netLabels: NetLabel[];
+  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
+  pendingNetLabel: PendingNetLabel | null;
+  setPendingNetLabel: (p: PendingNetLabel | null) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -767,6 +895,10 @@ function SchematicEditor({
   const [snapTarget, setSnapTarget] = useState<SnapTarget | null>(null);
   // Junction tool: nearest wire crossing within snap radius of the cursor.
   const [junctionHover, setJunctionHover] = useState<Point | null>(null);
+  // Label tool: pending name input at a clicked canvas position. Rendering is
+  // gated on the label tool being active, so switching tools hides it; commit,
+  // Escape, and blur all clear it.
+  const [labelDraft, setLabelDraft] = useState<{ pos: Point; text: string } | null>(null);
 
   const panRef  = useRef(pan);
   const zoomRef = useRef(zoom);
@@ -779,6 +911,8 @@ function SchematicEditor({
   wiresRef.current = wires;
   const kicadComponentsRef = useRef(kicadComponents);
   kicadComponentsRef.current = kicadComponents;
+  const netLabelsRef = useRef(netLabels);
+  netLabelsRef.current = netLabels;
 
   // Re-render when async KiCad part data arrives in the cache. `partVersion`
   // bumps on each load so derived data keyed on the cache recomputes.
@@ -804,8 +938,8 @@ function SchematicEditor({
   // labels). Recomputed when topology changes or a KiCad part loads.
   const nets = useMemo(() => {
     void partVersion; // recompute when an async KiCad part lands in the cache
-    return classifyNets(components, wires, kicadComponents, getCachedPart);
-  }, [components, wires, kicadComponents, partVersion]);
+    return classifyNets(components, wires, kicadComponents, getCachedPart, netLabels);
+  }, [components, wires, kicadComponents, partVersion, netLabels]);
 
   const dragRef = useRef<{
     type: "pan" | "group";
@@ -815,9 +949,11 @@ function SchematicEditor({
     groupCompIds?: Set<string>;
     groupWireIds?: Set<string>;
     groupKicadIds?: Set<string>;
+    groupLabelIds?: Set<string>;
     initComps?: Map<string, Point>;
     initWires?: Map<string, Point[]>;
     initKicad?: Map<string, Point>;
+    initLabels?: Map<string, Point>;
   } | null>(null);
 
   // Global mouse handlers
@@ -860,6 +996,15 @@ function SchematicEditor({
             return init ? { ...k, x: init.x + dx, y: init.y + dy } : k;
           }));
         }
+        const gL = dragRef.current.groupLabelIds;
+        const initL = dragRef.current.initLabels;
+        if (gL && initL) {
+          setNetLabels(netLabelsRef.current.map((l) => {
+            if (!gL.has(l.id)) return l;
+            const init = initL.get(l.id);
+            return init ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
+          }));
+        }
       }
     }
     function onMouseUp() { dragRef.current = null; }
@@ -869,7 +1014,7 @@ function SchematicEditor({
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup",   onMouseUp);
     };
-  }, [setComponents, setWires, setKicadComponents]);
+  }, [setComponents, setWires, setKicadComponents, setNetLabels]);
 
   // Non-passive wheel zoom
   useEffect(() => {
@@ -905,7 +1050,9 @@ function SchematicEditor({
     // Magnet snap only fires for the wire tool. Compute the snap target so
     // the preview, click commit, and hover halo all reference the same point.
     if (tool === "wire") {
-      setSnapTarget(findSnapTarget(w, components, wires, GRID, kicadPinPoints));
+      // Label anchors snap like pins so wires can attach to a label's point.
+      const anchorPoints = [...kicadPinPoints, ...netLabels.map((l) => l.position)];
+      setSnapTarget(findSnapTarget(w, components, wires, GRID, anchorPoints));
     } else if (snapTarget !== null) {
       setSnapTarget(null);
     }
@@ -985,6 +1132,19 @@ function SchematicEditor({
         setJunctionHover(null);
       }
       // Stay in junction mode so the user can mark another crossing.
+    } else if (tool === "label") {
+      // Open the floating name input at the clicked (snapped) position.
+      setLabelDraft({ pos: w, text: "" });
+    } else if (tool === "netlabel-place") {
+      if (!pendingNetLabel) return;
+      setNetLabels((ls) => [...ls, {
+        id: crypto.randomUUID(),
+        position: w,
+        name: pendingNetLabel.name,
+        kind: pendingNetLabel.kind,
+        orientation: 0,
+      }]);
+      // Stay in placement mode for repeated drops; Esc exits.
     } else if (tool === "delete") {
       // wire/component clicks handled by their own handlers
     } else {
@@ -1045,10 +1205,12 @@ function SchematicEditor({
       componentsRef.current,
       wiresRef.current,
       kicadPinSitesRef.current,
+      netLabelsRef.current,
     );
     const initComps = new Map<string, Point>();
     const initWires = new Map<string, Point[]>();
     const initKicad = new Map<string, Point>();
+    const initLabels = new Map<string, Point>();
     for (const id of group.componentIds) {
       const c = componentsRef.current.find((c) => c.id === id);
       if (c) initComps.set(id, { x: c.x, y: c.y });
@@ -1061,6 +1223,10 @@ function SchematicEditor({
       const k = kicadComponentsRef.current.find((k) => k.id === id);
       if (k) initKicad.set(id, { x: k.x, y: k.y });
     }
+    for (const id of group.netLabelIds) {
+      const l = netLabelsRef.current.find((l) => l.id === id);
+      if (l) initLabels.set(id, { ...l.position });
+    }
     const rect = svgRef.current!.getBoundingClientRect();
     const wx = snap((e.clientX - rect.left - pan.x) / zoom);
     const wy = snap((e.clientY - rect.top  - pan.y) / zoom);
@@ -1072,9 +1238,11 @@ function SchematicEditor({
       groupCompIds: group.componentIds,
       groupWireIds: group.wireIds,
       groupKicadIds: group.kicadInstanceIds,
+      groupLabelIds: group.netLabelIds,
       initComps,
       initWires,
       initKicad,
+      initLabels,
     };
   }
 
@@ -1084,6 +1252,55 @@ function SchematicEditor({
       setWires((ws) => ws.filter((w) => w.id !== wire.id));
       setDeleteHoveredId(null);
     }
+  }
+
+  // Delete a net label, or drag it alone (a label is an annotation — moving
+  // one must not drag the whole net it names).
+  function onLabelMouseDown(e: React.MouseEvent, label: NetLabel) {
+    if (e.button !== 0) return;
+    if (tool === "delete") {
+      e.stopPropagation();
+      setNetLabels((ls) => ls.filter((l) => l.id !== label.id));
+      setDeleteHoveredId(null);
+      return;
+    }
+    if (tool === "select") {
+      e.stopPropagation();
+      const rect = svgRef.current!.getBoundingClientRect();
+      const wx = snap((e.clientX - rect.left - pan.x) / zoom);
+      const wy = snap((e.clientY - rect.top  - pan.y) / zoom);
+      dragRef.current = {
+        type: "group",
+        startMouse: { x: e.clientX, y: e.clientY },
+        startPan: pan,
+        startWorldSnapped: { x: wx, y: wy },
+        groupCompIds: new Set(),
+        groupWireIds: new Set(),
+        groupKicadIds: new Set(),
+        groupLabelIds: new Set([label.id]),
+        initComps: new Map(),
+        initWires: new Map(),
+        initKicad: new Map(),
+        initLabels: new Map([[label.id, { ...label.position }]]),
+      };
+    }
+  }
+
+  // Commit the floating label-name input → a generic net label at the click
+  // position. Stays in the label tool for placing more.
+  function commitLabelDraft() {
+    if (!labelDraft) return;
+    const name = labelDraft.text.trim().toUpperCase();
+    if (name !== "") {
+      setNetLabels((ls) => [...ls, {
+        id: crypto.randomUUID(),
+        position: labelDraft.pos,
+        name,
+        kind: "label",
+        orientation: 0,
+      }]);
+    }
+    setLabelDraft(null);
   }
 
   // Effective endpoint for the wire preview: snap target if the cursor is
@@ -1120,7 +1337,10 @@ function SchematicEditor({
   const isTheoryPlacing = isTheoryPlacementTool(tool);
   const placementPart = tool === "kicad-place" && placementPartId ? getCachedPart(placementPartId) : null;
   const cursorStyle =
-    tool === "select" ? "default" : tool === "junction" ? JUNCTION_CURSOR : "crosshair";
+    tool === "select" ? "default"
+    : tool === "junction" ? JUNCTION_CURSOR
+    : tool === "label" ? "text"
+    : "crosshair";
 
   const statusMsg =
     tool === "wire" && wireDraftStart
@@ -1131,6 +1351,10 @@ function SchematicEditor({
       ? "DELETE — click element to remove  [Esc cancel]"
       : tool === "junction"
       ? "JUNCTION — click where two wires cross  [Esc cancel]"
+      : tool === "label"
+      ? "LABEL — click to name a net  [Enter commit · Esc cancel]"
+      : tool === "netlabel-place"
+      ? `PLACE ${pendingNetLabel?.name ?? "label"}  [Esc cancel · click place]`
       : tool === "kicad-place"
       ? `PLACE ${placementPart?.name ?? "part"}  [Esc cancel · click place · R rotate]`
       : isTheoryPlacing
@@ -1189,6 +1413,39 @@ function SchematicEditor({
           <CircleDot className="size-3.5" />
           <span className="bg-zinc-800 text-zinc-500 font-mono text-[10px] px-1 rounded">J</span>
         </button>
+        <button
+          title="Net label — name a net; same-name labels connect electrically"
+          onClick={() => { setTool("label"); setWireDraftStart(null); setPendingNetLabel(null); }}
+          className={`h-7 flex items-center gap-1.5 px-2 rounded transition ${
+            tool === "label"
+              ? "bg-zinc-700 text-zinc-100"
+              : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+          }`}
+        >
+          <Tag className="size-3.5" />
+          <span className="bg-zinc-800 text-zinc-500 font-mono text-[10px] px-1 rounded">T</span>
+        </button>
+        <div className="w-px self-stretch my-1 bg-zinc-800" />
+        {QUICK_LABELS.map((q) => (
+          <button
+            key={q.name}
+            title={`Place a ${q.name} ${q.kind === "ground" ? "ground symbol" : "power port"}`}
+            onClick={() => {
+              setTool("netlabel-place");
+              setPendingNetLabel(q);
+              setWireDraftStart(null);
+            }}
+            className={`h-7 px-1.5 rounded font-mono text-[10px] transition ${
+              tool === "netlabel-place" && pendingNetLabel?.name === q.name
+                ? "bg-zinc-700 text-zinc-100"
+                : q.kind === "ground"
+                ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                : "text-red-400/80 hover:text-red-300 hover:bg-zinc-800"
+            }`}
+          >
+            {q.name}
+          </button>
+        ))}
       </div>
 
       {/* Status bar */}
@@ -1249,7 +1506,9 @@ function SchematicEditor({
                 )}
                 <polyline
                   points={pts} fill="none"
-                  stroke={nets.wireColor(wire)} strokeWidth={1.5 / zoom} strokeLinecap="round" strokeLinejoin="miter"
+                  stroke={nets.wireColor(wire)}
+                  strokeWidth={(nets.wireRole(wire) === "unknown" ? 0.75 : 1) / zoom}
+                  strokeLinecap="round" strokeLinejoin="miter"
                   style={{ pointerEvents: "none" }}
                 />
                 {/* Fat transparent hit target — tool-gated so wire mode and
@@ -1274,7 +1533,7 @@ function SchematicEditor({
             <polyline
               points={previewPts.map((p) => `${p.x},${p.y}`).join(" ")}
               stroke="#14b8a6"
-              strokeWidth={1.5 / zoom}
+              strokeWidth={1 / zoom}
               fill="none"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -1288,7 +1547,7 @@ function SchematicEditor({
             <circle key={i} cx={j.x} cy={j.y} r={2.5 / zoom} fill="#a1a1aa" style={{ pointerEvents: "none" }} />
           ))}
 
-          {/* Net labels — name power/ground rails (e.g. "5V", "3V3", "GND"). */}
+          {/* Derived rail names — power/ground nets with no explicit label. */}
           {nets.labels.map((l, i) => (
             <text
               key={i}
@@ -1299,6 +1558,22 @@ function SchematicEditor({
             >
               {l.name}
             </text>
+          ))}
+
+          {/* Explicit net labels — power flags, ground symbols, signal flags.
+              Same-name labels are electrically one net. */}
+          {netLabels.map((label) => (
+            <NetLabelGlyph
+              key={label.id}
+              label={label}
+              role={nets.roleAt(label.position)}
+              zoom={zoom}
+              deleteHovered={tool === "delete" && deleteHoveredId === label.id}
+              pointerEvents={tool === "select" || tool === "delete" ? "auto" : "none"}
+              onMouseDown={(e) => onLabelMouseDown(e, label)}
+              onMouseEnter={() => { if (tool === "delete") setDeleteHoveredId(label.id); }}
+              onMouseLeave={() => setDeleteHoveredId((prev) => prev === label.id ? null : prev)}
+            />
           ))}
 
           {/* Components — pointer-events gated so wire/placement clicks
@@ -1368,8 +1643,50 @@ function SchematicEditor({
               <KicadSymbolInline symbolRaw={placementPart.symbolRaw} />
             </g>
           )}
+
+          {/* Net-label ghost preview */}
+          {tool === "netlabel-place" && inCanvas && pendingNetLabel && (
+            <NetLabelGlyph
+              label={{
+                id: "__ghost",
+                position: cursor,
+                name: pendingNetLabel.name,
+                kind: pendingNetLabel.kind,
+                orientation: 0,
+              }}
+              role={pendingNetLabel.kind === "ground" ? "ground" : pendingNetLabel.kind === "power" ? "power" : "signal"}
+              zoom={zoom}
+              ghost
+            />
+          )}
         </g>
       </svg>
+
+      {/* Floating name input for the Label tool. */}
+      {tool === "label" && labelDraft && (
+        <div
+          className="absolute z-20"
+          style={{
+            left: labelDraft.pos.x * zoom + pan.x + 8,
+            top:  labelDraft.pos.y * zoom + pan.y - 12,
+          }}
+        >
+          <input
+            autoFocus
+            value={labelDraft.text}
+            placeholder="NET_NAME"
+            onChange={(e) =>
+              setLabelDraft((d) => (d ? { ...d, text: e.target.value } : d))
+            }
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commitLabelDraft(); }
+              else if (e.key === "Escape") { e.preventDefault(); setLabelDraft(null); }
+            }}
+            onBlur={() => setLabelDraft(null)}
+            className="h-6 w-28 bg-zinc-900 border border-teal-600 rounded px-1.5 font-mono text-[11px] uppercase text-zinc-100 placeholder:text-zinc-600 outline-none shadow-lg"
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1524,6 +1841,10 @@ export default function Home() {
   const [selectedKicadId, setSelectedKicadId] = useState<string | null>(null);
   const [placementPartId, setPlacementPartId] = useState<string | null>(null);
 
+  // Net labels (both modes) + the preset held by the quick-place tool.
+  const [netLabels, setNetLabels] = useState<NetLabel[]>([]);
+  const [pendingNetLabel, setPendingNetLabel] = useState<PendingNetLabel | null>(null);
+
   // Begin modal placement of a KiCad part (from the Build library panel).
   function startKicadPlacement(partId: string) {
     setPlacementPartId(partId);
@@ -1620,12 +1941,18 @@ export default function Home() {
 
       const binding = getKeyBindings()[keyStr];
       if (!binding) {
-        // Junction tool shortcut — handled here rather than in the central
-        // binding map so users' custom keybinding files keep working unchanged.
+        // Junction/label tool shortcuts — handled here rather than in the
+        // central binding map so users' custom keybinding files keep working
+        // unchanged.
         if (keyStr === "j") {
           e.preventDefault();
           setTool("junction");
           setWireDraftStart(null);
+        } else if (keyStr === "t") {
+          e.preventDefault();
+          setTool("label");
+          setWireDraftStart(null);
+          setPendingNetLabel(null);
         }
         return;
       }
@@ -1665,6 +1992,7 @@ export default function Home() {
           setTool("select");
           setWireDraftStart(null);
           setPlacementPartId(null);
+          setPendingNetLabel(null);
         } else {
           setSelectedId(null);
           setSelectedKicadId(null);
@@ -1743,6 +2071,7 @@ export default function Home() {
     setComponents(state.components);
     setWires(state.wires);
     setKicadComponents(state.kicadComponents ?? []);
+    setNetLabels(state.netLabels ?? []);
     setSelectedId(null);
     setSelectedKicadId(null);
     setWireDraftStart(null);
@@ -1801,7 +2130,7 @@ export default function Home() {
         }
       }
 
-      if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0) {
+      if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0) {
         setPendingReplace({ state, explanation, prompt });
       } else {
         applySchematic(state, explanation, prompt);
@@ -1824,7 +2153,7 @@ export default function Home() {
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: { components, wires }, analysis: analysisConfig }),
+        body: JSON.stringify({ state: { components, wires, netLabels }, analysis: analysisConfig }),
       });
       const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
       if (!res.ok || data.error) {
@@ -2078,9 +2407,11 @@ export default function Home() {
                     kicadComponents={kicadComponents} setKicadComponents={setKicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
+                    netLabels={netLabels} setNetLabels={setNetLabels}
+                    pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
                   />
                   {/* Empty state overlay */}
-                  {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && (
+                  {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 pointer-events-none select-none">
                       <Sparkles className="size-8 text-zinc-700" />
                       <p className="text-zinc-400 text-sm">Empty schematic</p>
@@ -2135,6 +2466,8 @@ export default function Home() {
                 <SimView
                   components={components}
                   wires={wires}
+                  netLabels={netLabels}
+                  setNetLabels={setNetLabels}
                   simResult={simResult}
                   simLoading={simLoading}
                   simError={simError}
@@ -2519,21 +2852,25 @@ function OpTable({
 function ProbeSchematic({
   components,
   wires,
+  netLabels,
   probedSignals,
   pinNodes,
   onToggleProbe,
   mode,
   setComponents,
   setWires,
+  setNetLabels,
 }: {
   components: SchComponent[];
   wires: Wire[];
+  netLabels: NetLabel[];
   probedSignals: Set<string>;
   pinNodes: Record<string, string>;
   onToggleProbe: (signal: string) => void;
   mode: SimMode;
   setComponents: Dispatch<SetStateAction<SchComponent[]>>;
   setWires: Dispatch<SetStateAction<Wire[]>>;
+  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]   = useState<Point>({ x: 80, y: 60 });
@@ -2549,13 +2886,17 @@ function ProbeSchematic({
 
   const componentsRef    = useRef(components);
   const wiresRef         = useRef(wires);
+  const netLabelsRef     = useRef(netLabels);
   componentsRef.current  = components;
   wiresRef.current       = wires;
+  netLabelsRef.current   = netLabels;
 
   const setComponentsRef = useRef(setComponents);
   const setWiresRef      = useRef(setWires);
+  const setNetLabelsRef  = useRef(setNetLabels);
   setComponentsRef.current = setComponents;
   setWiresRef.current      = setWires;
+  setNetLabelsRef.current  = setNetLabels;
 
   const isPanning = useRef(false);
   const panStart  = useRef<{ mouse: Point; pan: Point }>({ mouse: { x: 0, y: 0 }, pan: { x: 0, y: 0 } });
@@ -2563,8 +2904,10 @@ function ProbeSchematic({
   const moveDragRef = useRef<{
     groupCompIds: Set<string>;
     groupWireIds: Set<string>;
+    groupLabelIds: Set<string>;
     initComps: Map<string, { x: number; y: number }>;
     initWires: Map<string, Point[]>;
+    initLabels: Map<string, Point>;
     startWorld: Point;
   } | null>(null);
 
@@ -2601,7 +2944,7 @@ function ProbeSchematic({
         const rect = svg.getBoundingClientRect();
         const wx = (e.clientX - rect.left  - panRef.current.x) / zoomRef.current;
         const wy = (e.clientY - rect.top   - panRef.current.y) / zoomRef.current;
-        const { groupCompIds, groupWireIds, initComps, initWires, startWorld } = moveDragRef.current;
+        const { groupCompIds, groupWireIds, groupLabelIds, initComps, initWires, initLabels, startWorld } = moveDragRef.current;
         const dx = Math.round((wx - startWorld.x) / 10) * 10;
         const dy = Math.round((wy - startWorld.y) / 10) * 10;
         setComponentsRef.current((prev) =>
@@ -2614,6 +2957,12 @@ function ProbeSchematic({
           prev.map((w) => {
             const init = initWires.get(w.id);
             return (groupWireIds.has(w.id) && init) ? { ...w, vertices: init.map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w;
+          })
+        );
+        setNetLabelsRef.current((prev) =>
+          prev.map((l) => {
+            const init = initLabels.get(l.id);
+            return (groupLabelIds.has(l.id) && init) ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
           })
         );
       }
@@ -2639,9 +2988,16 @@ function ProbeSchematic({
     const rect = svgRef.current.getBoundingClientRect();
     const wx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
     const wy = (e.clientY - rect.top  - panRef.current.y) / zoomRef.current;
-    const group = findConnectedGroup({ kind: "component", id: comp.id }, componentsRef.current, wiresRef.current);
+    const group = findConnectedGroup(
+      { kind: "component", id: comp.id },
+      componentsRef.current,
+      wiresRef.current,
+      [],
+      netLabelsRef.current,
+    );
     const initComps = new Map<string, { x: number; y: number }>();
     const initWires = new Map<string, Point[]>();
+    const initLabels = new Map<string, Point>();
     for (const id of group.componentIds) {
       const c = componentsRef.current.find((c) => c.id === id);
       if (c) initComps.set(id, { x: c.x, y: c.y });
@@ -2650,7 +3006,19 @@ function ProbeSchematic({
       const w = wiresRef.current.find((w) => w.id === id);
       if (w) initWires.set(id, w.vertices.map((v) => ({ ...v })));
     }
-    moveDragRef.current = { groupCompIds: group.componentIds, groupWireIds: group.wireIds, initComps, initWires, startWorld: { x: wx, y: wy } };
+    for (const id of group.netLabelIds) {
+      const l = netLabelsRef.current.find((l) => l.id === id);
+      if (l) initLabels.set(id, { ...l.position });
+    }
+    moveDragRef.current = {
+      groupCompIds: group.componentIds,
+      groupWireIds: group.wireIds,
+      groupLabelIds: group.netLabelIds,
+      initComps,
+      initWires,
+      initLabels,
+      startWorld: { x: wx, y: wy },
+    };
   }
 
   function handleBodyClick(e: React.MouseEvent, comp: SchComponent) {
@@ -2773,7 +3141,7 @@ function ProbeSchematic({
                   style={{ pointerEvents: "none" }} />
               )}
               <polyline points={pts} fill="none" stroke={wColor}
-                strokeWidth={(wProbed ? 2 : 1.5) / zoom} strokeLinecap="round" strokeLinejoin="round"
+                strokeWidth={(wProbed ? 2 : 1) / zoom} strokeLinecap="round" strokeLinejoin="round"
                 style={{ pointerEvents: "none" }} />
               <polyline points={pts} fill="none" stroke="transparent"
                 strokeWidth={12 / zoom} strokeLinecap="round"
@@ -2787,6 +3155,16 @@ function ProbeSchematic({
         {/* Junction dots */}
         {junctions.map((j, i) => (
           <circle key={i} cx={j.x} cy={j.y} r={2.5 / zoom} fill="#a1a1aa" style={{ pointerEvents: "none" }} />
+        ))}
+
+        {/* Net labels (read-only in sim view) */}
+        {netLabels.map((label) => (
+          <NetLabelGlyph
+            key={label.id}
+            label={label}
+            role={label.kind === "ground" ? "ground" : label.kind === "power" ? "power" : "signal"}
+            zoom={zoom}
+          />
         ))}
 
         {/* Components */}
@@ -3038,7 +3416,7 @@ function FloatingPanel({
 // ─── SimView ───────────────────────────────────────────────────────────────────
 
 function SimView({
-  components, wires, simResult, simLoading, simError,
+  components, wires, netLabels, setNetLabels, simResult, simLoading, simError,
   panes, setPanes, activePaneId, setActivePaneId,
   onRunSim, simMode, setSimMode, setComponents, setWires,
   chartPanelOpen, setChartPanelOpen,
@@ -3046,6 +3424,8 @@ function SimView({
 }: {
   components: SchComponent[];
   wires: Wire[];
+  netLabels: NetLabel[];
+  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
   simResult: SimResult | null;
   simLoading: boolean;
   simError: string | null;
@@ -3112,12 +3492,14 @@ function SimView({
         <ProbeSchematic
           components={components}
           wires={wires}
+          netLabels={netLabels}
           probedSignals={probedSignals}
           pinNodes={simResult?.pinNodes ?? {}}
           onToggleProbe={toggleProbe}
           mode={simMode}
           setComponents={setComponents}
           setWires={setWires}
+          setNetLabels={setNetLabels}
         />
         {components.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

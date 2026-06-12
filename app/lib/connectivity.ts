@@ -1,5 +1,5 @@
-import type { Point, SchComponent, Wire } from "@/lib/schematic-types";
-import { PIN_NAMES } from "@/lib/schematic-types";
+import type { NetLabel, Point, SchComponent, Wire } from "@/lib/schematic-types";
+import { PIN_NAMES, netLabelNameKey } from "@/lib/schematic-types";
 import { pinWorldPos, pointKey, pointEquals } from "./geometry";
 
 // ─── Union-Find ──────────────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ export type ConnectedGroup = {
   componentIds: Set<string>;
   wireIds: Set<string>;
   kicadInstanceIds: Set<string>;
+  netLabelIds: Set<string>;
 };
 
 // Find every component, KiCad instance, and wire reachable from a seed via
@@ -55,6 +56,13 @@ export type ConnectedGroup = {
 // behavior and by Sim view's move mode. KiCad parts participate exactly like
 // Theory components: a wire endpoint coincident with one of their pins pulls the
 // whole instance into the group.
+//
+// Net labels co-located with any point of the group are collected into
+// `netLabelIds` so a drag carries them along. By default the BFS does NOT jump
+// across same-name labels — that would fuse every labeled net into one rigid
+// group and make dragging useless (labels exist precisely so things are NOT
+// physically connected). Pass `followLabelNames: true` for electrical
+// reachability semantics instead.
 export function findConnectedGroup(
   seed:
     | { kind: "component"; id: string }
@@ -63,10 +71,13 @@ export function findConnectedGroup(
   components: SchComponent[],
   wires: Wire[],
   kicadPinSites: KicadPinSite[] = [],
+  netLabels: NetLabel[] = [],
+  followLabelNames = false,
 ): ConnectedGroup {
   const componentIds = new Set<string>();
   const wireIds = new Set<string>();
   const kicadInstanceIds = new Set<string>();
+  const netLabelIds = new Set<string>();
   type QItem =
     | { kind: "component"; id: string }
     | { kind: "wire"; id: string }
@@ -77,6 +88,15 @@ export function findConnectedGroup(
   else wireIds.add(seed.id);
 
   const kicadPinsById = new Map(kicadPinSites.map((k) => [k.id, k.pins]));
+
+  const labelsByPoint = new Map<string, NetLabel[]>();
+  const labelsByName = new Map<string, NetLabel[]>();
+  for (const l of netLabels) {
+    const pk = pointKey(l.position);
+    labelsByPoint.set(pk, [...(labelsByPoint.get(pk) ?? []), l]);
+    const nk = netLabelNameKey(l.name);
+    labelsByName.set(nk, [...(labelsByName.get(nk) ?? []), l]);
+  }
 
   function compPins(comp: SchComponent): Point[] {
     return (PIN_NAMES[comp.type] ?? []).map((pin) => pinWorldPos(comp, pin));
@@ -97,22 +117,65 @@ export function findConnectedGroup(
     }
   }
 
+  // Enqueue everything whose pin/endpoint coincides with `p` — used when a
+  // label name jump lands us at a brand-new position.
+  function enqueueAtPoint(p: Point): void {
+    enqueueWiresTouching([p]);
+    for (const comp of components) {
+      if (componentIds.has(comp.id)) continue;
+      if (compPins(comp).some((pp) => pp.x === p.x && pp.y === p.y)) {
+        componentIds.add(comp.id);
+        queue.push({ kind: "component", id: comp.id });
+      }
+    }
+    for (const site of kicadPinSites) {
+      if (kicadInstanceIds.has(site.id)) continue;
+      if (site.pins.some((pp) => pp.x === p.x && pp.y === p.y)) {
+        kicadInstanceIds.add(site.id);
+        queue.push({ kind: "kicad", id: site.id });
+      }
+    }
+  }
+
+  // Collect labels sitting at any of `pts`. With followLabelNames, jump to
+  // every other same-name label and continue the search from there.
+  function collectLabelsAt(pts: Point[]): void {
+    for (const p of pts) {
+      const here = labelsByPoint.get(pointKey(p));
+      if (!here) continue;
+      for (const label of here) {
+        if (netLabelIds.has(label.id)) continue;
+        netLabelIds.add(label.id);
+        if (!followLabelNames) continue;
+        for (const peer of labelsByName.get(netLabelNameKey(label.name)) ?? []) {
+          if (netLabelIds.has(peer.id)) continue;
+          netLabelIds.add(peer.id);
+          enqueueAtPoint(peer.position);
+        }
+      }
+    }
+  }
+
   while (queue.length > 0) {
     const item = queue.shift()!;
     if (item.kind === "component") {
       const comp = components.find((c) => c.id === item.id);
       if (!comp) continue;
-      enqueueWiresTouching(compPins(comp));
+      const pins = compPins(comp);
+      enqueueWiresTouching(pins);
+      collectLabelsAt(pins);
     } else if (item.kind === "kicad") {
       const pins = kicadPinsById.get(item.id);
       if (!pins) continue;
       enqueueWiresTouching(pins);
+      collectLabelsAt(pins);
     } else {
       const wire = wires.find((w) => w.id === item.id);
       if (!wire) continue;
       const wStart = wire.vertices[0];
       const wEnd   = wire.vertices[wire.vertices.length - 1];
       const eps = [wStart, wEnd];
+      collectLabelsAt(eps);
       for (const other of wires) {
         if (wireIds.has(other.id)) continue;
         const oStart = other.vertices[0];
@@ -137,7 +200,7 @@ export function findConnectedGroup(
       }
     }
   }
-  return { componentIds, wireIds, kicadInstanceIds };
+  return { componentIds, wireIds, kicadInstanceIds, netLabelIds };
 }
 
 // ─── Wire splitting ──────────────────────────────────────────────────────────
@@ -195,15 +258,18 @@ function wirePoints(w: { vertices?: Point[]; start?: Point; end?: Point }): Poin
   return [];
 }
 
-// Build a Union-Find over wire vertices + pin sites. Two coordinates land in
-// the same group iff they are electrically connected (via a wire or by being
-// the same point in space, i.e. co-located pins).
+// Build a Union-Find over wire vertices + pin sites + net-label anchors. Two
+// coordinates land in the same group iff they are electrically connected: via
+// a wire, by being the same point in space (co-located pins), or by net labels
+// sharing the same name — labels act as a "virtual wire" between every
+// position carrying that name, regardless of distance.
 export function buildNetUnionFind(
   components: SchComponent[],
   wires: Wire[],
   // World positions of KiCad-part pins (caller-resolved). Defaults to none so
   // server-side callers (SPICE netlist) stay unaffected.
   kicadPinSites: Point[] = [],
+  netLabels: NetLabel[] = [],
 ): UnionFind {
   const uf = new UnionFind();
 
@@ -224,7 +290,18 @@ export function buildNetUnionFind(
     }
   }
   for (const p of kicadPinSites) allPinSites.push(pointKey(p));
+  for (const l of netLabels) allPinSites.push(pointKey(l.position));
   for (const site of allPinSites) uf.find(site);
+
+  // Same-name labels: union every label's site with the others in its group.
+  const firstSiteByName = new Map<string, string>();
+  for (const l of netLabels) {
+    const nameKey = netLabelNameKey(l.name);
+    const site = pointKey(l.position);
+    const first = firstSiteByName.get(nameKey);
+    if (first) uf.union(site, first);
+    else firstSiteByName.set(nameKey, site);
+  }
 
   // Co-located pins (two pins at the same world position) belong to the same
   // net even without an explicit wire between them.
