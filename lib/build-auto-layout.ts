@@ -17,16 +17,25 @@
 import type {
   BuildLogicalNetlist,
   BuildLogicalComponent,
+  BuildLogicalWireConnection,
   ComponentRole,
   SchematicState,
   KicadComponentInstance,
+  NetLabel,
+  NetLabelKind,
+  Rotation,
   SchComponent,
   Wire,
   Point,
 } from "./schematic-types";
-import { normalizeComponentRole } from "./schematic-types";
+import {
+  normalizeComponentRole,
+  isLabelConnection,
+  inferNetLabelKind,
+} from "./schematic-types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { KicadPin } from "@/app/lib/kicad/types";
+import type { Direction } from "@/app/lib/geometry";
 import { snap, pointEquals, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import { consolidateWires, splitWiresAtPoint } from "@/app/lib/connectivity";
 
@@ -101,13 +110,20 @@ function detourCandidates(a: number, b: number, edges: number[]): number[] {
   return [...cands].sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
 }
 
+export type RouteResult = {
+  verts: Point[];
+  /** Component boxes the path crosses. 0 means a clean route. */
+  crossings: number;
+};
+
 /**
  * Orthogonal route from `from` to `to` avoiding component bounding boxes.
- * Tries direct → L-bends → Z-bends, then falls back to the least-bad L-bend.
+ * Tries direct → L-bends → Z-bends, then falls back to the least-bad L-bend
+ * (reported via `crossings`, so callers can choose a label-pair instead).
  * Obstacles are COMPONENTS only — wires may cross other wires freely.
  */
-export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point[] {
-  if (pointEquals(from, to)) return [from];
+export function routeWireInfo(from: Point, to: Point, obstacleBboxes: Bbox[]): RouteResult {
+  if (pointEquals(from, to)) return { verts: [from], crossings: 0 };
   // A box that already contains an endpoint can never be avoided (the wire has
   // to reach into it), so drop it rather than letting it veto every candidate.
   const obstacles = obstacleBboxes.filter(
@@ -118,13 +134,13 @@ export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point
   // 1. Direct, when colinear.
   const colinear = from.x === to.x || from.y === to.y;
   if (colinear) {
-    if (clear([from, to])) return [from, to];
+    if (clear([from, to])) return { verts: [from, to], crossings: 0 };
   } else {
     // 2. L-bends — horizontal-first preferred.
     const l1 = [from, { x: to.x, y: from.y }, to];
     const l2 = [from, { x: from.x, y: to.y }, to];
-    if (clear(l1)) return l1;
-    if (clear(l2)) return l2;
+    if (clear(l1)) return { verts: l1, crossings: 0 };
+    if (clear(l2)) return { verts: l2, crossings: 0 };
   }
 
   // 3. Z-bends — detour along a horizontal line y_mid (vertical-horizontal-
@@ -132,15 +148,15 @@ export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point
   const yEdges = obstacles.flatMap((b) => [b.y - ROUTE_CLEARANCE, b.y + b.height + ROUTE_CLEARANCE]);
   for (const yMid of detourCandidates(from.y, to.y, yEdges)) {
     const z = dedupeVerts([from, { x: from.x, y: yMid }, { x: to.x, y: yMid }, to]);
-    if (z.length >= 2 && clear(z)) return z;
+    if (z.length >= 2 && clear(z)) return { verts: z, crossings: 0 };
   }
   const xEdges = obstacles.flatMap((b) => [b.x - ROUTE_CLEARANCE, b.x + b.width + ROUTE_CLEARANCE]);
   for (const xMid of detourCandidates(from.x, to.x, xEdges)) {
     const z = dedupeVerts([from, { x: xMid, y: from.y }, { x: xMid, y: to.y }, to]);
-    if (z.length >= 2 && clear(z)) return z;
+    if (z.length >= 2 && clear(z)) return { verts: z, crossings: 0 };
   }
 
-  // 4. Cornered — return the least-bad option and accept the overlap.
+  // 4. Cornered — return the least-bad option and report the overlap.
   const fallbacks: Point[][] = colinear
     ? [[from, to]]
     : [
@@ -153,10 +169,72 @@ export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point
     const n = pathViolations(f, obstacles);
     if (n < bestN) { best = f; bestN = n; }
   }
-  console.warn(
-    `[build-auto-layout] routeWire cornered: (${from.x},${from.y})→(${to.x},${to.y}) crosses ${bestN} component box(es)`,
-  );
-  return best;
+  return { verts: best, crossings: bestN };
+}
+
+/** Back-compat wrapper: route and accept the least-bad path, warning on overlap. */
+export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point[] {
+  const { verts, crossings } = routeWireInfo(from, to, obstacleBboxes);
+  if (crossings > 0) {
+    console.warn(
+      `[build-auto-layout] routeWire cornered: (${from.x},${from.y})→(${to.x},${to.y}) crosses ${crossings} component box(es)`,
+    );
+  }
+  return verts;
+}
+
+// ─── Wire congestion: parallel-run detection ─────────────────────────────────
+
+const PARALLEL_NEAR_DIST = 10;   // lateral distance (px) that counts as "parallel to"
+const PARALLEL_MAX_OVERLAP = 60; // longest tolerated parallel run (px)
+
+// Longest stretch (px) where the candidate path runs parallel to (within
+// PARALLEL_NEAR_DIST of) an already-routed wire segment. Long shared runs read
+// as tangles even when nothing technically overlaps.
+function longestParallelRun(verts: Point[], existing: Wire[]): number {
+  let worst = 0;
+  for (let i = 0; i < verts.length - 1; i++) {
+    const a = verts[i];
+    const b = verts[i + 1];
+    const horizontal = a.y === b.y;
+    if (!horizontal && a.x !== b.x) continue; // non-orthogonal — shouldn't happen
+    for (const w of existing) {
+      for (let j = 0; j < w.vertices.length - 1; j++) {
+        const c = w.vertices[j];
+        const d = w.vertices[j + 1];
+        if (horizontal && c.y === d.y && Math.abs(c.y - a.y) <= PARALLEL_NEAR_DIST) {
+          const lo = Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x));
+          const hi = Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x));
+          worst = Math.max(worst, hi - lo);
+        } else if (!horizontal && c.x === d.x && Math.abs(c.x - a.x) <= PARALLEL_NEAR_DIST) {
+          const lo = Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y));
+          const hi = Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y));
+          worst = Math.max(worst, hi - lo);
+        }
+      }
+    }
+  }
+  return worst;
+}
+
+// ─── Generated net names ──────────────────────────────────────────────────────
+
+const NET_NAME_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+// Deterministic 4-char suffix from an FNV-1a hash of the connection endpoints:
+// the same netlist always generates the same fallback names.
+function netNameSuffix(key: string): string {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  let out = "";
+  for (let k = 0; k < 4; k++) {
+    out = NET_NAME_CHARS[h % NET_NAME_CHARS.length] + out;
+    h = Math.floor(h / NET_NAME_CHARS.length);
+  }
+  return out;
 }
 
 // ─── Categorization helpers ──────────────────────────────────────────────────
@@ -297,6 +375,38 @@ function obstacleFor(p: Sized): Bbox {
   };
 }
 
+// ─── Net-label placement helpers ─────────────────────────────────────────────
+
+// Which way a pin "exits" its component: the dominant axis from the body
+// center to the pin's world position. Robust to instance rotation and the
+// KiCad y-flip because it works purely on world coordinates.
+function pinExitDirection(owner: Sized, pinPoint: Point): Direction {
+  const box = obstacleFor(owner);
+  const dx = pinPoint.x - (box.x + box.width / 2);
+  const dy = pinPoint.y - (box.y + box.height / 2);
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "east" : "west";
+  return dy >= 0 ? "south" : "north";
+}
+
+// Each glyph has a natural direction it extends from its anchor: power flags
+// point up, ground symbols hang down, generic flags extend east. The stored
+// orientation is the clockwise rotation that aligns the glyph with the pin's
+// exit direction.
+const DIRECTION_ANGLE: Record<Direction, number> = {
+  north: 0, east: 90, south: 180, west: 270,
+};
+
+const NATURAL_LABEL_DIRECTION: Record<NetLabelKind, Direction> = {
+  power: "north",
+  ground: "south",
+  label: "east",
+};
+
+function labelOrientation(kind: NetLabelKind, exit: Direction): Rotation {
+  const delta = DIRECTION_ANGLE[exit] - DIRECTION_ANGLE[NATURAL_LABEL_DIRECTION[kind]];
+  return (((delta % 360) + 360) % 360) as Rotation;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export function autoLayoutBuild(
@@ -341,6 +451,17 @@ export function autoLayoutBuild(
     neighbors.set(a, list);
   };
   for (const conn of netlist.connections) {
+    if (isLabelConnection(conn)) {
+      // A ground label anchors its component to the ground rail for placement
+      // purposes (hang grounded passives below their neighbor). Power/signal
+      // labels are long-distance by design and contribute no adjacency.
+      const kind = conn.labelKind ?? inferNetLabelKind(conn.labelName);
+      if (kind === "ground") {
+        const parsed = parseEndpoint(conn.pin);
+        if (!("ground" in parsed)) groundedRefs.add(parsed.refDes);
+      }
+      continue;
+    }
     const f = parseEndpoint(conn.from);
     const t = parseEndpoint(conn.to);
     const fg = "ground" in f;
@@ -479,13 +600,16 @@ export function autoLayoutBuild(
   const groundPin: Point = { x: ground.x, y: snap(ground.y - 20) };
   let groundUsed = false;
 
-  // ── Wires ───────────────────────────────────────────────────────────────────
+  // ── Net labels + wires ──────────────────────────────────────────────────────
   const obstacles = all.map(obstacleFor);
   let wires: Wire[] = [];
   // Connection endpoints (pin sites + ground pin). Wires are pre-split at these
   // — and ONLY these — points so T-junctions render dots and union into one
   // net, while plain corner/crossing points stay electrically separate.
   const terminals: Point[] = [];
+  const netLabels: NetLabel[] = [];
+  const placedLabelKeys = new Set<string>();   // "x,y|NAME" — dedupe per anchor
+  const usedFallbackNames = new Map<string, string>(); // name → connection key
 
   function resolvePinPoint(parsed: { refDes: string; pin: string }): Point | null {
     const target = byRefDes.get(parsed.refDes);
@@ -495,8 +619,41 @@ export function autoLayoutBuild(
     return kicadPinWorldPos(target.instance, pin);
   }
 
-  function pushRoute(a: Point, b: Point): void {
-    const verts = routeWire(a, b, obstacles);
+  function placeLabel(
+    pinPoint: Point,
+    owner: Sized | undefined,
+    rawName: string,
+    kind: NetLabelKind,
+  ): void {
+    const name = rawName.trim().toUpperCase();
+    const key = `${pinPoint.x},${pinPoint.y}|${name}`;
+    if (placedLabelKeys.has(key)) return; // same label on the same pin twice
+    placedLabelKeys.add(key);
+    const exit = owner ? pinExitDirection(owner, pinPoint) : NATURAL_LABEL_DIRECTION[kind];
+    netLabels.push({
+      id: crypto.randomUUID(),
+      position: pinPoint,
+      name,
+      kind,
+      orientation: labelOrientation(kind, exit),
+    });
+  }
+
+  // Deterministic generated net name for a failed route: "NET_" + 4-char hash
+  // of the connection endpoints (≤ 8 chars total). On the rare hash collision
+  // between different connections, re-hash with a salt until unique.
+  function fallbackNetName(connKey: string): string {
+    for (let salt = 0; ; salt++) {
+      const name = `NET_${netNameSuffix(salt === 0 ? connKey : `${connKey}#${salt}`)}`;
+      const holder = usedFallbackNames.get(name);
+      if (holder === undefined || holder === connKey) {
+        usedFallbackNames.set(name, connKey);
+        return name;
+      }
+    }
+  }
+
+  function pushVerts(verts: Point[], a: Point, b: Point): void {
     // One single-segment Wire per consecutive vertex pair.
     for (let i = 0; i < verts.length - 1; i++) {
       if (!pointEquals(verts[i], verts[i + 1])) {
@@ -506,9 +663,35 @@ export function autoLayoutBuild(
     terminals.push(a, b);
   }
 
+  // PHASE 1 — explicit label connections first, so power/ground pins are
+  // flagged before any wire routing happens around them.
   for (const conn of netlist.connections) {
-    const from = parseEndpoint(conn.from);
-    const to = parseEndpoint(conn.to);
+    if (!isLabelConnection(conn)) continue;
+    const parsed = parseEndpoint(conn.pin);
+    if ("ground" in parsed) continue;
+    const pinPoint = resolvePinPoint(parsed);
+    if (!pinPoint) continue;
+    const kind = conn.labelKind ?? inferNetLabelKind(conn.labelName);
+    placeLabel(pinPoint, byRefDes.get(parsed.refDes), conn.labelName, kind);
+  }
+
+  // PHASE 2 — wire connections, with fallback-to-label when no clean route
+  // exists (the path would cross a component body, or would run parallel to
+  // existing wires for more than PARALLEL_MAX_OVERLAP px).
+  let fallbackCount = 0;
+
+  function routeOrFail(a: Point, b: Point): Point[] | null {
+    const { verts, crossings } = routeWireInfo(a, b, obstacles);
+    if (crossings > 0) return null;
+    if (longestParallelRun(verts, wires) > PARALLEL_MAX_OVERLAP) return null;
+    return verts;
+  }
+
+  for (const conn of netlist.connections) {
+    if (isLabelConnection(conn)) continue;
+    const wireConn = conn as BuildLogicalWireConnection;
+    const from = parseEndpoint(wireConn.from);
+    const to = parseEndpoint(wireConn.to);
     const fromGround = "ground" in from;
     const toGround = "ground" in to;
     if (fromGround && toGround) continue; // nonsensical; skip
@@ -517,15 +700,39 @@ export function autoLayoutBuild(
       const pinEnd = (fromGround ? to : from) as { refDes: string; pin: string };
       const pinPoint = resolvePinPoint(pinEnd);
       if (!pinPoint) continue;
-      groundUsed = true;
-      pushRoute(pinPoint, groundPin);
+      const verts = routeOrFail(pinPoint, groundPin);
+      if (verts) {
+        groundUsed = true;
+        pushVerts(verts, pinPoint, groundPin);
+      } else {
+        // Unroutable ground wire → a ground label right at the pin.
+        fallbackCount++;
+        placeLabel(pinPoint, byRefDes.get(pinEnd.refDes), "GND", "ground");
+      }
       continue;
     }
 
-    const aPos = resolvePinPoint(from as { refDes: string; pin: string });
-    const bPos = resolvePinPoint(to as { refDes: string; pin: string });
+    const fromEnd = from as { refDes: string; pin: string };
+    const toEnd = to as { refDes: string; pin: string };
+    const aPos = resolvePinPoint(fromEnd);
+    const bPos = resolvePinPoint(toEnd);
     if (!aPos || !bPos) continue;
-    pushRoute(aPos, bPos);
+    const verts = routeOrFail(aPos, bPos);
+    if (verts) {
+      pushVerts(verts, aPos, bPos);
+    } else {
+      // Unroutable signal wire → a label pair sharing a generated net name.
+      fallbackCount++;
+      const name = fallbackNetName(`${wireConn.from}->${wireConn.to}`);
+      placeLabel(aPos, byRefDes.get(fromEnd.refDes), name, "label");
+      placeLabel(bPos, byRefDes.get(toEnd.refDes), name, "label");
+    }
+  }
+
+  if (fallbackCount > 0) {
+    console.log(
+      `[autoLayoutBuild] fallback-to-label: ${fallbackCount} wires converted to labels.`,
+    );
   }
 
   for (const t of terminals) wires = splitWiresAtPoint(wires, t);
@@ -535,5 +742,6 @@ export function autoLayoutBuild(
     components: groundUsed ? [ground] : [],
     wires,
     kicadComponents: all.map((p) => p.instance),
+    netLabels,
   };
 }

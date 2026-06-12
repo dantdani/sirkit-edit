@@ -1,83 +1,84 @@
 /**
  * Net classification for the schematic editor.
  *
- * Derives, from the current components + wires, which electrical net each wire
- * belongs to and whether that net is power, ground, or a plain signal. This
- * drives diagram-style rendering: power rails get distinct colors (5V red,
- * 3V3 green, …), ground stays neutral, and power/ground nets get a name label.
+ * Derives, from the current components + wires + net labels, which electrical
+ * net each wire belongs to and whether that net is power, ground, a plain
+ * signal, or unknown (floating). This drives diagram-style rendering: power
+ * nets render red, ground stays grey, signals teal, and floating wires
+ * neutral.
  *
  * Nets themselves are not stored — they are recomputed from connectivity
  * (the same union-find the editor and SPICE export use), so this stays in sync
  * with manual edits automatically. Classification is heuristic: pin NAMES win
  * (an explicit "GND" pin is ground even if KiCad typed it `power_in`), with pin
- * TYPE as a fallback.
+ * TYPE as a fallback. Net labels vote too: a "ground"-kind label grounds its
+ * net; a "power"-kind label (or a power-named one) marks it as power.
  */
 
-import type { Point, SchComponent, Wire, KicadComponentInstance } from "@/lib/schematic-types";
+import type { NetLabel as SchNetLabel, Point, SchComponent, Wire, KicadComponentInstance } from "@/lib/schematic-types";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { buildNetUnionFind } from "./connectivity";
 import { pinWorldPos, kicadPinWorldPos, pointKey } from "./geometry";
 
-export type NetClass = "power" | "ground" | "signal";
+export type NetRole = "power" | "ground" | "signal" | "unknown";
 
-export type NetLabel = {
+export type RailLabel = {
   point: Point;
   name: string;
   color: string;
-  class: NetClass;
+  role: NetRole;
 };
 
 export type NetClassification = {
-  /** Stroke color for a wire, by the class of the net it sits on. */
+  /** Net role of the net a wire sits on. */
+  wireRole: (wire: Wire) => NetRole;
+  /** Stroke color for a wire, by the role of the net it sits on. */
   wireColor: (wire: Wire) => string;
-  /** One label per power/ground net, at the net's top-left-most wire vertex. */
-  labels: NetLabel[];
+  /** Net role at an arbitrary world point (pin site, label anchor, vertex). */
+  roleAt: (point: Point) => NetRole;
+  /** One derived label per power/ground net that has no explicit NetLabel. */
+  labels: RailLabel[];
 };
 
-// Neutral (zinc) for everything that isn't a colored power rail. Ground is left
-// neutral on purpose — the ground glyph + "GND" label are the cue; coloring it
-// too would compete with the rails for attention.
-const SIGNAL_COLOR = "#a1a1aa";
-const GROUND_COLOR = "#a1a1aa";
-const POWER_DEFAULT_COLOR = "#fbbf24"; // amber — an unrecognized rail
+// Spec palette: power red, ground grey, signal teal, unknown neutral.
+export const NET_ROLE_COLORS: Record<NetRole, string> = {
+  power: "#ef4444",   // red-500
+  ground: "#71717a",  // zinc-500
+  signal: "#14b8a6",  // teal-500
+  unknown: "#a1a1aa", // zinc-400
+};
 
-// Named rails get distinct colors so e.g. 5V and 3V3 read apart at a glance.
-const POWER_RAIL_COLORS: { pattern: RegExp; color: string }[] = [
-  { pattern: /(5v|vbus|vin|vsys|vbat)/i, color: "#f87171" }, // higher rails → red
-  { pattern: /(3v3|3\.3|2v5|2\.5|1v8|1\.8|1v2)/i, color: "#4ade80" }, // logic rails → green
-];
+const GND_NAME = /^(gnd\d*|gndd?|agnd|dgnd|pgnd|egnd|vss\d*|vee|0v?|0)$/i;
+const PWR_NAME = /^(vcc\w*|vdd\w*|vbus|vin|vsys|vbat|vaa|avcc|dvcc|v\+|\+?\d+v\d*|\+?\d+\.\d+v?)$/i;
 
-const GND_NAME = /^(gnd\d*|gndd?|agnd|dgnd|pgnd|vss\d*|vee|0v)$/i;
-const PWR_NAME = /^(vcc\w*|vdd\w*|vbus|vin|vout|vsys|vbat|vaa|avcc|dvcc|v\+|3v3|3\.3v|5v|1v8|1\.8v|2v5)$/i;
-
-function powerColor(name: string | null): string {
-  if (name) {
-    for (const r of POWER_RAIL_COLORS) if (r.pattern.test(name)) return r.color;
-  }
-  return POWER_DEFAULT_COLOR;
-}
-
-type Vote = { cls: NetClass; name: string | null };
+type Vote = { role: NetRole; name: string | null };
 
 function classifyKicadPin(pin: KicadPin): Vote | null {
   const name = (pin.name ?? "").trim();
-  if (GND_NAME.test(name)) return { cls: "ground", name: "GND" };
-  if (PWR_NAME.test(name)) return { cls: "power", name: name.toUpperCase() };
+  if (GND_NAME.test(name)) return { role: "ground", name: "GND" };
+  if (PWR_NAME.test(name)) return { role: "power", name: name.toUpperCase() };
   // Many KiCad GND pins are typed `power_in` too — but the name check above
   // already caught those, so a type-only power pin is a genuine supply pin.
   if (pin.type === "power_in" || pin.type === "power_out") {
-    return { cls: "power", name: name ? name.toUpperCase() : null };
+    return { role: "power", name: name ? name.toUpperCase() : null };
   }
   return null;
 }
 
-const CLASS_RANK: Record<NetClass, number> = { ground: 2, power: 1, signal: 0 };
+function classifyNetLabel(label: SchNetLabel): Vote | null {
+  const name = label.name.trim().toUpperCase();
+  if (label.kind === "ground" || GND_NAME.test(name)) return { role: "ground", name: "GND" };
+  if (label.kind === "power" || PWR_NAME.test(name)) return { role: "power", name };
+  return null; // generic signal label — its net stays "signal"
+}
+
+const ROLE_RANK: Record<NetRole, number> = { ground: 3, power: 2, signal: 1, unknown: 0 };
 
 function mergeVote(prev: Vote | undefined, next: Vote): Vote {
   if (!prev) return next;
-  if (CLASS_RANK[next.cls] > CLASS_RANK[prev.cls]) return next;
-  if (CLASS_RANK[next.cls] < CLASS_RANK[prev.cls]) return prev;
-  // Same class — prefer the one that carries a (more specific) name.
+  if (ROLE_RANK[next.role] > ROLE_RANK[prev.role]) return next;
+  if (ROLE_RANK[next.role] < ROLE_RANK[prev.role]) return prev;
+  // Same role — prefer the one that carries a (more specific) name.
   if (!prev.name && next.name) return next;
   return prev;
 }
@@ -91,10 +92,14 @@ export function classifyNets(
   wires: Wire[],
   kicadComponents: KicadComponentInstance[],
   getPart: (partId: string) => { pins: KicadPin[] } | null,
+  netLabels: SchNetLabel[] = [],
 ): NetClassification {
   // Gather pin votes + the KiCad pin world positions the union-find needs.
   const kicadPinPoints: Point[] = [];
   const pinVotes: { point: Point; vote: Vote }[] = [];
+  // Every pin site, voting or not — a net touching any pin is at least
+  // "signal"; a net touching none (a floating wire) is "unknown".
+  const pinSiteKeys = new Set<string>();
 
   for (const inst of kicadComponents) {
     const part = getPart(inst.partId);
@@ -102,6 +107,7 @@ export function classifyNets(
     for (const pin of part.pins) {
       const point = kicadPinWorldPos(inst, pin);
       kicadPinPoints.push(point);
+      pinSiteKeys.add(pointKey(point));
       const vote = classifyKicadPin(pin);
       if (vote) pinVotes.push({ point, vote });
     }
@@ -109,14 +115,40 @@ export function classifyNets(
 
   for (const c of components) {
     if (c.type === "ground") {
-      pinVotes.push({ point: pinWorldPos(c, "pin"), vote: { cls: "ground", name: "GND" } });
+      const p = pinWorldPos(c, "pin");
+      pinSiteKeys.add(pointKey(p));
+      pinVotes.push({ point: p, vote: { role: "ground", name: "GND" } });
     } else if (c.type === "voltage-source") {
+      const plus = pinWorldPos(c, "+");
+      const minus = pinWorldPos(c, "-");
+      pinSiteKeys.add(pointKey(plus));
+      pinSiteKeys.add(pointKey(minus));
       const name = c.value.trim() || null;
-      pinVotes.push({ point: pinWorldPos(c, "+"), vote: { cls: "power", name } });
+      pinVotes.push({ point: plus, vote: { role: "power", name } });
+    } else {
+      for (const pin of ["left", "right", "anode", "cathode", "+", "-"]) {
+        const p = pinWorldPos(c, pin);
+        // pinWorldPos falls back to the component origin for unknown pin
+        // names; only record real pins.
+        if (p.x !== c.x || p.y !== c.y) pinSiteKeys.add(pointKey(p));
+      }
     }
   }
 
-  const uf = buildNetUnionFind(components, wires, kicadPinPoints);
+  for (const label of netLabels) {
+    pinSiteKeys.add(pointKey(label.position));
+    const vote = classifyNetLabel(label);
+    if (vote) pinVotes.push({ point: label.position, vote });
+  }
+
+  const uf = buildNetUnionFind(components, wires, kicadPinPoints, netLabels);
+
+  // Net roots that touch at least one pin/label site — these default to
+  // "signal" instead of "unknown".
+  const rootsWithSites = new Set<string>();
+  for (const key of pinSiteKeys) {
+    if (uf.has(key)) rootsWithSites.add(uf.find(key));
+  }
 
   // Reduce votes onto net roots (ground > power > signal; named beats unnamed).
   const rootVote = new Map<string, Vote>();
@@ -127,40 +159,54 @@ export function classifyNets(
     rootVote.set(root, mergeVote(rootVote.get(root), vote));
   }
 
-  const colorOf = (vote: Vote | undefined): string => {
-    if (!vote || vote.cls === "signal") return SIGNAL_COLOR;
-    if (vote.cls === "ground") return GROUND_COLOR;
-    return powerColor(vote.name);
+  const roleOfRoot = (root: string): NetRole => {
+    const vote = rootVote.get(root);
+    if (vote) return vote.role;
+    return rootsWithSites.has(root) ? "signal" : "unknown";
   };
 
-  const wireColor = (wire: Wire): string => {
+  const roleAt = (point: Point): NetRole => {
+    const key = pointKey(point);
+    if (!uf.has(key)) return "unknown";
+    return roleOfRoot(uf.find(key));
+  };
+
+  const wireRole = (wire: Wire): NetRole => {
     const v0 = wire.vertices[0];
-    if (!v0) return SIGNAL_COLOR;
-    const key = pointKey(v0);
-    if (!uf.has(key)) return SIGNAL_COLOR;
-    return colorOf(rootVote.get(uf.find(key)));
+    if (!v0) return "unknown";
+    return roleAt(v0);
   };
 
-  // One label per power/ground net, anchored at its top-left-most wire vertex.
+  const wireColor = (wire: Wire): string => NET_ROLE_COLORS[wireRole(wire)];
+
+  // Derived rail-name labels for power/ground nets that carry no explicit
+  // NetLabel (explicit labels already render their own name glyph).
+  const rootsWithExplicitLabel = new Set<string>();
+  for (const label of netLabels) {
+    const key = pointKey(label.position);
+    if (uf.has(key)) rootsWithExplicitLabel.add(uf.find(key));
+  }
+
   const repPoint = new Map<string, Point>();
   for (const wire of wires) {
     for (const v of wire.vertices) {
       const key = pointKey(v);
       if (!uf.has(key)) continue;
       const root = uf.find(key);
-      const vote = rootVote.get(root);
-      if (!vote || vote.cls === "signal") continue;
+      if (rootsWithExplicitLabel.has(root)) continue;
+      const role = roleOfRoot(root);
+      if (role !== "power" && role !== "ground") continue;
       const cur = repPoint.get(root);
       if (!cur || v.y < cur.y || (v.y === cur.y && v.x < cur.x)) repPoint.set(root, v);
     }
   }
 
-  const labels: NetLabel[] = [];
+  const labels: RailLabel[] = [];
   for (const [root, point] of repPoint) {
     const vote = rootVote.get(root)!;
-    const name = vote.cls === "ground" ? "GND" : vote.name ?? "PWR";
-    labels.push({ point, name, color: colorOf(vote), class: vote.cls });
+    const name = vote.role === "ground" ? "GND" : vote.name ?? "PWR";
+    labels.push({ point, name, color: NET_ROLE_COLORS[vote.role], role: vote.role });
   }
 
-  return { wireColor, labels };
+  return { wireRole, wireColor, roleAt, labels };
 }

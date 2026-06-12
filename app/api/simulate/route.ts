@@ -132,9 +132,15 @@ export async function POST(req: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  if (!state.components.some((c) => c.type === "ground")) {
+  // A ground reference can be the ground component OR a ground net label
+  // ("ground"-kind, or named GND/0).
+  const hasGroundLabel = (state.netLabels ?? []).some((l) => {
+    const name = l.name.trim().toUpperCase();
+    return l.kind === "ground" || name === "GND" || name === "0";
+  });
+  if (!state.components.some((c) => c.type === "ground") && !hasGroundLabel) {
     return Response.json(
-      { error: "Schematic must have at least one ground component" },
+      { error: "Schematic must have at least one ground component or GND label" },
       { status: 400 },
     );
   }
