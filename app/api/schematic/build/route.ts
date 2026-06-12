@@ -18,8 +18,14 @@ import type {
   BuildLogicalComponent,
   BuildLogicalConnection,
 } from "@/lib/schematic-types";
-import { COMPONENT_ROLES, normalizeComponentRole } from "@/lib/schematic-types";
+import { normalizeComponentRole } from "@/lib/schematic-types";
 import { searchPartsForAI, type AiPartResult } from "@/app/lib/parts-search";
+import {
+  BUILD_SYSTEM_PROMPT,
+  BUILD_NUDGE,
+  BUILD_SEARCH_PARTS_TOOL,
+  BUILD_SUBMIT_SCHEMATIC_TOOL,
+} from "@/app/lib/prompts";
 
 export const runtime = "nodejs";
 
@@ -28,105 +34,6 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = "claude-sonnet-4-6";
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
-
-const SYSTEM_PROMPT = `You are sirkit's Build-mode schematic generator. You design circuits using REAL components from a database of KiCad symbols (~30,000 parts spanning MCUs, op-amps, regulators, sensors, connectors, passives, etc.).
-
-Your workflow for every request:
-1. Decompose the requested circuit into roles (e.g. "main controller", "power input", "current-limiting resistor for LED").
-2. For each role, call the search_parts tool with a natural-language description AND a category filter when applicable. Pick the best candidate from the returned top-5 based on the match quality (look at the description and MPN), pin count appropriateness, and any constraint the user specified.
-3. Once every component is chosen, call submit_schematic with the full netlist.
-
-Rules for connections:
-- Reference pins by either name OR number, in the form "refDes.pin". For an ESP32 you might write "U1.GND" or "U1.13"; both work.
-- Use refDes prefixes following EE convention: U for ICs, R for resistors, C for capacitors, L for inductors, D for diodes, Q for transistors, V for voltage sources (none here — power comes from a connector or regulator), J for connectors, Y for crystals, SW for switches, FB for ferrite beads.
-- Every power pin (VCC, VDD, +3V3) must connect to a power source.
-- Every ground pin must connect to a common ground (use the literal name "GND" in connection strings to denote ground rail; the frontend will create the ground component).
-
-Rules for component roles:
-Every component must include a "role" field selected from: input, processor, output, indicator, regulator, source, connector, passive, support.
-- Use "support" for passives whose purpose is exclusively tied to one specific IC (decoupling caps next to an MCU's VCC pin, pull-up resistors on a specific IC's I2C lines, an MCU's crystal). For support components, set parentRefDes to the refDes of the owning IC.
-- Use "passive" for passives that aren't tied to a specific IC (a current-limiting resistor for an LED in series, a voltage divider, RC filter).
-- Use "indicator" specifically for status LEDs and similar. Use "output" for primary functional outputs (motor driver outputs, speaker, etc.).
-
-Rules for picking parts:
-- Prefer parts with clear, well-known MPNs over obscure ones.
-- For MCUs, prefer common dev-friendly variants (ESP32-WROOM-32, RP2040, ATmega328P, STM32F103C8, etc.) over edge-cases unless the user specified otherwise.
-- For passives, search with package hints ("0805 resistor", "0603 capacitor") so the returned parts match modern SMT practice.
-- For connectors, prefer commonly stocked types (USB-C receptacle, JST-PH, pin header).
-
-Stay focused — don't over-engineer. A simple LED circuit needs an MCU, a resistor, an LED, and ground. Don't add decoupling caps for the MCU unless the user requested them. Add them when asked.
-
-CRITICAL: in submit_schematic, every component's "partId" must be the exact "partId" value (a UUID) copied from a search_parts result. NEVER put the part name or MPN in "partId" — names go in "value".
-
-Always END with exactly one call to submit_schematic. Don't narrate after.`;
-
-const SEARCH_PARTS_TOOL: Anthropic.Tool = {
-  name: "search_parts",
-  description:
-    "Search the parts catalog for real components matching a natural-language description. Returns top 5 candidates with their part IDs, names, MPNs, and pin lists.",
-  input_schema: {
-    type: "object",
-    properties: {
-      query: {
-        type: "string",
-        description: "Natural language description of the desired part",
-      },
-      category: {
-        type: "string",
-        description: "Optional category filter, e.g. Microcontrollers",
-      },
-    },
-    required: ["query"],
-  },
-};
-
-const SUBMIT_SCHEMATIC_TOOL: Anthropic.Tool = {
-  name: "submit_schematic",
-  description: "Submit the final designed schematic as a netlist referencing real parts.",
-  input_schema: {
-    type: "object",
-    properties: {
-      components: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            refDes: { type: "string" },
-            partId: {
-              type: "string",
-              description:
-                "The exact partId UUID from a search_parts result — never the part name or MPN",
-            },
-            value: { type: "string" },
-            role: {
-              type: "string",
-              enum: [...COMPONENT_ROLES],
-              description: "Layout role of this component",
-            },
-            parentRefDes: {
-              type: "string",
-              description: "For role=support only: refDes of the IC this component belongs to",
-            },
-          },
-          required: ["refDes", "partId", "value", "role"],
-        },
-      },
-      connections: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            from: { type: "string" },
-            to: { type: "string" },
-          },
-          required: ["from", "to"],
-        },
-      },
-      explanation: { type: "string" },
-    },
-    required: ["components", "connections", "explanation"],
-  },
-};
 
 /** A connection endpoint is either the ground rail sentinel or a refDes.pin pair. */
 function parseEndpoint(ep: string): { ground: true } | { refDes: string; pin: string } {
@@ -211,11 +118,11 @@ export async function POST(req: Request): Promise<Response> {
         system: [
           {
             type: "text",
-            text: SYSTEM_PROMPT,
+            text: BUILD_SYSTEM_PROMPT,
             cache_control: { type: "ephemeral" },
           },
         ],
-        tools: [SEARCH_PARTS_TOOL, SUBMIT_SCHEMATIC_TOOL],
+        tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
         messages,
       });
 
@@ -235,11 +142,7 @@ export async function POST(req: Request): Promise<Response> {
         console.warn(
           `[schematic/build] no tool call (stop_reason=${response.stop_reason}); nudging. Text: ${text.slice(0, 300)}`,
         );
-        messages.push({
-          role: "user",
-          content:
-            "Do not stop to narrate. Call submit_schematic now with the completed netlist (or search_parts if you still need parts).",
-        });
+        messages.push({ role: "user", content: BUILD_NUDGE });
         continue;
       }
 

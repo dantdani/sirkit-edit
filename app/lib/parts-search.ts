@@ -33,6 +33,7 @@ import {
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
+import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import type { KicadPin } from "@/app/lib/kicad/types";
 
 /** Compact pin descriptor handed to the AI — no positions (keeps tokens small). */
@@ -221,35 +222,6 @@ export async function searchPartsForAI(
 
 // ─── Stage 2: rerank ─────────────────────────────────────────────────────────
 
-const RANK_TOOL: Anthropic.Tool = {
-  name: "rank_parts",
-  description:
-    "Return candidate indices ordered from best to worst match for the role.",
-  input_schema: {
-    type: "object",
-    properties: {
-      ranking: {
-        type: "array",
-        items: { type: "integer" },
-        description:
-          "Candidate indices (from the provided list), best match first.",
-      },
-    },
-    required: ["ranking"],
-  },
-};
-
-const RERANK_SYSTEM = `You re-rank candidate electronic components for one specific role in a circuit.
-
-You are given a role description and a list of candidate parts, each with an index, name, MPN, category, pin count, and a short description. Return the candidate indices ordered from best to worst fit for the role by calling rank_parts.
-
-Judge fit by:
-- how directly the part fulfills the stated role;
-- match to any specifics in the role — package size (e.g. "0805"), family (e.g. "ESP32", "STM32F103"), or value;
-- category appropriateness and a sensible pin count for the role.
-
-Put the strongest matches first. Include every index at least once.`;
-
 /**
  * Reorder the fused candidate pool for the specific role. Best-effort: returns
  * the input order unchanged on any failure (no key, API error, malformed
@@ -282,8 +254,8 @@ async function rerankParts(
     const resp = await client.messages.create({
       model: RERANK_MODEL,
       max_tokens: 256,
-      system: RERANK_SYSTEM,
-      tools: [RANK_TOOL],
+      system: RERANK_SYSTEM_PROMPT,
+      tools: [RERANK_RANK_TOOL],
       tool_choice: { type: "tool", name: "rank_parts" },
       messages: [
         {
