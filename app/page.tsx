@@ -29,7 +29,7 @@ import { rangeAwareTickFormatter } from "./lib/format";
 import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuild } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
@@ -2111,13 +2111,24 @@ export default function Home() {
             parts.set(id, await ensurePartLoaded(id));
           }),
         );
-        state = autoLayoutBuild(netlist, parts);
+        const built = autoLayoutBuildValidated(netlist, parts);
+        state = built.state;
         explanation = data.explanation;
 
         if ((state.kicadComponents?.length ?? 0) === 0) {
           setGenError("No parts produced — try a more specific prompt.");
           setTimeout(() => setGenError(null), 6000);
           return;
+        }
+
+        // Electrical validation: surface (don't silently ship) a schematic that
+        // is electrically wrong by netlist after reroute attempts.
+        if (!built.validation.ok) {
+          const v = built.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
         }
       } else {
         const result = await generateSchematic(prompt);
@@ -2127,6 +2138,15 @@ export default function Home() {
           setGenError("No components produced — try a more specific prompt.");
           setTimeout(() => setGenError(null), 6000);
           return;
+        }
+
+        // Surface (don't silently ship) an electrically-invalid theory schematic.
+        if (!result.validation.ok) {
+          const v = result.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
         }
       }
 

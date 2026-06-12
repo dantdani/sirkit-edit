@@ -38,6 +38,11 @@ import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
 import { snap, pointEquals, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import { consolidateWires, splitWiresAtPoint } from "@/app/lib/connectivity";
+import {
+  validateSchematicNetlist,
+  rerouteToLabels,
+  type NetlistValidation,
+} from "./validate-netlist";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
@@ -375,6 +380,118 @@ function obstacleFor(p: Sized): Bbox {
   };
 }
 
+// ─── Placement validation: non-overlapping component bodies ───────────────────
+//
+// A PCB placement rule — "no component footprint may overlap another's body /
+// courtyard / keepout" — adapted to the layer this generator actually produces:
+// a SCHEMATIC, not a board. There are no real footprints, courtyards, PCB sides,
+// or silkscreen/assembly clearances in this codebase; the schematic analog of a
+// courtyard is the symbol's full pin-extent box expanded by a clearance margin
+// (which folds the rule's separate silkscreen/assembly/courtyard clearances into
+// one symbol clearance). The opposite-PCB-side / footprint-metadata exemptions
+// don't apply — everything is one logical sheet.
+//
+// After placement we check every component pair and slide the more-movable one
+// (smaller / passive before larger / processor-connector-source) out of the
+// other's occupied area until no two boxes intersect. Electrical nets are
+// preserved for free: wires and labels are routed AFTER this pass, from the
+// final pin positions — moving a symbol just moves where its nets attach.
+
+const SYMBOL_CLEARANCE = 30; // px around a symbol's extent (courtyard analog)
+const RESOLVE_MARGIN = 10;   // extra grid step when pushing apart (snap safety)
+
+// Higher rank = more of an anchor; the lower-ranked partner in a collision moves.
+const ANCHOR_RANK: Record<ComponentRole, number> = {
+  processor: 5, connector: 5, source: 5, regulator: 4,
+  input: 3, output: 3, indicator: 2, passive: 1, support: 1,
+};
+
+// Full symbol extent (pin endpoints — NOT deflated like obstacleFor) expanded by
+// `clearance` on every side: the schematic stand-in for a footprint courtyard.
+export function footprintBox(p: Sized, clearance = SYMBOL_CLEARANCE): Bbox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  if (p.part && p.part.pins.length >= 2) {
+    for (const pin of p.part.pins) {
+      const w = kicadPinWorldPos(p.instance, pin);
+      minX = Math.min(minX, w.x); minY = Math.min(minY, w.y);
+      maxX = Math.max(maxX, w.x); maxY = Math.max(maxY, w.y);
+    }
+  }
+  if (!Number.isFinite(minX)) {
+    minX = p.instance.x - p.width / 2; maxX = p.instance.x + p.width / 2;
+    minY = p.instance.y - p.height / 2; maxY = p.instance.y + p.height / 2;
+  }
+  return {
+    x: minX - clearance,
+    y: minY - clearance,
+    width: maxX - minX + 2 * clearance,
+    height: maxY - minY + 2 * clearance,
+  };
+}
+
+function bboxesIntersect(a: Bbox, b: Bbox): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  );
+}
+
+// Of a colliding pair, which one moves: more-movable role first, then the
+// smaller body, then higher refDes (purely for determinism). The other stays.
+function moverOf(a: Sized, b: Sized): Sized {
+  const ra = ANCHOR_RANK[a.role];
+  const rb = ANCHOR_RANK[b.role];
+  if (ra !== rb) return ra < rb ? a : b;
+  const areaA = a.width * a.height;
+  const areaB = b.width * b.height;
+  if (areaA !== areaB) return areaA < areaB ? a : b;
+  return a.comp.refDes > b.comp.refDes ? a : b;
+}
+
+// Slide `mover` just clear of `other` along the axis of least overlap.
+function nudgeApart(mover: Sized, other: Sized): void {
+  const m = footprintBox(mover);
+  const o = footprintBox(other);
+  const overlapX = Math.min(m.x + m.width, o.x + o.width) - Math.max(m.x, o.x);
+  const overlapY = Math.min(m.y + m.height, o.y + o.height) - Math.max(m.y, o.y);
+  const mCx = m.x + m.width / 2, mCy = m.y + m.height / 2;
+  const oCx = o.x + o.width / 2, oCy = o.y + o.height / 2;
+  if (overlapX <= overlapY) {
+    const dir = mCx >= oCx ? 1 : -1;
+    mover.instance.x = snap(mover.instance.x + dir * (overlapX + RESOLVE_MARGIN));
+  } else {
+    const dir = mCy >= oCy ? 1 : -1;
+    mover.instance.y = snap(mover.instance.y + dir * (overlapY + RESOLVE_MARGIN));
+  }
+}
+
+// Iteratively separate overlapping component bodies/courtyards. Returns the
+// number of pairs still overlapping after the pass budget (0 = fully clean).
+export function resolveComponentCollisions(items: Sized[]): number {
+  const maxPasses = items.length * 4 + 8;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let moved = false;
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        if (!bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) continue;
+        const mover = moverOf(items[i], items[j]);
+        nudgeApart(mover, mover === items[i] ? items[j] : items[i]);
+        moved = true;
+      }
+    }
+    if (!moved) return 0;
+  }
+  let remaining = 0;
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      if (bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) remaining++;
+    }
+  }
+  return remaining;
+}
+
 // ─── Net-label placement helpers ─────────────────────────────────────────────
 
 // Which way a pin "exits" its component: the dominant axis from the body
@@ -585,6 +702,16 @@ export function autoLayoutBuild(
     fx += COL_W / 2;
   }
 
+  // ── Placement validation: no two component bodies/courtyards overlap ────────
+  // Runs BEFORE ground placement and wire/label routing so the ground sits below
+  // the final layout and every net routes from de-overlapped pin positions.
+  const unresolvedOverlaps = resolveComponentCollisions(all);
+  if (unresolvedOverlaps > 0) {
+    console.warn(
+      `[autoLayoutBuild] ${unresolvedOverlaps} component overlap(s) could not be fully resolved within the pass budget.`,
+    );
+  }
+
   // ── Single shared ground at the bottom center ───────────────────────────────
   const bottom = zoneBottom(all) ?? CENTER_Y;
   const ground: SchComponent = {
@@ -744,4 +871,46 @@ export function autoLayoutBuild(
     kicadComponents: all.map((p) => p.instance),
     netLabels,
   };
+}
+
+/**
+ * Lay out the netlist, then VALIDATE the drawn result against the intended
+ * netlist (see validate-netlist.ts). When validation finds broken connections —
+ * a wire the netlist intended that didn't electrically take — reroute those nets
+ * as labels and try again (bounded, and only while the violation count strictly
+ * drops). Returns the best `state` plus the final `validation`. Merges and
+ * self-shorts are geometry faults relabeling can't fix; they survive in
+ * `validation.violations` for the caller to surface as hard errors rather than
+ * silently shipping an electrically wrong schematic.
+ */
+export function autoLayoutBuildValidated(
+  netlist: BuildLogicalNetlist,
+  parts: Map<string, CachedPart>,
+  maxAttempts = 3,
+): { state: SchematicState; validation: NetlistValidation } {
+  let current = netlist;
+  let state = autoLayoutBuild(current, parts);
+  let validation = validateSchematicNetlist(current, state, parts);
+
+  for (let attempt = 1; !validation.ok && attempt < maxAttempts; attempt++) {
+    const rerouted = rerouteToLabels(current, parts, state, validation.violations);
+    if (rerouted === current) break; // nothing reroutable (no broken connections)
+    const nextState = autoLayoutBuild(rerouted, parts);
+    const nextValidation = validateSchematicNetlist(rerouted, nextState, parts);
+    // Keep the reroute only if it strictly reduced violations.
+    if (nextValidation.violations.length >= validation.violations.length) break;
+    current = rerouted;
+    state = nextState;
+    validation = nextValidation;
+  }
+
+  if (!validation.ok) {
+    // warn, not error — this is a surfaced finding (also shown in the UI), not a
+    // crash; console.error trips Next.js's dev error overlay.
+    console.warn(
+      `[autoLayoutBuildValidated] ${validation.violations.length} unresolved netlist violation(s):`,
+      validation.violations.map((v) => `${v.kind}: ${v.message}`).join("\n  "),
+    );
+  }
+  return { state, validation };
 }

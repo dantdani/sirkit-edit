@@ -9,7 +9,8 @@
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "ingest:kicad": "tsx scripts/ingest-kicad.ts"
+    "ingest:kicad": "tsx scripts/ingest-kicad.ts",
+    "test:netlist": "tsx scripts/netlist-validation.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
