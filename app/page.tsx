@@ -26,7 +26,7 @@ import { GRID, snap, pointEquals, closestPointOnSegment, distance, pinWorldPos, 
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind } from "@/lib/schematic-types";
+import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
@@ -1856,6 +1856,7 @@ export default function Home() {
 
   // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditing, setIsEditing]       = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
@@ -2160,6 +2161,115 @@ export default function Home() {
       setTimeout(() => setGenError(null), 6000);
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  // Tier-1 text editing: attribute-only edits (set value / rename / delete)
+  // applied directly to state. No re-layout, no netlist round-trip — so manual
+  // placement is preserved and the validator isn't involved (connectivity only
+  // changes on delete, which is the user's explicit intent).
+  async function handleEditSchematic(prompt: string) {
+    if (!prompt.trim() || isEditing) return;
+    const hasSchematic = components.length > 0 || kicadComponents.length > 0;
+    if (!hasSchematic) return;
+
+    setIsEditing(true);
+    setGenError(null);
+    try {
+      const summary = [
+        ...components.map((c) => ({ refDes: c.id, kind: c.type, value: c.value || "" })),
+        ...kicadComponents.map((k) => ({
+          refDes: k.refDes,
+          kind: getCachedPart(k.partId)?.name ?? "part",
+          value: k.value || "",
+        })),
+      ];
+
+      const res = await fetch("/api/schematic/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: prompt, components: summary }),
+      });
+      const data = (await res.json()) as
+        | { ok: true; ops: SchematicEditOp[]; note: string }
+        | { ok: false; error: string };
+      if (!data.ok) throw new Error(data.error || "Edit failed");
+
+      let comps = components;
+      let kis = kicadComponents;
+      let wrs = wires;
+      let lbls = netLabels;
+      const deletedPinKeys = new Set<string>();
+      let applied = 0;
+
+      for (const op of data.ops) {
+        const tgt = op.target;
+        const isTheory = comps.some((c) => c.id === tgt);
+        const isKicad = kis.some((k) => k.refDes === tgt);
+        if (!isTheory && !isKicad) continue;
+
+        if (op.op === "set-value") {
+          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, value: op.value } : c));
+          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, value: op.value } : k));
+          applied++;
+        } else if (op.op === "rename") {
+          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, id: op.refDes } : c));
+          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, refDes: op.refDes } : k));
+          applied++;
+        } else if (op.op === "delete") {
+          if (isTheory) {
+            const c = comps.find((x) => x.id === tgt)!;
+            for (const name of PIN_NAMES[c.type] ?? []) {
+              const p = pinWorldPos(c, name);
+              deletedPinKeys.add(`${p.x},${p.y}`);
+            }
+            comps = comps.filter((x) => x.id !== tgt);
+          } else {
+            const k = kis.find((x) => x.refDes === tgt)!;
+            const part = getCachedPart(k.partId);
+            if (part) for (const pin of part.pins) {
+              const p = kicadPinWorldPos(k, pin);
+              deletedPinKeys.add(`${p.x},${p.y}`);
+            }
+            kis = kis.filter((x) => x.refDes !== tgt);
+          }
+          applied++;
+        }
+      }
+
+      // A deleted component's wires/labels would otherwise dangle — drop the ones
+      // anchored to its pins.
+      if (deletedPinKeys.size > 0) {
+        wrs = wrs.filter((w) => {
+          const a = w.vertices[0];
+          const b = w.vertices[w.vertices.length - 1];
+          return !(deletedPinKeys.has(`${a.x},${a.y}`) || deletedPinKeys.has(`${b.x},${b.y}`));
+        });
+        lbls = lbls.filter((l) => !deletedPinKeys.has(`${l.position.x},${l.position.y}`));
+      }
+
+      setComponents(comps);
+      setKicadComponents(kis);
+      setWires(wrs);
+      setNetLabels(lbls);
+      setSelectedId(null);
+      setSelectedKicadId(null);
+
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "user", content: prompt },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.note || (applied > 0 ? `Applied ${applied} edit(s).` : "No edits applied."),
+        },
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Edit failed";
+      setGenError(msg);
+      setTimeout(() => setGenError(null), 6000);
+    } finally {
+      setIsEditing(false);
     }
   }
 
@@ -2560,9 +2670,9 @@ export default function Home() {
                 }}
                 className="min-h-20 resize-none border-zinc-800 bg-zinc-900/60 text-sm"
                 placeholder={mode === "build"
-                  ? "Ask a question, or describe a circuit and hit Generate — e.g. 'ESP32 with USB-C and an LED'"
-                  : "Ask a question, or describe a circuit and hit Generate — e.g. '9V LED dimmer'"}
-                disabled={loading || isGenerating}
+                  ? "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"
+                  : "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"}
+                disabled={loading || isGenerating || isEditing}
               />
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-xs text-zinc-500">Enter to ask · ⇧Enter newline</div>
@@ -2570,14 +2680,28 @@ export default function Home() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    disabled={!input.trim() || loading || isGenerating}
+                    disabled={!input.trim() || loading || isGenerating || isEditing}
                     onClick={send}
                   >
                     {loading ? "…" : "Ask"}
                   </Button>
                   <Button
                     size="sm"
-                    disabled={!input.trim() || loading || isGenerating}
+                    variant="ghost"
+                    title={components.length === 0 && kicadComponents.length === 0
+                      ? "Generate a schematic first"
+                      : "Apply an attribute edit (set value, rename, delete) to the current schematic"}
+                    disabled={
+                      !input.trim() || loading || isGenerating || isEditing ||
+                      (components.length === 0 && kicadComponents.length === 0)
+                    }
+                    onClick={() => { const t = input; setInput(""); handleEditSchematic(t); }}
+                  >
+                    {isEditing ? "Editing…" : "Edit"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!input.trim() || loading || isGenerating || isEditing}
                     onClick={() => { const t = input; setInput(""); handleGenerateSchematic(t); }}
                   >
                     {isGenerating ? "Generating…" : "Generate"}

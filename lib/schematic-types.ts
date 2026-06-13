@@ -185,6 +185,16 @@ export type BuildLogicalNetlist = {
   explanation: string;
 };
 
+// ─── Tier-1 text editing (attribute-only, no topology change) ───────────────────
+// Edits applied DIRECTLY to schematic state from a chat instruction — no
+// re-layout, no netlist round-trip. `target` is the component's current
+// refDes (Build) or id (Theory). Topology edits (add/rewire/rotate) are a
+// separate, layout- and validator-aware tier.
+export type SchematicEditOp =
+  | { op: "set-value"; target: string; value: string }
+  | { op: "rename"; target: string; refDes: string }
+  | { op: "delete"; target: string };
+
 export const PIN_NAMES: Record<SchComponentType, string[]> = {
   resistor: ["left", "right"],
   capacitor: ["left", "right"],

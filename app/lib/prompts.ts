@@ -292,3 +292,45 @@ Judge fit by:
 - category appropriateness and a sensible pin count for the role.
 
 Put the strongest matches first. Include every index at least once.`;
+
+// ─── Tier-1 schematic editor (/api/schematic/edit) ───────────────────────────
+
+export const EDIT_SYSTEM_PROMPT = `You apply small, targeted edits to an EXISTING schematic from a natural-language instruction by calling apply_edits.
+
+You are given the current component list (each with a refDes, kind, and value) and the user's instruction. Return ONLY the minimal set of attribute edits needed.
+
+Supported operations (attribute-only — you may NOT add, move, rotate, or rewire anything):
+- set-value: change a component's value, e.g. "make R1 4.7k", "change the cap to 100n". Put the new value in "value".
+- rename: change a component's reference designator, e.g. "rename U1 to U5". Put the new refDes in "refDes".
+- delete: remove a component, e.g. "delete the status LED", "remove R3".
+
+Rules:
+- "target" MUST be the exact refDes/id of a component from the provided list. Identify the right one from the instruction (e.g. "the LED" → the diode whose value/name says LED; "the regulator" → the regulator part).
+- If the instruction asks for something NOT supported here — adding a part, wiring, moving, rotating, or anything that changes connections — do NOT invent an op for it; omit it and note it in "note".
+- "note" is a one-line plain-English summary of what you changed (and anything you skipped).
+- If nothing can be applied, return an empty "ops" array and explain why in "note".`;
+
+export const EDIT_APPLY_TOOL: Anthropic.Tool = {
+  name: "apply_edits",
+  description: "Apply attribute-only edits (set value, rename, delete) to the existing schematic.",
+  input_schema: {
+    type: "object",
+    properties: {
+      ops: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            op: { type: "string", enum: ["set-value", "rename", "delete"] },
+            target: { type: "string", description: "Exact refDes/id of the component to edit" },
+            value: { type: "string", description: 'New value (op="set-value" only)' },
+            refDes: { type: "string", description: 'New reference designator (op="rename" only)' },
+          },
+          required: ["op", "target"],
+        },
+      },
+      note: { type: "string", description: "One-line summary of what changed / was skipped" },
+    },
+    required: ["ops", "note"],
+  },
+};
