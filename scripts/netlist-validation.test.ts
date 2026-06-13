@@ -7,6 +7,7 @@
  */
 
 import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from "../lib/validate-netlist";
+import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin } from "../app/lib/kicad/types";
@@ -14,6 +15,7 @@ import type {
   BuildLogicalNetlist,
   LogicalNetlist,
   KicadComponentInstance,
+  NetLabel,
   SchComponent,
   SchComponentType,
   SchematicState,
@@ -370,6 +372,42 @@ const tPin = (c: SchComponent, name: string) => pinWorldPos(c, name);
   };
   const res = validateTheoryNetlist(logical, { components: comps, wires });
   check("theory: two ground symbols are one net (no false split/merge)", res.ok);
+}
+
+// ── schematicToBuildNetlist extractor (Tier-2 round-trip) ─────────────────────
+const nl = (name: string, kind: "power" | "ground" | "label", p: Point): NetLabel =>
+  ({ id: `${name}@${p.x},${p.y}`, position: p, name, kind, orientation: 0 });
+type LabelConn = { kind: "label"; pin: string; labelName: string; labelKind: string };
+const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
+
+// X1. Wire net stays a wire; ground/power labels are preserved.
+{
+  const r1 = mkInst("R1", PART, 0, 0);
+  const r2 = mkInst("R2", PART, 200, 0);
+  const wires: Wire[] = [wire(pinWorld(r1, "2"), pinWorld(r2, "1"))]; // R1.2 ── R2.1
+  const labels = [nl("GND", "ground", pinWorld(r1, "1")), nl("VCC", "power", pinWorld(r2, "2"))];
+  const state: SchematicState = { components: [], wires, kicadComponents: [r1, r2], netLabels: labels };
+  const out = schematicToBuildNetlist(state, parts);
+
+  const gnd = out.connections.find((c) => isLabel(c) && c.labelName === "GND") as LabelConn | undefined;
+  const vcc = out.connections.find((c) => isLabel(c) && c.labelName === "VCC") as LabelConn | undefined;
+  const wireConn = out.connections.find((c) => c.kind !== "label");
+
+  check("extractor: keeps components + partIds", out.components.length === 2 && out.components.every((c) => c.partId === PART));
+  check("extractor: 2-pin net → wire connection", !!wireConn);
+  check("extractor: ground label preserved", gnd?.labelKind === "ground" && gnd?.pin === "R1.1");
+  check("extractor: power label preserved", vcc?.labelKind === "power" && vcc?.pin === "R2.2");
+}
+
+// X2. A ground COMPONENT (not a label) becomes a GND label on the wired pin.
+{
+  const r3 = mkInst("R3", PART, 0, 0);
+  const g1 = tComp("GND1", "ground", 0, 120, "");
+  const wires: Wire[] = [wire(pinWorld(r3, "2"), tPin(g1, "pin"))];
+  const state: SchematicState = { components: [g1], wires, kicadComponents: [r3], netLabels: [] };
+  const out = schematicToBuildNetlist(state, parts);
+  const gnd = out.connections.find((c) => isLabel(c) && c.pin === "R3.2") as LabelConn | undefined;
+  check("extractor: ground component → GND label on its pin", gnd?.labelName === "GND" && gnd?.labelKind === "ground");
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

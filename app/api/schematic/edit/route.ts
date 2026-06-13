@@ -8,8 +8,11 @@
  * directly to state. Ops referencing an unknown target are dropped server-side.
  *
  * Body:     { instruction: string; components: { refDes: string; kind: string; value: string }[] }
- * Response: { ok: true; ops: SchematicEditOp[]; note: string }
+ * Response: { ok: true; ops: SchematicEditOp[]; note: string; needsTopology: boolean }
  *      or:  { ok: false; error: string }
+ *
+ * `needsTopology` signals the instruction needs add/rewire/swap/move/rotate — the
+ * client then hands it to the Tier-2 topology editor (/api/schematic/edit-build).
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -72,9 +75,10 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: "no edits returned" }, { status: 500 });
   }
 
-  const raw = toolUse.input as { ops?: unknown; note?: unknown };
+  const raw = toolUse.input as { ops?: unknown; note?: unknown; needsTopology?: unknown };
   const rawOps = Array.isArray(raw.ops) ? raw.ops : [];
   let note = typeof raw.note === "string" ? raw.note : "";
+  const needsTopology = raw.needsTopology === true;
 
   // Keep only well-formed ops that target a real component.
   const dropped: string[] = [];
@@ -101,5 +105,5 @@ export async function POST(req: Request): Promise<Response> {
     note = `${note}${note ? " " : ""}(dropped ${dropped.length}: ${dropped.join("; ")})`.trim();
   }
 
-  return Response.json({ ok: true, ops, note });
+  return Response.json({ ok: true, ops, note, needsTopology });
 }

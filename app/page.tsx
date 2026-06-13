@@ -30,6 +30,7 @@ import type { SchComponent, Wire, Point, SchComponentType, SchematicState, Kicad
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
@@ -2191,9 +2192,65 @@ export default function Home() {
         body: JSON.stringify({ instruction: prompt, components: summary }),
       });
       const data = (await res.json()) as
-        | { ok: true; ops: SchematicEditOp[]; note: string }
+        | { ok: true; ops: SchematicEditOp[]; note: string; needsTopology: boolean }
         | { ok: false; error: string };
       if (!data.ok) throw new Error(data.error || "Edit failed");
+
+      // Tier 2 — topology edit (add / rewire / swap). Round-trips the current
+      // schematic through the netlist editor, then re-lays-out + validates.
+      if (data.needsTopology) {
+        if (mode !== "build") {
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "user", content: prompt },
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content:
+                "Topology edits (adding, rewiring, or swapping parts) aren't supported in Theory mode yet — use Generate to recreate the circuit.",
+            },
+          ]);
+          return;
+        }
+
+        const partsMap = new Map<string, CachedPart>();
+        for (const k of kicadComponents) {
+          const p = getCachedPart(k.partId);
+          if (p) partsMap.set(k.partId, p);
+        }
+        const currentNetlist = schematicToBuildNetlist(
+          { components, wires, kicadComponents, netLabels },
+          partsMap,
+        );
+
+        const res2 = await fetch("/api/schematic/edit-build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instruction: prompt, netlist: currentNetlist }),
+        });
+        const data2 = (await res2.json()) as
+          | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
+          | { ok: false; error: string };
+        if (!data2.ok) throw new Error(data2.error || "Edit failed");
+
+        const nl = data2.netlist;
+        const ids = [...new Set(nl.components.map((c) => c.partId))];
+        const loaded = new Map<string, CachedPart>();
+        await Promise.all(ids.map(async (id) => loaded.set(id, await ensurePartLoaded(id))));
+
+        const built = autoLayoutBuildValidated(nl, loaded);
+        // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
+        // instruction + explanation into the chat transcript.
+        applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt);
+        if (!built.validation.ok) {
+          const v = built.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
+        }
+        return;
+      }
 
       let comps = components;
       let kis = kicadComponents;
