@@ -22,7 +22,7 @@ import {
   Scissors, Sparkles, Loader2, Move, Crosshair, GripVertical, X, CircleDot, Tag,
 } from "lucide-react";
 import { getKeyBindings } from "./lib/keybindings";
-import { GRID, snap, pointEquals, closestPointOnSegment, distance, pinWorldPos, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, pointStrictlyOnWireInterior } from "./lib/geometry";
+import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pinWorldPos, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, pointStrictlyOnWireInterior } from "./lib/geometry";
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
@@ -405,6 +405,61 @@ function lbend(from: Point, to: Point): Point {
   return dx >= dy ? { x: to.x, y: from.y } : { x: from.x, y: to.y };
 }
 
+// ─── Stretch-mode movement (double-click drag) ───────────────────────────────
+// Single-click drag moves the whole connected group rigidly (LTspice F8);
+// double-click drag moves ONLY the clicked component, and wires attached to
+// its pins stretch to follow (LTspice F7). Junctions with other wires may
+// break — that's expected; the user re-wires manually.
+
+const DOUBLE_CLICK_MS = 350;
+
+type DragMode = "rigid" | "stretch";
+
+// Move one end of a polyline by (dx, dy). If the end segment would go
+// diagonal, insert an L-bend corner that preserves the segment's ORIGINAL
+// direction: a horizontal segment stays horizontal from the unmoved side and
+// bends vertically at the moved pin's new x (symmetrically for vertical;
+// degenerate zero-length segments default to horizontal-first).
+function stretchPolylineEnd(vertices: Point[], end: "first" | "last", dx: number, dy: number): Point[] {
+  if (end === "first") {
+    return stretchPolylineEnd([...vertices].reverse(), "last", dx, dy).reverse();
+  }
+  const verts = vertices.map((v) => ({ ...v }));
+  const moved = verts[verts.length - 1];
+  const target = { x: moved.x + dx, y: moved.y + dy };
+  const neighbor = verts[verts.length - 2];
+  if (!neighbor) return [target];
+  const wasVertical = moved.x === neighbor.x && moved.y !== neighbor.y;
+  verts[verts.length - 1] = target;
+  if (target.x === neighbor.x || target.y === neighbor.y) {
+    // Pin moved along the segment's own axis — the endpoint just slides.
+    // Drop the end segment entirely if it collapsed onto the neighbor.
+    if (pointEquals(target, neighbor) && verts.length > 2) verts.splice(verts.length - 2, 1);
+    return verts;
+  }
+  const corner = wasVertical
+    ? { x: neighbor.x, y: target.y }
+    : { x: target.x, y: neighbor.y };
+  verts.splice(verts.length - 1, 0, corner);
+  return verts;
+}
+
+// Stretch-mode wire update: endpoints sitting on one of the moved component's
+// ORIGINAL pin positions follow that pin by (dx, dy); all other wires are
+// returned untouched. Always called against the drag-start snapshot so
+// corners don't accumulate across mousemoves.
+function stretchWire(wire: Wire, movedPinKeys: Set<string>, dx: number, dy: number): Wire {
+  const first = wire.vertices[0];
+  const last = wire.vertices[wire.vertices.length - 1];
+  const firstHit = first !== undefined && movedPinKeys.has(pointKey(first));
+  const lastHit = wire.vertices.length > 1 && movedPinKeys.has(pointKey(last));
+  if (!firstHit && !lastHit) return wire;
+  let verts = wire.vertices;
+  if (lastHit) verts = stretchPolylineEnd(verts, "last", dx, dy);
+  if (firstHit) verts = stretchPolylineEnd(verts, "first", dx, dy);
+  return { ...wire, vertices: verts };
+}
+
 // ─── Pin topology helpers ─────────────────────────────────────────────────────
 
 // Rotates a local point by the given rotation. Used inside SVG transforms for
@@ -524,12 +579,13 @@ const REFDES_LABEL: Record<SchComponentType, { x: number; y: number; anchor: str
 };
 
 function ComponentSymbol({
-  comp, selected, deleteHovered, onMouseDown, onMouseEnter, onMouseLeave,
+  comp, selected, deleteHovered, dragHighlight, onMouseDown, onMouseEnter, onMouseLeave,
   pointerEvents,
 }: {
   comp: SchComponent;
   selected: boolean;
   deleteHovered?: boolean;
+  dragHighlight?: DragMode;
   onMouseDown: (e: React.MouseEvent) => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -554,7 +610,10 @@ function ComponentSymbol({
     <g
       transform={`translate(${comp.x},${comp.y}) rotate(${comp.rotation})`}
       style={{
-        cursor: deleteHovered ? "crosshair" : "grab",
+        cursor: deleteHovered ? "crosshair"
+          : dragHighlight === "stretch" ? "move"
+          : dragHighlight === "rigid" ? "grabbing"
+          : "grab",
         pointerEvents: pointerEvents ?? "auto",
       }}
       onMouseDown={onMouseDown}
@@ -563,6 +622,18 @@ function ComponentSymbol({
     >
       <rect x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12} fill="transparent" />
       {shape}
+      {dragHighlight === "stretch" && (
+        <rect
+          x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12}
+          fill="none" stroke="#2dd4bf" strokeWidth={1.5} rx={3}
+        />
+      )}
+      {dragHighlight === "rigid" && (
+        <rect
+          x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12}
+          fill="none" stroke="#2dd4bf" strokeWidth={0.75} strokeDasharray="4 2" rx={2}
+        />
+      )}
       {selected && (
         <rect
           x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12}
@@ -766,13 +837,14 @@ function categoryTint(category: string): { fill: string; stroke: string } {
 const BLOCK_MIN_PINS = 5;
 
 function KicadInstanceView({
-  instance, part, selected, deleteHovered, zoom, pointerEvents,
+  instance, part, selected, deleteHovered, dragHighlight, zoom, pointerEvents,
   onMouseDown, onMouseEnter, onMouseLeave,
 }: {
   instance: KicadComponentInstance;
   part: CachedPart | null;
   selected: boolean;
   deleteHovered: boolean;
+  dragHighlight?: DragMode;
   zoom: number;
   pointerEvents: "auto" | "none";
   onMouseDown: (e: React.MouseEvent) => void;
@@ -807,7 +879,13 @@ function KicadInstanceView({
       {/* Symbol body — the transform applies mm→px scale, rotation, and origin. */}
       <g
         transform={`translate(${instance.x},${instance.y}) rotate(${instance.rotation}) scale(${KICAD_SCALE_PX_PER_MM})`}
-        style={{ cursor: deleteHovered ? "crosshair" : "grab", pointerEvents }}
+        style={{
+          cursor: deleteHovered ? "crosshair"
+            : dragHighlight === "stretch" ? "move"
+            : dragHighlight === "rigid" ? "grabbing"
+            : "grab",
+          pointerEvents,
+        }}
         onMouseDown={onMouseDown}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
@@ -820,6 +898,24 @@ function KicadInstanceView({
         const w = kicadPinWorldPos(instance, pin);
         return <circle key={i} cx={w.x} cy={w.y} r={2 / zoom} fill="#52525b" style={{ pointerEvents: "none" }} />;
       })}
+
+      {/* Drag-mode highlight: solid teal ring for stretch, dashed for rigid. */}
+      {dragHighlight === "stretch" && (
+        <rect
+          x={box.minX - pad} y={box.minY - pad}
+          width={box.maxX - box.minX + pad * 2} height={box.maxY - box.minY + pad * 2}
+          fill="none" stroke="#2dd4bf" strokeWidth={1.5 / zoom} rx={3}
+          style={{ pointerEvents: "none" }}
+        />
+      )}
+      {dragHighlight === "rigid" && (
+        <rect
+          x={box.minX - pad} y={box.minY - pad}
+          width={box.maxX - box.minX + pad * 2} height={box.maxY - box.minY + pad * 2}
+          fill="none" stroke="#2dd4bf" strokeWidth={1 / zoom} strokeDasharray={`${4 / zoom} ${2 / zoom}`} rx={2}
+          style={{ pointerEvents: "none" }}
+        />
+      )}
 
       {/* Selection halo. */}
       {selected && (
@@ -942,7 +1038,7 @@ function SchematicEditor({
   }, [components, wires, kicadComponents, partVersion, netLabels]);
 
   const dragRef = useRef<{
-    type: "pan" | "group";
+    type: "pan" | "group" | "stretch";
     startMouse: Point;
     startPan: Point;
     startWorldSnapped?: Point;
@@ -954,7 +1050,33 @@ function SchematicEditor({
     initWires?: Map<string, Point[]>;
     initKicad?: Map<string, Point>;
     initLabels?: Map<string, Point>;
+    // Stretch-mode (double-click drag): the lone moved element, its original
+    // pin positions, and a drag-start wire snapshot to recompute from.
+    stretchKind?: "component" | "kicad";
+    stretchId?: string;
+    stretchInitPos?: Point;
+    stretchPinKeys?: Set<string>;
+    stretchBaseWires?: Wire[];
   } | null>(null);
+
+  // Visual feedback for an in-progress drag: rigid mode outlines the whole
+  // connected group (dashed teal); stretch mode rings the lone moved element
+  // and brightens the wires that are following it.
+  const [activeDrag, setActiveDrag] = useState<
+    | { mode: "rigid"; compIds: Set<string>; kicadIds: Set<string>; wireIds: Set<string> }
+    | { mode: "stretch"; compId: string | null; kicadId: string | null; wireIds: Set<string> }
+    | null
+  >(null);
+
+  // Double-click detection for stretch-mode drags: second mousedown on the
+  // same element within DOUBLE_CLICK_MS enters stretch instead of rigid.
+  const lastClickRef = useRef<{ time: number; id: string } | null>(null);
+  function detectDoubleClick(id: string, e: React.MouseEvent): boolean {
+    const now = e.timeStamp;
+    const prev = lastClickRef.current;
+    lastClickRef.current = { time: now, id };
+    return prev !== null && prev.id === id && now - prev.time <= DOUBLE_CLICK_MS;
+  }
 
   // Global mouse handlers
   useEffect(() => {
@@ -1005,9 +1127,35 @@ function SchematicEditor({
             return init ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
           }));
         }
+      } else if (dragRef.current.type === "stretch") {
+        const rect = svgRef.current.getBoundingClientRect();
+        const wx = snap((e.clientX - rect.left - panRef.current.x) / zoomRef.current);
+        const wy = snap((e.clientY - rect.top  - panRef.current.y) / zoomRef.current);
+        const sw = dragRef.current.startWorldSnapped!;
+        const dx = wx - sw.x;
+        const dy = wy - sw.y;
+        const d = dragRef.current;
+        const init = d.stretchInitPos!;
+        if (d.stretchKind === "component") {
+          setComponents(componentsRef.current.map((c) =>
+            c.id === d.stretchId ? { ...c, x: init.x + dx, y: init.y + dy } : c));
+        } else {
+          setKicadComponents(kicadComponentsRef.current.map((k) =>
+            k.id === d.stretchId ? { ...k, x: init.x + dx, y: init.y + dy } : k));
+        }
+        // Recompute every attached wire from the drag-start snapshot so
+        // L-bend corners don't accumulate across mousemoves.
+        const pinKeys = d.stretchPinKeys!;
+        setWires(d.stretchBaseWires!.map((w) => stretchWire(w, pinKeys, dx, dy)));
       }
     }
-    function onMouseUp() { dragRef.current = null; }
+    function onMouseUp() {
+      if (dragRef.current?.type === "stretch") {
+        setWires((ws) => consolidateWires(ws));
+      }
+      if (dragRef.current && dragRef.current.type !== "pan") setActiveDrag(null);
+      dragRef.current = null;
+    }
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup",   onMouseUp);
     return () => {
@@ -1172,7 +1320,8 @@ function SchematicEditor({
       e.stopPropagation();
       setSelectedId(comp.id);
       setSelectedKicadId(null);
-      beginGroupDrag({ kind: "component", id: comp.id }, e);
+      if (detectDoubleClick(comp.id, e)) beginStretchDrag({ kind: "component", id: comp.id }, e);
+      else beginGroupDrag({ kind: "component", id: comp.id }, e);
     }
     // wire / placement: let click bubble to SVG background handler
   }
@@ -1191,7 +1340,8 @@ function SchematicEditor({
       e.stopPropagation();
       setSelectedKicadId(kicad.id);
       setSelectedId(null);
-      beginGroupDrag({ kind: "kicad", id: kicad.id }, e);
+      if (detectDoubleClick(kicad.id, e)) beginStretchDrag({ kind: "kicad", id: kicad.id }, e);
+      else beginGroupDrag({ kind: "kicad", id: kicad.id }, e);
     }
   }
 
@@ -1244,6 +1394,66 @@ function SchematicEditor({
       initKicad,
       initLabels,
     };
+    setActiveDrag({
+      mode: "rigid",
+      compIds: group.componentIds,
+      kicadIds: group.kicadInstanceIds,
+      wireIds: group.wireIds,
+    });
+  }
+
+  // Stretch-mode drag setup (double-click): only the clicked element moves;
+  // wires whose endpoints sit on its pins follow with L-bends. Other wires —
+  // including junction partners at the same point — stay put.
+  function beginStretchDrag(
+    seed: { kind: "component"; id: string } | { kind: "kicad"; id: string },
+    e: React.MouseEvent,
+  ) {
+    let origPins: Point[];
+    let initPos: Point;
+    if (seed.kind === "component") {
+      const c = componentsRef.current.find((c) => c.id === seed.id);
+      if (!c) return;
+      origPins = (PIN_NAMES[c.type] ?? []).map((pin) => pinWorldPos(c, pin));
+      initPos = { x: c.x, y: c.y };
+    } else {
+      const k = kicadComponentsRef.current.find((k) => k.id === seed.id);
+      if (!k) return;
+      origPins = kicadPinSitesRef.current.find((s) => s.id === seed.id)?.pins ?? [];
+      initPos = { x: k.x, y: k.y };
+    }
+    const pinKeys = new Set(origPins.map(pointKey));
+    const baseWires = wiresRef.current.map((w) => ({ ...w, vertices: w.vertices.map((v) => ({ ...v })) }));
+    const wireIds = new Set(
+      baseWires
+        .filter((w) => {
+          const f = w.vertices[0];
+          const l = w.vertices[w.vertices.length - 1];
+          return (f !== undefined && pinKeys.has(pointKey(f))) ||
+                 (l !== undefined && pinKeys.has(pointKey(l)));
+        })
+        .map((w) => w.id),
+    );
+    const rect = svgRef.current!.getBoundingClientRect();
+    const wx = snap((e.clientX - rect.left - pan.x) / zoom);
+    const wy = snap((e.clientY - rect.top  - pan.y) / zoom);
+    dragRef.current = {
+      type: "stretch",
+      startMouse: { x: e.clientX, y: e.clientY },
+      startPan: pan,
+      startWorldSnapped: { x: wx, y: wy },
+      stretchKind: seed.kind,
+      stretchId: seed.id,
+      stretchInitPos: initPos,
+      stretchPinKeys: pinKeys,
+      stretchBaseWires: baseWires,
+    };
+    setActiveDrag({
+      mode: "stretch",
+      compId: seed.kind === "component" ? seed.id : null,
+      kicadId: seed.kind === "kicad" ? seed.id : null,
+      wireIds,
+    });
   }
 
   function onWireMouseDown(e: React.MouseEvent, wire: Wire) {
@@ -1337,13 +1547,17 @@ function SchematicEditor({
   const isTheoryPlacing = isTheoryPlacementTool(tool);
   const placementPart = tool === "kicad-place" && placementPartId ? getCachedPart(placementPartId) : null;
   const cursorStyle =
-    tool === "select" ? "default"
+    activeDrag?.mode === "stretch" ? "move"
+    : activeDrag?.mode === "rigid" ? "grabbing"
+    : tool === "select" ? "default"
     : tool === "junction" ? JUNCTION_CURSOR
     : tool === "label" ? "text"
     : "crosshair";
 
   const statusMsg =
-    tool === "wire" && wireDraftStart
+    activeDrag?.mode === "stretch"
+      ? "STRETCH — component moves alone, attached wires follow"
+      : tool === "wire" && wireDraftStart
       ? "WIRE — click next point  [Esc cancel]"
       : tool === "wire"
       ? "WIRE — click to start  [Esc to exit]"
@@ -1359,7 +1573,7 @@ function SchematicEditor({
       ? `PLACE ${placementPart?.name ?? "part"}  [Esc cancel · click place · R rotate]`
       : isTheoryPlacing
       ? `PLACE ${SCH_TYPE_LABEL[tool as SchComponentType]}  [Esc cancel · click place]`
-      : "SELECT  [W wire · X delete · R rotate · Del delete]";
+      : "SELECT  [W wire · X delete · R rotate · Del delete · 2×click-drag stretch]";
 
   return (
     <div className="absolute inset-0 bg-zinc-950">
@@ -1483,6 +1697,8 @@ function SchematicEditor({
             const pts = wire.vertices.map(v => `${v.x},${v.y}`).join(" ");
             const isDeleteHovered = tool === "delete" && deleteHoveredId === wire.id;
             const isSnapHovered   = tool === "wire" && snapTarget?.wireId === wire.id;
+            const isStretching    = activeDrag?.mode === "stretch" && activeDrag.wireIds.has(wire.id);
+            const inRigidGroup    = activeDrag?.mode === "rigid"   && activeDrag.wireIds.has(wire.id);
             // Disable wire hit-testing while drawing/placing/junctioning so
             // clicks reach the canvas — this is the headline fix for
             // wire-to-wire connection.
@@ -1504,10 +1720,20 @@ function SchematicEditor({
                     style={{ pointerEvents: "none" }}
                   />
                 )}
+                {inRigidGroup && (
+                  <polyline
+                    points={pts} fill="none"
+                    stroke="#2dd4bf" strokeWidth={4 / zoom} strokeOpacity={0.2}
+                    strokeDasharray={`${4 / zoom} ${2 / zoom}`}
+                    strokeLinecap="round" strokeLinejoin="round"
+                    style={{ pointerEvents: "none" }}
+                  />
+                )}
                 <polyline
                   points={pts} fill="none"
-                  stroke={nets.wireColor(wire)}
-                  strokeWidth={(nets.wireRole(wire) === "unknown" ? 0.75 : 1) / zoom}
+                  stroke={isStretching ? "#2dd4bf" : nets.wireColor(wire)}
+                  strokeOpacity={isStretching ? 0.8 : 1}
+                  strokeWidth={(isStretching ? 1.25 : nets.wireRole(wire) === "unknown" ? 0.75 : 1) / zoom}
                   strokeLinecap="round" strokeLinejoin="miter"
                   style={{ pointerEvents: "none" }}
                 />
@@ -1584,6 +1810,13 @@ function SchematicEditor({
               comp={comp}
               selected={comp.id === selectedId}
               deleteHovered={tool === "delete" && deleteHoveredId === comp.id}
+              dragHighlight={
+                activeDrag?.mode === "stretch"
+                  ? (activeDrag.compId === comp.id ? "stretch" : undefined)
+                  : activeDrag?.mode === "rigid" && activeDrag.compIds.has(comp.id)
+                  ? "rigid"
+                  : undefined
+              }
               pointerEvents={tool === "wire" || tool === "junction" || isPlacementTool(tool) ? "none" : "auto"}
               onMouseDown={(e) => onCompMouseDown(e, comp)}
               onMouseEnter={() => { if (tool === "delete") setDeleteHoveredId(comp.id); }}
@@ -1599,6 +1832,13 @@ function SchematicEditor({
               part={getCachedPart(kicad.partId)}
               selected={kicad.id === selectedKicadId}
               deleteHovered={tool === "delete" && deleteHoveredId === kicad.id}
+              dragHighlight={
+                activeDrag?.mode === "stretch"
+                  ? (activeDrag.kicadId === kicad.id ? "stretch" : undefined)
+                  : activeDrag?.mode === "rigid" && activeDrag.kicadIds.has(kicad.id)
+                  ? "rigid"
+                  : undefined
+              }
               zoom={zoom}
               pointerEvents={tool === "wire" || tool === "junction" || isPlacementTool(tool) ? "none" : "auto"}
               onMouseDown={(e) => onKicadMouseDown(e, kicad)}
