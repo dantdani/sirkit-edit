@@ -26,10 +26,11 @@ import { GRID, snap, pointEquals, closestPointOnSegment, distance, pinWorldPos, 
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind } from "@/lib/schematic-types";
+import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuild } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
@@ -1856,8 +1857,8 @@ export default function Home() {
 
   // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isEditing, setIsEditing]       = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
-  const [genPrompt, setGenPrompt]       = useState("");
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
     explanation: string;
@@ -2111,13 +2112,24 @@ export default function Home() {
             parts.set(id, await ensurePartLoaded(id));
           }),
         );
-        state = autoLayoutBuild(netlist, parts);
+        const built = autoLayoutBuildValidated(netlist, parts);
+        state = built.state;
         explanation = data.explanation;
 
         if ((state.kicadComponents?.length ?? 0) === 0) {
           setGenError("No parts produced — try a more specific prompt.");
           setTimeout(() => setGenError(null), 6000);
           return;
+        }
+
+        // Electrical validation: surface (don't silently ship) a schematic that
+        // is electrically wrong by netlist after reroute attempts.
+        if (!built.validation.ok) {
+          const v = built.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
         }
       } else {
         const result = await generateSchematic(prompt);
@@ -2128,13 +2140,21 @@ export default function Home() {
           setTimeout(() => setGenError(null), 6000);
           return;
         }
+
+        // Surface (don't silently ship) an electrically-invalid theory schematic.
+        if (!result.validation.ok) {
+          const v = result.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
+        }
       }
 
       if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0) {
         setPendingReplace({ state, explanation, prompt });
       } else {
         applySchematic(state, explanation, prompt);
-        setGenPrompt("");
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generation failed";
@@ -2142,6 +2162,171 @@ export default function Home() {
       setTimeout(() => setGenError(null), 6000);
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  // Tier-1 text editing: attribute-only edits (set value / rename / delete)
+  // applied directly to state. No re-layout, no netlist round-trip — so manual
+  // placement is preserved and the validator isn't involved (connectivity only
+  // changes on delete, which is the user's explicit intent).
+  async function handleEditSchematic(prompt: string) {
+    if (!prompt.trim() || isEditing) return;
+    const hasSchematic = components.length > 0 || kicadComponents.length > 0;
+    if (!hasSchematic) return;
+
+    setIsEditing(true);
+    setGenError(null);
+    try {
+      const summary = [
+        ...components.map((c) => ({ refDes: c.id, kind: c.type, value: c.value || "" })),
+        ...kicadComponents.map((k) => ({
+          refDes: k.refDes,
+          kind: getCachedPart(k.partId)?.name ?? "part",
+          value: k.value || "",
+        })),
+      ];
+
+      const res = await fetch("/api/schematic/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction: prompt, components: summary }),
+      });
+      const data = (await res.json()) as
+        | { ok: true; ops: SchematicEditOp[]; note: string; needsTopology: boolean }
+        | { ok: false; error: string };
+      if (!data.ok) throw new Error(data.error || "Edit failed");
+
+      // Tier 2 — topology edit (add / rewire / swap). Round-trips the current
+      // schematic through the netlist editor, then re-lays-out + validates.
+      if (data.needsTopology) {
+        if (mode !== "build") {
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "user", content: prompt },
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content:
+                "Topology edits (adding, rewiring, or swapping parts) aren't supported in Theory mode yet — use Generate to recreate the circuit.",
+            },
+          ]);
+          return;
+        }
+
+        const partsMap = new Map<string, CachedPart>();
+        for (const k of kicadComponents) {
+          const p = getCachedPart(k.partId);
+          if (p) partsMap.set(k.partId, p);
+        }
+        const currentNetlist = schematicToBuildNetlist(
+          { components, wires, kicadComponents, netLabels },
+          partsMap,
+        );
+
+        const res2 = await fetch("/api/schematic/edit-build", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instruction: prompt, netlist: currentNetlist }),
+        });
+        const data2 = (await res2.json()) as
+          | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
+          | { ok: false; error: string };
+        if (!data2.ok) throw new Error(data2.error || "Edit failed");
+
+        const nl = data2.netlist;
+        const ids = [...new Set(nl.components.map((c) => c.partId))];
+        const loaded = new Map<string, CachedPart>();
+        await Promise.all(ids.map(async (id) => loaded.set(id, await ensurePartLoaded(id))));
+
+        const built = autoLayoutBuildValidated(nl, loaded);
+        // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
+        // instruction + explanation into the chat transcript.
+        applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt);
+        if (!built.validation.ok) {
+          const v = built.validation.violations;
+          setGenError(
+            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
+          );
+          setTimeout(() => setGenError(null), 12000);
+        }
+        return;
+      }
+
+      let comps = components;
+      let kis = kicadComponents;
+      let wrs = wires;
+      let lbls = netLabels;
+      const deletedPinKeys = new Set<string>();
+      let applied = 0;
+
+      for (const op of data.ops) {
+        const tgt = op.target;
+        const isTheory = comps.some((c) => c.id === tgt);
+        const isKicad = kis.some((k) => k.refDes === tgt);
+        if (!isTheory && !isKicad) continue;
+
+        if (op.op === "set-value") {
+          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, value: op.value } : c));
+          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, value: op.value } : k));
+          applied++;
+        } else if (op.op === "rename") {
+          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, id: op.refDes } : c));
+          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, refDes: op.refDes } : k));
+          applied++;
+        } else if (op.op === "delete") {
+          if (isTheory) {
+            const c = comps.find((x) => x.id === tgt)!;
+            for (const name of PIN_NAMES[c.type] ?? []) {
+              const p = pinWorldPos(c, name);
+              deletedPinKeys.add(`${p.x},${p.y}`);
+            }
+            comps = comps.filter((x) => x.id !== tgt);
+          } else {
+            const k = kis.find((x) => x.refDes === tgt)!;
+            const part = getCachedPart(k.partId);
+            if (part) for (const pin of part.pins) {
+              const p = kicadPinWorldPos(k, pin);
+              deletedPinKeys.add(`${p.x},${p.y}`);
+            }
+            kis = kis.filter((x) => x.refDes !== tgt);
+          }
+          applied++;
+        }
+      }
+
+      // A deleted component's wires/labels would otherwise dangle — drop the ones
+      // anchored to its pins.
+      if (deletedPinKeys.size > 0) {
+        wrs = wrs.filter((w) => {
+          const a = w.vertices[0];
+          const b = w.vertices[w.vertices.length - 1];
+          return !(deletedPinKeys.has(`${a.x},${a.y}`) || deletedPinKeys.has(`${b.x},${b.y}`));
+        });
+        lbls = lbls.filter((l) => !deletedPinKeys.has(`${l.position.x},${l.position.y}`));
+      }
+
+      setComponents(comps);
+      setKicadComponents(kis);
+      setWires(wrs);
+      setNetLabels(lbls);
+      setSelectedId(null);
+      setSelectedKicadId(null);
+
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "user", content: prompt },
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: data.note || (applied > 0 ? `Applied ${applied} edit(s).` : "No edits applied."),
+        },
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Edit failed";
+      setGenError(msg);
+      setTimeout(() => setGenError(null), 6000);
+    } finally {
+      setIsEditing(false);
     }
   }
 
@@ -2354,46 +2539,6 @@ export default function Home() {
               <ViewTab icon={Activity}     label="Sim"       active={view === "sim"}       onClick={() => setView("sim")} />
             </div>
 
-            {/* AI Prompt bar — available in the Schematic view (Theory + Build) */}
-            {view === "schematic" && (
-              <div className="shrink-0">
-                <div className="h-11 flex items-center gap-2 px-3 border-b border-zinc-800 bg-zinc-950">
-                  {isGenerating
-                    ? <Loader2 className="size-4 text-teal-400 animate-spin shrink-0" />
-                    : <Sparkles className="size-4 text-teal-400 shrink-0" />
-                  }
-                  <Input
-                    value={genPrompt}
-                    onChange={(e) => setGenPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleGenerateSchematic(genPrompt);
-                      }
-                    }}
-                    placeholder={mode === "build"
-                      ? "Describe a circuit with real parts — e.g. 'ESP32 with USB-C and an LED'"
-                      : "Describe a circuit and press Enter — e.g. '9V LED dimmer'"}
-                    disabled={isGenerating}
-                    className="flex-1 bg-zinc-900 border-zinc-800 text-xs h-7"
-                  />
-                  <Button
-                    size="sm"
-                    disabled={!genPrompt.trim() || isGenerating}
-                    onClick={() => handleGenerateSchematic(genPrompt)}
-                    className="shrink-0"
-                  >
-                    {isGenerating ? "Generating…" : "Generate"}
-                  </Button>
-                </div>
-                {genError && (
-                  <div className="px-3 py-1.5 text-xs text-red-400 bg-zinc-950 border-b border-zinc-800">
-                    {genError}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="flex-1 min-h-0 relative">
               {view === "schematic" ? (
                 <>
@@ -2525,7 +2670,6 @@ export default function Home() {
                 if (pendingReplace) {
                   applySchematic(pendingReplace.state, pendingReplace.explanation, pendingReplace.prompt);
                   setPendingReplace(null);
-                  setGenPrompt("");
                 }
               }}>Replace</Button>
             </DialogFooter>
@@ -2569,6 +2713,11 @@ export default function Home() {
               </div>
             </div>
 
+            {genError && (
+              <div className="px-3 py-1.5 text-xs text-red-400 border-t border-zinc-800 shrink-0">
+                {genError}
+              </div>
+            )}
             <div className="border-t border-zinc-800 p-3">
               <Textarea
                 value={input}
@@ -2577,14 +2726,44 @@ export default function Home() {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 }}
                 className="min-h-20 resize-none border-zinc-800 bg-zinc-900/60 text-sm"
-                placeholder="Describe what you want to build..."
-                disabled={loading}
+                placeholder={mode === "build"
+                  ? "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"
+                  : "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"}
+                disabled={loading || isGenerating || isEditing}
               />
-              <div className="flex items-center justify-between mt-2">
-                <div className="text-xs text-zinc-500">⇧ Enter for newline</div>
-                <Button size="sm" disabled={!input.trim() || loading} onClick={send}>
-                  {loading ? "…" : "Generate"}
-                </Button>
+              <div className="flex items-center justify-between mt-2 gap-2">
+                <div className="text-xs text-zinc-500">Enter to ask · ⇧Enter newline</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!input.trim() || loading || isGenerating || isEditing}
+                    onClick={send}
+                  >
+                    {loading ? "…" : "Ask"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={components.length === 0 && kicadComponents.length === 0
+                      ? "Generate a schematic first"
+                      : "Apply an attribute edit (set value, rename, delete) to the current schematic"}
+                    disabled={
+                      !input.trim() || loading || isGenerating || isEditing ||
+                      (components.length === 0 && kicadComponents.length === 0)
+                    }
+                    onClick={() => { const t = input; setInput(""); handleEditSchematic(t); }}
+                  >
+                    {isEditing ? "Editing…" : "Edit"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={!input.trim() || loading || isGenerating || isEditing}
+                    onClick={() => { const t = input; setInput(""); handleGenerateSchematic(t); }}
+                  >
+                    {isGenerating ? "Generating…" : "Generate"}
+                  </Button>
+                </div>
               </div>
             </div>
           </aside>

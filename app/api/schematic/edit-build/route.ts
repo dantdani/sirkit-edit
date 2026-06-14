@@ -1,0 +1,65 @@
+/**
+ * POST /api/schematic/edit-build
+ *
+ * Tier-2 topology editing (Build mode). The client serializes the current
+ * schematic into a BuildLogicalNetlist and sends it with an instruction; Claude
+ * returns the COMPLETE modified netlist via the shared build tool loop. Existing
+ * parts are seeded as pre-validated (so their partIds don't need re-searching);
+ * new/swapped parts go through search_parts as usual. The client then re-lays-out
+ * the result through autoLayoutBuildValidated (which validates it electrically).
+ *
+ * Body:     { instruction: string; netlist: BuildLogicalNetlist }
+ * Response: { ok: true; netlist: BuildLogicalNetlist; explanation: string }
+ *      or:  { ok: false; error: string }
+ */
+
+import type { BuildLogicalNetlist } from "@/lib/schematic-types";
+import { runBuildToolLoop } from "@/app/lib/build-loop";
+import { getPartsByIds } from "@/app/lib/parts-search";
+import { EDIT_BUILD_SYSTEM_PROMPT } from "@/app/lib/prompts";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request): Promise<Response> {
+  let body: { instruction?: unknown; netlist?: unknown };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const instruction = body.instruction;
+  if (typeof instruction !== "string" || instruction.trim() === "") {
+    return Response.json({ ok: false, error: "instruction is required" }, { status: 400 });
+  }
+  const netlist = body.netlist as BuildLogicalNetlist | undefined;
+  if (!netlist || !Array.isArray(netlist.components)) {
+    return Response.json({ ok: false, error: "current netlist is required" }, { status: 400 });
+  }
+
+  // Seed the loop with the existing components' parts so their partIds validate
+  // without the model re-searching for unchanged parts.
+  let seedParts;
+  try {
+    seedParts = await getPartsByIds(netlist.components.map((c) => c.partId));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return Response.json({ ok: false, error: msg }, { status: 500 });
+  }
+
+  const userMessage = `Current netlist:\n${JSON.stringify({
+    components: netlist.components,
+    connections: netlist.connections,
+  })}\n\nInstruction: ${instruction}`;
+
+  const result = await runBuildToolLoop({
+    systemPrompt: EDIT_BUILD_SYSTEM_PROMPT,
+    userMessage,
+    seedParts,
+  });
+
+  if (result.ok) {
+    return Response.json({ ok: true, netlist: result.netlist, explanation: result.explanation });
+  }
+  return Response.json({ ok: false, error: result.error }, { status: result.status });
+}
