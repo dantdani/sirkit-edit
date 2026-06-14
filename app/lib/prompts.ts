@@ -292,3 +292,72 @@ Judge fit by:
 - category appropriateness and a sensible pin count for the role.
 
 Put the strongest matches first. Include every index at least once.`;
+
+// ─── Tier-1 schematic editor (/api/schematic/edit) ───────────────────────────
+
+export const EDIT_SYSTEM_PROMPT = `You apply small, targeted edits to an EXISTING schematic from a natural-language instruction by calling apply_edits.
+
+You are given the current component list (each with a refDes, kind, and value) and the user's instruction. Return ONLY the minimal set of attribute edits needed.
+
+Supported operations (attribute-only — you may NOT add, move, rotate, or rewire anything):
+- set-value: change a component's value, e.g. "make R1 4.7k", "change the cap to 100n". Put the new value in "value".
+- rename: change a component's reference designator, e.g. "rename U1 to U5". Put the new refDes in "refDes".
+- delete: remove a component, e.g. "delete the status LED", "remove R3".
+
+Rules:
+- "target" MUST be the exact refDes/id of a component from the provided list. Identify the right one from the instruction (e.g. "the LED" → the diode whose value/name says LED; "the regulator" → the regulator part).
+- If the instruction asks for something NOT supported here — adding a part, wiring, moving, rotating, swapping a part, or anything that changes connections — do NOT invent an op for it. Set "needsTopology" to true (a separate topology editor will handle it) and omit those ops.
+- Set "needsTopology" to true whenever the instruction requires adding/removing-by-rewiring, rewiring, swapping a part, moving, or rotating. Set it to false for pure value/rename/delete edits.
+- "note" is a one-line plain-English summary of what you changed (and anything you deferred to the topology editor).
+- If nothing can be applied here, return an empty "ops" array; set "needsTopology" appropriately.`;
+
+export const EDIT_APPLY_TOOL: Anthropic.Tool = {
+  name: "apply_edits",
+  description: "Apply attribute-only edits (set value, rename, delete) to the existing schematic.",
+  input_schema: {
+    type: "object",
+    properties: {
+      ops: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            op: { type: "string", enum: ["set-value", "rename", "delete"] },
+            target: { type: "string", description: "Exact refDes/id of the component to edit" },
+            value: { type: "string", description: 'New value (op="set-value" only)' },
+            refDes: { type: "string", description: 'New reference designator (op="rename" only)' },
+          },
+          required: ["op", "target"],
+        },
+      },
+      note: { type: "string", description: "One-line summary of what changed / was deferred" },
+      needsTopology: {
+        type: "boolean",
+        description:
+          "true if the instruction needs add/rewire/swap/move/rotate (handled by the topology editor); false for pure value/rename/delete",
+      },
+    },
+    required: ["ops", "note", "needsTopology"],
+  },
+};
+
+// ─── Tier-2 topology editor (/api/schematic/edit-build) ──────────────────────
+
+export const EDIT_BUILD_SYSTEM_PROMPT = `You modify an EXISTING Build-mode schematic from a natural-language instruction, then return the COMPLETE updated netlist by calling submit_schematic. You design with REAL components from a database of KiCad symbols.
+
+You are given the current netlist (components with their refDes/partId/value, and connections) and the user's instruction. Apply the instruction and return the FULL netlist — every component and connection that should remain, plus your changes. Anything you omit is removed.
+
+Workflow:
+1. Read the current netlist. Keep everything the instruction does not change.
+2. If the instruction ADDS or SWAPS a part, call search_parts to find it and use a real partId from the result. For parts that already exist and stay, REUSE their existing partId verbatim (they are already valid — do NOT search for them again).
+3. Apply the requested wiring/component changes.
+4. Call submit_schematic once with the complete updated netlist.
+
+Connection rules (unchanged from generation):
+- Each connection is kind "wire" ({ "kind": "wire", "from": "U1.TX", "to": "U2.RX" }) or kind "label" ({ "kind": "label", "pin": "U1.VDD", "labelName": "+3V3", "labelKind": "power" }). Same-name labels are one net.
+- Power pins → "power" labels; ground pins → "GND" "ground" labels; high-fanout or far-apart signals → labels; local 2-pin signals → wires.
+- Reference pins as "refDes.pin" (pin name OR number).
+
+CRITICAL: every component's "partId" must be a real UUID — either reused from the current netlist (for unchanged parts) or copied from a search_parts result (for new/swapped parts). Never invent one.
+
+Make the MINIMAL change the instruction asks for; don't redesign unrelated parts of the circuit. Always END with exactly one submit_schematic call.`;

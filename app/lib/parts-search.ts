@@ -26,6 +26,7 @@ import {
   desc,
   eq,
   ilike,
+  inArray,
   or,
   sql,
   type SQL,
@@ -53,6 +54,42 @@ export type AiPartResult = {
   /** Cosine similarity to the query (1 = identical). */
   similarity: number;
 };
+
+/**
+ * Fetch parts by id in the compact AI shape. Used to seed the edit tool loop
+ * with a circuit's EXISTING components so their partIds validate without the
+ * model having to re-search for them. `similarity` is 1 (these are exact, not
+ * ranked). Order is not guaranteed.
+ */
+export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
+  const unique = [...new Set(ids)].filter((id) => id);
+  if (unique.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: parts.id,
+      name: parts.name,
+      mpn: parts.mpn,
+      description: parts.description,
+      mainCategory: libraries.mainCategory,
+      pins: parts.pins,
+    })
+    .from(parts)
+    .innerJoin(libraries, eq(parts.libraryId, libraries.id))
+    .where(inArray(parts.id, unique));
+
+  return rows.map((r) => ({
+    partId: r.id,
+    name: r.name,
+    mpn: r.mpn,
+    description: r.description,
+    mainCategory: r.mainCategory,
+    pins: Array.isArray(r.pins)
+      ? (r.pins as KicadPin[]).map((p) => ({ number: p.number, name: p.name, type: p.type }))
+      : [],
+    similarity: 1,
+  }));
+}
 
 // ─── Retrieval / rerank tuning ──────────────────────────────────────────────
 
