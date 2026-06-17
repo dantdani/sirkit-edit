@@ -32,6 +32,7 @@ import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
+import { BomView } from "@/app/components/bom/BomView";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
 
@@ -2630,11 +2631,12 @@ export default function Home() {
                   analysisConfig={analysisConfig}
                   setAnalysisConfig={setAnalysisConfig}
                 />
+              ) : view === "bom" ? (
+                <BomView components={components} kicadComponents={kicadComponents} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
                   {view === "pcb"       && "PCB layout canvas"}
                   {view === "3d"        && "3D view"}
-                  {view === "bom"       && "Bill of materials"}
                 </div>
               )}
             </div>
