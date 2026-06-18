@@ -8,6 +8,7 @@
 
 import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from "../lib/validate-netlist";
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
+import { buildReviewInput } from "../lib/netlist-review";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin } from "../app/lib/kicad/types";
@@ -408,6 +409,23 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   const out = schematicToBuildNetlist(state, parts);
   const gnd = out.connections.find((c) => isLabel(c) && c.pin === "R3.2") as LabelConn | undefined;
   check("extractor: ground component → GND label on its pin", gnd?.labelName === "GND" && gnd?.labelKind === "ground");
+}
+
+// ── buildReviewInput (Layer-2 ground truth) ──────────────────────────────────
+// R1.1 ── R2.1 (a real net); R1.2 floats; R2.2 → GND label.
+{
+  const r1 = mkInst("R1", PART, 0, 0);
+  const r2 = mkInst("R2", PART, 200, 0);
+  const wires: Wire[] = [wire(pinWorld(r1, "1"), pinWorld(r2, "1"))];
+  const labels = [nl("GND", "ground", pinWorld(r2, "2"))];
+  const state: SchematicState = { components: [], wires, kicadComponents: [r1, r2], netLabels: labels };
+  const input = buildReviewInput(state, parts);
+
+  check("review: floating pin detected", input.floatingPins.includes("R1.2"));
+  check("review: ground pin is NOT floating", !input.floatingPins.includes("R2.2"));
+  const gnd = input.nets.find((n) => n.kind === "ground");
+  check("review: ground net named GND with R2.2", gnd?.name === "GND" && gnd.pins.includes("R2.2"));
+  check("review: components enumerated", input.components.length === 2);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

@@ -361,3 +361,51 @@ Connection rules (unchanged from generation):
 CRITICAL: every component's "partId" must be a real UUID — either reused from the current netlist (for unchanged parts) or copied from a search_parts result (for new/swapped parts). Never invent one.
 
 Make the MINIMAL change the instruction asks for; don't redesign unrelated parts of the circuit. Always END with exactly one submit_schematic call.`;
+
+// ─── Layer-2 design review (/api/schematic/review) ───────────────────────────
+
+export const REVIEW_SYSTEM_PROMPT = `You are an expert electronics design reviewer. You are given the COMPLETE, accurate netlist computed from a schematic: the component list (each with its pins) and every electrical net (with the exact pins on it). Pins listed as floating connect to nothing.
+
+This netlist is GROUND TRUTH. Every electrical connection is listed; assume nothing beyond it. Report real design problems by calling report_findings.
+
+Focus on issues a structural netlist check cannot catch — the "does this circuit make sense?" layer:
+- Missing support parts: I2C/1-Wire/SPI-CS lines with no pull-up; reset / enable / boot / chip-select pins left floating; missing decoupling capacitor near an IC's power pins; missing bulk/output cap on a regulator; missing crystal load caps; an LED with no series current-limiting resistor.
+- Power & ground: a power pin (VCC/VDD/+3V3/+5V/VIN) not driven by any supply or regulator; a ground pin not on the ground net; a part fed from the wrong voltage rail.
+- Polarity / orientation hazards determinable from the net (e.g. a diode/LED wired backwards relative to the implied current path).
+
+Rules:
+- Justify every finding FROM THE NETLIST. Never invent a connection. If you claim a pin is floating/unconnected, it MUST appear in the provided floating list — otherwise it is connected, so do not claim it.
+- Each finding has: severity ("error" | "warning" | "info"), a short category, a short title, a one-sentence detail, and refs (exact refDes / refDes.pin / net names involved).
+- If a finding asserts a pin is unconnected/floating, list those exact pins in "unconnectedClaim" so the claim can be verified.
+- Be precise and conservative — no style nits, no speculation. If the circuit looks sound, return an empty findings array.`;
+
+export const REVIEW_TOOL: Anthropic.Tool = {
+  name: "report_findings",
+  description: "Report electrical design-review findings for the given netlist.",
+  input_schema: {
+    type: "object",
+    properties: {
+      findings: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            severity: { type: "string", enum: ["error", "warning", "info"] },
+            category: { type: "string", description: "Short category, e.g. 'Decoupling', 'Pull-up', 'Power'" },
+            title: { type: "string", description: "Short problem title" },
+            detail: { type: "string", description: "One-sentence explanation" },
+            refs: { type: "array", items: { type: "string" }, description: "refDes / refDes.pin / net names involved" },
+            unconnectedClaim: {
+              type: "array",
+              items: { type: "string" },
+              description: "Pins this finding asserts are unconnected/floating (for verification)",
+            },
+          },
+          required: ["severity", "category", "title", "detail", "refs"],
+        },
+      },
+      summary: { type: "string", description: "One-line overall assessment" },
+    },
+    required: ["findings", "summary"],
+  },
+};
