@@ -409,3 +409,58 @@ export const REVIEW_TOOL: Anthropic.Tool = {
     required: ["findings", "summary"],
   },
 };
+
+// ─── Multi-agent build: architect/planner (/api/schematic/build-multi) ───────
+
+export const PLAN_SYSTEM_PROMPT = `You are the architect for sirkit's Build-mode generator. Given a circuit request, decompose it into independent subsystem BLOCKS that can be designed in parallel, and define the shared nets that cross between them. Return the plan via submit_plan.
+
+Each block has:
+- "name": e.g. "Power supply", "MCU core", "Sensor interface", "USB-C input".
+- "brief": a SELF-CONTAINED instruction for designing just that block — what parts it must contain and what it must do. A designer will build only this block from the brief.
+- "sharedNets": the board-wide net names this block connects to — power rails ("+3V3", "+5V", "VBUS"), "GND", and any cross-block signals ("SDA", "SCL", "SPI_MOSI", "UART_TX", …).
+
+Rules:
+- Use consistent, UPPERCASE shared-net names across blocks — the same name in two blocks is the SAME electrical net (that's how blocks interconnect).
+- Exactly ONE block must SOURCE each power rail (a regulator or power connector that outputs it); the others consume it. Put GND in every block's sharedNets.
+- ONLY split when it helps. If the request is simple (one functional block, a handful of parts — e.g. "an LED and resistor on an MCU GPIO"), return a SINGLE block covering the whole request. Over-decomposition hurts quality. Prefer 2–5 blocks for genuinely multi-subsystem designs.`;
+
+export const PLAN_TOOL: Anthropic.Tool = {
+  name: "submit_plan",
+  description: "Submit the subsystem decomposition for the requested circuit.",
+  input_schema: {
+    type: "object",
+    properties: {
+      blocks: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            brief: { type: "string", description: "Self-contained design instruction for this block" },
+            sharedNets: {
+              type: "array",
+              items: { type: "string" },
+              description: "Board-wide net names this block connects to (uppercase)",
+            },
+          },
+          required: ["name", "brief", "sharedNets"],
+        },
+      },
+      rationale: { type: "string", description: "One-line summary of the decomposition" },
+    },
+    required: ["blocks", "rationale"],
+  },
+};
+
+export const BUILD_SUBSYSTEM_SYSTEM_PROMPT = `You design ONE subsystem block of a larger board, using REAL components from the KiCad symbol database (~30,000 parts). Design ONLY the parts for this block — not the rest of the board.
+
+Workflow: break the block into roles, call search_parts for each, then call submit_schematic with this block's components and connections.
+
+Connections (identical rules to the full generator):
+- "wire" for local 2-pin signals within this block; "label" for power, ground, and any net shared with other blocks.
+- CRITICAL — INTERCONNECTION: for every pin that connects to one of the SHARED BOARD NETS listed in the user message, attach a "label" connection using that EXACT net name. These are board-wide nets; the same name in another block is the same electrical net — this is how your block wires to the others. Use labelKind "power" for rails, "ground" for GND, "label" for signals.
+- Every power pin → a power label; every ground pin → a "GND" ground label.
+
+Use refDes by EE convention (U for ICs, R/C/L, D, Q, J, Y, …). Don't worry about refDes clashing with other blocks — collisions are renumbered automatically when blocks are merged.
+
+Every component's partId must be a real UUID copied from a search_parts result. END with exactly one submit_schematic call. Don't narrate after.`;

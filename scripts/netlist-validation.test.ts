@@ -9,6 +9,7 @@
 import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from "../lib/validate-netlist";
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
+import { mergeBuildNetlists } from "../app/lib/merge-netlists";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin } from "../app/lib/kicad/types";
@@ -426,6 +427,52 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   const gnd = input.nets.find((n) => n.kind === "ground");
   check("review: ground net named GND with R2.2", gnd?.name === "GND" && gnd.pins.includes("R2.2"));
   check("review: components enumerated", input.components.length === 2);
+}
+
+// ── mergeBuildNetlists (multi-agent deterministic merge) ──────────────────────
+{
+  const power: { name: string; netlist: BuildLogicalNetlist } = {
+    name: "Power",
+    netlist: {
+      components: [
+        { refDes: "U1", partId: "p", value: "AMS1117", role: "regulator" },
+        { refDes: "C1", partId: "c", value: "10u", role: "support" },
+      ],
+      connections: [
+        { kind: "wire", from: "U1.OUT", to: "C1.1" },
+        { kind: "label", pin: "U1.OUT", labelName: "+3V3", labelKind: "power" },
+        { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      ],
+      explanation: "",
+    },
+  };
+  const mcu: { name: string; netlist: BuildLogicalNetlist } = {
+    name: "MCU",
+    netlist: {
+      components: [
+        { refDes: "U1", partId: "q", value: "ESP32", role: "processor" }, // collides with Power.U1
+        { refDes: "R1", partId: "r", value: "330", role: "indicator" },
+      ],
+      connections: [
+        { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+        { kind: "wire", from: "U1.GPIO2", to: "R1.1" },
+      ],
+      explanation: "",
+    },
+  };
+
+  const { netlist, notes } = mergeBuildNetlists([power, mcu]);
+  const refs = netlist.components.map((c) => c.refDes);
+  const mcuRef = refs.find((r) => r !== "U1" && r.startsWith("U")); // the renamed ESP32
+  const mcuWire = netlist.connections.find(
+    (c) => c.kind !== "label" && (c as { from: string }).from.startsWith(`${mcuRef}.`),
+  );
+  const p3v3 = netlist.connections.filter((c) => isLabel(c) && c.labelName === "+3V3");
+
+  check("merge: refDes unique after de-collision", new Set(refs).size === refs.length && refs.length === 4);
+  check("merge: collided U1 was renamed", !!mcuRef && notes.some((n) => n.includes("U1")));
+  check("merge: connection endpoints follow the rename", !!mcuWire);
+  check("merge: shared net names preserved (both +3V3 labels)", p3v3.length === 2);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

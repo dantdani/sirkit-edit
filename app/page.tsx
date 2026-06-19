@@ -2096,7 +2096,7 @@ export default function Home() {
       let explanation: string;
 
       if (mode === "build") {
-        const res = await fetch("/api/schematic/build", {
+        const res = await fetch("/api/schematic/build-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
