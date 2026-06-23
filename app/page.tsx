@@ -31,7 +31,9 @@ import { PIN_NAMES } from "@/lib/schematic-types";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
+import { buildReviewInput } from "@/lib/netlist-review";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
+import { BomView } from "@/app/components/bom/BomView";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
 
@@ -2098,6 +2100,7 @@ export default function Home() {
   // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing]       = useState(false);
+  const [isReviewing, setIsReviewing]   = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
@@ -2333,7 +2336,7 @@ export default function Home() {
       let explanation: string;
 
       if (mode === "build") {
-        const res = await fetch("/api/schematic/build", {
+        const res = await fetch("/api/schematic/build-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt }),
@@ -2567,6 +2570,57 @@ export default function Home() {
       setTimeout(() => setGenError(null), 6000);
     } finally {
       setIsEditing(false);
+    }
+  }
+
+  // Layer-2 design review: advisory, non-blocking. Computes the deterministic
+  // netlist (ground truth), asks an LLM for electrical-sensibility findings, and
+  // posts them to the chat. Contradicted "floating" claims are dropped server-side.
+  async function handleReview() {
+    if (isReviewing) return;
+    if (components.length === 0 && kicadComponents.length === 0) return;
+    setIsReviewing(true);
+    setGenError(null);
+    try {
+      const partsMap = new Map<string, CachedPart>();
+      for (const k of kicadComponents) {
+        const p = getCachedPart(k.partId);
+        if (p) partsMap.set(k.partId, p);
+      }
+      const reviewInput = buildReviewInput({ components, wires, kicadComponents, netLabels }, partsMap);
+
+      const res = await fetch("/api/schematic/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reviewInput),
+      });
+      const data = (await res.json()) as
+        | { ok: true; findings: { severity: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
+        | { ok: false; error: string };
+      if (!data.ok) throw new Error(data.error || "Review failed");
+
+      const icon = (s: string) => (s === "error" ? "🔴" : s === "warning" ? "⚠️" : "ℹ️");
+      const md =
+        data.findings.length === 0
+          ? `**Design review** — no issues found.${data.summary ? `\n\n${data.summary}` : ""}`
+          : `**Design review — ${data.findings.length} finding(s)**\n\n` +
+            data.findings
+              .map((f) => `- ${icon(f.severity)} **${f.title}**${f.refs?.length ? ` (${f.refs.join(", ")})` : ""} — ${f.detail}`)
+              .join("\n") +
+            (data.summary ? `\n\n_${data.summary}_` : "") +
+            "\n\n_Advisory — design suggestions, not hard errors; verify before acting._";
+
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "user", content: "Review the circuit" },
+        { id: crypto.randomUUID(), role: "assistant", content: md },
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Review failed";
+      setGenError(msg);
+      setTimeout(() => setGenError(null), 6000);
+    } finally {
+      setIsReviewing(false);
     }
   }
 
@@ -2870,11 +2924,12 @@ export default function Home() {
                   analysisConfig={analysisConfig}
                   setAnalysisConfig={setAnalysisConfig}
                 />
+              ) : view === "bom" ? (
+                <BomView components={components} kicadComponents={kicadComponents} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
                   {view === "pcb"       && "PCB layout canvas"}
                   {view === "3d"        && "3D view"}
-                  {view === "bom"       && "Bill of materials"}
                 </div>
               )}
             </div>
@@ -2973,7 +3028,19 @@ export default function Home() {
               />
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-xs text-zinc-500">Enter to ask · ⇧Enter newline</div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={components.length === 0 && kicadComponents.length === 0
+                      ? "Generate a schematic first"
+                      : "Run an electrical design review of the current schematic (advisory)"}
+                    disabled={isReviewing || loading || isGenerating || isEditing ||
+                      (components.length === 0 && kicadComponents.length === 0)}
+                    onClick={handleReview}
+                  >
+                    {isReviewing ? "Reviewing…" : "Review"}
+                  </Button>
                   <Button
                     size="sm"
                     variant="ghost"
