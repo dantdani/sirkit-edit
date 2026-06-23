@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-Sirkit is a web-based circuit design tool. You describe a circuit in plain English, and an AI ("Claude") draws the schematic for you — placing the parts and wiring them up automatically. You can also draw and edit circuits by hand, and run a real electrical simulation to check that they behave correctly. It's aimed at engineers and hobbyists who want to go from an idea to a working circuit quickly.
+Sirkit is a web-based circuit design tool. You describe a circuit in plain English, and an AI draws the schematic for you — placing the parts and wiring them up automatically. You can also draw and edit circuits by hand, and run a real electrical simulation to check that they behave correctly. It's aimed at engineers and hobbyists who want to go from an idea to a working circuit quickly.
 
 The longer-term vision is to carry that circuit all the way to a manufacturable circuit board. **Today, the product delivers the front half of that journey — idea → working schematic → simulation — and the back half (real-part sourcing, the physical board, and manufacturing handoff) is not yet built.**
 

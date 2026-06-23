@@ -531,5 +531,6 @@ export function autoLayout(netlist: LogicalNetlist): SchematicState {
     });
   }
 
-  return { components: finalComps, wires, kicadComponents: [] };
+  return { components: finalComps, wires };
 }
+
