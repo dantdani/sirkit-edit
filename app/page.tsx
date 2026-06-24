@@ -2660,6 +2660,35 @@ export default function Home() {
     }
   }
 
+  async function handleExportKicad() {
+    try {
+      const res = await fetch("/api/export/kicad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state: { components, kicadComponents, wires, netLabels },
+          title: "sirkit-export",
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        alert(`Export failed: ${err.slice(0, 200)}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "sirkit-export.kicad_sch";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Export failed: ${(err as Error).message}`);
+    }
+  }
+
   const selectedComp = selectedId
     ? components.find((c) => c.id === selectedId) ?? null
     : null;
@@ -2705,7 +2734,11 @@ export default function Home() {
             {simLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
             {simLoading ? "Running…" : "Run sim"}
           </Button>
-          <Button size="sm" variant="ghost" className="gap-1.5 text-zinc-300">
+          <Button
+            size="sm" variant="ghost" className="gap-1.5 text-zinc-300"
+            onClick={handleExportKicad}
+            title="Export as KiCad (.kicad_sch)"
+          >
             <Download className="size-3.5" /> Export
           </Button>
           <Button
@@ -2925,7 +2958,7 @@ export default function Home() {
                   setAnalysisConfig={setAnalysisConfig}
                 />
               ) : view === "bom" ? (
-                <BomView components={components} kicadComponents={kicadComponents} />
+                <BomView state={{ components, kicadComponents, wires, netLabels }} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
                   {view === "pcb"       && "PCB layout canvas"}

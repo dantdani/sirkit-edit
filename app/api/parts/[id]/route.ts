@@ -8,12 +8,16 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries } from "@/app/lib/db/schema";
+import { parts, libraries, type KeySpecs } from "@/app/lib/db/schema";
 import type { KicadPin } from "@/app/lib/kicad/types";
 
 export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type LifecycleStatus =
+  | "active" | "nrnd" | "last_time_buy" | "eol" | "obsolete" | "unknown";
+type RohsStatus = "compliant" | "non_compliant" | "unknown";
 
 type PartDetail = {
   id: string;
@@ -29,6 +33,12 @@ type PartDetail = {
   pins: KicadPin[];
   symbolRaw: string;
   properties: Record<string, string>;
+  // BOM data-model fields (Stage 1).
+  internalPartNumber: string | null;
+  lifecycleStatus: LifecycleStatus | null;
+  rohsStatus: RohsStatus | null;
+  packageNormalized: string | null;
+  keySpecs: KeySpecs | null;
 };
 
 export async function GET(
@@ -58,6 +68,11 @@ export async function GET(
         pins: parts.pins,
         symbolRaw: parts.symbolRaw,
         properties: parts.properties,
+        internalPartNumber: parts.internalPartNumber,
+        lifecycleStatus: parts.lifecycleStatus,
+        rohsStatus: parts.rohsStatus,
+        packageNormalized: parts.packageNormalized,
+        keySpecs: parts.keySpecs,
       })
       .from(parts)
       .innerJoin(libraries, eq(parts.libraryId, libraries.id))

@@ -1,0 +1,178 @@
+/**
+ * DigiKey Product Information V4 client.
+ * https://developer.digikey.com/products/product-information-v4
+ *
+ * OAuth2 client_credentials → keyword search → `PartPricing`. Tokens are cached
+ * in memory and refreshed on expiry or a 401. Requests are serialized through a
+ * 200ms-spaced queue to stay under burst limits (the free tier allows
+ * 1000 req/day). Per-MPN failures resolve to null rather than throwing, so one
+ * bad part never sinks a whole batch.
+ */
+
+import {
+  asArray,
+  asNumber,
+  asRecord,
+  asString,
+  cheapestUnitPrice,
+  type DistributorClient,
+  type PartPricing,
+  type PriceBreak,
+} from "./types";
+import { makeCachedLookup } from "./cache";
+
+const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
+const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
+const MIN_REQUEST_SPACING_MS = 200;
+
+export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string }): DistributorClient {
+  const { clientId, clientSecret } = opts;
+  if (!clientId || !clientSecret) {
+    throw new Error("DIGIKEY credentials not configured");
+  }
+
+  // ── In-memory OAuth token cache ────────────────────────────────────────────
+  let token: { accessToken: string; expiresAt: number } | null = null;
+
+  async function fetchToken(): Promise<string> {
+    const body = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "client_credentials",
+    });
+    const res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    if (!res.ok) {
+      throw new Error(`DigiKey token request failed (${res.status})`);
+    }
+    const json = asRecord(await res.json());
+    const accessToken = asString(json.access_token);
+    if (!accessToken) throw new Error("DigiKey token response missing access_token");
+    // `expires_in` is seconds (~600). Refresh 30s early to dodge edge expiry.
+    const expiresIn = asNumber(json.expires_in) ?? 600;
+    token = { accessToken, expiresAt: Date.now() + (expiresIn - 30) * 1000 };
+    return accessToken;
+  }
+
+  async function getToken(forceRefresh = false): Promise<string> {
+    if (!forceRefresh && token && Date.now() < token.expiresAt) return token.accessToken;
+    return fetchToken();
+  }
+
+  // ── 200ms-spaced request queue ─────────────────────────────────────────────
+  let queueTail: Promise<unknown> = Promise.resolve();
+  function enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = queueTail.then(async () => {
+      const result = await task();
+      await delay(MIN_REQUEST_SPACING_MS);
+      return result;
+    });
+    // Keep the chain alive even if a task rejects.
+    queueTail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async function searchKeyword(mpn: string): Promise<unknown> {
+    const doRequest = async (accessToken: string): Promise<Response> =>
+      fetch(SEARCH_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          "X-DIGIKEY-Client-Id": clientId,
+        },
+        body: JSON.stringify({ Keywords: mpn, Limit: 5 }),
+      });
+
+    let res = await doRequest(await getToken());
+    if (res.status === 401) {
+      // Token may have expired early — refresh once and retry.
+      res = await doRequest(await getToken(true));
+    }
+    if (!res.ok) {
+      throw new Error(`DigiKey search failed for "${mpn}" (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
+    try {
+      const json = await enqueue(() => searchKeyword(mpn));
+      return mapProduct(mpn, json);
+    } catch (err) {
+      console.error(`[digikey] lookup failed for ${mpn}:`, err);
+      return null;
+    }
+  }
+
+  const cached = makeCachedLookup("digikey", lookupByMpn);
+
+  async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
+    const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
+    const entries = await Promise.all(
+      unique.map(async (mpn): Promise<[string, PartPricing] | null> => {
+        const pricing = await cached.lookup(mpn);
+        return pricing ? [mpn, pricing] : null;
+      }),
+    );
+    return new Map(entries.filter((e): e is [string, PartPricing] => e !== null));
+  }
+
+  return { name: "digikey", lookupByMpn: cached.lookup, lookupBatch };
+}
+
+// ─── Response mapping ──────────────────────────────────────────────────────────
+
+function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
+  const root = asRecord(json);
+  const products = asArray(root.Products);
+  if (products.length === 0) return null;
+
+  // Prefer an exact (case-insensitive) MPN match; fall back to the first result.
+  const wanted = requestedMpn.trim().toLowerCase();
+  const exact = products.find(
+    (p) => asString(asRecord(p).ManufacturerProductNumber)?.toLowerCase() === wanted,
+  );
+  const product = asRecord(exact ?? products[0]);
+
+  const priceBreaks = mapPriceBreaks(asArray(product.StandardPricing));
+  const manufacturer = asString(asRecord(product.Manufacturer).Name);
+  const description = asString(asRecord(product.Description).ProductDescription);
+
+  return {
+    distributor: "digikey",
+    mpn: asString(product.ManufacturerProductNumber) ?? requestedMpn,
+    manufacturer,
+    description,
+    datasheet: asString(product.DatasheetUrl),
+    inStock: asNumber(product.QuantityAvailable),
+    minOrderQty: asNumber(product.MinimumOrderQuantity),
+    priceBreaks,
+    bestUnitPrice: cheapestUnitPrice(priceBreaks),
+    productUrl: asString(product.ProductUrl),
+    package: asString(product.Packaging) ?? asString(asRecord(product.Packaging).Value),
+    fetchedAt: Date.now(),
+  };
+}
+
+function mapPriceBreaks(raw: unknown[]): PriceBreak[] {
+  const breaks: PriceBreak[] = [];
+  for (const entry of raw) {
+    const rec = asRecord(entry);
+    const qty = asNumber(rec.BreakQuantity);
+    const price = asNumber(rec.UnitPrice);
+    if (qty === null || price === null) continue;
+    breaks.push({ qty, price, currency: asString(rec.Currency) ?? "USD" });
+  }
+  return breaks.sort((a, b) => a.qty - b.qty);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

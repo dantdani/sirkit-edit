@@ -44,7 +44,17 @@ type PartSummary = {
   libraryName: string;
   pinCount: number;
   score: number;
+  // BOM data-model fields (Stage 1). keySpecs is intentionally omitted here to
+  // keep the search payload compact — fetch it from /api/parts/[id].
+  internalPartNumber: string | null;
+  lifecycleStatus: LifecycleStatus | null;
+  rohsStatus: RohsStatus | null;
+  packageNormalized: string | null;
 };
+
+type LifecycleStatus =
+  | "active" | "nrnd" | "last_time_buy" | "eol" | "obsolete" | "unknown";
+type RohsStatus = "compliant" | "non_compliant" | "unknown";
 
 export async function POST(req: Request): Promise<Response> {
   // ── Parse & validate ──────────────────────────────────────────────────────
@@ -102,6 +112,10 @@ export async function POST(req: Request): Promise<Response> {
       libraryName: r.libraryName,
       pinCount: Array.isArray(r.pins) ? r.pins.length : 0,
       score: r.score,
+      internalPartNumber: r.internalPartNumber,
+      lifecycleStatus: r.lifecycleStatus,
+      rohsStatus: r.rohsStatus,
+      packageNormalized: r.packageNormalized,
     }));
 
     return Response.json({ ok: true, results, pagination: { total, offset, limit } });
@@ -125,6 +139,10 @@ type Row = {
   libraryName: string;
   pins: KicadPin[] | null;
   score: number;
+  internalPartNumber: string | null;
+  lifecycleStatus: LifecycleStatus | null;
+  rohsStatus: RohsStatus | null;
+  packageNormalized: string | null;
 };
 
 /** Alphabetical browse — no embedding. Score is reported as 0 (not ranked). */
@@ -147,6 +165,10 @@ function browse(
       libraryName: libraries.name,
       pins: parts.pins,
       score: sql<number>`0`,
+      internalPartNumber: parts.internalPartNumber,
+      lifecycleStatus: parts.lifecycleStatus,
+      rohsStatus: parts.rohsStatus,
+      packageNormalized: parts.packageNormalized,
     })
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))
@@ -179,6 +201,10 @@ async function semantic(
       libraryName: libraries.name,
       pins: parts.pins,
       score: sql<number>`1 - (${distance})`,
+      internalPartNumber: parts.internalPartNumber,
+      lifecycleStatus: parts.lifecycleStatus,
+      rohsStatus: parts.rohsStatus,
+      packageNormalized: parts.packageNormalized,
     })
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))

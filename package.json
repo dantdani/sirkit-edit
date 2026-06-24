@@ -10,6 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "ingest:kicad": "tsx scripts/ingest-kicad.ts",
+    "backfill:parts": "tsx scripts/backfill-parts.ts",
+    "refresh:bom-pricing": "tsx scripts/refresh-bom-pricing.ts",
     "test:netlist": "tsx scripts/netlist-validation.test.ts"
   },
   "dependencies": {
