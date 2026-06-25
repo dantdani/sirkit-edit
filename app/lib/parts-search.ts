@@ -170,6 +170,7 @@ export async function searchPartsForAI(
   query: string,
   category: string | undefined,
   limit: number,
+  options?: { excludeGenerics?: boolean },
 ): Promise<AiPartResult[]> {
   const db = getDb();
 
@@ -178,6 +179,15 @@ export async function searchPartsForAI(
   const categoryWhere: SQL | undefined = trimmedCategory
     ? eq(libraries.mainCategory, trimmedCategory)
     : undefined;
+
+  // Generic KiCad template symbols (Device.R, …) have no orderable MPN; exclude
+  // them by default so the AI only ever sees buyable parts. The library panel
+  // can opt back in via excludeGenerics: false.
+  const excludeGenerics = options?.excludeGenerics ?? true;
+  const genericWhere: SQL | undefined = excludeGenerics
+    ? eq(parts.isGeneric, false)
+    : undefined;
+  const baseWhere: SQL | undefined = and(categoryWhere, genericWhere);
 
   const queryEmbedding = await embedQuery(query);
   const distance = cosineDistance(parts.embedding, queryEmbedding);
@@ -198,7 +208,7 @@ export async function searchPartsForAI(
     .select(baseSelect)
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))
-    .where(categoryWhere)
+    .where(baseWhere)
     .orderBy(distance)
     .limit(VECTOR_POOL);
 
@@ -221,7 +231,7 @@ export async function searchPartsForAI(
       sql` + `,
     )})`;
     const anyToken = or(...tokens.map(tokenMatch))!;
-    const lexWhere = categoryWhere ? and(categoryWhere, anyToken) : anyToken;
+    const lexWhere = and(baseWhere, anyToken);
 
     lexicalRows = await db
       .select(baseSelect)

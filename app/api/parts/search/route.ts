@@ -13,7 +13,7 @@
  * pagination metadata { total, offset, limit }.
  */
 
-import { cosineDistance, count, eq, sql, type SQL } from "drizzle-orm";
+import { and, cosineDistance, count, eq, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
@@ -30,6 +30,7 @@ type SearchBody = {
   category?: unknown;
   offset?: unknown;
   limit?: unknown;
+  includeGenerics?: unknown;
 };
 
 type PartSummary = {
@@ -81,11 +82,21 @@ export async function POST(req: Request): Promise<Response> {
   const limit = clampInt(body.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const offset = clampInt(body.offset, 0, 0, Number.MAX_SAFE_INTEGER);
 
+  // Generic KiCad templates are excluded by default; opt in with
+  // ?includeGenerics=true (or { includeGenerics: true } in the body).
+  const includeGenerics =
+    new URL(req.url).searchParams.get("includeGenerics") === "true" ||
+    body.includeGenerics === true;
+
   try {
     const db = getDb();
-    const where: SQL | undefined = category
+    const categoryWhere: SQL | undefined = category
       ? eq(libraries.mainCategory, category)
       : undefined;
+    const genericWhere: SQL | undefined = includeGenerics
+      ? undefined
+      : eq(parts.isGeneric, false);
+    const where: SQL | undefined = and(categoryWhere, genericWhere);
 
     // Total count for the current filter scope (drives "Load more").
     const totalRows = await db

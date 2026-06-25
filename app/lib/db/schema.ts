@@ -12,6 +12,7 @@ import {
   text,
   jsonb,
   integer,
+  boolean,
   timestamp,
   index,
   uniqueIndex,
@@ -19,6 +20,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { KicadPin } from "../kicad/types";
+import type { SnapshotRow, BomSnapshotMeta } from "../snapshots";
 import { EMBEDDING_DIMENSIONS } from "../embeddings";
 
 /**
@@ -97,6 +99,12 @@ export const parts = pgTable(
     packageNormalized: text("package_normalized"),
     /** Category-dependent extracted specs (see KeySpecs). */
     keySpecs: jsonb("key_specs").$type<KeySpecs>().default({}),
+    /**
+     * True for KiCad generic template symbols (Device.R, Connector_Generic_*,
+     * power ports, …) that have no orderable MPN. The Build-mode AI search
+     * excludes these by default so the model only picks buyable parts.
+     */
+    isGeneric: boolean("is_generic").default(false).notNull(),
     /** When the per-part normalized data was last refreshed. */
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }),
 
@@ -110,6 +118,8 @@ export const parts = pgTable(
       table.embedding.op("vector_cosine_ops"),
     ),
     nameIdx: index("parts_name_idx").on(table.name),
+    /** Fast `WHERE is_generic = false` filtering in AI/browse search. */
+    isGenericIdx: index("parts_is_generic_idx").on(table.isGeneric),
     /** Upsert key — one row per (library, symbol name). */
     libraryNameUniq: uniqueIndex("parts_library_name_uniq").on(
       table.libraryId,
@@ -144,6 +154,12 @@ export const partOffers = pgTable(
     minOrderQty: integer("min_order_qty"),
     leadTimeDays: integer("lead_time_days"),
     productUrl: text("product_url"),
+    /** Per-distributor lifecycle, normalized (Stage 3). */
+    lifecycleStatus: text("lifecycle_status")
+      .$type<"active" | "nrnd" | "last_time_buy" | "eol" | "obsolete" | "unknown">()
+      .default("unknown"),
+    /** The distributor's original lifecycle term, kept for debugging. */
+    lifecycleRaw: text("lifecycle_raw"),
     lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -192,6 +208,75 @@ export const alternates = pgTable(
   }),
 );
 
+/**
+ * A point-in-time capture of a BOM's supply-chain state (Stage 7). Stores a
+ * compact SnapshotRow array — NOT the full SchematicState.
+ */
+export const bomSnapshots = pgTable(
+  "bom_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Arbitrary identifier the caller provides (project id or state hash). */
+    projectKey: text("project_key").notNull(),
+    /** Optional user-facing label, e.g. "Pre-EVT 2026-06-24". */
+    label: text("label"),
+    takenAt: timestamp("taken_at", { withTimezone: true }).defaultNow().notNull(),
+    /** Serialized SnapshotRow[]. */
+    snapshotData: jsonb("snapshot_data").$type<SnapshotRow[]>().notNull().default([]),
+    /** Small summary: totals + design risk. */
+    bomMeta: jsonb("bom_meta").$type<BomSnapshotMeta>().notNull(),
+  },
+  (table) => ({
+    /** "list recent snapshots for project". */
+    projectKeyIdx: index("bom_snapshots_project_idx").on(table.projectKey, table.takenAt.desc()),
+  }),
+);
+
+/**
+ * Supply-chain change notifications (Stage 7), produced by diffing a project's
+ * latest snapshot against refreshed market data.
+ */
+export const bomNotifications = pgTable(
+  "bom_notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectKey: text("project_key").notNull(),
+    /** The snapshot the diff was made against. */
+    sourceSnapshotId: uuid("source_snapshot_id").references(() => bomSnapshots.id, {
+      onDelete: "set null",
+    }),
+    type: text("type")
+      .$type<
+        | "stock_dropped"
+        | "lifecycle_changed"
+        | "price_spike"
+        | "alternate_available"
+        | "alternate_obsolete"
+        | "supplier_lost"
+      >()
+      .notNull(),
+    severity: text("severity").$type<"info" | "warning" | "critical">().notNull(),
+    partId: uuid("part_id").references(() => parts.id, { onDelete: "cascade" }),
+    /** Human-readable, ≤200 chars. */
+    summary: text("summary").notNull(),
+    /** Structured before/after data. */
+    detailsJson: jsonb("details_json").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+  },
+  (table) => ({
+    /** Fast unread lookup (partial). */
+    unreadIdx: index("bom_notifications_unread_idx")
+      .on(table.projectKey, table.readAt)
+      .where(sql`${table.readAt} IS NULL`),
+    createdAtIdx: index("bom_notifications_created_idx").on(
+      table.projectKey,
+      table.createdAt.desc(),
+    ),
+  }),
+);
+
 // ─── Inferred row types (consumed across the codebase) ──────────────────────
 
 export type Library = typeof libraries.$inferSelect;
@@ -202,3 +287,7 @@ export type PartOffer = typeof partOffers.$inferSelect;
 export type NewPartOffer = typeof partOffers.$inferInsert;
 export type Alternate = typeof alternates.$inferSelect;
 export type NewAlternate = typeof alternates.$inferInsert;
+export type BomSnapshotRecord = typeof bomSnapshots.$inferSelect;
+export type NewBomSnapshot = typeof bomSnapshots.$inferInsert;
+export type BomNotification = typeof bomNotifications.$inferSelect;
+export type NewBomNotification = typeof bomNotifications.$inferInsert;

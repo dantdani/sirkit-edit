@@ -7,9 +7,9 @@
  * in a route) so the JSON route and the CSV route render the exact same BOM.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries } from "@/app/lib/db/schema";
+import { parts, libraries, alternates } from "@/app/lib/db/schema";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import {
   getPricingFor,
@@ -17,7 +17,14 @@ import {
   type AggregatedPricing,
   type DistributorChoice,
   type DistributorName,
+  type LifecycleStatus,
 } from "@/app/lib/distributors";
+import {
+  computeLineRisk,
+  computeDesignRisk,
+  type LineRiskBreakdown,
+  type DesignRiskSummary,
+} from "@/app/lib/risk-scoring";
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
   resistor: "Resistor",
@@ -42,6 +49,21 @@ export type BomRow = {
   datasheet: string | null;
   category: string | null;
   pricing: AggregatedPricing | null; // null if choice is "none" or no data
+  lifecycleStatus: LifecycleStatus; // consolidated; fresh from offers, else persisted
+  alternatesCount: number; // # of precomputed drop_in + fff alternates
+  riskScore: LineRiskBreakdown; // synthesized supply-chain risk (Stage 5)
+};
+
+/** Aggregate lifecycle counts + a single risk verdict for the whole BOM. */
+export type BomLifecycleSummary = {
+  active: number;
+  nrnd: number;
+  last_time_buy: number;
+  eol: number;
+  obsolete: number;
+  unknown: number;
+  totalRows: number;
+  riskRecommendation: "ok" | "review" | "blocked";
 };
 
 export type BomResult = {
@@ -52,6 +74,8 @@ export type BomResult = {
   pricingSource: DistributorChoice;
   cached: number;
   fetched: number;
+  lifecycleSummary: BomLifecycleSummary;
+  riskSummary: DesignRiskSummary;
   warnings: string[];
 };
 
@@ -115,7 +139,10 @@ export async function buildBom(
 
   // ── Enrich KiCad groups with catalog metadata (one DB round-trip) ────────────
   const partIds = [...new Set([...groups.values()].map((g) => g.partId).filter((p): p is string => p !== null))];
-  const partMeta = await loadPartMeta(partIds);
+  const [partMeta, alternatesCounts] = await Promise.all([
+    loadPartMeta(partIds),
+    loadAlternatesCounts(partIds),
+  ]);
 
   // ── Fetch pricing for every distinct part (by partId + its catalog MPN) ───────
   const partsForPricing: Array<{ partId: string; mpn: string }> = [];
@@ -154,6 +181,12 @@ export async function buildBom(
     const mpn = meta?.mpn ?? null;
     const pricing = g.partId ? pricingMap.get(g.partId) ?? null : null;
 
+    // Lifecycle is sourced from the aggregator's consolidated verdict, which
+    // already folds in cached offers. We deliberately do NOT fall back to the
+    // part's stored lifecycleStatus: Stage 1 seeded that to "active" for every
+    // part, and the contract here is "no distributor data → unknown".
+    const lifecycleStatus: LifecycleStatus = pricing?.lifecycleStatus ?? "unknown";
+
     rows.push({
       partId: g.partId,
       refDes: refDesList.join(", "),
@@ -167,6 +200,9 @@ export async function buildBom(
       datasheet: meta?.datasheet ?? pricing?.bestOverall?.datasheet ?? null,
       category: meta?.mainCategory ?? (g.type ? "Theory" : null),
       pricing,
+      lifecycleStatus,
+      alternatesCount: g.partId ? alternatesCounts.get(g.partId) ?? 0 : 0,
+      riskScore: computeLineRisk({ pricing, lifecycleStatus }),
     });
   }
 
@@ -195,8 +231,31 @@ export async function buildBom(
     pricingSource: pricingChoice,
     cached,
     fetched,
+    lifecycleSummary: summarizeLifecycle(rows),
+    riskSummary: computeDesignRisk(rows),
     warnings,
   };
+}
+
+/** Tally lifecycle states across rows and derive the overall risk verdict. */
+function summarizeLifecycle(rows: BomRow[]): BomLifecycleSummary {
+  const summary: BomLifecycleSummary = {
+    active: 0,
+    nrnd: 0,
+    last_time_buy: 0,
+    eol: 0,
+    obsolete: 0,
+    unknown: 0,
+    totalRows: rows.length,
+    riskRecommendation: "ok",
+  };
+  for (const row of rows) summary[row.lifecycleStatus] += 1;
+
+  if (summary.eol > 0 || summary.obsolete > 0) summary.riskRecommendation = "blocked";
+  else if (summary.nrnd > 0 || summary.last_time_buy > 0) summary.riskRecommendation = "review";
+  else summary.riskRecommendation = "ok";
+
+  return summary;
 }
 
 // ─── Catalog metadata ──────────────────────────────────────────────────────────
@@ -231,6 +290,27 @@ async function loadPartMeta(partIds: string[]): Promise<Map<string, PartMeta>> {
     .where(inArray(parts.id, partIds));
 
   for (const r of rows) map.set(r.id, r);
+  return map;
+}
+
+/** partId → count of drop_in + fff alternates, in one grouped query (no N+1). */
+async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (partIds.length === 0) return map;
+
+  const db = getDb();
+  const rows = await db
+    .select({ partId: alternates.partId, count: sql<number>`count(*)` })
+    .from(alternates)
+    .where(
+      and(
+        inArray(alternates.partId, partIds),
+        inArray(alternates.kind, ["drop_in", "fff"]),
+      ),
+    )
+    .groupBy(alternates.partId);
+
+  for (const r of rows) map.set(r.partId, Number(r.count));
   return map;
 }
 
@@ -269,6 +349,9 @@ export function bomToCsv(result: BomResult): string {
     "In Stock",
     "Datasheet",
     "Distributor URL",
+    "Risk Score",
+    "Risk Grade",
+    "Risk Notes",
   ];
 
   const rows = result.rows.map((row) => {
@@ -290,6 +373,9 @@ export function bomToCsv(result: BomResult): string {
       best?.inStock ?? "",
       row.datasheet ?? "",
       best?.productUrl ?? "",
+      row.riskScore.total,
+      row.riskScore.grade,
+      row.riskScore.notes.join("; "),
     ];
   });
 

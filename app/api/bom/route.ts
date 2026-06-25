@@ -8,29 +8,22 @@
  * Response: BomResult (ok, rows, totals, cached/fetched counts, warnings).
  */
 
-import { buildBom, type BomRow } from "@/app/lib/bom/build";
-import type { DistributorChoice } from "@/app/lib/distributors";
-import type { SchematicState } from "@/lib/schematic-types";
+import type { BomRow, BomLifecycleSummary } from "@/app/lib/bom/build";
+import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import type { LineRiskBreakdown, DesignRiskSummary } from "@/app/lib/risk-scoring";
 
 export const runtime = "nodejs";
 
 // Re-exported here so consumers can import the row shape from the route path
 // (per the spec) without reaching into the lib internals.
-export type { BomRow };
-
-const VALID_CHOICES: DistributorChoice[] = ["none", "digikey", "mouser", "octopart", "all"];
+export type { BomRow, BomLifecycleSummary };
+export type { LineRiskBreakdown, DesignRiskSummary };
 
 type BomBody = {
   state?: unknown;
   pricingChoice?: unknown;
   forceRefresh?: unknown;
 };
-
-/** Coerce an incoming choice (incl. the legacy "both") to the current union. */
-function normalizeChoice(raw: unknown): DistributorChoice {
-  if (raw === "both") return "all"; // legacy persisted value
-  return VALID_CHOICES.includes(raw as DistributorChoice) ? (raw as DistributorChoice) : "none";
-}
 
 export async function POST(req: Request): Promise<Response> {
   let body: BomBody;
@@ -52,17 +45,10 @@ export async function POST(req: Request): Promise<Response> {
   const forceRefresh = body.forceRefresh === true;
 
   try {
-    const result = await buildBom(state, pricingChoice, forceRefresh);
+    const result = await buildBomRows(state, pricingChoice, forceRefresh);
     return Response.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
-
-function isSchematicState(value: unknown): value is SchematicState {
-  if (!value || typeof value !== "object") return false;
-  const v = value as Record<string, unknown>;
-  // `components` is the only required array; kicadComponents/wires are optional.
-  return Array.isArray(v.components);
 }

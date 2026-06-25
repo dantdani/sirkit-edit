@@ -19,6 +19,7 @@ import {
   type PartPricing,
   type PriceBreak,
 } from "./types";
+import { mapLifecycleString } from "./lifecycle";
 import { makeCachedLookup } from "./cache";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
@@ -145,6 +146,13 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
   const manufacturer = asString(asRecord(product.Manufacturer).Name);
   const description = asString(asRecord(product.Description).ProductDescription);
 
+  // v4 exposes ProductStatus as `{ Id, Status }`; older shapes use a bare string
+  // or MarketStatus. Try each in turn.
+  const lifecycleRaw =
+    asString(asRecord(product.ProductStatus).Status) ??
+    asString(product.ProductStatus) ??
+    asString(product.MarketStatus);
+
   return {
     distributor: "digikey",
     mpn: asString(product.ManufacturerProductNumber) ?? requestedMpn,
@@ -157,6 +165,8 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
     bestUnitPrice: cheapestUnitPrice(priceBreaks),
     productUrl: asString(product.ProductUrl),
     package: asString(product.Packaging) ?? asString(asRecord(product.Packaging).Value),
+    lifecycleStatus: mapLifecycleString(lifecycleRaw),
+    lifecycleRaw,
     fetchedAt: Date.now(),
   };
 }

@@ -21,6 +21,7 @@ import {
   type PartPricing,
   type PriceBreak,
 } from "./types";
+import { mapLifecycleString } from "./lifecycle";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
 // 30 req/min on the free tier → a 2s minimum spacing keeps us comfortably under.
@@ -101,6 +102,7 @@ function mapPart(requestedMpn: string, json: unknown): PartPricing | null {
   const part = asRecord(exact ?? parts[0]);
 
   const priceBreaks = mapPriceBreaks(asArray(part.PriceBreaks));
+  const lifecycleRaw = asString(part.LifecycleStatus);
 
   return {
     distributor: "mouser",
@@ -116,6 +118,8 @@ function mapPart(requestedMpn: string, json: unknown): PartPricing | null {
     productUrl: asString(part.ProductDetailUrl),
     package: null,
     sku: asString(part.MouserPartNumber),
+    lifecycleStatus: mapLifecycleString(lifecycleRaw),
+    lifecycleRaw,
     fetchedAt: Date.now(),
   };
 }

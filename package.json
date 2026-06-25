@@ -12,6 +12,9 @@
     "ingest:kicad": "tsx scripts/ingest-kicad.ts",
     "backfill:parts": "tsx scripts/backfill-parts.ts",
     "refresh:bom-pricing": "tsx scripts/refresh-bom-pricing.ts",
+    "refresh:bom-notify": "tsx scripts/refresh-bom-pricing.ts --notify",
+    "compute:alternates": "tsx scripts/compute-alternates.ts",
+    "backfill:mpn-generics": "tsx scripts/backfill-mpn-and-generics.ts",
     "test:netlist": "tsx scripts/netlist-validation.test.ts"
   },
   "dependencies": {

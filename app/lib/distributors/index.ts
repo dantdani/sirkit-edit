@@ -9,31 +9,36 @@
  * "@/app/lib/distributors".
  */
 
-import type { DistributorClient, DistributorName, PartPricing } from "./types";
+import { eq } from "drizzle-orm";
+import type { DistributorClient, DistributorName, LifecycleStatus, PartPricing } from "./types";
+import type { DistributorChoice, AggregatedPricing } from "./shared";
 import { makeDigiKeyClient } from "./digikey";
 import { makeOctopartClient } from "./octopart";
 import { makeMouserClient } from "./mouser";
+import { consolidateLifecycle } from "./lifecycle";
 import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
+import { getDb } from "../db/client";
+import { parts } from "../db/schema";
 
-export type { PartPricing, PriceBreak, DistributorClient, DistributorName } from "./types";
+// Re-export the browser-safe surface (types, lifecycle helpers, DistributorChoice,
+// AggregatedPricing) so server callers can keep importing from this barrel. Client
+// Components must import these from "./shared" instead — this barrel pulls in the
+// DB/Postgres graph and cannot be bundled for the browser. See ./shared.ts.
+export type {
+  PartPricing,
+  PriceBreak,
+  DistributorClient,
+  DistributorName,
+  LifecycleStatus,
+  DistributorChoice,
+  AggregatedPricing,
+} from "./shared";
+export { LIFECYCLE_SEVERITY, consolidateLifecycle, mapLifecycleString } from "./shared";
 export {
   getCachedOffer,
   putCachedOffer,
   getCachedOffersForParts,
 } from "./cache";
-
-// LCSC is excluded from the union until partner API access lands (stub throws).
-export type DistributorChoice = "none" | "digikey" | "mouser" | "octopart" | "all";
-
-export type AggregatedPricing = {
-  partId: string;
-  mpn: string;
-  offers: PartPricing[]; // one entry per distributor that returned data
-  bestOverall: PartPricing | null;
-  sourcesQueried: string[]; // which distributors were actually called
-  sourcesFromCache: number;
-  sourcesFromLive: number;
-};
 
 // ── Lazy, process-wide client singletons ──────────────────────────────────────
 // Built once so token caches and request queues persist across calls.
@@ -147,6 +152,7 @@ export async function getPricingFor(
       mpn: it.mpn,
       offers: [],
       bestOverall: null,
+      lifecycleStatus: "unknown",
       sourcesQueried: sourceNames,
       sourcesFromCache: 0,
       sourcesFromLive: 0,
@@ -206,16 +212,44 @@ export async function getPricingFor(
     }
   }
 
-  // Finalize: compute bestOverall and drop parts that got no offers.
+  // Finalize: compute bestOverall + consolidated lifecycle; drop empty parts.
+  const lifecycleWrites: Array<{ partId: string; status: LifecycleStatus }> = [];
   for (const [partId, agg] of result) {
     if (agg.offers.length === 0) {
       result.delete(partId);
       continue;
     }
     agg.bestOverall = pickBestOverall(agg.offers);
+    agg.lifecycleStatus = consolidateLifecycle(agg.offers.map((o) => o.lifecycleStatus));
+    // Only persist a real verdict — never overwrite stored data with "unknown".
+    if (agg.lifecycleStatus !== "unknown") {
+      lifecycleWrites.push({ partId, status: agg.lifecycleStatus });
+    }
   }
 
+  await persistLifecycle(lifecycleWrites);
+
   return result;
+}
+
+/** Write consolidated lifecycle (and a refresh stamp) back to the parts table. */
+async function persistLifecycle(
+  writes: Array<{ partId: string; status: LifecycleStatus }>,
+): Promise<void> {
+  if (writes.length === 0) return;
+  const db = getDb();
+  const now = new Date();
+  await Promise.all(
+    writes.map(({ partId, status }) =>
+      db
+        .update(parts)
+        .set({ lifecycleStatus: status, lastRefreshedAt: now })
+        .where(eq(parts.id, partId))
+        .catch((err: unknown) => {
+          console.error(`[distributors] failed to persist lifecycle for ${partId}:`, err);
+        }),
+    ),
+  );
 }
 
 /** The offer with the lowest non-null bestUnitPrice (ties: first seen). */

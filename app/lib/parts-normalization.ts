@@ -28,6 +28,90 @@ export function normalizeMpn(mpn: string): string {
   return mpn.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+// ─── Generic-part detection ─────────────────────────────────────────────────-
+//
+// KiCad ships generic template symbols (Device.R, Connector_Generic_*, power
+// ports, SPICE primitives, …) that have no orderable MPN. The Build-mode AI
+// must never pick these — they produce all-"—" BOM rows. The heuristics below
+// classify a part as generic by its owning library, exact symbol name, or a
+// name pattern. Best-effort and deterministic (the backfill relies on this).
+
+/** Libraries that contain ONLY generic template symbols (no orderable MPNs). */
+export const GENERIC_LIBRARIES = new Set([
+  "Device",
+  "Connector_Generic",
+  "Connector_Generic_MountingPin",
+  "Connector_Generic_Shielded",
+  "Connector_Pin",
+  "Mechanical",
+  "Jumper",
+  "pspice", // SPICE simulation primitives, not buyable
+  "Simulation_SPICE",
+  "power", // power port symbols (+3V3, GND, etc.) — not parts
+  "Symbol", // KiCad's symbol-label library
+  "Graphic",
+]);
+
+/** Exact symbol names that are generic regardless of library. */
+export const GENERIC_EXACT_NAMES = new Set([
+  "R", "R_Small", "R_Variable", "R_Adjustable", "R_Pack4", "R_Pack8",
+  "C", "C_Small", "C_Polarized", "CP", "CP_Small", "C_Variable",
+  "L", "L_Small", "L_Coupled", "L_Core_Ferrite",
+  "D", "D_Small", "D_Schottky", "D_Zener", "D_TVS",
+  "LED", "LED_Small", "LED_Dual_AAC", "LED_Dual_CAC", "LED_RGB",
+  "Crystal", "Crystal_Small", "Crystal_GND2", "Crystal_GND24",
+  "Battery", "Battery_Cell",
+  "Speaker", "Buzzer",
+  "Fuse", "Fuse_Small", "Polyfuse", "Polyfuse_Small",
+  "Antenna", "Antenna_Chip", "Antenna_Shield",
+  "Transformer", "Transformer_1P_1S",
+  "Q_NPN_BCE", "Q_PNP_BCE", "Q_NMOS_GSD", "Q_PMOS_GSD",
+  "Resistor", "Capacitor", "Inductor", "Diode",
+  "Conn_01x02", "Conn_01x04", "Conn_01x08", "Conn_02x05",
+]);
+
+/** Name substring patterns that strongly indicate genericity. */
+export const GENERIC_NAME_PATTERNS = [
+  /^Conn_\d+x\d+/, // Conn_02x10, Conn_01x40 — generic headers
+  /^Mounting/,
+  /^Test(Point|Pad)/,
+  /Generic/,
+  /Placeholder/,
+];
+
+/** Is this part a generic KiCad template (no orderable MPN)? */
+export function isGenericPart(part: {
+  name: string;
+  libraryName?: string; // for parts from search responses
+  library?: { name: string }; // for parts from joined queries
+}): boolean {
+  const libName = part.libraryName ?? part.library?.name;
+  if (libName && GENERIC_LIBRARIES.has(libName)) return true;
+  if (GENERIC_EXACT_NAMES.has(part.name)) return true;
+  if (GENERIC_NAME_PATTERNS.some((re) => re.test(part.name))) return true;
+  return false;
+}
+
+// Footprint/symbol-name fragments that mark a string as a KiCad footprint or
+// mechanical descriptor rather than a real, buyable manufacturer part number.
+const MPN_DISALLOWED_SUBSTRINGS = [
+  "_THT_", "_SMD_", "_Vertical", "_Horizontal", "mm_P", "_TabPin", "_Drilled", "_MountingHoles",
+];
+
+/**
+ * Heuristic: could `s` plausibly be a buyable manufacturer part number? Returns
+ * false for obvious symbol/footprint names. False positives are acceptable — a
+ * distributor lookup on a non-MPN simply returns nothing.
+ */
+export function looksLikeMpn(s: string): boolean {
+  if (!s || s.length < 3 || s.length > 40) return false;
+  if (!/\d/.test(s)) return false; // must contain at least one digit
+  for (const dis of MPN_DISALLOWED_SUBSTRINGS) {
+    if (s.includes(dis)) return false;
+  }
+  return true;
+}
+
 // ─── Package ──────────────────────────────────────────────────────────────--
 
 /** Imperial two-terminal chip sizes we canonicalize to a bare 4-digit code. */

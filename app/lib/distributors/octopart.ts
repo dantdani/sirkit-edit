@@ -21,6 +21,7 @@ import {
   type PartPricing,
   type PriceBreak,
 } from "./types";
+import { mapLifecycleString } from "./lifecycle";
 import { getCached, setCached } from "./cache";
 
 const GRAPHQL_URL = "https://api.nexar.com/graphql";
@@ -33,6 +34,7 @@ const PART_FRAGMENT = `
       shortDescription
       bestDatasheet { url }
       totalAvail
+      lifecycleStatus
       sellers {
         company { name }
         offers {
@@ -156,6 +158,8 @@ function mapPart(requestedMpn: string, part: Record<string, unknown>): PartPrici
 
   priceBreaks.sort((a, b) => a.qty - b.qty);
 
+  const lifecycleRaw = asString(part.lifecycleStatus);
+
   return {
     distributor: "octopart-aggregated",
     mpn,
@@ -168,6 +172,8 @@ function mapPart(requestedMpn: string, part: Record<string, unknown>): PartPrici
     bestUnitPrice: cheapestUnitPrice(priceBreaks),
     productUrl: bestSeller.clickUrl,
     package: null,
+    lifecycleStatus: mapLifecycleString(lifecycleRaw),
+    lifecycleRaw,
     fetchedAt: Date.now(),
   };
 }

@@ -152,6 +152,8 @@ function offerRowToPricing(row: PartOffer): PartPricing {
     productUrl: row.productUrl ?? null,
     package: null,
     sku: row.distributorSku ?? null,
+    lifecycleStatus: row.lifecycleStatus ?? "unknown",
+    lifecycleRaw: row.lifecycleRaw ?? null,
     fetchedAt: row.lastRefreshedAt ? new Date(row.lastRefreshedAt).getTime() : Date.now(),
   };
 }
@@ -205,6 +207,8 @@ export async function putCachedOffer(
     minOrderQty: offer.minOrderQty ?? null,
     leadTimeDays: null,
     productUrl: offer.productUrl ?? null,
+    lifecycleStatus: offer.lifecycleStatus,
+    lifecycleRaw: offer.lifecycleRaw ?? null,
     lastRefreshedAt: now,
   };
   await db
@@ -219,6 +223,8 @@ export async function putCachedOffer(
         minOrderQty: values.minOrderQty,
         leadTimeDays: values.leadTimeDays,
         productUrl: values.productUrl,
+        lifecycleStatus: values.lifecycleStatus,
+        lifecycleRaw: values.lifecycleRaw,
         lastRefreshedAt: values.lastRefreshedAt,
       },
     });

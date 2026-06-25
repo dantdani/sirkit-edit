@@ -15,6 +15,15 @@ export type PriceBreak = {
   currency: string;
 };
 
+/** Manufacturing lifecycle, normalized across distributors (worst-known wins). */
+export type LifecycleStatus =
+  | "active"
+  | "nrnd" // Not Recommended for New Design
+  | "last_time_buy"
+  | "eol" // End of Life
+  | "obsolete"
+  | "unknown";
+
 export type PartPricing = {
   distributor: "digikey" | "octopart-aggregated" | "mouser" | "lcsc";
   mpn: string;
@@ -28,6 +37,8 @@ export type PartPricing = {
   productUrl: string | null; // link to the distributor's product page
   package: string | null;
   sku?: string | null; // distributor SKU/order number, when the source provides one
+  lifecycleStatus: LifecycleStatus; // normalized lifecycle for this source
+  lifecycleRaw: string | null; // the distributor's original term, kept for debugging
   fetchedAt: number; // unix ms
 };
 
