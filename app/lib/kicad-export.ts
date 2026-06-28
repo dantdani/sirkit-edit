@@ -85,9 +85,19 @@ function num(n: number): string {
   return String(n);
 }
 
-/** Quote and escape a string for an S-expression token. */
+/**
+ * Quote and escape a string for an S-expression token. This is the single
+ * source of truth for emitting any identifier that could contain characters
+ * outside `[A-Za-z0-9_]` (hyphens, dots, colons, slashes, …) — KiCad's parser
+ * only accepts those bare inside double-quoted strings.
+ */
 function q(s: string): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Escape a literal string for safe interpolation into a `RegExp`. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -105,15 +115,41 @@ function uuidFor(prefix: string, key: string): string {
 }
 
 /**
- * Rewrite the leading `(symbol "<name>" ...)` token of a raw symbol block so its
- * id becomes the fully-qualified `Library:Name` KiCad expects inside a
- * schematic's `lib_symbols`.
+ * Prepare a raw `(symbol ...)` block for embedding in a schematic's
+ * `lib_symbols`:
+ *
+ *  1. the root id becomes the fully-qualified `Library:Name` KiCad expects;
+ *  2. every child unit id (`<root>_<unit>_<style>`) is re-prefixed to the new
+ *     bare item `Name`.
+ *
+ * Step 2 matters for parts that `(extends ...)` another symbol: ingest resolves
+ * inheritance by handing the child the *parent's* raw block, so the unit ids
+ * still carry the parent's name (e.g. an `AP1117-18` that extends `AP1117-15`
+ * arrives with `AP1117-15_0_1` units). When KiCad reads a unit it strips the
+ * library nickname from the symbol name and requires the unit id to start with
+ * what remains; a leftover parent prefix triggers an "Invalid symbol unit name
+ * prefix" parse error. For a base symbol the original and target names are
+ * identical, so the child rewrite is a no-op and existing exports are
+ * byte-for-byte unchanged.
  */
 function rewriteSymbolName(symbolRaw: string, libId: string): string {
-  return symbolRaw.replace(
+  const rootMatch = symbolRaw.match(/^\s*\(symbol\s+"((?:[^"\\]|\\.)*)"/);
+  if (!rootMatch) return symbolRaw;
+  const rawOriginal = rootMatch[1]; // root id exactly as written in the source
+  const itemName = libId.slice(libId.indexOf(":") + 1); // bare KiCad item name
+
+  // (1) Root id → fully-qualified "Library:Name".
+  let out = symbolRaw.replace(
     /^(\s*\(symbol\s+)"(?:[^"\\]|\\.)*"/,
     (_full, lead: string) => `${lead}${q(libId)}`,
   );
+
+  // (2) Child unit ids "<root>_<unit>_<style>" → "<itemName>_<unit>_<style>".
+  // The root id no longer matches `rawOriginal` (it's now "Library:Name"), so
+  // only the unit children are touched.
+  const childRe = new RegExp(`(\\(symbol\\s+)"${escapeRegExp(rawOriginal)}((?:_\\d+)+)"`, "g");
+  out = out.replace(childRe, (_full, lead: string, suffix: string) => `${lead}${q(itemName + suffix)}`);
+  return out;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
