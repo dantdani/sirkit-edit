@@ -36,6 +36,7 @@ import { parts, libraries, alternates } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import type { KicadPin } from "@/app/lib/kicad/types";
+import type { CachedPart } from "@/app/lib/parts-cache";
 
 /** Compact pin descriptor handed to the AI — no positions (keeps tokens small). */
 export type AiPartPin = {
@@ -97,6 +98,36 @@ export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
     lifecycleStatus: r.lifecycleStatus ?? "unknown",
     similarity: 1,
   }));
+}
+
+/**
+ * Fetch FULL part records (CachedPart shape, incl. symbolRaw + geometry pins) by
+ * id — the server-side equivalent of the client parts cache, for routes that run
+ * on the server (e.g. KiCad export) and therefore can't call ensurePartLoaded.
+ */
+export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
+  const unique = [...new Set(ids)].filter((id) => id);
+  if (unique.length === 0) return [];
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: parts.id,
+      name: parts.name,
+      description: parts.description,
+      mpn: parts.mpn,
+      manufacturer: parts.manufacturer,
+      datasheet: parts.datasheet,
+      footprintHint: parts.footprintHint,
+      mainCategory: libraries.mainCategory,
+      libraryName: libraries.name,
+      pins: parts.pins,
+      symbolRaw: parts.symbolRaw,
+      properties: parts.properties,
+    })
+    .from(parts)
+    .innerJoin(libraries, eq(parts.libraryId, libraries.id))
+    .where(inArray(parts.id, unique));
+  return rows as CachedPart[];
 }
 
 // ─── Retrieval / rerank tuning ──────────────────────────────────────────────

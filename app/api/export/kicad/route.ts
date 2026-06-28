@@ -10,7 +10,7 @@
  */
 
 import { exportToKicadSch } from "@/app/lib/kicad-export";
-import { ensurePartLoaded, type CachedPart } from "@/app/lib/parts-cache";
+import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
 
 export const runtime = "nodejs";
@@ -50,16 +50,12 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  // Collect unique partIds and load them through the cache.
+  // Collect unique partIds and load full catalog data from the DB (server-side;
+  // the client parts cache / ensurePartLoaded can't be called from a route).
   const partIds = [...new Set(kicadComponents.map((c) => c.partId))];
-  const parts = new Map<string, CachedPart>();
-  const failed: string[] = [];
-
-  const results = await Promise.allSettled(partIds.map((id) => ensurePartLoaded(id)));
-  results.forEach((res, i) => {
-    if (res.status === "fulfilled") parts.set(partIds[i], res.value);
-    else failed.push(partIds[i]);
-  });
+  const loaded = await getFullPartsByIds(partIds);
+  const parts = new Map(loaded.map((p) => [p.id, p] as const));
+  const failed = partIds.filter((id) => !parts.has(id));
 
   if (failed.length > 0) {
     return Response.json(
