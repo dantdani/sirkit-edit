@@ -161,6 +161,17 @@ Stay focused — don't over-engineer. A simple LED circuit needs an MCU, a resis
 
 CRITICAL: in submit_schematic, every component's "partId" must be the exact "partId" value (a UUID) copied from a search_parts result. NEVER put the part name or MPN in "partId" — names go in "value".
 
+WHEN TO CALL find_alternates:
+
+After a search_parts result, inspect each chosen candidate. If a candidate has ANY of these issues, call find_alternates(partId) before committing to it:
+  - lifecycleStatus is "nrnd", "last_time_buy", "eol", or "obsolete"
+  - totalAvail (when present) is very low (< 1000 units)
+  - the candidate is the only result and you have doubts about its specs
+
+find_alternates returns ranked candidates by combined availability+lifecycle+price score. If the top alternate has a higher score AND is active lifecycle, prefer it over your original pick (use its partId in submit_schematic).
+
+Don't call find_alternates on parts that are already active+well-stocked — it's wasted work. Reserve it for borderline cases.
+
 Always END with exactly one call to submit_schematic. Don't narrate after.`;
 
 /** Nudge sent when the model narrates instead of calling a tool. */
@@ -184,6 +195,29 @@ export const BUILD_SEARCH_PARTS_TOOL: Anthropic.Tool = {
       },
     },
     required: ["query"],
+  },
+};
+
+export const BUILD_FIND_ALTERNATES_TOOL: Anthropic.Tool = {
+  name: "find_alternates",
+  description:
+    "Find ranked alternate parts for a given partId. Use this when a part returned by search_parts has low stock (<1000), NRND lifecycle, or EOL/obsolete status. Returns alternates ordered by a combined score of availability, lifecycle, and price.",
+  input_schema: {
+    type: "object",
+    properties: {
+      partId: {
+        type: "string",
+        description:
+          "The partId of the part you want alternates for (from a previous search_parts result).",
+      },
+      kind: {
+        type: "string",
+        enum: ["drop_in", "fff", "all"],
+        description:
+          "drop_in for exact spec replacements (preferred); fff for similar parts; all for both. Default 'all'.",
+      },
+    },
+    required: ["partId"],
   },
 };
 
