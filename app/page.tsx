@@ -2088,6 +2088,15 @@ export default function Home() {
   const [netLabels, setNetLabels] = useState<NetLabel[]>([]);
   const [pendingNetLabel, setPendingNetLabel] = useState<PendingNetLabel | null>(null);
 
+  // Transient bottom toast (e.g. BOM part-swap confirmations). Auto-dismisses.
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showToast(msg: string) {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  }
+
   // Begin modal placement of a KiCad part (from the Build library panel).
   function startKicadPlacement(partId: string) {
     setPlacementPartId(partId);
@@ -2689,6 +2698,27 @@ export default function Home() {
     }
   }
 
+  // Swap every placed instance of `sourcePartId` over to `newPartId`, invoked by
+  // the BOM alternates drawer. Position/rotation/refDes/value are preserved — the
+  // alternate is assumed form-fit-function compatible. If the new part's pin
+  // layout differs, attached wires keep their old endpoints and may hang; the
+  // toast tells the user to verify visually rather than blocking on a check.
+  async function handleSwapPart(sourcePartId: string, newPartId: string) {
+    try {
+      // Warm the cache so the renderer has the new symbol/pin data on re-render.
+      const newPart = await ensurePartLoaded(newPartId);
+      setKicadComponents((prev) =>
+        prev.map((kic) =>
+          kic.partId === sourcePartId ? { ...kic, partId: newPartId } : kic,
+        ),
+      );
+      const label = newPart.mpn ?? newPart.name;
+      showToast(`Swapped to ${label}. Verify wire connections — pin positions may differ.`);
+    } catch {
+      showToast("Swap failed: could not load the replacement part.");
+    }
+  }
+
   const selectedComp = selectedId
     ? components.find((c) => c.id === selectedId) ?? null
     : null;
@@ -2958,7 +2988,10 @@ export default function Home() {
                   setAnalysisConfig={setAnalysisConfig}
                 />
               ) : view === "bom" ? (
-                <BomView state={{ components, kicadComponents, wires, netLabels }} />
+                <BomView
+                  state={{ components, kicadComponents, wires, netLabels }}
+                  onSwapPart={handleSwapPart}
+                />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
                   {view === "pcb"       && "PCB layout canvas"}
@@ -3109,6 +3142,25 @@ export default function Home() {
           </aside>
         )}
       </div>
+
+      {/* Transient toast (BOM part swaps, etc.) */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-md">
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 shadow-lg"
+          >
+            <span className="flex-1">{toast}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="text-zinc-500 hover:text-zinc-200 transition-colors"
+              title="Dismiss"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

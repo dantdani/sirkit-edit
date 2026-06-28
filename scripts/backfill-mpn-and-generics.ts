@@ -29,7 +29,9 @@ loadEnvLocal();
 import postgres from "postgres";
 import { isGenericPart, looksLikeMpn, normalizeMpn } from "../app/lib/parts-normalization";
 
-const SELECT_BATCH = 1000;
+// Small batches keep every UPDATE/SELECT well under the transaction pooler's
+// statement_timeout — large (~900-row) set statements sat right at the limit.
+const SELECT_BATCH = 200;
 
 const summary = {
   processed: 0,
@@ -45,6 +47,25 @@ type Row = {
   is_generic: boolean;
   library_name: string | null;
 };
+
+/**
+ * Retry a query a few times on transient failures (the pooler's statement
+ * timeout, dropped connections). All writes here are idempotent, so retrying is
+ * always safe.
+ */
+async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const transient = /statement timeout|timeout|ECONNRESET|connection|terminat/i.test(msg);
+      if (!transient || attempt >= 4) throw err;
+      console.warn(`[backfill] ${label} attempt ${attempt} failed (${msg}); retrying…`);
+      await new Promise((r) => setTimeout(r, 500 * attempt));
+    }
+  }
+}
 
 async function main(): Promise<void> {
   const url = process.env.DATABASE_URL;
@@ -64,15 +85,23 @@ async function main(): Promise<void> {
     const total = totalRow[0]?.n ?? 0;
     console.log(`[backfill] ${total} parts to process (select batch ${SELECT_BATCH}).`);
 
-    for (let offset = 0; offset < total; offset += SELECT_BATCH) {
-      const rows = await sql<Row[]>`
+    // Keyset pagination on the uuid PK (WHERE id > last) — constant-time per
+    // batch, unlike OFFSET which scans further each step and trips the pooler's
+    // statement_timeout on a 22k-row table.
+    let lastId: string | null = null;
+    let scanned = 0;
+    for (;;) {
+      const after = lastId === null ? sql`` : sql`WHERE p.id > ${lastId}`;
+      const rows: Row[] = await sql<Row[]>`
         SELECT p.id, p.name, p.mpn, p.is_generic, l.name AS library_name
         FROM parts p
         LEFT JOIN libraries l ON p.library_id = l.id
+        ${after}
         ORDER BY p.id
-        LIMIT ${SELECT_BATCH} OFFSET ${offset}
+        LIMIT ${SELECT_BATCH}
       `;
       if (rows.length === 0) break;
+      lastId = rows[rows.length - 1].id;
 
       const toTrue: string[] = []; // is_generic false → true
       const toFalse: string[] = []; // is_generic true → false (re-classification)
@@ -93,17 +122,22 @@ async function main(): Promise<void> {
 
       // is_generic: one bulk UPDATE per direction, only where it actually changed.
       if (toTrue.length > 0) {
-        await sql`UPDATE parts SET is_generic = true, updated_at = now() WHERE id IN ${sql(toTrue)}`;
+        await withRetry("set-generic-true", () =>
+          sql`UPDATE parts SET is_generic = true, updated_at = now() WHERE id IN ${sql(toTrue)}`,
+        );
       }
       if (toFalse.length > 0) {
-        await sql`UPDATE parts SET is_generic = false, updated_at = now() WHERE id IN ${sql(toFalse)}`;
+        await withRetry("set-generic-false", () =>
+          sql`UPDATE parts SET is_generic = false, updated_at = now() WHERE id IN ${sql(toFalse)}`,
+        );
       }
 
       await backfillMpns(sql, candidates);
 
       summary.processed += rows.length;
+      scanned += rows.length;
       console.log(
-        `[backfill] ${Math.min(offset + rows.length, total)} / ${total} ` +
+        `[backfill] ${Math.min(scanned, total)} / ${total} ` +
           `(batch: +${toTrue.length} generic, ${candidates.length} mpn candidates)`,
       );
       if (rows.length < SELECT_BATCH) break;
@@ -146,9 +180,12 @@ async function backfillMpns(
 
   // 2) Drop values already owned by an existing row (would violate the index).
   const nmpns = [...byNmpn.keys()];
-  const taken = await sql<{ normalized_mpn: string }[]>`
-    SELECT normalized_mpn FROM parts WHERE normalized_mpn IN ${sql(nmpns)}
-  `;
+  const taken = await withRetry(
+    "conflict-check",
+    () => sql<{ normalized_mpn: string }[]>`
+      SELECT normalized_mpn FROM parts WHERE normalized_mpn IN ${sql(nmpns)}
+    `,
+  );
   for (const t of taken) {
     if (byNmpn.delete(t.normalized_mpn)) summary.mpnSkippedConflict += 1;
   }
@@ -160,12 +197,15 @@ async function backfillMpns(
   const ids = survivors.map((s) => s.id);
   const mpns = survivors.map((s) => s.mpn);
   const norms = survivors.map((s) => s.nmpn);
-  await sql`
-    UPDATE parts AS p
-    SET mpn = u.mpn, normalized_mpn = u.nmpn, updated_at = now()
-    FROM unnest(${ids}::uuid[], ${mpns}::text[], ${norms}::text[]) AS u(id, mpn, nmpn)
-    WHERE p.id = u.id
-  `;
+  await withRetry(
+    "mpn-update",
+    () => sql`
+      UPDATE parts AS p
+      SET mpn = u.mpn, normalized_mpn = u.nmpn, updated_at = now()
+      FROM unnest(${ids}::uuid[], ${mpns}::text[], ${norms}::text[]) AS u(id, mpn, nmpn)
+      WHERE p.id = u.id
+    `,
+  );
   summary.mpnBackfilled += survivors.length;
 }
 

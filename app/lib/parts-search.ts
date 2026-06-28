@@ -32,7 +32,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries } from "@/app/lib/db/schema";
+import { parts, libraries, alternates } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import type { KicadPin } from "@/app/lib/kicad/types";
@@ -51,6 +51,12 @@ export type AiPartResult = {
   description: string | null;
   mainCategory: string;
   pins: AiPartPin[];
+  /**
+   * Supply-chain lifecycle ("active" | "nrnd" | "last_time_buy" | "eol" |
+   * "obsolete" | "unknown"). Surfaced so the Build-mode agent can decide whether
+   * a chosen part warrants a find_alternates lookup before committing to it.
+   */
+  lifecycleStatus: string;
   /** Cosine similarity to the query (1 = identical). */
   similarity: number;
 };
@@ -73,6 +79,7 @@ export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
       description: parts.description,
       mainCategory: libraries.mainCategory,
       pins: parts.pins,
+      lifecycleStatus: parts.lifecycleStatus,
     })
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))
@@ -87,6 +94,7 @@ export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
     pins: Array.isArray(r.pins)
       ? (r.pins as KicadPin[]).map((p) => ({ number: p.number, name: p.name, type: p.type }))
       : [],
+    lifecycleStatus: r.lifecycleStatus ?? "unknown",
     similarity: 1,
   }));
 }
@@ -121,6 +129,7 @@ type SearchRow = {
   description: string | null;
   mainCategory: string;
   pins: KicadPin[];
+  lifecycleStatus: string | null;
   similarity: number;
 };
 
@@ -134,6 +143,7 @@ function toAiPart(row: SearchRow): AiPartResult {
     pins: Array.isArray(row.pins)
       ? row.pins.map((p) => ({ number: p.number, name: p.name, type: p.type }))
       : [],
+    lifecycleStatus: row.lifecycleStatus ?? "unknown",
     similarity: row.similarity,
   };
 }
@@ -200,6 +210,7 @@ export async function searchPartsForAI(
     description: parts.description,
     mainCategory: libraries.mainCategory,
     pins: parts.pins,
+    lifecycleStatus: parts.lifecycleStatus,
     similarity,
   };
 
@@ -335,4 +346,72 @@ async function rerankParts(
   } catch {
     return candidates;
   }
+}
+
+// ─── Alternates lookup for the Build-mode agent ─────────────────────────────────
+
+/** Compact alternate descriptor for the find_alternates tool result. */
+export type AiAlternateResult = {
+  partId: string;
+  name: string;
+  mpn: string | null;
+  manufacturer: string | null;
+  lifecycleStatus: string;
+  /** Precomputed match score from the alternates engine (0-100, higher = better). */
+  score: number;
+  /** "exact" | "drop_in" | "fff" | "substitute". */
+  kind: string;
+  matchReasons: string[];
+  pinCount: number;
+};
+
+/**
+ * Return ranked alternates for `partId` from the precomputed `alternates` table,
+ * joined to the catalog for display fields. `kind` "all" returns every relation;
+ * "drop_in"/"fff" scope to that exact relation kind. Ordered by score DESC,
+ * capped at `limit`.
+ *
+ * Deliberately compact (no pin list, no description) so a tool result stays well
+ * under ~1KB. The Build loop separately loads full part records (with pins) for
+ * the returned ids so a chosen alternate is still submittable.
+ */
+export async function fetchAlternatesForAI(
+  partId: string,
+  kind: "drop_in" | "fff" | "all",
+  limit: number,
+): Promise<AiAlternateResult[]> {
+  if (!partId) return [];
+  const db = getDb();
+
+  const kindWhere: SQL | undefined = kind === "all" ? undefined : eq(alternates.kind, kind);
+
+  const rows = await db
+    .select({
+      partId: parts.id,
+      name: parts.name,
+      mpn: parts.mpn,
+      manufacturer: parts.manufacturer,
+      lifecycleStatus: parts.lifecycleStatus,
+      score: alternates.score,
+      kind: alternates.kind,
+      matchReasons: alternates.matchReasons,
+      pins: parts.pins,
+    })
+    .from(alternates)
+    .innerJoin(parts, eq(alternates.alternatePartId, parts.id))
+    .where(and(eq(alternates.partId, partId), kindWhere))
+    .orderBy(desc(alternates.score))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    partId: r.partId,
+    name: r.name,
+    mpn: r.mpn,
+    manufacturer: r.manufacturer,
+    lifecycleStatus: r.lifecycleStatus ?? "unknown",
+    score: r.score,
+    kind: r.kind,
+    matchReasons: Array.isArray(r.matchReasons) ? r.matchReasons : [],
+    pinCount: Array.isArray(r.pins) ? r.pins.length : 0,
+  }));
 }

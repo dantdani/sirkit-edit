@@ -16,10 +16,16 @@ import type {
   NetLabelKind,
 } from "@/lib/schematic-types";
 import { normalizeComponentRole, inferNetLabelKind } from "@/lib/schematic-types";
-import { searchPartsForAI, type AiPartResult } from "@/app/lib/parts-search";
+import {
+  searchPartsForAI,
+  fetchAlternatesForAI,
+  getPartsByIds,
+  type AiPartResult,
+} from "@/app/lib/parts-search";
 import {
   BUILD_NUDGE,
   BUILD_SEARCH_PARTS_TOOL,
+  BUILD_FIND_ALTERNATES_TOOL,
   BUILD_SUBMIT_SCHEMATIC_TOOL,
 } from "@/app/lib/prompts";
 
@@ -28,6 +34,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = "claude-sonnet-4-6";
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
+const ALTERNATES_LIMIT = 5;
 
 export type BuildLoopResult =
   | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
@@ -104,7 +111,7 @@ export async function runBuildToolLoop(opts: {
         max_tokens: 8192,
         temperature: 0,
         system: [{ type: "text", text: opts.systemPrompt, cache_control: { type: "ephemeral" } }],
-        tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
+        tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
         messages,
       });
 
@@ -171,6 +178,45 @@ export async function runBuildToolLoop(opts: {
         },
       );
 
+      // Run find_alternates calls in parallel. For each, register the full part
+      // record (with pins) of every returned alternate into `returnedParts`, so
+      // the model may submit a chosen alternate and still pass validation — while
+      // the AI-facing payload stays compact (no pins).
+      const alternateBlocks = toolUses.filter((b) => b.name === "find_alternates");
+      const alternateResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+        alternateBlocks.map(async (block) => {
+          const { partId, kind } = block.input as { partId?: unknown; kind?: unknown };
+          if (typeof partId !== "string" || partId.trim() === "") {
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              is_error: true,
+              content: JSON.stringify({ error: "partId is required" }),
+            };
+          }
+          const safeKind = kind === "drop_in" || kind === "fff" ? kind : "all";
+          try {
+            console.log(`[AI] called find_alternates for partId=${partId} (kind=${safeKind})`);
+            const alternates = await fetchAlternatesForAI(partId, safeKind, ALTERNATES_LIMIT);
+            const full = await getPartsByIds(alternates.map((a) => a.partId));
+            for (const p of full) returnedParts.set(p.partId, p);
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              content: JSON.stringify(alternates),
+            };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return {
+              type: "tool_result" as const,
+              tool_use_id: block.id,
+              is_error: true,
+              content: JSON.stringify({ error: message }),
+            };
+          }
+        }),
+      );
+
       const submitResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
         const result = finalizeSubmission(block.input, returnedParts);
@@ -183,7 +229,10 @@ export async function runBuildToolLoop(opts: {
         });
       }
 
-      messages.push({ role: "user", content: [...searchResults, ...submitResults] });
+      messages.push({
+        role: "user",
+        content: [...searchResults, ...alternateResults, ...submitResults],
+      });
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
