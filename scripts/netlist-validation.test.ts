@@ -10,7 +10,7 @@ import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
 import { mergeBuildNetlists } from "../app/lib/merge-netlists";
-import { resolvePinCoincidences } from "../lib/build-auto-layout";
+import { resolvePinCoincidences, resolveComponentCollisions } from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
@@ -572,6 +572,38 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
     "pin-guard: coincident pins separated (no shared coordinate)",
     residual === 0 && new Set(coords).size === coords.length,
   );
+}
+
+// ── spread hints (layout critic) widen the de-overlap courtyard ──────────────
+{
+  const sp = mkPart("SP");
+  const sized = (refDes: string, x: number, y: number, spread?: number) => ({
+    comp: { refDes, partId: "SP", value: "v", role: "passive" as const },
+    part: sp,
+    role: "passive" as const,
+    width: 60,
+    height: 20,
+    placed: true,
+    spread,
+    instance: { id: refDes, partId: "SP", x, y, rotation: 0 as const, refDes, value: "v" },
+  });
+  const sep = (a: ReturnType<typeof sized>, b: ReturnType<typeof sized>) =>
+    Math.abs(a.instance.x - b.instance.x) + Math.abs(a.instance.y - b.instance.y);
+
+  // An overlapping pair resolved with default clearance …
+  const a0 = sized("R1", 100, 100);
+  const b0 = sized("R2", 120, 100);
+  resolveComponentCollisions([a0, b0]);
+  const gap0 = sep(a0, b0);
+
+  // … vs the same pair with R2 flagged crowded (extra courtyard clearance):
+  // the critic's hint must push them strictly further apart.
+  const a1 = sized("R1", 100, 100);
+  const b1 = sized("R2", 120, 100, 80);
+  resolveComponentCollisions([a1, b1]);
+  const gap1 = sep(a1, b1);
+
+  check("spread-hints: flagged component pushed strictly further apart", gap1 > gap0);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

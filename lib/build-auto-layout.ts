@@ -321,6 +321,13 @@ type Sized = {
   height: number;
   instance: KicadComponentInstance;
   placed: boolean;
+  /**
+   * Extra courtyard clearance (px) for the body de-overlap pass. Default 0. The
+   * layout critic (vision pass) sets this on components a rendered view shows as
+   * too crowded, so `resolveComponentCollisions` spreads them further apart than
+   * the uniform SYMBOL_CLEARANCE — without ever emitting coordinates itself.
+   */
+  spread?: number;
 };
 
 // Footprint used for zone spacing (and as the obstacle box when a part has no
@@ -607,10 +614,18 @@ function moverOf(a: Sized, b: Sized): Sized {
   return a.comp.refDes > b.comp.refDes ? a : b;
 }
 
+// Courtyard box for the de-overlap pass: the uniform symbol clearance plus any
+// per-component `spread` the layout critic requested. Keeping `spread` here (and
+// out of the page-fit/obstacle boxes) means extra breathing room only affects
+// how far components are pushed apart, never net geometry or routing.
+function collisionBox(p: Sized): Bbox {
+  return footprintBox(p, SYMBOL_CLEARANCE + (p.spread ?? 0));
+}
+
 // Slide `mover` just clear of `other` along the axis of least overlap.
 function nudgeApart(mover: Sized, other: Sized): void {
-  const m = footprintBox(mover);
-  const o = footprintBox(other);
+  const m = collisionBox(mover);
+  const o = collisionBox(other);
   const overlapX = Math.min(m.x + m.width, o.x + o.width) - Math.max(m.x, o.x);
   const overlapY = Math.min(m.y + m.height, o.y + o.height) - Math.max(m.y, o.y);
   const mCx = m.x + m.width / 2, mCy = m.y + m.height / 2;
@@ -632,7 +647,7 @@ export function resolveComponentCollisions(items: Sized[]): number {
     let moved = false;
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {
-        if (!bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) continue;
+        if (!bboxesIntersect(collisionBox(items[i]), collisionBox(items[j]))) continue;
         const mover = moverOf(items[i], items[j]);
         nudgeApart(mover, mover === items[i] ? items[j] : items[i]);
         moved = true;
@@ -643,7 +658,7 @@ export function resolveComponentCollisions(items: Sized[]): number {
   let remaining = 0;
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      if (bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) remaining++;
+      if (bboxesIntersect(collisionBox(items[i]), collisionBox(items[j]))) remaining++;
     }
   }
   return remaining;
@@ -753,9 +768,18 @@ function labelOrientation(kind: NetLabelKind, exit: Direction): Rotation {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Optional layout tuning. `spread` maps a refDes to EXTRA courtyard clearance
+ * (px) for the body de-overlap pass — the layout critic (vision pass) sets it on
+ * components a rendered view shows as crowded, so they get pushed further from
+ * their neighbours. Anything not listed keeps the default spacing.
+ */
+export type AutoLayoutOptions = { spread?: Record<string, number> };
+
 export function autoLayoutBuild(
   netlist: BuildLogicalNetlist,
   parts: Map<string, CachedPart>,
+  opts?: AutoLayoutOptions,
 ): SchematicState {
   // Deterministic ordering so the same netlist always lays out identically.
   const comps = [...netlist.components].sort((a, b) => a.refDes.localeCompare(b.refDes));
@@ -772,6 +796,7 @@ export function autoLayoutBuild(
       width: w,
       height: h,
       placed: false,
+      spread: opts?.spread?.[c.refDes],
       instance: {
         id: crypto.randomUUID(),
         partId: c.partId,
@@ -1183,15 +1208,16 @@ export function autoLayoutBuildValidated(
   netlist: BuildLogicalNetlist,
   parts: Map<string, CachedPart>,
   maxAttempts = 3,
+  opts?: AutoLayoutOptions,
 ): { state: SchematicState; validation: NetlistValidation } {
   let current = netlist;
-  let state = autoLayoutBuild(current, parts);
+  let state = autoLayoutBuild(current, parts, opts);
   let validation = validateSchematicNetlist(current, state, parts);
 
   for (let attempt = 1; !validation.ok && attempt < maxAttempts; attempt++) {
     const rerouted = rerouteToLabels(current, parts, state, validation.violations);
     if (rerouted === current) break; // nothing reroutable (no broken connections)
-    const nextState = autoLayoutBuild(rerouted, parts);
+    const nextState = autoLayoutBuild(rerouted, parts, opts);
     const nextValidation = validateSchematicNetlist(rerouted, nextState, parts);
     // Keep the reroute only if it strictly reduced violations.
     if (nextValidation.violations.length >= validation.violations.length) break;
