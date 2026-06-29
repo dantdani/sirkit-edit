@@ -10,6 +10,7 @@ import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
 import { mergeBuildNetlists } from "../app/lib/merge-netlists";
+import { resolvePinCoincidences } from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin } from "../app/lib/kicad/types";
@@ -473,6 +474,34 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   check("merge: collided U1 was renamed", !!mcuRef && notes.some((n) => n.includes("U1")));
   check("merge: connection endpoints follow the rename", !!mcuWire);
   check("merge: shared net names preserved (both +3V3 labels)", p3v3.length === 2);
+}
+
+// ── resolvePinCoincidences (pin-coincidence guard) ───────────────────────────
+{
+  const part = mkPart("PP");
+  const sized = (refDes: string, x: number, y: number) => ({
+    comp: { refDes, partId: "PP", value: "v", role: "passive" as const },
+    part,
+    role: "passive" as const,
+    width: 60,
+    height: 20,
+    placed: true,
+    instance: { id: refDes, partId: "PP", x, y, rotation: 0 as const, refDes, value: "v" },
+  });
+  // Two identical placements → every pin coincides (a silent short).
+  const a = sized("R1", 100, 100);
+  const b = sized("R2", 100, 100);
+  const residual = resolvePinCoincidences([a, b]);
+  const coords = [a, b].flatMap((s) =>
+    part.pins.map((p) => {
+      const w = kicadPinWorldPos(s.instance, p);
+      return `${w.x},${w.y}`;
+    }),
+  );
+  check(
+    "pin-guard: coincident pins separated (no shared coordinate)",
+    residual === 0 && new Set(coords).size === coords.length,
+  );
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

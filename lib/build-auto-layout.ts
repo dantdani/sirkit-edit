@@ -470,7 +470,7 @@ function nudgeApart(mover: Sized, other: Sized): void {
 // Iteratively separate overlapping component bodies/courtyards. Returns the
 // number of pairs still overlapping after the pass budget (0 = fully clean).
 export function resolveComponentCollisions(items: Sized[]): number {
-  const maxPasses = items.length * 4 + 8;
+  const maxPasses = items.length * 8 + 16;
   for (let pass = 0; pass < maxPasses; pass++) {
     let moved = false;
     for (let i = 0; i < items.length; i++) {
@@ -490,6 +490,76 @@ export function resolveComponentCollisions(items: Sized[]): number {
     }
   }
   return remaining;
+}
+
+// ─── Pin-coincidence guard ────────────────────────────────────────────────────
+//
+// Body de-overlap (above) can still leave two DIFFERENT components with a PIN on
+// the exact same grid point — which buildNetUnionFind reads as one node,
+// silently SHORTING the two nets (the `unintended-merge` failures). This pass
+// nudges the more-movable owner until no pin coordinate is shared by more than
+// one component. Electrical correctness wins over perfect body spacing, so it
+// runs AFTER resolveComponentCollisions and before wire routing (which reads the
+// final pin positions, so nets are preserved).
+
+const PIN_NUDGE = 20; // grid-aligned push per step (~one KiCad pin pitch)
+
+function instancePinPoints(p: Sized): Point[] {
+  if (!p.part) return [];
+  return p.part.pins.map((pin) => kicadPinWorldPos(p.instance, pin));
+}
+
+/** Owner index set per pin coordinate. */
+function pinOwners(items: Sized[]): Map<string, Set<number>> {
+  const owners = new Map<string, Set<number>>();
+  items.forEach((it, idx) => {
+    for (const pt of instancePinPoints(it)) {
+      const k = `${pt.x},${pt.y}`;
+      const set = owners.get(k);
+      if (set) set.add(idx);
+      else owners.set(k, new Set([idx]));
+    }
+  });
+  return owners;
+}
+
+/** Push `mover` a grid step away from `other` (snapped) so their pins separate. */
+function pushPinsApart(mover: Sized, other: Sized): void {
+  const m = obstacleFor(mover);
+  const o = obstacleFor(other);
+  let dx = m.x + m.width / 2 - (o.x + o.width / 2);
+  const dy = m.y + m.height / 2 - (o.y + o.height / 2);
+  if (dx === 0 && dy === 0) dx = 1;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    mover.instance.x = snap(mover.instance.x + (dx >= 0 ? PIN_NUDGE : -PIN_NUDGE));
+  } else {
+    mover.instance.y = snap(mover.instance.y + (dy >= 0 ? PIN_NUDGE : -PIN_NUDGE));
+  }
+}
+
+export function resolvePinCoincidences(items: Sized[]): number {
+  const maxPasses = items.length * 8 + 16;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const owners = pinOwners(items);
+    const movedThisPass = new Set<number>();
+    for (const set of owners.values()) {
+      if (set.size < 2) continue;
+      const idxs = [...set];
+      // Mover = the most-movable owner (passive before processor); push it off.
+      let moverIdx = idxs[0];
+      for (const i of idxs) {
+        if (ANCHOR_RANK[items[i].role] < ANCHOR_RANK[items[moverIdx].role]) moverIdx = i;
+      }
+      if (movedThisPass.has(moverIdx)) continue;
+      const otherIdx = idxs.find((i) => i !== moverIdx) ?? moverIdx;
+      pushPinsApart(items[moverIdx], items[otherIdx]);
+      movedThisPass.add(moverIdx);
+    }
+    if (movedThisPass.size === 0) return 0;
+  }
+  let residual = 0;
+  for (const set of pinOwners(items).values()) if (set.size >= 2) residual++;
+  return residual;
 }
 
 // ─── Net-label placement helpers ─────────────────────────────────────────────
@@ -709,6 +779,15 @@ export function autoLayoutBuild(
   if (unresolvedOverlaps > 0) {
     console.warn(
       `[autoLayoutBuild] ${unresolvedOverlaps} component overlap(s) could not be fully resolved within the pass budget.`,
+    );
+  }
+
+  // Separate any pins that still share a grid point — those silently short two
+  // nets, so this matters more than residual body overlap.
+  const unresolvedPins = resolvePinCoincidences(all);
+  if (unresolvedPins > 0) {
+    console.warn(
+      `[autoLayoutBuild] ${unresolvedPins} pin coincidence(s) (potential shorts) could not be resolved.`,
     );
   }
 
