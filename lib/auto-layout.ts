@@ -6,10 +6,11 @@ import type {
   Wire,
   Point,
 } from "./schematic-types";
-import { PIN_OFFSETS } from "./schematic-types";
+import { PIN_OFFSETS, DEFAULT_PAGE_SIZE } from "./schematic-types";
+import { planPageFit, type Bounds } from "./page-sizes";
 import {
   snap, snapPoint, pointEquals,
-  pinWorldPos, pinDirection,
+  pinWorldPos, pinDirection, pinStubEnd,
   type Direction,
 } from "@/app/lib/geometry";
 
@@ -28,9 +29,25 @@ type Role = "source" | "ground" | "shunt" | "series";
 
 // ─── Collision-aware routing ──────────────────────────────────────────────────
 
+// Approximate body size (px, unrotated) per ideal component type — keeps
+// auto-routed wires from cutting across a body. Passives are wide and short;
+// sources are tall; ground is small.
+const THEORY_COMPONENT_SIZES: Record<SchComponentType, { width: number; height: number }> = {
+  resistor:         { width: 60, height: 20 },
+  capacitor:        { width: 60, height: 20 },
+  inductor:         { width: 60, height: 20 },
+  diode:            { width: 60, height: 20 },
+  "voltage-source": { width: 40, height: 60 },
+  "current-source": { width: 40, height: 60 },
+  ground:           { width: 30, height: 30 },
+};
+
 function compBox(comp: SchComponent): { x1: number; y1: number; x2: number; y2: number } {
-  const pad = 24;
-  return { x1: comp.x - pad, y1: comp.y - pad, x2: comp.x + pad, y2: comp.y + pad };
+  const size = THEORY_COMPONENT_SIZES[comp.type];
+  const rotated = comp.rotation === 90 || comp.rotation === 270;
+  const halfW = (rotated ? size.height : size.width) / 2 + 10; // +10px routing margin
+  const halfH = (rotated ? size.width : size.height) / 2 + 10;
+  return { x1: comp.x - halfW, y1: comp.y - halfH, x2: comp.x + halfW, y2: comp.y + halfH };
 }
 
 function segCrossesRect(
@@ -99,15 +116,23 @@ function zbend(
 }
 
 function routeWireAvoiding(
-  aPos: Point, aDir: Direction, bPos: Point,
+  aPos: Point, aDir: Direction, bPos: Point, bDir: Direction,
   allPlaced: SchComponent[], fromId: string, toId: string,
 ): Point[] {
   if (pointEquals(aPos, bPos)) return [];
   const obstacles = allPlaced.filter((c) => c.id !== fromId && c.id !== toId);
-  const lb = lbend(aPos, aDir, bPos);
-  if (!pathCrossesAny(lb, obstacles)) return lb;
-  const zb = zbend(aPos, aDir, bPos, obstacles);
-  return zb.length >= 2 ? zb : lb;
+  // Pin escape: leave each pin with a short perpendicular stub before bending,
+  // so wires don't immediately cross the component's own adjacent pins. The
+  // L/Z routing then runs between the stub ends.
+  const aStub = pinStubEnd(aPos, aDir);
+  const bStub = pinStubEnd(bPos, bDir);
+  let mid = lbend(aStub, aDir, bStub);
+  if (mid.length < 2 || pathCrossesAny(mid, obstacles)) {
+    const zb = zbend(aStub, aDir, bStub, obstacles);
+    if (zb.length >= 2) mid = zb;
+  }
+  if (mid.length < 2) mid = [aStub, bStub];
+  return dedup([aPos, ...mid, bPos]);
 }
 
 // ─── Wire post-processing ─────────────────────────────────────────────────────
@@ -481,7 +506,9 @@ export function autoLayout(netlist: LogicalNetlist): SchematicState {
     if (pointEquals(aPos, bPos)) continue;
 
     const verts = routeWireAvoiding(
-      aPos, pinDirection(fromComp, fromPin), bPos, allPlaced, fromId, toId,
+      aPos, pinDirection(fromComp, fromPin),
+      bPos, pinDirection(toComp, toPin),
+      allPlaced, fromId, toId,
     );
     if (verts.length >= 2) wires.push({ id: crypto.randomUUID(), vertices: verts });
   }
@@ -531,6 +558,39 @@ export function autoLayout(netlist: LogicalNetlist): SchematicState {
     });
   }
 
-  return { components: finalComps, wires };
+  // ── Page fit ────────────────────────────────────────────────────────────────
+  // Size the sheet to the result and rigid-shift it inside the printable margin
+  // (see build-auto-layout for the rationale). Theory symbols are small, fixed
+  // bodies; the wire vertices already reach every pin, so bounds taken over the
+  // component centres (± a nominal body half-extent) plus the wires cover it.
+  const COMP_HALF = 40;
+  const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  const grow = (x: number, y: number): void => {
+    if (x < bounds.minX) bounds.minX = x;
+    if (y < bounds.minY) bounds.minY = y;
+    if (x > bounds.maxX) bounds.maxX = x;
+    if (y > bounds.maxY) bounds.maxY = y;
+  };
+  for (const c of finalComps) {
+    grow(c.x - COMP_HALF, c.y - COMP_HALF);
+    grow(c.x + COMP_HALF, c.y + COMP_HALF);
+  }
+  for (const w of wires) for (const v of w.vertices) grow(v.x, v.y);
+
+  const fit = Number.isFinite(bounds.minX)
+    ? planPageFit(bounds)
+    : { pageSize: DEFAULT_PAGE_SIZE, dx: 0, dy: 0 };
+
+  let outComps = finalComps;
+  let outWires = wires;
+  if (fit.dx !== 0 || fit.dy !== 0) {
+    outComps = finalComps.map((c) => ({ ...c, x: snap(c.x + fit.dx), y: snap(c.y + fit.dy) }));
+    outWires = wires.map((w) => ({
+      ...w,
+      vertices: w.vertices.map((v) => ({ x: snap(v.x + fit.dx), y: snap(v.y + fit.dy) })),
+    }));
+  }
+
+  return { components: outComps, wires: outWires, pageSize: fit.pageSize };
 }
 

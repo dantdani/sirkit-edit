@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, type Dispatch, type SetStateAction } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -26,8 +26,9 @@ import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pin
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp } from "@/lib/schematic-types";
+import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp, PageSize } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
+import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
@@ -963,6 +964,7 @@ function SchematicEditor({
   placementPartId,
   netLabels, setNetLabels,
   pendingNetLabel, setPendingNetLabel,
+  pageSize, setPageSize,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -984,6 +986,8 @@ function SchematicEditor({
   setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
+  pageSize: PageSize;
+  setPageSize: (p: PageSize) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -1003,6 +1007,29 @@ function SchematicEditor({
   const zoomRef = useRef(zoom);
   panRef.current  = pan;
   zoomRef.current = zoom;
+
+  // Reset pan/zoom so the whole sheet (plus a small frame) fills the viewport.
+  const fitToPage = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const r = svg.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
+    const { widthPx, heightPx } = pageSizePx(pageSize);
+    const FRAME = 48; // screen-px padding around the sheet
+    const z = Math.min((r.width - FRAME * 2) / widthPx, (r.height - FRAME * 2) / heightPx);
+    const nextZoom = Math.max(0.05, Math.min(4, z));
+    setZoom(nextZoom);
+    setPan({
+      x: (r.width - widthPx * nextZoom) / 2,
+      y: (r.height - heightPx * nextZoom) / 2,
+    });
+  }, [pageSize]);
+
+  // Frame the sheet on mount and whenever the sheet size changes (a manual pick,
+  // or the size auto-layout chose for a freshly generated circuit).
+  useEffect(() => {
+    fitToPage();
+  }, [fitToPage]);
 
   const componentsRef = useRef(components);
   componentsRef.current = components;
@@ -1578,8 +1605,39 @@ function SchematicEditor({
       ? `PLACE ${SCH_TYPE_LABEL[tool as SchComponentType]}  [Esc cancel · click place]`
       : "SELECT  [W wire · X delete · R rotate · Del delete · 2×click-drag stretch]";
 
+  // Sheet boundary geometry (world px). The canvas extends well past this so the
+  // user has working room, but it marks what gets printed / exported.
+  const { widthPx: pageW, heightPx: pageH } = pageSizePx(pageSize);
+  const { widthPx: tbW, heightPx: tbH } = titleBlockPx();
+
   return (
     <div className="absolute inset-0 bg-zinc-950">
+      {/* Page-size + fit-to-page controls (top-right) */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
+        <select
+          value={pageSize}
+          onChange={(e) => setPageSize(e.target.value as PageSize)}
+          title="Sheet size — also sets the KiCad export page"
+          className="h-7 text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 rounded px-1.5 outline-none focus:border-zinc-500 cursor-pointer"
+        >
+          <option value="A5">A5</option>
+          <option value="A4">A4</option>
+          <option value="A3">A3</option>
+          <option value="A2">A2</option>
+          <option value="A1">A1</option>
+          <option value="USLetter">US Letter</option>
+          <option value="USLegal">US Legal</option>
+        </select>
+        <button
+          title="Fit page to view"
+          onClick={fitToPage}
+          className="h-7 flex items-center gap-1.5 px-2 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
+        >
+          <Maximize2 className="size-3.5" />
+          <span className="text-[10px] font-mono hidden sm:inline">Fit</span>
+        </button>
+      </div>
+
       {/* Floating toolbar */}
       <div className="absolute top-3 left-3 z-10 flex gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md p-1 backdrop-blur-sm shadow-lg">
         <button
@@ -1695,6 +1753,32 @@ function SchematicEditor({
         <rect width="100%" height="100%" fill="url(#dot-grid)" />
 
         <g transform={`translate(${pan.x},${pan.y}) scale(${zoom})`}>
+          {/* Page boundary — drawn under everything; non-scaling strokes keep it
+              crisp at any zoom. The canvas extends past it for working room. */}
+          <g className="page-boundary" style={{ pointerEvents: "none" }}>
+            <rect
+              x={0} y={0} width={pageW} height={pageH}
+              fill="none" stroke="#52525b" strokeWidth={2}
+              vectorEffect="non-scaling-stroke"
+            />
+            <rect
+              x={PAGE_MARGIN_PX} y={PAGE_MARGIN_PX}
+              width={pageW - 2 * PAGE_MARGIN_PX} height={pageH - 2 * PAGE_MARGIN_PX}
+              fill="none" stroke="#3f3f46" strokeWidth={0.5}
+              strokeDasharray="4 4" vectorEffect="non-scaling-stroke"
+            />
+            <rect
+              x={pageW - tbW} y={pageH - tbH} width={tbW} height={tbH}
+              fill="rgba(82,82,91,0.05)" stroke="#52525b" strokeWidth={1}
+              vectorEffect="non-scaling-stroke"
+            />
+            <text
+              x={pageW - 8} y={pageH - tbH / 2}
+              textAnchor="end" dominantBaseline="middle"
+              fill="#71717a" fontSize={12 / zoom} fontFamily="monospace"
+            >{pageSize}</text>
+          </g>
+
           {/* Committed wires */}
           {wires.map((wire) => {
             const pts = wire.vertices.map(v => `${v.x},${v.y}`).join(" ");
@@ -2088,6 +2172,10 @@ export default function Home() {
   const [netLabels, setNetLabels] = useState<NetLabel[]>([]);
   const [pendingNetLabel, setPendingNetLabel] = useState<PendingNetLabel | null>(null);
 
+  // Sheet size for the canvas boundary + KiCad export. Auto-layout updates it to
+  // fit a generated circuit; the user can override it from the canvas toolbar.
+  const [pageSize, setPageSize] = useState<PageSize>("A4");
+
   // Transient bottom toast (e.g. BOM part-swap confirmations). Auto-dismisses.
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2325,6 +2413,9 @@ export default function Home() {
     setWires(state.wires);
     setKicadComponents(state.kicadComponents ?? []);
     setNetLabels(state.netLabels ?? []);
+    // Adopt the page size auto-layout picked for this circuit (absent only on
+    // older/hand-built states — leave the current choice untouched then).
+    if (state.pageSize) setPageSize(state.pageSize);
     setSelectedId(null);
     setSelectedKicadId(null);
     setWireDraftStart(null);
@@ -2675,7 +2766,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          state: { components, kicadComponents, wires, netLabels },
+          state: { components, kicadComponents, wires, netLabels, pageSize },
           title: "sirkit-export",
         }),
       });
@@ -2911,6 +3002,7 @@ export default function Home() {
                     placementPartId={placementPartId}
                     netLabels={netLabels} setNetLabels={setNetLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
+                    pageSize={pageSize} setPageSize={setPageSize}
                   />
                   {/* Empty state overlay */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (

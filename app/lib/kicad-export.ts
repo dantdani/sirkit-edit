@@ -20,8 +20,10 @@
 
 import { createHash } from "node:crypto";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
+import { DEFAULT_PAGE_SIZE } from "@/lib/schematic-types";
 import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
+import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
 
 export type KicadExportInput = {
   state: SchematicState;
@@ -31,9 +33,10 @@ export type KicadExportInput = {
   company?: string;
 };
 
-// KiCad 8.x stable schematic format version. If a target install rejects this,
-// "20230121" (KiCad 7.x) is an acceptable fallback per the export spec.
-const KICAD_VERSION = "20240114";
+// KiCad 10.0 stable schematic format version (matches a schematic freshly saved
+// by KiCad 10.0.3). KiCad reads older versions too, but writing the current one
+// avoids an on-load format upgrade prompt.
+const KICAD_VERSION = "20250610";
 
 // ─── Theory (ideal) component mappings ──────────────────────────────────────
 // `ground` is intentionally absent: it becomes a power port, not a symbol.
@@ -57,18 +60,11 @@ const THEORY_REFDES_PREFIX: Record<TheoryType, string> = {
   "current-source": "I",
 };
 
-// Known power-rail names → KiCad stock power symbols. Unknown power names fall
-// back to a global label so we never draw a misleading rail glyph.
-const POWER_LIB_ID: Record<string, string> = {
-  "+3V3": "power:+3V3",
-  "+5V": "power:+5V",
-  "+12V": "power:+12V",
-  "+9V": "power:+9V",
-  VCC: "power:VCC",
-  VDD: "power:VDD",
-  VBUS: "power:VBUS",
-  VIN: "power:VIN",
-};
+// Power ports resolve to the lib_id `power:<name>` for every rail and ground.
+// The matching symbol is embedded locally in `lib_symbols` (see the export
+// body), so the file is self-contained and doesn't depend on the user's KiCad
+// having the stock `power` library mapped — which is what caused power ports to
+// render as red "?" boxes.
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -85,9 +81,19 @@ function num(n: number): string {
   return String(n);
 }
 
-/** Quote and escape a string for an S-expression token. */
+/**
+ * Quote and escape a string for an S-expression token. This is the single
+ * source of truth for emitting any identifier that could contain characters
+ * outside `[A-Za-z0-9_]` (hyphens, dots, colons, slashes, …) — KiCad's parser
+ * only accepts those bare inside double-quoted strings.
+ */
 function q(s: string): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Escape a literal string for safe interpolation into a `RegExp`. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -105,15 +111,41 @@ function uuidFor(prefix: string, key: string): string {
 }
 
 /**
- * Rewrite the leading `(symbol "<name>" ...)` token of a raw symbol block so its
- * id becomes the fully-qualified `Library:Name` KiCad expects inside a
- * schematic's `lib_symbols`.
+ * Prepare a raw `(symbol ...)` block for embedding in a schematic's
+ * `lib_symbols`:
+ *
+ *  1. the root id becomes the fully-qualified `Library:Name` KiCad expects;
+ *  2. every child unit id (`<root>_<unit>_<style>`) is re-prefixed to the new
+ *     bare item `Name`.
+ *
+ * Step 2 matters for parts that `(extends ...)` another symbol: ingest resolves
+ * inheritance by handing the child the *parent's* raw block, so the unit ids
+ * still carry the parent's name (e.g. an `AP1117-18` that extends `AP1117-15`
+ * arrives with `AP1117-15_0_1` units). When KiCad reads a unit it strips the
+ * library nickname from the symbol name and requires the unit id to start with
+ * what remains; a leftover parent prefix triggers an "Invalid symbol unit name
+ * prefix" parse error. For a base symbol the original and target names are
+ * identical, so the child rewrite is a no-op and existing exports are
+ * byte-for-byte unchanged.
  */
 function rewriteSymbolName(symbolRaw: string, libId: string): string {
-  return symbolRaw.replace(
+  const rootMatch = symbolRaw.match(/^\s*\(symbol\s+"((?:[^"\\]|\\.)*)"/);
+  if (!rootMatch) return symbolRaw;
+  const rawOriginal = rootMatch[1]; // root id exactly as written in the source
+  const itemName = libId.slice(libId.indexOf(":") + 1); // bare KiCad item name
+
+  // (1) Root id → fully-qualified "Library:Name".
+  let out = symbolRaw.replace(
     /^(\s*\(symbol\s+)"(?:[^"\\]|\\.)*"/,
     (_full, lead: string) => `${lead}${q(libId)}`,
   );
+
+  // (2) Child unit ids "<root>_<unit>_<style>" → "<itemName>_<unit>_<style>".
+  // The root id no longer matches `rawOriginal` (it's now "Library:Name"), so
+  // only the unit children are touched.
+  const childRe = new RegExp(`(\\(symbol\\s+)"${escapeRegExp(rawOriginal)}((?:_\\d+)+)"`, "g");
+  out = out.replace(childRe, (_full, lead: string, suffix: string) => `${lead}${q(itemName + suffix)}`);
+  return out;
 }
 
 const TODAY = new Date().toISOString().slice(0, 10);
@@ -138,7 +170,8 @@ export function exportToKicadSch(input: KicadExportInput): string {
   lines.push(`\t(generator "sirkit_export")`);
   lines.push(`\t(generator_version "1.0")`);
   lines.push(`\t(uuid ${q(schematicUuid)})`);
-  lines.push(`\t(paper "A3")`);
+  // KiCad's `(paper ...)` tokens match our PageSize names 1:1.
+  lines.push(`\t(paper ${q(state.pageSize ?? DEFAULT_PAGE_SIZE)})`);
   lines.push(`\t(title_block`);
   lines.push(`\t\t(title ${q(input.title ?? "sirkit export")})`);
   lines.push(`\t\t(company ${q(input.company ?? "")})`);
@@ -159,6 +192,20 @@ export function exportToKicadSch(input: KicadExportInput): string {
     partLibId.set(inst.partId, libId);
     const raw = rewriteSymbolName(part.symbolRaw.trim(), libId);
     if (raw) lines.push(indent(raw, 2));
+  }
+
+  // Embed the power-port symbols this schematic actually uses, qualified to
+  // `power:<name>` exactly as KiCad does when it saves a schematic. Grounds all
+  // share the stock `GND` glyph; named rails use their stock symbol, and any
+  // name without one (e.g. "VIN", a custom "+24V") gets a generic flag.
+  const powerNames = new Set<string>();
+  for (const label of netLabels) {
+    if (label.kind === "ground") powerNames.add("GND");
+    else if (label.kind === "power") powerNames.add(label.name);
+  }
+  for (const name of powerNames) {
+    const raw = getPowerSymbol(name) ?? buildGenericPowerSymbol(name);
+    lines.push(indent(rewriteSymbolName(raw.trim(), `power:${name}`), 2));
   }
   lines.push(`\t)`);
 
@@ -255,13 +302,11 @@ export function exportToKicadSch(input: KicadExportInput): string {
     }
 
     if (label.kind === "power") {
-      const libId = POWER_LIB_ID[label.name];
-      if (libId) {
-        lines.push(buildPowerPort(libId, label.name, x, y, label.orientation, nextPwrRef(), uuid, sheetPath));
-        continue;
-      }
-      // Unknown power rail → fall through to a global label so we don't draw a
-      // wrong rail glyph.
+      // Every rail now has an embedded `power:<name>` symbol (stock or generic).
+      lines.push(
+        buildPowerPort(`power:${label.name}`, label.name, x, y, label.orientation, nextPwrRef(), uuid, sheetPath),
+      );
+      continue;
     }
 
     lines.push(buildGlobalLabel(label.name, x, y, label.orientation, uuid));

@@ -7,7 +7,7 @@ import type {
   KicadComponentInstance,
 } from "@/lib/schematic-types";
 import { PIN_OFFSETS } from "@/lib/schematic-types";
-import type { KicadPin } from "@/app/lib/kicad/types";
+import type { KicadPin, PinOrientation } from "@/app/lib/kicad/types";
 
 // The schematic snaps to a 10-unit grid. Every coordinate the user sees,
 // every pin location, every wire vertex lands on a multiple of GRID.
@@ -120,6 +120,29 @@ export function pinDirection(component: SchComponent, pinName: string): Directio
   return rotateDirection(local, component.rotation);
 }
 
+// ─── Pin escape routing (stubs) ────────────────────────────────────────────────
+//
+// Auto-routed wires must travel a short straight run in the pin's exit direction
+// BEFORE their first bend, so a wire never leaves a pin and immediately cuts
+// across the component's own adjacent pins (the classic "+5V trace clips
+// RESET/IOREF/AREF" artifact). This is standard "pin escape routing": every pin
+// gets a minimum perpendicular stub. Two grid cells is long enough to clear a
+// neighbouring pin column, short enough not to bloat the layout.
+export const STUB_LENGTH = 2 * GRID;
+
+// The point a wire reaches after escaping `length` px straight out of `pin` in
+// its exit `dir` — i.e. the first place the route is allowed to bend. Pin sites
+// are grid-snapped and STUB_LENGTH is a grid multiple, so the result stays on
+// the grid without re-snapping.
+export function pinStubEnd(pin: Point, dir: Direction, length: number = STUB_LENGTH): Point {
+  switch (dir) {
+    case "east":  return { x: pin.x + length, y: pin.y };
+    case "west":  return { x: pin.x - length, y: pin.y };
+    case "north": return { x: pin.x, y: pin.y - length };
+    case "south": return { x: pin.x, y: pin.y + length };
+  }
+}
+
 // ─── KiCad-sourced components ──────────────────────────────────────────────────
 
 // KiCad symbol coordinates are in millimeters. Standard pin spacing is 2.54mm
@@ -144,4 +167,27 @@ export function kicadPinWorldPos(instance: KicadComponentInstance, pin: KicadPin
   const py = -pin.position.y * KICAD_SCALE_PX_PER_MM;
   const r = rotateXY(px, py, instance.rotation);
   return snapPoint({ x: instance.x + r.x, y: instance.y + r.y });
+}
+
+// Direction a wire should LEAVE a KiCad part pin, in world (screen, y-down)
+// coordinates. `pin.orientation` is the raw KiCad pin angle in y-up symbol
+// space, and it points from the pin's wire-attach endpoint back INTO the body —
+// the OPPOSITE of where the wire exits. Turning that inward y-up angle into an
+// outward y-down screen direction is a single reflection. Verified against real
+// symbols: 4069's left inputs are (at -7.62 0 0) → exit west, right outputs
+// (at 7.62 0 180) → exit east, VSS (at 0 -12.7 90) → exit south, VDD
+// (at 0 12.7 270) → exit north. The instance rotation is then applied in screen
+// space, matching kicadPinWorldPos's rotateXY.
+const KICAD_LOCAL_EXIT: Record<PinOrientation, Direction> = {
+  0:   "west",
+  90:  "south",
+  180: "east",
+  270: "north",
+};
+
+export function kicadPinExitDirection(
+  instance: KicadComponentInstance,
+  pin: KicadPin,
+): Direction {
+  return rotateDirection(KICAD_LOCAL_EXIT[pin.orientation], instance.rotation);
 }
