@@ -72,6 +72,40 @@ export type KicadComponentInstance = {
   value: string;       // user-overridable display value
 };
 
+// ─── Page size ─────────────────────────────────────────────────────────────────
+// The sheet the canvas boundary draws and the KiCad export targets. The names
+// match KiCad's own `(paper ...)` tokens 1:1 (A5/A4/A3/A2/A1/USLetter/USLegal),
+// so the exporter emits the value verbatim. Dimensions are LANDSCAPE
+// (width > height) in millimetres. The mm↔px conversion and fit logic live in
+// app/lib/page-sizes.ts — kept out of this file so the type layer stays
+// import-free (geometry.ts, which owns KICAD_SCALE_PX_PER_MM, imports from here).
+export type PageSize = "A5" | "A4" | "A3" | "A2" | "A1" | "USLetter" | "USLegal";
+
+export const PAGE_SIZES_MM: Record<PageSize, { widthMm: number; heightMm: number }> = {
+  A5:       { widthMm: 210,   heightMm: 148   },
+  A4:       { widthMm: 297,   heightMm: 210   },
+  A3:       { widthMm: 420,   heightMm: 297   },
+  A2:       { widthMm: 594,   heightMm: 420   },
+  A1:       { widthMm: 841,   heightMm: 594   },
+  USLetter: { widthMm: 279.4, heightMm: 215.9 },
+  USLegal:  { widthMm: 355.6, heightMm: 215.9 },
+};
+
+// Title block — a fixed box KiCad draws in the bottom-right corner. We mirror it
+// on the canvas so auto-layout keeps clear of it.
+export const TITLE_BLOCK_MM = { widthMm: 130, heightMm: 30 };
+
+// Default sheet for new projects and the migration fallback for older saves.
+// KiCad's own default is A4 landscape, which matches the user's expectation.
+export const DEFAULT_PAGE_SIZE: PageSize = "A4";
+
+export function isPageSize(v: unknown): v is PageSize {
+  return (
+    v === "A5" || v === "A4" || v === "A3" || v === "A2" ||
+    v === "A1" || v === "USLetter" || v === "USLegal"
+  );
+}
+
 export type SchematicState = {
   components: SchComponent[];                    // existing Theory components
   wires: Wire[];
@@ -81,6 +115,9 @@ export type SchematicState = {
   // Net labels. Optional for the same backward-compat reason; treat absence
   // as [].
   netLabels?: NetLabel[];
+  // Sheet size for the canvas boundary + KiCad export. Optional for the same
+  // backward-compat reason; treat absence as DEFAULT_PAGE_SIZE.
+  pageSize?: PageSize;
 };
 
 export type LogicalComponent = {

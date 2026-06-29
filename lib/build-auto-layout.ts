@@ -32,12 +32,20 @@ import {
   normalizeComponentRole,
   isLabelConnection,
   inferNetLabelKind,
+  DEFAULT_PAGE_SIZE,
 } from "./schematic-types";
+import { planPageFit, type Bounds } from "./page-sizes";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
-import { snap, pointEquals, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
+import {
+  snap, pointEquals, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, rotateXY,
+  pinDirection, pinStubEnd, kicadPinExitDirection,
+} from "@/app/lib/geometry";
 import { consolidateWires, splitWiresAtPoint } from "@/app/lib/connectivity";
+import {
+  parseSExp, isList, head, findChild, findChildren, getNumber, type SExpr,
+} from "@/app/lib/kicad/sexp";
 import {
   validateSchematicNetlist,
   rerouteToLabels,
@@ -70,7 +78,6 @@ const ZONE_X = {
 
 export type Bbox = { x: number; y: number; width: number; height: number };
 
-const OBSTACLE_DEFLATE = 12;  // pin-extent box → body box shrink per side
 const MIN_OBSTACLE_DIM = 24;  // degenerate spans (2-pin passives) still block
 const ROUTE_CLEARANCE = 20;   // detour lines sit this far off an obstacle edge
 
@@ -186,6 +193,42 @@ export function routeWire(from: Point, to: Point, obstacleBboxes: Bbox[]): Point
     );
   }
   return verts;
+}
+
+// ─── Pin-escape routing ───────────────────────────────────────────────────────
+//
+// A pin plus the direction a wire should leave it. Routing between endpoints
+// (rather than bare points) lets every wire escape STUB_LENGTH px straight out
+// of each pin before bending, so it never clips the component's own neighbouring
+// pins on the way out.
+export type WireEndpoint = { position: Point; exitDirection: Direction };
+
+/**
+ * Like `routeWireInfo`, but forces a perpendicular stub out of each pin: the
+ * wire leaves `from` in its exit direction, runs the orthogonal route between
+ * the two stub ends (obstacle-avoiding, so a "destination behind the pin" U-turn
+ * detours cleanly around the body instead of cutting back across the pins), then
+ * approaches `to` head-on along its exit axis. Crossings are re-tallied over the
+ * FULL path (stubs included) so callers still get an honest count for fallback.
+ */
+export function routeWireEndpoints(
+  from: WireEndpoint,
+  to: WireEndpoint,
+  obstacleBboxes: Bbox[],
+): RouteResult {
+  if (pointEquals(from.position, to.position)) {
+    return { verts: [from.position], crossings: 0 };
+  }
+  const fromStub = pinStubEnd(from.position, from.exitDirection);
+  const toStub = pinStubEnd(to.position, to.exitDirection);
+  const mid = routeWireInfo(fromStub, toStub, obstacleBboxes);
+  const verts = dedupeVerts([from.position, fromStub, ...mid.verts, toStub, to.position]);
+  // The stubs leave each pin OUTWARD (never into the owning box), so re-tally
+  // crossings over the whole path against every box that doesn't contain a pin.
+  const obstacles = obstacleBboxes.filter(
+    (b) => !bboxContains(b, from.position) && !bboxContains(b, to.position),
+  );
+  return { verts, crossings: pathViolations(verts, obstacles) };
 }
 
 // ─── Wire congestion: parallel-run detection ─────────────────────────────────
@@ -345,32 +388,153 @@ function zoneBottom(list: Sized[]): number | null {
   return Number.isFinite(bottom) ? bottom : null;
 }
 
-// Obstacle box of a placed component: real pin extents deflated to approximate
-// the symbol body (pins stick out, so their endpoints land outside the box),
-// clamped to a minimum thickness so 2-pin passives still block crossings.
+// ─── Accurate component body boxes ────────────────────────────────────────────
+//
+// Routing obstacles and collision spacing both need a box that reflects where a
+// component actually SITS on the sheet. Pin-tip extents alone fall short: a part
+// whose pins are all on one side (connectors, switches, single-row headers) has
+// its body extending AWAY from the pins, so the pin-tip box collapses to a thin
+// sliver at the pin column — and wires route straight through the unrepresented
+// body. We fix this by also reading the symbol's drawn body from `symbolRaw` and
+// unioning it with the pin extents.
+
+type BodyMm = { minX: number; minY: number; maxX: number; maxY: number };
+
+// Symbol-space (millimetre, y-up) bounding box of a part's GRAPHIC body —
+// rectangles/polylines/circles/arcs, excluding pins and text. Cached per part;
+// a malformed or graphic-less symbol yields null (caller falls back to pins).
+const symbolBodyCache = new WeakMap<CachedPart, BodyMm | null>();
+
+function symbolBodyMm(part: CachedPart): BodyMm | null {
+  const cached = symbolBodyCache.get(part);
+  if (cached !== undefined) return cached;
+  let body: BodyMm | null = null;
+  const raw = part.symbolRaw?.trim();
+  if (raw) {
+    try {
+      const pts: Array<[number, number]> = [];
+      collectGraphicPoints(parseSExp(raw), pts);
+      if (pts.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const [x, y] of pts) {
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+        body = { minX, minY, maxX, maxY };
+      }
+    } catch {
+      body = null; // unparseable symbol → pin-extent fallback
+    }
+  }
+  symbolBodyCache.set(part, body);
+  return body;
+}
+
+// Walk the symbol tree collecting body-graphic coordinates. `pin`/text tags are
+// skipped so pin stubs and label text don't inflate the box.
+function collectGraphicPoints(node: SExpr, out: Array<[number, number]>): void {
+  if (!isList(node)) return;
+  const tag = head(node);
+  if (
+    tag === "pin" || tag === "property" || tag === "text" ||
+    tag === "pin_names" || tag === "pin_numbers"
+  ) return;
+  const xy = (child: SExpr[] | null): void => {
+    if (!child) return;
+    const x = getNumber(child[1]);
+    const y = getNumber(child[2]);
+    if (x !== null && y !== null) out.push([x, y]);
+  };
+  switch (tag) {
+    case "rectangle":
+      xy(findChild(node, "start"));
+      xy(findChild(node, "end"));
+      return;
+    case "polyline":
+    case "polygon":
+    case "bezier": {
+      const pts = findChild(node, "pts");
+      if (pts) for (const p of findChildren(pts, "xy")) xy(p);
+      return;
+    }
+    case "arc":
+      xy(findChild(node, "start"));
+      xy(findChild(node, "mid"));
+      xy(findChild(node, "end"));
+      return;
+    case "circle": {
+      const c = findChild(node, "center");
+      const r = getNumber(findChild(node, "radius")?.[1]) ?? 0;
+      if (c) {
+        const x = getNumber(c[1]);
+        const y = getNumber(c[2]);
+        if (x !== null && y !== null) out.push([x - r, y - r], [x + r, y + r]);
+      }
+      return;
+    }
+    default:
+      for (const child of node) collectGraphicPoints(child, out);
+  }
+}
+
+// When a symbol carries no readable body graphics, estimate the body by padding
+// the pin extents this far on each side — enough that a one-sided part (pins all
+// on one edge) doesn't collapse to a sliver the router would thread straight
+// through. Real catalog symbols carry graphics; this is the malformed/missing
+// path.
+const BODY_FALLBACK_PAD = 30;
+
+// World-space box covering a placed component's pins AND its drawn body. The one
+// source of truth for "where the component is"; obstacleFor and footprintBox
+// layer their own margins on top.
+export function componentBodyBox(instance: KicadComponentInstance, part: CachedPart): Bbox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const grow = (x: number, y: number): void => {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  };
+  for (const pin of part.pins) {
+    const w = kicadPinWorldPos(instance, pin);
+    grow(w.x, w.y);
+  }
+  const body = symbolBodyMm(part);
+  if (body) {
+    // Transform the four body corners from symbol mm-space to world px, matching
+    // kicadPinWorldPos (scale, KiCad y-flip, instance rotation, translate).
+    const corners: Array<[number, number]> = [
+      [body.minX, body.minY], [body.maxX, body.minY],
+      [body.maxX, body.maxY], [body.minX, body.maxY],
+    ];
+    for (const [xmm, ymm] of corners) {
+      const r = rotateXY(xmm * KICAD_SCALE_PX_PER_MM, -ymm * KICAD_SCALE_PX_PER_MM, instance.rotation);
+      grow(instance.x + r.x, instance.y + r.y);
+    }
+  }
+  if (!Number.isFinite(minX)) {
+    const s = BODY_FALLBACK_PAD;
+    return { x: instance.x - s, y: instance.y - s, width: 2 * s, height: 2 * s };
+  }
+  if (!body) {
+    // No drawn body to read: pad the pin extents so a one-sided part still gets a
+    // body-sized box rather than a pin-column sliver.
+    minX -= BODY_FALLBACK_PAD; minY -= BODY_FALLBACK_PAD;
+    maxX += BODY_FALLBACK_PAD; maxY += BODY_FALLBACK_PAD;
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+// Obstacle box for wire routing: the pin+body extent, clamped to a minimum
+// thickness so a thin part (a 2-pin passive seen edge-on) still blocks crossings.
 function obstacleFor(p: Sized): Bbox {
-  if (p.part && p.part.pins.length >= 2) {
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pin of p.part.pins) {
-      const w = kicadPinWorldPos(p.instance, pin);
-      minX = Math.min(minX, w.x); minY = Math.min(minY, w.y);
-      maxX = Math.max(maxX, w.x); maxY = Math.max(maxY, w.y);
-    }
-    if (Number.isFinite(minX)) {
-      let bx = minX + OBSTACLE_DEFLATE;
-      let bw = maxX - minX - 2 * OBSTACLE_DEFLATE;
-      let by = minY + OBSTACLE_DEFLATE;
-      let bh = maxY - minY - 2 * OBSTACLE_DEFLATE;
-      if (bw < MIN_OBSTACLE_DIM) {
-        bx = (minX + maxX) / 2 - MIN_OBSTACLE_DIM / 2;
-        bw = MIN_OBSTACLE_DIM;
-      }
-      if (bh < MIN_OBSTACLE_DIM) {
-        by = (minY + maxY) / 2 - MIN_OBSTACLE_DIM / 2;
-        bh = MIN_OBSTACLE_DIM;
-      }
-      return { x: bx, y: by, width: bw, height: bh };
-    }
+  if (p.part && p.part.pins.length >= 1) {
+    let { x, y, width, height } = componentBodyBox(p.instance, p.part);
+    if (width < MIN_OBSTACLE_DIM)  { x = x + width / 2 - MIN_OBSTACLE_DIM / 2;  width = MIN_OBSTACLE_DIM; }
+    if (height < MIN_OBSTACLE_DIM) { y = y + height / 2 - MIN_OBSTACLE_DIM / 2; height = MIN_OBSTACLE_DIM; }
+    return { x, y, width, height };
   }
   return {
     x: p.instance.x - p.width / 2,
@@ -406,26 +570,19 @@ const ANCHOR_RANK: Record<ComponentRole, number> = {
   input: 3, output: 3, indicator: 2, passive: 1, support: 1,
 };
 
-// Full symbol extent (pin endpoints — NOT deflated like obstacleFor) expanded by
-// `clearance` on every side: the schematic stand-in for a footprint courtyard.
+// Full symbol extent (pins + drawn body) expanded by `clearance` on every side:
+// the schematic stand-in for a footprint courtyard. Shares the body-aware box
+// with routing, so one-sided parts (connectors) are spaced by their real size
+// rather than a pin-column sliver.
 export function footprintBox(p: Sized, clearance = SYMBOL_CLEARANCE): Bbox {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  if (p.part && p.part.pins.length >= 2) {
-    for (const pin of p.part.pins) {
-      const w = kicadPinWorldPos(p.instance, pin);
-      minX = Math.min(minX, w.x); minY = Math.min(minY, w.y);
-      maxX = Math.max(maxX, w.x); maxY = Math.max(maxY, w.y);
-    }
-  }
-  if (!Number.isFinite(minX)) {
-    minX = p.instance.x - p.width / 2; maxX = p.instance.x + p.width / 2;
-    minY = p.instance.y - p.height / 2; maxY = p.instance.y + p.height / 2;
-  }
+  const base = (p.part && p.part.pins.length >= 1)
+    ? componentBodyBox(p.instance, p.part)
+    : { x: p.instance.x - p.width / 2, y: p.instance.y - p.height / 2, width: p.width, height: p.height };
   return {
-    x: minX - clearance,
-    y: minY - clearance,
-    width: maxX - minX + 2 * clearance,
-    height: maxY - minY + 2 * clearance,
+    x: base.x - clearance,
+    y: base.y - clearance,
+    width: base.width + 2 * clearance,
+    height: base.height + 2 * clearance,
   };
 }
 
@@ -738,12 +895,19 @@ export function autoLayoutBuild(
   const placedLabelKeys = new Set<string>();   // "x,y|NAME" — dedupe per anchor
   const usedFallbackNames = new Map<string, string>(); // name → connection key
 
-  function resolvePinPoint(parsed: { refDes: string; pin: string }): Point | null {
+  function resolvePinEndpoint(parsed: { refDes: string; pin: string }): WireEndpoint | null {
     const target = byRefDes.get(parsed.refDes);
     if (!target || !target.part) return null;
     const pin = findPin(target.part, parsed.pin);
     if (!pin) return null;
-    return kicadPinWorldPos(target.instance, pin);
+    return {
+      position: kicadPinWorldPos(target.instance, pin),
+      exitDirection: kicadPinExitDirection(target.instance, pin),
+    };
+  }
+
+  function resolvePinPoint(parsed: { refDes: string; pin: string }): Point | null {
+    return resolvePinEndpoint(parsed)?.position ?? null;
   }
 
   function placeLabel(
@@ -807,8 +971,8 @@ export function autoLayoutBuild(
   // existing wires for more than PARALLEL_MAX_OVERLAP px).
   let fallbackCount = 0;
 
-  function routeOrFail(a: Point, b: Point): Point[] | null {
-    const { verts, crossings } = routeWireInfo(a, b, obstacles);
+  function routeOrFail(a: WireEndpoint, b: WireEndpoint): Point[] | null {
+    const { verts, crossings } = routeWireEndpoints(a, b, obstacles);
     if (crossings > 0) return null;
     if (longestParallelRun(verts, wires) > PARALLEL_MAX_OVERLAP) return null;
     return verts;
@@ -825,34 +989,40 @@ export function autoLayoutBuild(
 
     if (fromGround || toGround) {
       const pinEnd = (fromGround ? to : from) as { refDes: string; pin: string };
-      const pinPoint = resolvePinPoint(pinEnd);
-      if (!pinPoint) continue;
-      const verts = routeOrFail(pinPoint, groundPin);
+      const pinEndpoint = resolvePinEndpoint(pinEnd);
+      if (!pinEndpoint) continue;
+      // The ground symbol's pin sits at its top and the wire leaves it going up
+      // (north) toward the circuit above.
+      const groundEndpoint: WireEndpoint = {
+        position: groundPin,
+        exitDirection: pinDirection(ground, "pin"),
+      };
+      const verts = routeOrFail(pinEndpoint, groundEndpoint);
       if (verts) {
         groundUsed = true;
-        pushVerts(verts, pinPoint, groundPin);
+        pushVerts(verts, pinEndpoint.position, groundPin);
       } else {
         // Unroutable ground wire → a ground label right at the pin.
         fallbackCount++;
-        placeLabel(pinPoint, byRefDes.get(pinEnd.refDes), "GND", "ground");
+        placeLabel(pinEndpoint.position, byRefDes.get(pinEnd.refDes), "GND", "ground");
       }
       continue;
     }
 
     const fromEnd = from as { refDes: string; pin: string };
     const toEnd = to as { refDes: string; pin: string };
-    const aPos = resolvePinPoint(fromEnd);
-    const bPos = resolvePinPoint(toEnd);
-    if (!aPos || !bPos) continue;
-    const verts = routeOrFail(aPos, bPos);
+    const aEnd = resolvePinEndpoint(fromEnd);
+    const bEnd = resolvePinEndpoint(toEnd);
+    if (!aEnd || !bEnd) continue;
+    const verts = routeOrFail(aEnd, bEnd);
     if (verts) {
-      pushVerts(verts, aPos, bPos);
+      pushVerts(verts, aEnd.position, bEnd.position);
     } else {
       // Unroutable signal wire → a label pair sharing a generated net name.
       fallbackCount++;
       const name = fallbackNetName(`${wireConn.from}->${wireConn.to}`);
-      placeLabel(aPos, byRefDes.get(fromEnd.refDes), name, "label");
-      placeLabel(bPos, byRefDes.get(toEnd.refDes), name, "label");
+      placeLabel(aEnd.position, byRefDes.get(fromEnd.refDes), name, "label");
+      placeLabel(bEnd.position, byRefDes.get(toEnd.refDes), name, "label");
     }
   }
 
@@ -865,11 +1035,58 @@ export function autoLayoutBuild(
   for (const t of terminals) wires = splitWiresAtPoint(wires, t);
   wires = consolidateWires(wires);
 
+  // ── Page fit ────────────────────────────────────────────────────────────────
+  // Size the sheet to the drawn result and shift it inside the printable margin
+  // so nothing floats off the page. A rigid (grid-snapped) translation preserves
+  // every pin position — and therefore every wire route and label anchor
+  // computed above — so this runs last, after the geometry is final.
+  const bounds: Bounds = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  const grow = (x: number, y: number): void => {
+    if (x < bounds.minX) bounds.minX = x;
+    if (y < bounds.minY) bounds.minY = y;
+    if (x > bounds.maxX) bounds.maxX = x;
+    if (y > bounds.maxY) bounds.maxY = y;
+  };
+  for (const p of all) {
+    const b = footprintBox(p, 0); // pure pin extent (no clearance — margin is added by the page fit)
+    grow(b.x, b.y);
+    grow(b.x + b.width, b.y + b.height);
+  }
+  if (groundUsed) {
+    grow(ground.x - 20, ground.y - 20);
+    grow(ground.x + 20, ground.y + 20);
+  }
+  for (const l of netLabels) grow(l.position.x, l.position.y);
+  for (const w of wires) for (const v of w.vertices) grow(v.x, v.y);
+
+  const fit = Number.isFinite(bounds.minX)
+    ? planPageFit(bounds)
+    : { pageSize: DEFAULT_PAGE_SIZE, dx: 0, dy: 0 };
+
+  if (fit.dx !== 0 || fit.dy !== 0) {
+    for (const p of all) {
+      p.instance.x = snap(p.instance.x + fit.dx);
+      p.instance.y = snap(p.instance.y + fit.dy);
+    }
+    if (groundUsed) {
+      ground.x = snap(ground.x + fit.dx);
+      ground.y = snap(ground.y + fit.dy);
+    }
+    for (const l of netLabels) {
+      l.position = { x: snap(l.position.x + fit.dx), y: snap(l.position.y + fit.dy) };
+    }
+    wires = wires.map((w) => ({
+      ...w,
+      vertices: w.vertices.map((v) => ({ x: snap(v.x + fit.dx), y: snap(v.y + fit.dy) })),
+    }));
+  }
+
   return {
     components: groundUsed ? [ground] : [],
     wires,
     kicadComponents: all.map((p) => p.instance),
     netLabels,
+    pageSize: fit.pageSize,
   };
 }
 

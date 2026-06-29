@@ -1,4 +1,5 @@
 import type { SchematicState } from "./schematic-types";
+import { isPageSize, DEFAULT_PAGE_SIZE } from "./schematic-types";
 
 export type SavedProject = {
   id: string;
@@ -212,6 +213,14 @@ export function importProjectJSON(json: string): SavedProject | { error: string 
     return { error: "Invalid netLabels array" };
   }
   state["netLabels"] = Array.isArray(labels) ? labels : [];
+
+  // pageSize is optional; reject a present-but-invalid value, migrate older
+  // saves that lack it to the default.
+  const ps = state["pageSize"];
+  if (ps !== undefined && !isPageSize(ps)) {
+    return { error: "Invalid pageSize" };
+  }
+  state["pageSize"] = isPageSize(ps) ? ps : DEFAULT_PAGE_SIZE;
 
   const now = Date.now();
   return saveProject({

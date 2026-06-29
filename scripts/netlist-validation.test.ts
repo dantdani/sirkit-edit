@@ -11,8 +11,9 @@ import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
 import { mergeBuildNetlists } from "../app/lib/merge-netlists";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
+import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
-import type { KicadPin } from "../app/lib/kicad/types";
+import type { KicadPin, PinOrientation } from "../app/lib/kicad/types";
 import type {
   BuildLogicalNetlist,
   LogicalNetlist,
@@ -473,6 +474,75 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   check("merge: collided U1 was renamed", !!mcuRef && notes.some((n) => n.includes("U1")));
   check("merge: connection endpoints follow the rename", !!mcuWire);
   check("merge: shared net names preserved (both +3V3 labels)", p3v3.length === 2);
+}
+
+// ── componentBodyBox: body-accurate obstacle sizing ───────────────────────────
+// Regression for the "wire routes through a component body" bug. The obstacle box
+// must reflect a part's real body, not collapse to a pin-column sliver for
+// one-sided parts (connectors, switches). Box dimensions are placement-invariant,
+// so we read them off a part at the origin (plus a rotated instance for the
+// rotation transform). Values are the ones the routing fix was verified against.
+{
+  const O: Record<"west" | "east" | "south" | "north", PinOrientation> =
+    { west: 0, east: 180, south: 90, north: 270 };
+  const kpin = (number: string, xmm: number, ymm: number, exit: keyof typeof O): KicadPin =>
+    ({ number, name: number, type: "passive", position: { x: xmm, y: ymm }, orientation: O[exit], length: 2.54 });
+  // bodyRect [x1,y1,x2,y2] in symbol mm-space (y-up); omit for a graphic-less part.
+  const mkKicad = (id: string, pins: KicadPin[], bodyRect?: [number, number, number, number]): CachedPart => ({
+    id, name: id, description: "", mpn: null, manufacturer: null, datasheet: null, footprintHint: null,
+    mainCategory: "x", libraryName: "Lib", pins,
+    symbolRaw: bodyRect
+      ? `(symbol "${id}" (symbol "${id}_0_1" (rectangle (start ${bodyRect[0]} ${bodyRect[1]}) (end ${bodyRect[2]} ${bodyRect[3]}))))`
+      : "",
+    properties: {},
+  });
+  const ic = (id: string, l: number, r: number): CachedPart => {
+    const pins: KicadPin[] = [];
+    for (let i = 0; i < l; i++) pins.push(kpin(`L${i + 1}`, -5.08, ((l - 1) / 2 - i) * 2.54, "west"));
+    for (let i = 0; i < r; i++) pins.push(kpin(`R${i + 1}`, 5.08, ((r - 1) / 2 - i) * 2.54, "east"));
+    const half = ((Math.max(l, r) - 1) / 2) * 2.54 + 1.27;
+    return mkKicad(id, pins, [-2.54, half, 2.54, -half]);
+  };
+  const inst = (rot: 0 | 90 = 0): KicadComponentInstance =>
+    ({ id: "X", partId: "x", x: 0, y: 0, rotation: rot, refDes: "X", value: "" });
+  const dims = (p: CachedPart, rot: 0 | 90 = 0) => {
+    const b = componentBodyBox(inst(rot), p);
+    return { w: b.width, h: b.height };
+  };
+  const near = (a: number, b: number) => Math.abs(a - b) <= 0.6;
+
+  // Repro parts (same geometry the routing fix was verified against).
+  const mcu = ic("mcu", 8, 8);
+  const usb = mkKicad("usb", [
+    kpin("VBUS", -2.54, 5.08, "west"), kpin("DP", -2.54, 2.54, "west"), kpin("DM", -2.54, 0, "west"),
+    kpin("GND", -2.54, -2.54, "west"), kpin("SHLD", -2.54, -5.08, "west"),
+  ], [0, 6, 5.08, -6]);
+  const sw = mkKicad("sw", [
+    kpin("A", -2.54, 2.54, "west"), kpin("B", -2.54, 0, "west"), kpin("C", -2.54, -2.54, "west"),
+  ], [0, 3.5, 5.08, -3.5]);
+  const reg = mkKicad("reg", [
+    kpin("IN", -2.54, 0, "west"), kpin("OUT", 2.54, 0, "east"), kpin("GND", 0, -2.54, "south"),
+  ], [-2.54, 2.54, 2.54, -2.54]);
+
+  // (1) parts WITH graphics → box matches the drawn body (verified repro values).
+  check("bbox: 2-sided IC matches symbol body (80×160)", near(dims(mcu).w, 80) && near(dims(mcu).h, 160));
+  check("bbox: one-sided USB covers its body (60×94)", near(dims(usb).w, 60) && near(dims(usb).h, 94));
+  check("bbox: one-sided switch covers its body (60×55)", near(dims(sw).w, 60) && near(dims(sw).h, 55));
+  check("bbox: 3-pin regulator covers its body (40×40)", near(dims(reg).w, 40) && near(dims(reg).h, 40));
+
+  // (2) part WITHOUT graphics → pin extents + padding (no sliver). Same 3 west
+  // pins as `sw` but no symbolRaw: pins span 0×40px, padded 30/side → 60×100.
+  const bare = mkKicad("bare", [
+    kpin("A", -2.54, 2.54, "west"), kpin("B", -2.54, 0, "west"), kpin("C", -2.54, -2.54, "west"),
+  ]);
+  check("bbox: graphic-less one-sided part pads pin extents (60×100)", near(dims(bare).w, 60) && near(dims(bare).h, 100));
+
+  // (3) BOTH yield body-sized boxes — never the old one-sided sliver (~24px).
+  check("bbox: one-sided WITH graphics is body-sized, not a sliver", dims(sw).w >= 50 && dims(sw).h >= 50);
+  check("bbox: one-sided WITHOUT graphics is body-sized, not a sliver", dims(bare).w >= 50 && dims(bare).h >= 50);
+
+  // rotation transform: a 90° instance swaps width/height.
+  check("bbox: rotation swaps width/height (IC 90° → 160×80)", near(dims(mcu, 90).w, 160) && near(dims(mcu, 90).h, 80));
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
