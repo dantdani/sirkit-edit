@@ -10,7 +10,13 @@ import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
 import { mergeBuildNetlists } from "../app/lib/merge-netlists";
-import { resolvePinCoincidences, resolveComponentCollisions } from "../lib/build-auto-layout";
+import {
+  resolvePinCoincidences,
+  resolveComponentCollisions,
+  nearestNeighborGaps,
+  evaluateRespacing,
+  DEFAULT_COMFORT_GAP,
+} from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
@@ -604,6 +610,55 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   const gap1 = sep(a1, b1);
 
   check("spread-hints: flagged component pushed strictly further apart", gap1 > gap0);
+}
+
+// ── respacing regression guard (Tidy "don't crowd elsewhere") ────────────────
+{
+  // nearestNeighborGaps: a far-apart pair has a larger nearest gap than a close pair.
+  const gp = mkPart("GP");
+  const pmap = new Map<string, CachedPart>([["GP", gp]]);
+  const close = nearestNeighborGaps(
+    [mkInst("A", "GP", 0, 0), mkInst("B", "GP", 40, 0)],
+    pmap,
+  );
+  const far = nearestNeighborGaps(
+    [mkInst("A", "GP", 0, 0), mkInst("B", "GP", 1000, 0)],
+    pmap,
+  );
+  check(
+    "respacing: nearest-neighbour gap grows with distance",
+    (far.get("A") ?? 0) > (close.get("A") ?? Infinity),
+  );
+
+  // evaluateRespacing decision logic (pure, comfort = DEFAULT_COMFORT_GAP = 60).
+  const C = DEFAULT_COMFORT_GAP;
+  // Flagged R1 gains room; comfortable R2 stays comfortable → accept.
+  const good = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 100]]),
+    new Map([["R1", 80], ["R2", 90]]),
+    ["R1"],
+  );
+  check("respacing: improvement with no regression is accepted", good.improved && good.regressed.length === 0);
+
+  // Flagged R1 gains room but comfortable R2 is pushed below comfort → regression.
+  const bad = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 100]]),
+    new Map([["R1", 80], ["R2", C - 10]]),
+    ["R1"],
+  );
+  check("respacing: a crowded-out comfortable part is flagged as regressed", bad.improved && bad.regressed.includes("R2"));
+
+  // Already-tight R2 (below comfort before) is NOT counted as a regression.
+  const tight = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 20]]),
+    new Map([["R1", 80], ["R2", 15]]),
+    ["R1"],
+  );
+  check("respacing: a part that was already tight is not a regression", tight.regressed.length === 0);
+
+  // No measurable gain for the flagged part → not improved.
+  const flat = evaluateRespacing(new Map([["R1", 50]]), new Map([["R1", 50]]), ["R1"]);
+  check("respacing: no gain for flagged parts → not improved", !flat.improved);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

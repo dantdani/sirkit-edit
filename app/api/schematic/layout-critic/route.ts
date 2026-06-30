@@ -26,7 +26,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { LAYOUT_CRITIC_SYSTEM_PROMPT, LAYOUT_CRITIC_TOOL } from "@/app/lib/prompts";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
-import { componentBodyBox, autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import {
+  componentBodyBox,
+  autoLayoutBuildValidated,
+  nearestNeighborGaps,
+  evaluateRespacing,
+} from "@/lib/build-auto-layout";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -176,8 +181,16 @@ export async function POST(req: Request): Promise<Response> {
   const netlist = schematicToBuildNetlist(state, parts);
   const { state: newState, validation } = autoLayoutBuildValidated(netlist, parts, 3, { spread });
 
+  // Regression guard: the re-layout reshuffles ALL components, so confirm it
+  // actually gave the flagged parts more room WITHOUT squeezing any previously-
+  // comfortable part below the comfort gap (i.e. without moving the crowding
+  // elsewhere). Compare nearest-neighbour spacing before vs after.
+  const beforeGaps = nearestNeighborGaps(kicad, parts);
+  const afterGaps = nearestNeighborGaps(newState.kicadComponents ?? [], parts);
+  const { improved, regressed } = evaluateRespacing(beforeGaps, afterGaps, spreadRefDes);
+
   const sameCount = (newState.kicadComponents?.length ?? 0) === kicad.length;
-  const applied = validation.ok && sameCount;
+  const applied = validation.ok && sameCount && improved && regressed.length === 0;
 
   return Response.json({
     ok: true,
@@ -186,5 +199,7 @@ export async function POST(req: Request): Promise<Response> {
     critique: { groups, summary },
     validation: { ok: validation.ok, violations: validation.violations.length },
     spreadRefDes,
+    regressedRefDes: regressed,
+    improved,
   });
 }

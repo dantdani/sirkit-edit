@@ -2818,6 +2818,8 @@ export default function Home() {
             critique: { groups: { refDes: string[]; reason: string; severity: string }[]; summary: string };
             validation: { ok: boolean; violations: number };
             spreadRefDes: string[];
+            regressedRefDes: string[];
+            improved: boolean;
           }
         | { ok: false; error: string };
       if (!data.ok) throw new Error(data.error || "Layout critic failed");
@@ -2844,7 +2846,11 @@ export default function Home() {
             ? "Nothing to spread out."
             : !data.validation.ok
               ? "A tidied re-layout would have broken connectivity, so the original was kept."
-              : "No safe improvement applied.";
+              : data.regressedRefDes.length > 0
+                ? `Spreading those out would have crowded other parts (${data.regressedRefDes.join(", ")}), so the original was kept.`
+                : !data.improved
+                  ? "Re-spacing wouldn't have given the crowded parts more room, so the original was kept."
+                  : "No safe improvement applied.";
         setMessages((prev) => [
           ...prev,
           { id: crypto.randomUUID(), role: "user", content: "Tidy the schematic layout" },

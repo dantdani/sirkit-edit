@@ -734,6 +734,90 @@ export function resolvePinCoincidences(items: Sized[]): number {
   return residual;
 }
 
+// ─── Respacing regression guard (layout critic) ──────────────────────────────
+//
+// The layout critic re-runs the WHOLE layout with extra clearance on crowded
+// components — which reshuffles every component, not just the flagged ones. These
+// helpers let the caller confirm the re-layout actually helped the flagged parts
+// WITHOUT pushing any previously-comfortable part into a tight spot ("moving the
+// problem elsewhere"). The metric is each component's nearest-neighbour gap (the
+// true edge-to-edge distance to its closest neighbour).
+
+// "Comfortable" spacing: a fully-resolved layout separates inflated courtyards,
+// so any non-overlapping pair sits ≥ 2× the per-side clearance apart. A
+// non-flagged component that was at/above this but drops below it has been
+// crowded by the respacing.
+export const DEFAULT_COMFORT_GAP = 2 * SYMBOL_CLEARANCE;
+
+// Minimum edge-to-edge distance between two axis-aligned boxes (0 if they
+// overlap). Separation on each axis is 0 unless the boxes are disjoint there.
+function rectGap(a: Bbox, b: Bbox): number {
+  const dx = Math.max(0, a.x - (b.x + b.width), b.x - (a.x + a.width));
+  const dy = Math.max(0, a.y - (b.y + b.height), b.y - (a.y + a.height));
+  return Math.hypot(dx, dy);
+}
+
+/** refDes → distance to its nearest neighbour (body box). Lone parts → Infinity. */
+export function nearestNeighborGaps(
+  instances: KicadComponentInstance[],
+  parts: Map<string, CachedPart>,
+): Map<string, number> {
+  const boxes: Array<{ refDes: string; box: Bbox }> = [];
+  for (const inst of instances) {
+    const part = parts.get(inst.partId);
+    if (part) boxes.push({ refDes: inst.refDes, box: componentBodyBox(inst, part) });
+  }
+  const gaps = new Map<string, number>();
+  for (let i = 0; i < boxes.length; i++) {
+    let min = Infinity;
+    for (let j = 0; j < boxes.length; j++) {
+      if (i === j) continue;
+      const g = rectGap(boxes[i].box, boxes[j].box);
+      if (g < min) min = g;
+    }
+    gaps.set(boxes[i].refDes, min);
+  }
+  return gaps;
+}
+
+/**
+ * Compare nearest-neighbour spacing before vs after a respacing.
+ *  - `improved`: the flagged components, in aggregate, gained breathing room.
+ *  - `regressed`: NON-flagged components that were comfortable (≥ `comfort`)
+ *    before but are now below it — i.e. the respacing crowded them.
+ * The caller applies the new layout only when `improved && regressed.length === 0`.
+ */
+export function evaluateRespacing(
+  before: Map<string, number>,
+  after: Map<string, number>,
+  flagged: Iterable<string>,
+  comfort: number = DEFAULT_COMFORT_GAP,
+): { improved: boolean; regressed: string[] } {
+  const flaggedSet = new Set(flagged);
+  let flaggedBefore = 0;
+  let flaggedAfter = 0;
+  let flaggedSeen = 0;
+  for (const r of flaggedSet) {
+    const b = before.get(r);
+    const a = after.get(r);
+    if (b === undefined || a === undefined) continue;
+    flaggedBefore += b;
+    flaggedAfter += a;
+    flaggedSeen++;
+  }
+  const improved = flaggedSeen > 0 && flaggedAfter > flaggedBefore;
+
+  const regressed: string[] = [];
+  for (const [r, a] of after) {
+    if (flaggedSet.has(r)) continue;
+    const b = before.get(r);
+    if (b === undefined) continue;
+    if (b >= comfort && a < comfort) regressed.push(r);
+  }
+  regressed.sort();
+  return { improved, regressed };
+}
+
 // ─── Net-label placement helpers ─────────────────────────────────────────────
 
 // Which way a pin "exits" its component: the dominant axis from the body
