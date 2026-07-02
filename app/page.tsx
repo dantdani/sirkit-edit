@@ -1730,6 +1730,7 @@ function SchematicEditor({
 
       <svg
         ref={svgRef}
+        id="sirkit-schematic-svg"
         width="100%"
         height="100%"
         style={{ cursor: cursorStyle, display: "block" }}
@@ -2198,6 +2199,7 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing]       = useState(false);
   const [isReviewing, setIsReviewing]   = useState(false);
+  const [isTidying, setIsTidying]       = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
@@ -2724,6 +2726,150 @@ export default function Home() {
     }
   }
 
+  // Rasterize the live schematic to a PNG data URL for the layout critic. We
+  // reframe a CLONE of the on-screen SVG to the full content bounds (getBBox on
+  // the transformed inner <g>, in world units) so the model sees the whole
+  // circuit regardless of the current pan/zoom — then draw it onto a canvas.
+  async function captureSchematicPng(): Promise<string | null> {
+    const svg = document.getElementById("sirkit-schematic-svg") as SVGSVGElement | null;
+    if (!svg) return null;
+    const inner = svg.querySelector("g") as SVGGraphicsElement | null;
+    if (!inner) return null;
+    let bb: DOMRect;
+    try {
+      bb = inner.getBBox();
+    } catch {
+      return null;
+    }
+    if (!bb.width || !bb.height) return null;
+
+    const PAD = 40;
+    const vbX = bb.x - PAD, vbY = bb.y - PAD;
+    const vbW = bb.width + 2 * PAD, vbH = bb.height + 2 * PAD;
+    const CAP = 1600; // cap the long edge so the upload stays small
+    const scale = Math.min(1, CAP / Math.max(vbW, vbH));
+    const pxW = Math.max(1, Math.round(vbW * scale));
+    const pxH = Math.max(1, Math.round(vbH * scale));
+
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    clone.setAttribute("viewBox", `${vbX} ${vbY} ${vbW} ${vbH}`);
+    clone.setAttribute("width", String(pxW));
+    clone.setAttribute("height", String(pxH));
+    clone.removeAttribute("style");
+    // Drop the pan/zoom transform so world coords map straight into the viewBox,
+    // and replace the panned dot-grid background with a flat fill.
+    const cloneInner = clone.querySelector("g");
+    if (cloneInner) cloneInner.setAttribute("transform", "translate(0,0) scale(1)");
+    const bgRect = clone.querySelector("rect");
+    if (bgRect) bgRect.setAttribute("fill", "#0b0b0d");
+
+    const xml = new XMLSerializer().serializeToString(clone);
+    const dataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
+
+    return await new Promise<string | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = pxW;
+        canvas.height = pxH;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.fillStyle = "#0b0b0d";
+        ctx.fillRect(0, 0, pxW, pxH);
+        ctx.drawImage(img, 0, 0, pxW, pxH);
+        try {
+          resolve(canvas.toDataURL("image/png"));
+        } catch {
+          resolve(null); // tainted canvas (shouldn't happen for inline SVG)
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  // Layer-2 LAYOUT critic: screenshot the schematic, let Claude flag crowded
+  // component groups, then DETERMINISTICALLY re-lay-out the circuit with extra
+  // spacing on those groups. Only applies a result that stays electrically valid.
+  async function handleTidyLayout() {
+    if (isTidying) return;
+    if (kicadComponents.length === 0) {
+      setGenError("Tidy is available for Build-mode schematics with catalog parts.");
+      setTimeout(() => setGenError(null), 5000);
+      return;
+    }
+    setIsTidying(true);
+    setGenError(null);
+    try {
+      const image = await captureSchematicPng();
+      if (!image) throw new Error("Could not capture the schematic image");
+
+      const res = await fetch("/api/schematic/layout-critic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: { components, wires, kicadComponents, netLabels, pageSize }, image }),
+      });
+      const data = (await res.json()) as
+        | {
+            ok: true;
+            applied: boolean;
+            state: SchematicState;
+            critique: { groups: { refDes: string[]; reason: string; severity: string }[]; summary: string };
+            validation: { ok: boolean; violations: number };
+            spreadRefDes: string[];
+            regressedRefDes: string[];
+            improved: boolean;
+          }
+        | { ok: false; error: string };
+      if (!data.ok) throw new Error(data.error || "Layout critic failed");
+
+      const { groups, summary } = data.critique;
+      const sevIcon = (s: string) => (s === "high" ? "🔴" : s === "medium" ? "⚠️" : "ℹ️");
+      const groupLines =
+        groups.length === 0
+          ? "No crowding found — layout reads clearly."
+          : groups
+              .map((g) => `- ${sevIcon(g.severity)} **${g.refDes.join(", ")}** — ${g.reason}`)
+              .join("\n");
+
+      if (data.applied) {
+        const note =
+          `**Layout tidied** — spaced out ${data.spreadRefDes.length} crowded component(s) and re-routed.\n\n` +
+          groupLines +
+          (summary ? `\n\n_${summary}_` : "");
+        // Re-layout replaces positions; applySchematic logs the note to chat.
+        applySchematic(data.state, note, "Tidy the schematic layout");
+      } else {
+        const reason =
+          data.spreadRefDes.length === 0
+            ? "Nothing to spread out."
+            : !data.validation.ok
+              ? "A tidied re-layout would have broken connectivity, so the original was kept."
+              : data.regressedRefDes.length > 0
+                ? `Spreading those out would have crowded other parts (${data.regressedRefDes.join(", ")}), so the original was kept.`
+                : !data.improved
+                  ? "Re-spacing wouldn't have given the crowded parts more room, so the original was kept."
+                  : "No safe improvement applied.";
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), role: "user", content: "Tidy the schematic layout" },
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `**Layout review** — ${reason}\n\n${groupLines}${summary ? `\n\n_${summary}_` : ""}`,
+          },
+        ]);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Layout critic failed";
+      setGenError(msg);
+      setTimeout(() => setGenError(null), 6000);
+    } finally {
+      setIsTidying(false);
+    }
+  }
+
   async function handleRunSim() {
     if (simLoading) return;
     setSimLoading(true);
@@ -3190,10 +3336,22 @@ export default function Home() {
                   <Button
                     size="sm"
                     variant="ghost"
+                    title={kicadComponents.length === 0
+                      ? "Generate a Build-mode schematic first"
+                      : "Screenshot the schematic, let AI flag crowded parts, and re-space the layout (deterministic)"}
+                    disabled={isTidying || isReviewing || loading || isGenerating || isEditing ||
+                      kicadComponents.length === 0}
+                    onClick={handleTidyLayout}
+                  >
+                    {isTidying ? "Tidying…" : "Tidy"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     title={components.length === 0 && kicadComponents.length === 0
                       ? "Generate a schematic first"
                       : "Run an electrical design review of the current schematic (advisory)"}
-                    disabled={isReviewing || loading || isGenerating || isEditing ||
+                    disabled={isReviewing || isTidying || loading || isGenerating || isEditing ||
                       (components.length === 0 && kicadComponents.length === 0)}
                     onClick={handleReview}
                   >
