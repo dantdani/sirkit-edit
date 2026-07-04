@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# external clone of microsoft/SchGen (its own repo — not our code)
+/SchGen

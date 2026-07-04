@@ -2200,6 +2200,9 @@ export default function Home() {
   const [isEditing, setIsEditing]       = useState(false);
   const [isReviewing, setIsReviewing]   = useState(false);
   const [isTidying, setIsTidying]       = useState(false);
+  const [isSecondOpinion, setIsSecondOpinion] = useState(false);
+  const [lastDesignPrompt, setLastDesignPrompt] = useState("");
+  const [pendingSuggestions, setPendingSuggestions] = useState<{ title: string; detail: string }[]>([]);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
@@ -2431,6 +2434,8 @@ export default function Home() {
 
   async function handleGenerateSchematic(prompt: string) {
     if (!prompt.trim() || isGenerating) return;
+    setLastDesignPrompt(prompt); // remembered for the SchGen cross-verify second opinion
+    setPendingSuggestions([]);   // any prior second-opinion suggestions are now stale
     setIsGenerating(true);
     setGenError(null);
     try {
@@ -2702,6 +2707,13 @@ export default function Home() {
       if (!data.ok) throw new Error(data.error || "Review failed");
 
       const icon = (s: string) => (s === "error" ? "🔴" : s === "warning" ? "⚠️" : "ℹ️");
+      // Actionable findings (errors/warnings) can be integrated via the validated
+      // edit pipeline — no SchGen/GPU dependency, so this works today.
+      const actionable = data.findings
+        .filter((f) => f.severity === "error" || f.severity === "warning")
+        .map((f) => ({ title: f.title, detail: f.detail }));
+      setPendingSuggestions(actionable);
+
       const md =
         data.findings.length === 0
           ? `**Design review** — no issues found.${data.summary ? `\n\n${data.summary}` : ""}`
@@ -2710,6 +2722,7 @@ export default function Home() {
               .map((f) => `- ${icon(f.severity)} **${f.title}**${f.refs?.length ? ` (${f.refs.join(", ")})` : ""} — ${f.detail}`)
               .join("\n") +
             (data.summary ? `\n\n_${data.summary}_` : "") +
+            (actionable.length > 0 ? "\n\n_Click **Apply suggestions** to address these via a validated edit._" : "") +
             "\n\n_Advisory — design suggestions, not hard errors; verify before acting._";
 
       setMessages((prev) => [
@@ -2868,6 +2881,96 @@ export default function Home() {
     } finally {
       setIsTidying(false);
     }
+  }
+
+  // Cross-verify: ask an INDEPENDENT domain model (SchGen) to design the same
+  // request, then diff its netlist against this one and surface disagreements as
+  // advisory findings. Slow (~1–2 min, a 20B model) and no-ops gracefully when the
+  // endpoint isn't configured.
+  async function handleSecondOpinion() {
+    if (isSecondOpinion) return;
+    if (kicadComponents.length === 0) {
+      setGenError("Second opinion needs a Build-mode schematic.");
+      setTimeout(() => setGenError(null), 5000);
+      return;
+    }
+    const prompt = (lastDesignPrompt || input).trim();
+    if (!prompt) {
+      setGenError("No design prompt to compare against — generate from a prompt first.");
+      setTimeout(() => setGenError(null), 5000);
+      return;
+    }
+    setIsSecondOpinion(true);
+    setGenError(null);
+    try {
+      const res = await fetch("/api/schematic/cross-verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, state: { components, wires, kicadComponents, netLabels, pageSize } }),
+      });
+      const data = (await res.json()) as
+        | {
+            ok: true;
+            available: boolean;
+            findings: { severity: string; category: string; title: string; detail: string }[];
+            agreement: number | null;
+            summary: string;
+          }
+        | { ok: false; error: string };
+      if (!data.ok) throw new Error(data.error || "Second opinion failed");
+
+      // Actionable = likely-missing support parts (warning severity). Stashed so
+      // the user can integrate them through the validated edit pipeline.
+      const actionable = data.available
+        ? data.findings.filter((f) => f.severity === "warning").map((f) => ({ title: f.title, detail: f.detail }))
+        : [];
+      setPendingSuggestions(actionable);
+
+      let md: string;
+      if (!data.available) {
+        md = "**Second opinion** — the independent model isn't configured (`SCHGEN_ENDPOINT_URL`).";
+      } else if (data.agreement === null) {
+        // No comparable netlist parsed (model returned prose / no DSL, or was truncated).
+        md = "**Second opinion** — the independent model's output couldn't be parsed into a comparable netlist, so no comparison was made. Its output is stochastic — try again, or simplify the request.";
+      } else if (data.findings.length === 0) {
+        md = `**Second opinion** — an independent domain model agrees on the component set (${(data.agreement * 100).toFixed(0)}% match).${data.summary ? `\n\n_${data.summary}_` : ""}`;
+      } else {
+        const icon = (s: string) => (s === "warning" ? "⚠️" : "ℹ️");
+        md =
+          `**Second opinion — ${data.findings.length} difference(s)** · agreement ${(data.agreement * 100).toFixed(0)}%` +
+          "\n\n" +
+          data.findings.map((f) => `- ${icon(f.severity)} **${f.title}** — ${f.detail}`).join("\n") +
+          (actionable.length > 0
+            ? "\n\n_Click **Apply suggestions** to integrate the flagged support parts via a validated edit._"
+            : "") +
+          "\n\n_Advisory — an independent model's take, not ground truth; verify before acting._";
+      }
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "user", content: "Get a second opinion" },
+        { id: crypto.randomUUID(), role: "assistant", content: md },
+      ]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Second opinion failed";
+      setGenError(msg);
+      setTimeout(() => setGenError(null), 6000);
+    } finally {
+      setIsSecondOpinion(false);
+    }
+  }
+
+  // Integrate the second opinion's suggestions by running them through the
+  // VALIDATED edit pipeline: a frontier model adds the actual parts/connections
+  // and autoLayoutBuildValidated checks them. We never graft SchGen's netlist raw.
+  async function handleApplySuggestions() {
+    if (pendingSuggestions.length === 0 || isEditing || isGenerating) return;
+    const instruction =
+      "A design review flagged the following. Address each by editing the schematic where " +
+      "genuinely appropriate — add missing support parts, fix wrong values/connections — while " +
+      "keeping all existing correct components and connections and using standard values:\n" +
+      pendingSuggestions.map((s) => `- ${s.title}: ${s.detail}`).join("\n");
+    setPendingSuggestions([]);
+    await handleEditSchematic(instruction);
   }
 
   async function handleRunSim() {
@@ -3339,7 +3442,7 @@ export default function Home() {
                     title={kicadComponents.length === 0
                       ? "Generate a Build-mode schematic first"
                       : "Screenshot the schematic, let AI flag crowded parts, and re-space the layout (deterministic)"}
-                    disabled={isTidying || isReviewing || loading || isGenerating || isEditing ||
+                    disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || isEditing ||
                       kicadComponents.length === 0}
                     onClick={handleTidyLayout}
                   >
@@ -3351,12 +3454,35 @@ export default function Home() {
                     title={components.length === 0 && kicadComponents.length === 0
                       ? "Generate a schematic first"
                       : "Run an electrical design review of the current schematic (advisory)"}
-                    disabled={isReviewing || isTidying || loading || isGenerating || isEditing ||
+                    disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
                       (components.length === 0 && kicadComponents.length === 0)}
                     onClick={handleReview}
                   >
                     {isReviewing ? "Reviewing…" : "Review"}
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    title={kicadComponents.length === 0
+                      ? "Generate a Build-mode schematic first"
+                      : "Ask an independent domain model (SchGen) to design the same request and diff it against this schematic (advisory; slow, ~1–2 min)"}
+                    disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || isEditing ||
+                      kicadComponents.length === 0}
+                    onClick={handleSecondOpinion}
+                  >
+                    {isSecondOpinion ? "Consulting…" : "Check with SchGen"}
+                  </Button>
+                  {pendingSuggestions.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Integrate the second opinion's suggested support parts via a validated edit"
+                      disabled={isEditing || isGenerating || loading || isSecondOpinion || isReviewing || isTidying}
+                      onClick={handleApplySuggestions}
+                    >
+                      {isEditing ? "Applying…" : `Apply suggestions (${pendingSuggestions.length})`}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"

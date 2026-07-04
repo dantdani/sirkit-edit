@@ -1,0 +1,9 @@
+# SchGen HF Inference Endpoint dependencies.
+# torch is preinstalled on HF endpoint images; pinned here for local testing.
+torch
+transformers==4.55.4
+peft>=0.17.0
+accelerate>=1.10
+kernels
+triton>=3.4          # MXFP4 kernels for gpt-oss on Hopper (H100)
+# bitsandbytes>=0.43 # uncomment only if using SCHGEN_LOAD_4BIT=1 (non-Hopper GPU)

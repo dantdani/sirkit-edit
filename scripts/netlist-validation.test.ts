@@ -18,6 +18,9 @@ import {
   DEFAULT_COMFORT_GAP,
 } from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
+import { resolveFootprint, assignFootprints } from "../lib/footprint-assign";
+import { normalizeBuildNetlist, crossCheckNetlists, classifyComponent } from "../lib/netlist-crosscheck";
+import { parseSchGenSource } from "../lib/schgen-netlist";
 import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin, PinOrientation } from "../app/lib/kicad/types";
@@ -659,6 +662,107 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   // No measurable gain for the flagged part → not improved.
   const flat = evaluateRespacing(new Map([["R1", 50]]), new Map([["R1", 50]]), ["R1"]);
   check("respacing: no gain for flagged parts → not improved", !flat.improved);
+}
+
+// ── footprint assignment (PCB seam) ──────────────────────────────────────────
+{
+  // 1) A real footprint id on the symbol is trusted verbatim.
+  const hint = resolveFootprint({ refDes: "U1", footprintHint: "Package_QFP:LQFP-48_7x7mm_P0.5mm" });
+  check("footprint: real hint is trusted", hint.source === "hint" && hint.footprint === "Package_QFP:LQFP-48_7x7mm_P0.5mm");
+
+  // 2) A wildcard footprint FILTER is not a real id → falls back to a default.
+  const filt = resolveFootprint({ refDes: "C3", footprintHint: "Capacitor_SMD:C_*" });
+  check("footprint: wildcard filter rejected, default used", filt.source === "default" && filt.footprint === "Capacitor_SMD:C_0603_1608Metric");
+
+  // 3) Category defaults by refDes prefix.
+  check("footprint: R default", resolveFootprint({ refDes: "R7", footprintHint: null }).footprint === "Resistor_SMD:R_0603_1608Metric");
+  check("footprint: L default", resolveFootprint({ refDes: "L2", footprintHint: "" }).footprint === "Inductor_SMD:L_0603_1608Metric");
+  check("footprint: Q default", resolveFootprint({ refDes: "Q1", footprintHint: null }).footprint === "Package_TO_SOT_SMD:SOT-23");
+
+  // 4) Diode vs LED (both refDes "D") disambiguated by name/value.
+  const diode = resolveFootprint({ refDes: "D1", footprintHint: null, name: "1N4148 Fast Diode" });
+  const led = resolveFootprint({ refDes: "D2", footprintHint: null, name: "Red LED", value: "RED" });
+  check("footprint: plain diode → SOD-123", diode.footprint === "Diode_SMD:D_SOD-123");
+  check("footprint: LED-named diode → LED land", led.footprint === "LED_SMD:LED_0603_1608Metric");
+
+  // 5) Unknown/variable package (IC, connector) is surfaced, not guessed.
+  const ic = resolveFootprint({ refDes: "U2", footprintHint: null });
+  check("footprint: unresolved IC → null (surfaced)", ic.source === "none" && ic.footprint === null);
+
+  // 6) Batch assignment over a schematic maps each refDes.
+  const fpParts = new Map([
+    ["p-mcu", { footprintHint: "Package_QFP:LQFP-32_5x5mm_P0.5mm", name: "STM32", mainCategory: "IC" }],
+    ["p-res", { footprintHint: null, name: "Resistor", mainCategory: "Passive" }],
+  ]);
+  const assigned = assignFootprints(
+    [
+      { refDes: "U1", partId: "p-mcu", value: "STM32" },
+      { refDes: "R1", partId: "p-res", value: "10k" },
+      { refDes: "J1", partId: "p-missing", value: "" },
+    ],
+    fpParts,
+  );
+  const byRef = new Map(assigned.map((a) => [a.refDes, a]));
+  check(
+    "footprint: batch assigns hint + default + null",
+    byRef.get("U1")!.source === "hint" &&
+      byRef.get("R1")!.footprint === "Resistor_SMD:R_0603_1608Metric" &&
+      byRef.get("J1")!.footprint === null,
+  );
+}
+
+// ── SchGen cross-verification (second-opinion diff) ──────────────────────────
+{
+  // classifyComponent basics.
+  check("crosscheck: classify R→resistor", classifyComponent("R1") === "resistor");
+  check("crosscheck: classify D+led name→led", classifyComponent("D3", "Green LED") === "led");
+  check("crosscheck: classify U→ic", classifyComponent("U1", "STM32") === "ic");
+
+  // Parse a small SchGen DSL sample (keyword + positional connect_pins) → netlist.
+  const schgenSrc = `
+from modules.kicad_sch_interface import *
+add_schematic_symbol(symbol_lib="Regulator_Linear", symbol_name="AP2112K-3.3", pos_x=100, pos_y=100, reference="U1", value="AP2112K-3.3")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=80, pos_y=90, reference="C1", value="1uF")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=120, pos_y=90, reference="C2", value="1uF")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=140, pos_y=90, reference="C3", value="100nF")
+add_label([100, 130], "VIN", "VIN_0", "input", "left")
+connect_pins("U1", "VIN", "C1", "1")
+connect_pins("U1", "VIN", "VIN_0", "1")
+connect_pins("U1", "VOUT", "C2", "1")
+connect_pins("U1", "EN", "C3", "1")
+write_out_all_wires()
+`;
+  const parsed = parseSchGenSource(schgenSrc);
+  check("crosscheck: parses SchGen components", parsed.netlist.components.length === 4);
+  check("crosscheck: parses SchGen connections", parsed.coverage.connections === 4);
+  check(
+    "crosscheck: VIN label becomes a named net",
+    parsed.netlist.nets.some((n) => n.name === "VIN"),
+  );
+
+  // Primary (Sirkit) netlist with FEWER caps than the second opinion → the diff
+  // should flag a possible missing decoupling/bulk capacitor.
+  const primaryNl: BuildLogicalNetlist = {
+    components: [
+      { refDes: "U1", partId: "ldo", value: "AP2112K-3.3", role: "regulator" },
+      { refDes: "C1", partId: "cap", value: "1uF", role: "passive" },
+    ],
+    connections: [
+      { kind: "label", pin: "U1.VIN", labelName: "VIN", labelKind: "power" },
+      { kind: "wire", from: "U1.VOUT", to: "C1.1" },
+    ],
+    explanation: "",
+  };
+  const primary = normalizeBuildNetlist(primaryNl);
+  const result = crossCheckNetlists(primary, parsed.netlist);
+  check(
+    "crosscheck: flags missing capacitor vs second opinion",
+    result.findings.some((f) => f.severity === "warning" && /capacitor/i.test(f.title)),
+  );
+
+  // Identical netlists → no findings, full agreement.
+  const same = crossCheckNetlists(parsed.netlist, parsed.netlist);
+  check("crosscheck: identical netlists agree (no findings)", same.findings.length === 0 && same.agreement === 1);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
