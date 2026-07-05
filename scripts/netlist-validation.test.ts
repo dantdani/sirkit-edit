@@ -19,6 +19,7 @@ import {
 } from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import { resolveFootprint, assignFootprints } from "../lib/footprint-assign";
+import { planPageFit, pageSizePx } from "../lib/page-sizes";
 import { normalizeBuildNetlist, crossCheckNetlists, classifyComponent } from "../lib/netlist-crosscheck";
 import { parseSchGenSource } from "../lib/schgen-netlist";
 import { componentBodyBox } from "../lib/build-auto-layout";
@@ -763,6 +764,20 @@ write_out_all_wires()
   // Identical netlists → no findings, full agreement.
   const same = crossCheckNetlists(parsed.netlist, parsed.netlist);
   check("crosscheck: identical netlists agree (no findings)", same.findings.length === 0 && same.agreement === 1);
+}
+
+// ── page fit: content is centred, not crowded into the corner ────────────────
+{
+  // A small circuit well inside A4's printable area.
+  const bounds = { minX: 1000, minY: 1000, maxX: 1200, maxY: 1100 };
+  const fit = planPageFit(bounds);
+  const { widthPx, heightPx } = pageSizePx(fit.pageSize);
+  const centerX = (bounds.minX + bounds.maxX) / 2 + fit.dx;
+  const centerY = (bounds.minY + bounds.maxY) / 2 + fit.dy;
+  check("page-fit: small circuit centred horizontally (not left-crowded)", Math.abs(centerX - widthPx / 2) <= 20);
+  // Vertically centred within the upper band (above the reserved title block),
+  // so the content sits above the page's true middle.
+  check("page-fit: content sits in the upper half vertically", centerY > 40 && centerY < heightPx / 2 + 40);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
