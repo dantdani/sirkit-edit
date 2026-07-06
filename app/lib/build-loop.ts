@@ -28,6 +28,8 @@ import {
   BUILD_FIND_ALTERNATES_TOOL,
   BUILD_SUBMIT_SCHEMATIC_TOOL,
 } from "@/app/lib/prompts";
+import { runErc, formatErcFeedback, type ErcReport } from "@/lib/erc";
+import { kgDesignNotes } from "@/lib/kg";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -35,9 +37,13 @@ const MODEL = "claude-sonnet-4-6";
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
 const ALTERNATES_LIMIT = 5;
+// ERC gate: reject a submission with critical electrical errors at most this
+// many times (pin-localized feedback drives self-correction); after that,
+// accept the best effort and surface the report instead of looping forever.
+const MAX_ERC_REJECTIONS = 2;
 
 export type BuildLoopResult =
-  | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
+  | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport }
   | { ok: false; error: string; status: number };
 
 /** A connection endpoint is either the ground rail sentinel or a refDes.pin pair. */
@@ -99,6 +105,8 @@ export async function runBuildToolLoop(opts: {
   // submission: a partId must have been surfaced, and its pins must exist.
   const returnedParts = new Map<string, AiPartResult>();
   for (const p of opts.seedParts ?? []) returnedParts.set(p.partId, p);
+
+  let ercRejections = 0;
 
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: opts.userMessage }];
 
@@ -172,7 +180,11 @@ export async function runBuildToolLoop(opts: {
               };
             }
             seenPartIds.add(r.partId);
-            return r;
+            // Ground generation in datasheet-derived pin roles + required
+            // connections when this part has a KG entry (Phase 2 "unified
+            // context assembly" — only matched parts pay the tokens).
+            const designNotes = kgDesignNotes(r.name);
+            return designNotes ? { ...r, designNotes } : r;
           });
           return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify(payload) };
         },
@@ -220,7 +232,33 @@ export async function runBuildToolLoop(opts: {
       const submitResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
         const result = finalizeSubmission(block.input, returnedParts);
-        if (result.ok) return { ok: true, netlist: result.netlist, explanation: result.explanation };
+        if (result.ok) {
+          // Deterministic ERC gate (design-level, not drawing-level): critical
+          // electrical faults — undriven power pins, shorted rails, fighting
+          // outputs — bounce back with pin-localized feedback so the model can
+          // self-correct. Bounded, so a stubborn design still ships WITH its
+          // report rather than dying in the loop.
+          const erc = runErc(result.netlist, returnedParts);
+          if (!erc.ok && ercRejections < MAX_ERC_REJECTIONS) {
+            ercRejections++;
+            console.warn(
+              `[build-loop] ERC rejected submission (${erc.criticalCount} critical, attempt ${ercRejections}/${MAX_ERC_REJECTIONS}, reward ${erc.reward.toFixed(2)})`,
+            );
+            submitResults.push({
+              type: "tool_result",
+              tool_use_id: block.id,
+              is_error: true,
+              content: formatErcFeedback(erc),
+            });
+            continue;
+          }
+          if (!erc.ok) {
+            console.warn(
+              `[build-loop] ERC still failing after ${MAX_ERC_REJECTIONS} rejections — accepting with ${erc.criticalCount} critical finding(s).`,
+            );
+          }
+          return { ok: true, netlist: result.netlist, explanation: result.explanation, erc };
+        }
         submitResults.push({
           type: "tool_result",
           tool_use_id: block.id,

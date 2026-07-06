@@ -161,6 +161,8 @@ Stay focused — don't over-engineer. A simple LED circuit needs an MCU, a resis
 
 CRITICAL: in submit_schematic, every component's "partId" must be the exact "partId" value (a UUID) copied from a search_parts result. NEVER put the part name or MPN in "partId" — names go in "value".
 
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections (supply pairs, pins that must not float). Treat designNotes as authoritative: satisfy every listed requirement in your connections.
+
 WHEN TO CALL find_alternates:
 
 After a search_parts result, inspect each chosen candidate. If a candidate has ANY of these issues, call find_alternates(partId) before committing to it:
@@ -537,5 +539,7 @@ Connections (identical rules to the full generator):
 - Every power pin → a power label; every ground pin → a "GND" ground label.
 
 Use refDes by EE convention (U for ICs, R/C/L, D, Q, J, Y, …). Don't worry about refDes clashing with other blocks — collisions are renumbered automatically when blocks are merged.
+
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections.
 
 Every component's partId must be a real UUID copied from a search_parts result. END with exactly one submit_schematic call. Don't narrate after.`;

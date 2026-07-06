@@ -20,6 +20,8 @@ import {
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import { resolveFootprint, assignFootprints } from "../lib/footprint-assign";
 import { planPageFit, pageSizePx } from "../lib/page-sizes";
+import { runErc, computeErcReward, type ErcPart } from "../lib/erc";
+import { kgEntryFor, kgDesignNotes, kgSize } from "../lib/kg";
 import { normalizeBuildNetlist, crossCheckNetlists, classifyComponent } from "../lib/netlist-crosscheck";
 import { parseSchGenSource } from "../lib/schgen-netlist";
 import { componentBodyBox } from "../lib/build-auto-layout";
@@ -778,6 +780,239 @@ write_out_all_wires()
   // Vertically centred within the upper band (above the reserved title block),
   // so the content sits above the page's true middle.
   check("page-fit: content sits in the upper half vertically", centerY > 40 && centerY < heightPx / 2 + 40);
+}
+
+// ── ERC: deterministic electrical rule check (design-level) ──────────────────
+{
+  const pin = (number: string, name: string, type: string) => ({ number, name, type });
+  const ic: ErcPart = {
+    pins: [
+      pin("1", "VDD", "power_in"),
+      pin("2", "GND", "power_in"),
+      pin("3", "OUT", "output"),
+      pin("4", "IN", "input"),
+      pin("5", "NC", "no_connect"),
+    ],
+  };
+  const res: ErcPart = { pins: [pin("1", "~", "passive"), pin("2", "~", "passive")] };
+  const usb: ErcPart = { pins: [pin("A1", "VBUS", "passive"), pin("A2", "G", "passive")] };
+  const ercParts = new Map<string, ErcPart>([["p-ic", ic], ["p-res", res], ["p-usb", usb]]);
+
+  const mkNl = (connections: BuildLogicalNetlist["connections"], extraComps: BuildLogicalNetlist["components"] = []): BuildLogicalNetlist => ({
+    components: [
+      { refDes: "U1", partId: "p-ic", value: "IC", role: "processor" },
+      { refDes: "R1", partId: "p-res", value: "10k", role: "passive" },
+      ...extraComps,
+    ],
+    connections,
+    explanation: "",
+  });
+
+  // Healthy netlist: powered, grounded, input driven, NC untouched.
+  const good = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.OUT", to: "R1.1" },
+      { kind: "wire", from: "U1.IN", to: "R1.2" },
+    ]),
+    ercParts,
+  );
+  check("erc: healthy netlist passes with reward 1.0", good.ok && good.reward === 1.0 && good.errors.length === 0);
+
+  // Unconnected power pin → supply_missing (critical), pin-localized.
+  const unpowered = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check(
+    "erc: unconnected power_in → critical supply_missing at U1.VDD",
+    !unpowered.ok && unpowered.errors.some((e) => e.category === "supply_missing" && e.refDes === "U1" && e.pin === "VDD"),
+  );
+
+  // Power pin on an undriven net (wired only to a passive) → supply_missing.
+  const undriven = runErc(
+    mkNl([
+      { kind: "wire", from: "U1.VDD", to: "R1.1" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.2" },
+    ]),
+    ercParts,
+  );
+  check("erc: power_in on undriven net → supply_missing", undriven.errors.some((e) => e.category === "supply_missing" && e.pin === "VDD"));
+
+  // Same wiring, but the net reaches a CONNECTOR-role component → driven (no false positive).
+  const viaConnector = runErc(
+    mkNl(
+      [
+        { kind: "wire", from: "U1.VDD", to: "J1.VBUS" },
+        { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "label", pin: "J1.G", labelName: "GND", labelKind: "ground" },
+        { kind: "wire", from: "U1.IN", to: "R1.1" },
+      ],
+      [{ refDes: "J1", partId: "p-usb", value: "USB", role: "connector" }],
+    ),
+    ercParts,
+  );
+  check("erc: power via connector-role pin counts as driven", !viaConnector.errors.some((e) => e.category === "supply_missing"));
+
+  // Two push-pull outputs shorted → erc_conflict (critical).
+  const conflict = runErc(
+    mkNl(
+      [
+        { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+        { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "label", pin: "U2.VDD", labelName: "+3V3", labelKind: "power" },
+        { kind: "label", pin: "U2.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "wire", from: "U1.OUT", to: "U2.OUT" },
+        { kind: "wire", from: "U1.IN", to: "R1.1" },
+        { kind: "wire", from: "U2.IN", to: "R1.2" },
+      ],
+      [{ refDes: "U2", partId: "p-ic", value: "IC", role: "processor" }],
+    ),
+    ercParts,
+  );
+  check("erc: two outputs on one net → critical erc_conflict", conflict.errors.some((e) => e.category === "erc_conflict" && e.severity === "critical"));
+
+  // Two different power rails joined → supply_short; rail tied to ground → supply_short.
+  const shorted = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.VDD", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.OUT", labelName: "VCC", labelKind: "power" },
+      { kind: "label", pin: "U1.OUT", labelName: "G2", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check("erc: two rails on one net → supply_short", shorted.errors.some((e) => e.category === "supply_short" && /\+3V3|\+5V/.test(e.message)));
+  check("erc: rail tied to ground → supply_short", shorted.errors.some((e) => e.category === "supply_short" && /ground/i.test(e.message)));
+
+  // NC pin wired + floating input + no ground → warnings only (still ok).
+  const warnings = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "+3V3B", labelKind: "power" },
+      { kind: "wire", from: "U1.NC", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check("erc: wired NC pin → warning nc_connected", warnings.errors.some((e) => e.category === "nc_connected" && e.severity === "warning"));
+  check("erc: floating input pin → warning input_floating", warnings.errors.some((e) => e.category === "input_floating" && e.pin === "IN"));
+  check("erc: no ground anywhere → warning no_ground", warnings.errors.some((e) => e.category === "no_ground"));
+  check("erc: warnings alone do not fail the gate", warnings.ok);
+
+  // Reward shaping: clean > warnings-only > criticals; monotone in error count.
+  check(
+    "erc: reward ordering clean > warnings > criticals",
+    computeErcReward(0, 0) === 1.0 &&
+      computeErcReward(0, 3) > computeErcReward(1, 0) &&
+      computeErcReward(1, 0) > computeErcReward(5, 0) &&
+      computeErcReward(5, 0) >= 0.5,
+  );
+}
+
+// ── KG layer: datasheet-derived per-IC constraints (Phase 2) ──────────────────
+{
+  // Lookup: seeded data present; exact + suffix-tolerant matching; no false hits.
+  check("kg: data seeded (150+ ICs)", kgSize() >= 150);
+  check("kg: exact lookup (TPS54302)", kgEntryFor("TPS54302") !== null);
+  check("kg: catalog suffix tolerated (TPS54302DDCR)", kgEntryFor("TPS54302DDCR") !== null);
+  check("kg: unknown part → null", kgEntryFor("XYZZY9999") === null);
+  check("kg: short/generic name → null (no false positive)", kgEntryFor("R") === null && kgEntryFor("LED") === null);
+
+  // Design notes render roles + requirements compactly.
+  const notes = kgDesignNotes("AMC1350");
+  check("kg: design notes include supply pair + must-connect", !!notes && /VDD1/.test(notes) && /INP/.test(notes));
+
+  // Constraint checking through runErc. AMC1350's KG entry requires
+  // supply_pair(VDD1,GND1), supply_pair(VDD2,GND2), must_be_connected(INP,INN).
+  // Give the part deliberately UNhelpful pin types (passive) so only the KG
+  // layer can catch the faults.
+  const pin = (number: string, name: string, type = "passive") => ({ number, name, type });
+  const amc: ErcPart = {
+    name: "AMC1350",
+    pins: [
+      pin("1", "VDD1"), pin("2", "INP"), pin("3", "INN"), pin("4", "GND1"),
+      pin("5", "GND2"), pin("6", "OUTN"), pin("7", "OUTP"), pin("8", "VDD2"),
+    ],
+  };
+  const kgParts = new Map<string, ErcPart>([["p-amc", amc]]);
+  const mkAmcNl = (connections: BuildLogicalNetlist["connections"]): BuildLogicalNetlist => ({
+    components: [{ refDes: "U1", partId: "p-amc", value: "AMC1350", role: "processor" }],
+    connections,
+    explanation: "",
+  });
+
+  // Fully hooked up per datasheet → no KG errors.
+  const kgGood = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.VDD2", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INP", labelName: "SENSE_P", labelKind: "label" },
+      { kind: "label", pin: "U1.INN", labelName: "SENSE_N", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check("kg: datasheet-complete hookup passes", kgGood.ok);
+
+  // VDD2 + INP left floating → KG catches both despite passive pin types.
+  const kgBad = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INN", labelName: "SENSE_N", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check(
+    "kg: floating supply pin caught via datasheet constraint",
+    kgBad.errors.some((e) => e.category === "supply_missing" && e.pin === "VDD2" && e.severity === "critical"),
+  );
+  check(
+    "kg: floating must-connect pin caught (INP)",
+    kgBad.errors.some((e) => e.category === "unconnected_pin" && e.pin === "INP"),
+  );
+
+  // Supply pair shorted together → supply_short from the KG layer.
+  const kgShort = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.VDD2", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INP", labelName: "SP", labelKind: "label" },
+      { kind: "label", pin: "U1.INN", labelName: "SN", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check(
+    "kg: supply pair shorted onto one net → supply_short",
+    kgShort.errors.some((e) => e.category === "supply_short" && e.refDes === "U1"),
+  );
+
+  // Name drift: a part whose pins don't match the KG names → checks skipped, no
+  // false positives.
+  const drifted: ErcPart = { name: "AMC1350", pins: [pin("1", "VCC"), pin("2", "VSS")] };
+  const kgDrift = runErc(
+    {
+      components: [{ refDes: "U1", partId: "p-d", value: "AMC1350", role: "processor" }],
+      connections: [
+        { kind: "label", pin: "U1.VCC", labelName: "+5V", labelKind: "power" },
+        { kind: "label", pin: "U1.VSS", labelName: "GND", labelKind: "ground" },
+      ],
+      explanation: "",
+    },
+    new Map([["p-d", drifted]]),
+  );
+  check("kg: symbol/datasheet pin-name drift → checks skipped (no false positives)", kgDrift.ok);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

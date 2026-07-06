@@ -2202,6 +2202,13 @@ export default function Home() {
   const [isTidying, setIsTidying]       = useState(false);
   const [isSecondOpinion, setIsSecondOpinion] = useState(false);
   const [lastDesignPrompt, setLastDesignPrompt] = useState("");
+  // Post-apply auto pipeline: bumped whenever a machine-generated schematic
+  // lands (generate / Tier-2 edit / apply-suggestions). The debounced effect
+  // below then auto-runs Tidy (only when the layout is machine-made — never on
+  // top of manual placement) followed by the advisory Review.
+  const [autoRunToken, setAutoRunToken] = useState(0);
+  const autoRunIncludesTidy = useRef(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [pendingSuggestions, setPendingSuggestions] = useState<{ title: string; detail: string }[]>([]);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
@@ -2413,11 +2420,22 @@ export default function Home() {
     }
   }
 
-  function applySchematic(state: SchematicState, explanation: string, prompt: string) {
+  function applySchematic(
+    state: SchematicState,
+    explanation: string,
+    prompt: string,
+    opts?: { skipAutoRun?: boolean },
+  ) {
     setComponents(state.components);
     setWires(state.wires);
     setKicadComponents(state.kicadComponents ?? []);
     setNetLabels(state.netLabels ?? []);
+    // Machine-generated layout → safe to auto-tidy, then auto-review. Tidy's own
+    // apply passes skipAutoRun so the pipeline can't re-trigger itself.
+    if (!opts?.skipAutoRun) {
+      autoRunIncludesTidy.current = (state.kicadComponents?.length ?? 0) > 0;
+      setAutoRunToken((t) => t + 1);
+    }
     // Adopt the page size auto-layout picked for this circuit (absent only on
     // older/hand-built states — leave the current choice untouched then).
     if (state.pageSize) setPageSize(state.pageSize);
@@ -2671,6 +2689,12 @@ export default function Home() {
           content: data.note || (applied > 0 ? `Applied ${applied} edit(s).` : "No edits applied."),
         },
       ]);
+
+      // Attribute edits keep the user's placement — re-review, but never re-tidy.
+      if (applied > 0) {
+        autoRunIncludesTidy.current = false;
+        setAutoRunToken((t) => t + 1);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Edit failed";
       setGenError(msg);
@@ -2683,7 +2707,7 @@ export default function Home() {
   // Layer-2 design review: advisory, non-blocking. Computes the deterministic
   // netlist (ground truth), asks an LLM for electrical-sensibility findings, and
   // posts them to the chat. Contradicted "floating" claims are dropped server-side.
-  async function handleReview() {
+  async function handleReview(auto = false) {
     if (isReviewing) return;
     if (components.length === 0 && kicadComponents.length === 0) return;
     setIsReviewing(true);
@@ -2727,13 +2751,16 @@ export default function Home() {
 
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "user", content: "Review the circuit" },
+        // Auto-runs post only the result; a fake user turn would read as noise.
+        ...(auto ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: "Review the circuit" }]),
         { id: crypto.randomUUID(), role: "assistant", content: md },
       ]);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Review failed";
-      setGenError(msg);
-      setTimeout(() => setGenError(null), 6000);
+      if (!auto) {
+        const msg = err instanceof Error ? err.message : "Review failed";
+        setGenError(msg);
+        setTimeout(() => setGenError(null), 6000);
+      }
     } finally {
       setIsReviewing(false);
     }
@@ -2805,11 +2832,13 @@ export default function Home() {
   // Layer-2 LAYOUT critic: screenshot the schematic, let Claude flag crowded
   // component groups, then DETERMINISTICALLY re-lay-out the circuit with extra
   // spacing on those groups. Only applies a result that stays electrically valid.
-  async function handleTidyLayout() {
+  async function handleTidyLayout(auto = false) {
     if (isTidying) return;
     if (kicadComponents.length === 0) {
-      setGenError("Tidy is available for Build-mode schematics with catalog parts.");
-      setTimeout(() => setGenError(null), 5000);
+      if (!auto) {
+        setGenError("Tidy is available for Build-mode schematics with catalog parts.");
+        setTimeout(() => setGenError(null), 5000);
+      }
       return;
     }
     setIsTidying(true);
@@ -2852,8 +2881,11 @@ export default function Home() {
           groupLines +
           (summary ? `\n\n_${summary}_` : "");
         // Re-layout replaces positions; applySchematic logs the note to chat.
-        applySchematic(data.state, note, "Tidy the schematic layout");
-      } else {
+        // skipAutoRun: the auto pipeline drives tidy → review itself; letting
+        // this apply re-bump the token would loop tidy on its own output.
+        applySchematic(data.state, note, "Tidy the schematic layout", { skipAutoRun: true });
+      } else if (!auto) {
+        // Auto runs stay silent when nothing changed; manual runs explain why.
         const reason =
           data.spreadRefDes.length === 0
             ? "Nothing to spread out."
@@ -2875,13 +2907,31 @@ export default function Home() {
         ]);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Layout critic failed";
-      setGenError(msg);
-      setTimeout(() => setGenError(null), 6000);
+      if (!auto) {
+        const msg = err instanceof Error ? err.message : "Layout critic failed";
+        setGenError(msg);
+        setTimeout(() => setGenError(null), 6000);
+      }
     } finally {
       setIsTidying(false);
     }
   }
+
+  // Post-apply auto pipeline: after a machine-generated schematic lands (and has
+  // had a moment to render — Tidy screenshots the live SVG), auto-tidy the
+  // layout, then auto-review it. Both are no-ops/silent when there's nothing to
+  // do. The review reads the pre-tidy snapshot's netlist, which Tidy's validation
+  // gate guarantees is electrically identical to the tidied one.
+  useEffect(() => {
+    if (autoRunToken === 0) return;
+    const wantTidy = autoRunIncludesTidy.current;
+    const timer = setTimeout(async () => {
+      if (wantTidy) await handleTidyLayout(true);
+      await handleReview(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunToken]);
 
   // Cross-verify: ask an INDEPENDENT domain model (SchGen) to design the same
   // request, then diff its netlist against this one and surface disagreements as
@@ -3434,44 +3484,16 @@ export default function Home() {
                 disabled={loading || isGenerating || isEditing}
               />
               <div className="flex items-center justify-between mt-2 gap-2">
-                <div className="text-xs text-zinc-500">Enter to ask · ⇧Enter newline</div>
+                <div className="text-xs text-zinc-500">
+                  {isTidying
+                    ? "Tidying layout…"
+                    : isReviewing
+                      ? "Reviewing design…"
+                      : isSecondOpinion
+                        ? "Consulting SchGen…"
+                        : "Enter to ask · ⇧Enter newline"}
+                </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    title={kicadComponents.length === 0
-                      ? "Generate a Build-mode schematic first"
-                      : "Screenshot the schematic, let AI flag crowded parts, and re-space the layout (deterministic)"}
-                    disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || isEditing ||
-                      kicadComponents.length === 0}
-                    onClick={handleTidyLayout}
-                  >
-                    {isTidying ? "Tidying…" : "Tidy"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    title={components.length === 0 && kicadComponents.length === 0
-                      ? "Generate a schematic first"
-                      : "Run an electrical design review of the current schematic (advisory)"}
-                    disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
-                      (components.length === 0 && kicadComponents.length === 0)}
-                    onClick={handleReview}
-                  >
-                    {isReviewing ? "Reviewing…" : "Review"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    title={kicadComponents.length === 0
-                      ? "Generate a Build-mode schematic first"
-                      : "Ask an independent domain model (SchGen) to design the same request and diff it against this schematic (advisory; slow, ~1–2 min)"}
-                    disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || isEditing ||
-                      kicadComponents.length === 0}
-                    onClick={handleSecondOpinion}
-                  >
-                    {isSecondOpinion ? "Consulting…" : "Check with SchGen"}
-                  </Button>
                   {pendingSuggestions.length > 0 && (
                     <Button
                       size="sm"
@@ -3512,6 +3534,51 @@ export default function Home() {
                   >
                     {isGenerating ? "Generating…" : "Generate"}
                   </Button>
+                  {/* Overflow: manual re-runs of the automatic passes + the
+                      expensive SchGen check. Tidy/review run by themselves after
+                      every generate/edit, so they no longer need primary buttons. */}
+                  <div className="relative">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="More checks"
+                      onClick={() => setMoreMenuOpen((o) => !o)}
+                    >
+                      ⋯
+                    </Button>
+                    {moreMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(false)} />
+                        <div className="absolute bottom-full right-0 mb-1 z-50 w-56 rounded-md border border-zinc-800 bg-zinc-900 py-1 shadow-lg">
+                          <button
+                            className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                            disabled={isReviewing || isTidying || isSecondOpinion || loading || isGenerating || isEditing ||
+                              (components.length === 0 && kicadComponents.length === 0)}
+                            onClick={() => { setMoreMenuOpen(false); handleReview(); }}
+                          >
+                            Re-run design review
+                          </button>
+                          <button
+                            className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                            disabled={isTidying || isReviewing || isSecondOpinion || loading || isGenerating || isEditing ||
+                              kicadComponents.length === 0}
+                            onClick={() => { setMoreMenuOpen(false); handleTidyLayout(); }}
+                          >
+                            Re-tidy layout
+                          </button>
+                          <button
+                            className="w-full px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800 disabled:opacity-40"
+                            title="Independent domain model designs the same request and diffs it (slow, ~1–2 min)"
+                            disabled={isSecondOpinion || isReviewing || isTidying || loading || isGenerating || isEditing ||
+                              kicadComponents.length === 0}
+                            onClick={() => { setMoreMenuOpen(false); handleSecondOpinion(); }}
+                          >
+                            Second opinion (SchGen)
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
