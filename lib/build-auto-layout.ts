@@ -322,6 +322,13 @@ type Sized = {
   height: number;
   instance: KicadComponentInstance;
   placed: boolean;
+  /**
+   * Extra courtyard clearance (px) for the body de-overlap pass. Default 0. The
+   * layout critic (vision pass) sets this on components a rendered view shows as
+   * too crowded, so `resolveComponentCollisions` spreads them further apart than
+   * the uniform SYMBOL_CLEARANCE — without ever emitting coordinates itself.
+   */
+  spread?: number;
 };
 
 // Footprint used for zone spacing (and as the obstacle box when a part has no
@@ -608,10 +615,18 @@ function moverOf(a: Sized, b: Sized): Sized {
   return a.comp.refDes > b.comp.refDes ? a : b;
 }
 
+// Courtyard box for the de-overlap pass: the uniform symbol clearance plus any
+// per-component `spread` the layout critic requested. Keeping `spread` here (and
+// out of the page-fit/obstacle boxes) means extra breathing room only affects
+// how far components are pushed apart, never net geometry or routing.
+function collisionBox(p: Sized): Bbox {
+  return footprintBox(p, SYMBOL_CLEARANCE + (p.spread ?? 0));
+}
+
 // Slide `mover` just clear of `other` along the axis of least overlap.
 function nudgeApart(mover: Sized, other: Sized): void {
-  const m = footprintBox(mover);
-  const o = footprintBox(other);
+  const m = collisionBox(mover);
+  const o = collisionBox(other);
   const overlapX = Math.min(m.x + m.width, o.x + o.width) - Math.max(m.x, o.x);
   const overlapY = Math.min(m.y + m.height, o.y + o.height) - Math.max(m.y, o.y);
   const mCx = m.x + m.width / 2, mCy = m.y + m.height / 2;
@@ -628,12 +643,12 @@ function nudgeApart(mover: Sized, other: Sized): void {
 // Iteratively separate overlapping component bodies/courtyards. Returns the
 // number of pairs still overlapping after the pass budget (0 = fully clean).
 export function resolveComponentCollisions(items: Sized[]): number {
-  const maxPasses = items.length * 4 + 8;
+  const maxPasses = items.length * 8 + 16;
   for (let pass = 0; pass < maxPasses; pass++) {
     let moved = false;
     for (let i = 0; i < items.length; i++) {
       for (let j = i + 1; j < items.length; j++) {
-        if (!bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) continue;
+        if (!bboxesIntersect(collisionBox(items[i]), collisionBox(items[j]))) continue;
         const mover = moverOf(items[i], items[j]);
         nudgeApart(mover, mover === items[i] ? items[j] : items[i]);
         moved = true;
@@ -644,10 +659,164 @@ export function resolveComponentCollisions(items: Sized[]): number {
   let remaining = 0;
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      if (bboxesIntersect(footprintBox(items[i]), footprintBox(items[j]))) remaining++;
+      if (bboxesIntersect(collisionBox(items[i]), collisionBox(items[j]))) remaining++;
     }
   }
   return remaining;
+}
+
+// ─── Pin-coincidence guard ────────────────────────────────────────────────────
+//
+// Body de-overlap (above) can still leave two DIFFERENT components with a PIN on
+// the exact same grid point — which buildNetUnionFind reads as one node,
+// silently SHORTING the two nets (the `unintended-merge` failures). This pass
+// nudges the more-movable owner until no pin coordinate is shared by more than
+// one component. Electrical correctness wins over perfect body spacing, so it
+// runs AFTER resolveComponentCollisions and before wire routing (which reads the
+// final pin positions, so nets are preserved).
+
+const PIN_NUDGE = 20; // grid-aligned push per step (~one KiCad pin pitch)
+
+function instancePinPoints(p: Sized): Point[] {
+  if (!p.part) return [];
+  return p.part.pins.map((pin) => kicadPinWorldPos(p.instance, pin));
+}
+
+/** Owner index set per pin coordinate. */
+function pinOwners(items: Sized[]): Map<string, Set<number>> {
+  const owners = new Map<string, Set<number>>();
+  items.forEach((it, idx) => {
+    for (const pt of instancePinPoints(it)) {
+      const k = `${pt.x},${pt.y}`;
+      const set = owners.get(k);
+      if (set) set.add(idx);
+      else owners.set(k, new Set([idx]));
+    }
+  });
+  return owners;
+}
+
+/** Push `mover` a grid step away from `other` (snapped) so their pins separate. */
+function pushPinsApart(mover: Sized, other: Sized): void {
+  const m = obstacleFor(mover);
+  const o = obstacleFor(other);
+  let dx = m.x + m.width / 2 - (o.x + o.width / 2);
+  const dy = m.y + m.height / 2 - (o.y + o.height / 2);
+  if (dx === 0 && dy === 0) dx = 1;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    mover.instance.x = snap(mover.instance.x + (dx >= 0 ? PIN_NUDGE : -PIN_NUDGE));
+  } else {
+    mover.instance.y = snap(mover.instance.y + (dy >= 0 ? PIN_NUDGE : -PIN_NUDGE));
+  }
+}
+
+export function resolvePinCoincidences(items: Sized[]): number {
+  const maxPasses = items.length * 8 + 16;
+  for (let pass = 0; pass < maxPasses; pass++) {
+    const owners = pinOwners(items);
+    const movedThisPass = new Set<number>();
+    for (const set of owners.values()) {
+      if (set.size < 2) continue;
+      const idxs = [...set];
+      // Mover = the most-movable owner (passive before processor); push it off.
+      let moverIdx = idxs[0];
+      for (const i of idxs) {
+        if (ANCHOR_RANK[items[i].role] < ANCHOR_RANK[items[moverIdx].role]) moverIdx = i;
+      }
+      if (movedThisPass.has(moverIdx)) continue;
+      const otherIdx = idxs.find((i) => i !== moverIdx) ?? moverIdx;
+      pushPinsApart(items[moverIdx], items[otherIdx]);
+      movedThisPass.add(moverIdx);
+    }
+    if (movedThisPass.size === 0) return 0;
+  }
+  let residual = 0;
+  for (const set of pinOwners(items).values()) if (set.size >= 2) residual++;
+  return residual;
+}
+
+// ─── Respacing regression guard (layout critic) ──────────────────────────────
+//
+// The layout critic re-runs the WHOLE layout with extra clearance on crowded
+// components — which reshuffles every component, not just the flagged ones. These
+// helpers let the caller confirm the re-layout actually helped the flagged parts
+// WITHOUT pushing any previously-comfortable part into a tight spot ("moving the
+// problem elsewhere"). The metric is each component's nearest-neighbour gap (the
+// true edge-to-edge distance to its closest neighbour).
+
+// "Comfortable" spacing: a fully-resolved layout separates inflated courtyards,
+// so any non-overlapping pair sits ≥ 2× the per-side clearance apart. A
+// non-flagged component that was at/above this but drops below it has been
+// crowded by the respacing.
+export const DEFAULT_COMFORT_GAP = 2 * SYMBOL_CLEARANCE;
+
+// Minimum edge-to-edge distance between two axis-aligned boxes (0 if they
+// overlap). Separation on each axis is 0 unless the boxes are disjoint there.
+function rectGap(a: Bbox, b: Bbox): number {
+  const dx = Math.max(0, a.x - (b.x + b.width), b.x - (a.x + a.width));
+  const dy = Math.max(0, a.y - (b.y + b.height), b.y - (a.y + a.height));
+  return Math.hypot(dx, dy);
+}
+
+/** refDes → distance to its nearest neighbour (body box). Lone parts → Infinity. */
+export function nearestNeighborGaps(
+  instances: KicadComponentInstance[],
+  parts: Map<string, CachedPart>,
+): Map<string, number> {
+  const boxes: Array<{ refDes: string; box: Bbox }> = [];
+  for (const inst of instances) {
+    const part = parts.get(inst.partId);
+    if (part) boxes.push({ refDes: inst.refDes, box: componentBodyBox(inst, part) });
+  }
+  const gaps = new Map<string, number>();
+  for (let i = 0; i < boxes.length; i++) {
+    let min = Infinity;
+    for (let j = 0; j < boxes.length; j++) {
+      if (i === j) continue;
+      const g = rectGap(boxes[i].box, boxes[j].box);
+      if (g < min) min = g;
+    }
+    gaps.set(boxes[i].refDes, min);
+  }
+  return gaps;
+}
+
+/**
+ * Compare nearest-neighbour spacing before vs after a respacing.
+ *  - `improved`: the flagged components, in aggregate, gained breathing room.
+ *  - `regressed`: NON-flagged components that were comfortable (≥ `comfort`)
+ *    before but are now below it — i.e. the respacing crowded them.
+ * The caller applies the new layout only when `improved && regressed.length === 0`.
+ */
+export function evaluateRespacing(
+  before: Map<string, number>,
+  after: Map<string, number>,
+  flagged: Iterable<string>,
+  comfort: number = DEFAULT_COMFORT_GAP,
+): { improved: boolean; regressed: string[] } {
+  const flaggedSet = new Set(flagged);
+  let flaggedBefore = 0;
+  let flaggedAfter = 0;
+  let flaggedSeen = 0;
+  for (const r of flaggedSet) {
+    const b = before.get(r);
+    const a = after.get(r);
+    if (b === undefined || a === undefined) continue;
+    flaggedBefore += b;
+    flaggedAfter += a;
+    flaggedSeen++;
+  }
+  const improved = flaggedSeen > 0 && flaggedAfter > flaggedBefore;
+
+  const regressed: string[] = [];
+  for (const [r, a] of after) {
+    if (flaggedSet.has(r)) continue;
+    const b = before.get(r);
+    if (b === undefined) continue;
+    if (b >= comfort && a < comfort) regressed.push(r);
+  }
+  regressed.sort();
+  return { improved, regressed };
 }
 
 // ─── Net-label placement helpers ─────────────────────────────────────────────
@@ -792,9 +961,18 @@ function staggerCrowdedLabels(netLabels: NetLabel[], wires: Wire[], occupied: Se
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Optional layout tuning. `spread` maps a refDes to EXTRA courtyard clearance
+ * (px) for the body de-overlap pass — the layout critic (vision pass) sets it on
+ * components a rendered view shows as crowded, so they get pushed further from
+ * their neighbours. Anything not listed keeps the default spacing.
+ */
+export type AutoLayoutOptions = { spread?: Record<string, number> };
+
 export function autoLayoutBuild(
   netlist: BuildLogicalNetlist,
   parts: Map<string, CachedPart>,
+  opts?: AutoLayoutOptions,
 ): SchematicState {
   // Deterministic ordering so the same netlist always lays out identically.
   const comps = [...netlist.components].sort((a, b) => a.refDes.localeCompare(b.refDes));
@@ -811,6 +989,7 @@ export function autoLayoutBuild(
       width: w,
       height: h,
       placed: false,
+      spread: opts?.spread?.[c.refDes],
       instance: {
         id: crypto.randomUUID(),
         partId: c.partId,
@@ -975,6 +1154,15 @@ export function autoLayoutBuild(
   if (unresolvedOverlaps > 0) {
     console.warn(
       `[autoLayoutBuild] ${unresolvedOverlaps} component overlap(s) could not be fully resolved within the pass budget.`,
+    );
+  }
+
+  // Separate any pins that still share a grid point — those silently short two
+  // nets, so this matters more than residual body overlap.
+  const unresolvedPins = resolvePinCoincidences(all);
+  if (unresolvedPins > 0) {
+    console.warn(
+      `[autoLayoutBuild] ${unresolvedPins} pin coincidence(s) (potential shorts) could not be resolved.`,
     );
   }
 
@@ -1225,15 +1413,16 @@ export function autoLayoutBuildValidated(
   netlist: BuildLogicalNetlist,
   parts: Map<string, CachedPart>,
   maxAttempts = 3,
+  opts?: AutoLayoutOptions,
 ): { state: SchematicState; validation: NetlistValidation } {
   let current = netlist;
-  let state = autoLayoutBuild(current, parts);
+  let state = autoLayoutBuild(current, parts, opts);
   let validation = validateSchematicNetlist(current, state, parts);
 
   for (let attempt = 1; !validation.ok && attempt < maxAttempts; attempt++) {
     const rerouted = rerouteToLabels(current, parts, state, validation.violations);
     if (rerouted === current) break; // nothing reroutable (no broken connections)
-    const nextState = autoLayoutBuild(rerouted, parts);
+    const nextState = autoLayoutBuild(rerouted, parts, opts);
     const nextValidation = validateSchematicNetlist(rerouted, nextState, parts);
     // Keep the reroute only if it strictly reduced violations.
     if (nextValidation.violations.length >= validation.violations.length) break;

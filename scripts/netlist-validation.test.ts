@@ -10,6 +10,13 @@ import { validateSchematicNetlist, validateTheoryNetlist, rerouteToLabels } from
 import { schematicToBuildNetlist } from "../lib/schematic-to-netlist";
 import { buildReviewInput } from "../lib/netlist-review";
 import { mergeBuildNetlists } from "../app/lib/merge-netlists";
+import {
+  resolvePinCoincidences,
+  resolveComponentCollisions,
+  nearestNeighborGaps,
+  evaluateRespacing,
+  DEFAULT_COMFORT_GAP,
+} from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
 import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
@@ -543,6 +550,115 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
 
   // rotation transform: a 90° instance swaps width/height.
   check("bbox: rotation swaps width/height (IC 90° → 160×80)", near(dims(mcu, 90).w, 160) && near(dims(mcu, 90).h, 80));
+}
+
+// ── resolvePinCoincidences (pin-coincidence guard) ───────────────────────────
+{
+  const part = mkPart("PP");
+  const sized = (refDes: string, x: number, y: number) => ({
+    comp: { refDes, partId: "PP", value: "v", role: "passive" as const },
+    part,
+    role: "passive" as const,
+    width: 60,
+    height: 20,
+    placed: true,
+    instance: { id: refDes, partId: "PP", x, y, rotation: 0 as const, refDes, value: "v" },
+  });
+  // Two identical placements → every pin coincides (a silent short).
+  const a = sized("R1", 100, 100);
+  const b = sized("R2", 100, 100);
+  const residual = resolvePinCoincidences([a, b]);
+  const coords = [a, b].flatMap((s) =>
+    part.pins.map((p) => {
+      const w = kicadPinWorldPos(s.instance, p);
+      return `${w.x},${w.y}`;
+    }),
+  );
+  check(
+    "pin-guard: coincident pins separated (no shared coordinate)",
+    residual === 0 && new Set(coords).size === coords.length,
+  );
+}
+
+// ── spread hints (layout critic) widen the de-overlap courtyard ──────────────
+{
+  const sp = mkPart("SP");
+  const sized = (refDes: string, x: number, y: number, spread?: number) => ({
+    comp: { refDes, partId: "SP", value: "v", role: "passive" as const },
+    part: sp,
+    role: "passive" as const,
+    width: 60,
+    height: 20,
+    placed: true,
+    spread,
+    instance: { id: refDes, partId: "SP", x, y, rotation: 0 as const, refDes, value: "v" },
+  });
+  const sep = (a: ReturnType<typeof sized>, b: ReturnType<typeof sized>) =>
+    Math.abs(a.instance.x - b.instance.x) + Math.abs(a.instance.y - b.instance.y);
+
+  // An overlapping pair resolved with default clearance …
+  const a0 = sized("R1", 100, 100);
+  const b0 = sized("R2", 120, 100);
+  resolveComponentCollisions([a0, b0]);
+  const gap0 = sep(a0, b0);
+
+  // … vs the same pair with R2 flagged crowded (extra courtyard clearance):
+  // the critic's hint must push them strictly further apart.
+  const a1 = sized("R1", 100, 100);
+  const b1 = sized("R2", 120, 100, 80);
+  resolveComponentCollisions([a1, b1]);
+  const gap1 = sep(a1, b1);
+
+  check("spread-hints: flagged component pushed strictly further apart", gap1 > gap0);
+}
+
+// ── respacing regression guard (Tidy "don't crowd elsewhere") ────────────────
+{
+  // nearestNeighborGaps: a far-apart pair has a larger nearest gap than a close pair.
+  const gp = mkPart("GP");
+  const pmap = new Map<string, CachedPart>([["GP", gp]]);
+  const close = nearestNeighborGaps(
+    [mkInst("A", "GP", 0, 0), mkInst("B", "GP", 40, 0)],
+    pmap,
+  );
+  const far = nearestNeighborGaps(
+    [mkInst("A", "GP", 0, 0), mkInst("B", "GP", 1000, 0)],
+    pmap,
+  );
+  check(
+    "respacing: nearest-neighbour gap grows with distance",
+    (far.get("A") ?? 0) > (close.get("A") ?? Infinity),
+  );
+
+  // evaluateRespacing decision logic (pure, comfort = DEFAULT_COMFORT_GAP = 60).
+  const C = DEFAULT_COMFORT_GAP;
+  // Flagged R1 gains room; comfortable R2 stays comfortable → accept.
+  const good = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 100]]),
+    new Map([["R1", 80], ["R2", 90]]),
+    ["R1"],
+  );
+  check("respacing: improvement with no regression is accepted", good.improved && good.regressed.length === 0);
+
+  // Flagged R1 gains room but comfortable R2 is pushed below comfort → regression.
+  const bad = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 100]]),
+    new Map([["R1", 80], ["R2", C - 10]]),
+    ["R1"],
+  );
+  check("respacing: a crowded-out comfortable part is flagged as regressed", bad.improved && bad.regressed.includes("R2"));
+
+  // Already-tight R2 (below comfort before) is NOT counted as a regression.
+  const tight = evaluateRespacing(
+    new Map([["R1", 10], ["R2", 20]]),
+    new Map([["R1", 80], ["R2", 15]]),
+    ["R1"],
+  );
+  check("respacing: a part that was already tight is not a regression", tight.regressed.length === 0);
+
+  // No measurable gain for the flagged part → not improved.
+  const flat = evaluateRespacing(new Map([["R1", 50]]), new Map([["R1", 50]]), ["R1"]);
+  check("respacing: no gain for flagged parts → not improved", !flat.improved);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);

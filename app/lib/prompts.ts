@@ -444,6 +444,47 @@ export const REVIEW_TOOL: Anthropic.Tool = {
   },
 };
 
+// ─── Layer-2 layout critic (/api/schematic/layout-critic) ────────────────────
+
+export const LAYOUT_CRITIC_SYSTEM_PROMPT = `You are a schematic-layout readability critic. You are given (1) a rendered image of an auto-laid-out schematic and (2) a MANIFEST listing every component by refDes, with its role and its bounding box in the drawing's coordinate space. The manifest is GROUND TRUTH for which components exist and where they are.
+
+Your ONLY job: identify components whose PLACEMENT is too crowded to read clearly — symbols overlapping or nearly touching another symbol, labels/values colliding with a neighbouring part or wire, or a cluster packed so tightly the connections are hard to follow. Group the refDes of components that should be spread further apart.
+
+Hard rules:
+- Refer to components ONLY by the refDes strings in the manifest. Never invent a refDes.
+- Do NOT output coordinates, positions, or moves. You flag WHAT is crowded; deterministic code decides the new positions. Suggesting x/y is out of scope and will be ignored.
+- Judge READABILITY/SPACING only — never electrical design (that is a separate review). Do not comment on missing parts, values, or connectivity.
+- Be conservative. A schematic with clear spacing should return an EMPTY groups array. Only flag genuine crowding a viewer would struggle with. Prefer a few well-justified groups over many speculative ones.
+- A group should contain the 2+ components that are crowded TOGETHER (so they can be pushed apart from each other). A lone component with plenty of space around it is not a group.`;
+
+export const LAYOUT_CRITIC_TOOL: Anthropic.Tool = {
+  name: "report_layout_issues",
+  description: "Report groups of components whose placement is too crowded to read clearly.",
+  input_schema: {
+    type: "object",
+    properties: {
+      groups: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            refDes: {
+              type: "array",
+              items: { type: "string" },
+              description: "The 2+ refDes (from the manifest) that are crowded together and should be spread apart",
+            },
+            reason: { type: "string", description: "One short phrase: what is crowded (e.g. 'C3/C4 overlap U1 body', 'labels collide')" },
+            severity: { type: "string", enum: ["low", "medium", "high"], description: "How badly readability is hurt" },
+          },
+          required: ["refDes", "reason", "severity"],
+        },
+      },
+      summary: { type: "string", description: "One-line overall assessment of the layout's readability" },
+    },
+    required: ["groups", "summary"],
+  },
+};
+
 // ─── Multi-agent build: architect/planner (/api/schematic/build-multi) ───────
 
 export const PLAN_SYSTEM_PROMPT = `You are the architect for sirkit's Build-mode generator. Given a circuit request, decompose it into independent subsystem BLOCKS that can be designed in parallel, and define the shared nets that cross between them. Return the plan via submit_plan.
