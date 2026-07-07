@@ -27,7 +27,7 @@ import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinS
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
 import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp, PageSize } from "@/lib/schematic-types";
-import { PIN_NAMES } from "@/lib/schematic-types";
+import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
 import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
@@ -43,7 +43,24 @@ import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } fro
 type Mode = "theory" | "build";
 type View = "schematic" | "pcb" | "3d" | "bom" | "sim";
 type LeftPanel = "projects" | "library" | null;
-type Message = { id: string; role: "user" | "assistant"; content: string };
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
+type ActivityLogMessage = {
+  id: string;
+  role: "log";
+  title: string;
+  status: "running" | "done" | "error";
+  entries: ActivityLogEntry[];
+};
+type Message = ChatMessage | ActivityLogMessage;
+type PendingSuggestion = {
+  title: string;
+  detail: string;
+  category?: string;
+  severity?: string;
+  refs?: string[];
+  source: "review" | "second-opinion";
+};
 // "kicad-place" carries no partId itself — the part to place lives in separate
 // state (placementPartId), so Tool stays a simple string union. Likewise
 // "netlabel-place" carries no name/kind — those live in pendingNetLabel.
@@ -63,6 +80,31 @@ const QUICK_LABELS: PendingNetLabel[] = [
   { name: "+5V",  kind: "power" },
   { name: "VCC",  kind: "power" },
 ];
+
+const SUPPORT_SUGGESTION_RE =
+  /\b(decoupl|bypass|bulk|pull[-\s]?(up|down)|series|current[-\s]?limit|terminat|bias|capacitor|cap\b|resistor|ferrite|bead|filter|tvs|esd|protection|flyback|bootstrap|crystal|load\s*cap|support)\b/i;
+const UNSAFE_APPLY_SUGGESTION_RE =
+  /\b(second opinion has more|more\s+(ic|mcu|microcontroller|processor|controller|connector)s?|missing\s+(mcu|microcontroller|processor|controller)|add\s+(an?\s+)?(mcu|microcontroller|processor|controller))\b/i;
+
+function isSupportSuggestion(s: { title: string; detail: string; category?: string }): boolean {
+  const text = `${s.category ?? ""} ${s.title} ${s.detail}`;
+  return SUPPORT_SUGGESTION_RE.test(text) && !UNSAFE_APPLY_SUGGESTION_RE.test(text);
+}
+
+function isGuardedSupportApplyInstruction(text: string): boolean {
+  return text.startsWith("Apply ONLY the bounded support-circuit suggestions below.");
+}
+
+function inferComposerAction(text: string, hasSchematic: boolean): "ask" | "edit" | "generate" {
+  const t = text.trim().toLowerCase();
+  if (!t) return "ask";
+  if (!hasSchematic) return "generate";
+  if (/^(generate|create|design|build|make|draw)\b/.test(t)) return "generate";
+  if (/^(edit|change|set|rename|delete|remove|add|replace|swap|connect|disconnect|rewire|fix|update|make\s+(r|c|u|d|led|j|sw)\d+\b)/.test(t)) {
+    return "edit";
+  }
+  return "ask";
+}
 
 // Hit-test radius for net labels (delete / drag).
 const NET_LABEL_HIT_RADIUS = 15;
@@ -624,7 +666,11 @@ function ComponentSymbol({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <rect x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12} fill="transparent" />
+      <rect
+        x={bb.x - 6} y={bb.y - 6} width={bb.w + 12} height={bb.h + 12}
+        fill="transparent"
+        pointerEvents={pointerEvents === "none" ? "none" : "all"}
+      />
       {shape}
       {dragHighlight === "stretch" && (
         <rect
@@ -858,6 +904,11 @@ function KicadInstanceView({
   if (!part) {
     return (
       <g onMouseDown={onMouseDown} style={{ pointerEvents, cursor: "grab" }}>
+        <rect
+          x={instance.x - 25} y={instance.y - 25} width={50} height={50}
+          fill="transparent"
+          pointerEvents={pointerEvents === "none" ? "none" : "all"}
+        />
         <KicadPlaceholder instance={instance} />
       </g>
     );
@@ -869,6 +920,21 @@ function KicadInstanceView({
 
   return (
     <g>
+      <rect
+        x={box.minX - pad} y={box.minY - pad}
+        width={box.maxX - box.minX + pad * 2} height={box.maxY - box.minY + pad * 2}
+        fill="transparent"
+        pointerEvents={pointerEvents === "none" ? "none" : "all"}
+        style={{
+          cursor: deleteHovered ? "crosshair"
+            : dragHighlight === "stretch" ? "move"
+            : dragHighlight === "rigid" ? "grabbing"
+            : "grab",
+        }}
+        onMouseDown={onMouseDown}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+      />
       {/* Block panel behind multi-pin ICs — keeps the real pin geometry (so
           wiring is unchanged) but reads as a labeled block. */}
       {block && (
@@ -2148,6 +2214,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode]         = useState<Mode>("build");
   const [view, setView]         = useState<View>("schematic");
   const [leftPanel, setLeftPanel]           = useState<LeftPanel>(null);
@@ -2209,12 +2276,15 @@ export default function Home() {
   const [autoRunToken, setAutoRunToken] = useState(0);
   const autoRunIncludesTidy = useRef(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [pendingSuggestions, setPendingSuggestions] = useState<{ title: string; detail: string }[]>([]);
+  const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestion[]>([]);
+  const [suggestionsMinimized, setSuggestionsMinimized] = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
     explanation: string;
     prompt: string;
+    logId?: string;
+    promptAlreadyLogged?: boolean;
   } | null>(null);
 
   // Simulation state
@@ -2235,6 +2305,10 @@ export default function Home() {
     try { localStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(analysisConfig)); }
     catch { /* ignore */ }
   }, [analysisConfig]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: "end" });
+  }, [messages]);
 
   // Panel resize
   const dragging   = useRef<"left" | "right" | null>(null);
@@ -2378,20 +2452,92 @@ export default function Home() {
     setLeftPanel((prev) => (prev === panel ? null : panel));
   }
 
+  function startActivityLog(title: string, firstStep: string, userPrompt?: string): string {
+    const id = crypto.randomUUID();
+    const entries: ActivityLogEntry[] = [{ id: crypto.randomUUID(), text: firstStep, status: "running" }];
+    setMessages((prev) => [
+      ...prev,
+      ...(userPrompt ? [{ id: crypto.randomUUID(), role: "user" as const, content: userPrompt }] : []),
+      { id, role: "log", title, status: "running", entries },
+    ]);
+    return id;
+  }
+
+  function appendActivityStep(logId: string, text: string, status: ActivityLogEntry["status"] = "running") {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.role !== "log" || message.id !== logId) return message;
+        return {
+          ...message,
+          status: status === "error" ? "error" : "running",
+          entries: [
+            ...message.entries.map((entry) =>
+              entry.status === "running" ? { ...entry, status: "done" as const } : entry,
+            ),
+            { id: crypto.randomUUID(), text, status },
+          ],
+        };
+      }),
+    );
+  }
+
+  function finishActivityLog(logId: string, text?: string) {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.role !== "log" || message.id !== logId) return message;
+        const entries = message.entries.map((entry) =>
+          entry.status === "running" ? { ...entry, status: "done" as const } : entry,
+        );
+        return {
+          ...message,
+          status: "done",
+          entries: text ? [...entries, { id: crypto.randomUUID(), text, status: "done" as const }] : entries,
+        };
+      }),
+    );
+  }
+
+  function failActivityLog(logId: string, text: string) {
+    setMessages((prev) =>
+      prev.map((message) => {
+        if (message.role !== "log" || message.id !== logId) return message;
+        const entries = message.entries.map((entry) =>
+          entry.status === "running" ? { ...entry, status: "error" as const } : entry,
+        );
+        return {
+          ...message,
+          status: "error",
+          entries: [...entries, { id: crypto.randomUUID(), text, status: "error" as const }],
+        };
+      }),
+    );
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
 
-    const userMsg: Message      = { id: Date.now().toString(), role: "user", content: text };
+    const userMsg: ChatMessage  = { id: Date.now().toString(), role: "user", content: text };
+    const logId                 = crypto.randomUUID();
+    const logMsg: ActivityLogMessage = {
+      id: logId,
+      role: "log",
+      title: "Working",
+      status: "running",
+      entries: [{ id: crypto.randomUUID(), text: "Submitting message", status: "running" }],
+    };
     const assistantId           = (Date.now() + 1).toString();
-    const assistantMsg: Message = { id: assistantId, role: "assistant", content: "" };
+    const assistantMsg: ChatMessage = { id: assistantId, role: "assistant", content: "" };
 
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setMessages((prev) => [...prev, userMsg, logMsg, assistantMsg]);
     setInput("");
     setLoading(true);
 
     try {
-      const apiMessages = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
+      appendActivityStep(logId, "Calling assistant");
+      const apiMessages = [...messages, userMsg]
+        .filter((message): message is ChatMessage => message.role === "user" || message.role === "assistant")
+        .map(({ role, content }) => ({ role, content }));
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2400,22 +2546,40 @@ export default function Home() {
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const dec    = new TextDecoder();
+      appendActivityStep(logId, "Streaming response");
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = dec.decode(value, { stream: true });
         setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, content: m.content + chunk } : m))
+          prev.map((m) =>
+            m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content + chunk } : m,
+          )
         );
       }
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === assistantId ? { ...m, content: "Error — please try again." } : m
+          m.role === "assistant" && m.id === assistantId ? { ...m, content: "Error — please try again." } : m
         )
       );
+      failActivityLog(logId, err instanceof Error ? err.message : "Chat request failed");
       console.error(err);
     } finally {
+      setMessages((prev) => {
+        const log = prev.find((message) => message.role === "log" && message.id === logId);
+        if (log?.role === "log" && log.status === "error") return prev;
+        return prev.map((message) => {
+          if (message.role !== "log" || message.id !== logId) return message;
+          return {
+            ...message,
+            status: "done",
+            entries: message.entries.map((entry) =>
+              entry.status === "running" ? { ...entry, status: "done" as const } : entry,
+            ),
+          };
+        });
+      });
       setLoading(false);
     }
   }
@@ -2424,7 +2588,7 @@ export default function Home() {
     state: SchematicState,
     explanation: string,
     prompt: string,
-    opts?: { skipAutoRun?: boolean },
+    opts?: { skipAutoRun?: boolean; promptAlreadyLogged?: boolean; suppressChat?: boolean },
   ) {
     setComponents(state.components);
     setWires(state.wires);
@@ -2443,17 +2607,21 @@ export default function Home() {
     setSelectedKicadId(null);
     setWireDraftStart(null);
     setTool("select");
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), role: "user",      content: prompt },
-      { id: crypto.randomUUID(), role: "assistant", content: explanation },
-    ]);
+    if (!opts?.suppressChat) {
+      setMessages((prev) => [
+        ...prev,
+        ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
+        { id: crypto.randomUUID(), role: "assistant", content: explanation },
+      ]);
+    }
   }
 
   async function handleGenerateSchematic(prompt: string) {
     if (!prompt.trim() || isGenerating) return;
+    const logId = startActivityLog("Generating schematic", "Preparing request", prompt);
     setLastDesignPrompt(prompt); // remembered for the SchGen cross-verify second opinion
     setPendingSuggestions([]);   // any prior second-opinion suggestions are now stale
+    setSuggestionsMinimized(false);
     setIsGenerating(true);
     setGenError(null);
     try {
@@ -2461,6 +2629,7 @@ export default function Home() {
       let explanation: string;
 
       if (mode === "build") {
+        appendActivityStep(logId, "Generating build netlist");
         const res = await fetch("/api/schematic/build-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2475,16 +2644,19 @@ export default function Home() {
         const netlist = data.netlist;
         const partIds = [...new Set(netlist.components.map((c) => c.partId))];
         const parts = new Map<string, CachedPart>();
+        appendActivityStep(logId, `Loading ${partIds.length} catalog part${partIds.length === 1 ? "" : "s"}`);
         await Promise.all(
           partIds.map(async (id) => {
             parts.set(id, await ensurePartLoaded(id));
           }),
         );
+        appendActivityStep(logId, "Laying out and validating schematic");
         const built = autoLayoutBuildValidated(netlist, parts);
         state = built.state;
         explanation = data.explanation;
 
         if ((state.kicadComponents?.length ?? 0) === 0) {
+          failActivityLog(logId, "No parts produced");
           setGenError("No parts produced — try a more specific prompt.");
           setTimeout(() => setGenError(null), 6000);
           return;
@@ -2497,13 +2669,16 @@ export default function Home() {
           setGenError(
             `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
           );
+          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
           setTimeout(() => setGenError(null), 12000);
         }
       } else {
+        appendActivityStep(logId, "Synthesizing theory schematic");
         const result = await generateSchematic(prompt);
         state = result.state;
         explanation = result.netlist.explanation;
         if (state.components.length === 0) {
+          failActivityLog(logId, "No components produced");
           setGenError("No components produced — try a more specific prompt.");
           setTimeout(() => setGenError(null), 6000);
           return;
@@ -2512,6 +2687,7 @@ export default function Home() {
         // Surface (don't silently ship) an electrically-invalid theory schematic.
         if (!result.validation.ok) {
           const v = result.validation.violations;
+          appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
           setGenError(
             `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
           );
@@ -2520,12 +2696,15 @@ export default function Home() {
       }
 
       if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0) {
-        setPendingReplace({ state, explanation, prompt });
+        finishActivityLog(logId, "Generated replacement; waiting for confirmation");
+        setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true });
       } else {
-        applySchematic(state, explanation, prompt);
+        finishActivityLog(logId, "Applied schematic to canvas");
+        applySchematic(state, explanation, prompt, { promptAlreadyLogged: true });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generation failed";
+      failActivityLog(logId, msg);
       setGenError(msg);
       setTimeout(() => setGenError(null), 6000);
     } finally {
@@ -2537,11 +2716,13 @@ export default function Home() {
   // applied directly to state. No re-layout, no netlist round-trip — so manual
   // placement is preserved and the validator isn't involved (connectivity only
   // changes on delete, which is the user's explicit intent).
-  async function handleEditSchematic(prompt: string) {
+  async function handleEditSchematic(prompt: string, opts?: { displayPrompt?: string }) {
     if (!prompt.trim() || isEditing) return;
     const hasSchematic = components.length > 0 || kicadComponents.length > 0;
     if (!hasSchematic) return;
 
+    const logId = startActivityLog("Editing schematic", "Interpreting edit request", opts?.displayPrompt ?? prompt);
+    const isApplyingSuggestions = isGuardedSupportApplyInstruction(prompt);
     setIsEditing(true);
     setGenError(null);
     try {
@@ -2567,10 +2748,11 @@ export default function Home() {
       // Tier 2 — topology edit (add / rewire / swap). Round-trips the current
       // schematic through the netlist editor, then re-lays-out + validates.
       if (data.needsTopology) {
+        appendActivityStep(logId, "Routing through topology editor");
         if (mode !== "build") {
+          finishActivityLog(logId, "Topology edit not available in Theory mode");
           setMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), role: "user", content: prompt },
             {
               id: crypto.randomUUID(),
               role: "assistant",
@@ -2591,6 +2773,7 @@ export default function Home() {
           partsMap,
         );
 
+        appendActivityStep(logId, "Applying netlist edit");
         const res2 = await fetch("/api/schematic/edit-build", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2602,14 +2785,40 @@ export default function Home() {
         if (!data2.ok) throw new Error(data2.error || "Edit failed");
 
         const nl = data2.netlist;
+        if (isApplyingSuggestions) {
+          const beforeByRef = new Map(currentNetlist.components.map((c) => [c.refDes, c] as const));
+          const afterByRef = new Map(nl.components.map((c) => [c.refDes, c] as const));
+          const processorBefore = currentNetlist.components.filter((c) => c.role === "processor");
+          const changedProcessors = processorBefore.filter((c) => afterByRef.get(c.refDes)?.partId !== c.partId);
+          const addedBlocked = nl.components.filter((c) => {
+            if (beforeByRef.has(c.refDes)) return false;
+            const prefix = (c.refDes.match(/^[A-Za-z]+/)?.[0] ?? "").toUpperCase();
+            return (
+              c.role === "processor" ||
+              prefix === "U" ||
+              /\b(esp32|mcu|microcontroller|processor|controller|rp2040|stm32|atmega|wroom|wrover)\b/i.test(c.value)
+            );
+          });
+          if (changedProcessors.length > 0 || addedBlocked.length > 0) {
+            throw new Error(
+              "Apply suggestions was blocked because it tried to add, remove, or rename a processor/controller. Use a manual edit if you really want that change.",
+            );
+          }
+        }
         const ids = [...new Set(nl.components.map((c) => c.partId))];
         const loaded = new Map<string, CachedPart>();
+        appendActivityStep(logId, `Loading ${ids.length} catalog part${ids.length === 1 ? "" : "s"}`);
         await Promise.all(ids.map(async (id) => loaded.set(id, await ensurePartLoaded(id))));
 
+        appendActivityStep(logId, "Laying out and validating edit");
         const built = autoLayoutBuildValidated(nl, loaded);
         // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
         // instruction + explanation into the chat transcript.
-        applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt);
+        finishActivityLog(logId, isApplyingSuggestions ? "Applied suggestions to canvas" : "Applied edit to canvas");
+        applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt, {
+          promptAlreadyLogged: true,
+          skipAutoRun: isApplyingSuggestions,
+        });
         if (!built.validation.ok) {
           const v = built.validation.violations;
           setGenError(
@@ -2680,9 +2889,9 @@ export default function Home() {
       setSelectedId(null);
       setSelectedKicadId(null);
 
+      finishActivityLog(logId, applied > 0 ? `Applied ${applied} edit${applied === 1 ? "" : "s"}` : "No edits applied");
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), role: "user", content: prompt },
         {
           id: crypto.randomUUID(),
           role: "assistant",
@@ -2691,12 +2900,13 @@ export default function Home() {
       ]);
 
       // Attribute edits keep the user's placement — re-review, but never re-tidy.
-      if (applied > 0) {
+      if (applied > 0 && !isApplyingSuggestions) {
         autoRunIncludesTidy.current = false;
         setAutoRunToken((t) => t + 1);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Edit failed";
+      failActivityLog(logId, msg);
       setGenError(msg);
       setTimeout(() => setGenError(null), 6000);
     } finally {
@@ -2726,7 +2936,7 @@ export default function Home() {
         body: JSON.stringify(reviewInput),
       });
       const data = (await res.json()) as
-        | { ok: true; findings: { severity: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
+        | { ok: true; findings: { severity: string; category?: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
         | { ok: false; error: string };
       if (!data.ok) throw new Error(data.error || "Review failed");
 
@@ -2735,8 +2945,17 @@ export default function Home() {
       // edit pipeline — no SchGen/GPU dependency, so this works today.
       const actionable = data.findings
         .filter((f) => f.severity === "error" || f.severity === "warning")
-        .map((f) => ({ title: f.title, detail: f.detail }));
+        .filter(isSupportSuggestion)
+        .map((f) => ({
+          title: f.title,
+          detail: f.detail,
+          category: f.category,
+          severity: f.severity,
+          refs: f.refs ?? [],
+          source: "review" as const,
+        }));
       setPendingSuggestions(actionable);
+      if (actionable.length > 0) setSuggestionsMinimized(false);
 
       const md =
         data.findings.length === 0
@@ -2880,10 +3099,11 @@ export default function Home() {
           `**Layout tidied** — spaced out ${data.spreadRefDes.length} crowded component(s) and re-routed.\n\n` +
           groupLines +
           (summary ? `\n\n_${summary}_` : "");
-        // Re-layout replaces positions; applySchematic logs the note to chat.
+        // Re-layout replaces positions. Auto-tidy is part of the default loop,
+        // so it updates the canvas silently; manual tidy still reports to chat.
         // skipAutoRun: the auto pipeline drives tidy → review itself; letting
         // this apply re-bump the token would loop tidy on its own output.
-        applySchematic(data.state, note, "Tidy the schematic layout", { skipAutoRun: true });
+        applySchematic(data.state, note, "Tidy the schematic layout", { skipAutoRun: true, suppressChat: auto });
       } else if (!auto) {
         // Auto runs stay silent when nothing changed; manual runs explain why.
         const reason =
@@ -2972,9 +3192,20 @@ export default function Home() {
       // Actionable = likely-missing support parts (warning severity). Stashed so
       // the user can integrate them through the validated edit pipeline.
       const actionable = data.available
-        ? data.findings.filter((f) => f.severity === "warning").map((f) => ({ title: f.title, detail: f.detail }))
+        ? data.findings
+            .filter((f) => f.severity === "warning")
+            .filter(isSupportSuggestion)
+            .map((f) => ({
+              title: f.title,
+              detail: f.detail,
+              category: f.category,
+              severity: f.severity,
+              refs: [],
+              source: "second-opinion" as const,
+            }))
         : [];
       setPendingSuggestions(actionable);
+      if (actionable.length > 0) setSuggestionsMinimized(false);
 
       let md: string;
       if (!data.available) {
@@ -3014,14 +3245,61 @@ export default function Home() {
   // and autoLayoutBuildValidated checks them. We never graft SchGen's netlist raw.
   async function handleApplySuggestions() {
     if (pendingSuggestions.length === 0 || isEditing || isGenerating) return;
-    const instruction =
-      "A design review flagged the following. Address each by editing the schematic where " +
-      "genuinely appropriate — add missing support parts, fix wrong values/connections — while " +
-      "keeping all existing correct components and connections and using standard values:\n" +
-      pendingSuggestions.map((s) => `- ${s.title}: ${s.detail}`).join("\n");
+    const existingProcessors = kicadComponents
+      .map((k) => {
+        const part = getCachedPart(k.partId);
+        const role = normalizeComponentRole(undefined, k.refDes, part?.pins.length ?? 0);
+        return role === "processor" ? `${k.refDes} (${k.value || part?.name || "processor"})` : null;
+      })
+      .filter((p): p is string => p !== null);
+    const suggestionLines = pendingSuggestions.map((s) => {
+      const refs = s.refs && s.refs.length > 0 ? ` [refs: ${s.refs.join(", ")}]` : "";
+      const category = s.category ? `${s.category}: ` : "";
+      return `- ${category}${s.title}${refs}: ${s.detail}`;
+    });
+    const guardedInstruction =
+      "Apply ONLY the bounded support-circuit suggestions below. Keep the design's existing " +
+      "functional blocks intact; do not redesign the schematic.\n\n" +
+      "Hard constraints:\n" +
+      "- Do NOT add another MCU, microcontroller, processor, controller, module, or other large IC.\n" +
+      "- Do NOT remove, replace, rename, or duplicate any existing MCU/processor/controller.\n" +
+      "- Preserve every existing correct component and connection unless a listed support fix directly requires a local connection change.\n" +
+      "- You may add only support/protection/passive parts such as decoupling or bulk capacitors, pull-up/pull-down/series/current-limit/termination resistors, ferrite beads, crystals/load capacitors, TVS/ESD/protection/flyback diodes, or equivalent local support parts.\n" +
+      "- If a suggestion would require adding a second controller or a broad redesign, ignore that suggestion and explain why.\n" +
+      (existingProcessors.length > 0
+        ? `\nExisting processor/controller parts that must remain unique: ${existingProcessors.join(", ")}.\n`
+        : "\n") +
+      "\nSupport suggestions to apply where genuinely appropriate:\n" +
+      suggestionLines.join("\n");
     setPendingSuggestions([]);
-    await handleEditSchematic(instruction);
+    setSuggestionsMinimized(false);
+    await handleEditSchematic(guardedInstruction, { displayPrompt: "Apply suggestions" });
   }
+
+  function handleComposerSubmit() {
+    const text = input.trim();
+    if (!text || loading || isGenerating || isEditing) return;
+    const hasSchematic = components.length > 0 || kicadComponents.length > 0;
+    const action = inferComposerAction(text, hasSchematic);
+    if (action !== "ask") setInput("");
+    if (action === "generate") void handleGenerateSchematic(text);
+    else if (action === "edit") void handleEditSchematic(text);
+    else void send();
+  }
+
+  const composerText = input.trim();
+  const hasSchematicForComposer = components.length > 0 || kicadComponents.length > 0;
+  const composerAction = inferComposerAction(composerText, hasSchematicForComposer);
+  const composerBusy = loading || isGenerating || isEditing;
+  const composerDisabled = !composerText || composerBusy;
+  const showComposerButton = composerAction !== "ask" || isGenerating || isEditing;
+  const composerLabel = isGenerating
+    ? "Generating..."
+    : isEditing
+      ? "Editing..."
+      : composerAction === "generate"
+        ? "Generate"
+        : "Edit";
 
   async function handleRunSim() {
     if (simLoading) return;
@@ -3409,7 +3687,12 @@ export default function Home() {
         {/* Confirmation dialog for replacing existing schematic */}
         <Dialog
           open={pendingReplace !== null}
-          onOpenChange={(open) => { if (!open) setPendingReplace(null); }}
+          onOpenChange={(open) => {
+            if (!open) {
+              if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+              setPendingReplace(null);
+            }
+          }}
         >
           <DialogContent>
             <DialogHeader>
@@ -3417,10 +3700,21 @@ export default function Home() {
             </DialogHeader>
             <p className="text-sm text-zinc-400">This will replace all existing components and wires.</p>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setPendingReplace(null)}>Cancel</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (pendingReplace?.logId) finishActivityLog(pendingReplace.logId, "Replacement discarded");
+                  setPendingReplace(null);
+                }}
+              >
+                Cancel
+              </Button>
               <Button onClick={() => {
                 if (pendingReplace) {
-                  applySchematic(pendingReplace.state, pendingReplace.explanation, pendingReplace.prompt);
+                  if (pendingReplace.logId) finishActivityLog(pendingReplace.logId, "Applied replacement to canvas");
+                  applySchematic(pendingReplace.state, pendingReplace.explanation, pendingReplace.prompt, {
+                    promptAlreadyLogged: pendingReplace.promptAlreadyLogged,
+                  });
                   setPendingReplace(null);
                 }
               }}>Replace</Button>
@@ -3455,13 +3749,7 @@ export default function Home() {
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
                 ))}
-                {loading && messages.at(-1)?.role === "assistant" && messages.at(-1)?.content === "" && (
-                  <div className="flex justify-start">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-500">
-                      Thinking…
-                    </div>
-                  </div>
-                )}
+                <div ref={chatEndRef} />
               </div>
             </div>
 
@@ -3471,16 +3759,83 @@ export default function Home() {
               </div>
             )}
             <div className="border-t border-zinc-800 p-3">
+              {pendingSuggestions.length > 0 && (
+                <div className="mb-3 rounded-lg border border-teal-500/25 bg-teal-500/5 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <Sparkles className="size-3.5 text-teal-300 shrink-0" />
+                    <button
+                      type="button"
+                      className="flex items-center gap-1 min-w-0 flex-1 text-left"
+                      onClick={() => setSuggestionsMinimized((m) => !m)}
+                      title={suggestionsMinimized ? "Expand suggestions" : "Minimise suggestions"}
+                    >
+                      {suggestionsMinimized
+                        ? <ChevronRight className="size-3.5 text-zinc-500 shrink-0" />
+                        : <ChevronDown className="size-3.5 text-zinc-500 shrink-0" />}
+                      <span className="text-xs font-medium text-zinc-200 truncate">
+                        {pendingSuggestions.length} suggestion{pendingSuggestions.length === 1 ? "" : "s"} ready
+                      </span>
+                    </button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Apply bounded support-part fixes via a validated edit"
+                      disabled={isEditing || isGenerating || loading || isSecondOpinion || isReviewing || isTidying}
+                      onClick={handleApplySuggestions}
+                    >
+                      <Check className="size-3.5 mr-1" />
+                      Apply
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Ignore these suggestions"
+                      disabled={isEditing}
+                      onClick={() => {
+                        setPendingSuggestions([]);
+                        setSuggestionsMinimized(false);
+                      }}
+                    >
+                      <X className="size-3.5 mr-1" />
+                      Ignore
+                    </Button>
+                  </div>
+                  {!suggestionsMinimized && (
+                    <div className="px-3 pb-3 space-y-2">
+                      <div className="text-[11px] text-zinc-500">
+                        Bounded support fixes only; controllers and main ICs are preserved.
+                      </div>
+                      <div className="space-y-1.5">
+                        {pendingSuggestions.slice(0, 3).map((s, idx) => (
+                          <div key={`${s.source}-${s.title}-${idx}`} className="text-xs text-zinc-300 leading-relaxed">
+                            <span className="text-zinc-500">{s.source === "review" ? "Review" : "Second opinion"} · </span>
+                            <span className="font-medium text-zinc-200">{s.title}</span>
+                            {s.refs && s.refs.length > 0 && (
+                              <span className="text-zinc-500"> ({s.refs.join(", ")})</span>
+                            )}
+                            <span className="text-zinc-400"> — {s.detail}</span>
+                          </div>
+                        ))}
+                        {pendingSuggestions.length > 3 && (
+                          <div className="text-[11px] text-zinc-500">
+                            +{pendingSuggestions.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <Textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleComposerSubmit(); }
                 }}
                 className="min-h-20 resize-none border-zinc-800 bg-zinc-900/60 text-sm"
                 placeholder={mode === "build"
-                  ? "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"
-                  : "Ask, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to Generate"}
+                  ? "Type a question, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to generate"
+                  : "Type a question, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to generate"}
                 disabled={loading || isGenerating || isEditing}
               />
               <div className="flex items-center justify-between mt-2 gap-2">
@@ -3491,49 +3846,24 @@ export default function Home() {
                       ? "Reviewing design…"
                       : isSecondOpinion
                         ? "Consulting SchGen…"
-                        : "Enter to ask · ⇧Enter newline"}
+                        : "Enter to submit - Shift+Enter newline"}
                 </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
-                  {pendingSuggestions.length > 0 && (
+                  {showComposerButton && (
                     <Button
                       size="sm"
-                      variant="ghost"
-                      title="Integrate the second opinion's suggested support parts via a validated edit"
-                      disabled={isEditing || isGenerating || loading || isSecondOpinion || isReviewing || isTidying}
-                      onClick={handleApplySuggestions}
+                      title={
+                        composerAction === "generate"
+                          ? "Generate a schematic from this prompt"
+                          : "Apply this as an edit to the current schematic"
+                      }
+                      disabled={composerDisabled}
+                      onClick={handleComposerSubmit}
                     >
-                      {isEditing ? "Applying…" : `Apply suggestions (${pendingSuggestions.length})`}
+                      {(isGenerating || isEditing) && <Loader2 className="size-3.5 mr-1 animate-spin" />}
+                      {composerLabel}
                     </Button>
                   )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={!input.trim() || loading || isGenerating || isEditing}
-                    onClick={send}
-                  >
-                    {loading ? "…" : "Ask"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    title={components.length === 0 && kicadComponents.length === 0
-                      ? "Generate a schematic first"
-                      : "Apply an attribute edit (set value, rename, delete) to the current schematic"}
-                    disabled={
-                      !input.trim() || loading || isGenerating || isEditing ||
-                      (components.length === 0 && kicadComponents.length === 0)
-                    }
-                    onClick={() => { const t = input; setInput(""); handleEditSchematic(t); }}
-                  >
-                    {isEditing ? "Editing…" : "Edit"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!input.trim() || loading || isGenerating || isEditing}
-                    onClick={() => { const t = input; setInput(""); handleGenerateSchematic(t); }}
-                  >
-                    {isGenerating ? "Generating…" : "Generate"}
-                  </Button>
                   {/* Overflow: manual re-runs of the automatic passes + the
                       expensive SchGen check. Tidy/review run by themselves after
                       every generate/edit, so they no longer need primary buttons. */}
@@ -4900,6 +5230,36 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
     );
   }
+  if (message.role === "log") {
+    const StatusIcon = message.status === "running" ? Loader2 : message.status === "error" ? X : Check;
+    return (
+      <div className="flex justify-start w-full">
+        <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
+          <div className="flex items-center gap-2 text-zinc-300">
+            <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
+            <span className="font-medium">{message.title}</span>
+          </div>
+          <div className="mt-2 space-y-1.5">
+            {message.entries.map((entry) => (
+              <div key={entry.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
+                <span
+                  className={`mt-1.5 size-1.5 rounded-full shrink-0 ${
+                    entry.status === "running"
+                      ? "bg-teal-300 animate-pulse"
+                      : entry.status === "error"
+                        ? "bg-red-400"
+                        : "bg-zinc-600"
+                  }`}
+                />
+                <span className={entry.status === "error" ? "text-red-300" : "text-zinc-400"}>{entry.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!message.content.trim()) return null;
   return (
     <div className="flex justify-start w-full">
       <div className="w-full rounded-lg px-3 py-2.5 text-xs leading-relaxed bg-zinc-900 border border-zinc-800 overflow-hidden">
