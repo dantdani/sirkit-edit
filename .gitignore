@@ -46,3 +46,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# external clones (their own repos — not our code). The data we derive from
+# PCBSchemaGen_v2 lives in the checked-in lib/kg-data.ts, so the clone is only
+# needed to re-run scripts/build-kg.ts.
+/SchGen
+/PCBSchemaGen_v2

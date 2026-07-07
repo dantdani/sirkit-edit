@@ -21,6 +21,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { runBuildToolLoop } from "@/app/lib/build-loop";
 import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
+import { getPartsByIds } from "@/app/lib/parts-search";
+import { runErc } from "@/lib/erc";
 import {
   BUILD_SYSTEM_PROMPT,
   BUILD_SUBSYSTEM_SYSTEM_PROMPT,
@@ -120,11 +122,30 @@ export async function POST(req: Request): Promise<Response> {
     ok.map((d) => ({ name: d.name, netlist: d.result.netlist })),
   );
 
+  // 5. Post-merge ERC (advisory). Each block was ERC-gated in its own loop, but
+  // cross-block faults — two blocks both driving a shared net, a rail shorted
+  // across the label join — only exist after the merge. Advisory here (the
+  // blocks already self-corrected); criticals are surfaced, not bounced.
+  let ercNote = "";
+  try {
+    const partIds = [...new Set(netlist.components.map((c) => c.partId))];
+    const parts = new Map((await getPartsByIds(partIds)).map((p) => [p.partId, p] as const));
+    const erc = runErc(netlist, parts);
+    if (!erc.ok) {
+      const lines = erc.errors.filter((e) => e.severity === "critical").map((e) => e.message);
+      console.warn(`[build-multi] post-merge ERC: ${erc.criticalCount} critical finding(s):\n  ${lines.join("\n  ")}`);
+      ercNote = `\n\nElectrical check found ${erc.criticalCount} issue(s) after merging blocks:\n- ${lines.join("\n- ")}`;
+    }
+  } catch (err) {
+    console.warn("[build-multi] post-merge ERC skipped:", err);
+  }
+
   const explanation =
     `Designed as ${ok.length} subsystem block(s)${rationale ? ` — ${rationale}` : ""}.\n\n` +
     netlist.explanation +
     (failed.length > 0 ? `\n\nNote: ${failed.length} block(s) failed and were omitted: ${failed.join(", ")}.` : "") +
-    (notes.length > 0 ? `\n\nMerge: ${notes.join("; ")}.` : "");
+    (notes.length > 0 ? `\n\nMerge: ${notes.join("; ")}.` : "") +
+    ercNote;
 
   return Response.json({ ok: true, netlist: { ...netlist, explanation }, explanation });
 }

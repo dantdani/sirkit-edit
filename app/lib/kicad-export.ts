@@ -24,6 +24,7 @@ import { DEFAULT_PAGE_SIZE } from "@/lib/schematic-types";
 import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
 import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
+import { assignFootprints } from "@/lib/footprint-assign";
 
 export type KicadExportInput = {
   state: SchematicState;
@@ -210,6 +211,13 @@ export function exportToKicadSch(input: KicadExportInput): string {
   lines.push(`\t)`);
 
   // ── (B) symbol instances ──
+  // Footprint per KiCad component: the symbol's own footprint id when it has
+  // one, else a deterministic category default (R/C/L/D/Q…). Parts left
+  // unresolved export with an empty Footprint, same as before.
+  const footprintByRefDes = new Map(
+    assignFootprints(kicadComponents, parts).map((a) => [a.refDes, a.footprint] as const),
+  );
+
   // Per-type refDes counters for Theory components (R1, C1, ...).
   const refDesCount: Record<string, number> = {};
   const nextRefDes = (prefix: string): string => {
@@ -230,7 +238,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
         rotation: inst.rotation,
         refDes: inst.refDes,
         value: inst.value,
-        footprint: part?.footprintHint ?? "",
+        footprint: footprintByRefDes.get(inst.refDes) ?? "",
         datasheet: part?.datasheet ?? "",
         uuid: uuidFor("symbol", inst.id),
         sheetPath,

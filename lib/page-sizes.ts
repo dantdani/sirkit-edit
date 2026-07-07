@@ -78,10 +78,12 @@ export function fitPageSize(
 
 /**
  * Plan how to drop a laid-out circuit onto a sheet: choose the sheet size and
- * the grid-snapped (dx, dy) translation that moves the content's top-left corner
- * to the margin corner. The translation is a rigid shift by a grid multiple, so
- * it preserves every component's grid alignment AND every wire route / label
- * anchor (which were computed from the pre-shift pin positions).
+ * the grid-snapped (dx, dy) translation that CENTRES the content within the
+ * printable area (the band above the title block). The translation is a rigid
+ * shift by a grid multiple, so it preserves every component's grid alignment AND
+ * every wire route / label anchor (which were computed from the pre-shift pin
+ * positions). When the content is larger than the printable area (overflow), the
+ * slack is clamped to 0 so it aligns to the margin corner instead of shifting off.
  */
 export function planPageFit(
   bounds: Bounds,
@@ -90,9 +92,12 @@ export function planPageFit(
   const contentWidth = bounds.maxX - bounds.minX;
   const contentHeight = bounds.maxY - bounds.minY;
   const pageSize = fitPageSize(contentWidth, contentHeight, base);
+  const area = printableArea(pageSize);
+  const slackX = Math.max(0, area.width - contentWidth) / 2;
+  const slackY = Math.max(0, area.height - contentHeight) / 2;
   return {
     pageSize,
-    dx: snap(PAGE_MARGIN_PX - bounds.minX),
-    dy: snap(PAGE_MARGIN_PX - bounds.minY),
+    dx: snap(PAGE_MARGIN_PX + slackX - bounds.minX),
+    dy: snap(PAGE_MARGIN_PX + slackY - bounds.minY),
   };
 }

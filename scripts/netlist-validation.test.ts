@@ -18,6 +18,12 @@ import {
   DEFAULT_COMFORT_GAP,
 } from "../lib/build-auto-layout";
 import { kicadPinWorldPos, pinWorldPos } from "../app/lib/geometry";
+import { resolveFootprint, assignFootprints } from "../lib/footprint-assign";
+import { planPageFit, pageSizePx } from "../lib/page-sizes";
+import { runErc, computeErcReward, type ErcPart } from "../lib/erc";
+import { kgEntryFor, kgDesignNotes, kgSize } from "../lib/kg";
+import { normalizeBuildNetlist, crossCheckNetlists, classifyComponent } from "../lib/netlist-crosscheck";
+import { parseSchGenSource } from "../lib/schgen-netlist";
 import { componentBodyBox } from "../lib/build-auto-layout";
 import type { CachedPart } from "../app/lib/parts-cache";
 import type { KicadPin, PinOrientation } from "../app/lib/kicad/types";
@@ -659,6 +665,354 @@ const isLabel = (c: { kind?: string }): c is LabelConn => c.kind === "label";
   // No measurable gain for the flagged part → not improved.
   const flat = evaluateRespacing(new Map([["R1", 50]]), new Map([["R1", 50]]), ["R1"]);
   check("respacing: no gain for flagged parts → not improved", !flat.improved);
+}
+
+// ── footprint assignment (PCB seam) ──────────────────────────────────────────
+{
+  // 1) A real footprint id on the symbol is trusted verbatim.
+  const hint = resolveFootprint({ refDes: "U1", footprintHint: "Package_QFP:LQFP-48_7x7mm_P0.5mm" });
+  check("footprint: real hint is trusted", hint.source === "hint" && hint.footprint === "Package_QFP:LQFP-48_7x7mm_P0.5mm");
+
+  // 2) A wildcard footprint FILTER is not a real id → falls back to a default.
+  const filt = resolveFootprint({ refDes: "C3", footprintHint: "Capacitor_SMD:C_*" });
+  check("footprint: wildcard filter rejected, default used", filt.source === "default" && filt.footprint === "Capacitor_SMD:C_0603_1608Metric");
+
+  // 3) Category defaults by refDes prefix.
+  check("footprint: R default", resolveFootprint({ refDes: "R7", footprintHint: null }).footprint === "Resistor_SMD:R_0603_1608Metric");
+  check("footprint: L default", resolveFootprint({ refDes: "L2", footprintHint: "" }).footprint === "Inductor_SMD:L_0603_1608Metric");
+  check("footprint: Q default", resolveFootprint({ refDes: "Q1", footprintHint: null }).footprint === "Package_TO_SOT_SMD:SOT-23");
+
+  // 4) Diode vs LED (both refDes "D") disambiguated by name/value.
+  const diode = resolveFootprint({ refDes: "D1", footprintHint: null, name: "1N4148 Fast Diode" });
+  const led = resolveFootprint({ refDes: "D2", footprintHint: null, name: "Red LED", value: "RED" });
+  check("footprint: plain diode → SOD-123", diode.footprint === "Diode_SMD:D_SOD-123");
+  check("footprint: LED-named diode → LED land", led.footprint === "LED_SMD:LED_0603_1608Metric");
+
+  // 5) Unknown/variable package (IC, connector) is surfaced, not guessed.
+  const ic = resolveFootprint({ refDes: "U2", footprintHint: null });
+  check("footprint: unresolved IC → null (surfaced)", ic.source === "none" && ic.footprint === null);
+
+  // 6) Batch assignment over a schematic maps each refDes.
+  const fpParts = new Map([
+    ["p-mcu", { footprintHint: "Package_QFP:LQFP-32_5x5mm_P0.5mm", name: "STM32", mainCategory: "IC" }],
+    ["p-res", { footprintHint: null, name: "Resistor", mainCategory: "Passive" }],
+  ]);
+  const assigned = assignFootprints(
+    [
+      { refDes: "U1", partId: "p-mcu", value: "STM32" },
+      { refDes: "R1", partId: "p-res", value: "10k" },
+      { refDes: "J1", partId: "p-missing", value: "" },
+    ],
+    fpParts,
+  );
+  const byRef = new Map(assigned.map((a) => [a.refDes, a]));
+  check(
+    "footprint: batch assigns hint + default + null",
+    byRef.get("U1")!.source === "hint" &&
+      byRef.get("R1")!.footprint === "Resistor_SMD:R_0603_1608Metric" &&
+      byRef.get("J1")!.footprint === null,
+  );
+}
+
+// ── SchGen cross-verification (second-opinion diff) ──────────────────────────
+{
+  // classifyComponent basics.
+  check("crosscheck: classify R→resistor", classifyComponent("R1") === "resistor");
+  check("crosscheck: classify D+led name→led", classifyComponent("D3", "Green LED") === "led");
+  check("crosscheck: classify U→ic", classifyComponent("U1", "STM32") === "ic");
+
+  // Parse a small SchGen DSL sample (keyword + positional connect_pins) → netlist.
+  const schgenSrc = `
+from modules.kicad_sch_interface import *
+add_schematic_symbol(symbol_lib="Regulator_Linear", symbol_name="AP2112K-3.3", pos_x=100, pos_y=100, reference="U1", value="AP2112K-3.3")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=80, pos_y=90, reference="C1", value="1uF")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=120, pos_y=90, reference="C2", value="1uF")
+add_schematic_symbol(symbol_lib="Device", symbol_name="C", pos_x=140, pos_y=90, reference="C3", value="100nF")
+add_label([100, 130], "VIN", "VIN_0", "input", "left")
+connect_pins("U1", "VIN", "C1", "1")
+connect_pins("U1", "VIN", "VIN_0", "1")
+connect_pins("U1", "VOUT", "C2", "1")
+connect_pins("U1", "EN", "C3", "1")
+write_out_all_wires()
+`;
+  const parsed = parseSchGenSource(schgenSrc);
+  check("crosscheck: parses SchGen components", parsed.netlist.components.length === 4);
+  check("crosscheck: parses SchGen connections", parsed.coverage.connections === 4);
+  check(
+    "crosscheck: VIN label becomes a named net",
+    parsed.netlist.nets.some((n) => n.name === "VIN"),
+  );
+
+  // Primary (Sirkit) netlist with FEWER caps than the second opinion → the diff
+  // should flag a possible missing decoupling/bulk capacitor.
+  const primaryNl: BuildLogicalNetlist = {
+    components: [
+      { refDes: "U1", partId: "ldo", value: "AP2112K-3.3", role: "regulator" },
+      { refDes: "C1", partId: "cap", value: "1uF", role: "passive" },
+    ],
+    connections: [
+      { kind: "label", pin: "U1.VIN", labelName: "VIN", labelKind: "power" },
+      { kind: "wire", from: "U1.VOUT", to: "C1.1" },
+    ],
+    explanation: "",
+  };
+  const primary = normalizeBuildNetlist(primaryNl);
+  const result = crossCheckNetlists(primary, parsed.netlist);
+  check(
+    "crosscheck: flags missing capacitor vs second opinion",
+    result.findings.some((f) => f.severity === "warning" && /capacitor/i.test(f.title)),
+  );
+
+  // Identical netlists → no findings, full agreement.
+  const same = crossCheckNetlists(parsed.netlist, parsed.netlist);
+  check("crosscheck: identical netlists agree (no findings)", same.findings.length === 0 && same.agreement === 1);
+}
+
+// ── page fit: content is centred, not crowded into the corner ────────────────
+{
+  // A small circuit well inside A4's printable area.
+  const bounds = { minX: 1000, minY: 1000, maxX: 1200, maxY: 1100 };
+  const fit = planPageFit(bounds);
+  const { widthPx, heightPx } = pageSizePx(fit.pageSize);
+  const centerX = (bounds.minX + bounds.maxX) / 2 + fit.dx;
+  const centerY = (bounds.minY + bounds.maxY) / 2 + fit.dy;
+  check("page-fit: small circuit centred horizontally (not left-crowded)", Math.abs(centerX - widthPx / 2) <= 20);
+  // Vertically centred within the upper band (above the reserved title block),
+  // so the content sits above the page's true middle.
+  check("page-fit: content sits in the upper half vertically", centerY > 40 && centerY < heightPx / 2 + 40);
+}
+
+// ── ERC: deterministic electrical rule check (design-level) ──────────────────
+{
+  const pin = (number: string, name: string, type: string) => ({ number, name, type });
+  const ic: ErcPart = {
+    pins: [
+      pin("1", "VDD", "power_in"),
+      pin("2", "GND", "power_in"),
+      pin("3", "OUT", "output"),
+      pin("4", "IN", "input"),
+      pin("5", "NC", "no_connect"),
+    ],
+  };
+  const res: ErcPart = { pins: [pin("1", "~", "passive"), pin("2", "~", "passive")] };
+  const usb: ErcPart = { pins: [pin("A1", "VBUS", "passive"), pin("A2", "G", "passive")] };
+  const ercParts = new Map<string, ErcPart>([["p-ic", ic], ["p-res", res], ["p-usb", usb]]);
+
+  const mkNl = (connections: BuildLogicalNetlist["connections"], extraComps: BuildLogicalNetlist["components"] = []): BuildLogicalNetlist => ({
+    components: [
+      { refDes: "U1", partId: "p-ic", value: "IC", role: "processor" },
+      { refDes: "R1", partId: "p-res", value: "10k", role: "passive" },
+      ...extraComps,
+    ],
+    connections,
+    explanation: "",
+  });
+
+  // Healthy netlist: powered, grounded, input driven, NC untouched.
+  const good = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.OUT", to: "R1.1" },
+      { kind: "wire", from: "U1.IN", to: "R1.2" },
+    ]),
+    ercParts,
+  );
+  check("erc: healthy netlist passes with reward 1.0", good.ok && good.reward === 1.0 && good.errors.length === 0);
+
+  // Unconnected power pin → supply_missing (critical), pin-localized.
+  const unpowered = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check(
+    "erc: unconnected power_in → critical supply_missing at U1.VDD",
+    !unpowered.ok && unpowered.errors.some((e) => e.category === "supply_missing" && e.refDes === "U1" && e.pin === "VDD"),
+  );
+
+  // Power pin on an undriven net (wired only to a passive) → supply_missing.
+  const undriven = runErc(
+    mkNl([
+      { kind: "wire", from: "U1.VDD", to: "R1.1" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.2" },
+    ]),
+    ercParts,
+  );
+  check("erc: power_in on undriven net → supply_missing", undriven.errors.some((e) => e.category === "supply_missing" && e.pin === "VDD"));
+
+  // Same wiring, but the net reaches a CONNECTOR-role component → driven (no false positive).
+  const viaConnector = runErc(
+    mkNl(
+      [
+        { kind: "wire", from: "U1.VDD", to: "J1.VBUS" },
+        { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "label", pin: "J1.G", labelName: "GND", labelKind: "ground" },
+        { kind: "wire", from: "U1.IN", to: "R1.1" },
+      ],
+      [{ refDes: "J1", partId: "p-usb", value: "USB", role: "connector" }],
+    ),
+    ercParts,
+  );
+  check("erc: power via connector-role pin counts as driven", !viaConnector.errors.some((e) => e.category === "supply_missing"));
+
+  // Two push-pull outputs shorted → erc_conflict (critical).
+  const conflict = runErc(
+    mkNl(
+      [
+        { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+        { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "label", pin: "U2.VDD", labelName: "+3V3", labelKind: "power" },
+        { kind: "label", pin: "U2.GND", labelName: "GND", labelKind: "ground" },
+        { kind: "wire", from: "U1.OUT", to: "U2.OUT" },
+        { kind: "wire", from: "U1.IN", to: "R1.1" },
+        { kind: "wire", from: "U2.IN", to: "R1.2" },
+      ],
+      [{ refDes: "U2", partId: "p-ic", value: "IC", role: "processor" }],
+    ),
+    ercParts,
+  );
+  check("erc: two outputs on one net → critical erc_conflict", conflict.errors.some((e) => e.category === "erc_conflict" && e.severity === "critical"));
+
+  // Two different power rails joined → supply_short; rail tied to ground → supply_short.
+  const shorted = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.VDD", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.OUT", labelName: "VCC", labelKind: "power" },
+      { kind: "label", pin: "U1.OUT", labelName: "G2", labelKind: "ground" },
+      { kind: "wire", from: "U1.IN", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check("erc: two rails on one net → supply_short", shorted.errors.some((e) => e.category === "supply_short" && /\+3V3|\+5V/.test(e.message)));
+  check("erc: rail tied to ground → supply_short", shorted.errors.some((e) => e.category === "supply_short" && /ground/i.test(e.message)));
+
+  // NC pin wired + floating input + no ground → warnings only (still ok).
+  const warnings = runErc(
+    mkNl([
+      { kind: "label", pin: "U1.VDD", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND", labelName: "+3V3B", labelKind: "power" },
+      { kind: "wire", from: "U1.NC", to: "R1.1" },
+    ]),
+    ercParts,
+  );
+  check("erc: wired NC pin → warning nc_connected", warnings.errors.some((e) => e.category === "nc_connected" && e.severity === "warning"));
+  check("erc: floating input pin → warning input_floating", warnings.errors.some((e) => e.category === "input_floating" && e.pin === "IN"));
+  check("erc: no ground anywhere → warning no_ground", warnings.errors.some((e) => e.category === "no_ground"));
+  check("erc: warnings alone do not fail the gate", warnings.ok);
+
+  // Reward shaping: clean > warnings-only > criticals; monotone in error count.
+  check(
+    "erc: reward ordering clean > warnings > criticals",
+    computeErcReward(0, 0) === 1.0 &&
+      computeErcReward(0, 3) > computeErcReward(1, 0) &&
+      computeErcReward(1, 0) > computeErcReward(5, 0) &&
+      computeErcReward(5, 0) >= 0.5,
+  );
+}
+
+// ── KG layer: datasheet-derived per-IC constraints (Phase 2) ──────────────────
+{
+  // Lookup: seeded data present; exact + suffix-tolerant matching; no false hits.
+  check("kg: data seeded (150+ ICs)", kgSize() >= 150);
+  check("kg: exact lookup (TPS54302)", kgEntryFor("TPS54302") !== null);
+  check("kg: catalog suffix tolerated (TPS54302DDCR)", kgEntryFor("TPS54302DDCR") !== null);
+  check("kg: unknown part → null", kgEntryFor("XYZZY9999") === null);
+  check("kg: short/generic name → null (no false positive)", kgEntryFor("R") === null && kgEntryFor("LED") === null);
+
+  // Design notes render roles + requirements compactly.
+  const notes = kgDesignNotes("AMC1350");
+  check("kg: design notes include supply pair + must-connect", !!notes && /VDD1/.test(notes) && /INP/.test(notes));
+
+  // Constraint checking through runErc. AMC1350's KG entry requires
+  // supply_pair(VDD1,GND1), supply_pair(VDD2,GND2), must_be_connected(INP,INN).
+  // Give the part deliberately UNhelpful pin types (passive) so only the KG
+  // layer can catch the faults.
+  const pin = (number: string, name: string, type = "passive") => ({ number, name, type });
+  const amc: ErcPart = {
+    name: "AMC1350",
+    pins: [
+      pin("1", "VDD1"), pin("2", "INP"), pin("3", "INN"), pin("4", "GND1"),
+      pin("5", "GND2"), pin("6", "OUTN"), pin("7", "OUTP"), pin("8", "VDD2"),
+    ],
+  };
+  const kgParts = new Map<string, ErcPart>([["p-amc", amc]]);
+  const mkAmcNl = (connections: BuildLogicalNetlist["connections"]): BuildLogicalNetlist => ({
+    components: [{ refDes: "U1", partId: "p-amc", value: "AMC1350", role: "processor" }],
+    connections,
+    explanation: "",
+  });
+
+  // Fully hooked up per datasheet → no KG errors.
+  const kgGood = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.VDD2", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INP", labelName: "SENSE_P", labelKind: "label" },
+      { kind: "label", pin: "U1.INN", labelName: "SENSE_N", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check("kg: datasheet-complete hookup passes", kgGood.ok);
+
+  // VDD2 + INP left floating → KG catches both despite passive pin types.
+  const kgBad = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "+5V", labelKind: "power" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INN", labelName: "SENSE_N", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check(
+    "kg: floating supply pin caught via datasheet constraint",
+    kgBad.errors.some((e) => e.category === "supply_missing" && e.pin === "VDD2" && e.severity === "critical"),
+  );
+  check(
+    "kg: floating must-connect pin caught (INP)",
+    kgBad.errors.some((e) => e.category === "unconnected_pin" && e.pin === "INP"),
+  );
+
+  // Supply pair shorted together → supply_short from the KG layer.
+  const kgShort = runErc(
+    mkAmcNl([
+      { kind: "label", pin: "U1.VDD1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.GND1", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.VDD2", labelName: "+3V3", labelKind: "power" },
+      { kind: "label", pin: "U1.GND2", labelName: "GND", labelKind: "ground" },
+      { kind: "label", pin: "U1.INP", labelName: "SP", labelKind: "label" },
+      { kind: "label", pin: "U1.INN", labelName: "SN", labelKind: "label" },
+    ]),
+    kgParts,
+  );
+  check(
+    "kg: supply pair shorted onto one net → supply_short",
+    kgShort.errors.some((e) => e.category === "supply_short" && e.refDes === "U1"),
+  );
+
+  // Name drift: a part whose pins don't match the KG names → checks skipped, no
+  // false positives.
+  const drifted: ErcPart = { name: "AMC1350", pins: [pin("1", "VCC"), pin("2", "VSS")] };
+  const kgDrift = runErc(
+    {
+      components: [{ refDes: "U1", partId: "p-d", value: "AMC1350", role: "processor" }],
+      connections: [
+        { kind: "label", pin: "U1.VCC", labelName: "+5V", labelKind: "power" },
+        { kind: "label", pin: "U1.VSS", labelName: "GND", labelKind: "ground" },
+      ],
+      explanation: "",
+    },
+    new Map([["p-d", drifted]]),
+  );
+  check("kg: symbol/datasheet pin-name drift → checks skipped (no false positives)", kgDrift.ok);
 }
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
