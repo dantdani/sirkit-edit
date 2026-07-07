@@ -1,0 +1,3 @@
+# Fixtures must stay byte-identical to the KiCad originals (CRLF included);
+# keep git from normalizing line endings (core.autocrlf) on commit/checkout.
+*.kicad_mod -text

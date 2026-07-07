@@ -15,6 +15,7 @@
     "refresh:bom-notify": "tsx scripts/refresh-bom-pricing.ts --notify",
     "compute:alternates": "tsx scripts/compute-alternates.ts",
     "backfill:mpn-generics": "tsx scripts/backfill-mpn-and-generics.ts",
+    "test": "vitest run",
     "test:netlist": "tsx scripts/netlist-validation.test.ts"
   },
   "dependencies": {
@@ -24,11 +25,15 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
+    "flatbush": "^4.6.2",
     "highlight.js": "^11.11.1",
+    "immer": "^10.2.0",
     "katex": "^0.17.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
     "openai": "^6.42.0",
+    "pixi-viewport": "^6.0.3",
+    "pixi.js": "^8.19.0",
     "postgres": "^3.4.9",
     "radix-ui": "^1.4.3",
     "react": "19.2.4",
@@ -51,6 +56,7 @@
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.6"
   }
 }

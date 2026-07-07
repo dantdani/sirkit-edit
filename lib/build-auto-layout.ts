@@ -39,7 +39,8 @@ import type { CachedPart } from "@/app/lib/parts-cache";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
 import {
-  snap, pointEquals, kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, rotateXY,
+  snap, pointEquals, pointKey, pointStrictlyOnWireInterior,
+  kicadPinWorldPos, KICAD_SCALE_PX_PER_MM, rotateXY,
   pinDirection, pinStubEnd, kicadPinExitDirection,
 } from "@/app/lib/geometry";
 import { consolidateWires, splitWiresAtPoint } from "@/app/lib/connectivity";
@@ -850,6 +851,114 @@ function labelOrientation(kind: NetLabelKind, exit: Direction): Rotation {
   return (((delta % 360) + 360) % 360) as Rotation;
 }
 
+// Inverse of labelOrientation: the world direction a placed label's glyph
+// extends (== its pin's exit direction).
+const DIRECTION_ORDER: Direction[] = ["north", "east", "south", "west"];
+
+function labelExitDirection(label: NetLabel): Direction {
+  const angle = (DIRECTION_ANGLE[NATURAL_LABEL_DIRECTION[label.kind]] + label.orientation) % 360;
+  return DIRECTION_ORDER[angle / 90];
+}
+
+// ─── Label staggering ─────────────────────────────────────────────────────────
+//
+// Labels on adjacent pins of the same edge (the classic +3V3 stack over an
+// MCU's VDD row) crowd each other now that glyphs and text are large. Labels
+// can't shrink, so alternate members of each crowded run move STAGGER_OFFSET
+// further out along their exit direction, tied back to the pin by a short wire
+// stub. The label anchor then sits exactly on the stub's far vertex, so the
+// exact-position net binding (connectivity + validation) is preserved.
+
+const STAGGER_OFFSET = 20;    // px further from the pin (2 grid steps)
+const STAGGER_NEAR = 30;      // primary-axis gap that counts as crowded
+const STAGGER_EDGE_TOL = 60;  // secondary-axis gap that still reads as one edge
+
+const DIRECTION_VECTOR: Record<Direction, Point> = {
+  north: { x: 0, y: -1 },
+  east:  { x: 1, y: 0 },
+  south: { x: 0, y: 1 },
+  west:  { x: -1, y: 0 },
+};
+
+// Does any existing wire vertex sit strictly inside the (axis-aligned)
+// pin→anchor stub? Splitting/exporting would weld the label's net onto that
+// vertex's net, so such a stub must not be created.
+function stubSwallowsVertex(pin: Point, moved: Point, wires: Wire[]): boolean {
+  const vertical = pin.x === moved.x;
+  const lo = vertical ? Math.min(pin.y, moved.y) : Math.min(pin.x, moved.x);
+  const hi = vertical ? Math.max(pin.y, moved.y) : Math.max(pin.x, moved.x);
+  for (const w of wires) {
+    for (const v of w.vertices) {
+      if (vertical) {
+        if (v.x === pin.x && v.y > lo && v.y < hi) return true;
+      } else {
+        if (v.y === pin.y && v.x > lo && v.x < hi) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Chain-cluster a sorted coordinate list: consecutive labels within `tol` of
+// each other share a cluster.
+function chainClusters(labels: NetLabel[], coord: (l: NetLabel) => number, tol: number): NetLabel[][] {
+  const sorted = [...labels].sort((a, b) => coord(a) - coord(b));
+  const clusters: NetLabel[][] = [];
+  for (const l of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && coord(l) - coord(last[last.length - 1]) <= tol) last.push(l);
+    else clusters.push([l]);
+  }
+  return clusters;
+}
+
+/**
+ * Stagger crowded label runs in place, appending a pin→anchor wire stub for
+ * every label moved. `occupied` (pointKey set of live geometry: pins, wire
+ * vertices, label anchors) guards against parking an anchor on top of another
+ * net, which would short it.
+ */
+function staggerCrowdedLabels(netLabels: NetLabel[], wires: Wire[], occupied: Set<string>): void {
+  const byDirection = new Map<Direction, NetLabel[]>();
+  for (const l of netLabels) {
+    const dir = labelExitDirection(l);
+    byDirection.set(dir, [...(byDirection.get(dir) ?? []), l]);
+  }
+  for (const [dir, group] of byDirection) {
+    const vertical = dir === "north" || dir === "south";
+    const primary = (l: NetLabel) => (vertical ? l.position.x : l.position.y);
+    const secondary = (l: NetLabel) => (vertical ? l.position.y : l.position.x);
+    // Split into edges (rows/columns) first, then find crowded runs along each.
+    for (const edge of chainClusters(group, secondary, STAGGER_EDGE_TOL)) {
+      for (const run of chainClusters(edge, primary, STAGGER_NEAR)) {
+        // Even members keep their natural anchor; odd members move out.
+        for (let i = 1; i < run.length; i += 2) {
+          const label = run[i];
+          const pin = label.position;
+          const v = DIRECTION_VECTOR[dir];
+          const moved = {
+            x: snap(pin.x + v.x * STAGGER_OFFSET),
+            y: snap(pin.y + v.y * STAGGER_OFFSET),
+          };
+          const key = pointKey(moved);
+          if (occupied.has(key)) continue; // would land on live geometry
+          // Routing detours run ROUTE_CLEARANCE (20px) off obstacle edges —
+          // the same line staggered anchors land on. An anchor strictly
+          // inside a foreign wire segment reads as a junction and, in the
+          // KiCad export, genuinely shorts the two nets (KiCad binds a label
+          // to any wire crossing its position). Likewise a stub swallowing a
+          // foreign vertex. Skip the stagger in both cases.
+          if (wires.some((w) => pointStrictlyOnWireInterior(moved, w))) continue;
+          if (stubSwallowsVertex(pin, moved, wires)) continue;
+          occupied.add(key);
+          wires.push({ id: crypto.randomUUID(), vertices: [pin, moved] });
+          label.position = moved;
+        }
+      }
+    }
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -1219,6 +1328,18 @@ export function autoLayoutBuild(
       `[autoLayoutBuild] fallback-to-label: ${fallbackCount} wires converted to labels.`,
     );
   }
+
+  // ── Stagger crowded labels (before terminal splitting / page fit) ───────────
+  const occupiedPoints = new Set<string>();
+  for (const p of all) {
+    for (const pin of p.part?.pins ?? []) {
+      occupiedPoints.add(pointKey(kicadPinWorldPos(p.instance, pin)));
+    }
+  }
+  occupiedPoints.add(pointKey(groundPin));
+  for (const w of wires) for (const v of w.vertices) occupiedPoints.add(pointKey(v));
+  for (const l of netLabels) occupiedPoints.add(pointKey(l.position));
+  staggerCrowdedLabels(netLabels, wires, occupiedPoints);
 
   for (const t of terminals) wires = splitWiresAtPoint(wires, t);
   wires = consolidateWires(wires);
