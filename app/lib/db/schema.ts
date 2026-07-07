@@ -21,6 +21,8 @@ import {
 import { sql } from "drizzle-orm";
 import type { KicadPin } from "../kicad/types";
 import type { SnapshotRow, BomSnapshotMeta } from "../snapshots";
+import type { Pad, FootprintModelRef } from "../pcb/types";
+import type { BBox } from "../pcb/geometry";
 import { EMBEDDING_DIMENSIONS } from "../embeddings";
 
 /**
@@ -277,6 +279,61 @@ export const bomNotifications = pgTable(
   }),
 );
 
+/**
+ * KiCad official footprint library (PCB Stage 2), ingested from
+ * https://github.com/KiCad/kicad-footprints (CC-BY-SA 4.0 with KiCad Libraries
+ * Exception). `source` distinguishes future LCSC/EasyEDA-converted footprints
+ * from the official set without a migration.
+ */
+export const pcbFootprints = pgTable(
+  "pcb_footprints",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Library (`.pretty` dir basename), e.g. "Resistor_SMD". */
+    libName: text("lib_name").notNull(),
+    /** Footprint name, e.g. "R_0805_2012Metric". */
+    name: text("name").notNull(),
+    description: text("description"),
+    tags: text("tags"),
+    attrSmd: boolean("attr_smd").notNull().default(false),
+    attrTht: boolean("attr_tht").notNull().default(false),
+    /** Electrical pads (pads with a non-empty number; NPTH excluded). */
+    padCount: integer("pad_count").notNull(),
+    smdPadCount: integer("smd_pad_count").notNull().default(0),
+    thtPadCount: integer("tht_pad_count").notNull().default(0),
+    /** Pad[] per app/lib/pcb/types.ts — integer-nanometer coordinates. */
+    pads: jsonb("pads").$type<Pad[]>().notNull(),
+    courtyardBbox: jsonb("courtyard_bbox").$type<BBox>(),
+    bodyBbox: jsonb("body_bbox").$type<BBox>().notNull(),
+    models: jsonb("models").$type<FootprintModelRef[]>().notNull().default([]),
+    /** VERBATIM file content — Stage 13 re-emits this; never reformat. */
+    rawSexpr: text("raw_sexpr").notNull(),
+    source: text("source").notNull().default("kicad-footprints"),
+    /** Git SHA of the ingested kicad-footprints checkout. */
+    sourceCommit: text("source_commit").notNull(),
+    embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    embeddingIdx: index("pcb_footprints_embedding_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
+    /** Serves trigram similarity on "Lib:Name" in the hybrid search re-rank. */
+    trgmIdx: index("pcb_footprints_trgm_idx").using(
+      "gin",
+      sql`(${table.libName} || ':' || ${table.name}) gin_trgm_ops`,
+    ),
+    padCountIdx: index("pcb_footprints_pad_count_idx").on(table.padCount),
+    /** Upsert key — one row per (source, library, footprint name). */
+    sourceLibNameUniq: uniqueIndex("pcb_footprints_source_lib_name_uniq").on(
+      table.source,
+      table.libName,
+      table.name,
+    ),
+  }),
+);
+
 // ─── Inferred row types (consumed across the codebase) ──────────────────────
 
 export type Library = typeof libraries.$inferSelect;
@@ -291,3 +348,5 @@ export type BomSnapshotRecord = typeof bomSnapshots.$inferSelect;
 export type NewBomSnapshot = typeof bomSnapshots.$inferInsert;
 export type BomNotification = typeof bomNotifications.$inferSelect;
 export type NewBomNotification = typeof bomNotifications.$inferInsert;
+export type PcbFootprint = typeof pcbFootprints.$inferSelect;
+export type NewPcbFootprint = typeof pcbFootprints.$inferInsert;

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction } from "react";
+import dynamic from "next/dynamic";
+const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -26,7 +28,7 @@ import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pin
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, SchematicEditOp, PageSize } from "@/lib/schematic-types";
+import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, Rotation, SchematicEditOp, PageSize } from "@/lib/schematic-types";
 import { PIN_NAMES } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
@@ -695,11 +697,53 @@ const LABEL_ROLE_COLORS: Record<NetRole, string> = {
   unknown: "#a1a1aa", // zinc-400
 };
 
+// Text metrics for net-label names. The text NEVER rotates — only the
+// flag/arrow group does — so labels on vertical pins still read left-to-right.
+const LABEL_FONT_SIZE = 16;
+const LABEL_FONT_WEIGHT = 600;
+const LABEL_TEXT_GAP = 6;    // clearance between a flag tip and its text
+const LABEL_CHAR_W = 9.6;    // monospace advance at 16px (0.6em)
+
+// Glyph reach from the anchor along the extent direction (world px).
+const POWER_TIP = 32;        // stem + wedge (2.0x the KiCad-standard base)
+const GROUND_TIP = 28;       // stem + three bars
+const LABEL_LEAD = 12;       // generic flag's lead-in line
+const LABEL_FLAG_HALF_H = 11;// generic flag half-height (1.8x the old 6)
+const VLABEL_BODY = 22;      // compact pentagon body for vertical generic flags
+
+// The world direction a glyph extends after rotation. Natural directions —
+// power up, generic east, ground down — must match NATURAL_LABEL_DIRECTION in
+// lib/build-auto-layout.ts; `orientation` steps clockwise from there.
+type LabelDir = "north" | "east" | "south" | "west";
+const LABEL_DIR_ORDER: LabelDir[] = ["north", "east", "south", "west"];
+const LABEL_NATURAL_STEP: Record<NetLabelKind, number> = { power: 0, label: 1, ground: 2 };
+
+function labelWorldDir(kind: NetLabelKind, orientation: Rotation): LabelDir {
+  return LABEL_DIR_ORDER[(LABEL_NATURAL_STEP[kind] + orientation / 90) % 4];
+}
+
+// Horizontal-text placement just past the flag tip, reading outward from the
+// pin. East/west text vertical-centers on the flag height ("middle" baseline).
+function labelTextProps(dir: LabelDir, tip: number): {
+  x: number; y: number;
+  textAnchor: "start" | "middle" | "end";
+  dominantBaseline: "middle" | "hanging" | "auto";
+} {
+  const d = tip + LABEL_TEXT_GAP;
+  switch (dir) {
+    case "north": return { x: 0,  y: -d, textAnchor: "middle", dominantBaseline: "auto" };
+    case "south": return { x: 0,  y: d,  textAnchor: "middle", dominantBaseline: "hanging" };
+    case "east":  return { x: d,  y: 0,  textAnchor: "start",  dominantBaseline: "middle" };
+    case "west":  return { x: -d, y: 0,  textAnchor: "end",    dominantBaseline: "middle" };
+  }
+}
+
 /**
  * A net label glyph anchored at label.position (the electrical connection
  * point sits at the local origin). Natural directions: power flags point up,
  * ground symbols hang down, generic flags extend east; `orientation` rotates
- * the glyph clockwise from there.
+ * the FLAG clockwise from there. The text never rotates — it sits just past
+ * the flag tip (or inside a horizontal generic flag) reading left-to-right.
  */
 function NetLabelGlyph({
   label, role, zoom, ghost, deleteHovered, pointerEvents,
@@ -716,73 +760,103 @@ function NetLabelGlyph({
   onMouseLeave?: () => void;
 }) {
   const name = label.name.trim().toUpperCase();
-  let body: React.ReactNode;
+  const dir = labelWorldDir(label.kind, label.orientation);
+  const horizontal = dir === "east" || dir === "west";
+  let flag: React.ReactNode;   // rotates with label.orientation
+  let text: React.ReactNode;   // never rotates
 
   if (label.kind === "ground") {
     const showName = name !== "GND" && name !== "0";
-    body = (
+    flag = (
       <>
-        <line x1={0} y1={0} x2={0} y2={10} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
-        <line x1={-6} y1={10} x2={6} y2={10} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
-        <line x1={-4} y1={14} x2={4} y2={14} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
-        <line x1={-2} y1={18} x2={2} y2={18} stroke="#a1a1aa" strokeWidth={1} strokeLinecap="round" />
-        {showName && (
-          <text x={0} y={28} textAnchor="middle" fontSize={9} fontFamily="monospace" fill="#71717a"
-            style={{ userSelect: "none" }}>
-            {name}
-          </text>
-        )}
+        {/* Invisible grab area over the glyph (≥24px thick). */}
+        <rect x={-12} y={-2} width={24} height={32} fill="transparent" />
+        <line x1={0} y1={0} x2={0} y2={16} stroke="#a1a1aa" strokeWidth={1.5} strokeLinecap="round" />
+        <line x1={-9} y1={16} x2={9} y2={16} stroke="#a1a1aa" strokeWidth={1.5} strokeLinecap="round" />
+        <line x1={-6} y1={22} x2={6} y2={22} stroke="#a1a1aa" strokeWidth={1.5} strokeLinecap="round" />
+        <line x1={-3} y1={28} x2={3} y2={28} stroke="#a1a1aa" strokeWidth={1.5} strokeLinecap="round" />
       </>
     );
-  } else if (label.kind === "power") {
-    body = (
-      <>
-        <line x1={0} y1={0} x2={0} y2={-10} stroke="#f87171" strokeWidth={1} strokeLinecap="round" />
-        <polygon points="-5,-10 5,-10 0,-18" fill="#f87171" />
-        <text x={0} y={-22} textAnchor="middle" fontSize={9} fontFamily="monospace" fill="#f87171"
-          style={{ userSelect: "none" }}>
+    if (showName) {
+      const tp = labelTextProps(dir, GROUND_TIP);
+      text = (
+        <text {...tp} fontSize={LABEL_FONT_SIZE} fontWeight={LABEL_FONT_WEIGHT}
+          fontFamily="monospace" fill="#71717a" style={{ userSelect: "none" }}>
           {name}
         </text>
+      );
+    }
+  } else if (label.kind === "power") {
+    flag = (
+      <>
+        <rect x={-14} y={-34} width={28} height={36} fill="transparent" />
+        <line x1={0} y1={0} x2={0} y2={-16} stroke="#f87171" strokeWidth={1.5} strokeLinecap="round" />
+        <polygon points="-12,-16 12,-16 0,-32" fill="#f87171" />
       </>
+    );
+    const tp = labelTextProps(dir, POWER_TIP);
+    text = (
+      <text {...tp} fontSize={LABEL_FONT_SIZE} fontWeight={LABEL_FONT_WEIGHT}
+        fontFamily="monospace" fill="#f87171" style={{ userSelect: "none" }}>
+        {name}
+      </text>
     );
   } else {
     const color = LABEL_ROLE_COLORS[role];
-    // Flag width tracks the name so the pentagon encloses the text.
-    const textW = Math.max(12, name.length * 5.6);
-    const flagEnd = 12 + textW + 6;
-    body = (
+    // Horizontal flags enclose the text, so their width tracks the name;
+    // vertical flags stay compact and the text sits past the tip instead.
+    const textW = Math.max(20, name.length * LABEL_CHAR_W);
+    const flagEnd = horizontal ? LABEL_LEAD + 6 + textW + 6 : LABEL_LEAD + VLABEL_BODY;
+    const tip = flagEnd + LABEL_FLAG_HALF_H;
+    flag = (
       <>
-        <line x1={0} y1={0} x2={10} y2={0} stroke={color} strokeWidth={1} strokeLinecap="round" />
+        <rect x={-2} y={-13} width={tip + 4} height={26} fill="transparent" />
+        <line x1={0} y1={0} x2={LABEL_LEAD} y2={0} stroke={color} strokeWidth={1.5} strokeLinecap="round" />
         <polygon
-          points={`10,-6 ${flagEnd},-6 ${flagEnd + 6},0 ${flagEnd},6 10,6`}
-          fill={color} fillOpacity={0.12} stroke={color} strokeWidth={0.75} strokeLinejoin="round"
+          points={`${LABEL_LEAD},${-LABEL_FLAG_HALF_H} ${flagEnd},${-LABEL_FLAG_HALF_H} ${tip},0 ${flagEnd},${LABEL_FLAG_HALF_H} ${LABEL_LEAD},${LABEL_FLAG_HALF_H}`}
+          fill={color} fillOpacity={0.12} stroke={color} strokeWidth={1} strokeLinejoin="round"
         />
-        <text x={14} y={3} textAnchor="start" fontSize={9} fontFamily="monospace" fill={color}
-          style={{ userSelect: "none" }}>
-          {name}
-        </text>
       </>
+    );
+    // Inside the flag when it lies flat (the text IS the flag content);
+    // past the tip when the flag points up or down.
+    const tp = horizontal
+      ? {
+          x: dir === "east" ? LABEL_LEAD + 6 : -(LABEL_LEAD + 6),
+          y: 0,
+          textAnchor: (dir === "east" ? "start" : "end") as "start" | "end",
+          dominantBaseline: "middle" as const,
+        }
+      : labelTextProps(dir, tip);
+    text = (
+      <text {...tp} fontSize={LABEL_FONT_SIZE} fontWeight={LABEL_FONT_WEIGHT}
+        fontFamily="monospace" fill={color} style={{ userSelect: "none" }}>
+        {name}
+      </text>
     );
   }
 
   return (
     <g
-      transform={`translate(${label.position.x},${label.position.y}) rotate(${label.orientation})`}
+      transform={`translate(${label.position.x},${label.position.y})`}
       opacity={ghost ? 0.5 : 1}
       style={{ pointerEvents: pointerEvents ?? "none", cursor: deleteHovered ? "crosshair" : "grab" }}
       onMouseDown={onMouseDown}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Hit target around the anchor (15px world radius). */}
+      {/* Hit target around the anchor. */}
       <circle cx={0} cy={0} r={NET_LABEL_HIT_RADIUS} fill="transparent" />
       {deleteHovered && (
         <circle cx={0} cy={0} r={NET_LABEL_HIT_RADIUS} fill="#ef4444" fillOpacity={0.15}
           stroke="#ef4444" strokeWidth={0.75 / zoom} style={{ pointerEvents: "none" }} />
       )}
-      {/* Anchor tick — marks the exact connection point. */}
-      <circle cx={0} cy={0} r={1.5} fill="#71717a" style={{ pointerEvents: "none" }} />
-      {body}
+      {/* Connection-point dot — marks the exact electrical anchor. */}
+      <circle cx={0} cy={0} r={4} fill="#71717a" style={{ pointerEvents: "none" }} />
+      {/* Flag/arrow — rotates with orientation. */}
+      <g transform={`rotate(${label.orientation})`}>{flag}</g>
+      {/* Text — always horizontal. */}
+      {text}
     </g>
   );
 }
@@ -2385,6 +2459,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: apiMessages }),
       });
+      if (!res.ok) throw new Error(`Chat request failed with status ${res.status}`);
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const dec    = new TextDecoder();
@@ -3084,9 +3159,10 @@ export default function Home() {
                   state={{ components, kicadComponents, wires, netLabels }}
                   onSwapPart={handleSwapPart}
                 />
+              ) : view === "pcb" ? (
+                <PcbEditor schematic={{ components, kicadComponents, wires, netLabels }} />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
-                  {view === "pcb"       && "PCB layout canvas"}
                   {view === "3d"        && "3D view"}
                 </div>
               )}

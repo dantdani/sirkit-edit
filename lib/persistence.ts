@@ -1,5 +1,6 @@
 import type { SchematicState } from "./schematic-types";
 import { isPageSize, DEFAULT_PAGE_SIZE } from "./schematic-types";
+import type { PcbBoard } from "@/app/lib/pcb";
 
 export type SavedProject = {
   id: string;
@@ -7,6 +8,10 @@ export type SavedProject = {
   state: SchematicState;
   createdAt: number;
   updatedAt: number;
+  // PCB layout state (Stage 1+). JSON-serializable by construction — all
+  // numbers/strings/arrays; a 200-part board with embedded footprint defs is
+  // ~600 KB, fine for localStorage.
+  pcb?: PcbBoard;
 };
 
 const STORAGE_PREFIX    = "sirkit:project:";
@@ -69,6 +74,23 @@ export function saveProject(project: SavedProject): SavedProject {
     // quota exceeded or unavailable
   }
   return updated;
+}
+
+/**
+ * Update only a project's `pcb` field (PCB Stage 4 board autosave). Unlike
+ * saveProject this REPORTS failure — a 200-part board with embedded footprint
+ * defs is a few hundred KB, and a silent quota drop would lose layout work.
+ */
+export function saveProjectPcb(id: string, pcb: PcbBoard | undefined): boolean {
+  const project = loadProject(id);
+  if (!project) return false;
+  const updated: SavedProject = { ...project, pcb, updatedAt: Date.now() };
+  try {
+    localStorage.setItem(STORAGE_PREFIX + id, JSON.stringify(updated));
+    return true;
+  } catch {
+    return false; // quota exceeded or storage unavailable
+  }
 }
 
 export function createProject(name: string, state: SchematicState): SavedProject {
