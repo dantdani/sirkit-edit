@@ -136,12 +136,16 @@ export function buildRoutedDemo(): PcbBoard {
     { id: "rd-v2", at: viaB, size: VIA_SIZE, drill: VIA_DRILL, netId: VCC, layers: ["copperTop", "copperBottom"] },
   ];
 
-  // Unfilled GND zone (rendered outline + light fill; NOT conductive until Stage 11).
+  // GND zone (Stage 11: starts dirty/unfilled; useZoneFills pours it on load).
   const zones: Zone[] = [
     {
       id: "rd-z1",
       layer: "copperTop",
       netId: GND,
+      appearance: "solid",
+      connection: "thermal",
+      fill: [],
+      dirty: true,
       polygon: [
         { x: mmToNm(6), y: mmToNm(44) },
         { x: mmToNm(28), y: mmToNm(44) },

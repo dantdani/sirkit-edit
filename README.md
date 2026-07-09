@@ -33,6 +33,21 @@ The result: LLM flexibility with deterministic correctness guarantees.
 
 ---
 
+## PCB module
+
+The PCB module ships schematic-to-fab: sync footprints from the schematic,
+auto-place, autoroute (Freerouting), zones, DRC against real fab presets,
+silkscreen, 3D preview, KiCad export, and a one-click Gerber/drill/BOM/
+pick-and-place bundle that JLCPCB's quote tool accepts.
+
+- **Demo**: open the PCB tab with `?pcbdemo=story` and follow the five-click
+  flow (`Ctrl+P` place → `Ctrl+E` route → `Ctrl+D` DRC → `Ctrl+3` 3D →
+  `Ctrl+B` fab bundle). Press `?` for all shortcuts.
+- **Docs**: [`docs/pcb-quickstart.md`](docs/pcb-quickstart.md) — setup
+  (`FREEROUTING_JAR`, `KICAD_CLI`), the workflow, and where to go next.
+
+---
+
 ## Getting started
 
 ### 1. Prerequisites

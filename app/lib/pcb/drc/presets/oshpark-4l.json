@@ -1,0 +1,25 @@
+{
+  "id": "oshpark-4l",
+  "name": "OSH Park 4-layer",
+  "fab": "OSH Park",
+  "version": 1,
+  "verifiedAt": "2026-07-08",
+  "specUrl": "https://docs.oshpark.com/services/four-layer/",
+  "rules": {
+    "default": {
+      "clearanceMm": 0.127,
+      "minTrackWidthMm": 0.127,
+      "minViaOuterMm": 0.457,
+      "minViaDrillMm": 0.254,
+      "minAnnularRingMm": 0.1016,
+      "minHoleToHoleMm": 0.508,
+      "minEdgeClearanceMm": 0.381,
+      "minSilkPadClearanceMm": 0.152,
+      "minCourtyardClearanceMm": 0.0
+    },
+    "perClass": {
+      "Power": { "clearanceMm": 0.2, "minTrackWidthMm": 0.4 },
+      "HighCurrent": { "clearanceMm": 0.3, "minTrackWidthMm": 1.0 }
+    }
+  }
+}

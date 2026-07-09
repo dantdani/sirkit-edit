@@ -48,6 +48,14 @@ export interface PcbHistory {
    * of N transient frames + one execute yields exactly one entry.
    */
   transient(mutate: (draft: PcbBoard) => void): void;
+  /**
+   * Stage 11: write DERIVED state (zone fills) onto `present` with NO history
+   * entry, notifying subscribers so the editor/renderer pick it up. Unlike
+   * `transient`, the write survives the next `execute()` (it also patches the
+   * pre-transient base) and undo/redo simply apply their patches on top —
+   * derived fields aren't part of any entry, so they are never undone.
+   */
+  applyDerived(label: string, mutate: (draft: PcbBoard) => void): void;
 }
 
 export function createHistory(initial: PcbBoard): PcbHistory {
@@ -120,6 +128,12 @@ export function createHistory(initial: PcbBoard): PcbHistory {
     transient(mutate: (draft: PcbBoard) => void): void {
       if (transientBase === null) transientBase = present;
       present = produce(present, mutate);
+    },
+
+    applyDerived(label: string, mutate: (draft: PcbBoard) => void): void {
+      if (transientBase !== null) transientBase = produce(transientBase, mutate);
+      present = produce(present, mutate);
+      notify({ label });
     },
   };
 }

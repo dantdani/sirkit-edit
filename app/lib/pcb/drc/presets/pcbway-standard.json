@@ -1,0 +1,25 @@
+{
+  "id": "pcbway-standard",
+  "name": "PCBWay standard",
+  "fab": "PCBWay",
+  "version": 1,
+  "verifiedAt": "2026-07-08",
+  "specUrl": "https://www.pcbway.com/capabilities.html",
+  "rules": {
+    "default": {
+      "clearanceMm": 0.152,
+      "minTrackWidthMm": 0.152,
+      "minViaOuterMm": 0.45,
+      "minViaDrillMm": 0.2,
+      "minAnnularRingMm": 0.13,
+      "minHoleToHoleMm": 0.5,
+      "minEdgeClearanceMm": 0.4,
+      "minSilkPadClearanceMm": 0.15,
+      "minCourtyardClearanceMm": 0.0
+    },
+    "perClass": {
+      "Power": { "clearanceMm": 0.2, "minTrackWidthMm": 0.4 },
+      "HighCurrent": { "clearanceMm": 0.3, "minTrackWidthMm": 1.0 }
+    }
+  }
+}

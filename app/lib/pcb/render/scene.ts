@@ -87,6 +87,8 @@ export interface PcbScene {
   /** Screen (canvas CSS px) → model space (nm). */
   worldFromScreen(x: number, y: number): Vec2;
   zoomToFit(): void;
+  /** Recenter on a world point (nm); optionally set zoom (px/mm). Stage 12 zoom-to. */
+  centerOn(world: Vec2, pxPerMm?: number): void;
   stats(): { primitives: number; fpsAvg: number; fpsMin: number };
   // ── Stage 5 additions (pinned — Stages 6/7 consume) ──────────────────────
   /** Overlay airwires: 1px screen-constant, #71717a @ 50%. */
@@ -814,6 +816,17 @@ export function createPcbScene(): PcbScene {
     redrawOverlay();
   }
 
+  function centerOn(world: Vec2, pxPerMm?: number): void {
+    if (!viewport || !hostEl) return;
+    if (pxPerMm !== undefined) {
+      viewport.setZoom(Math.min(Math.max(pxPerMm, MIN_PX_PER_MM), MAX_PX_PER_MM), false);
+    }
+    viewport.moveCenter(mm(world.x), mm(world.y));
+    maybeRebuildGrid(true);
+    updateHandleScales();
+    redrawOverlay();
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────────
 
   return {
@@ -849,6 +862,7 @@ export function createPcbScene(): PcbScene {
 
     worldFromScreen,
     zoomToFit,
+    centerOn,
 
     stats(): { primitives: number; fpsAvg: number; fpsMin: number } {
       const fpsAvg =

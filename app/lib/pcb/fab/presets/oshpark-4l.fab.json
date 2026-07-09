@@ -1,0 +1,25 @@
+{
+  "id": "oshpark-4l",
+  "name": "OSH Park 4-layer",
+  "fab": "OSH Park",
+  "version": 1,
+  "verifiedAt": "2026-07-09",
+  "specUrl": "https://docs.oshpark.com/design-tools/kicad/generating-kicad-gerbers/",
+  "drcPresetId": "oshpark-4l",
+  "zipRootFolder": null,
+  "layerBundle": [
+    { "layerId": "copperTop",    "kicadName": "F.Cu",      "fileSuffix": "-F_Cu.gbr",      "enabled": true },
+    { "layerId": "in1",          "kicadName": "In1.Cu",    "fileSuffix": "-In1_Cu.gbr",    "enabled": true },
+    { "layerId": "in2",          "kicadName": "In2.Cu",    "fileSuffix": "-In2_Cu.gbr",    "enabled": true },
+    { "layerId": "copperBottom", "kicadName": "B.Cu",      "fileSuffix": "-B_Cu.gbr",      "enabled": true },
+    { "layerId": "silkTop",      "kicadName": "F.SilkS",   "fileSuffix": "-F_Silkscreen.gbr", "enabled": true },
+    { "layerId": "silkBottom",   "kicadName": "B.SilkS",   "fileSuffix": "-B_Silkscreen.gbr", "enabled": true },
+    { "layerId": "maskTop",      "kicadName": "F.Mask",    "fileSuffix": "-F_Mask.gbr",    "enabled": true },
+    { "layerId": "maskBottom",   "kicadName": "B.Mask",    "fileSuffix": "-B_Mask.gbr",    "enabled": true },
+    { "layerId": "edge",         "kicadName": "Edge.Cuts", "fileSuffix": "-Edge_Cuts.gbr", "enabled": true }
+  ],
+  "drill": { "format": "excellon-2:4-metric", "separateNPTH": false },
+  "pos": { "splitBySide": false, "format": "kicad-default", "filename": "{boardName}-pos.csv" },
+  "bom": { "columns": ["refs", "quantity", "value", "footprint"], "filename": "{boardName}_bom.csv" },
+  "notes": "Order at oshpark.com: upload this zip directly. OSH Park reads KiCad's default gerber names. Position/BOM files are for your own assembly reference."
+}

@@ -1,0 +1,25 @@
+{
+  "id": "jlcpcb-4l",
+  "name": "JLCPCB 4-layer",
+  "fab": "JLCPCB",
+  "version": 1,
+  "verifiedAt": "2026-07-09",
+  "specUrl": "https://jlcpcb.com/help/article/how-to-generate-gerber-and-drill-files-in-kicad-8",
+  "drcPresetId": "jlcpcb-4l",
+  "zipRootFolder": "gerber/",
+  "layerBundle": [
+    { "layerId": "copperTop",    "kicadName": "F.Cu",      "fileSuffix": ".GTL", "enabled": true },
+    { "layerId": "in1",          "kicadName": "In1.Cu",    "fileSuffix": ".G2L", "enabled": true },
+    { "layerId": "in2",          "kicadName": "In2.Cu",    "fileSuffix": ".G3L", "enabled": true },
+    { "layerId": "copperBottom", "kicadName": "B.Cu",      "fileSuffix": ".GBL", "enabled": true },
+    { "layerId": "silkTop",      "kicadName": "F.SilkS",   "fileSuffix": ".GTO", "enabled": true },
+    { "layerId": "silkBottom",   "kicadName": "B.SilkS",   "fileSuffix": ".GBO", "enabled": true },
+    { "layerId": "maskTop",      "kicadName": "F.Mask",    "fileSuffix": ".GTS", "enabled": true },
+    { "layerId": "maskBottom",   "kicadName": "B.Mask",    "fileSuffix": ".GBS", "enabled": true },
+    { "layerId": "edge",         "kicadName": "Edge.Cuts", "fileSuffix": ".GML", "enabled": true }
+  ],
+  "drill": { "format": "excellon-2:4-metric", "separateNPTH": true },
+  "pos": { "splitBySide": true, "format": "jlcpcb-cpl", "filename": "{boardName}_cpl.csv" },
+  "bom": { "columns": ["refs", "value", "footprint", "quantity", "mpn"], "filename": "{boardName}_bom.csv" },
+  "notes": "Order at jlcpcb.com/quote: upload this zip as the Gerber file (pick 4 layers). For SMT assembly, upload the BOM and CPL CSVs separately."
+}

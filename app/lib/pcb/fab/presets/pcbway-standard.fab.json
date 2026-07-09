@@ -1,0 +1,23 @@
+{
+  "id": "pcbway-standard",
+  "name": "PCBWay standard 2-layer",
+  "fab": "PCBWay",
+  "version": 1,
+  "verifiedAt": "2026-07-09",
+  "specUrl": "https://www.pcbway.com/helpcenter/technical_support/Generate_Gerber_file_from_Kicad.html",
+  "drcPresetId": "pcbway-standard",
+  "zipRootFolder": null,
+  "layerBundle": [
+    { "layerId": "copperTop",    "kicadName": "F.Cu",      "fileSuffix": "-F_Cu.gbr",      "enabled": true },
+    { "layerId": "copperBottom", "kicadName": "B.Cu",      "fileSuffix": "-B_Cu.gbr",      "enabled": true },
+    { "layerId": "silkTop",      "kicadName": "F.SilkS",   "fileSuffix": "-F_Silkscreen.gbr", "enabled": true },
+    { "layerId": "silkBottom",   "kicadName": "B.SilkS",   "fileSuffix": "-B_Silkscreen.gbr", "enabled": true },
+    { "layerId": "maskTop",      "kicadName": "F.Mask",    "fileSuffix": "-F_Mask.gbr",    "enabled": true },
+    { "layerId": "maskBottom",   "kicadName": "B.Mask",    "fileSuffix": "-B_Mask.gbr",    "enabled": true },
+    { "layerId": "edge",         "kicadName": "Edge.Cuts", "fileSuffix": "-Edge_Cuts.gbr", "enabled": true }
+  ],
+  "drill": { "format": "excellon-2:4-metric", "separateNPTH": false },
+  "pos": { "splitBySide": false, "format": "pcbway-standard", "filename": "{boardName}-pos.csv" },
+  "bom": { "columns": ["refs", "quantity", "value", "footprint", "mpn", "description"], "filename": "{boardName}_bom.csv" },
+  "notes": "Order at pcbway.com: upload this zip in the online quote. PCBWay accepts KiCad's default gerber names. Include the position file only if ordering assembly."
+}

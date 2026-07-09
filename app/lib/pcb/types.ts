@@ -8,6 +8,8 @@ import type { Nm } from "./units";
 import { mmToNm } from "./units";
 import type { Vec2, BBox, PadShape } from "./geometry";
 import type { LayerId } from "./layers";
+import type { BoardNetClassing } from "./netclass"; // Stage 10 (type-only; no runtime cycle)
+import type { SilkItem } from "./silk/types"; // Stage 16 (type-only; no runtime cycle)
 
 export type PadType = "smd" | "thru_hole" | "np_thru_hole";
 
@@ -83,11 +85,26 @@ export interface Via {
   layers: [LayerId, LayerId];
 }
 
+/** One filled copper region of a zone (Stage 11) — outer boundary + clearance-cutout holes. */
+export interface FilledRegion {
+  outer: Vec2[]; // outer boundary, integer nm, closed (first != last)
+  holes: Vec2[][]; // inner holes (clearance cutouts)
+  boundingBox: BBox;
+  areaNm2: number; // for stats + island scoring
+}
+
 export interface Zone {
   id: string;
   layer: LayerId;
   netId: number;
   polygon: Vec2[];
+  // Stage 11 additions — appearance is render-only; DRC/export always see solid fills.
+  appearance: "solid" | "hatched";
+  connection: "solid" | "thermal"; // to same-net pads (thermal = default)
+  clearanceOverrideNm?: number; // else getNetClass(zone.netId).clearance
+  thermal?: { spokeWidthNm?: number; gapNm?: number; spokes?: 2 | 4; angleOffsetDeg?: number };
+  fill: FilledRegion[]; // derived — recomputed when dirty, never an undo entry
+  dirty: boolean; // true after any board mutation that could affect the fill
 }
 
 export interface BoardText {
@@ -127,6 +144,11 @@ export interface PcbBoard {
   vias: Via[];
   zones: Zone[];
   texts: BoardText[];
+  /** Stage 10: per-net class assignments + AI rule deltas. Optional/additive —
+   *  boards saved before Stage 10 load fine (getNetClass falls back to Default). */
+  netClassing?: BoardNetClassing;
+  /** Stage 16: user silkscreen items. Optional/additive — same posture. */
+  silkItems?: SilkItem[];
 }
 
 /** 100×80 mm rect at origin, 2-layer stackup, only the reserved net 0. */
@@ -146,5 +168,6 @@ export function createEmptyBoard(): PcbBoard {
     vias: [],
     zones: [],
     texts: [],
+    silkItems: [],
   };
 }

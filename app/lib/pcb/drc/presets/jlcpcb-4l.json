@@ -1,0 +1,25 @@
+{
+  "id": "jlcpcb-4l",
+  "name": "JLCPCB 4-layer",
+  "fab": "JLCPCB",
+  "version": 1,
+  "verifiedAt": "2026-07-08",
+  "specUrl": "https://jlcpcb.com/capabilities/pcb-capabilities",
+  "rules": {
+    "default": {
+      "clearanceMm": 0.0889,
+      "minTrackWidthMm": 0.0889,
+      "minViaOuterMm": 0.45,
+      "minViaDrillMm": 0.2,
+      "minAnnularRingMm": 0.13,
+      "minHoleToHoleMm": 0.5,
+      "minEdgeClearanceMm": 0.3,
+      "minSilkPadClearanceMm": 0.15,
+      "minCourtyardClearanceMm": 0.0
+    },
+    "perClass": {
+      "Power": { "clearanceMm": 0.15, "minTrackWidthMm": 0.35 },
+      "HighCurrent": { "clearanceMm": 0.25, "minTrackWidthMm": 0.8 }
+    }
+  }
+}

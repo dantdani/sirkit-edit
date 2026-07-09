@@ -12,7 +12,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { CircuitBoard, ListTodo, Loader2 } from "lucide-react";
+import dynamic from "next/dynamic";
+import { CircuitBoard, ListTodo, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
 import type { PcbBoard, BoardOutline, FootprintInstance } from "@/app/lib/pcb/types";
 import { LAYERS, type LayerId } from "@/app/lib/pcb/layers";
@@ -33,6 +34,28 @@ import {
 import { loadCurrentBoard, saveCurrentBoard } from "@/app/lib/pcb/board-persistence";
 import { createHistory, type PcbHistory } from "@/app/lib/pcb/history";
 import { createSelectMoveTool, type SelectMoveTool } from "@/app/lib/pcb/tools/select-move";
+import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo"; // Stage 7 integration
+import { buildStoryDemo } from "@/app/lib/pcb/demo/story-demo"; // Stage 16
+import { useRouteTool } from "./hooks/useRouteTool"; // Stage 7 integration
+import { useAutoroute } from "./hooks/useAutoroute"; // Stage 9 integration
+import { useAutoPlace } from "./hooks/useAutoPlace"; // Stage 8 integration
+import { useDrc } from "./hooks/useDrc"; // Stage 12 integration
+import { useZoneFills } from "./hooks/useZoneFills"; // Stage 11 integration
+import { ZoneTool, AddPlaneDialog } from "./ZoneTool"; // Stage 11
+import { renderZones } from "@/app/lib/pcb/render/zones"; // Stage 11
+import { makePlaneZone } from "@/app/lib/pcb/zones/plane"; // Stage 11
+import { mutateBoardWithZoneCommand, zoneCommandLabel, type ZoneCommand } from "@/app/lib/pcb/zones/command"; // Stage 11
+import { downloadKicadPcb } from "@/app/lib/pcb/kicad/export-client"; // Stage 13 integration
+import { FabDialog } from "./FabDialog"; // Stage 14
+import { useFabExport } from "./hooks/useFabExport"; // Stage 14
+import { SilkTool } from "./SilkTool"; // Stage 16
+import { useSilkTool } from "./hooks/useSilkTool"; // Stage 16
+import { renderSilkItems } from "@/app/lib/pcb/render/silk"; // Stage 16
+import { ShortcutsHelp } from "./ShortcutsHelp"; // Stage 16
+import { useShortcutsHelp } from "./hooks/useShortcutsHelp"; // Stage 16
+import { EmptyState } from "./EmptyState"; // Stage 16
+import { DrcPanel } from "./DrcPanel"; // Stage 12
+import { getPreset } from "@/app/lib/pcb/drc/presets"; // Stage 12
 import { getCachedPart, ensurePartLoaded, subscribeToPart } from "@/app/lib/parts-cache";
 import { PcbCanvas } from "./PcbCanvas";
 import { LayerPanel } from "./LayerPanel";
@@ -40,6 +63,12 @@ import { PcbToolbar } from "./PcbToolbar";
 import { DebugHud } from "./DebugHud";
 import { SyncButton } from "./SyncButton";
 import { AssignmentQueue, type FootprintPick, type QueueItem } from "./AssignmentQueue";
+
+// Stage 15: 3D preview is client-only and heavy (three.js) — lazy chunk.
+const PcbPreview3D = dynamic(
+  () => import("./PcbPreview3D").then((m) => m.PcbPreview3D),
+  { ssr: false },
+);
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -49,7 +78,7 @@ interface EditorState {
   /** Overrides on top of LAYERS defaultVisible. */
   visibleOverrides: Partial<Record<LayerId, boolean>>;
   selection: string[];
-  tool: "select" | "pan";
+  tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
   gridOn: boolean;
 }
 
@@ -60,7 +89,7 @@ type EditorAction =
   | { type: "toggle-layer"; layer: LayerId }
   | { type: "set-active-layer"; layer: LayerId }
   | { type: "set-selection"; ids: string[] }
-  | { type: "set-tool"; tool: "select" | "pan" }
+  | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" } // Stages 7 + 11 + 16
   | { type: "toggle-grid" };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
@@ -139,11 +168,16 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
         ? new URLSearchParams(window.location.search).get("pcbdemo")
         : null;
     if (demoParam !== null) {
-      return {
-        board: buildDemoBoard(demoParam === "high" ? "high" : "default"),
-        demo: true,
-        lastSyncHash: null as string | null,
-      };
+      // Stage 7: ?pcbdemo=routed loads the hand-routed fixture (interactive-
+      // routing start point); Stage 16: =story loads the five-click demo
+      // start (unplaced ESP32 breakout); =high/default keep Stage 3's grid demo.
+      const board =
+        demoParam === "routed"
+          ? buildRoutedDemo()
+          : demoParam === "story"
+            ? buildStoryDemo()
+            : buildDemoBoard(demoParam === "high" ? "high" : "default");
+      return { board, demo: true, lastSyncHash: null as string | null };
     }
     const { board, lastSyncHash } = loadCurrentBoard();
     return { board, demo: false, lastSyncHash };
@@ -333,6 +367,88 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   }, [scene, state.board]);
   useEffect(() => () => historyCleanupRef.current?.(), []);
 
+  // ── Stage 7: interactive routing tool (active only in "route" mode) ─────────
+  const routeTool = useRouteTool({
+    scene,
+    getHistory: () => historyRef.current,
+    getActiveLayer: () => state.activeLayer,
+    toast: setToast,
+  });
+  const { activate: activateRoute, deactivate: deactivateRoute } = routeTool;
+  useEffect(() => {
+    if (state.tool === "route") activateRoute();
+    else deactivateRoute();
+  }, [state.tool, activateRoute, deactivateRoute]);
+
+  // ── Stage 12: batch DRC (panel + toolbar button + zoom-to) ──────────────────
+  const drc = useDrc({ scene, getHistory: () => historyRef.current });
+
+  // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
+  const [preview3dOpen, setPreview3dOpen] = useState(false);
+
+  // ── Stage 14: "Send to fab" bundle export ───────────────────────────────────
+  const [fabDialogOpen, setFabDialogOpen] = useState(false);
+  const fabExport = useFabExport({ getBoard: () => boardRef.current, getNetlist: () => netlist });
+
+  // ── Stage 16: shortcut cheat sheet + modal keyboard guard ────────────────────
+  /** While any modal dialog owns the screen, global shortcuts are gated —
+   *  including Ctrl+Z, which used to undo board state UNDER the fab dialog. */
+  const modalGuardRef = useRef({ anyModalOpen: false, otherModalOpen: false, preview3dOpen: false });
+  const shortcuts = useShortcutsHelp(() => modalGuardRef.current.otherModalOpen);
+
+  // ── Stage 11: zone fills (derived state — recomputed after commits) ─────────
+  const zoneFills = useZoneFills({ getHistory: () => historyRef.current, board: state.board });
+  const [planeDialogOpen, setPlaneDialogOpen] = useState(false);
+  const addPlane = useCallback((layer: LayerId, netId: number) => {
+    const h = historyRef.current;
+    if (!h) return;
+    const cmd: ZoneCommand = { kind: "AddZone", zone: makePlaneZone(h.present, layer, netId) };
+    h.execute(zoneCommandLabel(cmd, h.present), (d) => mutateBoardWithZoneCommand(d, cmd));
+    setToast("Plane added — filling…");
+  }, []);
+
+  // Zone fill rendering: batched Graphics per copper layer, under tracks/pads.
+  useEffect(() => {
+    if (!scene || !state.board) return;
+    try {
+      renderZones(state.board, (layer) => scene.getLayerContainer(layer));
+    } catch {
+      /* scene torn down mid-frame */
+    }
+  }, [scene, state.board]);
+
+  // Stage 16: user silk items, one batched Graphics per silk layer.
+  useEffect(() => {
+    if (!scene || !state.board) return;
+    try {
+      renderSilkItems(state.board, (layer) => scene.getLayerContainer(layer));
+    } catch {
+      /* scene torn down mid-frame */
+    }
+  }, [scene, state.board]);
+
+  // ── Stage 16: silkscreen tool ────────────────────────────────────────────────
+  const silkTool = useSilkTool({
+    scene,
+    active: state.tool === "silk",
+    getHistory: () => historyRef.current,
+    toast: setToast,
+  });
+
+  // ── Stage 8: one-click auto-place (single-undo batch) ───────────────────────
+  const autoPlace = useAutoPlace({
+    getHistory: () => historyRef.current,
+    getNetlist: () => netlist,
+    toast: setToast,
+  });
+
+  // ── Stage 9: one-click Freerouting autoroute (single-undo import) ───────────
+  const autoroute = useAutoroute({
+    getHistory: () => historyRef.current,
+    toast: setToast,
+    getDrcRules: () => getPreset(drc.activePresetId).rules, // Stage 12: DRC on completion
+  });
+
   // ── Scene sync (state → scene) ────────────────────────────────────────────
   useEffect(() => {
     if (state.board) scene?.setBoard(state.board);
@@ -354,7 +470,10 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   }, [scene, state.selection]);
 
   useEffect(() => {
-    scene?.setTool(state.tool);
+    // Route/zone/silk modes reuse the select viewport (middle-drag pans, left draws).
+    scene?.setTool(
+      state.tool === "route" || state.tool === "zone" || state.tool === "silk" ? "select" : state.tool,
+    );
   }, [scene, state.tool]);
 
   useEffect(() => {
@@ -365,6 +484,9 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   useEffect(() => {
     if (!scene) return;
     return scene.onPointer((e: ScenePointerEvent) => {
+      if (toolRef.current === "route") return; // useRouteTool owns route-mode pointers
+      if (toolRef.current === "zone") return; // ZoneTool owns zone-mode pointers
+      if (toolRef.current === "silk") return; // useSilkTool owns silk-mode pointers (Stage 16)
       if (toolRef.current === "pan") {
         // Viewport owns left-drag in pan mode; just keep hover clean.
         if (e.type === "move" || e.type === "leave") scene.setHover(null);
@@ -416,10 +538,91 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     });
   }, [scene]);
 
+  // Stage 16: keep the modal guard + global-action bindings current.
+  useEffect(() => {
+    modalGuardRef.current = {
+      anyModalOpen: fabDialogOpen || planeDialogOpen || shortcuts.open,
+      otherModalOpen: fabDialogOpen || planeDialogOpen,
+      preview3dOpen,
+    };
+  });
+  const globalActionsRef = useRef({
+    autoPlace: () => {},
+    autoroute: () => {},
+    runDrc: () => {},
+    toggle3d: () => {},
+    openFab: () => {},
+  });
+  useEffect(() => {
+    globalActionsRef.current = {
+      autoPlace: () => void autoPlace.run(),
+      autoroute: () => void autoroute.run(),
+      runDrc: () => void drc.run(),
+      toggle3d: () => setPreview3dOpen((o) => !o),
+      openFab: () => setFabDialogOpen(true),
+    };
+  });
+
   // Keyboard: select/move tool first (R/F/arrows/Delete/Escape/undo/redo).
+  // Stage 7: "R" toggles route mode (only when select-move didn't consume it —
+  // e.g. no selection to rotate); route-mode keys are owned by useRouteTool.
+  // Stage 16: modal dialogs gate EVERYTHING (no Ctrl+Z under the fab dialog);
+  // Ctrl+P/E/D/3/B are the global action shortcuts (see ShortcutsHelp).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (moveToolRef.current?.handleKey(e)) return;
+      if (modalGuardRef.current.anyModalOpen) return; // dialogs own the keyboard
+      const editable =
+        e.target instanceof HTMLElement &&
+        (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable);
+      if (e.key === "Escape" && modalGuardRef.current.preview3dOpen) {
+        e.preventDefault();
+        setPreview3dOpen(false);
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !editable) {
+        const k = e.key.toLowerCase();
+        const actions = globalActionsRef.current;
+        const run =
+          k === "p" ? actions.autoPlace
+          : k === "e" ? actions.autoroute
+          : k === "d" ? actions.runDrc
+          : k === "3" ? actions.toggle3d
+          : k === "b" ? actions.openFab
+          : null;
+        if (run) {
+          e.preventDefault(); // Ctrl+P/D would otherwise print/bookmark
+          run();
+          return;
+        }
+      }
+      if (
+        toolRef.current !== "route" &&
+        toolRef.current !== "zone" &&
+        toolRef.current !== "silk" &&
+        moveToolRef.current?.handleKey(e)
+      ) {
+        return;
+      }
+      if ((e.key === "r" || e.key === "R") && !e.ctrlKey && !e.metaKey && !editable) {
+        e.preventDefault();
+        dispatch({ type: "set-tool", tool: toolRef.current === "route" ? "select" : "route" });
+        return;
+      }
+      // Stage 11: "Z" toggles the zone-draw tool.
+      if ((e.key === "z" || e.key === "Z") && !e.ctrlKey && !e.metaKey && !editable) {
+        e.preventDefault();
+        dispatch({ type: "set-tool", tool: toolRef.current === "zone" ? "select" : "zone" });
+        return;
+      }
+      // Stage 16: "S" toggles the silkscreen tool.
+      if ((e.key === "s" || e.key === "S") && !e.ctrlKey && !e.metaKey && !editable) {
+        e.preventDefault();
+        dispatch({ type: "set-tool", tool: toolRef.current === "silk" ? "select" : "silk" });
+        return;
+      }
+      if (toolRef.current === "route") return; // useRouteTool owns V/Tab/Backspace/Escape/X
+      if (toolRef.current === "zone") return; // ZoneTool owns Enter/Escape
+      if (toolRef.current === "silk") return; // useSilkTool owns Enter/Escape (Stage 16)
       if (e.key === "Escape") dispatch({ type: "set-selection", ids: [] });
     };
     window.addEventListener("keydown", onKey);
@@ -479,6 +682,20 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
             if (h) h.execute("Edit outline", (d) => void (d.outline = outline));
             else dispatch({ type: "set-outline", outline });
           }}
+          onAutoPlace={() => void autoPlace.run()}
+          autoPlacing={autoPlace.state === "running"}
+          onRouteBoard={() => void autoroute.run()}
+          routing={autoroute.state === "running"}
+          routingElapsedMs={autoroute.elapsedMs}
+          onRunDrc={() => void drc.run()}
+          drcRunning={drc.state === "running"}
+          onAddPlane={() => setPlaneDialogOpen(true)} // Stage 11
+          zoneFilling={zoneFills.isFilling} // Stage 11
+          onToggle3d={() => setPreview3dOpen((o) => !o)} // Stage 15
+          preview3dOpen={preview3dOpen} // Stage 15
+          onExportKicad={() => { const b = boardRef.current; if (b) void downloadKicadPcb(b, netlist); }} // Stage 13
+          onSendToFab={() => setFabDialogOpen(true)} // Stage 14
+          onShowShortcuts={shortcuts.show} // Stage 16
         >
           {!init.demo && (
             <>
@@ -500,6 +717,41 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
         <div className="relative flex-1 min-h-0">
           <PcbCanvas onReady={handleSceneReady} />
           <DebugHud scene={scene} />
+          {/* Stage 11: zone draw tool (Z) + plane dialog */}
+          <ZoneTool
+            scene={scene}
+            active={state.tool === "zone"}
+            board={state.board}
+            getHistory={() => historyRef.current}
+            activeLayer={state.activeLayer}
+            toast={setToast}
+          />
+          <SilkTool silk={silkTool} active={state.tool === "silk"} /> {/* Stage 16 */}
+          <AddPlaneDialog
+            open={planeDialogOpen}
+            board={state.board}
+            onClose={() => setPlaneDialogOpen(false)}
+            onAdd={addPlane}
+          />
+          {/* Stage 15: 3D preview side sheet (three.js mounts only while open) */}
+          {preview3dOpen && (
+            <div className="absolute inset-y-0 right-0 z-40 w-[min(560px,85%)] flex flex-col border-l border-zinc-800 bg-zinc-950 shadow-2xl">
+              <div className="flex items-center justify-between h-9 px-3 shrink-0 border-b border-zinc-800 text-xs">
+                <span className="font-medium text-zinc-200">3D preview</span>
+                <button
+                  type="button"
+                  aria-label="Close 3D preview"
+                  onClick={() => setPreview3dOpen(false)}
+                  className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <PcbPreview3D board={state.board} />
+              </div>
+            </div>
+          )}
           <AssignmentQueue
             open={queueOpen}
             items={queueItems}
@@ -515,7 +767,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       </div>
 
       {/* Right panel column */}
-      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col">
+      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0">
         <LayerPanel
           stackup={state.board.stackup}
           activeLayer={state.activeLayer}
@@ -523,7 +775,20 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           onToggleVisible={(layer) => dispatch({ type: "toggle-layer", layer })}
           onActivate={(layer) => dispatch({ type: "set-active-layer", layer })}
         />
+        {drc.state === "idle" && !drc.lastResult ? (
+          <EmptyState // Stage 16: before the first run the panel explains itself
+            icon={ShieldCheck}
+            title="Design rule check"
+            subtitle="Run DRC to check the board against the current fab preset."
+            actionLabel="Run DRC"
+            onAction={() => void drc.run()}
+          />
+        ) : (
+          <DrcPanel drc={drc} />
+        )}
       </div>
+      <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={drc.zoomToViolation} /> {/* Stage 14 */}
+      <ShortcutsHelp open={shortcuts.open} onClose={shortcuts.hide} /> {/* Stage 16 */}
     </div>
   );
 }

@@ -6,7 +6,7 @@
  * outline controls (size presets, roundrect toggle, numeric width/height mm).
  */
 
-import { Hand, LayoutGrid, Maximize2, MousePointer } from "lucide-react";
+import { Box, Factory, FileDown, Hand, Hexagon, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, ShieldCheck, Sparkles, Spline, Type, Zap } from "lucide-react";
 import type { BoardOutline } from "@/app/lib/pcb/types";
 import { mmToNm, nmToMm } from "@/app/lib/pcb/units";
 
@@ -37,10 +37,24 @@ export function PcbToolbar({
   onStackupChange,
   outline,
   onOutlineChange,
+  onAutoPlace,
+  autoPlacing,
+  onRouteBoard,
+  routing,
+  routingElapsedMs,
+  onRunDrc,
+  drcRunning,
+  onExportKicad,
+  onSendToFab,
+  onShowShortcuts,
+  onAddPlane,
+  zoneFilling,
+  onToggle3d,
+  preview3dOpen,
   children,
 }: {
-  tool: "select" | "pan";
-  onToolChange: (tool: "select" | "pan") => void;
+  tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
+  onToolChange: (tool: "select" | "pan" | "route" | "zone" | "silk") => void;
   onZoomToFit: () => void;
   gridOn: boolean;
   onToggleGrid: () => void;
@@ -48,6 +62,29 @@ export function PcbToolbar({
   onStackupChange: (stackup: 2 | 4) => void;
   outline: BoardOutline;
   onOutlineChange: (outline: BoardOutline) => void;
+  /** Stage 8: one-click auto-place (button hidden when absent). */
+  onAutoPlace?: () => void;
+  autoPlacing?: boolean;
+  /** Stage 9: one-click Freerouting autoroute (button hidden when absent). */
+  onRouteBoard?: () => void;
+  routing?: boolean;
+  routingElapsedMs?: number;
+  /** Stage 12: run the batch DRC (button hidden when absent). */
+  onRunDrc?: () => void;
+  drcRunning?: boolean;
+  /** Stage 13: export the board as .kicad_pcb (button hidden when absent). */
+  onExportKicad?: () => void;
+  /** Stage 14: open the "Send to fab" bundle dialog (button hidden when absent). */
+  onSendToFab?: () => void;
+  /** Stage 16: open the keyboard-shortcut cheat sheet (button hidden when absent). */
+  onShowShortcuts?: () => void;
+  /** Stage 11: open the "Fill layer as plane" dialog (button hidden when absent). */
+  onAddPlane?: () => void;
+  /** Stage 11: a zone re-fill is running (spinner on the Zone button). */
+  zoneFilling?: boolean;
+  /** Stage 15: toggle the 3D preview panel (button hidden when absent). */
+  onToggle3d?: () => void;
+  preview3dOpen?: boolean;
   /** Right-aligned extras (Stage 4 mounts Sync + queue here). */
   children?: React.ReactNode;
 }) {
@@ -104,6 +141,114 @@ export function PcbToolbar({
       >
         <Hand className="size-3.5" />
       </button>
+      <button
+        type="button"
+        title="Route tracks (R)"
+        aria-label="Route tool"
+        onClick={() => onToolChange("route")}
+        className={iconButtonClass(tool === "route")}
+      >
+        <Spline className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Draw copper zone (Z)"
+        aria-label="Zone tool"
+        onClick={() => onToolChange("zone")}
+        className={iconButtonClass(tool === "zone")}
+      >
+        {zoneFilling ? <Loader2 className="size-3.5 animate-spin" /> : <Hexagon className="size-3.5" />}
+      </button>
+      <button
+        type="button"
+        title="Silkscreen text & graphics (S)"
+        aria-label="Silkscreen tool"
+        onClick={() => onToolChange("silk")}
+        className={iconButtonClass(tool === "silk")}
+      >
+        <Type className="size-3.5" />
+      </button>
+      {onAddPlane && (
+        <button
+          type="button"
+          title="Fill layer as plane"
+          aria-label="Add plane"
+          onClick={onAddPlane}
+          className={iconButtonClass(false)}
+        >
+          <Layers className="size-3.5" />
+        </button>
+      )}
+      {onAutoPlace && (
+        <button
+          type="button"
+          title="Auto-place footprints"
+          aria-label="Auto-place footprints"
+          onClick={onAutoPlace}
+          disabled={autoPlacing}
+          className={`${iconButtonClass(false)} disabled:opacity-50`}
+        >
+          {autoPlacing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+        </button>
+      )}
+      {onRouteBoard && (
+        <button
+          type="button"
+          title="Autoroute board (Freerouting)"
+          aria-label="Autoroute board"
+          onClick={onRouteBoard}
+          disabled={routing}
+          className={`${iconButtonClass(false)} flex items-center gap-1 disabled:opacity-50`}
+        >
+          {routing ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+          {routing && <span className="tabular-nums">{Math.round((routingElapsedMs ?? 0) / 1000)}s</span>}
+        </button>
+      )}
+      {onRunDrc && (
+        <button
+          type="button"
+          title="Run design rule check"
+          aria-label="Run DRC"
+          onClick={onRunDrc}
+          disabled={drcRunning}
+          className={`${iconButtonClass(false)} flex items-center gap-1 disabled:opacity-50`}
+        >
+          {drcRunning ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
+        </button>
+      )}
+      {onExportKicad && (
+        <button
+          type="button"
+          title="Export KiCad PCB (.kicad_pcb)"
+          aria-label="Export KiCad PCB"
+          onClick={onExportKicad}
+          className={iconButtonClass(false)}
+        >
+          <FileDown className="size-3.5" />
+        </button>
+      )}
+      {onSendToFab && (
+        <button
+          type="button"
+          title="Send to fab (Gerbers, drill, BOM, pick-and-place)"
+          aria-label="Send to fab"
+          onClick={onSendToFab}
+          className={iconButtonClass(false)}
+        >
+          <Factory className="size-3.5" />
+        </button>
+      )}
+      {onShowShortcuts && (
+        <button
+          type="button"
+          title="Keyboard shortcuts (?)"
+          aria-label="Keyboard shortcuts"
+          onClick={onShowShortcuts}
+          className={iconButtonClass(false)}
+        >
+          <Keyboard className="size-3.5" />
+        </button>
+      )}
 
       <div className="w-px h-4 bg-zinc-800 mx-1" />
 
@@ -125,6 +270,17 @@ export function PcbToolbar({
       >
         <LayoutGrid className="size-3.5" />
       </button>
+      {onToggle3d && (
+        <button
+          type="button"
+          title="3D preview"
+          aria-label="3D preview"
+          onClick={onToggle3d}
+          className={iconButtonClass(preview3dOpen === true)}
+        >
+          <Box className="size-3.5" />
+        </button>
+      )}
 
       <div className="w-px h-4 bg-zinc-800 mx-1" />
 

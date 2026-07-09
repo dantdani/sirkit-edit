@@ -28,6 +28,17 @@ function currentProjectId(): string | null {
   }
 }
 
+/** Stage 11 migration: boards saved before zone fill lack the new Zone fields. */
+function normalizeZones(board: PcbBoard): PcbBoard {
+  for (const zone of board.zones) {
+    zone.appearance ??= "solid";
+    zone.connection ??= "thermal";
+    zone.fill ??= [];
+    zone.dirty ??= true;
+  }
+  return board;
+}
+
 /** Board + last-synced netlist hash for the current project, if any. */
 export function loadCurrentBoard(): { board: PcbBoard | null; lastSyncHash: string | null } {
   const id = currentProjectId();
@@ -39,7 +50,7 @@ export function loadCurrentBoard(): { board: PcbBoard | null; lastSyncHash: stri
   } catch {
     /* unavailable — treat as never synced */
   }
-  return { board: project?.pcb ?? null, lastSyncHash };
+  return { board: project?.pcb ? normalizeZones(project.pcb) : null, lastSyncHash };
 }
 
 /**

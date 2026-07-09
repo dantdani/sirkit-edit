@@ -18,7 +18,8 @@
 import Flatbush from "flatbush";
 import type { Vec2, BBox, PlacedShape } from "./geometry";
 import { shapeBBox, shapeDistance } from "./geometry";
-import type { PcbBoard, Track, Via } from "./types";
+import type { PcbBoard, Track, Via, FilledRegion } from "./types";
+import { regionShapeDistance } from "./zones/geometry"; // Stage 11: hole-aware zone distance
 import type { LayerId } from "./layers";
 import {
   padCopperLayers,
@@ -41,7 +42,9 @@ export interface Airwire {
 export type CopperItemRef =
   | { kind: "pad"; instanceId: string; padNumber: string }
   | { kind: "track"; id: string }
-  | { kind: "via"; id: string };
+  | { kind: "via"; id: string }
+  // Stage 11: one entry per Zone.fill region (zones with an empty fill emit nothing).
+  | { kind: "zone-region"; zoneId: string; regionIndex: number };
 
 export interface NetConnectivity {
   netId: number;
@@ -82,6 +85,8 @@ interface Item {
   shape: PlacedShape | null;
   track?: Track;
   via?: Via;
+  /** Stage 11: zone fill region — touch tests go through regionShapeDistance. */
+  region?: FilledRegion;
 }
 
 function shapeOf(item: Item): PlacedShape {
@@ -155,7 +160,42 @@ function collectItems(board: PcbBoard): Item[] {
       via,
     });
   }
+  // Stage 11: zone fill regions are conductive copper. Anchors are boundary
+  // vertices (fine for airwires); anchorsInside=false keeps them out of the
+  // exact-anchor fast path, so every touch runs the hole-aware distance.
+  for (const zone of board.zones) {
+    zone.fill.forEach((region, regionIndex) => {
+      if (region.outer.length < 3) return;
+      items.push({
+        ref: { kind: "zone-region", zoneId: zone.id, regionIndex },
+        netId: zone.netId,
+        layers: [zone.layer],
+        bbox: region.boundingBox,
+        positions: [region.outer[0]],
+        anchorsInside: false,
+        shape: null,
+        region,
+      });
+    });
+  }
   return items;
+}
+
+/** Touch distance for pairs where at least one side is a zone region. */
+function zoneAwareDistance(a: Item, b: Item): number {
+  if (a.region && b.region) {
+    // Region–region: outer-ring proximity (same-net overlapping pours union;
+    // cross-net region pairs are clearance-separated by construction).
+    const ring = b.region.outer;
+    return regionShapeDistance(
+      a.region,
+      { shape: { kind: "polygon", points: ring }, at: { x: 0, y: 0 }, rotationDeg: 0 },
+      ring[0],
+    );
+  }
+  const zone = a.region ? a : b;
+  const other = a.region ? b : a;
+  return regionShapeDistance(zone.region as FilledRegion, shapeOf(other), other.positions[0]);
 }
 
 /**
@@ -345,7 +385,9 @@ export function computeConnectivity(board: PcbBoard): BoardConnectivity {
     const a = items[i];
     const b = items[j];
     if (a.netId === b.netId && (a.netId === 0 || uf.find(i) === uf.find(j))) continue;
-    if (shapeDistance(shapeOf(a), shapeOf(b)) <= 0) onTouch(i, j);
+    const d =
+      a.region || b.region ? zoneAwareDistance(a, b) : shapeDistance(shapeOf(a), shapeOf(b));
+    if (d <= 0) onTouch(i, j);
   }
 
   // Group same-net items into clusters by union-find root.

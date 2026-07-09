@@ -102,7 +102,9 @@ function endpointKey(a: Vec2, b: Vec2): string {
 }
 
 function refKey(r: CopperItemRef): string {
-  return r.kind === "pad" ? `pad:${r.instanceId}/${r.padNumber}` : `${r.kind}:${r.id}`;
+  if (r.kind === "pad") return `pad:${r.instanceId}/${r.padNumber}`;
+  if (r.kind === "zone-region") return `zone:${r.zoneId}#${r.regionIndex}`; // Stage 11
+  return `${r.kind}:${r.id}`;
 }
 
 // ── (a) two pads + joining track → one cluster, complete, no airwires ────────

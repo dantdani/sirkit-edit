@@ -1,0 +1,25 @@
+{
+  "id": "jlcpcb-2l",
+  "name": "JLCPCB economy 2-layer",
+  "fab": "JLCPCB",
+  "version": 1,
+  "verifiedAt": "2026-07-08",
+  "specUrl": "https://jlcpcb.com/capabilities/pcb-capabilities",
+  "rules": {
+    "default": {
+      "clearanceMm": 0.127,
+      "minTrackWidthMm": 0.127,
+      "minViaOuterMm": 0.6,
+      "minViaDrillMm": 0.3,
+      "minAnnularRingMm": 0.15,
+      "minHoleToHoleMm": 0.5,
+      "minEdgeClearanceMm": 0.3,
+      "minSilkPadClearanceMm": 0.15,
+      "minCourtyardClearanceMm": 0.0
+    },
+    "perClass": {
+      "Power": { "clearanceMm": 0.2, "minTrackWidthMm": 0.4 },
+      "HighCurrent": { "clearanceMm": 0.3, "minTrackWidthMm": 1.0 }
+    }
+  }
+}
