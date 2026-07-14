@@ -37,6 +37,7 @@ import { regionShapeDistance } from "./zones/geometry"; // Stage 11: zone fills 
 import type { CopperItemRef } from "./connectivity-board";
 import type { RouteCommand } from "./route-tool.commands";
 import { buildRipupNetCommand } from "./route-tool.commands";
+import { classDefaultPadstack, applyPadstackToVia } from "./padstack/defaults"; // Stage 17
 
 // ── Net-class defaults (Stage 10 `getNetClass` supersedes; see options.netClass)
 export const DEFAULT_TRACK_WIDTH = 250_000; // 0.25 mm
@@ -728,6 +729,10 @@ export function createRouteTool(
       netId: state.netId,
       layers: [state.activeLayer, newLayer],
     };
+    // Stage 17: the active net class's default padstack wins when the board
+    // has a library (dims denormalized onto the via — see padstack/registry).
+    const padstack = classDefaultPadstack(getBoard(), state.netId);
+    if (padstack) applyPadstackToVia(via, padstack);
     // Guard the via itself before committing (edge / other-net proximity).
     const res = checkClearance(getBoard(), {
       candidateSegments: [],

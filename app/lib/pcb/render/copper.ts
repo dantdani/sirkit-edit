@@ -22,6 +22,7 @@ import { COPPER_LAYERS } from "../layers";
 import { NM_PER_MM } from "../units";
 import { BACKGROUND_COLOR, layerColor } from "./colors";
 import { viaSpannedLayers } from "../geometry-copper";
+import { resolveVia } from "../padstack/registry"; // Stage 17
 
 type CopperTarget = LayerId | "holes";
 
@@ -89,10 +90,13 @@ export function renderCopper(
   for (const via of board.vias) {
     const xMm = mm(via.at.x);
     const yMm = mm(via.at.y);
+    // Stage 17: dims resolve through the padstack registry (legacy vias fall
+    // back to their own size/drill inside resolveVia).
+    const dims = resolveVia(board, via);
     for (const layer of viaSpannedLayers(via)) {
-      gfx(layer).circle(xMm, yMm, mm(via.size) / 2).fill(layerColor(layer));
+      gfx(layer).circle(xMm, yMm, mm(dims.outerNm) / 2).fill(layerColor(layer));
     }
-    gfx("holes").circle(xMm, yMm, mm(via.drill) / 2).fill(BACKGROUND_COLOR);
+    gfx("holes").circle(xMm, yMm, mm(dims.drillNm) / 2).fill(BACKGROUND_COLOR);
   }
 
   // Each track/via/zone counts once, however many layers show it — matches

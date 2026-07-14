@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { produce } from "immer";
 import dynamic from "next/dynamic";
 import { CircuitBoard, ListTodo, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -44,6 +45,8 @@ import { applyEdits, liveRefs } from "@/app/lib/pcb/edit/apply"; // Stage 17
 import type { SelectionRef } from "@/app/lib/pcb/edit/commands"; // Stage 17
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu"; // Stage 17
 import { Inspector } from "./Inspector"; // Stage 17 Phase B
+import { ensureBoardPadstacks } from "@/app/lib/pcb/padstack/migrate"; // Stage 17 Phase C
+import { PadstackPanel } from "./PadstackPanel"; // Stage 17 Phase C
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo"; // Stage 7 integration
 import { buildStoryDemo } from "@/app/lib/pcb/demo/story-demo"; // Stage 16
 import { useRouteTool } from "./hooks/useRouteTool"; // Stage 7 integration
@@ -184,6 +187,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           : demoParam === "story"
             ? buildStoryDemo()
             : buildDemoBoard(demoParam === "high" ? "high" : "default");
+      ensureBoardPadstacks(board); // Stage 17 — demos bypass board-persistence
       return { board, demo: true, lastSyncHash: null as string | null };
     }
     const { board, lastSyncHash } = loadCurrentBoard();
@@ -294,7 +298,9 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
         boardRef.current ?? undefined,
         { getPart: getCachedPart },
       );
-      dispatch({ type: "set-board", board });
+      // Stage 17 — sync results bypass board-persistence; the synced board can
+      // share frozen (immer) subtrees with the previous one, so migrate a draft.
+      dispatch({ type: "set-board", board: produce(board, (d) => void ensureBoardPadstacks(d)) });
       setNetlist(netlist);
       setLastSyncHash(netlistHash(netlist));
       setQueueItems(
@@ -404,6 +410,9 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
   const [preview3dOpen, setPreview3dOpen] = useState(false);
+
+  // ── Stage 17: padstack library panel (right column, not a modal) ───────────
+  const [padstacksOpen, setPadstacksOpen] = useState(false);
 
   // ── Stage 14: "Send to fab" bundle export ───────────────────────────────────
   const [fabDialogOpen, setFabDialogOpen] = useState(false);
@@ -799,6 +808,8 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           zoneFilling={zoneFills.isFilling} // Stage 11
           onToggle3d={() => setPreview3dOpen((o) => !o)} // Stage 15
           preview3dOpen={preview3dOpen} // Stage 15
+          onTogglePadstacks={() => setPadstacksOpen((o) => !o)} // Stage 17
+          padstacksOpen={padstacksOpen} // Stage 17
           onExportKicad={() => { const b = boardRef.current; if (b) void downloadKicadPcb(b, netlist); }} // Stage 13
           onSendToFab={() => setFabDialogOpen(true)} // Stage 14
           onShowShortcuts={shortcuts.show} // Stage 16
@@ -900,7 +911,16 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           toast={setToast}
           onRefillZones={() => void zoneFills.fillAllDirty()}
         />
-        {drc.state === "idle" && !drc.lastResult ? (
+        {padstacksOpen ? (
+          // Stage 17: the padstack library borrows the DRC panel's slot.
+          <PadstackPanel
+            board={state.board}
+            getHistory={() => historyRef.current}
+            rules={getPreset(drc.activePresetId).rules}
+            toast={setToast}
+            onClose={() => setPadstacksOpen(false)}
+          />
+        ) : drc.state === "idle" && !drc.lastResult ? (
           <EmptyState // Stage 16: before the first run the panel explains itself
             icon={ShieldCheck}
             title="Design rule check"

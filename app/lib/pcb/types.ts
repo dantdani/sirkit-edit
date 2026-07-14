@@ -10,6 +10,7 @@ import type { Vec2, BBox, PadShape } from "./geometry";
 import type { LayerId } from "./layers";
 import type { BoardNetClassing } from "./netclass"; // Stage 10 (type-only; no runtime cycle)
 import type { SilkItem } from "./silk/types"; // Stage 16 (type-only; no runtime cycle)
+import type { Padstack } from "./padstack/types"; // Stage 17 (type-only; no runtime cycle)
 
 export type PadType = "smd" | "thru_hole" | "np_thru_hole";
 
@@ -154,6 +155,8 @@ export interface PcbBoard {
   netClassing?: BoardNetClassing;
   /** Stage 16: user silkscreen items. Optional/additive — same posture. */
   silkItems?: SilkItem[];
+  /** Stage 17: via padstack library. Optional/additive — seeded + migrated on load. */
+  padstacks?: Padstack[];
 }
 
 /** 100×80 mm rect at origin, 2-layer stackup, only the reserved net 0. */

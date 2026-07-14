@@ -16,6 +16,7 @@
 import type { SchematicState } from "@/lib/schematic-types";
 import { createProject, loadProject, saveProjectPcb } from "@/lib/persistence";
 import type { PcbBoard } from "./types";
+import { ensureBoardPadstacks } from "./padstack/migrate"; // Stage 17
 
 const CURRENT_PROJECT_KEY = "sirkit:currentProjectId";
 const SYNC_HASH_PREFIX = "sirkit:pcbSyncHash:";
@@ -39,6 +40,13 @@ function normalizeZones(board: PcbBoard): PcbBoard {
   return board;
 }
 
+/** Stage 17 migration: seed the padstack library + link legacy vias. Runs
+ *  outside history (not undoable), idempotent — see padstack/migrate.ts. */
+function normalizePadstacks(board: PcbBoard): PcbBoard {
+  ensureBoardPadstacks(board);
+  return board;
+}
+
 /** Board + last-synced netlist hash for the current project, if any. */
 export function loadCurrentBoard(): { board: PcbBoard | null; lastSyncHash: string | null } {
   const id = currentProjectId();
@@ -50,7 +58,7 @@ export function loadCurrentBoard(): { board: PcbBoard | null; lastSyncHash: stri
   } catch {
     /* unavailable — treat as never synced */
   }
-  return { board: project?.pcb ? normalizeZones(project.pcb) : null, lastSyncHash };
+  return { board: project?.pcb ? normalizePadstacks(normalizeZones(project.pcb)) : null, lastSyncHash };
 }
 
 /**

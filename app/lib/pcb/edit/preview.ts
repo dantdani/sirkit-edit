@@ -28,8 +28,7 @@ import { getPreset, DEFAULT_PRESET_ID } from "../drc/presets";
 import { getNetClass } from "../netclass";
 import { checkClearance, type ClearanceGuardResult } from "../route-tool";
 import type { EditCommand } from "./commands";
-import { validateCommand } from "./validate";
-import { dryRunEdits } from "./apply";
+import { compileEdits } from "./apply";
 
 export interface EditPreview {
   /** Validation errors — these DO block a commit (applyEdits rejects). */
@@ -141,12 +140,13 @@ export function previewEdits(
   cmds: EditCommand[],
   rules: DrcRules = getPreset(DEFAULT_PRESET_ID).rules,
 ): EditPreview {
-  const errors = cmds.flatMap((cmd) => validateCommand(board, cmd));
-  if (errors.length > 0 || cmds.length === 0) {
-    return { errors, violations: [] };
+  if (cmds.length === 0) return { errors: [], violations: [] };
+  const compiled = compileEdits(board, cmds);
+  if (compiled.errors.length > 0) {
+    return { errors: compiled.errors, violations: [] };
   }
 
-  const next = dryRunEdits(board, cmds);
+  const next = compiled.result;
   const { trackIds, viaIds } = touchedCopper(cmds);
   const tracks = next.tracks.filter((t) => trackIds.has(t.id));
   const vias = next.vias.filter((v) => viaIds.has(v.id));

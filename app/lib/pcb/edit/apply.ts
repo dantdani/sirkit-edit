@@ -23,6 +23,8 @@ import {
   findFootprint,
 } from "./validate";
 import { describeEdits } from "./describe";
+import { addPadstack, syncViasToPadstack } from "../padstack/registry";
+import { applyPadstackToVia } from "../padstack/defaults";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 
@@ -268,6 +270,48 @@ function compileCommand(board: PcbBoard, cmd: EditCommand): Mutator {
       };
     }
 
+    case "create-padstack": {
+      const input = cmd.padstack;
+      return (draft) => {
+        addPadstack(draft, input);
+      };
+    }
+
+    case "edit-padstack": {
+      const { id, patch } = cmd;
+      return (draft) => {
+        const ps = (draft.padstacks ?? []).find((p) => p.id === id);
+        if (!ps) return;
+        if (patch.name !== undefined) ps.name = patch.name;
+        if (patch.outerNm !== undefined) ps.outerNm = Math.round(patch.outerNm);
+        if (patch.drillNm !== undefined) ps.drillNm = Math.round(patch.drillNm);
+        if (patch.tented !== undefined) ps.tented = patch.tented;
+        if (patch.zoneConnect !== undefined) ps.zoneConnect = patch.zoneConnect;
+        // Denormalization invariant: member vias mirror the padstack dims.
+        syncViasToPadstack(draft, id);
+      };
+    }
+
+    case "set-via-padstack": {
+      const ids = new Set(cmd.viaIds);
+      const padstackId = cmd.padstackId;
+      return (draft) => {
+        const ps = (draft.padstacks ?? []).find((p) => p.id === padstackId);
+        if (!ps) return;
+        for (const via of draft.vias) {
+          if (ids.has(via.id)) applyPadstackToVia(via, ps);
+        }
+      };
+    }
+
+    case "delete-padstack": {
+      const { id } = cmd;
+      return (draft) => {
+        // Validator guarantees usageCount === 0.
+        draft.padstacks = (draft.padstacks ?? []).filter((p) => p.id !== id);
+      };
+    }
+
     // Validated commands never reach here for not-yet-implemented ops —
     // validateCommand rejects them until their phase lands.
     default:
@@ -313,21 +357,46 @@ function makeTransformMutator(refs: SelectionRef[], f: (p: Vec2) => Vec2): Mutat
 // ── The single mutation path ─────────────────────────────────────────────────
 
 /**
- * Dry-run a VALIDATED batch on a throwaway immer draft — the board is not
- * touched and no history entry exists. Phase B's `previewEdits` and the AI
- * assist gate build on this. Callers must validate first.
+ * Validate + compile a batch SEQUENTIALLY: each command validates against the
+ * board as the previous commands left it, so batch-internal dependencies work
+ * (e.g. `create-padstack` followed by `set-via-padstack` referencing the new
+ * id — the Phase C fork rule). Mutators capture only constants and ids, so
+ * replaying them in order on the history draft reproduces `result` exactly.
  */
-export function dryRunEdits(board: PcbBoard, cmds: EditCommand[]): PcbBoard {
-  const mutators = cmds.map((cmd) => compileCommand(board, cmd));
-  return produce(board, (draft) => {
-    for (const m of mutators) m(draft);
-  });
+export function compileEdits(
+  board: PcbBoard,
+  cmds: EditCommand[],
+): { errors: string[]; mutators: ((draft: PcbBoard) => void)[]; result: PcbBoard } {
+  const errors: string[] = [];
+  const mutators: Mutator[] = [];
+  let cur = board;
+  for (const cmd of cmds) {
+    const errs = validateCommand(cur, cmd);
+    if (errs.length > 0) {
+      errors.push(...errs);
+      continue;
+    }
+    const m = compileCommand(cur, cmd);
+    mutators.push(m);
+    cur = produce(cur, m);
+  }
+  return { errors, mutators, result: cur };
 }
 
 /**
- * Validate ALL commands, then apply them in ONE `history.execute()` — one
- * undo step for the whole batch (inspector commit, arrange action, AI edit).
- * Any validation error aborts the batch untouched.
+ * Dry-run a batch on throwaway immer drafts — the board is not touched and
+ * no history entry exists. Phase B's `previewEdits` and the AI assist gate
+ * build on this. Invalid commands are skipped (callers validate separately).
+ */
+export function dryRunEdits(board: PcbBoard, cmds: EditCommand[]): PcbBoard {
+  return compileEdits(board, cmds).result;
+}
+
+/**
+ * Validate ALL commands (sequentially — see compileEdits), then apply them in
+ * ONE `history.execute()` — one undo step for the whole batch (inspector
+ * commit, arrange action, AI edit). Any validation error aborts the batch
+ * untouched.
  */
 export function applyEdits(
   history: PcbHistory,
@@ -335,17 +404,16 @@ export function applyEdits(
   labelOverride?: string,
 ): EditResult {
   const board = history.present;
-
-  const errors = cmds.flatMap((cmd) => validateCommand(board, cmd));
-  if (errors.length > 0) {
-    return { ok: false, errors, violations: [], label: "" };
-  }
   if (cmds.length === 0) {
     return { ok: true, errors: [], violations: [], label: "" };
   }
 
+  const { errors, mutators } = compileEdits(board, cmds);
+  if (errors.length > 0) {
+    return { ok: false, errors, violations: [], label: "" };
+  }
+
   const label = labelOverride ?? describeEdits(board, cmds);
-  const mutators = cmds.map((cmd) => compileCommand(board, cmd));
   history.execute(label, (draft) => {
     for (const m of mutators) m(draft);
   });

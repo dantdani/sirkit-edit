@@ -10,6 +10,7 @@ import type { LayerId } from "../layers";
 import type { PcbBoard } from "../types";
 import type { EditCommand, SelectionRef } from "./commands";
 import { findFootprint } from "./validate";
+import { getPadstack } from "../padstack/registry";
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -97,12 +98,18 @@ function describeOne(board: PcbBoard, cmd: EditCommand): string {
       return `Snap ${describeRefs(board, cmd.refs)} to ${formatMm(cmd.gridNm)} mm grid`;
     case "create-padstack":
       return `Add padstack '${cmd.padstack.name}'`;
-    case "edit-padstack":
-      return "Edit padstack";
-    case "set-via-padstack":
-      return `Set padstack on ${plural(cmd.viaIds.length, "via")}`;
-    case "delete-padstack":
-      return "Delete padstack";
+    case "edit-padstack": {
+      const name = getPadstack(board, cmd.id)?.name;
+      return name ? `Edit padstack '${name}'` : "Edit padstack";
+    }
+    case "set-via-padstack": {
+      const name = getPadstack(board, cmd.padstackId)?.name;
+      return `Set ${plural(cmd.viaIds.length, "via")} to ${name ? `'${name}'` : "padstack"}`;
+    }
+    case "delete-padstack": {
+      const name = getPadstack(board, cmd.id)?.name;
+      return name ? `Delete padstack '${name}'` : "Delete padstack";
+    }
   }
 }
 

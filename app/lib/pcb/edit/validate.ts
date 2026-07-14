@@ -13,6 +13,8 @@ import type { PcbBoard, Track, Via, Zone, FootprintInstance } from "../types";
 import type { SilkTextItem } from "../silk/types";
 import type { LayerId } from "../layers";
 import type { Vec2 } from "../geometry";
+import type { PadstackInput } from "../padstack/types";
+import { getPadstack, usageCount } from "../padstack/registry";
 import type { EditCommand, SelectionRef } from "./commands";
 
 // ── Item lookup (shared with apply.ts / describe.ts) ─────────────────────────
@@ -114,6 +116,40 @@ function checkNotLocked(board: PcbBoard, refs: SelectionRef[], errors: string[],
     if (ref.kind !== "footprint") continue;
     const fp = findFootprint(board, ref.id);
     if (fp?.locked) errors.push(`${fp.ref} is locked — unlock it before you ${verb} it.`);
+  }
+}
+
+/** Field checks shared by create-padstack (all fields) and edit-padstack
+ *  (validated post-merge so a partial patch can't break the invariants). */
+function checkPadstackFields(
+  p: Partial<PadstackInput>,
+  errors: string[],
+  requireAll: boolean,
+): void {
+  if (requireAll || p.name !== undefined) {
+    if (typeof p.name !== "string" || p.name.trim().length === 0) {
+      errors.push("Padstack needs a name.");
+    }
+  }
+  if (requireAll || p.kind !== undefined) {
+    if (p.kind !== "via") {
+      errors.push("Only via padstacks exist — pad padstacks are post-MVP.");
+    }
+  }
+  const outerOk = isPositiveDim(p.outerNm);
+  const drillOk = isPositiveDim(p.drillNm);
+  if (!outerOk) errors.push("Padstack outer diameter must be a positive number of nanometers.");
+  if (!drillOk) errors.push("Padstack drill must be a positive number of nanometers.");
+  if (outerOk && drillOk && (p.drillNm as number) >= (p.outerNm as number)) {
+    errors.push("Padstack drill must be smaller than its outer diameter.");
+  }
+  if (requireAll || p.tented !== undefined) {
+    if (typeof p.tented !== "boolean") errors.push("Tented must be true or false.");
+  }
+  if (requireAll || p.zoneConnect !== undefined) {
+    if (p.zoneConnect !== "solid" && p.zoneConnect !== "thermal") {
+      errors.push("Zone connect must be 'solid' or 'thermal'.");
+    }
   }
 }
 
@@ -302,13 +338,54 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
       errors.push(`'${cmd.op}' isn't available yet (Stage 17 Phase D).`);
       break;
 
-    // Phase C — padstack commands land with padstack/registry.ts.
-    case "create-padstack":
-    case "edit-padstack":
-    case "set-via-padstack":
-    case "delete-padstack":
-      errors.push(`'${cmd.op}' isn't available yet (Stage 17 Phase C).`);
+    case "create-padstack": {
+      checkPadstackFields(cmd.padstack ?? {}, errors, true);
       break;
+    }
+
+    case "edit-padstack": {
+      const ps = getPadstack(board, cmd.id);
+      if (!ps) {
+        errors.push(`No padstack ${cmd.id} on this board.`);
+        break;
+      }
+      const patch = cmd.patch ?? {};
+      if (Object.keys(patch).length === 0) {
+        errors.push("Nothing to change on the padstack.");
+        break;
+      }
+      checkPadstackFields({ ...ps, ...patch }, errors, false);
+      break;
+    }
+
+    case "set-via-padstack": {
+      if (!Array.isArray(cmd.viaIds) || cmd.viaIds.length === 0) {
+        errors.push("Nothing to change — the command has no via ids.");
+      } else {
+        for (const id of cmd.viaIds) {
+          if (!findVia(board, id)) errors.push(`No via ${id} on this board.`);
+        }
+      }
+      if (!getPadstack(board, cmd.padstackId)) {
+        errors.push(`No padstack ${cmd.padstackId} on this board.`);
+      }
+      break;
+    }
+
+    case "delete-padstack": {
+      const ps = getPadstack(board, cmd.id);
+      if (!ps) {
+        errors.push(`No padstack ${cmd.id} on this board.`);
+        break;
+      }
+      const used = usageCount(board, cmd.id);
+      if (used > 0) {
+        errors.push(
+          `'${ps.name}' is used by ${used} via${used === 1 ? "" : "s"} — switch those vias to another padstack first.`,
+        );
+      }
+      break;
+    }
 
     default: {
       // AI/JSON boundary: `cmd` may not be a real EditCommand at runtime.

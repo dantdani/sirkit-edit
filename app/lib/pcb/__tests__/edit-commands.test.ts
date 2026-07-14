@@ -142,9 +142,10 @@ describe("validateCommand", () => {
     expect(
       validateCommand(board, { op: "align", refs: [ref("via", "rd-v1")], mode: "left" }),
     ).toContain("'align' isn't available yet (Stage 17 Phase D).");
+    // Phase C: create-padstack is live — an empty input fails field checks.
     expect(
       validateCommand(board, { op: "create-padstack", padstack: {} as never }),
-    ).toContain("'create-padstack' isn't available yet (Stage 17 Phase C).");
+    ).toContain("Padstack needs a name.");
     expect(
       validateCommand(board, { op: "explode-board" } as unknown as EditCommand),
     ).toEqual(["Unknown edit command 'explode-board'."]);

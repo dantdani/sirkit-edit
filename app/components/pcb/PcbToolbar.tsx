@@ -6,7 +6,7 @@
  * outline controls (size presets, roundrect toggle, numeric width/height mm).
  */
 
-import { Box, Factory, FileDown, Hand, Hexagon, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, ShieldCheck, Sparkles, Spline, Type, Zap } from "lucide-react";
+import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, ShieldCheck, Sparkles, Spline, Type, Zap } from "lucide-react";
 import type { BoardOutline } from "@/app/lib/pcb/types";
 import { mmToNm, nmToMm } from "@/app/lib/pcb/units";
 
@@ -51,6 +51,8 @@ export function PcbToolbar({
   zoneFilling,
   onToggle3d,
   preview3dOpen,
+  onTogglePadstacks,
+  padstacksOpen,
   children,
 }: {
   tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
@@ -85,6 +87,9 @@ export function PcbToolbar({
   /** Stage 15: toggle the 3D preview panel (button hidden when absent). */
   onToggle3d?: () => void;
   preview3dOpen?: boolean;
+  /** Stage 17: toggle the padstack library panel (button hidden when absent). */
+  onTogglePadstacks?: () => void;
+  padstacksOpen?: boolean;
   /** Right-aligned extras (Stage 4 mounts Sync + queue here). */
   children?: React.ReactNode;
 }) {
@@ -279,6 +284,17 @@ export function PcbToolbar({
           className={iconButtonClass(preview3dOpen === true)}
         >
           <Box className="size-3.5" />
+        </button>
+      )}
+      {onTogglePadstacks && (
+        <button
+          type="button"
+          title="Padstacks"
+          aria-label="Padstack library"
+          onClick={onTogglePadstacks}
+          className={iconButtonClass(padstacksOpen === true)}
+        >
+          <CircleDot className="size-3.5" />
         </button>
       )}
 
