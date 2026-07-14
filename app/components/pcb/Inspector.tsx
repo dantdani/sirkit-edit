@@ -15,7 +15,7 @@ import { Crosshair, Trash2 } from "lucide-react";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbScene } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
-import type { DrcRules } from "@/app/lib/pcb/drc/types";
+import type { DrcRules, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { SelectionStore } from "@/app/lib/pcb/selection";
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
 import { applyEdits, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply";
@@ -30,6 +30,8 @@ import { FootprintInspector } from "./inspectors/FootprintInspector";
 import { ZoneInspector } from "./inspectors/ZoneInspector";
 import { TextInspector } from "./inspectors/TextInspector";
 import { MixedInspector } from "./inspectors/MixedInspector";
+import { ArrangeSection } from "./inspectors/ArrangeSection"; // Stage 17 Phase D
+import { AssistBox } from "./AssistBox"; // Stage 17 Phase D
 
 const KIND_WORD: Record<ResolvedItem["kind"], string> = {
   via: "via",
@@ -72,6 +74,7 @@ export function Inspector({
   getHistory,
   scene,
   rules,
+  presetId,
   toast,
   onRefillZones,
 }: {
@@ -80,6 +83,7 @@ export function Inspector({
   getHistory: () => PcbHistory | null;
   scene: PcbScene | null;
   rules: DrcRules;
+  presetId: DrcPresetId;
   toast(message: string): void;
   onRefillZones?(): void;
 }) {
@@ -171,7 +175,10 @@ export function Inspector({
           {headerText(board, items)}
         </span>
       </div>
-      <div className="overflow-y-auto py-1">{body}</div>
+      <div className="overflow-y-auto py-1">
+        {body}
+        <ArrangeSection refs={set.refs} commit={commit} />
+      </div>
       <div className="px-3 py-1.5 border-t border-zinc-800/60 flex items-center gap-2">
         <button
           type="button"
@@ -201,6 +208,14 @@ export function Inspector({
           </button>
         )}
       </div>
+      <AssistBox
+        board={board}
+        getSelectionRefs={() => selection.get().refs}
+        getHistory={getHistory}
+        rules={rules}
+        presetId={presetId}
+        toast={toast}
+      />
     </div>
   );
 }

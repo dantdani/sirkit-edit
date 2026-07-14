@@ -33,6 +33,7 @@ function setup(selectTrackCount: number) {
       getHistory={() => history}
       scene={null}
       rules={RULES}
+      presetId="jlcpcb-2l"
       toast={toast}
     />,
   );
@@ -50,6 +51,7 @@ describe("Inspector", () => {
         getHistory={() => history}
         scene={null}
         rules={RULES}
+        presetId="jlcpcb-2l"
         toast={() => {}}
       />,
     );
@@ -125,6 +127,7 @@ describe("Inspector", () => {
         getHistory={() => history}
         scene={null}
         rules={RULES}
+        presetId="jlcpcb-2l"
         toast={() => {}}
       />,
     );
@@ -147,6 +150,7 @@ describe("Inspector", () => {
         getHistory={() => history}
         scene={null}
         rules={RULES}
+        presetId="jlcpcb-2l"
         toast={toast}
       />,
     );

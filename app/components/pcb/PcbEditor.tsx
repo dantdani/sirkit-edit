@@ -41,12 +41,15 @@ import {
 } from "@/app/lib/pcb/tools/select-move";
 import { createSelectionStore } from "@/app/lib/pcb/selection"; // Stage 17
 import { selectSimilar, selectNet, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
-import { applyEdits, liveRefs } from "@/app/lib/pcb/edit/apply"; // Stage 17
-import type { SelectionRef } from "@/app/lib/pcb/edit/commands"; // Stage 17
+import { applyEdits, liveRefs, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply"; // Stage 17
+import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands"; // Stage 17
 import { ContextMenu, type ContextMenuItem } from "./ContextMenu"; // Stage 17
 import { Inspector } from "./Inspector"; // Stage 17 Phase B
 import { ensureBoardPadstacks } from "@/app/lib/pcb/padstack/migrate"; // Stage 17 Phase C
 import { PadstackPanel } from "./PadstackPanel"; // Stage 17 Phase C
+import { CommandPalette, type PaletteAction } from "./CommandPalette"; // Stage 17 Phase D
+import { AssistBox } from "./AssistBox"; // Stage 17 Phase D
+import { ARRANGE_GRID_NM, movableRefs } from "./inspectors/ArrangeSection"; // Stage 17 Phase D
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo"; // Stage 7 integration
 import { buildStoryDemo } from "@/app/lib/pcb/demo/story-demo"; // Stage 16
 import { useRouteTool } from "./hooks/useRouteTool"; // Stage 7 integration
@@ -414,6 +417,10 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   // ── Stage 17: padstack library panel (right column, not a modal) ───────────
   const [padstacksOpen, setPadstacksOpen] = useState(false);
 
+  // ── Stage 17 Phase D: command palette (Ctrl+K) + floating AI assist ────────
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(false);
+
   // ── Stage 14: "Send to fab" bundle export ───────────────────────────────────
   const [fabDialogOpen, setFabDialogOpen] = useState(false);
   const fabExport = useFabExport({ getBoard: () => boardRef.current, getNetlist: () => netlist });
@@ -575,9 +582,10 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   }, [scene]);
 
   // Stage 16: keep the modal guard + global-action bindings current.
+  // Stage 17: the palette gates global shortcuts too (it owns the keyboard).
   useEffect(() => {
     modalGuardRef.current = {
-      anyModalOpen: fabDialogOpen || planeDialogOpen || shortcuts.open,
+      anyModalOpen: fabDialogOpen || planeDialogOpen || shortcuts.open || paletteOpen,
       otherModalOpen: fabDialogOpen || planeDialogOpen,
       preview3dOpen,
     };
@@ -606,6 +614,14 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   // Ctrl+P/E/D/3/B are the global action shortcuts (see ShortcutsHelp).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      // Stage 17: Ctrl+K toggles the palette from anywhere except a modal.
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        if (!modalGuardRef.current.otherModalOpen) {
+          e.preventDefault();
+          setPaletteOpen((o) => !o);
+        }
+        return;
+      }
       if (modalGuardRef.current.anyModalOpen) return; // dialogs own the keyboard
       const editable =
         e.target instanceof HTMLElement &&
@@ -727,6 +743,30 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
     );
     const h = historyRef.current;
+
+    // Stage 17 Phase D: arrange on multi-select — same commands as the
+    // inspector's Arrange section and the palette.
+    const movable = movableRefs(refs);
+    if (movable.length >= 2 && h) {
+      const arrange = (cmds: EditCommand[]) => () => {
+        const result = applyEdits(h, cmds);
+        if (!result.ok) setToast(result.errors[0]);
+      };
+      items.push(
+        { label: "Align left", onClick: arrange([{ op: "align", refs: movable, mode: "left" }]) },
+        { label: "Align top", onClick: arrange([{ op: "align", refs: movable, mode: "top" }]) },
+      );
+      if (movable.length >= 3) {
+        items.push({
+          label: "Distribute horizontally",
+          onClick: arrange([{ op: "distribute", refs: movable, axis: "h" }]),
+        });
+      }
+      items.push({
+        label: "Snap to 0.5 mm grid",
+        onClick: arrange([{ op: "snap-to-grid", refs: movable, gridNm: ARRANGE_GRID_NM }]),
+      });
+    }
     if (deletable.length > 0 && h) {
       items.push({
         label:
@@ -747,6 +787,140 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       });
     }
     return items;
+  };
+
+  // ── Stage 17 Phase D: the palette's action registry ────────────────────────
+  // Every EditCommand-backed action + editor actions; the palette is the
+  // discoverability answer (and mirrors the AI's action vocabulary).
+  const buildPaletteActions = (): PaletteAction[] => {
+    const board = state.board;
+    const refs = selectionStore.get().refs;
+    const movable = movableRefs(refs);
+    const primary = selectionStore.get().primary;
+    const h = historyRef.current;
+    const commit = (cmds: EditCommand[]): void => {
+      if (!h) return;
+      const result = applyEdits(h, cmds);
+      if (!result.ok) setToast(result.errors[0]);
+    };
+    const needTwo = movable.length >= 2 ? null : "select 2+ items";
+    const needThree = movable.length >= 3 ? null : "select 3+ items";
+    const alignAction = (
+      mode: "left" | "right" | "top" | "bottom" | "centerH" | "centerV",
+      title: string,
+    ): PaletteAction => ({
+      id: `align-${mode}`,
+      title,
+      hint: "Arrange",
+      disabled: needTwo,
+      run: () => commit([{ op: "align", refs: movable, mode }]),
+    });
+
+    const actions: PaletteAction[] = [
+      { id: "assist", title: "Ask AI to edit the board…", hint: "AI", run: () => setAssistOpen(true) },
+      { id: "zoom-fit", title: "Zoom to fit", run: () => scene?.zoomToFit() },
+      {
+        id: "zoom-selection",
+        title: "Zoom to selection",
+        disabled: refs.length > 0 ? null : "nothing selected",
+        run: () => {
+          if (board && scene) scene.centerOn(selectionBBoxCenter(board, refs));
+        },
+      },
+      { id: "run-drc", title: "Run design rule check", hint: "Ctrl+D", run: () => void drc.run() },
+      { id: "autoplace", title: "Auto-place components", hint: "Ctrl+P", run: () => void autoPlace.run() },
+      { id: "autoroute", title: "Autoroute board", hint: "Ctrl+E", run: () => void autoroute.run() },
+      { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => setPreview3dOpen((o) => !o) },
+      { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
+      {
+        id: "export-kicad",
+        title: "Export .kicad_pcb",
+        run: () => {
+          const b = boardRef.current;
+          if (b) void downloadKicadPcb(b, netlist);
+        },
+      },
+      { id: "padstacks", title: "Open padstack library", run: () => setPadstacksOpen(true) },
+      { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => dispatch({ type: "toggle-grid" }) },
+      { id: "shortcuts", title: "Keyboard shortcuts", hint: "?", run: shortcuts.show },
+      alignAction("left", "Align left"),
+      alignAction("centerH", "Align horizontal centers"),
+      alignAction("right", "Align right"),
+      alignAction("top", "Align top"),
+      alignAction("centerV", "Align vertical centers"),
+      alignAction("bottom", "Align bottom"),
+      {
+        id: "distribute-h",
+        title: "Distribute horizontally",
+        hint: "Arrange",
+        disabled: needThree,
+        run: () => commit([{ op: "distribute", refs: movable, axis: "h" }]),
+      },
+      {
+        id: "distribute-v",
+        title: "Distribute vertically",
+        hint: "Arrange",
+        disabled: needThree,
+        run: () => commit([{ op: "distribute", refs: movable, axis: "v" }]),
+      },
+      {
+        id: "snap-grid",
+        title: "Snap selection to 0.5 mm grid",
+        hint: "Arrange",
+        disabled: movable.length > 0 ? null : "nothing selected",
+        run: () => commit([{ op: "snap-to-grid", refs: movable, gridNm: ARRANGE_GRID_NM }]),
+      },
+      {
+        id: "delete-selection",
+        title: "Delete selected copper/text",
+        disabled: refs.some((r) => r.kind !== "footprint" && r.kind !== "pad")
+          ? null
+          : "nothing deletable selected",
+        run: () =>
+          commit([
+            {
+              op: "delete-items",
+              refs: refs.filter(
+                (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+              ),
+            },
+          ]),
+      },
+    ];
+
+    // Select-similar for the primary item (same queries as the context menu).
+    if (board && primary && primary.kind !== "pad" && primary.kind !== "footprint") {
+      actions.push({
+        id: "select-net",
+        title: "Select everything on this net",
+        run: () => selectionStore.replace(selectSimilar(board, primary, "net")),
+      });
+      actions.push({
+        id: "select-layer",
+        title: "Select everything on this layer",
+        run: () => selectionStore.replace(selectSimilar(board, primary, "layer")),
+      });
+      if (primary.kind === "via") {
+        actions.push({
+          id: "select-padstack",
+          title: "Select vias with this padstack",
+          run: () => selectionStore.replace(selectSimilar(board, primary, "padstack")),
+        });
+      }
+    }
+
+    // Layer visibility toggles (copper + silk — the everyday set).
+    for (const layer of LAYERS) {
+      if (layer.kind !== "copper" && layer.kind !== "silk") continue;
+      if ((layer.id === "in1" || layer.id === "in2") && board?.stackup !== 4) continue;
+      actions.push({
+        id: `layer-${layer.id}`,
+        title: `Toggle ${layer.displayName}`,
+        hint: "Layers",
+        run: () => dispatch({ type: "toggle-layer", layer: layer.id }),
+      });
+    }
+    return actions;
   };
 
   // ── Empty state: no board yet ─────────────────────────────────────────────
@@ -889,6 +1063,39 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
               onClose={() => setCtxMenu(null)}
             />
           )}
+          {/* Stage 17 Phase D: command palette (Ctrl+K) */}
+          <CommandPalette
+            open={paletteOpen}
+            actions={buildPaletteActions()}
+            onClose={() => setPaletteOpen(false)}
+          />
+          {/* Stage 17 Phase D: floating AI assist (palette-launched; works
+              without a selection — the inspector footer has its own box) */}
+          {assistOpen && (
+            <div className="absolute bottom-3 right-3 z-40 w-72 rounded-lg border border-zinc-700 bg-zinc-900/95 shadow-xl">
+              <div className="flex items-center justify-between px-3 pt-2">
+                <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+                  AI assist
+                </span>
+                <button
+                  type="button"
+                  aria-label="Close AI assist"
+                  onClick={() => setAssistOpen(false)}
+                  className="p-0.5 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+              <AssistBox
+                board={state.board}
+                getSelectionRefs={() => selectionStore.get().refs}
+                getHistory={() => historyRef.current}
+                rules={getPreset(drc.activePresetId).rules}
+                presetId={drc.activePresetId}
+                toast={setToast}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -908,6 +1115,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           getHistory={() => historyRef.current}
           scene={scene}
           rules={getPreset(drc.activePresetId).rules}
+          presetId={drc.activePresetId}
           toast={setToast}
           onRefillZones={() => void zoneFills.fillAllDirty()}
         />

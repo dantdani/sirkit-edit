@@ -331,12 +331,43 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
       break;
     }
 
-    // Phase D — arrange commands land with edit/arrange.ts.
-    case "align":
-    case "distribute":
-    case "snap-to-grid":
-      errors.push(`'${cmd.op}' isn't available yet (Stage 17 Phase D).`);
+    case "align": {
+      checkRefs(board, cmd.refs, errors, "align");
+      for (const ref of cmd.refs) {
+        if (ref.kind === "pad") errors.push("Pads move with their footprint — align the footprint instead.");
+      }
+      checkNotLocked(board, cmd.refs, errors, "move");
+      if (cmd.refs.length < 2) errors.push("Aligning needs at least two items.");
+      if (!["left", "right", "top", "bottom", "centerH", "centerV"].includes(cmd.mode)) {
+        errors.push(`Unknown align mode '${String(cmd.mode)}'.`);
+      }
       break;
+    }
+
+    case "distribute": {
+      checkRefs(board, cmd.refs, errors, "distribute");
+      for (const ref of cmd.refs) {
+        if (ref.kind === "pad") errors.push("Pads move with their footprint — distribute the footprints instead.");
+      }
+      checkNotLocked(board, cmd.refs, errors, "move");
+      if (cmd.refs.length < 3) errors.push("Distributing needs at least three items.");
+      if (cmd.axis !== "h" && cmd.axis !== "v") {
+        errors.push("Distribute axis must be 'h' or 'v'.");
+      }
+      break;
+    }
+
+    case "snap-to-grid": {
+      checkRefs(board, cmd.refs, errors, "snap");
+      for (const ref of cmd.refs) {
+        if (ref.kind === "pad") errors.push("Pads move with their footprint — snap the footprint instead.");
+      }
+      checkNotLocked(board, cmd.refs, errors, "move");
+      if (!isPositiveDim(cmd.gridNm)) {
+        errors.push("Snap grid must be a positive number of nanometers.");
+      }
+      break;
+    }
 
     case "create-padstack": {
       checkPadstackFields(cmd.padstack ?? {}, errors, true);

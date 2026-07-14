@@ -138,10 +138,11 @@ describe("validateCommand", () => {
     ).toContain("Zone clearance must be zero or a positive number of nanometers.");
   });
 
-  it("rejects not-yet-implemented and unknown ops", () => {
+  it("rejects undersized arrange batches and unknown ops", () => {
+    // Phase D: align is live — a one-item align fails its own check.
     expect(
       validateCommand(board, { op: "align", refs: [ref("via", "rd-v1")], mode: "left" }),
-    ).toContain("'align' isn't available yet (Stage 17 Phase D).");
+    ).toContain("Aligning needs at least two items.");
     // Phase C: create-padstack is live — an empty input fails field checks.
     expect(
       validateCommand(board, { op: "create-padstack", padstack: {} as never }),

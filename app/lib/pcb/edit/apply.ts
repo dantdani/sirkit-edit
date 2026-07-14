@@ -9,19 +9,20 @@
  */
 
 import { produce } from "immer";
-import type { Vec2, BBox } from "../geometry";
-import { transformPoint, bboxUnion } from "../geometry";
-import type { PcbBoard, FootprintInstance } from "../types";
+import type { Vec2 } from "../geometry";
+import type { PcbBoard } from "../types";
 import type { PcbHistory } from "../history";
 import type { EditCommand, EditResult, SelectionRef } from "./commands";
 import { refKey } from "./commands";
 import {
-  validateCommand,
-  findTrack,
-  findVia,
-  findZone,
-  findFootprint,
-} from "./validate";
+  computeAlign,
+  computeDistribute,
+  computeSnapToGrid,
+  selectionBBoxCenter,
+} from "./arrange";
+
+export { selectionBBoxCenter } from "./arrange"; // re-export (Phase B consumers)
+import { validateCommand } from "./validate";
 import { describeEdits } from "./describe";
 import { addPadstack, syncViasToPadstack } from "../padstack/registry";
 import { applyPadstackToVia } from "../padstack/defaults";
@@ -44,83 +45,6 @@ function rotateQuarter(p: Vec2, pivot: Vec2, quarterTurns: 1 | -1): Vec2 {
 /** KiCad rotations are CCW-positive, so a screen-wise CW quarter turn is −90. */
 function turnedDeg(deg: number, quarterTurns: 1 | -1): number {
   return (((deg - 90 * quarterTurns) % 360) + 360) % 360;
-}
-
-function footprintWorldBBox(fp: FootprintInstance): BBox {
-  const b = fp.def.bodyBBox;
-  const corners: Vec2[] = [
-    { x: b.minX, y: b.minY },
-    { x: b.maxX, y: b.minY },
-    { x: b.maxX, y: b.maxY },
-    { x: b.minX, y: b.maxY },
-  ];
-  let out: BBox | null = null;
-  for (const c of corners) {
-    const p = transformPoint(c, fp.at, fp.rotationDeg, fp.side === "bottom");
-    const box = { minX: p.x, minY: p.y, maxX: p.x, maxY: p.y };
-    out = out ? bboxUnion(out, box) : box;
-  }
-  return out ?? { minX: fp.at.x, minY: fp.at.y, maxX: fp.at.x, maxY: fp.at.y };
-}
-
-/** World bbox of one referenced item (validated to exist). */
-function refBBox(board: PcbBoard, ref: SelectionRef): BBox | null {
-  switch (ref.kind) {
-    case "footprint": {
-      const fp = findFootprint(board, ref.id);
-      return fp ? footprintWorldBBox(fp) : null;
-    }
-    case "via": {
-      const v = findVia(board, ref.id);
-      if (!v) return null;
-      const r = v.size / 2;
-      return { minX: v.at.x - r, minY: v.at.y - r, maxX: v.at.x + r, maxY: v.at.y + r };
-    }
-    case "track": {
-      const t = findTrack(board, ref.id);
-      if (!t) return null;
-      const r = t.width / 2;
-      return {
-        minX: Math.min(t.start.x, t.end.x) - r,
-        minY: Math.min(t.start.y, t.end.y) - r,
-        maxX: Math.max(t.start.x, t.end.x) + r,
-        maxY: Math.max(t.start.y, t.end.y) + r,
-      };
-    }
-    case "zone": {
-      const z = findZone(board, ref.id);
-      if (!z || z.polygon.length === 0) return null;
-      let box: BBox | null = null;
-      for (const p of z.polygon) {
-        const b = { minX: p.x, minY: p.y, maxX: p.x, maxY: p.y };
-        box = box ? bboxUnion(box, b) : b;
-      }
-      return box;
-    }
-    case "text": {
-      const item = (board.silkItems ?? []).find((s) => s.id === ref.id);
-      if (!item || item.kind !== "text") return null;
-      return {
-        minX: item.position.x,
-        minY: item.position.y,
-        maxX: item.position.x,
-        maxY: item.position.y,
-      };
-    }
-    case "pad":
-      return null; // pads are never rotate/move targets (validator rejects)
-  }
-}
-
-/** Selection-bbox center — the default rotate pivot (existing 90° machinery). */
-export function selectionBBoxCenter(board: PcbBoard, refs: SelectionRef[]): Vec2 {
-  let box: BBox | null = null;
-  for (const ref of refs) {
-    const b = refBBox(board, ref);
-    if (b) box = box ? bboxUnion(box, b) : b;
-  }
-  if (!box) return { x: 0, y: 0 };
-  return { x: Math.round((box.minX + box.maxX) / 2), y: Math.round((box.minY + box.maxY) / 2) };
 }
 
 // ── Command → mutator compilation ────────────────────────────────────────────
@@ -270,6 +194,16 @@ function compileCommand(board: PcbBoard, cmd: EditCommand): Mutator {
       };
     }
 
+    case "align":
+      return makePerRefDeltaMutator(cmd.refs, computeAlign(board, cmd.refs, cmd.mode));
+    case "distribute":
+      return makePerRefDeltaMutator(cmd.refs, computeDistribute(board, cmd.refs, cmd.axis));
+    case "snap-to-grid":
+      return makePerRefDeltaMutator(
+        cmd.refs,
+        computeSnapToGrid(board, cmd.refs, Math.round(cmd.gridNm)),
+      );
+
     case "create-padstack": {
       const input = cmd.padstack;
       return (draft) => {
@@ -317,6 +251,18 @@ function compileCommand(board: PcbBoard, cmd: EditCommand): Mutator {
     default:
       return () => {};
   }
+}
+
+/** Per-item translation mutator — each ref moves by ITS delta (arrange). */
+function makePerRefDeltaMutator(refs: SelectionRef[], deltas: Map<string, Vec2>): Mutator {
+  const mutators = refs.flatMap((ref) => {
+    const d = deltas.get(refKey(ref));
+    if (!d || (d.x === 0 && d.y === 0)) return [];
+    return [makeTransformMutator([ref], (p) => ({ x: p.x + d.x, y: p.y + d.y }))];
+  });
+  return (draft) => {
+    for (const m of mutators) m(draft);
+  };
 }
 
 /** Position-transform mutator over every movable point of the referenced
