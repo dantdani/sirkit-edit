@@ -56,7 +56,16 @@ import {
 } from "./colors";
 import { drawGrid, gridNeedsRebuild, type GridCoverage, type ViewRectMm } from "./grid";
 import { drawOutline, outlineBBoxNm, outlineHandleSpots, type HandleSpot } from "./outline";
-import { buildPickIndex, type PickIndex, type PickResult, type PickEntry } from "./pick";
+import {
+  buildPickIndex,
+  buildBoardPickEntries,
+  PICK_TOLERANCE_NM,
+  type PickIndex,
+  type PickResult,
+  type PickEntry,
+} from "./pick";
+import type { SelectionRef } from "../edit/commands"; // Stage 17
+import { silkItemPolylines } from "../silk/geometry";
 
 export type { PickResult, OutlineHandleId } from "./pick";
 
@@ -80,8 +89,10 @@ export interface PcbScene {
   setLayerVisible(layer: LayerId, visible: boolean): void;
   /** Dims other copper layers to 35% alpha. */
   setActiveLayer(layer: LayerId): void;
-  /** Teal outline overlay. */
+  /** Teal outline overlay (footprint ids — kept for Stage 12 zoom-to flash). */
   setSelection(ids: string[]): void;
+  /** Stage 17: ref-based selection overlay — copper, pads and text included. */
+  setSelectionRefs(refs: SelectionRef[]): void;
   setHover(id: string | null): void;
   onPointer(cb: (e: ScenePointerEvent) => void): () => void;
   /** Screen (canvas CSS px) → model space (nm). */
@@ -200,7 +211,7 @@ export function createPcbScene(): PcbScene {
   let activeLayer: LayerId = "copperTop";
   let gridVisible = true;
   let tool: "select" | "pan" = "select";
-  let selection: string[] = [];
+  let selectionRefs: SelectionRef[] = [];
   let hoverId: string | null = null;
 
   let instances: InstanceRecord[] = [];
@@ -492,11 +503,41 @@ export function createPcbScene(): PcbScene {
     updateHandleScales();
   }
 
-  function rebuildPickIndex(): void {
+  /** Item arrays of the board the pick index was last built from. Immer's
+   *  structural sharing makes reference equality a precise dirty check —
+   *  outline drags keep every array and skip the rebuild entirely. */
+  let pickSource: {
+    footprints: unknown;
+    tracks: unknown;
+    vias: unknown;
+    zones: unknown;
+    silkItems: unknown;
+  } | null = null;
+
+  function rebuildPickIndex(b: PcbBoard): void {
+    if (
+      pickSource &&
+      pickSource.footprints === b.footprints &&
+      pickSource.tracks === b.tracks &&
+      pickSource.vias === b.vias &&
+      pickSource.zones === b.zones &&
+      pickSource.silkItems === b.silkItems
+    ) {
+      return;
+    }
+    pickSource = {
+      footprints: b.footprints,
+      tracks: b.tracks,
+      vias: b.vias,
+      zones: b.zones,
+      silkItems: b.silkItems,
+    };
     const entries: PickEntry[] = instances.map((r) => ({
       result: { kind: "footprint", id: r.id },
       bbox: r.bboxNm,
     }));
+    // Stage 17: copper, pads, zone outlines and silk text join the index.
+    entries.push(...buildBoardPickEntries(b, PICK_TOLERANCE_NM));
     pickIndex = buildPickIndex(entries);
   }
 
@@ -548,13 +589,152 @@ export function createPcbScene(): PcbScene {
       .stroke({ width: 1 / pxPerMm(), color: ACCENT_COLOR, alpha: 0.9 });
   }
 
+  /** Selected-footprint id set (hover suppression + bbox outlines). */
+  function selectedFootprintIds(): Set<string> {
+    const out = new Set<string>();
+    for (const ref of selectionRefs) {
+      if (ref.kind === "footprint") out.add(ref.id);
+    }
+    return out;
+  }
+
+  function strokeBBoxNm(g: Graphics, b: BBox, scale: number): void {
+    g.roundRect(mm(b.minX), mm(b.minY), mm(b.maxX - b.minX), mm(b.maxY - b.minY), 4 / scale)
+      .stroke({ width: 2 / scale, color: ACCENT_COLOR });
+  }
+
+  /** Per-redraw item lookup — one O(board) pass instead of a per-ref linear
+   *  scan (marquee-select on a big board redraws every frame). */
+  interface OverlayLookup {
+    tracks: Map<string, PcbBoard["tracks"][number]>;
+    vias: Map<string, PcbBoard["vias"][number]>;
+    zones: Map<string, PcbBoard["zones"][number]>;
+    silk: Map<string, NonNullable<PcbBoard["silkItems"]>[number]>;
+  }
+
+  function buildOverlayLookup(b: PcbBoard): OverlayLookup {
+    return {
+      tracks: new Map(b.tracks.map((t) => [t.id, t])),
+      vias: new Map(b.vias.map((v) => [v.id, v])),
+      zones: new Map(b.zones.map((z) => [z.id, z])),
+      silk: new Map((b.silkItems ?? []).map((s) => [s.id, s])),
+    };
+  }
+
+  /** Stage 17: per-kind selection outlines. Footprints/text keep the bbox
+   *  roundRect; vias/pads/zones get shape outlines; tracks get a halo (a
+   *  crisp capsule outline reads worse at thin widths). */
+  function drawSelectedRef(
+    g: Graphics,
+    ref: SelectionRef,
+    scale: number,
+    lookup: OverlayLookup,
+  ): void {
+    switch (ref.kind) {
+      case "footprint": {
+        const rec = instanceById.get(ref.id);
+        if (rec) strokeBBoxNm(g, rec.bboxNm, scale);
+        return;
+      }
+      case "via": {
+        const via = lookup.vias.get(ref.id);
+        if (!via) return;
+        g.circle(mm(via.at.x), mm(via.at.y), mm(via.size) / 2 + 2 / scale).stroke({
+          width: 2 / scale,
+          color: ACCENT_COLOR,
+        });
+        return;
+      }
+      case "track": {
+        const t = lookup.tracks.get(ref.id);
+        if (!t) return;
+        g.moveTo(mm(t.start.x), mm(t.start.y))
+          .lineTo(mm(t.end.x), mm(t.end.y))
+          .stroke({
+            width: mm(t.width) + 4 / scale,
+            color: ACCENT_COLOR,
+            alpha: 0.45,
+            cap: "round",
+          });
+        return;
+      }
+      case "zone": {
+        const z = lookup.zones.get(ref.id);
+        if (!z || z.polygon.length < 3) return;
+        g.poly(
+          z.polygon.map((p) => ({ x: mm(p.x), y: mm(p.y) })),
+          true,
+        ).stroke({ width: 2 / scale, color: ACCENT_COLOR });
+        return;
+      }
+      case "text": {
+        const item = lookup.silk.get(ref.id);
+        if (!item || item.kind !== "text") return;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const line of silkItemPolylines(item)) {
+          for (const p of line) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        }
+        if (minX === Infinity) return;
+        const pad = Math.round(item.strokeWidthNm / 2);
+        strokeBBoxNm(g, { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }, scale);
+        return;
+      }
+      case "pad": {
+        // Read the live instance record (updated during transient drags) so
+        // selected pad outlines track the drag, not the last committed board.
+        const rec = instanceById.get(ref.footprintId);
+        const fp = rec ?? board?.footprints.find((f) => f.id === ref.footprintId);
+        const pad = fp?.def.pads.find((p) => p.number === ref.padNumber);
+        if (!fp || !pad) return;
+        const mirror = fp.side === "bottom";
+        const center = transformPoint(pad.at, fp.at, fp.rotationDeg, mirror);
+        const sh = pad.shape;
+        if (sh.kind === "circle") {
+          g.circle(mm(center.x), mm(center.y), mm(sh.radius) + 2 / scale).stroke({
+            width: 2 / scale,
+            color: ACCENT_COLOR,
+          });
+          return;
+        }
+        // Oriented outline: pad-local corners → world via the instance+pad
+        // transform (mirror conjugates the pad's local rotation).
+        const rot = mirror ? fp.rotationDeg - pad.rotationDeg : fp.rotationDeg + pad.rotationDeg;
+        const corners: Vec2[] =
+          sh.kind === "polygon"
+            ? sh.points.map((p) => (mirror ? { x: -p.x, y: p.y } : p))
+            : [
+                { x: -sh.width / 2, y: -sh.height / 2 },
+                { x: sh.width / 2, y: -sh.height / 2 },
+                { x: sh.width / 2, y: sh.height / 2 },
+                { x: -sh.width / 2, y: sh.height / 2 },
+              ];
+        g.poly(
+          corners.map((c) => {
+            const w = transformPoint(c, center, rot, false);
+            return { x: mm(w.x), y: mm(w.y) };
+          }),
+          true,
+        ).stroke({ width: 2 / scale, color: ACCENT_COLOR });
+        return;
+      }
+    }
+  }
+
   function redrawOverlay(): void {
     const g = overlayGraphics().sel;
     g.clear();
     const scale = pxPerMm();
     const radius = 4 / scale;
 
-    if (hoverId && !selection.includes(hoverId)) {
+    if (hoverId && !selectedFootprintIds().has(hoverId)) {
       const rec = instanceById.get(hoverId);
       if (rec) {
         const b = rec.bboxNm;
@@ -563,12 +743,9 @@ export function createPcbScene(): PcbScene {
           .stroke({ width: 1.5 / scale, color: ACCENT_COLOR, alpha: HOVER_ALPHA });
       }
     }
-    for (const id of selection) {
-      const rec = instanceById.get(id);
-      if (!rec) continue;
-      const b = rec.bboxNm;
-      g.roundRect(mm(b.minX), mm(b.minY), mm(b.maxX - b.minX), mm(b.maxY - b.minY), radius)
-        .stroke({ width: 2 / scale, color: ACCENT_COLOR });
+    if (selectionRefs.length > 0 && board) {
+      const lookup = buildOverlayLookup(board);
+      for (const ref of selectionRefs) drawSelectedRef(g, ref, scale, lookup);
     }
   }
 
@@ -631,7 +808,7 @@ export function createPcbScene(): PcbScene {
         return { kind: "outline-handle", handle: spot.handle };
       }
     }
-    return pickIndex.pickAt(world);
+    return pickIndex.pickAt(world, PICK_TOLERANCE_NM);
   }
 
   function worldFromScreen(x: number, y: number): Vec2 {
@@ -784,8 +961,10 @@ export function createPcbScene(): PcbScene {
     const footprintsUnchanged = prev !== null && prev.footprints === b.footprints;
     if (!footprintsUnchanged) {
       rebuildFootprints(b);
-      rebuildPickIndex();
     }
+    // Stage 17: copper-only commits (same footprints array via immer sharing)
+    // must still refresh the pick index; it dirty-checks its own sources.
+    rebuildPickIndex(b);
     rebuildOutline(b);
     applyLayerState();
     redrawOverlay();
@@ -845,7 +1024,12 @@ export function createPcbScene(): PcbScene {
     },
 
     setSelection(ids: string[]): void {
-      selection = [...ids];
+      selectionRefs = ids.map((id) => ({ kind: "footprint", id }));
+      if (mounted) redrawOverlay();
+    },
+
+    setSelectionRefs(refs: SelectionRef[]): void {
+      selectionRefs = [...refs];
       if (mounted) redrawOverlay();
     },
 

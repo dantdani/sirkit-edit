@@ -83,6 +83,9 @@ export interface Via {
   drill: Nm;
   netId: number;
   layers: [LayerId, LayerId];
+  /** Stage 17: padstack reference. Optional/additive — when absent, `size`/
+   *  `drill` above are authoritative (resolveVia falls back to them). */
+  padstackId?: string;
 }
 
 /** One filled copper region of a zone (Stage 11) — outer boundary + clearance-cutout holes. */
@@ -132,6 +135,8 @@ export interface FootprintInstance {
   rotationDeg: number;
   side: "top" | "bottom";
   padNets: Record<string, number>; // pad number -> net id; absent/0 = unconnected
+  /** Stage 17: locked instances refuse move/rotate edit commands. Optional/additive. */
+  locked?: boolean;
 }
 
 export interface PcbBoard {

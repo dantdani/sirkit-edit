@@ -24,7 +24,9 @@ describe.skipIf(!hasDb)("pcb_footprints raw_sexpr round-trip (DB)", () => {
     await getSqlClient().end();
   });
 
-  it("3 random rows re-parse and emit verbatim", async () => {
+  // 30 s timeout: the remote DB round-trip gets starved when the full suite
+  // runs in parallel (observed flaking at the 5 s default; passes solo).
+  it("3 random rows re-parse and emit verbatim", { timeout: 30_000 }, async () => {
     const { getSqlClient } = await import("../../db/client");
     const rows = await getSqlClient()<
       { lib_name: string; name: string; raw_sexpr: string }[]

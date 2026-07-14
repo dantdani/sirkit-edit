@@ -33,7 +33,17 @@ import {
 } from "@/app/lib/pcb/netlist-bridge";
 import { loadCurrentBoard, saveCurrentBoard } from "@/app/lib/pcb/board-persistence";
 import { createHistory, type PcbHistory } from "@/app/lib/pcb/history";
-import { createSelectMoveTool, type SelectMoveTool } from "@/app/lib/pcb/tools/select-move";
+import {
+  createSelectMoveTool,
+  type SelectMoveTool,
+  type ContextMenuRequest,
+} from "@/app/lib/pcb/tools/select-move";
+import { createSelectionStore } from "@/app/lib/pcb/selection"; // Stage 17
+import { selectSimilar, selectNet, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
+import { applyEdits, liveRefs } from "@/app/lib/pcb/edit/apply"; // Stage 17
+import type { SelectionRef } from "@/app/lib/pcb/edit/commands"; // Stage 17
+import { ContextMenu, type ContextMenuItem } from "./ContextMenu"; // Stage 17
+import { Inspector } from "./Inspector"; // Stage 17 Phase B
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo"; // Stage 7 integration
 import { buildStoryDemo } from "@/app/lib/pcb/demo/story-demo"; // Stage 16
 import { useRouteTool } from "./hooks/useRouteTool"; // Stage 7 integration
@@ -77,7 +87,8 @@ interface EditorState {
   activeLayer: LayerId;
   /** Overrides on top of LAYERS defaultVisible. */
   visibleOverrides: Partial<Record<LayerId, boolean>>;
-  selection: string[];
+  // Stage 17: selection moved out of React into the global SelectionStore
+  // (app/lib/pcb/selection.ts) — the tool, scene overlay and inspector share it.
   tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
   gridOn: boolean;
 }
@@ -88,7 +99,6 @@ type EditorAction =
   | { type: "set-stackup"; stackup: 2 | 4 }
   | { type: "toggle-layer"; layer: LayerId }
   | { type: "set-active-layer"; layer: LayerId }
-  | { type: "set-selection"; ids: string[] }
   | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" } // Stages 7 + 11 + 16
   | { type: "toggle-grid" };
 
@@ -116,8 +126,6 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
     }
     case "set-active-layer":
       return { ...state, activeLayer: action.layer };
-    case "set-selection":
-      return { ...state, selection: action.ids };
     case "set-tool":
       return { ...state, tool: action.tool };
     case "toggle-grid":
@@ -130,7 +138,6 @@ function makeEditorState(board: PcbBoard | null): EditorState {
     board,
     activeLayer: "copperTop",
     visibleOverrides: {},
-    selection: [],
     tool: "select",
     gridOn: true,
   };
@@ -197,13 +204,17 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   const toolRef = useRef(state.tool);
   const dragRef = useRef<OutlineHandleId | null>(null);
   const schematicRef = useRef(schematic);
-  const selectionRef = useRef(state.selection);
   useEffect(() => {
     boardRef.current = state.board;
     toolRef.current = state.tool;
     schematicRef.current = schematic;
-    selectionRef.current = state.selection;
-  }, [state.board, state.tool, schematic, state.selection]);
+  }, [state.board, state.tool, schematic]);
+
+  // Stage 17: the global selection store — synchronous, shared by the
+  // select-move tool, the scene overlay and (Phase B) the inspector.
+  const [selectionStore] = useState(() => createSelectionStore());
+  // Stage 17: right-click context menu (select-move emits the request).
+  const [ctxMenu, setCtxMenu] = useState<ContextMenuRequest | null>(null);
 
   // Stage 5: undo/redo history + select/move tool (see app/lib/pcb/history.ts
   // and app/lib/pcb/tools/select-move.ts).
@@ -349,15 +360,18 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     const tool = createSelectMoveTool({
       scene,
       history,
-      getSelection: () => selectionRef.current,
-      setSelection: (ids) => {
-        selectionRef.current = ids; // synchronous — the tool re-reads immediately
-        dispatch({ type: "set-selection", ids });
-      },
+      selection: selectionStore, // Stage 17: the tool writes the global store
       toast: setToast,
+      onContextMenu: (request) => setCtxMenu(request),
     });
     moveToolRef.current = tool;
-    const unsubscribe = history.subscribe((board) => dispatch({ type: "set-board", board }));
+    const unsubscribe = history.subscribe((board) => {
+      dispatch({ type: "set-board", board });
+      // Stage 17: drop selection refs whose items vanished (delete, undo, sync).
+      const refs = selectionStore.get().refs;
+      const live = liveRefs(board, refs);
+      if (live.length !== refs.length) selectionStore.replace(live);
+    });
     tool.refreshAirwires();
     historyCleanupRef.current = () => {
       unsubscribe();
@@ -381,7 +395,12 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   }, [state.tool, activateRoute, deactivateRoute]);
 
   // ── Stage 12: batch DRC (panel + toolbar button + zoom-to) ──────────────────
-  const drc = useDrc({ scene, getHistory: () => historyRef.current });
+  const drc = useDrc({
+    scene,
+    getHistory: () => historyRef.current,
+    // Stage 17: the flash borrows the selection overlay — hand it back.
+    restoreSelection: () => scene?.setSelectionRefs(selectionStore.get().refs),
+  });
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
   const [preview3dOpen, setPreview3dOpen] = useState(false);
@@ -465,9 +484,12 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     scene?.setActiveLayer(state.activeLayer);
   }, [scene, state.activeLayer]);
 
+  // Stage 17: selection store → scene overlay (refs — copper items included).
   useEffect(() => {
-    scene?.setSelection(state.selection);
-  }, [scene, state.selection]);
+    if (!scene) return;
+    scene.setSelectionRefs(selectionStore.get().refs);
+    return selectionStore.subscribe((s) => scene.setSelectionRefs(s.refs));
+  }, [scene, selectionStore]);
 
   useEffect(() => {
     // Route/zone/silk modes reuse the select viewport (middle-drag pans, left draws).
@@ -494,6 +516,11 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       }
       switch (e.type) {
         case "down": {
+          if ((e.buttons & 2) !== 0) {
+            // Right button: the select-move tool owns the context-menu flow.
+            moveToolRef.current?.handlePointer(e);
+            return;
+          }
           if ((e.buttons & 1) === 0) return; // left button only
           if (e.pick?.kind === "outline-handle") {
             dragRef.current = e.pick.handle;
@@ -623,7 +650,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       if (toolRef.current === "route") return; // useRouteTool owns V/Tab/Backspace/Escape/X
       if (toolRef.current === "zone") return; // ZoneTool owns Enter/Escape
       if (toolRef.current === "silk") return; // useSilkTool owns Enter/Escape (Stage 16)
-      if (e.key === "Escape") dispatch({ type: "set-selection", ids: [] });
+      if (e.key === "Escape") selectionStore.clear();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -633,6 +660,85 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
     [state.visibleOverrides],
   );
+
+  // ── Stage 17: context-menu items for the current right-click pick ─────────
+  // Items are thin wrappers over the same primitives the palette and
+  // inspector use: selectSimilar / selectNet / applyEdits.
+  const buildCtxItems = (): ContextMenuItem[] => {
+    const board = state.board;
+    if (!board || !ctxMenu) return [];
+    const items: ContextMenuItem[] = [];
+    const pick = ctxMenu.pick;
+    const ref: SelectionRef | null =
+      pick && pick.kind !== "outline-handle"
+        ? pick.kind === "pad"
+          ? { kind: "pad", footprintId: pick.footprintId, padNumber: pick.padNumber }
+          : { kind: pick.kind, id: pick.id }
+        : null;
+
+    if (ref) {
+      const [item] = getItems(board, [ref]);
+      if (item) {
+        const netId =
+          item.kind === "track"
+            ? item.track.netId
+            : item.kind === "via"
+              ? item.via.netId
+              : item.kind === "zone"
+                ? item.zone.netId
+                : item.kind === "pad"
+                  ? item.netId
+                  : undefined;
+        if (netId !== undefined && netId !== 0) {
+          const name = board.nets.find((n) => n.id === netId)?.name || `net ${netId}`;
+          items.push({
+            label: `Select net ${name}`,
+            onClick: () => selectionStore.replace(selectNet(board, netId)),
+          });
+        }
+        if (item.kind === "via") {
+          items.push({
+            label: "Select similar vias",
+            onClick: () => selectionStore.replace(selectSimilar(board, ref, "padstack")),
+          });
+        }
+        if (item.kind === "track" || item.kind === "zone" || item.kind === "text") {
+          items.push({
+            label: "Select same layer",
+            onClick: () => selectionStore.replace(selectSimilar(board, ref, "layer")),
+          });
+        }
+      }
+    }
+
+    // Delete acts on the whole current selection (right-click selected the
+    // picked item already); footprints are schematic-owned.
+    const refs = selectionStore.get().refs;
+    const deletable = refs.filter(
+      (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+    );
+    const h = historyRef.current;
+    if (deletable.length > 0 && h) {
+      items.push({
+        label:
+          deletable.length === 1
+            ? `Delete ${deletable[0].kind === "text" ? "silk text" : deletable[0].kind}`
+            : `Delete ${deletable.length} items`,
+        danger: true,
+        onClick: () => {
+          const result = applyEdits(h, [{ op: "delete-items", refs: deletable }]);
+          if (!result.ok) setToast(result.errors[0]);
+        },
+      });
+    } else if (ref?.kind === "footprint") {
+      items.push({
+        label: "Delete",
+        disabled: true,
+        reason: "Parts are removed by editing the schematic and re-syncing.",
+      });
+    }
+    return items;
+  };
 
   // ── Empty state: no board yet ─────────────────────────────────────────────
   if (!state.board) {
@@ -763,6 +869,15 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
               {toast}
             </div>
           )}
+          {/* Stage 17: right-click context menu */}
+          {ctxMenu && (
+            <ContextMenu
+              x={ctxMenu.screen.x}
+              y={ctxMenu.screen.y}
+              items={buildCtxItems()}
+              onClose={() => setCtxMenu(null)}
+            />
+          )}
         </div>
       </div>
 
@@ -774,6 +889,16 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           isVisible={isVisible}
           onToggleVisible={(layer) => dispatch({ type: "toggle-layer", layer })}
           onActivate={(layer) => dispatch({ type: "set-active-layer", layer })}
+        />
+        {/* Stage 17: properties inspector — renders nothing when selection is empty */}
+        <Inspector
+          board={state.board}
+          selection={selectionStore}
+          getHistory={() => historyRef.current}
+          scene={scene}
+          rules={getPreset(drc.activePresetId).rules}
+          toast={setToast}
+          onRefillZones={() => void zoneFills.fillAllDirty()}
         />
         {drc.state === "idle" && !drc.lastResult ? (
           <EmptyState // Stage 16: before the first run the panel explains itself

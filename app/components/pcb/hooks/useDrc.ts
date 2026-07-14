@@ -18,6 +18,9 @@ import { refHighlightId } from "@/app/lib/pcb/drc/format";
 export interface DrcEditor {
   scene: PcbScene | null;
   getHistory: () => PcbHistory | null;
+  /** Stage 17: re-apply the user's real selection overlay after the zoom-to
+   *  flash (which borrows scene.setSelection). Falls back to clearing. */
+  restoreSelection?: () => void;
 }
 
 export interface DrcHandle {
@@ -68,7 +71,11 @@ export function useDrc(editor: DrcEditor): DrcHandle {
     const ids = v.items.map(refHighlightId).filter((id) => id.length > 0);
     scene.setSelection(ids);
     if (flashTimer.current) clearTimeout(flashTimer.current);
-    flashTimer.current = setTimeout(() => editorRef.current.scene?.setSelection([]), FLASH_MS);
+    flashTimer.current = setTimeout(() => {
+      const editor = editorRef.current;
+      if (editor.restoreSelection) editor.restoreSelection();
+      else editor.scene?.setSelection([]);
+    }, FLASH_MS);
   }, []);
 
   return { state, lastResult, activePresetId, setActivePresetId, run, zoomToViolation };
