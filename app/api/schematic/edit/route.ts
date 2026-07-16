@@ -3,7 +3,7 @@
  *
  * Tier-1 text editing: attribute-only edits to an EXISTING schematic (set value,
  * rename, delete) — no layout, no netlist, no topology change. The client sends
- * the current component list + the user's instruction; Claude returns a minimal
+ * the current component list + the user's instruction; the selected brain returns a minimal
  * op list via a single forced `apply_edits` tool call, which the client applies
  * directly to state. Ops referencing an unknown target are dropped server-side.
  *
@@ -15,18 +15,16 @@
  * client then hands it to the Tier-2 topology editor (/api/schematic/edit-build).
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import type { SchematicEditOp } from "@/lib/schematic-types";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
 import { EDIT_SYSTEM_PROMPT, EDIT_APPLY_TOOL } from "@/app/lib/prompts";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MODEL = "claude-sonnet-4-6";
 
 type EditComponent = { refDes: string; kind: string; value: string };
 
 export async function POST(req: Request): Promise<Response> {
-  let body: { instruction?: unknown; components?: unknown };
+  let body: { instruction?: unknown; components?: unknown; provider?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -34,6 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const instruction = body.instruction;
+  const provider = requestedProvider(body.provider);
   if (typeof instruction !== "string" || instruction.trim() === "") {
     return Response.json({ ok: false, error: "instruction is required" }, { status: 400 });
   }
@@ -48,14 +47,16 @@ export async function POST(req: Request): Promise<Response> {
 
   const known = new Set(components.map((c) => c.refDes));
 
-  let response: Anthropic.Message;
+  let response;
   try {
-    response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
+    response = await llmRouter.generate({
+      provider,
+      maxTokens: 1024,
       system: EDIT_SYSTEM_PROMPT,
       tools: [EDIT_APPLY_TOOL],
-      tool_choice: { type: "tool", name: "apply_edits" },
+      toolChoice: { name: "apply_edits" },
+      schematicState: { components },
+      userRequest: instruction,
       messages: [
         {
           role: "user",
@@ -63,14 +64,11 @@ export async function POST(req: Request): Promise<Response> {
         },
       ],
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: msg }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 
-  const toolUse = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "apply_edits",
-  );
+  const toolUse = response.toolCalls.find((call) => call.name === "apply_edits");
   if (!toolUse) {
     return Response.json({ ok: false, error: "no edits returned" }, { status: 500 });
   }

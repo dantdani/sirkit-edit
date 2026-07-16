@@ -20,6 +20,8 @@ import { DEFAULT_CLEARANCE, type RouteToolState } from "../route-tool";
 
 const ILLEGAL_COLOR = 0xef4444;
 const LEGAL_ALPHA = 0.6;
+const SELECTED_ALPHA = 0.88;
+const ALTERNATIVE_ALPHA = 0.18;
 const ILLEGAL_ALPHA = 0.8;
 const HALO_ALPHA = 0.15;
 const DASH_ON_MM = 0.4;
@@ -91,12 +93,27 @@ export function renderRoutePreview(
 
   if (toolState.kind === "routing") {
     const { activeLayer, trackWidth, clearance, anchor, preview } = toolState;
-    const pts = [anchor, preview.corner, preview.end];
+    const pts = preview.points?.length ? [...preview.points] : [anchor, preview.corner, preview.end];
+    for (const candidate of preview.candidates ?? []) {
+      if (candidate.id === preview.selectedCandidateId) continue;
+      dashedPath(g, [...candidate.points], mm(trackWidth), layerColor(activeLayer), ALTERNATIVE_ALPHA);
+    }
     if (!preview.legal) halo(g, pts, mm(trackWidth + 2 * clearance));
     const color = preview.legal ? layerColor(activeLayer) : ILLEGAL_COLOR;
-    const alpha = preview.legal ? LEGAL_ALPHA : ILLEGAL_ALPHA;
+    const alpha = preview.legal
+      ? preview.selectedCandidateId
+        ? SELECTED_ALPHA
+        : LEGAL_ALPHA
+      : ILLEGAL_ALPHA;
     dashedPath(g, pts, mm(trackWidth), color, alpha);
-    emitTooltip(overlayContainer, preview.legal ? null : preview.blockedText ?? "Clearance violation");
+    emitTooltip(
+      overlayContainer,
+      preview.legal
+        ? preview.smartStatus === "walking-around"
+          ? preview.smartExplanation ?? "Walking around fixed copper"
+          : null
+        : preview.blockedText ?? preview.smartExplanation ?? "Clearance violation",
+    );
     return;
   }
 

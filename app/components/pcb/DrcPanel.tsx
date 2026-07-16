@@ -13,6 +13,8 @@ import { PRESETS } from "@/app/lib/pcb/drc/presets";
 import { layerName } from "@/app/lib/pcb/drc/format";
 import type { DrcViolation, DrcSeverity, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { DrcHandle } from "./hooks/useDrc";
+import type { PcbRepairHandle } from "./hooks/usePcbRepair";
+import { BoardRepairPanel } from "./BoardRepairPanel";
 
 const DOT: Record<DrcSeverity, string> = {
   error: "bg-red-500",
@@ -24,10 +26,12 @@ function ViolationRow({
   v,
   expanded,
   onToggle,
+  proposal,
 }: {
   v: DrcViolation;
   expanded: boolean;
   onToggle: () => void;
+  proposal?: string;
 }): React.JSX.Element {
   return (
     <li className="border-b border-zinc-800/60">
@@ -43,14 +47,23 @@ function ViolationRow({
             {v.layer && <span className="text-[10px] text-zinc-600 truncate">{layerName(v.layer)}</span>}
           </span>
           <span className="block text-xs text-zinc-200 leading-snug">{v.summary}</span>
-          {expanded && <span className="block mt-1 text-[11px] text-zinc-400 leading-snug">{v.detail}</span>}
+          {expanded && (
+            <span className="block mt-1 text-[11px] text-zinc-400 leading-snug">
+              <span className="block">{v.detail}</span>
+              <span className="mt-1 block text-zinc-500">
+                Actual: {v.kind === "incompleteNet" ? v.measuredNm : `${(v.measuredNm / 1_000_000).toFixed(3)} mm`} · Required: {v.kind === "incompleteNet" ? v.thresholdNm : `${(v.thresholdNm / 1_000_000).toFixed(3)} mm`}
+              </span>
+              {proposal && <span className="mt-1 block text-teal-400">Proposed fix: {proposal}</span>}
+              <span className="mt-1 block text-zinc-600">Clicking this row focuses and highlights the violating geometry.</span>
+            </span>
+          )}
         </span>
       </button>
     </li>
   );
 }
 
-export function DrcPanel({ drc }: { drc: DrcHandle }): React.JSX.Element {
+export function DrcPanel({ drc, repair }: { drc: DrcHandle; repair: PcbRepairHandle }): React.JSX.Element {
   const [grouped, setGrouped] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [collapsedKinds, setCollapsedKinds] = useState<Set<string>>(new Set());
@@ -58,8 +71,8 @@ export function DrcPanel({ drc }: { drc: DrcHandle }): React.JSX.Element {
   const result = drc.lastResult;
   const preset = PRESETS.find((p) => p.id === drc.activePresetId);
   const running = drc.state === "running";
-  const errors = result?.violations.filter((v) => v.severity === "error").length ?? 0;
-  const warnings = result?.violations.filter((v) => v.severity === "warning").length ?? 0;
+  const errors = result?.readiness.errors ?? 0;
+  const warnings = result?.readiness.warnings ?? 0;
 
   const onRow = (v: DrcViolation): void => {
     drc.zoomToViolation(v);
@@ -118,23 +131,29 @@ export function DrcPanel({ drc }: { drc: DrcHandle }): React.JSX.Element {
         </div>
       ) : (
         <>
-          <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-2 text-xs">
-              {errors === 0 && warnings === 0 ? (
-                <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">0 errors — clean</span>
-              ) : (
-                <>
-                  {errors > 0 && <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">{errors} errors</span>}
-                  {warnings > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">{warnings} warnings</span>
-                  )}
-                </>
-              )}
+          <BoardRepairPanel result={result} repair={repair} />
+          <div className="px-3 py-2 border-b border-zinc-800 shrink-0 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs">
+                {result.readiness.state === "ready" ? (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">Ready</span>
+                ) : (
+                  <>
+                    {errors > 0 && <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">{errors} errors</span>}
+                    {warnings > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400">{warnings} warnings</span>
+                    )}
+                  </>
+                )}
+              </div>
+              <label className="flex items-center gap-1 text-[10px] text-zinc-500 cursor-pointer select-none">
+                <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-teal-500" />
+                Group by kind
+              </label>
             </div>
-            <label className="flex items-center gap-1 text-[10px] text-zinc-500 cursor-pointer select-none">
-              <input type="checkbox" checked={grouped} onChange={(e) => setGrouped(e.target.checked)} className="accent-teal-500" />
-              Group by kind
-            </label>
+            <p className={`text-[10px] ${result.readiness.state === "not-ready" ? "text-red-300" : result.readiness.state === "needs-review" ? "text-amber-300" : "text-emerald-300"}`}>
+              {result.readiness.message}
+            </p>
           </div>
 
           <ul className="overflow-y-auto min-h-0 flex-1">
@@ -162,7 +181,7 @@ export function DrcPanel({ drc }: { drc: DrcHandle }): React.JSX.Element {
                       {!isCollapsed && (
                         <ul>
                           {list.map((v) => (
-                            <ViolationRow key={v.id} v={v} expanded={expanded.has(v.id)} onToggle={() => onRow(v)} />
+                            <ViolationRow key={v.id} v={v} expanded={expanded.has(v.id)} onToggle={() => onRow(v)} proposal={repair.plan?.violations.find((item) => item.id === v.id)?.candidateFixes[0]?.label} />
                           ))}
                         </ul>
                       )}
@@ -170,7 +189,7 @@ export function DrcPanel({ drc }: { drc: DrcHandle }): React.JSX.Element {
                   );
                 })
               : result.violations.map((v) => (
-                  <ViolationRow key={v.id} v={v} expanded={expanded.has(v.id)} onToggle={() => onRow(v)} />
+                  <ViolationRow key={v.id} v={v} expanded={expanded.has(v.id)} onToggle={() => onRow(v)} proposal={repair.plan?.violations.find((item) => item.id === v.id)?.candidateFixes[0]?.label} />
                 ))}
           </ul>
         </>

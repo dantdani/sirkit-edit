@@ -35,6 +35,37 @@ export function checkUnconnectedAndShorts(ctx: DrcCheckContext): DrcViolation[] 
   const { board, connectivity } = ctx;
   const out: DrcViolation[] = [];
 
+  for (const net of connectivity.nets.values()) {
+    if (net.complete) continue;
+    const airwires = connectivity.airwires.filter((wire) => wire.netId === net.netId);
+    const remaining = Math.max(airwires.length, net.clusters.length - 1, 1);
+    const firstWire = airwires[0];
+    const firstRef = net.clusters.flat().find((ref) => ref.kind === "pad") ?? net.clusters.flat()[0];
+    const location = firstWire
+      ? { x: Math.round((firstWire.from.x + firstWire.to.x) / 2), y: Math.round((firstWire.from.y + firstWire.to.y) / 2) }
+      : firstRef
+        ? refLocation(board, firstRef)
+        : { x: 0, y: 0 };
+    const padRefs = net.clusters
+      .flat()
+      .filter((ref): ref is Extract<CopperItemRef, { kind: "pad" }> => ref.kind === "pad")
+      .map((ref) => {
+        const footprint = board.footprints.find((item) => item.id === ref.instanceId);
+        return `${footprint?.ref ?? ref.instanceId}.${ref.padNumber}`;
+      });
+    out.push({
+      id: violationId("incompleteNet", firstRef ? [firstRef] : [], remaining, 0, String(net.netId)),
+      kind: "incompleteNet",
+      severity: "error",
+      items: firstRef ? [firstRef] : [],
+      location,
+      measuredNm: remaining,
+      thresholdNm: 0,
+      summary: `${netName(board, net.netId)} is incomplete: ${remaining} connection${remaining === 1 ? "" : "s"} remain.`,
+      detail: `${netName(board, net.netId)} still has ${net.clusters.length} disconnected copper groups${padRefs.length > 0 ? ` across ${padRefs.join(", ")}` : ""}. Finish the highlighted airwire connections before manufacturing.`,
+    });
+  }
+
   for (const [a, b] of connectivity.shorts) {
     const items = [a, b];
     const na = netName(board, refNet(board, a));

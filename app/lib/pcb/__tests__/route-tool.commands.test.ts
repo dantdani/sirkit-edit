@@ -98,6 +98,34 @@ describe("applyRouteCommand / invertRouteCommand round-trips", () => {
 });
 
 describe("command semantics", () => {
+  it("adds and inverts structured Smart Route history with the copper", () => {
+    const b0 = board([5]);
+    const event = {
+      schemaVersion: 1 as const,
+      id: "history-1",
+      tool: "smart-route" as const,
+      baseWorldRevision: "rw1-test",
+      netId: 5,
+      layer: "copperTop" as const,
+      candidateId: "candidate-1",
+      mode: "direct" as const,
+      points: [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      segmentIds: ["smart-1"],
+      rules: { trackWidthNm: 250_000, clearanceNm: 200_000, edgeClearanceNm: 250_000, gridNm: 25_000 },
+      score: 10,
+      explanation: "Deterministic direct route.",
+    };
+    const cmd: RouteCommand = {
+      kind: "CommitRouteSegment",
+      netId: 5,
+      segments: [track("smart-1", 5, 0, 0, 10, 0)],
+      historyEvents: [event],
+    };
+    const applied = applyRouteCommand(b0, cmd);
+    expect(applied.routingHistory).toEqual([event]);
+    expect(applyRouteCommand(applied, invertRouteCommand(cmd))).toEqual(b0);
+  });
+
   it("CommitRouteSegment with 2 segments keeps both, ids intact and unique", () => {
     const b0 = board([5]);
     const cmd: RouteCommand = {

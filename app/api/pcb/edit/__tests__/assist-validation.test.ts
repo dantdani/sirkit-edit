@@ -25,7 +25,12 @@ import { createHistory } from "@/app/lib/pcb/history";
 import { mmToNm } from "@/app/lib/pcb/units";
 
 function toolUse(name: string, input: unknown, id = "tu_1") {
-  return { content: [{ type: "tool_use", id, name, input }], stop_reason: "tool_use" };
+  return {
+    content: [{ type: "tool_use", id, name, input }],
+    stop_reason: "tool_use",
+    model: "claude-test",
+    usage: { input_tokens: 10, output_tokens: 5 },
+  };
 }
 
 function post(body: unknown): Promise<Response> {
@@ -43,6 +48,7 @@ const gndTracks = board.tracks.filter(
   (t) => t.netId === board.nets.find((n) => n.name === "GND")?.id,
 );
 const BODY = {
+  provider: "anthropic",
   instruction: "make all GND traces 0.5 mm",
   digest: buildDigest(board, []),
   items: buildItemIndex(board),

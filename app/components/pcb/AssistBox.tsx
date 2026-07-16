@@ -22,6 +22,7 @@ import { applyEdits, compileEdits } from "@/app/lib/pcb/edit/apply";
 import { previewEdits } from "@/app/lib/pcb/edit/preview";
 import { describeEdits } from "@/app/lib/pcb/edit/describe";
 import { buildDigest, buildItemIndex } from "@/app/lib/pcb/edit/digest";
+import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
 
 interface PendingEdit {
   commands: EditCommand[];
@@ -98,11 +99,11 @@ export function AssistBox({
       const res = await fetch("/api/pcb/edit/assist", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(withAiBrain({
           instruction,
           digest: buildDigest(board, getSelectionRefs(), { presetId }),
           items: buildItemIndex(board),
-        }),
+        })),
       });
       const data = (await res.json()) as {
         commands?: EditCommand[];
@@ -111,8 +112,10 @@ export function AssistBox({
         error?: string;
       };
       if (!res.ok) {
-        setNotice(`Assist failed: ${data.error ?? res.statusText}`);
-        return;
+        await throwAiResponseError(new Response(JSON.stringify(data), {
+          status: res.status,
+          headers: { "Content-Type": "application/json" },
+        }), () => void submit());
       }
       if (data.question) {
         setNotice(data.question);

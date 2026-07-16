@@ -43,8 +43,31 @@ pick-and-place bundle that JLCPCB's quote tool accepts.
 - **Demo**: open the PCB tab with `?pcbdemo=story` and follow the five-click
   flow (`Ctrl+P` place → `Ctrl+E` route → `Ctrl+D` DRC → `Ctrl+3` 3D →
   `Ctrl+B` fab bundle). Press `?` for all shortcuts.
-- **Docs**: [`docs/pcb-quickstart.md`](docs/pcb-quickstart.md) — setup
-  (`FREEROUTING_JAR`, `KICAD_CLI`), the workflow, and where to go next.
+- **Docs**: [`docs/pcb-quickstart.md`](docs/pcb-quickstart.md) — local Freerouting
+  setup (no hosted API key), `KICAD_CLI`, the workflow, and where to go next.
+
+---
+
+## SPICE Studio
+
+The SPICE tab is a project-based simulation environment rather than a single
+"run" button. It compiles the immutable schematic revision plus reversible
+simulation overlays into a canonical circuit IR, audits readiness, and only
+then emits source-mapped ngspice input.
+
+- Versioned tests with variables, operating point/DC/AC/transient and advanced
+  directives, sweeps, corners, seeded Monte Carlo, measurements, and specs.
+- Governed model registry with dialect inspection, pin-map review, reversible
+  transforms, assignment, and a real ngspice smoke test.
+- Isolated queued jobs with manifests, hashes, progress events, cancellation,
+  bounded logs/artifacts, waveform range queries, and reproducible ZIP bundles.
+- Interactive signal browser with zoom/pan, A/B cursors, scalar measurements,
+  diagnostics, run comparison, CSV/JSON export, and report generation.
+- Typed AI tools inspect evidence and propose reviewable project changes; they
+  do not silently rewrite the schematic or generated netlist.
+
+See [`docs/spice-studio.md`](docs/spice-studio.md) for setup, workflow, API, and
+headless CI usage.
 
 ---
 
@@ -53,6 +76,9 @@ pick-and-place bundle that JLCPCB's quote tool accepts.
 ### 1. Prerequisites
 - Node + [pnpm](https://pnpm.io/)
 - A Postgres database with the `pgvector` extension (e.g. Supabase)
+- For one-click PCB autorouting, run `npm run setup:freerouting` once. This
+  installs Sirkit's pinned local engine and private Java runtime; no Freerouting
+  API key is required.
 
 ### 2. Environment
 Create `.env.local`:
@@ -60,8 +86,11 @@ Create `.env.local`:
 ```bash
 # Required
 DATABASE_URL=postgres://...            # Postgres + pgvector
-ANTHROPIC_API_KEY=sk-ant-...           # generation / edit / review
-OPENAI_API_KEY=sk-...                  # retrieval embeddings
+ANTHROPIC_API_KEY=sk-ant-...           # optional Anthropic reasoning brain
+OPENAI_API_KEY=sk-...                  # OpenAI brain + fixed retrieval embeddings
+# Optional brain model overrides:
+# SIRKIT_ANTHROPIC_MODEL=claude-opus-4-7
+# SIRKIT_OPENAI_MODEL=gpt-5.4
 
 # Optional — distributor sourcing (BOM)
 DIGIKEY_CLIENT_ID=...
@@ -84,6 +113,15 @@ pnpm drizzle-kit push       # sync schema
 pnpm dev
 ```
 Open [http://localhost:3000](http://localhost:3000).
+
+### AI Brain selection
+
+Open **AI Chat** and choose **OpenAI** or **Anthropic** under **AI Brain**. The
+choice takes effect immediately for chat, schematic generation/edit/review, PCB
+assistance, and SPICE proposals. It is saved globally and in the active project;
+provider switches are metadata-only history events. OpenAI remains the fixed
+embeddings provider for catalog retrieval regardless of this selection. API keys
+stay in `.env.local` and are used only by server routes.
 
 ---
 

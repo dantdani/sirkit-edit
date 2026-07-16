@@ -27,19 +27,61 @@ enablePatches();
 const MAX_ENTRIES = 200;
 
 interface HistoryEntry {
+  id: string;
   label: string;
+  createdAt: number;
   patches: Patch[];
   inversePatches: Patch[];
+  metadata: PcbHistoryMetadata;
+}
+
+export interface PcbHistoryMetadata {
+  operationType: string;
+  affectedObjects: string[];
+  netId?: number;
+  layer?: string;
+  details?: Record<string, unknown>;
+  actor?: "human" | "ai" | "autorouter" | "system";
+  reason?: string;
+  sourceViolationIds?: string[];
+  transactionId?: string;
+}
+
+export interface PcbEngineeringEvent {
+  eventId: string;
+  timestamp: string;
+  actor: "human" | "ai" | "autorouter" | "system";
+  operation: string;
+  objectIds: string[];
+  before: Array<{ path: Array<string | number>; value?: unknown }>;
+  after: Array<{ path: Array<string | number>; value?: unknown }>;
+  reason?: string;
+  sourceViolationIds: string[];
+  transactionId: string;
+}
+
+export interface PcbHistoryRecord {
+  id: string;
+  label: string;
+  createdAt: number;
+  state: "applied" | "redo";
+  metadata: PcbHistoryMetadata;
 }
 
 export interface PcbHistory {
   readonly present: PcbBoard;
   /** Commit one undoable step. Mutations apply to the pre-transient state. */
-  execute(label: string, mutate: (draft: PcbBoard) => void): void;
+  execute(label: string, mutate: (draft: PcbBoard) => void, metadata?: Partial<PcbHistoryMetadata>): void;
   undo(): void;
   redo(): void;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
+  readonly undoLabel?: string;
+  readonly redoLabel?: string;
+  /** Oldest to newest command log. Redo entries remain visible and marked. */
+  readonly entries: readonly PcbHistoryRecord[];
+  /** Append-only engineering audit log. Undo/redo add events; they never erase earlier records. */
+  readonly events: readonly PcbEngineeringEvent[];
   /** Fires on execute/undo/redo (NOT on transient). Returns unsubscribe. */
   subscribe(cb: (board: PcbBoard, entry: { label: string }) => void): () => void;
   /**
@@ -64,6 +106,8 @@ export function createHistory(initial: PcbBoard): PcbHistory {
   let transientBase: PcbBoard | null = null;
   const past: HistoryEntry[] = [];
   const future: HistoryEntry[] = [];
+  const events: PcbEngineeringEvent[] = [];
+  let nextId = 1;
   const subscribers = new Set<(board: PcbBoard, entry: { label: string }) => void>();
 
   function notify(entry: { label: string }): void {
@@ -78,6 +122,28 @@ export function createHistory(initial: PcbBoard): PcbHistory {
     }
   }
 
+  function affectedObjects(base: PcbBoard, next: PcbBoard, patches: readonly Patch[]): string[] {
+    const out = new Set<string>();
+    const collections = new Set(["footprints", "tracks", "vias", "zones", "texts", "silkItems", "padstacks", "nets"]);
+    for (const patch of patches) {
+      const collection = String(patch.path[0] ?? "board");
+      if (!collections.has(collection)) {
+        out.add(collection);
+        continue;
+      }
+      const index = patch.path[1];
+      if (typeof index !== "number") {
+        out.add(collection);
+        continue;
+      }
+      const beforeItem = (base as unknown as Record<string, unknown[]>)[collection]?.[index] as { id?: string; name?: string } | undefined;
+      const afterItem = (next as unknown as Record<string, unknown[]>)[collection]?.[index] as { id?: string; name?: string } | undefined;
+      const identity = afterItem?.id ?? beforeItem?.id ?? afterItem?.name ?? beforeItem?.name ?? String(index);
+      out.add(`${collection}:${identity}`);
+    }
+    return [...out].sort();
+  }
+
   return {
     get present(): PcbBoard {
       return present;
@@ -88,13 +154,59 @@ export function createHistory(initial: PcbBoard): PcbHistory {
     get canRedo(): boolean {
       return future.length > 0;
     },
+    get undoLabel(): string | undefined {
+      return past.at(-1)?.label;
+    },
+    get redoLabel(): string | undefined {
+      return future.at(-1)?.label;
+    },
+    get entries(): readonly PcbHistoryRecord[] {
+      return [
+        ...past.map((entry) => ({ id: entry.id, label: entry.label, createdAt: entry.createdAt, state: "applied" as const, metadata: entry.metadata })),
+        ...[...future].reverse().map((entry) => ({ id: entry.id, label: entry.label, createdAt: entry.createdAt, state: "redo" as const, metadata: entry.metadata })),
+      ];
+    },
+    get events(): readonly PcbEngineeringEvent[] {
+      return events;
+    },
 
-    execute(label: string, mutate: (draft: PcbBoard) => void): void {
+    execute(label: string, mutate: (draft: PcbBoard) => void, metadata?: Partial<PcbHistoryMetadata>): void {
       const base = transientBase ?? present;
       transientBase = null;
       const [next, patches, inversePatches] = produceWithPatches(base, mutate);
       present = next;
-      past.push({ label, patches, inversePatches });
+      const entryId = `pcb-history-${nextId++}`;
+      const fullMetadata: PcbHistoryMetadata = {
+        operationType: metadata?.operationType ?? label.split(/[ :]/, 1)[0].toLowerCase(),
+        affectedObjects: metadata?.affectedObjects ?? affectedObjects(base, next, patches),
+        ...(metadata?.netId === undefined ? {} : { netId: metadata.netId }),
+        ...(metadata?.layer === undefined ? {} : { layer: metadata.layer }),
+        ...(metadata?.details === undefined ? {} : { details: metadata.details }),
+        ...(metadata?.actor === undefined ? {} : { actor: metadata.actor }),
+        ...(metadata?.reason === undefined ? {} : { reason: metadata.reason }),
+        ...(metadata?.sourceViolationIds === undefined ? {} : { sourceViolationIds: [...metadata.sourceViolationIds] }),
+        ...(metadata?.transactionId === undefined ? {} : { transactionId: metadata.transactionId }),
+      };
+      past.push({
+        id: entryId,
+        label,
+        createdAt: Date.now(),
+        patches,
+        inversePatches,
+        metadata: fullMetadata,
+      });
+      events.push({
+        eventId: `pcb-event-${events.length + 1}`,
+        timestamp: new Date().toISOString(),
+        actor: fullMetadata.actor ?? "human",
+        operation: fullMetadata.operationType,
+        objectIds: [...fullMetadata.affectedObjects],
+        before: inversePatches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        after: patches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        ...(fullMetadata.reason ? { reason: fullMetadata.reason } : {}),
+        sourceViolationIds: [...(fullMetadata.sourceViolationIds ?? [])],
+        transactionId: fullMetadata.transactionId ?? entryId,
+      });
       if (past.length > MAX_ENTRIES) past.shift();
       future.length = 0;
       notify({ label });
@@ -106,6 +218,18 @@ export function createHistory(initial: PcbBoard): PcbHistory {
       if (!entry) return;
       present = applyPatches(present, entry.inversePatches);
       future.push(entry);
+      events.push({
+        eventId: `pcb-event-${events.length + 1}`,
+        timestamp: new Date().toISOString(),
+        actor: "human",
+        operation: "undo",
+        objectIds: [...entry.metadata.affectedObjects],
+        before: entry.patches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        after: entry.inversePatches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        reason: `Undo ${entry.label}`,
+        sourceViolationIds: [...(entry.metadata.sourceViolationIds ?? [])],
+        transactionId: entry.metadata.transactionId ?? entry.id,
+      });
       notify({ label: entry.label });
     },
 
@@ -115,6 +239,18 @@ export function createHistory(initial: PcbBoard): PcbHistory {
       if (!entry) return;
       present = applyPatches(present, entry.patches);
       past.push(entry);
+      events.push({
+        eventId: `pcb-event-${events.length + 1}`,
+        timestamp: new Date().toISOString(),
+        actor: "human",
+        operation: "redo",
+        objectIds: [...entry.metadata.affectedObjects],
+        before: entry.inversePatches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        after: entry.patches.map((patch) => ({ path: [...patch.path], ...(patch.op === "remove" ? {} : { value: patch.value }) })),
+        reason: `Redo ${entry.label}`,
+        sourceViolationIds: [...(entry.metadata.sourceViolationIds ?? [])],
+        transactionId: entry.metadata.transactionId ?? entry.id,
+      });
       notify({ label: entry.label });
     },
 

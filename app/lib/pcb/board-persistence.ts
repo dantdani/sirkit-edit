@@ -17,6 +17,7 @@ import type { SchematicState } from "@/lib/schematic-types";
 import { createProject, loadProject, saveProjectPcb } from "@/lib/persistence";
 import type { PcbBoard } from "./types";
 import { ensureBoardPadstacks } from "./padstack/migrate"; // Stage 17
+import { loadAiBrainPreference, saveAiBrainPreference } from "@/app/lib/ai-preferences";
 
 const CURRENT_PROJECT_KEY = "sirkit:currentProjectId";
 const SYNC_HASH_PREFIX = "sirkit:pcbSyncHash:";
@@ -76,6 +77,8 @@ export function saveCurrentBoard(
     id = project.id;
     try {
       localStorage.setItem(CURRENT_PROJECT_KEY, id);
+      // Attach the already-active global brain to the newly materialized project.
+      saveAiBrainPreference(loadAiBrainPreference());
     } catch {
       return false;
     }

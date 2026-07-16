@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction } from "react";
 import dynamic from "next/dynamic";
 const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
+const SpiceStudio = dynamic(() => import("@/app/components/spice/SpiceStudio"), { ssr: false });
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -39,6 +40,13 @@ import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
 import { BomView } from "@/app/components/bom/BomView";
 import { KicadSymbolInline } from "@/app/components/schematic/KicadSymbol";
 import { getCachedPart, ensurePartLoaded, subscribeToPart, type CachedPart } from "@/app/lib/parts-cache";
+import {
+  AiProviderUnavailableError,
+  loadAiBrainPreference,
+  saveAiBrainPreference,
+  throwAiResponseError,
+} from "@/app/lib/ai-preferences";
+import type { LLMProviderId } from "@/app/lib/llm/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -55,6 +63,7 @@ type ActivityLogMessage = {
   entries: ActivityLogEntry[];
 };
 type Message = ChatMessage | ActivityLogMessage;
+type AiProviderFailureState = { provider: LLMProviderId };
 type PendingSuggestion = {
   title: string;
   detail: string;
@@ -2296,6 +2305,10 @@ export default function Home() {
   const [chatFullscreen, setChatFullscreen] = useState(false);
   const [chatWidth, setChatWidth]           = useState(384);
   const [leftPanelWidth, setLeftPanelWidth] = useState(240);
+  const [aiBrain, setAiBrain] = useState<LLMProviderId>("openai");
+  const aiBrainRef = useRef<LLMProviderId>("openai");
+  const [aiProviderFailure, setAiProviderFailure] = useState<AiProviderFailureState | null>(null);
+  const lastAiRetryRef = useRef<(() => void) | null>(null);
 
   // Schematic state
   const [tool, setTool]       = useState<Tool>("select");
@@ -2376,6 +2389,32 @@ export default function Home() {
   // Hydrate analysis config from localStorage post-mount (SSR safety).
   useEffect(() => { setAnalysisConfig(loadAnalysisConfig()); }, []);
   useEffect(() => {
+    const storedBrain = loadAiBrainPreference();
+    aiBrainRef.current = storedBrain;
+    setAiBrain(storedBrain);
+    const onBrainChange = (event: Event) => {
+      const detail = (event as CustomEvent<LLMProviderId>).detail;
+      if (detail === "openai" || detail === "anthropic") {
+        aiBrainRef.current = detail;
+        setAiBrain(detail);
+      }
+    };
+    const onProviderFailure = (event: Event) => {
+      const detail = (event as CustomEvent<{ provider?: LLMProviderId; retry?: () => void }>).detail;
+      if (detail?.provider === "openai" || detail?.provider === "anthropic") {
+        lastAiRetryRef.current = detail.retry ?? null;
+        setAiProviderFailure({ provider: detail.provider });
+        setChatOpen(true);
+      }
+    };
+    window.addEventListener("sirkit:ai-brain-change", onBrainChange);
+    window.addEventListener("sirkit:ai-provider-failure", onProviderFailure);
+    return () => {
+      window.removeEventListener("sirkit:ai-brain-change", onBrainChange);
+      window.removeEventListener("sirkit:ai-provider-failure", onProviderFailure);
+    };
+  }, []);
+  useEffect(() => {
     try { localStorage.setItem(ANALYSIS_STORAGE_KEY, JSON.stringify(analysisConfig)); }
     catch { /* ignore */ }
   }, [analysisConfig]);
@@ -2383,6 +2422,13 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  function selectAiBrain(provider: LLMProviderId) {
+    saveAiBrainPreference(provider);
+    aiBrainRef.current = provider;
+    setAiBrain(provider);
+    setAiProviderFailure(null);
+  }
 
   // Panel resize
   const dragging   = useRef<"left" | "right" | null>(null);
@@ -2587,8 +2633,8 @@ export default function Home() {
     );
   }
 
-  async function send() {
-    const text = input.trim();
+  async function send(retryText?: string) {
+    const text = (retryText ?? input).trim();
     if (!text || loading) return;
 
     const userMsg: ChatMessage  = { id: Date.now().toString(), role: "user", content: text };
@@ -2606,6 +2652,8 @@ export default function Home() {
     setMessages((prev) => [...prev, userMsg, logMsg, assistantMsg]);
     setInput("");
     setLoading(true);
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = () => void send(text);
 
     try {
       appendActivityStep(logId, "Calling assistant");
@@ -2615,9 +2663,13 @@ export default function Home() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({
+          provider: aiBrainRef.current,
+          messages: apiMessages,
+          schematicState: { components, wires, kicadComponents, netLabels, pageSize },
+        }),
       });
-      if (!res.ok) throw new Error(`Chat request failed with status ${res.status}`);
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const dec    = new TextDecoder();
@@ -2635,7 +2687,15 @@ export default function Home() {
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
-          m.role === "assistant" && m.id === assistantId ? { ...m, content: "Error — please try again." } : m
+          m.role === "assistant" && m.id === assistantId
+            ? {
+                ...m,
+                content:
+                  err instanceof AiProviderUnavailableError
+                    ? `${err.message} Choose an action below.`
+                    : "Error — please try again.",
+              }
+            : m
         )
       );
       failActivityLog(logId, err instanceof Error ? err.message : "Chat request failed");
@@ -2699,6 +2759,8 @@ export default function Home() {
     setSuggestionsMinimized(false);
     setIsGenerating(true);
     setGenError(null);
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = () => void handleGenerateSchematic(prompt);
     try {
       let state: SchematicState;
       let explanation: string;
@@ -2708,8 +2770,9 @@ export default function Home() {
         const res = await fetch("/api/schematic/build-multi", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ prompt, provider: aiBrainRef.current }),
         });
+        if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
         const data = (await res.json()) as
           | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
           | { ok: false; error: string };
@@ -2749,7 +2812,7 @@ export default function Home() {
         }
       } else {
         appendActivityStep(logId, "Synthesizing theory schematic");
-        const result = await generateSchematic(prompt);
+        const result = await generateSchematic(prompt, lastAiRetryRef.current ?? undefined);
         state = result.state;
         explanation = result.netlist.explanation;
         if (state.components.length === 0) {
@@ -2800,6 +2863,8 @@ export default function Home() {
     const isApplyingSuggestions = isGuardedSupportApplyInstruction(prompt);
     setIsEditing(true);
     setGenError(null);
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = () => void handleEditSchematic(prompt, opts);
     try {
       const summary = [
         ...components.map((c) => ({ refDes: c.id, kind: c.type, value: c.value || "" })),
@@ -2813,8 +2878,9 @@ export default function Home() {
       const res = await fetch("/api/schematic/edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ instruction: prompt, components: summary }),
+        body: JSON.stringify({ instruction: prompt, components: summary, provider: aiBrainRef.current }),
       });
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
       const data = (await res.json()) as
         | { ok: true; ops: SchematicEditOp[]; note: string; needsTopology: boolean }
         | { ok: false; error: string };
@@ -2852,8 +2918,9 @@ export default function Home() {
         const res2 = await fetch("/api/schematic/edit-build", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ instruction: prompt, netlist: currentNetlist }),
+          body: JSON.stringify({ instruction: prompt, netlist: currentNetlist, provider: aiBrainRef.current }),
         });
+        if (!res2.ok) await throwAiResponseError(res2, lastAiRetryRef.current ?? undefined);
         const data2 = (await res2.json()) as
           | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
           | { ok: false; error: string };
@@ -2997,6 +3064,8 @@ export default function Home() {
     if (components.length === 0 && kicadComponents.length === 0) return;
     setIsReviewing(true);
     setGenError(null);
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = () => void handleReview(auto);
     try {
       const partsMap = new Map<string, CachedPart>();
       for (const k of kicadComponents) {
@@ -3008,8 +3077,9 @@ export default function Home() {
       const res = await fetch("/api/schematic/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(reviewInput),
+        body: JSON.stringify({ ...reviewInput, provider: aiBrainRef.current }),
       });
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
       const data = (await res.json()) as
         | { ok: true; findings: { severity: string; category?: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
         | { ok: false; error: string };
@@ -3137,6 +3207,8 @@ export default function Home() {
     }
     setIsTidying(true);
     setGenError(null);
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = () => void handleTidyLayout(auto);
     try {
       const image = await captureSchematicPng();
       if (!image) throw new Error("Could not capture the schematic image");
@@ -3144,8 +3216,13 @@ export default function Home() {
       const res = await fetch("/api/schematic/layout-critic", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: { components, wires, kicadComponents, netLabels, pageSize }, image }),
+        body: JSON.stringify({
+          provider: aiBrainRef.current,
+          state: { components, wires, kicadComponents, netLabels, pageSize },
+          image,
+        }),
       });
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
       const data = (await res.json()) as
         | {
             ok: true;
@@ -3619,7 +3696,7 @@ export default function Home() {
         {leftPanel !== null && (
           <div
             onMouseDown={(e) => startDrag("left", e)}
-            className="w-1 shrink-0 relative flex items-center justify-center cursor-col-resize group bg-zinc-800 hover:bg-teal-500/60 transition-colors"
+            className="sirkit-chat-resizer w-1 shrink-0 relative flex items-center justify-center cursor-col-resize group bg-zinc-800 hover:bg-teal-500/60 transition-colors"
           >
             <div className="absolute flex flex-col items-center gap-0.5 pointer-events-none">
               <ChevronLeft  className="size-2.5 text-zinc-600 group-hover:text-teal-300 transition-colors" />
@@ -3636,7 +3713,7 @@ export default function Home() {
               <ViewTab icon={CircuitBoard} label="PCB"       active={view === "pcb"}       onClick={() => setView("pcb")} />
               <ViewTab icon={Box}          label="3D"        active={view === "3d"}        onClick={() => setView("3d")} />
               <ViewTab icon={Receipt}      label="BOM"       active={view === "bom"}       onClick={() => setView("bom")} />
-              <ViewTab icon={Activity}     label="Sim"       active={view === "sim"}       onClick={() => setView("sim")} />
+              <ViewTab icon={Activity}     label="SPICE"     active={view === "sim"}       onClick={() => setView("sim")} />
             </div>
 
             <div className="flex-1 min-h-0 relative">
@@ -3709,27 +3786,32 @@ export default function Home() {
                   )}
                 </>
               ) : view === "sim" ? (
-                <SimView
-                  components={components}
-                  wires={wires}
-                  netLabels={netLabels}
-                  setNetLabels={setNetLabels}
-                  simResult={simResult}
-                  simLoading={simLoading}
-                  simError={simError}
-                  panes={panes}
-                  setPanes={setPanes}
-                  activePaneId={activePaneId}
-                  setActivePaneId={setActivePaneId}
-                  onRunSim={handleRunSim}
-                  simMode={simMode}
-                  setSimMode={setSimMode}
-                  setComponents={setComponents}
-                  setWires={setWires}
-                  chartPanelOpen={chartPanelOpen}
-                  setChartPanelOpen={setChartPanelOpen}
-                  analysisConfig={analysisConfig}
-                  setAnalysisConfig={setAnalysisConfig}
+                <SpiceStudio
+                  schematic={{ components, kicadComponents, wires, netLabels, pageSize }}
+                  legacyPanel={(
+                    <SimView
+                      components={components}
+                      wires={wires}
+                      netLabels={netLabels}
+                      setNetLabels={setNetLabels}
+                      simResult={simResult}
+                      simLoading={simLoading}
+                      simError={simError}
+                      panes={panes}
+                      setPanes={setPanes}
+                      activePaneId={activePaneId}
+                      setActivePaneId={setActivePaneId}
+                      onRunSim={handleRunSim}
+                      simMode={simMode}
+                      setSimMode={setSimMode}
+                      setComponents={setComponents}
+                      setWires={setWires}
+                      chartPanelOpen={chartPanelOpen}
+                      setChartPanelOpen={setChartPanelOpen}
+                      analysisConfig={analysisConfig}
+                      setAnalysisConfig={setAnalysisConfig}
+                    />
+                  )}
                 />
               ) : view === "bom" ? (
                 <BomView
@@ -3801,18 +3883,38 @@ export default function Home() {
         {/* Right Chat Panel */}
         {chatOpen && (
           <aside
-            className="border-l border-zinc-800 shrink-0 flex flex-col min-h-0"
+            className="sirkit-chat-panel border-l border-zinc-800 bg-zinc-950 z-30 shrink-0 flex flex-col min-h-0"
             style={{ width: chatFullscreen ? undefined : chatWidth, flex: chatFullscreen ? "1 1 0" : undefined }}
           >
-            <div className="h-10 border-b border-zinc-800 flex items-center px-3 shrink-0 gap-2">
-              <span className="text-xs text-zinc-400 font-medium flex-1">AI Chat</span>
-              <button
-                onClick={() => setChatFullscreen((f) => !f)}
-                title={chatFullscreen ? "Restore" : "Maximize"}
-                className="text-zinc-500 hover:text-zinc-200 transition-colors"
-              >
-                {chatFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </button>
+            <div className="border-b border-zinc-800 px-3 py-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-300 font-medium flex-1">AI Chat</span>
+                <button
+                  onClick={() => setChatFullscreen((f) => !f)}
+                  title={chatFullscreen ? "Restore" : "Maximize"}
+                  className="text-zinc-500 hover:text-zinc-200 transition-colors"
+                >
+                  {chatFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                </button>
+              </div>
+              <div className="mt-2 flex items-end gap-2 flex-wrap">
+                <label className="flex flex-col gap-1 min-w-28">
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-500">AI Brain</span>
+                  <select
+                    aria-label="AI Brain"
+                    value={aiBrain}
+                    onChange={(event) => selectAiBrain(event.target.value as LLMProviderId)}
+                    className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200 outline-none focus:border-teal-500"
+                  >
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+                <div className="pb-0.5 text-[10px] leading-4 text-zinc-500">
+                  <div>Brain: <span className="text-teal-300">{aiBrain === "openai" ? "OpenAI" : "Anthropic"}</span></div>
+                  <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
+                </div>
+              </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -3832,6 +3934,37 @@ export default function Home() {
             {genError && (
               <div className="px-3 py-1.5 text-xs text-red-400 border-t border-zinc-800 shrink-0">
                 {genError}
+              </div>
+            )}
+            {aiProviderFailure && (
+              <div role="alert" className="mx-3 mb-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs shrink-0">
+                <div className="font-medium text-amber-200">
+                  {aiProviderFailure.provider === "openai" ? "OpenAI" : "Anthropic"} is currently unavailable.
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={!lastAiRetryRef.current}
+                    onClick={() => {
+                      setAiProviderFailure(null);
+                      lastAiRetryRef.current?.();
+                    }}
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const alternative = aiProviderFailure.provider === "anthropic" ? "openai" : "anthropic";
+                      selectAiBrain(alternative);
+                      lastAiRetryRef.current?.();
+                    }}
+                  >
+                    Use {aiProviderFailure.provider === "anthropic" ? "OpenAI" : "Anthropic"} instead
+                  </Button>
+                </div>
               </div>
             )}
             <div className="border-t border-zinc-800 p-3">

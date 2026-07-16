@@ -6,7 +6,9 @@
  */
 
 import type { Vec2, BBox } from "../geometry";
+import type { BoardOutline } from "../types";
 import { mmToNm } from "../units";
+import type { PlacementRouteabilityReport } from "./routeability";
 
 export type AutoPlaceRotation = 0 | 90 | 180 | 270;
 
@@ -25,6 +27,11 @@ export interface AutoPlaceParams {
   boundaryK?: number; // default 0.05
   damping?: number; // default 0.85 (velocity decay per frame)
   maxStepNm?: number; // default 2 mm per iteration
+  /** Explicit user permission for a user-authored outline; generated outlines resize automatically. */
+  allowBoardResize?: boolean;
+  expandGeneratedOutline?: boolean;
+  envelopeScale?: number;
+  candidateCount?: number;
 }
 
 export const AUTO_PLACE_DEFAULTS = {
@@ -39,6 +46,10 @@ export const AUTO_PLACE_DEFAULTS = {
   boundaryK: 0.05,
   damping: 0.85,
   maxStepNm: mmToNm(2),
+  allowBoardResize: false,
+  expandGeneratedOutline: true,
+  envelopeScale: 1.15,
+  candidateCount: 2,
 } as const;
 
 /** Params with every knob resolved; `seed` is filled by the orchestrator. */
@@ -66,6 +77,26 @@ export interface FootprintPlacement {
 export interface AutoPlaceResult {
   /** Final placement per moved footprint. Locked footprints are omitted. */
   placements: Map<string, { position: Vec2; rotationDeg: AutoPlaceRotation; side: "top" | "bottom" }>;
+  outlineBefore: BoardOutline;
+  outlineAfter: BoardOutline;
+  outlineResized: boolean;
+  routeabilityBefore: PlacementRouteabilityReport;
+  routeabilityAfter: PlacementRouteabilityReport;
+  report: {
+    footprintsPlaced: number;
+    totalFootprints: number;
+    lockedFootprintsPreserved: number;
+    padsInsideBoard: number;
+    totalPads: number;
+    envelopeOverlaps: number;
+    blockedPadEscapes: number;
+    congestion: "Low" | "Medium" | "High";
+    envelopeScale: number;
+    spacingPreset: "compact" | "comfortable" | "spacious" | "custom";
+    estimatedRequiredAreaMm2: number;
+    availableBoardAreaMm2: number;
+    success: boolean;
+  };
   stats: {
     iterations: number;
     converged: boolean;

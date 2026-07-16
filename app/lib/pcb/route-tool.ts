@@ -18,7 +18,7 @@ import Flatbush from "flatbush";
 import type { PcbBoard, Track, Via, Pad, FootprintInstance, BoardOutline, FilledRegion } from "./types";
 import type { Vec2, BBox, PlacedShape } from "./geometry";
 import { shapeDistance, shapeBBox } from "./geometry";
-import type { LayerId } from "./layers";
+import { COPPER_LAYERS, type LayerId } from "./layers";
 import {
   trackShape,
   padWorldShape,
@@ -33,11 +33,27 @@ import {
   viaSpannedLayers,
   segmentDistance,
 } from "./geometry-copper";
-import { regionShapeDistance } from "./zones/geometry"; // Stage 11: zone fills are obstacles
+import { polygonBBox, regionAreaNm2, regionShapeDistance } from "./zones/geometry"; // Stage 11: zone fills are obstacles
 import type { CopperItemRef } from "./connectivity-board";
 import type { RouteCommand } from "./route-tool.commands";
 import { buildRipupNetCommand } from "./route-tool.commands";
 import { classDefaultPadstack, applyPadstackToVia } from "./padstack/defaults"; // Stage 17
+import { getPadstack } from "./padstack/registry";
+import { adaptBoardToRoutingWorld } from "./smart-routing/world";
+import { resolveSmartRoutingRules } from "./smart-routing/rules";
+import { routeSmart } from "./smart-routing/engine";
+import {
+  beginPreviewTransaction,
+  createRoutingHistoryEvent,
+  stagePreviewCandidates,
+} from "./smart-routing/transaction";
+import type {
+  EffectiveRoutingRules,
+  RoutingWorld,
+  SmartRouteCandidate,
+  SmartRouteIntent,
+  SmartRouteResult,
+} from "./smart-routing/types";
 
 // ── Net-class defaults (Stage 10 `getNetClass` supersedes; see options.netClass)
 export const DEFAULT_TRACK_WIDTH = 250_000; // 0.25 mm
@@ -63,8 +79,17 @@ export interface RoutePreview {
   end: Vec2; // cursor position, grid-snapped (or a same-net pad center)
   legal: boolean; // false when any candidate segment fails clearance
   blockedBy?: CopperItemRef; // first offender (deterministic order)
+  blockedByKeepoutId?: string;
   /** Plain-English tooltip built from `blockedBy` + board (see describeBlock). */
   blockedText?: string;
+  /** Full route polyline; legacy `corner` remains for compatible consumers. */
+  points?: readonly Vec2[];
+  /** Independently validated alternatives. Tab cycles this array. */
+  candidates?: readonly SmartRouteCandidate[];
+  selectedCandidateId?: string;
+  smartStatus?: SmartRouteResult["status"];
+  smartExplanation?: string;
+  searchElapsedMs?: number;
 }
 
 export interface StretchPreview {
@@ -82,6 +107,9 @@ export type RouteToolState =
       activeLayer: LayerId;
       trackWidth: number;
       clearance: number;
+      viaSize: number;
+      viaDrill: number;
+      viaPadstackId?: string;
       anchor: Vec2; // last committed vertex (world nm)
       preview: RoutePreview;
       preferHorizontalFirst: boolean; // Tab toggles this
@@ -115,6 +143,13 @@ export interface RouteToolOptions {
   getActiveLayer?: () => LayerId;
   /** Stage 10 `getNetClass`; defaults to the constants above. */
   netClass?: (netId: number) => NetClass;
+  routingProfile?: (netId: number) => {
+    trackWidth: number;
+    clearance: number;
+    viaSize: number;
+    viaDrill: number;
+    viaPadstackId?: string;
+  };
   grid?: number;
 }
 
@@ -162,18 +197,20 @@ export interface ClearanceGuardInput {
 export interface ClearanceGuardResult {
   legal: boolean;
   blockedBy?: CopperItemRef;
+  /** A typed routing keepout is not conductive, so it is not a CopperItemRef. */
+  blockedByKeepoutId?: string;
   distance?: number; // nm; negative = overlap
   /** Additive: the first violation is the board edge (has no CopperItemRef). */
   blockedByEdge?: boolean;
 }
 
 interface Obstacle {
-  ref: CopperItemRef;
-  rank: 0 | 1 | 2 | 3; // pad < track < via < zone (edge is 4, see below)
+  ref?: CopperItemRef;
+  rank: 0 | 1 | 2 | 3 | 4; // pad/hole < track < via < zone < keepout (edge is 5)
   key: string; // deterministic tiebreak within a rank
   netId: number;
   bbox: BBox;
-  kind: "pad" | "track" | "via" | "zone";
+  kind: "pad" | "track" | "via" | "zone" | "keepout";
   track?: Track;
   via?: Via;
   inst?: FootprintInstance;
@@ -181,6 +218,11 @@ interface Obstacle {
   /** Stage 11: zone fill region (+ its layer) — same-net zones never obstruct. */
   region?: FilledRegion;
   zoneLayer?: LayerId;
+  padLayers?: readonly LayerId[];
+  throughAllLayers?: boolean;
+  keepoutId?: string;
+  forbidTracks?: boolean;
+  forbidVias?: boolean;
 }
 
 function trackBBox(t: Track): BBox {
@@ -204,21 +246,26 @@ function padRefKey(instanceId: string, padNumber: string): string {
 
 function collectObstacles(board: PcbBoard, ignore: Set<string>): Obstacle[] {
   const out: Obstacle[] = [];
+  const allCopper: readonly LayerId[] =
+    board.stackup === 2 ? ["copperTop", "copperBottom"] : COPPER_LAYERS;
   for (const inst of board.footprints) {
     for (const pad of inst.def.pads) {
-      if (pad.type === "np_thru_hole") continue;
-      if (padCopperLayers(inst, pad).length === 0) continue;
+      const throughAllLayers = pad.type === "np_thru_hole";
+      const padLayers = throughAllLayers ? allCopper : padCopperLayers(inst, pad);
+      if (padLayers.length === 0) continue;
       const key = padRefKey(inst.id, pad.number);
       if (ignore.has(key)) continue;
       out.push({
         ref: { kind: "pad", instanceId: inst.id, padNumber: pad.number },
         rank: 0,
         key,
-        netId: inst.padNets[pad.number] ?? 0,
+        netId: throughAllLayers ? 0 : (inst.padNets[pad.number] ?? 0),
         bbox: shapeBBox(padWorldShape(inst, pad)),
         kind: "pad",
         inst,
         pad,
+        padLayers,
+        throughAllLayers,
       });
     }
   }
@@ -264,6 +311,27 @@ function collectObstacles(board: PcbBoard, ignore: Set<string>): Obstacle[] {
       });
     });
   }
+  for (const keepout of board.routingKeepouts ?? []) {
+    if (ignore.has(keepout.id) || keepout.polygon.length < 3) continue;
+    const boundingBox = polygonBBox(keepout.polygon);
+    out.push({
+      rank: 4,
+      key: keepout.id,
+      netId: 0,
+      bbox: boundingBox,
+      kind: "keepout",
+      region: {
+        outer: keepout.polygon,
+        holes: [],
+        boundingBox,
+        areaNm2: regionAreaNm2(keepout.polygon, []),
+      },
+      keepoutId: keepout.id,
+      padLayers: keepout.layers,
+      forbidTracks: keepout.forbidTracks,
+      forbidVias: keepout.forbidVias,
+    });
+  }
   return out;
 }
 
@@ -274,6 +342,12 @@ function trackToObstacleDistance(t: Track, o: Obstacle): number {
     if (o.zoneLayer !== t.layer) return Infinity;
     return regionShapeDistance(o.region as FilledRegion, trackShape(t), t.start);
   }
+  if (o.kind === "keepout") {
+    if (!o.forbidTracks || !o.padLayers?.includes(t.layer)) return Infinity;
+    return regionShapeDistance(o.region as FilledRegion, trackShape(t), t.start);
+  }
+  if (o.throughAllLayers) return shapeDistance(trackShape(t), padWorldShape(o.inst as FootprintInstance, o.pad as Pad));
+  if (!o.throughAllLayers && !o.padLayers?.includes(t.layer)) return Infinity;
   return trackPadDistance(t, o.inst as FootprintInstance, o.pad as Pad);
 }
 
@@ -284,6 +358,12 @@ function viaToObstacleDistance(v: Via, o: Obstacle): number {
     if (!viaSpannedLayers(v).includes(o.zoneLayer as LayerId)) return Infinity;
     return regionShapeDistance(o.region as FilledRegion, viaShape(v), v.at);
   }
+  if (o.kind === "keepout") {
+    if (!o.forbidVias || !viaSpannedLayers(v).some((layer) => o.padLayers?.includes(layer))) return Infinity;
+    return regionShapeDistance(o.region as FilledRegion, viaShape(v), v.at);
+  }
+  if (o.throughAllLayers) return shapeDistance(viaShape(v), padWorldShape(o.inst as FootprintInstance, o.pad as Pad));
+  if (!o.throughAllLayers && !viaSpannedLayers(v).some((layer) => o.padLayers?.includes(layer))) return Infinity;
   return viaPadDistance(v, o.inst as FootprintInstance, o.pad as Pad);
 }
 
@@ -365,6 +445,7 @@ interface Violation {
   key: string;
   distance: number;
   ref?: CopperItemRef;
+  keepoutId?: string;
   edge?: boolean;
 }
 
@@ -390,7 +471,7 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
         if (o.kind === "zone" && o.netId === netId) continue; // pour joins same-net copper
         const d = trackToObstacleDistance(seg, o);
         if (isViolation(d, o.netId, netId, clearance)) {
-          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref });
+          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref, keepoutId: o.keepoutId });
         }
       }
     }
@@ -400,7 +481,7 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
         if (o.kind === "zone" && o.netId === netId) continue; // pour joins same-net copper
         const d = viaToObstacleDistance(v, o);
         if (isViolation(d, o.netId, netId, clearance)) {
-          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref });
+          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref, keepoutId: o.keepoutId });
         }
       }
     }
@@ -414,20 +495,20 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
   const edges = outlineSegments(board.outline);
   for (const seg of candidateSegments) {
     if (!pointInOutline(board.outline, seg.start) || !pointInOutline(board.outline, seg.end)) {
-      violations.push({ rank: 4, key: "", distance: -edgeClearance, edge: true });
+      violations.push({ rank: 5, key: "", distance: -edgeClearance, edge: true });
     }
     for (const [a, b] of edges) {
       const d = segmentDistance(seg.start, seg.end, a, b) - seg.width / 2;
-      if (d < edgeClearance) violations.push({ rank: 4, key: "", distance: d, edge: true });
+      if (d < edgeClearance) violations.push({ rank: 5, key: "", distance: d, edge: true });
     }
   }
   for (const v of candidateVias) {
     if (!pointInOutline(board.outline, v.at)) {
-      violations.push({ rank: 4, key: "", distance: -v.size / 2, edge: true });
+      violations.push({ rank: 5, key: "", distance: -v.size / 2, edge: true });
     }
     for (const [a, b] of edges) {
       const d = segmentDistance(v.at, v.at, a, b) - v.size / 2;
-      if (d < edgeClearance) violations.push({ rank: 4, key: "", distance: d, edge: true });
+      if (d < edgeClearance) violations.push({ rank: 5, key: "", distance: d, edge: true });
     }
   }
 
@@ -437,7 +518,13 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
     (x, y) => x.rank - y.rank || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0) || x.distance - y.distance,
   );
   const first = violations[0];
-  return { legal: false, blockedBy: first.ref, distance: first.distance, blockedByEdge: first.edge };
+  return {
+    legal: false,
+    blockedBy: first.ref,
+    blockedByKeepoutId: first.keepoutId,
+    distance: first.distance,
+    blockedByEdge: first.edge,
+  };
 }
 
 // ── Tooltip text (tool owns it — has board + net names; renderer just emits) ──
@@ -455,6 +542,10 @@ function describeBlock(
   res: ClearanceGuardResult,
 ): string {
   if (res.blockedByEdge) return "Too close to board edge";
+  if (res.blockedByKeepoutId) {
+    const name = board.routingKeepouts?.find((item) => item.id === res.blockedByKeepoutId)?.name;
+    return `Route enters ${name || "a copper keepout"}`;
+  }
   const ref = res.blockedBy;
   const d = res.distance ?? 0;
   const near = (label: string): string =>
@@ -582,6 +673,16 @@ export function createRouteTool(
 
   let state: RouteToolState = { kind: "idle" };
   let lastMoveWorld: Vec2 | null = null;
+  let cachedWorldBoard: PcbBoard | null = null;
+  let cachedWorld: RoutingWorld | null = null;
+
+  function worldFor(board: PcbBoard): RoutingWorld {
+    if (board !== cachedWorldBoard || !cachedWorld) {
+      cachedWorldBoard = board;
+      cachedWorld = adaptBoardToRoutingWorld(board);
+    }
+    return cachedWorld;
+  }
 
   // Routing bookkeeping (Backspace unwind of anchor + layer per committed step).
   let routeStack: { anchor: Vec2; activeLayer: LayerId }[] = [];
@@ -604,17 +705,27 @@ export function createRouteTool(
     return { id: freshId("rt-t"), layer, width, start, end, netId };
   }
 
-  function buildSegments(
-    anchor: Vec2,
-    corner: Vec2,
-    end: Vec2,
+  function buildSegmentsFromPoints(
+    points: readonly Vec2[],
     layer: LayerId,
     width: number,
     netId: number,
+    committed: boolean,
   ): Track[] {
     const segs: Track[] = [];
-    if (!samePoint(anchor, corner)) segs.push(makeTrack(anchor, corner, layer, width, netId));
-    if (!samePoint(corner, end)) segs.push(makeTrack(corner, end, layer, width, netId));
+    for (let index = 0; index + 1 < points.length; index++) {
+      if (samePoint(points[index], points[index + 1])) continue;
+      segs.push(committed
+        ? makeTrack(points[index], points[index + 1], layer, width, netId)
+        : {
+            id: `smart-preview-${index}`,
+            layer,
+            width,
+            start: { ...points[index] },
+            end: { ...points[index + 1] },
+            netId,
+          });
+    }
     return segs;
   }
 
@@ -624,8 +735,16 @@ export function createRouteTool(
     segments: Track[];
     legal: boolean;
     blockedBy?: CopperItemRef;
+    blockedByKeepoutId?: string;
     blockedText?: string;
     targetPad: PadHit | null;
+    points: readonly Vec2[];
+    candidates: readonly SmartRouteCandidate[];
+    selectedCandidate?: SmartRouteCandidate;
+    smartResult: SmartRouteResult;
+    smartIntent: SmartRouteIntent;
+    smartRules: EffectiveRoutingRules;
+    smartWorld: RoutingWorld;
   }
 
   function resolveRouting(world: Vec2): RoutingResolve {
@@ -652,25 +771,91 @@ export function createRouteTool(
       end = snap(world);
     }
 
-    // Don't re-snap a corner that already collapsed onto `end` (degenerate
-    // axis/diagonal target): snapping would overshoot an off-grid pad center and
-    // emit a doubled-back stub. Genuine free corners land on the grid already.
+    const smartWorld = worldFor(board);
+    const smartIntent: SmartRouteIntent = {
+      schemaVersion: 1,
+      netId,
+      layer: activeLayer,
+      start: anchor,
+      end,
+      movementPolicy: "keep-existing-copper-fixed",
+      maxCandidates: 4,
+    };
+    const smartRules = resolveSmartRoutingRules(board, netId, activeLayer, {
+      session: {
+        trackWidthNm: trackWidth,
+        clearanceNm: clearance,
+        viaSizeNm: state.viaSize,
+        viaDrillNm: state.viaDrill,
+        gridNm: grid,
+      },
+    });
+    const smartResult = routeSmart(smartWorld, smartIntent, smartRules);
+    const preferredId = state.preview.selectedCandidateId;
+    const selectedCandidate = smartResult.candidates.find((candidate) => candidate.id === preferredId)
+      ?? smartResult.candidates.find((candidate) => candidate.id === smartResult.selectedCandidateId)
+      ?? smartResult.candidates[0];
+    if (selectedCandidate) {
+      const points = selectedCandidate.points;
+      const segments = buildSegmentsFromPoints(points, activeLayer, trackWidth, netId, false);
+      const corner = points[1] ?? end;
+      return {
+        corner,
+        end,
+        points,
+        segments,
+        legal: true,
+        targetPad,
+        candidates: smartResult.candidates,
+        selectedCandidate,
+        smartResult,
+        smartIntent,
+        smartRules,
+        smartWorld,
+      };
+    }
+
+    // Keep the blocked direct posture visible. The independent engine has
+    // already exhausted both direct postures and bounded CW/CCW walk-around.
     const rawCorner = fortyFiveCorner(anchor, end, preferHorizontalFirst);
     const corner = samePoint(rawCorner, end) ? end : snap(rawCorner);
-    const segments = buildSegments(anchor, corner, end, activeLayer, trackWidth, netId);
+    const points = samePoint(anchor, end)
+      ? [anchor]
+      : samePoint(corner, end)
+        ? [anchor, end]
+        : [anchor, corner, end];
+    const segments = buildSegmentsFromPoints(points, activeLayer, trackWidth, netId, false);
     if (segments.length === 0) {
-      // Zero-length (cursor on the anchor): a no-op, not illegal geometry.
-      return { corner, end, segments, legal: true, targetPad: null };
+      return {
+        corner,
+        end,
+        points,
+        segments,
+        legal: true,
+        targetPad: null,
+        candidates: [],
+        smartResult,
+        smartIntent,
+        smartRules,
+        smartWorld,
+      };
     }
     const res = checkClearance(board, { candidateSegments: segments, netId, clearance });
     return {
       corner,
       end,
+      points,
       segments,
       legal: res.legal,
       blockedBy: res.blockedBy,
+      blockedByKeepoutId: res.blockedByKeepoutId,
       blockedText: res.legal ? undefined : describeBlock(board, netId, clearance, res),
       targetPad,
+      candidates: [],
+      smartResult,
+      smartIntent,
+      smartRules,
+      smartWorld,
     };
   }
 
@@ -683,20 +868,53 @@ export function createRouteTool(
       end: r.end,
       legal: r.legal,
       blockedBy: r.blockedBy,
+      blockedByKeepoutId: r.blockedByKeepoutId,
       blockedText: r.blockedText,
+      points: r.points,
+      candidates: r.candidates,
+      selectedCandidateId: r.selectedCandidate?.id,
+      smartStatus: r.smartResult.status,
+      smartExplanation: r.smartResult.explanation,
+      searchElapsedMs: r.smartResult.diagnostics.elapsedMs,
     };
   }
 
   function startRouting(netId: number, activeLayer: LayerId, anchor: Vec2): void {
     const nc = netClassOf(netId);
+    const profile = options.routingProfile?.(netId) ?? nc;
+    const automaticPadstack = options.routingProfile ? undefined : classDefaultPadstack(getBoard(), netId);
+    const profilePadstackId =
+      "viaPadstackId" in profile && typeof profile.viaPadstackId === "string"
+        ? profile.viaPadstackId
+        : automaticPadstack?.id;
+    const effective = resolveSmartRoutingRules(getBoard(), netId, activeLayer, {
+      session: {
+        trackWidthNm: profile.trackWidth,
+        clearanceNm: profile.clearance,
+        viaSizeNm: automaticPadstack?.outerNm ?? profile.viaSize,
+        viaDrillNm: automaticPadstack?.drillNm ?? profile.viaDrill,
+        gridNm: grid,
+      },
+    });
     state = {
       kind: "routing",
       netId,
       activeLayer,
-      trackWidth: nc.trackWidth,
-      clearance: nc.clearance,
+      trackWidth: effective.trackWidthNm,
+      clearance: effective.clearanceNm,
+      viaSize: effective.viaSizeNm,
+      viaDrill: effective.viaDrillNm,
+      ...(profilePadstackId ? { viaPadstackId: profilePadstackId } : {}),
       anchor,
-      preview: { corner: anchor, end: anchor, legal: true },
+      preview: {
+        corner: anchor,
+        end: anchor,
+        legal: true,
+        points: [anchor],
+        candidates: [],
+        smartStatus: "ready",
+        smartExplanation: "Move the pointer to preview a deterministic route.",
+      },
       preferHorizontalFirst: true,
     };
     routeStack = [{ anchor, activeLayer }];
@@ -706,32 +924,62 @@ export function createRouteTool(
   function commitRouting(world: Vec2): void {
     if (state.kind !== "routing") return;
     const r = resolveRouting(world);
-    if (!r.legal || r.segments.length === 0) return; // cannot commit illegal / no-op
-    applyCommand({ kind: "CommitRouteSegment", segments: r.segments, netId: state.netId });
+    if (!r.legal || !r.selectedCandidate || r.segments.length === 0) return; // cannot commit illegal / no-op
+    const segments = buildSegmentsFromPoints(
+      r.points,
+      state.activeLayer,
+      state.trackWidth,
+      state.netId,
+      true,
+    );
+    const transaction = stagePreviewCandidates(
+      beginPreviewTransaction(r.smartWorld, r.smartIntent),
+      r.smartResult.candidates,
+      r.selectedCandidate.id,
+    );
+    const historyEvent = createRoutingHistoryEvent(
+      transaction,
+      r.selectedCandidate,
+      r.smartRules,
+      segments.map((segment) => segment.id),
+    );
+    applyCommand({
+      kind: "CommitRouteSegment",
+      segments,
+      netId: state.netId,
+      historyEvents: [historyEvent],
+    });
     state.anchor = r.end;
     routeStack.push({ anchor: r.end, activeLayer: state.activeLayer });
     if (r.targetPad) {
       cancel(); // completed a connection to a same-net pad
       return;
     }
-    state.preview = { corner: r.end, end: r.end, legal: true };
+    state.preview = {
+      corner: r.end,
+      end: r.end,
+      legal: true,
+      points: [r.end],
+      candidates: [],
+      smartStatus: "ready",
+      smartExplanation: "Segment committed atomically.",
+    };
   }
 
   function placeVia(): void {
     if (state.kind !== "routing") return;
-    const nc = netClassOf(state.netId);
     const newLayer = flipCopperLayer(state.activeLayer);
     const via: Via = {
       id: freshId("rt-v"),
       at: { ...state.anchor },
-      size: nc.viaSize,
-      drill: nc.viaDrill,
+      size: state.viaSize,
+      drill: state.viaDrill,
       netId: state.netId,
       layers: [state.activeLayer, newLayer],
     };
     // Stage 17: the active net class's default padstack wins when the board
     // has a library (dims denormalized onto the via — see padstack/registry).
-    const padstack = classDefaultPadstack(getBoard(), state.netId);
+    const padstack = state.viaPadstackId ? getPadstack(getBoard(), state.viaPadstackId) : undefined;
     if (padstack) applyPadstackToVia(via, padstack);
     // Guard the via itself before committing (edge / other-net proximity).
     const res = checkClearance(getBoard(), {
@@ -924,7 +1172,26 @@ export function createRouteTool(
         case "Tab":
           if (state.kind === "routing") {
             state.preferHorizontalFirst = !state.preferHorizontalFirst;
-            if (lastMoveWorld) updateRoutingPreview(lastMoveWorld);
+            const routingState = state;
+            const candidates = routingState.preview.candidates ?? [];
+            if (candidates.length > 1) {
+              const current = Math.max(0, candidates.findIndex((candidate) => candidate.id === routingState.preview.selectedCandidateId));
+              const selected = candidates[(current + 1) % candidates.length];
+              routingState.preview = {
+                ...routingState.preview,
+                corner: selected.points[1] ?? selected.points[0],
+                end: selected.points[selected.points.length - 1],
+                points: selected.points,
+                selectedCandidateId: selected.id,
+                legal: selected.validation.legal,
+                blockedBy: undefined,
+                blockedByKeepoutId: undefined,
+                blockedText: undefined,
+                smartExplanation: selected.explanation,
+              };
+            } else if (lastMoveWorld) {
+              updateRoutingPreview(lastMoveWorld);
+            }
           }
           return;
       }

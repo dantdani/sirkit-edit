@@ -199,6 +199,7 @@ export function checkCourtyardOverlap(ctx: DrcCheckContext): DrcViolation[] {
         kind: "courtyardOverlap",
         severity: "error",
         items: [],
+        objectIds: [insts[i].id, insts[j].id],
         layer,
         location: trackMidpoint(a.at, b.at),
         measuredNm: gap,

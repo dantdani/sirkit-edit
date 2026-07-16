@@ -16,6 +16,7 @@ import type { LayerId } from "../../layers";
 import type { Vec2 } from "../../geometry";
 import type { DrcCheckContext, DrcViolation } from "../types";
 import { fmtMm, layerName, refKey, violationId } from "../format";
+import { trackInsideBoard, viaInsideBoard } from "./containment";
 
 export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
   const { board } = ctx;
@@ -88,7 +89,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
     const cand: CopperItemRef = { kind: "track", id: track.id };
     const loc: Vec2 = { x: (track.start.x + track.end.x) / 2, y: (track.start.y + track.end.y) / 2 };
     if (res.blockedByEdge) {
-      emitEdge(cand, loc, track.layer, res.distance ?? 0, eff.minEdgeClearanceNm);
+      if (trackInsideBoard(board, track)) emitEdge(cand, loc, track.layer, res.distance ?? 0, eff.minEdgeClearanceNm);
     } else if (res.blockedBy && (res.distance ?? 0) > 0) {
       emitClearance(cand, loc, track.layer, res.blockedBy, res.distance ?? 0, eff.clearanceNm);
     }
@@ -108,7 +109,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
     const cand: CopperItemRef = { kind: "via", id: via.id };
     const loc: Vec2 = { ...via.at };
     if (res.blockedByEdge) {
-      emitEdge(cand, loc, via.layers[0], res.distance ?? 0, eff.minEdgeClearanceNm);
+      if (viaInsideBoard(board, via)) emitEdge(cand, loc, via.layers[0], res.distance ?? 0, eff.minEdgeClearanceNm);
     } else if (res.blockedBy && (res.distance ?? 0) > 0) {
       emitClearance(cand, loc, via.layers[0], res.blockedBy, res.distance ?? 0, eff.clearanceNm);
     }

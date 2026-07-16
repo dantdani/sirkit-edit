@@ -2,7 +2,7 @@
  * POST /api/pcb/edit/assist (PCB Stage 17 Phase D)
  *
  * Turns a plain-English edit instruction ("make all GND traces 0.5 mm") into
- * validated `EditCommand`s. Claude EMITS commands (tool use at temperature 0);
+ * validated `EditCommand`s. The selected brain EMITS commands through typed tools;
  * the server validates every command against a strict structural schema; the
  * client then re-validates against the live board (`compileEdits`) and
  * dry-runs `previewEdits` before anything is applied — AI output that fails
@@ -20,16 +20,21 @@
  * hand-written. Mirrors the client/model config of app/lib/build-loop.ts.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
+import {
+  assistantResponseMessage,
+  toolResultsMessage,
+  type LLMMessage,
+  type LLMTool,
+} from "@/app/lib/llm/types";
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
 import type { CompactItem } from "@/app/lib/pcb/edit/digest";
 import type { LayerId } from "@/app/lib/pcb/layers";
 
 export const runtime = "nodejs";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MODEL = "claude-sonnet-4-6";
 const MAX_ITERATIONS = 6; // tool-use round trips (queries + emit + one retry)
 const MAX_QUERIES = 3;
 const MAX_COMMANDS = 50;
@@ -48,11 +53,11 @@ const ALIGN_MODES: readonly string[] = ["left", "right", "top", "bottom", "cente
 
 // ── Tools ────────────────────────────────────────────────────────────────────
 
-const EMIT_TOOL: Anthropic.Tool = {
+const EMIT_TOOL: LLMTool = {
   name: "emit_edits",
   description:
     "Emit the final list of edit commands implementing the user's instruction. Call this exactly once, when you know precisely which items to edit.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       commands: {
@@ -66,22 +71,22 @@ const EMIT_TOOL: Anthropic.Tool = {
   },
 };
 
-const ASK_TOOL: Anthropic.Tool = {
+const ASK_TOOL: LLMTool = {
   name: "ask_user",
   description:
     "Ask the user ONE clarifying question when the instruction is ambiguous (which item, which value, which direction). Prefer asking over guessing.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: { question: { type: "string" } },
     required: ["question"],
   },
 };
 
-const QUERY_TOOL: Anthropic.Tool = {
+const QUERY_TOOL: LLMTool = {
   name: "query_items",
   description:
     "Look up board items not detailed in the digest. Filters combine with AND. Returns up to 100 compact rows (id, kind, net, layer, widthMm, x/y in mm).",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       kind: { type: "string", enum: ["track", "via", "zone", "text", "footprint"] },
@@ -352,7 +357,10 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const messages: Anthropic.MessageParam[] = [
+  const provider = requestedProvider(
+    typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>).provider : undefined,
+  );
+  const messages: LLMMessage[] = [
     {
       role: "user",
       content: `Board digest:\n${JSON.stringify(body.digest)}\n\nInstruction: ${body.instruction}`,
@@ -365,19 +373,19 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
+      const response = await llmRouter.generate({
+        provider,
+        maxTokens: 2048,
         temperature: 0,
         system: SYSTEM_PROMPT,
         tools: [EMIT_TOOL, ASK_TOOL, QUERY_TOOL],
-        tool_choice: { type: "any" },
+        toolChoice: "required",
+        boardState: body.digest,
+        userRequest: body.instruction,
         messages,
       });
 
-      const toolUse = response.content.find(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
+      const toolUse = response.toolCalls[0];
       if (!toolUse) {
         // Unreachable with tool_choice: any, but handled defensively.
         firstError ??= "model did not call a tool";
@@ -397,11 +405,10 @@ export async function POST(req: Request): Promise<Response> {
           queries > MAX_QUERIES
             ? JSON.stringify({ error: "query limit reached — emit your commands now" })
             : runQuery(body.items, toolUse.input);
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({
-          role: "user",
-          content: [{ type: "tool_result", tool_use_id: toolUse.id, content: result }],
-        });
+        messages.push(assistantResponseMessage(response));
+        messages.push(
+          toolResultsMessage([{ type: "tool_result", toolCallId: toolUse.id, output: result }]),
+        );
         continue;
       }
 
@@ -413,23 +420,20 @@ export async function POST(req: Request): Promise<Response> {
       firstError ??= validated.error;
       if (retried) break; // one correction attempt only
       retried = true;
-      messages.push({ role: "assistant", content: response.content });
-      messages.push({
-        role: "user",
-        content: [
+      messages.push(assistantResponseMessage(response));
+      messages.push(
+        toolResultsMessage([
           {
             type: "tool_result",
-            tool_use_id: toolUse.id,
-            content: `Your previous output failed validation: ${validated.error}. Emit commands matching the documented shapes exactly.`,
-            is_error: true,
+            toolCallId: toolUse.id,
+            output: `Your previous output failed validation: ${validated.error}. Emit commands matching the documented shapes exactly.`,
+            isError: true,
           },
-        ],
-      });
+        ]),
+      );
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[pcb/edit/assist] ${message}`);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 
   return Response.json({ ok: false, error: firstError ?? "validation failed" }, { status: 422 });

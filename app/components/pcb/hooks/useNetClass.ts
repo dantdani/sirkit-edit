@@ -15,8 +15,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import type { PcbBoard } from "@/app/lib/pcb/types";
-import { getNetClass, ensureNetClassing, type NetClass, type RuleDelta } from "@/app/lib/pcb/netclass";
+import { getNetClass, ensureNetClassing, type NetClass, type NetClassId, type RuleDelta } from "@/app/lib/pcb/netclass";
 import { reclassifyBoard } from "@/app/lib/pcb/netclass-rules";
+import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
 
 export interface NetClassEditor {
   /** The CURRENT history (PcbEditor recreates it on board reseed). */
@@ -29,6 +30,15 @@ export interface NetClassEditor {
 export interface NetClassHandle {
   getClassForNet(netId: number): NetClass;
   runAutoClassify(): void;
+  suggestBrief(brief: string): Promise<{ ok: true; delta: RuleDelta } | { ok: false; error: string }>;
+  applyDelta(delta: RuleDelta): void;
+  applyManualRules(netId: number, values: {
+    classId: NetClassId;
+    trackWidthNm: number;
+    clearanceNm: number;
+    viaSizeNm: number;
+    viaDrillNm: number;
+  }): void;
   applyBrief(brief: string): Promise<{ ok: true } | { ok: false; error: string }>;
   latestDelta?: RuleDelta;
 }
@@ -62,34 +72,32 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
     h.execute("Auto-classify nets", (draft) => reclassifyBoard(draft, { pinNames }));
   }, []);
 
-  const applyBrief = useCallback(
-    async (brief: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+  const suggestBrief = useCallback(
+    async (brief: string): Promise<{ ok: true; delta: RuleDelta } | { ok: false; error: string }> => {
       const board = getBoard();
       try {
         const res = await fetch("/api/pcb/ai-rules/from-brief", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+          body: JSON.stringify(withAiBrain({
             brief,
             board: { netNames: boardNetNames(board), hasIcs: boardHasIcs(board) },
-          }),
+          })),
         });
         const body = (await res.json()) as { ok: boolean; delta?: RuleDelta; error?: string };
         if (!res.ok || !body.ok || !body.delta) {
+          if (!res.ok) {
+            await throwAiResponseError(new Response(JSON.stringify(body), {
+              status: res.status,
+              headers: { "Content-Type": "application/json" },
+            }));
+          }
           return { ok: false, error: body.error ?? `Request failed (${res.status})` };
         }
         const delta = body.delta;
-        const h = editorRef.current.getHistory();
-        if (!h) return { ok: false, error: "No board to apply rules to" };
-        const pinNames = editorRef.current.getPinNames?.();
         // Append the delta, then reclassify: a fresh auto-classified base plus the
         // full sorted delta log — order-independent and deterministic.
-        h.execute(`AI rules: ${brief.slice(0, 40)}`, (draft) => {
-          ensureNetClassing(draft).ruleDeltas.push(delta);
-          reclassifyBoard(draft, { pinNames });
-        });
-        setLatestDelta(delta);
-        return { ok: true };
+        return { ok: true, delta };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) };
       }
@@ -97,5 +105,57 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
     [getBoard],
   );
 
-  return { getClassForNet, runAutoClassify, applyBrief, latestDelta };
+  const applyDelta = useCallback((delta: RuleDelta): void => {
+    const h = editorRef.current.getHistory();
+    if (!h) return;
+    const pinNames = editorRef.current.getPinNames?.();
+    h.execute(`AI routing rules: ${(delta.brief ?? delta.explanation).slice(0, 40)}`, (draft) => {
+      ensureNetClassing(draft).ruleDeltas.push(delta);
+      reclassifyBoard(draft, { pinNames });
+    });
+    setLatestDelta(delta);
+  }, []);
+
+  const applyBrief = useCallback(async (brief: string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const proposal = await suggestBrief(brief);
+    if (!proposal.ok) return proposal;
+    applyDelta(proposal.delta);
+    return { ok: true };
+  }, [applyDelta, suggestBrief]);
+
+  const applyManualRules = useCallback((
+    netId: number,
+    values: { classId: NetClassId; trackWidthNm: number; clearanceNm: number; viaSizeNm: number; viaDrillNm: number },
+  ): void => {
+    const h = editorRef.current.getHistory();
+    if (!h) return;
+    const netName = h.present.nets.find((net) => net.id === netId)?.name || `Net ${netId}`;
+    const delta: RuleDelta = {
+      id: `manual-routing-${Date.now()}-${netId}`,
+      createdAt: new Date().toISOString(),
+      source: "manual",
+      changes: [{
+        className: values.classId,
+        trackWidthNm: values.trackWidthNm,
+        clearanceNm: values.clearanceNm,
+        viaSizeNm: values.viaSizeNm,
+        viaDrillNm: values.viaDrillNm,
+        appliesTo: { kind: "nets", netIds: [netId] },
+      }],
+      explanation: `Manual routing rules for ${netName}`,
+    };
+    const pinNames = editorRef.current.getPinNames?.();
+    h.execute(`Edit routing rules for ${netName}`, (draft) => {
+      ensureNetClassing(draft).ruleDeltas.push(delta);
+      reclassifyBoard(draft, { pinNames });
+    }, {
+      operationType: "routing-rules",
+      affectedObjects: [`net:${netId}`],
+      netId,
+      details: { ...values },
+    });
+    setLatestDelta(delta);
+  }, []);
+
+  return { getClassForNet, runAutoClassify, suggestBrief, applyDelta, applyManualRules, applyBrief, latestDelta };
 }

@@ -2,19 +2,27 @@
  * Shared Build-mode tool-use loop.
  *
  * Both /api/schematic/build (generate) and /api/schematic/edit-build (topology
- * edit) drive Claude through the same search_parts → submit_schematic loop and
+ * edit) drive the selected AI brain through the same search_parts → submit_schematic loop and
  * the same submission validation. The only differences are the system prompt,
  * the seed user message, and (for edits) a set of pre-validated parts — so they
  * are parameters here.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import type {
   BuildLogicalNetlist,
   BuildLogicalComponent,
   BuildLogicalConnection,
   NetLabelKind,
 } from "@/lib/schematic-types";
+import { llmRouter } from "@/app/lib/llm/router";
+import { LLMProviderError } from "@/app/lib/llm/errors";
+import {
+  assistantResponseMessage,
+  toolResultsMessage,
+  type LLMMessage,
+  type LLMProviderId,
+  type LLMToolResultPart,
+} from "@/app/lib/llm/types";
 import { normalizeComponentRole, inferNetLabelKind } from "@/lib/schematic-types";
 import {
   searchPartsForAI,
@@ -31,9 +39,6 @@ import {
 import { runErc, formatErcFeedback, type ErcReport } from "@/lib/erc";
 import { kgDesignNotes } from "@/lib/kg";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MODEL = "claude-sonnet-4-6";
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
 const ALTERNATES_LIMIT = 5;
@@ -44,7 +49,13 @@ const MAX_ERC_REJECTIONS = 2;
 
 export type BuildLoopResult =
   | { ok: true; netlist: BuildLogicalNetlist; explanation: string; erc?: ErcReport }
-  | { ok: false; error: string; status: number };
+  | {
+      ok: false;
+      error: string;
+      status: number;
+      code?: "provider_unavailable";
+      provider?: LLMProviderId;
+    };
 
 /** A connection endpoint is either the ground rail sentinel or a refDes.pin pair. */
 function parseEndpoint(ep: string): { ground: true } | { refDes: string; pin: string } {
@@ -65,38 +76,12 @@ function pinExists(part: AiPartResult, pin: string): boolean {
 }
 
 /**
- * Keep exactly one cache breakpoint on the last content block of the most recent
- * message, so each loop iteration reuses the cached prefix instead of re-billing
- * the growing transcript. At most 4 breakpoints are allowed, so clear the
- * previous position before setting the new one.
- */
-function moveCacheBreakpoint(messages: Anthropic.MessageParam[]): void {
-  for (const m of messages) {
-    if (typeof m.content === "string") continue;
-    for (const block of m.content) {
-      delete (block as { cache_control?: unknown }).cache_control;
-    }
-  }
-  const last = messages[messages.length - 1];
-  if (!last) return;
-  if (typeof last.content === "string") {
-    last.content = [
-      { type: "text", text: last.content, cache_control: { type: "ephemeral" } },
-    ];
-    return;
-  }
-  const lastBlock = last.content[last.content.length - 1];
-  if (lastBlock) {
-    (lastBlock as { cache_control?: { type: "ephemeral" } }).cache_control = { type: "ephemeral" };
-  }
-}
-
-/**
  * Run the search/submit loop. `seedParts` are partIds the model may reference
  * without searching first (existing components in an edit) — they are treated as
  * already surfaced by search.
  */
 export async function runBuildToolLoop(opts: {
+  provider: LLMProviderId;
   systemPrompt: string;
   userMessage: string;
   seedParts?: AiPartResult[];
@@ -108,33 +93,25 @@ export async function runBuildToolLoop(opts: {
 
   let ercRejections = 0;
 
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: opts.userMessage }];
+  const messages: LLMMessage[] = [{ role: "user", content: opts.userMessage }];
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      moveCacheBreakpoint(messages);
-
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 8192,
+      const response = await llmRouter.generate({
+        provider: opts.provider,
+        maxTokens: 8192,
         temperature: 0,
-        system: [{ type: "text", text: opts.systemPrompt, cache_control: { type: "ephemeral" } }],
+        system: opts.systemPrompt,
         tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
         messages,
       });
 
-      messages.push({ role: "assistant", content: response.content });
+      messages.push(assistantResponseMessage(response));
 
-      const toolUses = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
+      const toolUses = response.toolCalls;
       if (toolUses.length === 0) {
-        const text = response.content
-          .filter((b): b is Anthropic.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("\n");
         console.warn(
-          `[build-loop] no tool call (stop_reason=${response.stop_reason}); nudging. Text: ${text.slice(0, 300)}`,
+          `[build-loop] no tool call (stop_reason=${response.stopReason}); nudging. Text: ${response.text.slice(0, 300)}`,
         );
         messages.push({ role: "user", content: BUILD_NUDGE });
         continue;
@@ -164,10 +141,15 @@ export async function runBuildToolLoop(opts: {
       );
 
       const seenPartIds = new Set<string>();
-      const searchResults: Anthropic.ToolResultBlockParam[] = rawSearches.map(
+      const searchResults: LLMToolResultPart[] = rawSearches.map(
         ({ block, error, results }) => {
           if (error !== null) {
-            return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify({ error }) };
+            return {
+              type: "tool_result" as const,
+              toolCallId: block.id,
+              output: JSON.stringify({ error }),
+              isError: true,
+            };
           }
           const payload = results.map((r) => {
             if (seenPartIds.has(r.partId)) {
@@ -186,7 +168,11 @@ export async function runBuildToolLoop(opts: {
             const designNotes = kgDesignNotes(r.name);
             return designNotes ? { ...r, designNotes } : r;
           });
-          return { type: "tool_result" as const, tool_use_id: block.id, content: JSON.stringify(payload) };
+          return {
+            type: "tool_result" as const,
+            toolCallId: block.id,
+            output: JSON.stringify(payload),
+          };
         },
       );
 
@@ -195,15 +181,15 @@ export async function runBuildToolLoop(opts: {
       // the model may submit a chosen alternate and still pass validation — while
       // the AI-facing payload stays compact (no pins).
       const alternateBlocks = toolUses.filter((b) => b.name === "find_alternates");
-      const alternateResults: Anthropic.ToolResultBlockParam[] = await Promise.all(
+      const alternateResults: LLMToolResultPart[] = await Promise.all(
         alternateBlocks.map(async (block) => {
           const { partId, kind } = block.input as { partId?: unknown; kind?: unknown };
           if (typeof partId !== "string" || partId.trim() === "") {
             return {
               type: "tool_result" as const,
-              tool_use_id: block.id,
-              is_error: true,
-              content: JSON.stringify({ error: "partId is required" }),
+              toolCallId: block.id,
+              isError: true,
+              output: JSON.stringify({ error: "partId is required" }),
             };
           }
           const safeKind = kind === "drop_in" || kind === "fff" ? kind : "all";
@@ -214,22 +200,22 @@ export async function runBuildToolLoop(opts: {
             for (const p of full) returnedParts.set(p.partId, p);
             return {
               type: "tool_result" as const,
-              tool_use_id: block.id,
-              content: JSON.stringify(alternates),
+              toolCallId: block.id,
+              output: JSON.stringify(alternates),
             };
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             return {
               type: "tool_result" as const,
-              tool_use_id: block.id,
-              is_error: true,
-              content: JSON.stringify({ error: message }),
+              toolCallId: block.id,
+              isError: true,
+              output: JSON.stringify({ error: message }),
             };
           }
         }),
       );
 
-      const submitResults: Anthropic.ToolResultBlockParam[] = [];
+      const submitResults: LLMToolResultPart[] = [];
       for (const block of toolUses.filter((b) => b.name === "submit_schematic")) {
         const result = finalizeSubmission(block.input, returnedParts);
         if (result.ok) {
@@ -246,9 +232,9 @@ export async function runBuildToolLoop(opts: {
             );
             submitResults.push({
               type: "tool_result",
-              tool_use_id: block.id,
-              is_error: true,
-              content: formatErcFeedback(erc),
+              toolCallId: block.id,
+              isError: true,
+              output: formatErcFeedback(erc),
             });
             continue;
           }
@@ -261,18 +247,24 @@ export async function runBuildToolLoop(opts: {
         }
         submitResults.push({
           type: "tool_result",
-          tool_use_id: block.id,
-          is_error: true,
-          content: result.error,
+          toolCallId: block.id,
+          isError: true,
+          output: result.error,
         });
       }
 
-      messages.push({
-        role: "user",
-        content: [...searchResults, ...alternateResults, ...submitResults],
-      });
+      messages.push(toolResultsMessage([...searchResults, ...alternateResults, ...submitResults]));
     }
   } catch (err) {
+    if (err instanceof LLMProviderError) {
+      return {
+        ok: false,
+        error: `${err.provider === "openai" ? "OpenAI" : "Anthropic"} is currently unavailable.`,
+        status: 503,
+        code: err.code,
+        provider: err.provider,
+      };
+    }
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message, status: 500 };
   }

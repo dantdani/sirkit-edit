@@ -17,7 +17,12 @@ interface MockToolInput {
   explanation: string;
 }
 function toolResponse(input: MockToolInput, id = "tu_1") {
-  return { content: [{ type: "tool_use", id, name: "emit_rule_delta", input }], stop_reason: "tool_use" };
+  return {
+    content: [{ type: "tool_use", id, name: "emit_rule_delta", input }],
+    stop_reason: "tool_use",
+    model: "claude-test",
+    usage: { input_tokens: 10, output_tokens: 5 },
+  };
 }
 
 function post(body: unknown): Promise<Response> {
@@ -30,7 +35,11 @@ function post(body: unknown): Promise<Response> {
   );
 }
 
-const BRIEF = { brief: "2A USB-C power board", board: { netNames: ["VBUS", "GND", "DP", "DN"], hasIcs: true } };
+const BRIEF = {
+  provider: "anthropic",
+  brief: "2A USB-C power board",
+  board: { netNames: ["VBUS", "GND", "DP", "DN"], hasIcs: true },
+};
 
 beforeEach(() => createMock.mockReset());
 
@@ -64,6 +73,43 @@ describe("POST /api/pcb/ai-rules/from-brief", () => {
     const body = await (await post(BRIEF)).json();
     expect(body.ok).toBe(true);
     expect(body.delta.changes[0].trackWidthNm).toBe(1_500_000);
+  });
+
+  it("converts a manufacturable via recommendation with its trace width", async () => {
+    createMock.mockResolvedValueOnce(
+      toolResponse({
+        changes: [{
+          className: "Power",
+          trackWidthMm: 1.2,
+          viaSizeMm: 0.8,
+          viaDrillMm: 0.4,
+          appliesTo: { kind: "class", classId: "Power" },
+        }],
+        explanation: "Sized the power trace and layer transition together.",
+      }),
+    );
+    const body = await (await post(BRIEF)).json();
+    expect(body.ok).toBe(true);
+    expect(body.delta.changes[0]).toMatchObject({
+      trackWidthNm: 1_200_000,
+      viaSizeNm: 800_000,
+      viaDrillNm: 400_000,
+    });
+  });
+
+  it("rejects an unsafe annular ring and accepts a corrected retry", async () => {
+    createMock
+      .mockResolvedValueOnce(toolResponse({
+        changes: [{ viaSizeMm: 0.5, viaDrillMm: 0.4, appliesTo: { kind: "class", classId: "Power" } }],
+        explanation: "Unsafe ring.",
+      }))
+      .mockResolvedValueOnce(toolResponse({
+        changes: [{ viaSizeMm: 0.8, viaDrillMm: 0.4, appliesTo: { kind: "class", classId: "Power" } }],
+        explanation: "Corrected annular ring.",
+      }));
+    const response = await post(BRIEF);
+    expect(response.status).toBe(200);
+    expect(createMock).toHaveBeenCalledTimes(2);
   });
 
   it("malformed on first try, valid on retry → 200", async () => {

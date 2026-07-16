@@ -7,10 +7,16 @@ import type { BundleResult } from "@/app/lib/pcb/fab/types";
 import { FabExportGatedByDrc, KicadCliError } from "@/app/lib/pcb/fab/types";
 import type { DrcViolation } from "@/app/lib/pcb/drc/types";
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo";
+import { NativeFabBlockedError } from "@/app/lib/pcb/fab/native/types";
 
 const buildFabBundleMock = vi.fn();
+const compileNativeMock = vi.fn();
 vi.mock("@/app/lib/pcb/fab/build-bundle", () => ({
   buildFabBundle: (...args: unknown[]) => buildFabBundleMock(...args),
+}));
+vi.mock("@/app/lib/pcb/fab/native/compiler", () => ({
+  compileNativeFabPackage: (...args: unknown[]) => compileNativeMock(...args),
+  summarizeNativePreflight: (result: { summary: unknown }) => result.summary,
 }));
 
 import { POST } from "../route";
@@ -46,6 +52,7 @@ const violations = [
 
 beforeEach(() => {
   buildFabBundleMock.mockReset();
+  compileNativeMock.mockReset();
 });
 
 describe("POST /api/pcb/export/gerbers", () => {
@@ -98,5 +105,51 @@ describe("POST /api/pcb/export/gerbers", () => {
     expect((await POST(request({ fabPresetId: "jlcpcb-2l" }))).status).toBe(400);
     expect((await POST(request({ board: buildRoutedDemo(), fabPresetId: "nope" }))).status).toBe(400);
     expect(buildFabBundleMock).not.toHaveBeenCalled();
+  });
+
+  it("native-beta preflight returns verified files without invoking KiCad", async () => {
+    const summary = {
+      packageId: "pkg-1",
+      packageSha256: "abc",
+      files: [{ path: "board.GTL", kind: "gerber", bytes: 10, sha256: "def" }],
+      diagnostics: [],
+      stages: [{ stage: "independent-parse-back", status: "passed", elapsedMs: 1 }],
+    };
+    compileNativeMock.mockResolvedValue({ summary });
+    const response = await POST(request({
+      board: buildRoutedDemo(),
+      fabPresetId: "jlcpcb-2l",
+      engine: "native-beta",
+      action: "preflight",
+    }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(summary);
+    expect(buildFabBundleMock).not.toHaveBeenCalled();
+  });
+
+  it("native-beta rejects generic overrides and maps fail-closed diagnostics", async () => {
+    const rejected = await POST(request({
+      board: buildRoutedDemo(),
+      fabPresetId: "jlcpcb-2l",
+      engine: "native-beta",
+      overrideDrcFail: true,
+    }));
+    expect(rejected.status).toBe(400);
+    expect(compileNativeMock).not.toHaveBeenCalled();
+
+    compileNativeMock.mockRejectedValue(new NativeFabBlockedError("parse-back failed", [{
+      code: "GERBER_GEOMETRY_MISMATCH",
+      severity: "error",
+      category: "equivalence",
+      message: "mismatch",
+    }]));
+    const blocked = await POST(request({
+      board: buildRoutedDemo(),
+      fabPresetId: "jlcpcb-2l",
+      engine: "native-beta",
+      action: "preflight",
+    }));
+    expect(blocked.status).toBe(400);
+    expect(await blocked.json()).toMatchObject({ error: "native-preflight-failed" });
   });
 });

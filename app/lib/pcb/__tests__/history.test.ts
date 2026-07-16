@@ -93,6 +93,22 @@ describe("createHistory", () => {
     expect(h.present).toEqual(after);
   });
 
+  it("exposes named, timestamped commands and redo state for the visible history UI", () => {
+    const h = createHistory(makeBoard(1));
+    h.execute("Move R1", (draft) => {
+      draft.footprints[0].at.x += 1;
+    });
+    expect(h.undoLabel).toBe("Move R1");
+    expect(h.redoLabel).toBeUndefined();
+    expect(h.entries).toHaveLength(1);
+    expect(h.entries[0]).toMatchObject({ label: "Move R1", state: "applied" });
+    expect(h.entries[0].createdAt).toBeGreaterThan(0);
+    h.undo();
+    expect(h.undoLabel).toBeUndefined();
+    expect(h.redoLabel).toBe("Move R1");
+    expect(h.entries[0].state).toBe("redo");
+  });
+
   it("caps at 200 entries, evicting the oldest", () => {
     const h = createHistory(makeBoard(1));
     for (let i = 0; i < 205; i++) {

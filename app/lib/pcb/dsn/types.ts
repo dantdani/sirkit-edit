@@ -3,7 +3,9 @@
 // DSN is a large spec; Freerouting only needs a small subset. These types mirror
 // precisely what `write-dsn.ts` produces so the emitter is transparent about its
 // output. All coordinates are integer nanometers (see units.ts), +y down — the
-// same axis as PcbBoard, emitted directly (DSN's `(resolution nm 1)`).
+// same axis as PcbBoard, emitted directly. Freerouting does not accept `nm` as
+// a DSN unit token, so the file uses its supported `um` token. The emitter
+// converts nanometers to micrometers and the SES reader converts them back.
 //
 // Layer names here are KiCad-style DSN names (F.Cu / B.Cu / In1.Cu / In2.Cu),
 // NOT our internal LayerId values — write-dsn maps LayerId -> these. Class ids
@@ -27,6 +29,9 @@ export type DsnLayerName = "F.Cu" | "B.Cu" | "In1.Cu" | "In2.Cu";
 /** DSN net-class identifier — mirrors Stage 10 `NetClassId`. */
 export type DsnClassId = "Default" | "Power" | "HighCurrent";
 
+export type DsnLayerRole = "signal" | "plane" | "mixed";
+export type DsnPreferredDirection = "horizontal" | "vertical" | "any";
+
 /** Pad/via copper shape. roundrect/oval collapse to `rect`; arbitrary shapes to `polygon`. */
 export type DsnPadShape =
   | { kind: "circle"; diameterNm: number }
@@ -35,7 +40,7 @@ export type DsnPadShape =
 
 export interface DsnBoard {
   name: string; // sirkit-export-<hash8> (deterministic — see boardToDsn)
-  resolution: "nm"; // MVP: 'nm' — Freerouting accepts arbitrary resolutions
+  resolution: "um"; // supported Freerouting token; emitter scales nm to um
   boundary: DsnBoundary; // board outline as a closed polygon
   layers: DsnLayer[]; // copper layers only — Freerouting ignores non-copper
   padstacks: DsnPadstack[]; // one per unique pad shape+drill+layer combo
@@ -43,6 +48,8 @@ export interface DsnBoard {
   components: DsnComponent[]; // one per FootprintInstance (1:1 with an image)
   networks: DsnNetwork[]; // nets with class refs
   rules: DsnRule[]; // default + per-used-class
+  routingSettings: DsnRoutingSettings;
+  wiring: DsnWiringItem[]; // existing copper exported as protected geometry
 }
 
 export interface DsnBoundary {
@@ -54,6 +61,20 @@ export interface DsnLayer {
   name: DsnLayerName;
   type: "signal" | "power";
   index: number;
+  role: DsnLayerRole;
+  autorouteEnabled: boolean;
+  preferredDirection: DsnPreferredDirection;
+  traceWidthNm: number;
+  planeNetName?: string;
+}
+
+export interface DsnRoutingSettings {
+  viasAllowed: boolean;
+  fanout: boolean;
+  postroute: boolean;
+  viaCost: number;
+  planeViaCost: number;
+  startRipupCost: number;
 }
 
 export interface DsnPadstack {
@@ -90,7 +111,9 @@ export interface DsnVia {
   name: string; // via_default / via_power / via_highcurrent
   diameterNm: number; // outer copper diameter (same on both outer layers)
   drillNm: number;
-  onLayers: DsnLayerName[]; // through via: outer copper layers
+  onLayers: DsnLayerName[]; // every layer crossed by the padstack
+  startLayer: DsnLayerName;
+  endLayer: DsnLayerName;
 }
 
 export interface DsnRule {
@@ -98,4 +121,21 @@ export interface DsnRule {
   widthNm: number;
   clearanceNm: number;
   viaCandidateName: string; // via ref used for via generation in this scope
+  layerWidthsNm: Partial<Record<DsnLayerName, number>>;
 }
+
+export type DsnWiringItem =
+  | {
+      kind: "wire";
+      layer: DsnLayerName;
+      widthNm: number;
+      startNm: Vec2Nm;
+      endNm: Vec2Nm;
+      netName: string;
+    }
+  | {
+      kind: "via";
+      viaName: string;
+      atNm: Vec2Nm;
+      netName: string;
+    };

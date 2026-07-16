@@ -6,11 +6,11 @@
  * cached prompt prefix is a single import — straightforward to reason about for
  * prompt caching. Naming convention: <FEATURE>_<WHAT>.
  *
- * With forced/again tool-use, the tool `description` and `input_schema` are part
+ * With forced/again tool-use, the tool `description` and `inputSchema` are part
  * of the prompt surface too — tune them alongside the system text.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import type { LLMTool } from "@/app/lib/llm/types";
 import { COMPONENT_ROLES } from "@/lib/schematic-types";
 
 // ─── Chat assistant (/api/chat) ──────────────────────────────────────────────
@@ -77,10 +77,10 @@ Example 2 — "A passive RC low-pass filter, 1 kHz cutoff, 10k resistor":
 
 Always call submit_schematic exactly once. Don't add narration outside the tool call.`;
 
-export const THEORY_SUBMIT_SCHEMATIC_TOOL: Anthropic.Tool = {
+export const THEORY_SUBMIT_SCHEMATIC_TOOL: LLMTool = {
   name: "submit_schematic",
   description: "Submit the designed schematic as a logical netlist.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       components: {
@@ -180,11 +180,11 @@ Always END with exactly one call to submit_schematic. Don't narrate after.`;
 export const BUILD_NUDGE =
   "Do not stop to narrate. Call submit_schematic now with the completed netlist (or search_parts if you still need parts).";
 
-export const BUILD_SEARCH_PARTS_TOOL: Anthropic.Tool = {
+export const BUILD_SEARCH_PARTS_TOOL: LLMTool = {
   name: "search_parts",
   description:
     "Search the parts catalog for real components matching a natural-language description. Returns top 5 candidates with their part IDs, names, MPNs, and pin lists.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       query: {
@@ -200,11 +200,11 @@ export const BUILD_SEARCH_PARTS_TOOL: Anthropic.Tool = {
   },
 };
 
-export const BUILD_FIND_ALTERNATES_TOOL: Anthropic.Tool = {
+export const BUILD_FIND_ALTERNATES_TOOL: LLMTool = {
   name: "find_alternates",
   description:
     "Find ranked alternate parts for a given partId. Use this when a part returned by search_parts has low stock (<1000), NRND lifecycle, or EOL/obsolete status. Returns alternates ordered by a combined score of availability, lifecycle, and price.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       partId: {
@@ -223,10 +223,10 @@ export const BUILD_FIND_ALTERNATES_TOOL: Anthropic.Tool = {
   },
 };
 
-export const BUILD_SUBMIT_SCHEMATIC_TOOL: Anthropic.Tool = {
+export const BUILD_SUBMIT_SCHEMATIC_TOOL: LLMTool = {
   name: "submit_schematic",
   description: "Submit the final designed schematic as a netlist referencing real parts.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       components: {
@@ -300,11 +300,11 @@ export const BUILD_SUBMIT_SCHEMATIC_TOOL: Anthropic.Tool = {
 
 // ─── Part reranker (app/lib/parts-search.ts) ─────────────────────────────────
 
-export const RERANK_RANK_TOOL: Anthropic.Tool = {
+export const RERANK_RANK_TOOL: LLMTool = {
   name: "rank_parts",
   description:
     "Return candidate indices ordered from best to worst match for the role.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       ranking: {
@@ -347,10 +347,10 @@ Rules:
 - "note" is a one-line plain-English summary of what you changed (and anything you deferred to the topology editor).
 - If nothing can be applied here, return an empty "ops" array; set "needsTopology" appropriately.`;
 
-export const EDIT_APPLY_TOOL: Anthropic.Tool = {
+export const EDIT_APPLY_TOOL: LLMTool = {
   name: "apply_edits",
   description: "Apply attribute-only edits (set value, rename, delete) to the existing schematic.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       ops: {
@@ -415,10 +415,10 @@ Rules:
 - If a finding asserts a pin is unconnected/floating, list those exact pins in "unconnectedClaim" so the claim can be verified.
 - Be precise and conservative — no style nits, no speculation. If the circuit looks sound, return an empty findings array.`;
 
-export const REVIEW_TOOL: Anthropic.Tool = {
+export const REVIEW_TOOL: LLMTool = {
   name: "report_findings",
   description: "Report electrical design-review findings for the given netlist.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       findings: {
@@ -459,10 +459,10 @@ Hard rules:
 - Be conservative. A schematic with clear spacing should return an EMPTY groups array. Only flag genuine crowding a viewer would struggle with. Prefer a few well-justified groups over many speculative ones.
 - A group should contain the 2+ components that are crowded TOGETHER (so they can be pushed apart from each other). A lone component with plenty of space around it is not a group.`;
 
-export const LAYOUT_CRITIC_TOOL: Anthropic.Tool = {
+export const LAYOUT_CRITIC_TOOL: LLMTool = {
   name: "report_layout_issues",
   description: "Report groups of components whose placement is too crowded to read clearly.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       groups: {
@@ -501,10 +501,10 @@ Rules:
 - Exactly ONE block must SOURCE each power rail (a regulator or power connector that outputs it); the others consume it. Put GND in every block's sharedNets.
 - ONLY split when it helps. If the request is simple (one functional block, a handful of parts — e.g. "an LED and resistor on an MCU GPIO"), return a SINGLE block covering the whole request. Over-decomposition hurts quality. Prefer 2–5 blocks for genuinely multi-subsystem designs.`;
 
-export const PLAN_TOOL: Anthropic.Tool = {
+export const PLAN_TOOL: LLMTool = {
   name: "submit_plan",
   description: "Submit the subsystem decomposition for the requested circuit.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       blocks: {

@@ -81,6 +81,41 @@ export function outlineCenter(outline: BoardOutline): Vec2 {
   return { x: Math.round((b.minX + b.maxX) / 2), y: Math.round((b.minY + b.maxY) / 2) };
 }
 
+/** Scale both placement-region dimensions around the current center. */
+export function scaleOutline(outline: BoardOutline, scale: number): BoardOutline {
+  if (!(scale > 0)) throw new Error("Outline scale must be positive");
+  const center = outlineCenter(outline);
+  if (outline.kind === "polygon") {
+    return {
+      kind: "polygon",
+      points: outline.points.map((point) => ({
+        x: Math.round(center.x + (point.x - center.x) * scale),
+        y: Math.round(center.y + (point.y - center.y) * scale),
+      })),
+    };
+  }
+  const width = Math.round(outline.width * scale);
+  const height = Math.round(outline.height * scale);
+  const origin = { x: center.x - Math.round(width / 2), y: center.y - Math.round(height / 2) };
+  return outline.kind === "roundrect"
+    ? { kind: "roundrect", width, height, origin, cornerRadius: Math.round(outline.cornerRadius * scale) }
+    : { kind: "rect", width, height, origin };
+}
+
+/** Add deterministic routing space without changing the physical footprint body. */
+export function scaleBBoxAboutCenter(box: BBox, scale: number): BBox {
+  const cx = (box.minX + box.maxX) / 2;
+  const cy = (box.minY + box.maxY) / 2;
+  const halfWidth = ((box.maxX - box.minX) * scale) / 2;
+  const halfHeight = ((box.maxY - box.minY) * scale) / 2;
+  return {
+    minX: Math.floor(cx - halfWidth),
+    minY: Math.floor(cy - halfHeight),
+    maxX: Math.ceil(cx + halfWidth),
+    maxY: Math.ceil(cy + halfHeight),
+  };
+}
+
 function pointInPolygon(p: Vec2, poly: readonly Vec2[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {

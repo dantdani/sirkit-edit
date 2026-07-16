@@ -32,10 +32,10 @@ export interface LayerDef {
 // in1/in2 always exist in the model; the UI filters them out on 2-layer
 // boards (Stage 3's job).
 export const LAYERS: readonly LayerDef[] = [
-  { id: "copperTop",       kicadName: "F.Cu",     displayName: "Top Copper",        kind: "copper",    defaultColor: "#14b8a6", defaultVisible: true },
+  { id: "copperTop",       kicadName: "F.Cu",     displayName: "Top Copper",        kind: "copper",    defaultColor: "#ff5a5f", defaultVisible: true },
   { id: "in1",             kicadName: "In1.Cu",   displayName: "Inner 1",           kind: "copper",    defaultColor: "#f59e0b", defaultVisible: true },
   { id: "in2",             kicadName: "In2.Cu",   displayName: "Inner 2",           kind: "copper",    defaultColor: "#ec4899", defaultVisible: true },
-  { id: "copperBottom",    kicadName: "B.Cu",     displayName: "Bottom Copper",     kind: "copper",    defaultColor: "#6366f1", defaultVisible: true },
+  { id: "copperBottom",    kicadName: "B.Cu",     displayName: "Bottom Copper",     kind: "copper",    defaultColor: "#4f8cff", defaultVisible: true },
   { id: "silkTop",         kicadName: "F.SilkS",  displayName: "Top Silkscreen",    kind: "silk",      defaultColor: "#e4e4e7", defaultVisible: true },
   { id: "silkBottom",      kicadName: "B.SilkS",  displayName: "Bottom Silkscreen", kind: "silk",      defaultColor: "#a1a1aa", defaultVisible: false },
   { id: "maskTop",         kicadName: "F.Mask",   displayName: "Top Solder Mask",   kind: "mask",      defaultColor: "#0f766e", defaultVisible: false },

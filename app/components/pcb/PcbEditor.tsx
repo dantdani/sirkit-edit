@@ -2,10 +2,10 @@
 
 /**
  * PCB editor shell. Stage 3 built the canvas + panels; Stage 4 wires the
- * schematic → board bridge: empty-state "Send schematic to board" CTA, a
+ * schematic → board bridge: empty-state "Schematic → PCB" CTA, a
  * toolbar Sync button (badged when the schematic drifted from the last sync),
- * the footprint assignment queue, and board persistence on the project's
- * `pcb` field (750 ms debounce).
+ * automatic footprint resolution, and board persistence on the project's
+ * `pcb` field (750 ms debounce). No manual assignment drawer is mounted.
  *
  * The bundled demo board stays reachable via `?pcbdemo=` (`=high` for the
  * perf build) and NEVER persists.
@@ -14,26 +14,27 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { produce } from "immer";
 import dynamic from "next/dynamic";
-import { CircuitBoard, ListTodo, Loader2, ShieldCheck, X } from "lucide-react";
+import { CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
-import type { PcbBoard, BoardOutline, FootprintInstance } from "@/app/lib/pcb/types";
+import type { PcbBoard, BoardOutline, RoutingPreferences } from "@/app/lib/pcb/types";
 import { LAYERS, type LayerId } from "@/app/lib/pcb/layers";
 import type { PcbScene, ScenePointerEvent } from "@/app/lib/pcb/render/scene";
+import { bboxUnion } from "@/app/lib/pcb/geometry";
+import { localCourtyardBBox, worldCourtyardBBox } from "@/app/lib/pcb/autoplace/geometry";
+import { mmToNm } from "@/app/lib/pcb/units";
 import { applyHandleDrag } from "@/app/lib/pcb/render/outline";
 import type { OutlineHandleId } from "@/app/lib/pcb/render/pick";
 import { buildDemoBoard } from "@/app/lib/pcb/demo/demo-board";
-import { parseKicadMod } from "@/app/lib/pcb/kicad-mod";
 import {
   buildNetlist,
-  createFetchFootprintResolver,
   netlistHash,
-  placeNewFootprint,
   syncFromSchematic,
   type PcbNetlist,
+  type SyncOptions,
   type SyncReport,
 } from "@/app/lib/pcb/netlist-bridge";
 import { loadCurrentBoard, saveCurrentBoard } from "@/app/lib/pcb/board-persistence";
-import { createHistory, type PcbHistory } from "@/app/lib/pcb/history";
+import { createHistory, type PcbHistory, type PcbHistoryRecord } from "@/app/lib/pcb/history";
 import {
   createSelectMoveTool,
   type SelectMoveTool,
@@ -51,14 +52,16 @@ import { CommandPalette, type PaletteAction } from "./CommandPalette"; // Stage 
 import { AssistBox } from "./AssistBox"; // Stage 17 Phase D
 import { ARRANGE_GRID_NM, movableRefs } from "./inspectors/ArrangeSection"; // Stage 17 Phase D
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo"; // Stage 7 integration
+import { buildSmartRoutingDemo } from "@/app/lib/pcb/demo/smart-routing-demo";
 import { buildStoryDemo } from "@/app/lib/pcb/demo/story-demo"; // Stage 16
 import { useRouteTool } from "./hooks/useRouteTool"; // Stage 7 integration
+import { useNetClass } from "./hooks/useNetClass";
 import { useAutoroute } from "./hooks/useAutoroute"; // Stage 9 integration
 import { useAutoPlace } from "./hooks/useAutoPlace"; // Stage 8 integration
 import { useDrc } from "./hooks/useDrc"; // Stage 12 integration
+import { usePcbRepair } from "./hooks/usePcbRepair";
 import { useZoneFills } from "./hooks/useZoneFills"; // Stage 11 integration
 import { ZoneTool, AddPlaneDialog } from "./ZoneTool"; // Stage 11
-import { renderZones } from "@/app/lib/pcb/render/zones"; // Stage 11
 import { makePlaneZone } from "@/app/lib/pcb/zones/plane"; // Stage 11
 import { mutateBoardWithZoneCommand, zoneCommandLabel, type ZoneCommand } from "@/app/lib/pcb/zones/command"; // Stage 11
 import { downloadKicadPcb } from "@/app/lib/pcb/kicad/export-client"; // Stage 13 integration
@@ -66,19 +69,24 @@ import { FabDialog } from "./FabDialog"; // Stage 14
 import { useFabExport } from "./hooks/useFabExport"; // Stage 14
 import { SilkTool } from "./SilkTool"; // Stage 16
 import { useSilkTool } from "./hooks/useSilkTool"; // Stage 16
-import { renderSilkItems } from "@/app/lib/pcb/render/silk"; // Stage 16
 import { ShortcutsHelp } from "./ShortcutsHelp"; // Stage 16
 import { useShortcutsHelp } from "./hooks/useShortcutsHelp"; // Stage 16
 import { EmptyState } from "./EmptyState"; // Stage 16
 import { DrcPanel } from "./DrcPanel"; // Stage 12
 import { getPreset } from "@/app/lib/pcb/drc/presets"; // Stage 12
+import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import { getCachedPart, ensurePartLoaded, subscribeToPart } from "@/app/lib/parts-cache";
 import { PcbCanvas } from "./PcbCanvas";
 import { LayerPanel } from "./LayerPanel";
 import { PcbToolbar } from "./PcbToolbar";
 import { DebugHud } from "./DebugHud";
 import { SyncButton } from "./SyncButton";
-import { AssignmentQueue, type FootprintPick, type QueueItem } from "./AssignmentQueue";
+import { SyncPlacementDialog } from "./SyncPlacementDialog";
+import { RoutingControls } from "./RoutingControls";
+import { RoutingRulesPanel } from "./RoutingRulesPanel";
+import { AutorouteSetup } from "./AutorouteSetup";
+import { PlacementSetup } from "./PlacementSetup";
+import { stackupProfile } from "@/app/lib/pcb/stackup";
 
 // Stage 15: 3D preview is client-only and heavy (three.js) — lazy chunk.
 const PcbPreview3D = dynamic(
@@ -104,6 +112,8 @@ type EditorAction =
   | { type: "set-outline"; outline: BoardOutline }
   | { type: "set-stackup"; stackup: 2 | 4 }
   | { type: "toggle-layer"; layer: LayerId }
+  | { type: "isolate-layer"; layer: LayerId }
+  | { type: "show-copper" }
   | { type: "set-active-layer"; layer: LayerId }
   | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" } // Stages 7 + 11 + 16
   | { type: "toggle-grid" };
@@ -122,13 +132,32 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, board: { ...state.board, outline: action.outline } };
     case "set-stackup":
       if (!state.board) return state;
-      return { ...state, board: { ...state.board, stackup: action.stackup } };
+      return {
+        ...state,
+        board: {
+          ...state.board,
+          stackup: action.stackup,
+          stackupConfig: stackupProfile(action.stackup === 4 ? "all-signal-4" : "simple-2"),
+        },
+      };
     case "toggle-layer": {
       const current = state.visibleOverrides[action.layer] ?? DEFAULT_VISIBLE[action.layer];
       return {
         ...state,
         visibleOverrides: { ...state.visibleOverrides, [action.layer]: !current },
       };
+    }
+    case "isolate-layer":
+      return {
+        ...state,
+        visibleOverrides: Object.fromEntries(LAYERS.map((layer) => [layer.id, layer.id === action.layer])),
+      };
+    case "show-copper": {
+      const next = { ...state.visibleOverrides };
+      for (const layer of LAYERS) {
+        if (layer.kind === "copper") next[layer.id] = state.board?.stackup === 4 || (layer.id !== "in1" && layer.id !== "in2");
+      }
+      return { ...state, visibleOverrides: next };
     }
     case "set-active-layer":
       return { ...state, activeLayer: action.layer };
@@ -149,28 +178,45 @@ function makeEditorState(board: PcbBoard | null): EditorState {
   };
 }
 
-/** pad number → net id for one component, from the synced netlist. */
-function padNetsFor(netlist: PcbNetlist, componentId: string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const net of netlist.nets) {
-    for (const node of net.nodes) {
-      if (node.componentId === componentId) out[node.pinNumber] = net.id;
-    }
-  }
-  return out;
-}
-
 function formatSyncToast(report: SyncReport): string {
   const placed = report.added.length - report.unresolved.length + report.kept.length;
   const parts = [`${placed} placed`];
   if (report.resolvedBy.hint > 0) parts.push(`${report.resolvedBy.hint} by hint`);
   if (report.resolvedBy.heuristic > 0) parts.push(`${report.resolvedBy.heuristic} by package`);
   if (report.removed.length > 0) parts.push(`${report.removed.length} removed`);
-  if (report.unresolved.length > 0) parts.push(`${report.unresolved.length} need attention`);
+  if (report.unresolved.length > 0) parts.push(`${report.unresolved.length} skipped — missing footprint metadata`);
+  if (report.added.length > 0) parts.push(report.placement.mode === "centered" ? "new parts centered" : "coordinates preserved");
+  if (report.placement.warning) parts.push(report.placement.warning);
   return parts.join(" · ");
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
+
+function replaceBoardContents(target: PcbBoard, source: PcbBoard): void {
+  const targetRecord = target as unknown as Record<string, unknown>;
+  for (const key of Object.keys(targetRecord)) {
+    if (!(key in source)) delete targetRecord[key];
+  }
+  Object.assign(target, source);
+}
+
+interface HistoryView {
+  canUndo: boolean;
+  canRedo: boolean;
+  undoLabel?: string;
+  redoLabel?: string;
+  entries: readonly PcbHistoryRecord[];
+}
+
+function historyView(history: PcbHistory): HistoryView {
+  return {
+    canUndo: history.canUndo,
+    canRedo: history.canRedo,
+    ...(history.undoLabel ? { undoLabel: history.undoLabel } : {}),
+    ...(history.redoLabel ? { redoLabel: history.redoLabel } : {}),
+    entries: history.entries,
+  };
+}
 
 export default function PcbEditor({ schematic }: { schematic: SchematicState }) {
   // One-shot init: demo board via ?pcbdemo= (never persisted), otherwise the
@@ -181,12 +227,15 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
         ? new URLSearchParams(window.location.search).get("pcbdemo")
         : null;
     if (demoParam !== null) {
-      // Stage 7: ?pcbdemo=routed loads the hand-routed fixture (interactive-
-      // routing start point); Stage 16: =story loads the five-click demo
-      // start (unplaced ESP32 breakout); =high/default keep Stage 3's grid demo.
+      // Stage 7: ?pcbdemo=routed loads the hand-routed fixture; Phase-1 Smart
+      // Route: =smart-route loads the reproducible CW/CCW blocker fixture;
+      // Stage 16: =story loads the five-click demo start (unplaced ESP32
+      // breakout); =high/default keep Stage 3's grid demo.
       const board =
         demoParam === "routed"
           ? buildRoutedDemo()
+          : demoParam === "smart-route"
+            ? buildSmartRoutingDemo()
           : demoParam === "story"
             ? buildStoryDemo()
             : buildDemoBoard(demoParam === "high" ? "high" : "default");
@@ -200,10 +249,10 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   const [state, dispatch] = useReducer(reducer, init.board, makeEditorState);
   const [scene, setScene] = useState<PcbScene | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [placementWarning, setPlacementWarning] = useState<string | null>(null);
   const [lastSyncHash, setLastSyncHash] = useState<string | null>(init.lastSyncHash);
   const [netlist, setNetlist] = useState<PcbNetlist | null>(null);
-  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
-  const [queueOpen, setQueueOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   // Refs so the (stable) pointer callback sees current values without resubscribing.
@@ -226,6 +275,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   // Stage 5: undo/redo history + select/move tool (see app/lib/pcb/history.ts
   // and app/lib/pcb/tools/select-move.ts).
   const historyRef = useRef<PcbHistory | null>(null);
+  const [visibleHistory, setVisibleHistory] = useState<HistoryView>({ canUndo: false, canRedo: false, entries: [] });
   const moveToolRef = useRef<SelectMoveTool | null>(null);
   const historyCleanupRef = useRef<(() => void) | null>(null);
 
@@ -285,7 +335,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   );
 
   // ── Sync (also the empty-state CTA) ────────────────────────────────────────
-  const handleSync = useCallback(async () => {
+  const handleSync = useCallback(async (placement?: NonNullable<SyncOptions["placement"]>) => {
     if (syncing) return;
     setSyncing(true);
     try {
@@ -299,62 +349,32 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       const { board, report, netlist } = await syncFromSchematic(
         s,
         boardRef.current ?? undefined,
-        { getPart: getCachedPart },
+        { getPart: getCachedPart, placement },
       );
       // Stage 17 — sync results bypass board-persistence; the synced board can
       // share frozen (immer) subtrees with the previous one, so migrate a draft.
-      dispatch({ type: "set-board", board: produce(board, (d) => void ensureBoardPadstacks(d)) });
+      const migrated = produce(board, (d) => void ensureBoardPadstacks(d));
+      const history = historyRef.current;
+      if (history && boardRef.current && history.present === boardRef.current) {
+        history.execute("Sync schematic to PCB", (draft) => replaceBoardContents(draft, migrated), {
+          operationType: "schematic-sync",
+          affectedObjects: [...report.added, ...report.removed, ...report.footprintChanged].map((id) => `footprints:${id}`),
+          details: { placement: report.placement, kept: report.kept.length, unresolved: report.unresolved.length },
+        });
+      } else {
+        dispatch({ type: "set-board", board: migrated });
+      }
       setNetlist(netlist);
       setLastSyncHash(netlistHash(netlist));
-      setQueueItems(
-        report.unresolved.flatMap((u) => {
-          const component = netlist.components.find((c) => c.id === u.componentId);
-          return component ? [{ ...u, component }] : [];
-        }),
-      );
       setToast(formatSyncToast(report));
-      if (report.unresolved.length > 0) setQueueOpen(true);
+      setPlacementWarning(report.placement.warning ?? null);
+      setSyncDialogOpen(false);
     } catch (err) {
       setToast(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSyncing(false);
     }
   }, [syncing]);
-
-  // ── Assignment-queue pick: fetch def, place in staging strip ──────────────
-  const handleAssign = useCallback(
-    async (componentId: string, pick: FootprintPick) => {
-      const board = boardRef.current;
-      const nl = netlist;
-      if (!board || !nl) return;
-      const component = nl.components.find((c) => c.id === componentId);
-      if (!component) return;
-      const detail = await createFetchFootprintResolver().detail(pick.id);
-      if (!detail) throw new Error("footprint source unavailable");
-      const def = parseKicadMod(detail.rawSexpr, detail.libName);
-      const inst: Omit<FootprintInstance, "at"> = {
-        id: component.id,
-        ref: component.ref,
-        footprintId: pick.fullName,
-        def,
-        rotationDeg: 0,
-        side: "top",
-        padNets: padNetsFor(nl, component.id),
-      };
-      const placed = placeNewFootprint(board, inst);
-      const h = historyRef.current;
-      if (h && h.present === board) {
-        h.execute(`Place ${component.ref}`, (d) => {
-          d.footprints = placed.footprints;
-        });
-      } else {
-        dispatch({ type: "set-board", board: placed });
-      }
-      setQueueItems((items) => items.filter((i) => i.componentId !== componentId));
-      setToast(`${component.ref} → ${pick.fullName}`);
-    },
-    [netlist],
-  );
 
   // ── History + move tool lifecycle ──────────────────────────────────────────
   // Boards arriving from OUTSIDE the history stack (initial load, demo, sync)
@@ -366,6 +386,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     historyCleanupRef.current?.();
     const history = createHistory(state.board);
     historyRef.current = history;
+    setVisibleHistory(historyView(history));
     const tool = createSelectMoveTool({
       scene,
       history,
@@ -376,6 +397,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     moveToolRef.current = tool;
     const unsubscribe = history.subscribe((board) => {
       dispatch({ type: "set-board", board });
+      setVisibleHistory(historyView(history));
       // Stage 17: drop selection refs whose items vanished (delete, undo, sync).
       const refs = selectionStore.get().refs;
       const live = liveRefs(board, refs);
@@ -387,10 +409,11 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       tool.destroy();
       moveToolRef.current = null;
     };
-  }, [scene, state.board]);
+  }, [scene, selectionStore, state.board]);
   useEffect(() => () => historyCleanupRef.current?.(), []);
 
   // ── Stage 7: interactive routing tool (active only in "route" mode) ─────────
+  const netClasses = useNetClass({ getHistory: () => historyRef.current });
   const routeTool = useRouteTool({
     scene,
     getHistory: () => historyRef.current,
@@ -403,13 +426,39 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     else deactivateRoute();
   }, [state.tool, activateRoute, deactivateRoute]);
 
+  const updateRoutingPreferences = useCallback((preferences: RoutingPreferences): void => {
+    const history = historyRef.current;
+    if (history) {
+      history.execute("Set routing width and via preset", (draft) => {
+        draft.routingPreferences = preferences;
+      });
+      return;
+    }
+    const board = boardRef.current;
+    if (board) dispatch({ type: "set-board", board: { ...board, routingPreferences: preferences } });
+  }, []);
+
   // ── Stage 12: batch DRC (panel + toolbar button + zoom-to) ──────────────────
   const drc = useDrc({
     scene,
     getHistory: () => historyRef.current,
+    board: state.board,
     // Stage 17: the flash borrows the selection overlay — hand it back.
     restoreSelection: () => scene?.setSelectionRefs(selectionStore.get().refs),
   });
+  const repair = usePcbRepair({
+    getHistory: () => historyRef.current,
+    getRules: () => getPreset(drc.activePresetId).rules,
+    getPresetId: () => drc.activePresetId,
+    toast: setToast,
+    onApplied: () => drc.run(),
+  });
+  const liveReadiness = useMemo(() => {
+    if (!state.board) {
+      return { state: "not-ready" as const, errors: 0, warnings: 0, incompleteNets: 0, unroutedConnections: 0, message: "No PCB has been created." };
+    }
+    return runDrc(state.board, getPreset(drc.activePresetId).rules, { presetId: drc.activePresetId }).readiness;
+  }, [state.board, drc.activePresetId]);
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
   const [preview3dOpen, setPreview3dOpen] = useState(false);
@@ -442,26 +491,6 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     setToast("Plane added — filling…");
   }, []);
 
-  // Zone fill rendering: batched Graphics per copper layer, under tracks/pads.
-  useEffect(() => {
-    if (!scene || !state.board) return;
-    try {
-      renderZones(state.board, (layer) => scene.getLayerContainer(layer));
-    } catch {
-      /* scene torn down mid-frame */
-    }
-  }, [scene, state.board]);
-
-  // Stage 16: user silk items, one batched Graphics per silk layer.
-  useEffect(() => {
-    if (!scene || !state.board) return;
-    try {
-      renderSilkItems(state.board, (layer) => scene.getLayerContainer(layer));
-    } catch {
-      /* scene torn down mid-frame */
-    }
-  }, [scene, state.board]);
-
   // ── Stage 16: silkscreen tool ────────────────────────────────────────────────
   const silkTool = useSilkTool({
     scene,
@@ -476,6 +505,36 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     getNetlist: () => netlist,
     toast: setToast,
   });
+  const enlargeBoardToFit = useCallback((): void => {
+    const history = historyRef.current;
+    if (!history) return;
+    const current = history.present;
+    if (current.outline.kind !== "rect" && current.outline.kind !== "roundrect") {
+      setToast("Automatic outline enlargement currently supports rectangular and rounded-rectangle boards.");
+      return;
+    }
+    const bounds = current.footprints
+      .map((footprint) => worldCourtyardBBox(localCourtyardBBox(footprint.def), footprint.at, footprint.rotationDeg, footprint.side === "bottom"))
+      .reduce((union, box) => union ? bboxUnion(union, box) : box, null as ReturnType<typeof localCourtyardBBox> | null);
+    if (!bounds) return;
+    const margin = mmToNm(5);
+    const oldMaxX = current.outline.origin.x + current.outline.width;
+    const oldMaxY = current.outline.origin.y + current.outline.height;
+    const origin = {
+      x: Math.min(current.outline.origin.x, Math.floor(bounds.minX - margin)),
+      y: Math.min(current.outline.origin.y, Math.floor(bounds.minY - margin)),
+    };
+    const maxX = Math.max(oldMaxX, Math.ceil(bounds.maxX + margin));
+    const maxY = Math.max(oldMaxY, Math.ceil(bounds.maxY + margin));
+    history.execute("Enlarge board to fit imported parts", (draft) => {
+      if (draft.outline.kind !== "rect" && draft.outline.kind !== "roundrect") return;
+      draft.outline.origin = origin;
+      draft.outline.width = maxX - origin.x;
+      draft.outline.height = maxY - origin.y;
+    });
+    setPlacementWarning(null);
+    setToast("Board outline enlarged with a 5 mm placement margin. Undo is available.");
+  }, []);
 
   // ── Stage 9: one-click Freerouting autoroute (single-undo import) ───────────
   const autoroute = useAutoroute({
@@ -585,8 +644,8 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   // Stage 17: the palette gates global shortcuts too (it owns the keyboard).
   useEffect(() => {
     modalGuardRef.current = {
-      anyModalOpen: fabDialogOpen || planeDialogOpen || shortcuts.open || paletteOpen,
-      otherModalOpen: fabDialogOpen || planeDialogOpen,
+      anyModalOpen: fabDialogOpen || planeDialogOpen || shortcuts.open || paletteOpen || syncDialogOpen,
+      otherModalOpen: fabDialogOpen || planeDialogOpen || syncDialogOpen,
       preview3dOpen,
     };
   });
@@ -630,6 +689,18 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
         e.preventDefault();
         setPreview3dOpen(false);
         return;
+      }
+      // Undo/redo are editor-global. Route/zone/silk own their drawing keys,
+      // but they must never make an already-committed gesture unreachable by
+      // Ctrl+Z (Smart Route commits an entire candidate as one history entry).
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !editable) {
+        const key = e.key.toLowerCase();
+        if (key === "z" || key === "y") {
+          e.preventDefault();
+          if (key === "y" || (key === "z" && e.shiftKey)) historyRef.current?.redo();
+          else historyRef.current?.undo();
+          return;
+        }
       }
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !editable) {
         const k = e.key.toLowerCase();
@@ -679,7 +750,7 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [selectionStore]);
 
   const isVisible = useCallback(
     (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
@@ -926,8 +997,9 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
   // ── Empty state: no board yet ─────────────────────────────────────────────
   if (!state.board) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
-        <div className="flex flex-col items-center text-center max-w-sm">
+      <>
+        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
+          <div className="flex flex-col items-center text-center max-w-sm">
           <CircuitBoard className="size-10 text-zinc-700" />
           <p className="mt-3 text-sm font-medium text-zinc-300">No board yet</p>
           <p className="mt-1 text-xs text-zinc-500">
@@ -936,16 +1008,31 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           </p>
           <button
             type="button"
-            onClick={() => void handleSync()}
+            onClick={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             disabled={syncing}
             className="mt-4 flex items-center gap-2 px-3 py-1.5 rounded bg-teal-600 text-sm text-white hover:bg-teal-500 transition-colors disabled:opacity-50"
           >
             {syncing && <Loader2 className="size-3.5 animate-spin" />}
-            Send schematic to board
+            Schematic → PCB
+          </button>
+          <button
+            type="button"
+            onClick={() => setSyncDialogOpen(true)}
+            disabled={syncing}
+            className="mt-2 text-xs text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+          >
+            Placement options
           </button>
           {toast && <p className="mt-3 text-xs text-zinc-400">{toast}</p>}
+          </div>
         </div>
-      </div>
+        <SyncPlacementDialog
+          open={syncDialogOpen}
+          syncing={syncing}
+          onClose={() => setSyncDialogOpen(false)}
+          onConfirm={(placement) => void handleSync(placement)}
+        />
+      </>
     );
   }
 
@@ -962,7 +1049,10 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           stackup={state.board.stackup}
           onStackupChange={(stackup) => {
             const h = historyRef.current;
-            if (h) h.execute("Set stackup", (d) => void (d.stackup = stackup));
+            if (h) h.execute("Set stackup", (d) => {
+              d.stackup = stackup;
+              d.stackupConfig = stackupProfile(stackup === 4 ? "all-signal-4" : "simple-2");
+            });
             else dispatch({ type: "set-stackup", stackup });
           }}
           outline={state.board.outline}
@@ -972,9 +1062,11 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
             else dispatch({ type: "set-outline", outline });
           }}
           onAutoPlace={() => void autoPlace.run()}
+          onCancelAutoPlace={autoPlace.cancel}
           autoPlacing={autoPlace.state === "running"}
+          autoPlaceProgress={autoPlace.progress?.percent}
           onRouteBoard={() => void autoroute.run()}
-          routing={autoroute.state === "running"}
+          routing={autoroute.state === "queued" || autoroute.state === "running"}
           routingElapsedMs={autoroute.elapsedMs}
           onRunDrc={() => void drc.run()}
           drcRunning={drc.state === "running"}
@@ -984,30 +1076,35 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
           preview3dOpen={preview3dOpen} // Stage 15
           onTogglePadstacks={() => setPadstacksOpen((o) => !o)} // Stage 17
           padstacksOpen={padstacksOpen} // Stage 17
+          onUndo={() => historyRef.current?.undo()}
+          onRedo={() => historyRef.current?.redo()}
+          canUndo={visibleHistory.canUndo}
+          canRedo={visibleHistory.canRedo}
+          undoLabel={visibleHistory.undoLabel}
+          redoLabel={visibleHistory.redoLabel}
+          historyEntries={visibleHistory.entries}
+          readiness={liveReadiness}
           onExportKicad={() => { const b = boardRef.current; if (b) void downloadKicadPcb(b, netlist); }} // Stage 13
           onSendToFab={() => setFabDialogOpen(true)} // Stage 14
           onShowShortcuts={shortcuts.show} // Stage 16
         >
-          {!init.demo && (
-            <>
-              {queueItems.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setQueueOpen((o) => !o)}
-                  title="Footprint assignment queue"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-amber-400 hover:bg-amber-500/10 transition-colors"
-                >
-                  <ListTodo className="size-3.5" />
-                  {queueItems.length}
-                </button>
-              )}
-              <SyncButton dirty={dirty} syncing={syncing} onSync={() => void handleSync()} />
-            </>
-          )}
+          <SyncButton
+            dirty={dirty}
+            syncing={syncing}
+            onSync={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
+            onOptions={() => setSyncDialogOpen(true)}
+          />
         </PcbToolbar>
         <div className="relative flex-1 min-h-0">
           <PcbCanvas onReady={handleSceneReady} />
           <DebugHud scene={scene} />
+          {state.tool === "route" && (
+            <RoutingControls
+              board={state.board}
+              onChange={updateRoutingPreferences}
+              status={routeTool.status}
+            />
+          )}
           {/* Stage 11: zone draw tool (Z) + plane dialog */}
           <ZoneTool
             scene={scene}
@@ -1043,12 +1140,16 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
               </div>
             </div>
           )}
-          <AssignmentQueue
-            open={queueOpen}
-            items={queueItems}
-            onClose={() => setQueueOpen(false)}
-            onAssign={handleAssign}
-          />
+          {placementWarning && (
+            <div className="absolute bottom-12 left-3 z-50 max-w-md rounded-lg border border-amber-500/35 bg-zinc-900/95 p-3 text-xs text-zinc-200 shadow-xl">
+              <p className="text-amber-200">{placementWarning}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" onClick={() => void autoPlace.run()} disabled={autoPlace.state === "running"} className="rounded bg-teal-600 px-2 py-1 text-[11px] text-white hover:bg-teal-500 disabled:opacity-40">Auto-arrange parts</button>
+                <button type="button" onClick={enlargeBoardToFit} className="rounded border border-zinc-600 px-2 py-1 text-[11px] text-zinc-300 hover:text-white">Enlarge board to fit</button>
+                <button type="button" onClick={() => setPlacementWarning(null)} className="px-2 py-1 text-[11px] text-zinc-500 hover:text-zinc-200">Dismiss</button>
+              </div>
+            </div>
+          )}
           {toast && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-50 px-3 py-1.5 rounded border border-zinc-700 bg-zinc-900/95 text-xs text-zinc-200 shadow-lg">
               {toast}
@@ -1059,14 +1160,22 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
             <ContextMenu
               x={ctxMenu.screen.x}
               y={ctxMenu.screen.y}
-              items={buildCtxItems()}
+              items={
+                // Legacy action builders capture editor refs for click handlers.
+                // eslint-disable-next-line react-hooks/refs
+                buildCtxItems()
+              }
               onClose={() => setCtxMenu(null)}
             />
           )}
           {/* Stage 17 Phase D: command palette (Ctrl+K) */}
           <CommandPalette
             open={paletteOpen}
-            actions={buildPaletteActions()}
+            actions={
+              // Legacy action builders capture editor refs for click handlers.
+              // eslint-disable-next-line react-hooks/refs
+              buildPaletteActions()
+            }
             onClose={() => setPaletteOpen(false)}
           />
           {/* Stage 17 Phase D: floating AI assist (palette-launched; works
@@ -1100,14 +1209,45 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
       </div>
 
       {/* Right panel column */}
-      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0">
+      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
         <LayerPanel
           stackup={state.board.stackup}
           activeLayer={state.activeLayer}
           isVisible={isVisible}
           onToggleVisible={(layer) => dispatch({ type: "toggle-layer", layer })}
           onActivate={(layer) => dispatch({ type: "set-active-layer", layer })}
+          onIsolate={(layer) => dispatch({ type: "isolate-layer", layer })}
+          onShowAllCopper={() => dispatch({ type: "show-copper" })}
+          layerUsage={autoroute.lastResult?.layerUsage}
         />
+        <AutorouteSetup
+          board={state.board}
+          result={autoroute.lastResult}
+          onFocusFailure={(failure) => {
+            scene?.centerOn(failure.location, 40);
+            scene?.setSelection([failure.from?.footprintId, failure.to?.footprintId].filter((id): id is string => Boolean(id)));
+          }}
+          onChange={(stackup, label) => {
+            const h = historyRef.current;
+            if (!h) return;
+            h.execute(label, (draft) => {
+              draft.stackup = stackup.copperLayers.length as 2 | 4;
+              draft.stackupConfig = stackup;
+            });
+          }}
+        />
+        <PlacementSetup
+          board={state.board}
+          result={autoPlace.lastResult}
+          onChange={(preferences) => {
+            const h = historyRef.current;
+            if (!h) return;
+            h.execute("Set auto-placement spacing", (draft) => {
+              draft.placementPreferences = preferences;
+            });
+          }}
+        />
+        <RoutingRulesPanel board={state.board} netClasses={netClasses} toast={setToast} />
         {/* Stage 17: properties inspector — renders nothing when selection is empty */}
         <Inspector
           board={state.board}
@@ -1137,11 +1277,17 @@ export default function PcbEditor({ schematic }: { schematic: SchematicState }) 
             onAction={() => void drc.run()}
           />
         ) : (
-          <DrcPanel drc={drc} />
+          <DrcPanel drc={drc} repair={repair} />
         )}
       </div>
       <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={drc.zoomToViolation} /> {/* Stage 14 */}
       <ShortcutsHelp open={shortcuts.open} onClose={shortcuts.hide} /> {/* Stage 16 */}
+      <SyncPlacementDialog
+        open={syncDialogOpen}
+        syncing={syncing}
+        onClose={() => setSyncDialogOpen(false)}
+        onConfirm={(placement) => void handleSync(placement)}
+      />
     </div>
   );
 }

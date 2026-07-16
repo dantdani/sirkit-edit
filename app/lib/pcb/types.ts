@@ -11,6 +11,7 @@ import type { LayerId } from "./layers";
 import type { BoardNetClassing } from "./netclass"; // Stage 10 (type-only; no runtime cycle)
 import type { SilkItem } from "./silk/types"; // Stage 16 (type-only; no runtime cycle)
 import type { Padstack } from "./padstack/types"; // Stage 17 (type-only; no runtime cycle)
+import type { BoardStackup } from "./stackup";
 
 export type PadType = "smd" | "thru_hole" | "np_thru_hole";
 
@@ -75,6 +76,9 @@ export interface Track {
   start: Vec2;
   end: Vec2;
   netId: number;
+  /** Provenance used by repair policy; absent legacy copper is treated as human/imported. */
+  source?: "human" | "ai" | "autorouter" | "imported";
+  locked?: boolean;
 }
 
 export interface Via {
@@ -87,6 +91,46 @@ export interface Via {
   /** Stage 17: padstack reference. Optional/additive — when absent, `size`/
    *  `drill` above are authoritative (resolveVia falls back to them). */
   padstackId?: string;
+  source?: "human" | "ai" | "autorouter" | "imported";
+  locked?: boolean;
+}
+
+/**
+ * A board-authored area that interactive routing must not enter.  This is an
+ * additive format-v1 field: old boards omit it and therefore have no routing
+ * keepouts.  The polygon is expressed in the same integer-nanometer world
+ * coordinates as every other board primitive.
+ */
+export interface RoutingKeepout {
+  id: string;
+  name?: string;
+  polygon: Vec2[];
+  layers: LayerId[];
+  forbidTracks: boolean;
+  forbidVias: boolean;
+}
+
+/** Replayable engineering record emitted by an accepted Smart Route preview. */
+export interface RoutingHistoryEvent {
+  schemaVersion: 1;
+  id: string;
+  tool: "smart-route";
+  baseWorldRevision: string;
+  netId: number;
+  layer: LayerId;
+  candidateId: string;
+  mode: "direct" | "walk-around";
+  direction?: "cw" | "ccw";
+  points: Vec2[];
+  segmentIds: string[];
+  rules: {
+    trackWidthNm: Nm;
+    clearanceNm: Nm;
+    edgeClearanceNm: Nm;
+    gridNm: Nm;
+  };
+  score: number;
+  explanation: string;
 }
 
 /** One filled copper region of a zone (Stage 11) — outer boundary + clearance-cutout holes. */
@@ -138,11 +182,24 @@ export interface FootprintInstance {
   padNets: Record<string, number>; // pad number -> net id; absent/0 = unconnected
   /** Stage 17: locked instances refuse move/rotate edit commands. Optional/additive. */
   locked?: boolean;
+  /** Explicitly suppress the default body-overhang warning (pads still must be inside). */
+  bodyMayOverhang?: boolean;
+  /** Hard placement constraints. Auto-placement never moves fixed, mechanical, or edge-bound parts. */
+  placementConstraints?: {
+    fixedPosition?: boolean;
+    mechanical?: boolean;
+    edgeConnector?: "top" | "right" | "bottom" | "left";
+    allowedRotations?: Array<0 | 90 | 180 | 270>;
+    allowSideChange?: boolean;
+    criticalRole?: "connector" | "power" | "clock" | "analog" | "rf" | "thermal";
+  };
 }
 
 export interface PcbBoard {
   formatVersion: 1;
   stackup: 2 | 4;
+  /** Stable multilayer roles and autoroute policy. Legacy boards resolve from `stackup`. */
+  stackupConfig?: BoardStackup;
   outline: BoardOutline;
   nets: { id: number; name: string }[]; // net 0 reserved = unconnected
   footprints: FootprintInstance[];
@@ -157,6 +214,28 @@ export interface PcbBoard {
   silkItems?: SilkItem[];
   /** Stage 17: via padstack library. Optional/additive — seeded + migrated on load. */
   padstacks?: Padstack[];
+  /** Additive board-local choices used when a new interactive route starts. */
+  routingPreferences?: RoutingPreferences;
+  /** Phase-1 Smart Route obstacles. Optional so legacy boards load unchanged. */
+  routingKeepouts?: RoutingKeepout[];
+  /** Structured/replayable accepted-route records; undo/redo owns their lifetime. */
+  routingHistory?: RoutingHistoryEvent[];
+  /** Controls whether auto-placement may resize a generated outline. */
+  placementPolicy?: { outlineSource: "generated" | "user"; allowBoardResize?: boolean };
+  /** Project-persisted virtual spacing used only by auto-placement analysis. */
+  placementPreferences?: {
+    spacingPreset: "compact" | "comfortable" | "spacious" | "custom";
+    envelopeScale: number;
+  };
+}
+
+/** Optional so legacy boards continue to resolve to net-class defaults. */
+export interface RoutingPreferences {
+  version: 1;
+  trackWidthMode: "net-class" | "custom";
+  customTrackWidthNm?: Nm;
+  viaMode: "net-class" | "padstack";
+  viaPadstackId?: string;
 }
 
 /** 100×80 mm rect at origin, 2-layer stackup, only the reserved net 0. */

@@ -30,9 +30,6 @@ const mm = (nm: number): number => nm / NM_PER_MM;
 
 const label = (target: CopperTarget): string => `copper:${target}`;
 
-const ZONE_FILL_ALPHA = 0.15;
-const ZONE_OUTLINE_ALPHA = 0.9;
-
 export function renderCopper(
   board: PcbBoard,
   getLayer: (layer: CopperTarget) => Container,
@@ -63,18 +60,6 @@ export function renderCopper(
     return g;
   };
 
-  // Zones first so tracks/vias paint above the translucent fill.
-  for (const zone of board.zones) {
-    if (zone.polygon.length < 3) continue;
-    const pts: number[] = [];
-    for (const p of zone.polygon) pts.push(mm(p.x), mm(p.y));
-    const color = layerColor(zone.layer);
-    gfx(zone.layer)
-      .poly(pts, true)
-      .fill({ color, alpha: ZONE_FILL_ALPHA })
-      .stroke({ width: 1, pixelLine: true, color, alpha: ZONE_OUTLINE_ALPHA });
-  }
-
   for (const track of board.tracks) {
     gfx(track.layer)
       .moveTo(mm(track.start.x), mm(track.start.y))
@@ -101,5 +86,5 @@ export function renderCopper(
 
   // Each track/via/zone counts once, however many layers show it — matches
   // the Stage 3 footprint-primitive convention so the HUD stays honest.
-  return { primitives: board.tracks.length + board.vias.length + board.zones.length };
+  return { primitives: board.tracks.length + board.vias.length };
 }

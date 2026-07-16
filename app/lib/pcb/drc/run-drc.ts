@@ -23,6 +23,7 @@ import { checkCopperClearance } from "./checks/clearance";
 import { checkMinTrackWidth, checkVia, checkHoleToHole, checkCourtyardOverlap } from "./checks/geometry";
 import { checkSilkOverPad } from "./checks/silk";
 import { checkUnconnectedAndShorts } from "./checks/connectivity";
+import { checkBoardContainmentAndLayers } from "./checks/containment";
 import { checkZoneFills } from "../zones/drc-check"; // Stage 11
 
 export interface RunDrcOptions {
@@ -37,7 +38,22 @@ export function buildDrcContext(board: PcbBoard, rules: DrcRules): DrcCheckConte
   const eff = (netId: number): DrcRuleSet => {
     let r = cache.get(netId);
     if (!r) {
-      r = effectiveRules(rules, netId, getNetClass(board, netId));
+      const design = getNetClass(board, netId);
+      const fabrication = effectiveRules(rules, netId, design);
+      const assigned = board.netClassing?.assignments[netId] !== undefined;
+      r = assigned
+        ? {
+            ...fabrication,
+            clearanceNm: Math.max(fabrication.clearanceNm, design.clearance),
+            minTrackWidthNm: Math.max(fabrication.minTrackWidthNm, design.trackWidth),
+            minViaOuterNm: Math.max(fabrication.minViaOuterNm, design.viaSize),
+            minViaDrillNm: Math.max(fabrication.minViaDrillNm, design.viaDrill),
+            minAnnularRingNm: Math.max(
+              fabrication.minAnnularRingNm,
+              Math.max(0, Math.round((design.viaSize - design.viaDrill) / 2)),
+            ),
+          }
+        : fabrication;
       cache.set(netId, r);
     }
     return r;
@@ -65,6 +81,7 @@ export function runDrc(board: PcbBoard, rules: DrcRules, options?: RunDrcOptions
   // Pinned order. Grouped functions cover multiple kinds: clearance also emits
   // edgeClearance (#7); checkVia emits viaOuterDiameter/viaDrill/annularRing.
   const checks: (() => DrcViolation[])[] = [
+    () => checkBoardContainmentAndLayers(ctx),
     () => checkCopperClearance(ctx), // #1 clearance + #7 edge
     () => checkMinTrackWidth(ctx), // #2
     () => checkVia(ctx), // #3 #4 #5
@@ -89,11 +106,32 @@ export function runDrc(board: PcbBoard, rules: DrcRules, options?: RunDrcOptions
   let padCount = 0;
   for (const f of board.footprints) padCount += f.def.pads.length;
   const checkedItems = board.tracks.length + board.vias.length + padCount;
+  const errors = violations.filter((violation) => violation.severity === "error").length;
+  const warnings = violations.filter((violation) => violation.severity === "warning").length;
+  const incompleteNets = violations.filter((violation) => violation.kind === "incompleteNet").length;
+  const unroutedConnections = connectivityConnectionCount(ctx);
+  const state = errors > 0 ? "not-ready" : warnings > 0 ? "needs-review" : "ready";
+  const message = errors > 0
+    ? unroutedConnections > 0
+      ? `Not ready: ${unroutedConnections} unrouted connection${unroutedConnections === 1 ? "" : "s"} and ${errors} blocking issue${errors === 1 ? "" : "s"}.`
+      : `Not ready: ${errors} blocking issue${errors === 1 ? "" : "s"}.`
+    : warnings > 0
+      ? `Needs review: ${warnings} warning${warnings === 1 ? "" : "s"}.`
+      : "Ready for manufacturing checks.";
 
   return {
-    ok: violations.every((v) => v.severity !== "error"),
+    ok: errors === 0,
     violations,
     stats: { checkedItems, elapsedMs: performance.now() - t0, perCheck },
     presetId: options?.presetId,
+    readiness: { state, errors, warnings, incompleteNets, unroutedConnections, message },
   };
+}
+
+function connectivityConnectionCount(ctx: DrcCheckContext): number {
+  let count = 0;
+  for (const net of ctx.connectivity.nets.values()) {
+    if (!net.complete) count += Math.max(ctx.connectivity.airwires.filter((wire) => wire.netId === net.netId).length, net.clusters.length - 1, 1);
+  }
+  return count;
 }

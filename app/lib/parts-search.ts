@@ -344,7 +344,13 @@ async function rerankParts(
       model: RERANK_MODEL,
       max_tokens: 256,
       system: RERANK_SYSTEM_PROMPT,
-      tools: [RERANK_RANK_TOOL],
+      tools: [
+        {
+          name: RERANK_RANK_TOOL.name,
+          description: RERANK_RANK_TOOL.description,
+          input_schema: RERANK_RANK_TOOL.inputSchema as Anthropic.Tool.InputSchema,
+        },
+      ],
       tool_choice: { type: "tool", name: "rank_parts" },
       messages: [
         {

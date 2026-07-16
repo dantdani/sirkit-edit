@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbScene } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
+import type { PcbBoard } from "@/app/lib/pcb/types";
 import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import { getPreset, DEFAULT_PRESET_ID } from "@/app/lib/pcb/drc/presets";
 import type { DrcResult, DrcViolation, DrcPresetId } from "@/app/lib/pcb/drc/types";
@@ -18,6 +19,8 @@ import { refHighlightId } from "@/app/lib/pcb/drc/format";
 export interface DrcEditor {
   scene: PcbScene | null;
   getHistory: () => PcbHistory | null;
+  /** Current committed board identity; displayed results are invalid after it changes. */
+  board?: PcbBoard | null;
   /** Stage 17: re-apply the user's real selection overlay after the zoom-to
    *  flash (which borrows scene.setSelection). Falls back to clearing. */
   restoreSelection?: () => void;
@@ -42,9 +45,11 @@ export function useDrc(editor: DrcEditor): DrcHandle {
   });
 
   const [state, setState] = useState<"idle" | "running" | "done">("idle");
-  const [lastResult, setLastResult] = useState<DrcResult | undefined>(undefined);
+  const [completed, setCompleted] = useState<{ board: PcbBoard; result: DrcResult } | undefined>(undefined);
   const [activePresetId, setActivePresetId] = useState<DrcPresetId>(DEFAULT_PRESET_ID);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastResult = editor.board === undefined || completed?.board === editor.board ? completed?.result : undefined;
+  const visibleState = state === "done" && !lastResult ? "idle" : state;
 
   useEffect(
     () => () => {
@@ -59,8 +64,12 @@ export function useDrc(editor: DrcEditor): DrcHandle {
     // Yield a macrotask so React paints "running" before the sync check blocks.
     await new Promise((resolve) => setTimeout(resolve, 0));
     const result = runDrc(board, getPreset(activePresetId).rules, { presetId: activePresetId });
-    setLastResult(result);
-    setState("done");
+    if (editorRef.current.board === undefined || editorRef.current.board === board) {
+      setCompleted({ board, result });
+      setState("done");
+    } else {
+      setState("idle");
+    }
   }, [activePresetId]);
 
   const zoomToViolation = useCallback((v: DrcViolation) => {
@@ -78,5 +87,5 @@ export function useDrc(editor: DrcEditor): DrcHandle {
     }, FLASH_MS);
   }, []);
 
-  return { state, lastResult, activePresetId, setActivePresetId, run, zoomToViolation };
+  return { state: visibleState, lastResult, activePresetId, setActivePresetId, run, zoomToViolation };
 }

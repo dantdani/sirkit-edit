@@ -8,21 +8,27 @@
  * Response: { candidates: { footprintId, fullName, confidence, reason }[] }  (≤3)
  *
  * Single-tool agentic loop (mirrors app/lib/build-loop.ts's client/model
- * config): Claude may call search_footprints up to MAX_SEARCHES times (a
+ * config): the selected brain may call search_footprints up to MAX_SEARCHES times (a
  * lookup task, not research), then must submit candidates. Output is strictly
  * validated — a candidate must reference a footprint id actually surfaced by
  * search AND have pad count == the component's pin count; invalid entries are
  * discarded, never patched. Total validation failure returns { candidates: [] }.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
+import {
+  assistantResponseMessage,
+  toolResultsMessage,
+  type LLMMessage,
+  type LLMTool,
+  type LLMToolResultPart,
+} from "@/app/lib/llm/types";
 import type { FootprintSearchHit } from "@/app/lib/pcb/footprint-api-types";
 
 export const runtime = "nodejs";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MODEL = "claude-sonnet-4-6";
 const MAX_SEARCHES = 3;
 const MAX_ITERATIONS = 6; // searches + submit + one nudge of slack
 const MAX_CANDIDATES = 3;
@@ -74,11 +80,11 @@ function parseComponent(raw: unknown): SuggestComponent | null {
   };
 }
 
-const SEARCH_TOOL: Anthropic.Tool = {
+const SEARCH_TOOL: LLMTool = {
   name: "search_footprints",
   description:
     "Hybrid search over the KiCad footprint library. Returns candidate footprints with id, fullName, description, padCount. ALWAYS pass padCount so results match the component's pin count.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       query: { type: "string", description: "Free text or Lib:Name, e.g. 'SOIC-8 3.9mm' or 'pin header 1x04 2.54mm'" },
@@ -89,11 +95,11 @@ const SEARCH_TOOL: Anthropic.Tool = {
   },
 };
 
-const SUBMIT_TOOL: Anthropic.Tool = {
+const SUBMIT_TOOL: LLMTool = {
   name: "submit_candidates",
   description:
     "Submit the final footprint candidates (at most 3, best first). Every footprintId MUST be copied from a search_footprints result and its padCount MUST equal the component's pin count.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       candidates: {
@@ -162,6 +168,7 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
   const component = parseComponent((body as Record<string, unknown> | null)?.component);
+  const provider = requestedProvider((body as Record<string, unknown> | null)?.provider);
   if (!component) {
     return Response.json(
       { ok: false, error: "component with id, ref and pins[] is required" },
@@ -217,26 +224,25 @@ export async function POST(req: Request): Promise<Response> {
     pins: component.pins.slice(0, 64),
   });
 
-  const messages: Anthropic.MessageParam[] = [
+  const messages: LLMMessage[] = [
     { role: "user", content: `Find footprint candidates for this component:\n${userMessage}` },
   ];
 
   try {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
+      const response = await llmRouter.generate({
+        provider,
+        maxTokens: 2048,
         temperature: 0,
         system: SYSTEM_PROMPT,
         tools: [SEARCH_TOOL, SUBMIT_TOOL],
-        tool_choice: { type: "any" }, // lookup task — always act, never chat
+        toolChoice: "required", // lookup task - always act, never chat
+        schematicState: { component },
         messages,
       });
-      messages.push({ role: "assistant", content: response.content });
+      messages.push(assistantResponseMessage(response));
 
-      const toolUses = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
-      );
+      const toolUses = response.toolCalls;
 
       for (const block of toolUses) {
         if (block.name !== "submit_candidates") continue;
@@ -251,13 +257,13 @@ export async function POST(req: Request): Promise<Response> {
         return Response.json({ candidates });
       }
 
-      const results: Anthropic.ToolResultBlockParam[] = [];
+      const results: LLMToolResultPart[] = [];
       for (const block of toolUses) {
         if (block.name !== "search_footprints") continue;
         results.push({
           type: "tool_result",
-          tool_use_id: block.id,
-          content: await runSearch(block.input),
+          toolCallId: block.id,
+          output: await runSearch(block.input),
         });
       }
       if (results.length === 0) {
@@ -265,13 +271,11 @@ export async function POST(req: Request): Promise<Response> {
         console.warn(`[assign/suggest] ${component.ref}: no tool call, giving up`);
         return Response.json({ candidates: [] });
       }
-      messages.push({ role: "user", content: results });
+      messages.push(toolResultsMessage(results));
     }
     console.warn(`[assign/suggest] ${component.ref}: max iterations reached`);
     return Response.json({ candidates: [] });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[assign/suggest] ${component.ref}: ${message}`);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 }

@@ -63,6 +63,8 @@ describe("boardToDsn / writeDsn", () => {
     expect(dsn.rules.length).toBeGreaterThanOrEqual(1);
 
     const text = writeDsn(dsn);
+    expect(text).toContain("(resolution um 1)");
+    expect(text).toContain('(pins "R1"-"1" "R1"-"2")');
     expect(text).toContain("(padstack");
     expect(text).toContain("(image");
     expect(text).toContain('(net "N1"');
@@ -96,6 +98,9 @@ describe("boardToDsn / writeDsn", () => {
     const text = writeDsn(dsn);
     expect(text).toContain("In1.Cu");
     expect(text).toContain("In2.Cu");
+    expect(text).toContain("(autoroute_settings");
+    expect(text).toContain("(layer_rule In1.Cu");
+    expect(dsn.vias.every((via) => via.onLayers.length === 4)).toBe(true);
   });
 
   it("(d) net names with special characters are double-quoted and escaped", () => {
@@ -133,5 +138,7 @@ describe("boardToDsn / writeDsn", () => {
     // and the real demo fixture emits a well-formed pcb document
     expect(first.startsWith("(pcb sirkit-export-")).toBe(true);
     expect(first.trimEnd().endsWith(")")).toBe(true);
+    expect(first).toContain("(wiring");
+    expect(first).toContain("(type protect)");
   });
 });

@@ -2,7 +2,7 @@
  * POST /api/schematic/edit-build
  *
  * Tier-2 topology editing (Build mode). The client serializes the current
- * schematic into a BuildLogicalNetlist and sends it with an instruction; Claude
+ * schematic into a BuildLogicalNetlist and sends it with an instruction; the selected brain
  * returns the COMPLETE modified netlist via the shared build tool loop. Existing
  * parts are seeded as pre-validated (so their partIds don't need re-searching);
  * new/swapped parts go through search_parts as usual. The client then re-lays-out
@@ -15,13 +15,14 @@
 
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import { runBuildToolLoop } from "@/app/lib/build-loop";
+import { requestedProvider } from "@/app/lib/llm/request";
 import { getPartsByIds } from "@/app/lib/parts-search";
 import { EDIT_BUILD_SYSTEM_PROMPT } from "@/app/lib/prompts";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request): Promise<Response> {
-  let body: { instruction?: unknown; netlist?: unknown };
+  let body: { instruction?: unknown; netlist?: unknown; provider?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -53,6 +54,7 @@ export async function POST(req: Request): Promise<Response> {
   })}\n\nInstruction: ${instruction}`;
 
   const result = await runBuildToolLoop({
+    provider: requestedProvider(body.provider),
     systemPrompt: EDIT_BUILD_SYSTEM_PROMPT,
     userMessage,
     seedParts,
@@ -61,5 +63,8 @@ export async function POST(req: Request): Promise<Response> {
   if (result.ok) {
     return Response.json({ ok: true, netlist: result.netlist, explanation: result.explanation });
   }
-  return Response.json({ ok: false, error: result.error }, { status: result.status });
+  return Response.json(
+    { ok: false, error: result.error, code: result.code, provider: result.provider },
+    { status: result.status },
+  );
 }

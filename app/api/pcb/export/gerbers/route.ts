@@ -21,6 +21,11 @@ import type { DrcPresetId } from "@/app/lib/pcb/drc/types";
 import { FAB_PRESETS } from "@/app/lib/pcb/fab/presets";
 import { buildFabBundle } from "@/app/lib/pcb/fab/build-bundle";
 import { FabExportGatedByDrc, KicadCliError } from "@/app/lib/pcb/fab/types";
+import {
+  compileNativeFabPackage,
+  summarizeNativePreflight,
+} from "@/app/lib/pcb/fab/native/compiler";
+import { NativeFabBlockedError } from "@/app/lib/pcb/fab/native/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // three kicad-cli invocations at 60 s each, worst case
@@ -65,6 +70,8 @@ export async function POST(req: Request): Promise<Response> {
     drcPresetId?: unknown;
     overrideDrcFail?: unknown;
     boardName?: unknown;
+    engine?: unknown;
+    action?: unknown;
   };
 
   if (!isBoardLike(body.board)) return bad("body.board must be a PcbBoard");
@@ -75,6 +82,14 @@ export async function POST(req: Request): Promise<Response> {
   if (!fabPreset) return bad(`unknown fabPresetId ${JSON.stringify(body.fabPresetId)}`);
   if (body.overrideDrcFail !== undefined && typeof body.overrideDrcFail !== "boolean") {
     return bad("overrideDrcFail must be a boolean");
+  }
+  const engine = body.engine ?? "kicad";
+  if (engine !== "kicad" && engine !== "native-beta") return bad("engine must be kicad or native-beta");
+  const action = body.action ?? "package";
+  if (action !== "package" && action !== "preflight") return bad("action must be package or preflight");
+  if (action === "preflight" && engine !== "native-beta") return bad("preflight is available only for native-beta");
+  if (engine === "native-beta" && body.overrideDrcFail === true) {
+    return bad("native-beta is fail-closed and does not permit a generic DRC override");
   }
 
   // DRC preset: explicit request wins, else the fab preset's soft link.
@@ -92,6 +107,32 @@ export async function POST(req: Request): Promise<Response> {
   const boardName = typeof body.boardName === "string" ? body.boardName : "sirkit-board";
 
   try {
+    if (engine === "native-beta") {
+      const result = await compileNativeFabPackage({
+        board,
+        netlist,
+        fabPreset,
+        drcPreset,
+        boardName,
+      });
+      if (action === "preflight") return Response.json(summarizeNativePreflight(result));
+      return new Response(Buffer.from(result.zipBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="${result.filename}"`,
+          "X-Sirkit-Native-Signoff": result.manifest.signoff,
+          "X-Sirkit-Package-SHA256": result.packageSha256,
+          "X-Sirkit-Bundle-Stats": JSON.stringify({
+            files: result.files.length,
+            totalBytes: result.zipBytes.byteLength,
+            drcErrors: 0,
+            drcWarnings: result.manifest.diagnostics.warnings,
+            elapsedMs: result.stages.reduce((sum, stage) => sum + stage.elapsedMs, 0),
+          }),
+        },
+      });
+    }
     const result = await buildFabBundle({
       board,
       netlist,
@@ -115,6 +156,12 @@ export async function POST(req: Request): Promise<Response> {
       },
     });
   } catch (e) {
+    if (e instanceof NativeFabBlockedError) {
+      return Response.json(
+        { error: "native-preflight-failed", message: e.message, diagnostics: e.diagnostics },
+        { status: 400 },
+      );
+    }
     if (e instanceof FabExportGatedByDrc) {
       return Response.json({ error: "drc-failed", violations: e.violations }, { status: 400 });
     }

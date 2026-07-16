@@ -11,7 +11,7 @@
  */
 
 import { Graphics } from "pixi.js";
-import { GRID_MINOR_COLOR, GRID_MAJOR_COLOR, ACCENT_COLOR } from "./colors";
+import { GRID_MINOR_COLOR, GRID_MAJOR_COLOR, GRID_ORIGIN_COLOR } from "./colors";
 
 export interface ViewRectMm {
   minX: number;
@@ -69,7 +69,7 @@ export function drawGrid(g: Graphics, view: ViewRectMm, pxPerMm: number): GridCo
 
   g.clear();
   const minorWidth = 1 / pxPerMm; // 1 screen px
-  const majorWidth = 1.5 / pxPerMm;
+  const majorWidth = 1.25 / pxPerMm;
 
   // Vertical then horizontal lines; grid line i sits at i*step, major when
   // i % 5 === 0 (anchored at the origin so majors are stable across rebuilds).
@@ -92,13 +92,15 @@ export function drawGrid(g: Graphics, view: ViewRectMm, pxPerMm: number): GridCo
     g.stroke({
       width: major ? majorWidth : minorWidth,
       color: major ? GRID_MAJOR_COLOR : GRID_MINOR_COLOR,
+      alpha: major ? 0.58 : 0.24,
+      pixelLine: true,
     });
   }
 
   // Origin crosshair (teal), drawn on top of the grid lines.
   g.moveTo(0, rect.minY).lineTo(0, rect.maxY);
   g.moveTo(rect.minX, 0).lineTo(rect.maxX, 0);
-  g.stroke({ width: majorWidth, color: ACCENT_COLOR, alpha: 0.6 });
+  g.stroke({ width: majorWidth, color: GRID_ORIGIN_COLOR, alpha: 0.45, pixelLine: true });
 
   return { stepMm: step, pxPerMm, rect };
 }

@@ -87,24 +87,54 @@ describe("parseSes", () => {
     expect(r.tracks.filter((t) => t.netId === 2)).toHaveLength(1);
   });
 
-  it("(d) unknown via padstack falls back to the default via dimensions", () => {
+  it("converts Freerouting micrometer SES coordinates back to Sirkit nanometers", () => {
+    const s = `(session x (routes (resolution um 1) (network_out (net "GND"
+      (wire (path F.Cu 250 1.5 2 3 4) (net "GND"))
+      (via "via_default" 5.25 6.5 (net "GND"))
+    ))))`;
+    const r = parseSes(s, board());
+    expect(r.tracks[0]).toMatchObject({
+      width: 250000,
+      start: { x: 1500, y: 2000 },
+      end: { x: 3000, y: 4000 },
+    });
+    expect(r.vias[0].at).toEqual({ x: 5250, y: 6500 });
+  });
+
+  it("rejects an unknown via padstack instead of inventing default geometry", () => {
     const s = `(session x (routes (network_out (net "GND"
       (via "via_bogus" 5 5 (net "GND"))
     ))))`;
-    const r = parseSes(s, board());
-    expect(r.vias).toHaveLength(1);
-    expect(r.vias[0].size).toBe(800000); // via_default outer
-    expect(r.vias[0].drill).toBe(400000);
+    expect(() => parseSes(s, board())).toThrow(/unknown via padstack/i);
   });
 
-  it("drops wires/vias whose net name isn't on the board (never assigns reserved net 0)", () => {
+  it("rejects routes whose net name is not on the board", () => {
     const s = `(session x (routes (network_out (net "MYSTERY"
       (wire (path F.Cu 250000 0 0 1000 0) (net "MYSTERY"))
       (via "via_default" 5 5 (net "MYSTERY"))
     ))))`;
-    const r = parseSes(s, board());
-    expect(r.tracks).toHaveLength(0);
-    expect(r.vias).toHaveLength(0);
+    expect(() => parseSes(s, board())).toThrow(/unknown or unconnected net/i);
+  });
+
+  it("imports and reports both inner copper layers on a four-layer board", () => {
+    const four = { ...board(), stackup: 4 as const };
+    const s = `(session x (routes (resolution um 1) (network_out (net "GND"
+      (wire (path In1.Cu 200 0 0 5 0) (net "GND"))
+      (wire (path In2.Cu 220 5 0 5 5) (net "GND"))
+      (via "via_default" 5 0 (net "GND"))
+    ))))`;
+    const r = parseSes(s, four);
+    expect(r.tracks.map((track) => track.layer)).toEqual(["in1", "in2"]);
+    expect(r.vias[0].layers).toEqual(["copperTop", "copperBottom"]);
+    expect(r.layerUsage.in1).toMatchObject({ segments: 1, trackLengthNm: 5_000 });
+    expect(r.layerUsage.in2).toMatchObject({ segments: 1, trackLengthNm: 5_000 });
+  });
+
+  it("rejects an inner-layer route when that layer is disabled by a two-layer stackup", () => {
+    const s = `(session x (routes (network_out (net "GND"
+      (wire (path In1.Cu 200000 0 0 5000000 0) (net "GND"))
+    ))))`;
+    expect(() => parseSes(s, board())).toThrow(/unknown or disabled copper layer/i);
   });
 
   it("returns an empty, unsuccessful result on unparseable input (no throw)", () => {

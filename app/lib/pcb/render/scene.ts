@@ -66,6 +66,9 @@ import {
 } from "./pick";
 import type { SelectionRef } from "../edit/commands"; // Stage 17
 import { silkItemPolylines } from "../silk/geometry";
+import { renderCopper } from "./copper";
+import { renderZones } from "./zones";
+import { renderSilkItems } from "./silk";
 
 export type { PickResult, OutlineHandleId } from "./pick";
 
@@ -111,6 +114,8 @@ export interface PcbScene {
   /** Stage 6 hooks copper rendering here. Throws for paste layers (no
    *  container in the pinned paint order). */
   getLayerContainer(layer: LayerId): Container;
+  /** Tool previews live above all layers and never inherit layer visibility. */
+  getOverlayContainer(): Container;
   /** Red 50% tint on the dragged instance. Survives setBoard rebuilds until
    *  cleared — courtyard violations persist across drops. */
   setGhost(id: string, state: "none" | "illegal"): void;
@@ -156,8 +161,8 @@ const HANDLE_PX = 6;
 const HANDLE_PICK_PX = 8;
 
 /** Airwire stroke: 1px screen-constant, zinc-500 @ 50%. */
-const AIRWIRE_COLOR = 0x71717a;
-const AIRWIRE_ALPHA = 0.5;
+const AIRWIRE_COLOR = 0xcbd5e1;
+const AIRWIRE_ALPHA = 0.62;
 /** Ghost tint: 50% blend toward red (multiplicative, halves G/B). */
 const GHOST_TINT = 0xff8080;
 
@@ -232,6 +237,7 @@ export function createPcbScene(): PcbScene {
   let marqueeG: Graphics | null = null;
 
   let primitives = 0;
+  let footprintPrimitives = 0;
 
   // FPS: rolling 60-frame window; fpsMin = worst window over the last 10 s.
   const frameMs: number[] = [];
@@ -460,7 +466,7 @@ export function createPcbScene(): PcbScene {
     }
     instances = [];
     instanceById.clear();
-    primitives = 0;
+    footprintPrimitives = 0;
 
     // Ghosts for instances that left the board (re-sync) must not leak.
     const liveIds = new Set(b.footprints.map((f) => f.id));
@@ -471,7 +477,7 @@ export function createPcbScene(): PcbScene {
     for (const inst of b.footprints) {
       const rec = buildInstance(inst);
       instances.push(rec);
-      primitives += geometryFor(inst.def, inst.side).plan.primitives;
+      footprintPrimitives += geometryFor(inst.def, inst.side).plan.primitives;
     }
   }
 
@@ -962,6 +968,13 @@ export function createPcbScene(): PcbScene {
     if (!footprintsUnchanged) {
       rebuildFootprints(b);
     }
+    // One authoritative render pass. Keeping copper, zones, and user silk in
+    // the scene prevents a footprint rebuild from clearing content that a
+    // React effect happened to draw first.
+    const copper = renderCopper(b, (layer) => container(layer as ContainerKey));
+    const zones = renderZones(b, (layer) => container(layer as ContainerKey));
+    const silk = renderSilkItems(b, (layer) => container(layer as ContainerKey));
+    primitives = footprintPrimitives + copper.primitives + zones.primitives + silk.items;
     // Stage 17: copper-only commits (same footprints array via immer sharing)
     // must still refresh the pick index; it dirty-checks its own sources.
     rebuildPickIndex(b);
@@ -1113,6 +1126,10 @@ export function createPcbScene(): PcbScene {
         throw new Error(`PcbScene has no container for paste layers (${layer})`);
       }
       return container(layer);
+    },
+
+    getOverlayContainer(): Container {
+      return container("overlay");
     },
 
     setGhost(id: string, state: "none" | "illegal"): void {

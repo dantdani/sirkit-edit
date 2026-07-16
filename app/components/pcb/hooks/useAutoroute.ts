@@ -1,43 +1,42 @@
-/**
- * useAutoroute (PCB Stage 9) — one-click Freerouting autoroute.
- *
- * Mirrors useNetClass's editor-ref + fetch + commit-through-history shape:
- * snapshot the board, POST it to /api/pcb/autoroute (which spawns the JAR),
- * parse the returned SES client-side, and commit the ENTIRE batch as a single
- * `AutorouteImport` history entry so one Ctrl+Z reverses the whole autoroute.
- *
- * The server never mutates board state — it returns raw SES text; this hook
- * owns parsing + dispatch. A 250 ms interval bumps `elapsedMs` for the toolbar
- * spinner. `cancel()` aborts the fetch (the subprocess keeps running server-side
- * — documented limitation; there is no cancel channel to the JAR in MVP).
- */
+/** One-click bounded multilayer FreeRouting completion with one atomic commit. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbHistory } from "@/app/lib/pcb/history";
-import { createEmptyBoard, type PcbBoard } from "@/app/lib/pcb/types";
-import { parseSes } from "@/app/lib/pcb/dsn/read-ses";
+import { createEmptyBoard, type PcbBoard, type Track, type Via } from "@/app/lib/pcb/types";
+import { parseSes, type SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
 import { buildAutorouteImportCommand } from "@/app/lib/pcb/autoroute/command";
 import { mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
 import { computeConnectivity } from "@/app/lib/pcb/connectivity-board";
 import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
+import type { LayerId } from "@/app/lib/pcb/layers";
+import type { AutoroutePassReport, AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
+import { pcbRevisionId } from "@/app/lib/pcb/ai/snapshot";
 
 export interface AutorouteEditor {
-  /** The CURRENT history (PcbEditor recreates it on board reseed). */
   getHistory: () => PcbHistory | null;
   toast?: (message: string) => void;
-  /** Stage 12: optional DRC rules — when present, DRC runs on autoroute success. */
   getDrcRules?: () => DrcRules;
 }
 
-export type AutorouteState = "idle" | "running" | "done" | "error";
+export type AutorouteState = "idle" | "queued" | "running" | "complete" | "partial" | "failed" | "cancelled";
 
 export interface AutorouteResult {
+  status: "complete" | "partial";
   tracksImported: number;
   viasImported: number;
   routedNets: number;
   totalNets: number;
-  drcErrors?: number; // Stage 12: errors from the post-route DRC (undefined if not run)
+  drcErrors?: number;
+  requiredConnections: number;
+  completedConnections: number;
+  remainingConnections: number;
+  layerUsage: Partial<Record<LayerId, SesLayerUsage>>;
+  passCount: number;
+  acceptedPasses: number;
+  failures: AutorouteUnresolvedConnection[];
+  passReports: AutoroutePassReport[];
+  debugDirectory?: string;
 }
 
 export interface AutorouteHandle {
@@ -49,135 +48,164 @@ export interface AutorouteHandle {
   cancel(): void;
 }
 
+interface AutorouteApiResponse {
+  ok?: boolean;
+  sesText?: string;
+  routes?: { tracks: Track[]; vias: Via[] };
+  error?: string;
+  engine?: { name?: string; version?: string; apiKeyRequired?: boolean };
+  job?: { id?: string; status?: "complete" | "partial" | "failed" };
+  verification?: {
+    requiredConnections?: number;
+    completedConnections?: number;
+    remainingConnections?: number;
+    routedNets?: number;
+    totalNets?: number;
+  };
+  completion?: {
+    acceptedPasses?: number;
+    passes?: AutoroutePassReport[];
+    failures?: AutorouteUnresolvedConnection[];
+  };
+  stats?: {
+    elapsedMs?: number;
+    tracksImported?: number;
+    viasImported?: number;
+    layerUsage?: Partial<Record<LayerId, SesLayerUsage>>;
+  };
+  debugDirectory?: string;
+}
+
 export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
   const editorRef = useRef(editor);
   useEffect(() => {
     editorRef.current = editor;
   });
-
   const [state, setState] = useState<AutorouteState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [lastResult, setLastResult] = useState<AutorouteResult | undefined>(undefined);
-  const [lastError, setLastError] = useState<string | undefined>(undefined);
-
+  const [lastResult, setLastResult] = useState<AutorouteResult>();
+  const [lastError, setLastError] = useState<string>();
   const runningRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startRef = useRef(0);
 
   const stopTimer = useCallback(() => {
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    if (timerRef.current !== null) clearInterval(timerRef.current);
+    timerRef.current = null;
   }, []);
 
-  useEffect(
-    () => () => {
-      stopTimer();
-      abortRef.current?.abort();
-    },
-    [stopTimer],
-  );
+  useEffect(() => () => {
+    stopTimer();
+    abortRef.current?.abort();
+  }, [stopTimer]);
 
-  const toast = (m: string): void => editorRef.current.toast?.(m);
+  const toast = (message: string): void => editorRef.current.toast?.(message);
 
   const cancel = useCallback(() => {
     if (!runningRef.current) return;
     abortRef.current?.abort();
     runningRef.current = false;
     stopTimer();
-    setState("idle");
-    toast("Autoroute cancelled");
+    setState("cancelled");
+    toast("Autoroute cancelled; board unchanged");
   }, [stopTimer]);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (): Promise<void> => {
     if (runningRef.current) return;
-
-    // Snapshot BEFORE the async gap; re-read history AFTER it to commit.
     const board: PcbBoard = editorRef.current.getHistory()?.present ?? createEmptyBoard();
-
+    const baseRevision = pcbRevisionId(board);
     runningRef.current = true;
-    setState("running");
+    setState("queued");
     setLastError(undefined);
     setElapsedMs(0);
     startRef.current = Date.now();
     stopTimer();
     timerRef.current = setInterval(() => setElapsedMs(Date.now() - startRef.current), 250);
-
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
-      const res = await fetch("/api/pcb/autoroute", {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      setState("running");
+      const response = await fetch("/api/pcb/autoroute", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ board }),
         signal: controller.signal,
       });
-      const body = (await res.json()) as { ok?: boolean; sesText?: string; error?: string };
-      if (!res.ok || !body.ok || !body.sesText) {
-        throw new Error(body.error ?? `Autoroute failed (${res.status})`);
+      const body = await response.json() as AutorouteApiResponse;
+      if (!response.ok || !body.ok || (!body.routes && !body.sesText)) {
+        throw new Error(body.error ?? `Autoroute failed (${response.status})`);
       }
+      const history = editorRef.current.getHistory();
+      if (!history) throw new Error("No board to apply routes to");
+      if (pcbRevisionId(history.present) !== baseRevision) {
+        throw new Error("Board changed while autorouting; the stale route candidate was discarded.");
+      }
+      const current = history.present;
+      const parsed = body.routes ? undefined : parseSes(body.sesText ?? "", current);
+      const imported = body.routes ?? { tracks: parsed?.tracks ?? [], vias: parsed?.vias ?? [] };
+      const acceptedPasses = body.completion?.acceptedPasses ?? (imported.tracks.length + imported.vias.length > 0 ? 1 : 0);
+      const passReports = body.completion?.passes ?? [];
+      const failures = body.completion?.failures ?? [];
 
-      const h = editorRef.current.getHistory();
-      if (!h) throw new Error("No board to apply routes to");
-
-      // Re-read the CURRENT board after the async gap and build the command
-      // against it, so net-name resolution + replacedNetIds/removed stay
-      // consistent with the board we actually mutate (see review finding).
-      const current = h.present;
-      const ses = parseSes(body.sesText, current);
-
-      if (!ses.wasSuccessful || (ses.tracks.length === 0 && ses.vias.length === 0)) {
-        const conn = computeConnectivity(current);
-        setLastResult({
-          tracksImported: 0,
-          viasImported: 0,
-          routedNets: conn.completion.routedNets,
-          totalNets: conn.completion.totalNets,
+      if (acceptedPasses > 0) {
+        const command = buildAutorouteImportCommand(current, imported);
+        history.execute("Autoroute board", (draft) => mutateBoardWithCommand(draft, command), {
+          operationType: "autoroute_completion",
+          actor: "autorouter",
+          reason: `Applied ${acceptedPasses} monotonic high-effort routing pass(es).`,
+          details: { passReports, failures },
         });
-        setState("done");
-        toast("Freerouting returned no routes — board unchanged");
-        return;
       }
 
-      const cmd = buildAutorouteImportCommand(current, { tracks: ses.tracks, vias: ses.vias });
-      h.execute("Autoroute board", (draft) => mutateBoardWithCommand(draft, cmd));
-
-      // Stage 12: run DRC on the routed board and surface the error count.
+      const connectivity = computeConnectivity(history.present);
       const drcRules = editorRef.current.getDrcRules?.();
       const drcErrors = drcRules
-        ? runDrc(h.present, drcRules).violations.filter((v) => v.severity === "error").length
+        ? runDrc(history.present, drcRules).violations.filter((violation) => violation.severity === "error").length
         : undefined;
-
-      const conn = computeConnectivity(h.present);
+      const requiredConnections = body.verification?.requiredConnections ?? connectivity.airwires.length;
+      const completedConnections = body.verification?.completedConnections ?? Math.max(0, requiredConnections - connectivity.airwires.length);
+      const remainingConnections = Math.max(body.verification?.remainingConnections ?? 0, connectivity.airwires.length);
       const result: AutorouteResult = {
-        tracksImported: ses.tracks.length,
-        viasImported: ses.vias.length,
-        routedNets: conn.completion.routedNets,
-        totalNets: conn.completion.totalNets,
+        status: body.job?.status === "complete" && remainingConnections === 0 ? "complete" : "partial",
+        tracksImported: body.stats?.tracksImported ?? imported.tracks.length,
+        viasImported: body.stats?.viasImported ?? imported.vias.length,
+        routedNets: body.verification?.routedNets ?? connectivity.completion.routedNets,
+        totalNets: body.verification?.totalNets ?? connectivity.completion.totalNets,
         drcErrors,
+        requiredConnections,
+        completedConnections,
+        remainingConnections,
+        layerUsage: body.stats?.layerUsage ?? parsed?.layerUsage ?? {},
+        passCount: passReports.length,
+        acceptedPasses,
+        failures,
+        passReports,
+        debugDirectory: body.debugDirectory,
       };
       setLastResult(result);
-      setState("done");
-      const secs = ((Date.now() - startRef.current) / 1000).toFixed(1);
+      setState(result.status);
+      const seconds = ((Date.now() - startRef.current) / 1000).toFixed(1);
+      const engine = body.engine?.version ? `Freerouting ${body.engine.version} local · ` : "";
       const drcChip = drcErrors === undefined ? "" : ` · DRC: ${drcErrors} error${drcErrors === 1 ? "" : "s"}`;
-      toast(
-        `Routed ${result.tracksImported} tracks + ${result.viasImported} vias in ${secs}s (${result.routedNets}/${result.totalNets} nets)${drcChip}`,
-      );
-    } catch (e) {
-      if (controller.signal.aborted) return; // cancel() already reset state
-      const raw = e instanceof Error ? e.message : String(e);
-      // Stage 16: env problems get actionable guidance, not error codes.
-      const message =
-        raw === "jar-missing"
-          ? "Freerouting JAR not found — set FREEROUTING_JAR in .env.local (see docs/pcb-quickstart.md)"
-          : raw === "java-missing"
-            ? "Java runtime not found — install Java 21+ or set JAVA_HOME (see docs/pcb-quickstart.md)"
-            : raw;
+      if (result.status === "complete") {
+        toast(`${engine}Autoroute complete — ${result.completedConnections}/${result.requiredConnections} connections completed · 0 unrouted · ${result.passCount} pass${result.passCount === 1 ? "" : "es"} in ${seconds}s${drcChip}`);
+      } else {
+        const blocker = failures[0]?.primaryBlockers[0] ? ` · ${failures[0].primaryBlockers[0]}` : "";
+        toast(`${engine}Autoroute partial — ${result.completedConnections}/${result.requiredConnections} connections completed · ${result.remainingConnections} remain · ${result.acceptedPasses}/${result.passCount} passes improved${blocker}${drcChip}`);
+      }
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const raw = error instanceof Error ? error.message : String(error);
+      const message = raw === "jar-missing"
+        ? "Local Freerouting is not installed — run npm run setup:freerouting (no API key required)"
+        : raw === "java-missing"
+          ? "Freerouting's local Java runtime is missing — run npm run setup:freerouting"
+          : raw;
       setLastError(message);
-      setState("error");
+      setState("failed");
       toast(`Autoroute failed: ${message}`);
     } finally {
       runningRef.current = false;

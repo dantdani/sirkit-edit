@@ -6,8 +6,10 @@
  * outline controls (size presets, roundrect toggle, numeric width/height mm).
  */
 
-import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, ShieldCheck, Sparkles, Spline, Type, Zap } from "lucide-react";
+import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, History, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, Redo2, ShieldCheck, Sparkles, Spline, Square, Type, Undo2, Zap } from "lucide-react";
 import type { BoardOutline } from "@/app/lib/pcb/types";
+import type { DrcResult } from "@/app/lib/pcb/drc/types";
+import type { PcbHistoryRecord } from "@/app/lib/pcb/history";
 import { mmToNm, nmToMm } from "@/app/lib/pcb/units";
 
 const MIN_BOARD_MM = 10;
@@ -38,7 +40,9 @@ export function PcbToolbar({
   outline,
   onOutlineChange,
   onAutoPlace,
+  onCancelAutoPlace,
   autoPlacing,
+  autoPlaceProgress,
   onRouteBoard,
   routing,
   routingElapsedMs,
@@ -53,6 +57,14 @@ export function PcbToolbar({
   preview3dOpen,
   onTogglePadstacks,
   padstacksOpen,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  undoLabel,
+  redoLabel,
+  historyEntries,
+  readiness,
   children,
 }: {
   tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
@@ -66,7 +78,9 @@ export function PcbToolbar({
   onOutlineChange: (outline: BoardOutline) => void;
   /** Stage 8: one-click auto-place (button hidden when absent). */
   onAutoPlace?: () => void;
+  onCancelAutoPlace?: () => void;
   autoPlacing?: boolean;
+  autoPlaceProgress?: number;
   /** Stage 9: one-click Freerouting autoroute (button hidden when absent). */
   onRouteBoard?: () => void;
   routing?: boolean;
@@ -90,7 +104,15 @@ export function PcbToolbar({
   /** Stage 17: toggle the padstack library panel (button hidden when absent). */
   onTogglePadstacks?: () => void;
   padstacksOpen?: boolean;
-  /** Right-aligned extras (Stage 4 mounts Sync + queue here). */
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  undoLabel?: string;
+  redoLabel?: string;
+  historyEntries: readonly PcbHistoryRecord[];
+  readiness: DrcResult["readiness"];
+  /** Primary schematic-to-PCB action, intentionally first so it stays visible. */
   children?: React.ReactNode;
 }) {
   const isRectLike = outline.kind === "rect" || outline.kind === "roundrect";
@@ -128,6 +150,8 @@ export function PcbToolbar({
 
   return (
     <div className="flex items-center gap-1 px-2 h-9 shrink-0 border-b border-zinc-800 bg-zinc-900/50 text-xs select-none">
+      {children && <div className="flex shrink-0 items-center gap-1">{children}</div>}
+      {children && <div className="w-px h-4 bg-zinc-800 mx-1" />}
       <button
         type="button"
         title="Select"
@@ -187,20 +211,20 @@ export function PcbToolbar({
       {onAutoPlace && (
         <button
           type="button"
-          title="Auto-place footprints"
-          aria-label="Auto-place footprints"
-          onClick={onAutoPlace}
-          disabled={autoPlacing}
-          className={`${iconButtonClass(false)} disabled:opacity-50`}
+          title={autoPlacing ? "Cancel auto-placement" : "Auto-place footprints"}
+          aria-label={autoPlacing ? "Cancel auto-placement" : "Auto-place footprints"}
+          onClick={autoPlacing ? onCancelAutoPlace : onAutoPlace}
+          className={`${iconButtonClass(false)} flex items-center gap-1`}
         >
-          {autoPlacing ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+          {autoPlacing ? <Square className="size-3 fill-current" /> : <Sparkles className="size-3.5" />}
+          {autoPlacing && <span className="tabular-nums">{Math.round(autoPlaceProgress ?? 0)}%</span>}
         </button>
       )}
       {onRouteBoard && (
         <button
           type="button"
-          title="Autoroute board (Freerouting)"
-          aria-label="Autoroute board"
+          title="Autoroute locally with Freerouting (no API key)"
+          aria-label="Autoroute board locally with Freerouting"
           onClick={onRouteBoard}
           disabled={routing}
           className={`${iconButtonClass(false)} flex items-center gap-1 disabled:opacity-50`}
@@ -254,6 +278,53 @@ export function PcbToolbar({
           <Keyboard className="size-3.5" />
         </button>
       )}
+
+      <div className="w-px h-4 bg-zinc-800 mx-1" />
+      <button
+        type="button"
+        title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : "Nothing to undo"}
+        aria-label={undoLabel ? `Undo ${undoLabel}` : "Undo"}
+        onClick={onUndo}
+        disabled={!canUndo}
+        className={`${iconButtonClass(false)} disabled:opacity-30 disabled:hover:bg-transparent`}
+      >
+        <Undo2 className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : "Nothing to redo"}
+        aria-label={redoLabel ? `Redo ${redoLabel}` : "Redo"}
+        onClick={onRedo}
+        disabled={!canRedo}
+        className={`${iconButtonClass(false)} disabled:opacity-30 disabled:hover:bg-transparent`}
+      >
+        <Redo2 className="size-3.5" />
+      </button>
+      <details className="group relative">
+        <summary title="Edit history" aria-label="Edit history" className={`${iconButtonClass(false)} list-none cursor-pointer`}>
+          <History className="size-3.5" />
+        </summary>
+        <div className="absolute left-0 top-8 z-[90] w-72 overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-2xl">
+          <div className="border-b border-zinc-800 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Session edit history</div>
+          {historyEntries.length === 0 ? (
+            <p className="px-3 py-4 text-[11px] text-zinc-500">No board edits in this session.</p>
+          ) : (
+            <ol className="max-h-64 overflow-y-auto py-1">
+              {[...historyEntries].reverse().map((entry) => (
+                <li key={entry.id} className={`flex items-start justify-between gap-3 px-3 py-1.5 text-[11px] ${entry.state === "redo" ? "text-zinc-600" : "text-zinc-300"}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate">{entry.label}</span>
+                    <span className="block truncate text-[9px] text-zinc-600">{entry.metadata.operationType}{entry.metadata.affectedObjects.length > 0 ? ` · ${entry.metadata.affectedObjects.slice(0, 3).join(", ")}` : ""}</span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[10px] text-zinc-600">
+                    {entry.state === "redo" ? "undone" : new Date(entry.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </details>
 
       <div className="w-px h-4 bg-zinc-800 mx-1" />
 
@@ -367,7 +438,20 @@ export function PcbToolbar({
         </span>
       )}
 
-      {children && <div className="ml-auto flex items-center gap-1">{children}</div>}
+      <span
+        title={readiness.message}
+        className={`ml-1 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+          readiness.state === "ready"
+            ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+            : readiness.state === "needs-review"
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+              : "border-red-500/35 bg-red-500/10 text-red-300"
+        }`}
+      >
+        {readiness.state === "ready" ? "Ready" : readiness.state === "needs-review" ? "Needs review" : "Not ready"}
+        {readiness.unroutedConnections > 0 ? ` · ${readiness.unroutedConnections} unrouted` : ""}
+      </span>
+
     </div>
   );
 }

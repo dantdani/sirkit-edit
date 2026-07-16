@@ -16,7 +16,13 @@
     "compute:alternates": "tsx scripts/compute-alternates.ts",
     "backfill:mpn-generics": "tsx scripts/backfill-mpn-and-generics.ts",
     "test": "vitest run",
-    "test:netlist": "tsx scripts/netlist-validation.test.ts"
+    "test:netlist": "tsx scripts/netlist-validation.test.ts",
+    "spice:ci": "tsx scripts/spice-ci.ts",
+    "fab:compile": "tsx scripts/fab-compile.ts",
+    "pcb:routebench": "tsx scripts/route-bench.ts",
+    "pcb:verify-multilayer": "tsx scripts/verify-multilayer-freerouting.ts",
+    "pcb:verify-two-layer-vias": "tsx scripts/verify-two-layer-via-routing.ts",
+    "setup:freerouting": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-freerouting.ps1"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",

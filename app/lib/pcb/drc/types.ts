@@ -18,6 +18,16 @@ export type DrcCheckKind =
   | "courtyardOverlap"
   | "silkOverPad"
   | "unconnected"
+  | "incompleteNet"
+  | "footprintOutsideBoard"
+  | "padOutsideBoard"
+  | "holeOutsideBoard"
+  | "trackOutsideBoard"
+  | "viaOutsideBoard"
+  | "zoneOutsideBoard"
+  | "referenceTextOutsideBoard"
+  | "disabledLayer"
+  | "unsupportedViaSpan"
   | "short";
 
 export type DrcSeverity = "error" | "warning" | "info";
@@ -57,6 +67,8 @@ export interface DrcViolation {
   kind: DrcCheckKind;
   severity: DrcSeverity;
   items: CopperItemRef[]; // 1 for single-item checks, 2 for pair checks
+  /** Exact non-copper model IDs (footprints, zones, text, etc.). */
+  objectIds?: string[];
   layer?: LayerId; // where the violation is visible
   location: { x: number; y: number }; // zoom-to point (world nm)
   measuredNm: number; // the offending measurement
@@ -74,6 +86,14 @@ export interface DrcResult {
     perCheck: Partial<Record<DrcCheckKind, number>>; // count per kind
   };
   presetId?: DrcPresetId; // which preset was used
+  readiness: {
+    state: "ready" | "needs-review" | "not-ready";
+    errors: number;
+    warnings: number;
+    incompleteNets: number;
+    unroutedConnections: number;
+    message: string;
+  };
 }
 
 /**

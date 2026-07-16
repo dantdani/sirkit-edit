@@ -55,6 +55,16 @@ describe("autoPlace", () => {
     expect(serialize(autoPlace(board, null))).toBe(serialize(autoPlace(board, null)));
   });
 
+  it("reports worker-friendly progress and honors cancellation before mutation", () => {
+    const board = buildFixtureBoard30();
+    const phases: string[] = [];
+    const result = autoPlace(board, null, undefined, { onProgress: (progress) => phases.push(`${progress.phase}:${progress.percent}`) });
+    expect(phases[0]).toBe("analyzing:5");
+    expect(phases.at(-1)).toBe("complete:100");
+    expect(result.placements.size).toBe(30);
+    expect(() => autoPlace(board, null, undefined, { shouldCancel: () => true })).toThrow("Auto-placement was cancelled.");
+  });
+
   it("30-footprint fixture completes in under 500 ms", () => {
     const board = buildFixtureBoard30();
     const result = autoPlace(board, null);
@@ -71,6 +81,19 @@ describe("autoPlace", () => {
     expect(result.placements.has(locked.id)).toBe(false); // omitted from the result
     expect(result.placements.size).toBe(29);
     assertCollisionFreeInsideOutline(board, result); // includes the locked box as an obstacle
+  });
+
+  it("preserves hard mechanical/edge constraints and honors allowed rotations", () => {
+    const board = buildFixtureBoard30();
+    const fixed = board.footprints[5];
+    fixed.placementConstraints = { mechanical: true, edgeConnector: "left" };
+    const rotationLimited = board.footprints[6];
+    rotationLimited.placementConstraints = { allowedRotations: [180] };
+
+    const result = autoPlace(board, null);
+    expect(result.placements.has(fixed.id)).toBe(false);
+    expect(result.placements.get(rotationLimited.id)?.rotationDeg).toBe(180);
+    expect(result.report.lockedFootprintsPreserved).toBe(1);
   });
 
   it("100-footprint synthetic board: still collision-free and inside the outline", () => {

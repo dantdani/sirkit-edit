@@ -71,14 +71,18 @@ export function optimizeRotations(
       if (targets.length > 0) votes.push({ local: pad.at, targets });
     }
 
+    const allowed = inst.placementConstraints?.allowedRotations?.length
+      ? ROTATIONS.filter((rotation) => inst.placementConstraints?.allowedRotations?.includes(rotation))
+      : ROTATIONS;
     if (votes.length === 0) {
-      out.set(inst.id, snapRotation(inst.rotationDeg));
+      const snapped = snapRotation(inst.rotationDeg);
+      out.set(inst.id, allowed.includes(snapped) ? snapped : allowed[0]);
       continue;
     }
 
     let best: AutoPlaceRotation = 0;
     let bestScore = Infinity;
-    for (const r of ROTATIONS) {
+    for (const r of allowed) {
       let score = 0;
       for (const v of votes) {
         const world = transformPoint(v.local, at, r, mirror);

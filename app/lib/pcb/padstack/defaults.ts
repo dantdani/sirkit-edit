@@ -10,7 +10,7 @@
 
 import type { PcbBoard, Via } from "../types";
 import type { NetClassId } from "../netclass";
-import { getNetClass } from "../netclass";
+import { DEFAULT_CLASSES, getNetClass } from "../netclass";
 import type { Padstack } from "./types";
 import { getPadstack } from "./registry";
 
@@ -65,7 +65,12 @@ export function seedDefaultPadstacks(board: PcbBoard): boolean {
 
 /** The active net class's default padstack — the route tool's via source. */
 export function classDefaultPadstack(board: PcbBoard, netId: number): Padstack | undefined {
-  return getPadstack(board, CLASS_PADSTACK_ID[getNetClass(board, netId).id]);
+  const effective = getNetClass(board, netId);
+  const base = DEFAULT_CLASSES[effective.id];
+  // Respect AI/manual via overrides instead of replacing them with the class
+  // padstack. The route tool then uses the effective dimensions directly.
+  if (effective.viaSize !== base.viaSize || effective.viaDrill !== base.viaDrill) return undefined;
+  return getPadstack(board, CLASS_PADSTACK_ID[effective.id]);
 }
 
 /** Apply a padstack to a freshly built via (dims denormalized — see registry). */

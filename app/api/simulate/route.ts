@@ -6,6 +6,8 @@ import { randomUUID } from "crypto";
 import type { SchematicState } from "@/lib/schematic-types";
 import { schematicToSpice, type SpiceAnalysis } from "@/app/lib/netlist";
 
+const NGSPICE_EXECUTABLE = process.env.NGSPICE_BIN?.trim() || (process.platform === "win32" ? "ngspice_con" : "ngspice");
+
 // ─── ASCII raw-file parser ────────────────────────────────────────────────────
 
 interface SimResult {
@@ -154,7 +156,7 @@ export async function POST(req: Request): Promise<Response> {
   let nodeMap: Record<string, string>;
   let pinNodes: Record<string, string>;
   try {
-    ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: rawPath }));
+    ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: `${uuid}.raw` }));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: `Netlist generation failed: ${msg}` }, { status: 400 });
@@ -174,9 +176,9 @@ export async function POST(req: Request): Promise<Response> {
       let timedOut = false;
 
       const child = spawn(
-        "ngspice",
+        NGSPICE_EXECUTABLE,
         ["-b", netlistPath],
-        { stdio: "pipe" },
+        { stdio: "pipe", cwd: tmpdir(), windowsHide: true },
       );
 
       child.on("error", (err: NodeJS.ErrnoException) => {

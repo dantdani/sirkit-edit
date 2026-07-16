@@ -1,6 +1,7 @@
 import type { SchematicState } from "./schematic-types";
 import { isPageSize, DEFAULT_PAGE_SIZE } from "./schematic-types";
 import type { PcbBoard } from "@/app/lib/pcb";
+import type { AiProjectSettings } from "@/app/lib/llm/types";
 
 export type SavedProject = {
   id: string;
@@ -12,6 +13,9 @@ export type SavedProject = {
   // numbers/strings/arrays; a 200-part board with embedded footprint defs is
   // ~600 KB, fine for localStorage.
   pcb?: PcbBoard;
+  // AI provider selection/history is project metadata only. It never mutates
+  // `state` or `pcb`, and embeddings remain fixed to OpenAI.
+  ai?: AiProjectSettings;
 };
 
 const STORAGE_PREFIX    = "sirkit:project:";
@@ -107,7 +111,8 @@ export function createProject(name: string, state: SchematicState): SavedProject
 export function duplicateProject(id: string, newName: string): SavedProject | null {
   const original = loadProject(id);
   if (!original) return null;
-  return createProject(newName, original.state);
+  const duplicate = createProject(newName, original.state);
+  return original.ai ? saveProject({ ...duplicate, ai: original.ai }) : duplicate;
 }
 
 export function renameProject(id: string, newName: string): SavedProject | null {
@@ -245,11 +250,26 @@ export function importProjectJSON(json: string): SavedProject | { error: string 
   state["pageSize"] = isPageSize(ps) ? ps : DEFAULT_PAGE_SIZE;
 
   const now = Date.now();
+  const rawAi = p["ai"];
+  let ai: AiProjectSettings | undefined;
+  if (typeof rawAi === "object" && rawAi !== null) {
+    const candidate = rawAi as Record<string, unknown>;
+    if (candidate.brain === "openai" || candidate.brain === "anthropic") {
+      ai = {
+        brain: candidate.brain,
+        embeddings: "openai",
+        providerHistory: Array.isArray(candidate.providerHistory)
+          ? (candidate.providerHistory as AiProjectSettings["providerHistory"])
+          : [],
+      };
+    }
+  }
   return saveProject({
     id: crypto.randomUUID(),
     name: p["name"] as string,
     state: state as unknown as SchematicState,
     createdAt: typeof p["createdAt"] === "number" ? p["createdAt"] : now,
     updatedAt: now,
+    ...(ai ? { ai } : {}),
   });
 }

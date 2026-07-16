@@ -6,33 +6,48 @@
  * last synced one.
  */
 
-import { Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
 
 export function SyncButton({
   dirty,
   syncing,
   onSync,
+  onOptions,
 }: {
   dirty: boolean;
   syncing: boolean;
   onSync: () => void;
+  onOptions: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSync}
-      disabled={syncing}
-      title={dirty ? "Schematic changed since last sync" : "Sync board from schematic"}
-      className="relative flex items-center gap-1.5 px-2 py-1 rounded text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 transition-colors disabled:opacity-50"
-    >
-      {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-      Sync
-      {dirty && !syncing && (
-        <span
-          className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-amber-400"
-          aria-label="Schematic changed since last sync"
-        />
-      )}
-    </button>
+    <div className="flex shrink-0 overflow-hidden rounded-md border border-teal-500/45 bg-teal-500/15 text-teal-200 shadow-sm">
+      <button
+        type="button"
+        onClick={onSync}
+        disabled={syncing}
+        title={dirty ? "Schematic changed — update the PCB now" : "Place the schematic on the PCB"}
+        aria-label="Schematic to PCB"
+        className="relative flex items-center gap-1.5 px-2.5 py-1 font-medium hover:bg-teal-500/20 disabled:opacity-50"
+      >
+        {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+        Schematic → PCB
+        {dirty && !syncing && (
+          <span
+            className="absolute right-1 top-0.5 size-1.5 rounded-full bg-amber-400"
+            aria-label="Schematic changed since last sync"
+          />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={onOptions}
+        disabled={syncing}
+        title="Schematic to PCB placement options"
+        aria-label="Schematic to PCB placement options"
+        className="border-l border-teal-500/35 px-1.5 hover:bg-teal-500/20 disabled:opacity-50"
+      >
+        <ChevronDown className="size-3.5" />
+      </button>
+    </div>
   );
 }

@@ -16,7 +16,7 @@
  * sync). Every tier is verified by pad-count == pin-count.
  */
 
-import type { SchematicState, SchComponent } from "@/lib/schematic-types";
+import type { SchematicState } from "@/lib/schematic-types";
 import { netLabelNameKey } from "@/lib/schematic-types";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { buildNetUnionFind } from "@/app/lib/connectivity";
@@ -28,6 +28,15 @@ import { heuristicFootprint, guessPackageToken } from "./package-map";
 import type { FootprintDef, FootprintInstance, PcbBoard } from "./types";
 import { createEmptyBoard } from "./types";
 import { mmToNm } from "./units";
+import {
+  bboxesOverlap,
+  courtyardFitsOutline,
+  localCourtyardBBox,
+  outlineBBox as fullOutlineBBox,
+  worldCourtyardBBox,
+} from "./autoplace/geometry";
+import type { BBox, Vec2 } from "./geometry";
+import { reclassifyBoard } from "./netclass-rules";
 
 // ─── Pinned netlist types ────────────────────────────────────────────────────
 
@@ -59,6 +68,13 @@ export interface SyncReport {
   footprintChanged: string[]; // kept position, def replaced
   unresolved: { componentId: string; ref: string; reason: string }[];
   resolvedBy: Record<"hint" | "heuristic" | "manual", number>;
+  placement: {
+    mode: "centered" | "preserved-staging";
+    spreadOverlaps: boolean;
+    allInsideBoard: boolean;
+    overlapCount: number;
+    warning?: string;
+  };
 }
 
 // ─── Part lookup (client injects the parts cache; tests inject fixtures) ────
@@ -354,6 +370,126 @@ function layoutStagingStrip(
   return out;
 }
 
+const IMPORT_SPREAD_STEP = mmToNm(1);
+const IMPORT_SPREAD_RINGS = 60;
+
+function unionBoxes(boxes: readonly BBox[]): BBox {
+  return boxes.reduce(
+    (out, box) => ({
+      minX: Math.min(out.minX, box.minX),
+      minY: Math.min(out.minY, box.minY),
+      maxX: Math.max(out.maxX, box.maxX),
+      maxY: Math.max(out.maxY, box.maxY),
+    }),
+    { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
+  );
+}
+
+function courtyardAt(def: FootprintDef, at: Vec2): BBox {
+  return worldCourtyardBBox(localCourtyardBBox(def), at, 0, false);
+}
+
+function ringOffsets(ring: number): Vec2[] {
+  if (ring === 0) return [{ x: 0, y: 0 }];
+  const out: Vec2[] = [];
+  for (let x = -ring; x <= ring; x++) out.push({ x, y: -ring });
+  for (let y = -ring + 1; y <= ring; y++) out.push({ x: ring, y });
+  for (let x = ring - 1; x >= -ring; x--) out.push({ x, y: ring });
+  for (let y = ring - 1; y > -ring; y--) out.push({ x: -ring, y });
+  return out;
+}
+
+function centeredImportPositions(
+  board: PcbBoard,
+  defs: readonly FootprintDef[],
+  kept: readonly FootprintInstance[],
+  spreadOverlaps: boolean,
+): { positions: Vec2[]; placement: SyncReport["placement"] } {
+  if (defs.length === 0) {
+    return {
+      positions: [],
+      placement: {
+        mode: "centered",
+        spreadOverlaps,
+        allInsideBoard: true,
+        overlapCount: 0,
+      },
+    };
+  }
+
+  // Start from the established readable shelf layout, then translate the
+  // entire cluster as one rigid group onto the board center.
+  const staged = layoutStagingStrip({ ...board, footprints: [] }, [...defs]);
+  const stagedBoxes = defs.map((def, index) => courtyardAt(def, staged[index]));
+  const cluster = unionBoxes(stagedBoxes);
+  const boardBox = fullOutlineBBox(board.outline);
+  const translation = {
+    x: Math.round((boardBox.minX + boardBox.maxX - cluster.minX - cluster.maxX) / 2),
+    y: Math.round((boardBox.minY + boardBox.maxY - cluster.minY - cluster.maxY) / 2),
+  };
+  const centered = staged.map((at) => ({ x: at.x + translation.x, y: at.y + translation.y }));
+
+  const occupied = kept.map((instance) =>
+    worldCourtyardBBox(
+      localCourtyardBBox(instance.def),
+      instance.at,
+      instance.rotationDeg,
+      instance.side === "bottom",
+    ),
+  );
+  const positions: Vec2[] = [];
+  const newBoxes: BBox[] = [];
+  for (let index = 0; index < defs.length; index++) {
+    const desired = centered[index];
+    let selected = desired;
+    let selectedBox = courtyardAt(defs[index], selected);
+    const blocked = (): boolean =>
+      [...occupied, ...newBoxes].some((box) => bboxesOverlap(selectedBox, box));
+    if (spreadOverlaps && (blocked() || !courtyardFitsOutline(selectedBox, board.outline))) {
+      let found = false;
+      for (let ring = 1; ring <= IMPORT_SPREAD_RINGS && !found; ring++) {
+        for (const offset of ringOffsets(ring)) {
+          const candidate = {
+            x: desired.x + offset.x * IMPORT_SPREAD_STEP,
+            y: desired.y + offset.y * IMPORT_SPREAD_STEP,
+          };
+          const candidateBox = courtyardAt(defs[index], candidate);
+          if (!courtyardFitsOutline(candidateBox, board.outline)) continue;
+          if ([...occupied, ...newBoxes].some((box) => bboxesOverlap(candidateBox, box))) continue;
+          selected = candidate;
+          selectedBox = candidateBox;
+          found = true;
+          break;
+        }
+      }
+    }
+    positions.push(selected);
+    newBoxes.push(selectedBox);
+  }
+
+  let overlapCount = 0;
+  for (let index = 0; index < newBoxes.length; index++) {
+    overlapCount += occupied.filter((box) => bboxesOverlap(newBoxes[index], box)).length;
+    for (let other = index + 1; other < newBoxes.length; other++) {
+      if (bboxesOverlap(newBoxes[index], newBoxes[other])) overlapCount++;
+    }
+  }
+  const allInsideBoard = newBoxes.every((box) => courtyardFitsOutline(box, board.outline));
+  const warning = !allInsideBoard || overlapCount > 0
+    ? "Some parts do not fit inside the current board outline. Resize the board or allow Sirkit to arrange parts."
+    : undefined;
+  return {
+    positions,
+    placement: {
+      mode: "centered",
+      spreadOverlaps,
+      allInsideBoard,
+      overlapCount,
+      ...(warning ? { warning } : {}),
+    },
+  };
+}
+
 /**
  * Append a single new instance (assignment-queue pick), placing it in the
  * staging strip. Returns a new board; the input is not mutated.
@@ -363,7 +499,8 @@ export function placeNewFootprint(
   inst: Omit<FootprintInstance, "at">,
 ): PcbBoard {
   const def = inst.def;
-  const [at] = layoutStagingStrip(board, [def]);
+  const { positions } = centeredImportPositions(board, [def], board.footprints, true);
+  const at = positions[0];
   const footprints = [...board.footprints, { ...inst, at }].sort((a, b) =>
     a.id.localeCompare(b.id),
   );
@@ -377,6 +514,14 @@ export interface SyncOptions {
   getPart?: PartLookup;
   /** Footprint API boundary; defaults to fetch()ing the Stage 2 routes. */
   resolver?: FootprintResolver;
+  placement?: {
+    /** Default true: translate the new-part cluster to the board center. */
+    centerNewParts?: boolean;
+    /** Default true: nudge new parts away from existing/new footprint courtyards. */
+    spreadOverlaps?: boolean;
+    /** Explicit legacy behavior: leave new parts in the staging strip. */
+    preserveAbsoluteCoordinates?: boolean;
+  };
 }
 
 type Resolution =
@@ -458,6 +603,12 @@ export async function syncFromSchematic(
     footprintChanged: [],
     unresolved: [],
     resolvedBy: { hint: 0, heuristic: 0, manual: 0 },
+    placement: {
+      mode: "centered",
+      spreadOverlaps: opts.placement?.spreadOverlaps !== false,
+      allInsideBoard: true,
+      overlapCount: 0,
+    },
   };
 
   const base = existing ?? createEmptyBoard();
@@ -499,6 +650,7 @@ export async function syncFromSchematic(
         }
       }
       keptInstances.push({
+        ...prev,
         id: c.id,
         ref: c.ref,
         footprintId,
@@ -525,10 +677,35 @@ export async function syncFromSchematic(
     if (!netlist.components.some((c) => c.id === f.id)) report.removed.push(f.id);
   }
 
-  // New parts land in the staging strip, sorted by ref for readable rows.
+  // New parts default to a centered, spread cluster. The legacy staging strip
+  // remains available only through an explicit preserve-coordinates option.
   newcomers.sort((a, b) => compareRefs(a.c.ref, b.c.ref));
   const interim: PcbBoard = { ...base, footprints: keptInstances };
-  const positions = layoutStagingStrip(interim, newcomers.map((n) => n.def));
+  const preserveCoordinates = opts.placement?.preserveAbsoluteCoordinates === true
+    || opts.placement?.centerNewParts === false;
+  const spreadOverlaps = opts.placement?.spreadOverlaps !== false;
+  let positions: Vec2[];
+  if (preserveCoordinates) {
+    positions = layoutStagingStrip(interim, newcomers.map((n) => n.def));
+    report.placement = {
+      mode: "preserved-staging",
+      spreadOverlaps: false,
+      allInsideBoard: newcomers.length === 0,
+      overlapCount: 0,
+      ...(newcomers.length
+        ? { warning: "Imported coordinates were preserved, so new parts remain outside the board staging area." }
+        : {}),
+    };
+  } else {
+    const centered = centeredImportPositions(
+      interim,
+      newcomers.map((newcomer) => newcomer.def),
+      keptInstances,
+      spreadOverlaps,
+    );
+    positions = centered.positions;
+    report.placement = centered.placement;
+  }
   const newInstances = newcomers.map(({ c, fullName, def }, i): FootprintInstance => ({
     id: c.id,
     ref: c.ref,
@@ -546,6 +723,7 @@ export async function syncFromSchematic(
   const remapNet = (netId: number): number => (validNetIds.has(netId) ? netId : 0);
 
   const board: PcbBoard = {
+    ...base,
     formatVersion: 1,
     stackup: base.stackup,
     outline: base.outline,
@@ -560,6 +738,9 @@ export async function syncFromSchematic(
     zones: base.zones.map((z) => ({ ...z, netId: remapNet(z.netId) })),
     texts: base.texts,
   };
+  // Net names and topology may have changed; retain manual/AI deltas while
+  // rebuilding their deterministic assignment base for the synced netlist.
+  if (board.netClassing) reclassifyBoard(board);
 
   return { board, report, netlist };
 }

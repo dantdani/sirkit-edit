@@ -1,37 +1,38 @@
-/**
- * Specctra SES reader (PCB Stage 9) — parses Freerouting's routed session back
- * into fresh Track[] + Via[] in our board's coordinate space (integer nm, +y
- * down; DSN/SES were emitted in the same axis so no flip is needed).
- *
- * Robust by construction: it reuses the lossless S-expression parser (sexpr.ts)
- * and only reads the nodes it recognizes (`routes` → `network_out` → `net` →
- * `wire`/`via`). Any other top-level or sibling block Freerouting emits
- * (`parser`, `resolution`, `library`, `base_design`, …) is simply ignored.
- */
-
 import type { Track, Via, PcbBoard } from "../types";
 import type { LayerId } from "../layers";
-import { layerFromKicadName } from "../layers";
+import { getBoardStackup, layerIdFromSesName } from "../stackup";
 import { parseSexpr, child, children, type SList } from "../sexpr";
-import { dsnNetName, VIA_DIMENSIONS } from "./write-dsn";
+import { dsnNetName, viaDimensionsForName } from "./write-dsn";
 
-export interface SesResult {
-  tracks: Track[]; // fresh ids
-  vias: Via[]; // fresh ids
-  wasSuccessful: boolean; // a routes/network_out block was present and parsed
-  passesRun: number; // Freerouting pass count if parseable, else -1
+export interface SesLayerUsage {
+  segments: number;
+  trackLengthNm: number;
 }
 
-// ── Fresh id generation (route-tool.ts's freshId is private; mirror the pattern
-//    with an autoroute-specific prefix so ids stay distinguishable) ────────────
+export interface SesResult {
+  tracks: Track[];
+  vias: Via[];
+  wasSuccessful: boolean;
+  passesRun: number;
+  layerUsage: Partial<Record<LayerId, SesLayerUsage>>;
+  unknownLayers: string[];
+  errors: string[];
+}
+
+/** A syntactically valid SES that is unsafe to apply to this board. */
+export class SesImportError extends Error {
+  constructor(public readonly result: SesResult) {
+    super(result.errors.join(" "));
+    this.name = "SesImportError";
+  }
+}
+
 let idSeq = 0;
 const idSalt = Math.random().toString(36).slice(2, 8);
 function freshId(prefix: string): string {
   idSeq += 1;
   return `${prefix}-${idSalt}-${idSeq}`;
 }
-
-const VIA_LAYERS: [LayerId, LayerId] = ["copperTop", "copperBottom"];
 
 function atomText(list: SList, index: number): string | null {
   const item = list.items[index];
@@ -46,64 +47,117 @@ function atomNumber(list: SList, index: number): number | null {
   return item && item.kind === "number" ? item.value : null;
 }
 
-/** All number atoms from `startIndex` onward (path vertices live inline). */
 function trailingNumbers(list: SList, startIndex: number): number[] {
   const out: number[] = [];
   for (let i = startIndex; i < list.items.length; i++) {
-    const it = list.items[i];
-    if (it.kind === "number") out.push(it.value);
+    const item = list.items[i];
+    if (item.kind === "number") out.push(item.value);
   }
   return out;
+}
+
+function sesNanometersPerCoordinate(routes: SList): number {
+  const resolution = child(routes, "resolution");
+  if (!resolution) return 1;
+  const unit = atomText(resolution, 1)?.toLowerCase();
+  const unitsPerCoordinate = atomNumber(resolution, 2) ?? 1;
+  if (!(unitsPerCoordinate > 0)) return 1;
+  const nanometersPerUnit: Record<string, number> = {
+    nm: 1,
+    um: 1_000,
+    mm: 1_000_000,
+    mil: 25_400,
+    inch: 25_400_000,
+  };
+  const perUnit = unit ? nanometersPerUnit[unit] : undefined;
+  return perUnit === undefined ? 1 : perUnit / unitsPerCoordinate;
+}
+
+function unsuccessful(message: string): SesResult {
+  return {
+    tracks: [],
+    vias: [],
+    wasSuccessful: false,
+    passesRun: -1,
+    layerUsage: {},
+    unknownLayers: [],
+    errors: [message],
+  };
 }
 
 export function parseSes(sesText: string, board: PcbBoard): SesResult {
   const tracks: Track[] = [];
   const vias: Via[] = [];
+  const layerUsage: SesResult["layerUsage"] = {};
+  const unknownLayers = new Set<string>();
+  const errors: string[] = [];
 
-  // net name -> id (net 0 is the reserved unconnected net; never routed)
   const netIdByName = new Map<string, number>();
   for (const net of board.nets) {
-    if (net.id === 0) continue;
-    netIdByName.set(dsnNetName(net), net.id);
+    if (net.id !== 0) netIdByName.set(dsnNetName(net), net.id);
   }
 
   let root: SList;
   try {
     root = parseSexpr(sesText);
   } catch {
-    return { tracks, vias, wasSuccessful: false, passesRun: -1 };
+    return unsuccessful("SES is not valid S-expression syntax.");
   }
-
   const routes = child(root, "routes");
-  if (!routes) return { tracks, vias, wasSuccessful: false, passesRun: -1 };
+  if (!routes) return unsuccessful("SES contains no routes block.");
+  const coordinateScale = sesNanometersPerCoordinate(routes);
+  const enabledCopper = getBoardStackup(board).copperLayers
+    .filter((layer) => layer.enabled)
+    .sort((a, b) => a.order - b.order);
+  if (enabledCopper.length < 2) return unsuccessful("The board stackup has fewer than two enabled copper layers.");
+  const viaLayers: [LayerId, LayerId] = [enabledCopper[0].id, enabledCopper[enabledCopper.length - 1].id];
 
   for (const networkOut of children(routes, "network_out")) {
     for (const netList of children(networkOut, "net")) {
       const netName = atomText(netList, 1);
       const netId = netName != null ? netIdByName.get(netName) ?? 0 : 0;
-      // Net 0 is the reserved unconnected net; a name we can't resolve maps to 0.
-      // Freerouting never routes net 0, so drop these rather than plant floating
-      // copper on it (which would also leak into AutorouteImport.replacedNetIds).
-      if (netId === 0) continue;
+      if (netId === 0) {
+        errors.push(`SES references unknown or unconnected net ${netName ?? "<missing>"}.`);
+        continue;
+      }
 
       for (const wire of children(netList, "wire")) {
         const path = child(wire, "path");
         if (!path) continue;
         const layerName = atomText(path, 1);
-        const layer = layerName ? layerFromKicadName(layerName) : undefined;
-        if (!layer) continue; // unknown / non-copper layer — skip
+        const layer = layerName ? layerIdFromSesName(board, layerName) : undefined;
+        if (!layer) {
+          unknownLayers.add(layerName ?? "<missing>");
+          continue;
+        }
         const width = atomNumber(path, 2);
-        if (width == null) continue;
-        const coords = trailingNumbers(path, 3); // x1 y1 x2 y2 ... (polyline)
+        if (width == null || !(width > 0)) {
+          errors.push(`SES wire on ${layerName} has an invalid width.`);
+          continue;
+        }
+        const coords = trailingNumbers(path, 3);
         for (let i = 0; i + 3 < coords.length; i += 2) {
+          const start = {
+            x: Math.round(coords[i] * coordinateScale),
+            y: Math.round(coords[i + 1] * coordinateScale),
+          };
+          const end = {
+            x: Math.round(coords[i + 2] * coordinateScale),
+            y: Math.round(coords[i + 3] * coordinateScale),
+          };
           tracks.push({
             id: freshId("ar-t"),
             layer,
-            width,
-            start: { x: coords[i], y: coords[i + 1] },
-            end: { x: coords[i + 2], y: coords[i + 3] },
+            width: Math.round(width * coordinateScale),
+            start,
+            end,
             netId,
+            source: "autorouter",
           });
+          const usage = layerUsage[layer] ?? { segments: 0, trackLengthNm: 0 };
+          usage.segments += 1;
+          usage.trackLengthNm += Math.hypot(end.x - start.x, end.y - start.y);
+          layerUsage[layer] = usage;
         }
       }
 
@@ -111,19 +165,40 @@ export function parseSes(sesText: string, board: PcbBoard): SesResult {
         const padstackName = atomText(viaNode, 1);
         const x = atomNumber(viaNode, 2);
         const y = atomNumber(viaNode, 3);
-        if (x == null || y == null) continue;
-        const dims = (padstackName && VIA_DIMENSIONS[padstackName]) || VIA_DIMENSIONS.via_default;
+        if (x == null || y == null) {
+          errors.push(`SES via ${padstackName ?? "<missing>"} has invalid coordinates.`);
+          continue;
+        }
+        const dims = padstackName ? viaDimensionsForName(padstackName) : undefined;
+        if (!dims) {
+          errors.push(`SES references unknown via padstack ${padstackName ?? "<missing>"}.`);
+          continue;
+        }
         vias.push({
           id: freshId("ar-v"),
-          at: { x, y },
+          at: { x: Math.round(x * coordinateScale), y: Math.round(y * coordinateScale) },
           size: dims.sizeNm,
           drill: dims.drillNm,
           netId,
-          layers: [VIA_LAYERS[0], VIA_LAYERS[1]],
+          layers: viaLayers,
+          source: "autorouter",
         });
       }
     }
   }
 
-  return { tracks, vias, wasSuccessful: true, passesRun: -1 };
+  if (unknownLayers.size > 0) {
+    errors.push(`SES references unknown or disabled copper layer(s): ${[...unknownLayers].join(", ")}.`);
+  }
+  const result: SesResult = {
+    tracks,
+    vias,
+    wasSuccessful: errors.length === 0,
+    passesRun: -1,
+    layerUsage,
+    unknownLayers: [...unknownLayers],
+    errors,
+  };
+  if (errors.length > 0) throw new SesImportError(result);
+  return result;
 }

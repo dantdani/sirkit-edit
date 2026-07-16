@@ -10,14 +10,16 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FileCheck2, Loader2, ShieldCheck } from "lucide-react";
 import type { DrcViolation } from "@/app/lib/pcb/drc/types";
 import type { FabPresetId } from "@/app/lib/pcb/fab/types";
 import { FAB_PRESETS, DEFAULT_FAB_PRESET_ID, getFabPreset } from "@/app/lib/pcb/fab/presets";
-import type { FabExportHandle } from "./hooks/useFabExport";
+import type { FabEngine, FabExportHandle } from "./hooks/useFabExport";
 
 const BUSY_LABEL: Record<string, string> = {
   checkingDrc: "Checking DRC…",
+  preflighting: "Parsing native CAM…",
+  compilingNative: "Compiling native package…",
   runningKicadCli: "Running kicad-cli…",
   zipping: "Zipping…",
 };
@@ -40,6 +42,7 @@ export function FabDialog({
   onZoomToViolation?: (v: DrcViolation) => void;
 }) {
   const [presetId, setPresetId] = useState<FabPresetId>(DEFAULT_FAB_PRESET_ID);
+  const [engine, setEngine] = useState<FabEngine>("kicad");
   const [override, setOverride] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -51,9 +54,12 @@ export function FabDialog({
 
   // Re-check DRC whenever the dialog opens or the preset changes.
   useEffect(() => {
-    if (open) fab.checkDrc(presetId);
+    if (open) {
+      fab.checkDrc(presetId);
+      if (engine === "native-beta") void fab.preflight(presetId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- checkDrc is stable; drc depends on (open, preset)
-  }, [open, presetId]);
+  }, [open, presetId, engine]);
 
   // Reset the override on each open (render-time adjustment, AddPlaneDialog idiom).
   const [wasOpen, setWasOpen] = useState(false);
@@ -68,8 +74,16 @@ export function FabDialog({
   const drc = fab.drcResult;
   const errors = drc?.violations.filter((v) => v.severity === "error") ?? [];
   const warnings = drc ? drc.violations.length - errors.length : 0;
-  const busy = fab.state === "checkingDrc" || fab.state === "runningKicadCli" || fab.state === "zipping";
-  const gated = errors.length > 0 && !override;
+  const busy =
+    fab.state === "checkingDrc" ||
+    fab.state === "preflighting" ||
+    fab.state === "compilingNative" ||
+    fab.state === "runningKicadCli" ||
+    fab.state === "zipping";
+  const nativeReady = engine === "native-beta" && fab.state === "ready" && Boolean(fab.nativePreflight);
+  const gated =
+    (errors.length > 0 && (engine === "native-beta" || !override)) ||
+    (engine === "native-beta" && !nativeReady);
 
   const fileExamples = preset.layerBundle
     .filter((e) => e.enabled)
@@ -84,7 +98,7 @@ export function FabDialog({
         tabIndex={-1}
         role="dialog"
         aria-label="Send to fab"
-        className="w-[26rem] max-h-[80vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-xl flex flex-col gap-3 outline-none"
+        className="w-[46rem] max-w-[92vw] max-h-[84vh] overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-xs shadow-xl flex flex-col gap-3 outline-none"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape" && !busy) {
@@ -94,6 +108,35 @@ export function FabDialog({
         }}
       >
         <p className="text-sm font-medium text-zinc-100">Send to fab</p>
+
+        <div className="grid grid-cols-2 gap-2" aria-label="Manufacturing engine">
+          <button
+            type="button"
+            onClick={() => setEngine("native-beta")}
+            disabled={busy}
+            className={`rounded border p-2.5 text-left transition-colors ${
+              engine === "native-beta"
+                ? "border-teal-500 bg-teal-950/35 text-zinc-100"
+                : "border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:border-zinc-600"
+            }`}
+          >
+            <span className="flex items-center gap-1.5 font-medium"><ShieldCheck className="size-3.5" /> Sirkit native beta</span>
+            <span className="mt-1 block text-[11px] text-zinc-500">Deterministic X2/X3 + XNC, independent parse-back, fail-closed.</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setEngine("kicad")}
+            disabled={busy}
+            className={`rounded border p-2.5 text-left transition-colors ${
+              engine === "kicad"
+                ? "border-teal-500 bg-teal-950/35 text-zinc-100"
+                : "border-zinc-700 bg-zinc-950/40 text-zinc-400 hover:border-zinc-600"
+            }`}
+          >
+            <span className="flex items-center gap-1.5 font-medium"><FileCheck2 className="size-3.5" /> KiCad-assisted fallback</span>
+            <span className="mt-1 block text-[11px] text-zinc-500">Existing production route and migration oracle.</span>
+          </button>
+        </div>
 
         {/* Preset picker */}
         <label className="flex flex-col gap-1 text-zinc-400">
@@ -148,22 +191,27 @@ export function FabDialog({
             </span>
           ))}
 
-        {/* Opt-in override — the ONLY way past the gate */}
-        <label
-          className={`flex items-center gap-2 ${errors.length === 0 ? "text-zinc-600" : "text-zinc-300"}`}
-        >
-          <input
-            type="checkbox"
-            checked={override}
-            disabled={errors.length === 0 || busy}
-            onChange={(e) => setOverride(e.target.checked)}
-            className="accent-teal-600"
-          />
-          Export anyway (I&apos;ll review manually)
-        </label>
-        {override && errors.length > 0 && (
-          <p className="rounded border border-red-900/60 bg-red-950/40 p-2 text-red-300">
-            Fab may reject boards with DRC violations. Review manually before ordering.
+        {engine === "kicad" ? (
+          <>
+            <label className={`flex items-center gap-2 ${errors.length === 0 ? "text-zinc-600" : "text-zinc-300"}`}>
+              <input
+                type="checkbox"
+                checked={override}
+                disabled={errors.length === 0 || busy}
+                onChange={(e) => setOverride(e.target.checked)}
+                className="accent-teal-600"
+              />
+              Export anyway (I&apos;ll review manually)
+            </label>
+            {override && errors.length > 0 && (
+              <p className="rounded border border-red-900/60 bg-red-950/40 p-2 text-red-300">
+                Fab may reject boards with DRC violations. Review manually before ordering.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="rounded border border-amber-800/50 bg-amber-950/25 p-2 text-amber-200/80">
+            Native export has no generic override. Stale zones, DRC errors, invalid syntax, or MIR/parse-back differences block the ZIP.
           </p>
         )}
 
@@ -174,6 +222,29 @@ export function FabDialog({
           </p>
           <p>{preset.notes}</p>
         </div>
+
+        {engine === "native-beta" && fab.nativePreflight && (
+          <div className="rounded border border-emerald-900/60 bg-emerald-950/25 p-2.5 flex flex-col gap-2">
+            <span className="flex items-center gap-1.5 text-emerald-400 font-medium">
+              <ShieldCheck className="size-3.5" /> Native parse-back passed
+            </span>
+            <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-400">
+              {fab.nativePreflight.stages.map((item) => (
+                <span key={item.stage} className="flex items-center gap-1">
+                  <CheckCircle2 className="size-3 text-emerald-500" /> {item.stage}
+                </span>
+              ))}
+            </div>
+            <div className="max-h-28 overflow-y-auto rounded bg-zinc-950/60 p-1.5 font-mono text-[10px] text-zinc-400">
+              {fab.nativePreflight.files.map((item) => (
+                <div key={item.path} className="flex justify-between gap-3">
+                  <span className="truncate">{item.path}</span><span className="shrink-0">{kb(item.bytes)}</span>
+                </div>
+              ))}
+            </div>
+            <span className="font-mono text-[10px] text-zinc-500">package {fab.nativePreflight.packageId.slice(0, 20)}…</span>
+          </div>
+        )}
 
         {/* Status line */}
         {fab.state === "done" && fab.lastStats && (
@@ -198,7 +269,7 @@ export function FabDialog({
           <button
             type="button"
             disabled={busy || gated}
-            onClick={() => void fab.start(presetId, override)}
+            onClick={() => void fab.start(engine, presetId, override)}
             className={`px-2.5 py-1.5 rounded transition-colors flex items-center gap-1.5 ${
               gated
                 ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
@@ -209,8 +280,12 @@ export function FabDialog({
             {busy
               ? BUSY_LABEL[fab.state]
               : gated
-                ? `Fix DRC (${errors.length} error${errors.length === 1 ? "" : "s"})`
-                : "Generate fab files"}
+                ? errors.length > 0
+                  ? `Fix DRC (${errors.length} error${errors.length === 1 ? "" : "s"})`
+                  : "Native preflight required"
+                : engine === "native-beta"
+                  ? "Generate verified native package"
+                  : "Generate KiCad-assisted files"}
           </button>
         </div>
       </div>

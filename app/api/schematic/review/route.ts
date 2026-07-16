@@ -3,7 +3,7 @@
  *
  * Layer-2 design review (advisory, non-blocking). The client sends the
  * deterministic netlist summary (components + nets + floating pins) computed by
- * lib/netlist-review.ts; Claude reviews electrical sensibility and returns
+ * lib/netlist-review.ts; the selected brain reviews electrical sensibility and returns
  * findings via a forced report_findings tool call. We then CROSS-CHECK any
  * finding that asserts a pin is unconnected against the ground-truth floating
  * list and drop fully-contradicted findings (the verification step that keeps
@@ -14,13 +14,12 @@
  *      or:  { ok: false; error: string }
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
 import { REVIEW_SYSTEM_PROMPT, REVIEW_TOOL } from "@/app/lib/prompts";
 
 export const runtime = "nodejs";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
 
 type Finding = {
   severity: "error" | "warning" | "info";
@@ -32,7 +31,7 @@ type Finding = {
 };
 
 export async function POST(req: Request): Promise<Response> {
-  let body: { components?: unknown; nets?: unknown; floatingPins?: unknown };
+  let body: { components?: unknown; nets?: unknown; floatingPins?: unknown; provider?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -40,30 +39,29 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const components = Array.isArray(body.components) ? body.components : [];
+  const provider = requestedProvider(body.provider);
   const nets = Array.isArray(body.nets) ? body.nets : [];
   const floatingPins = Array.isArray(body.floatingPins) ? (body.floatingPins as string[]) : [];
   if (components.length === 0) {
     return Response.json({ ok: false, error: "no components to review" }, { status: 400 });
   }
 
-  let response: Anthropic.Message;
+  let response;
   try {
-    response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 2048,
+    response = await llmRouter.generate({
+      provider,
+      maxTokens: 2048,
       system: REVIEW_SYSTEM_PROMPT,
       tools: [REVIEW_TOOL],
-      tool_choice: { type: "tool", name: "report_findings" },
+      toolChoice: { name: "report_findings" },
+      schematicState: { components, nets, floatingPins },
       messages: [{ role: "user", content: JSON.stringify({ components, nets, floatingPins }) }],
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: msg }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 
-  const toolUse = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "report_findings",
-  );
+  const toolUse = response.toolCalls.find((call) => call.name === "report_findings");
   if (!toolUse) {
     return Response.json({ ok: false, error: "no review returned" }, { status: 500 });
   }

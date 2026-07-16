@@ -5,7 +5,7 @@
  *
  * The client renders the current schematic to a PNG and posts it together with
  * the live `SchematicState`. We send the image PLUS a ground-truth manifest
- * (every component's refDes / role / bounding box) to Claude vision, which flags
+ * (every component's refDes / role / bounding box) to the selected vision model, which flags
  * GROUPS of refDes whose PLACEMENT reads as too crowded — it never proposes
  * coordinates. We then VERIFY the flagged refDes against the manifest, turn each
  * into extra courtyard clearance, invert the state to its netlist, and re-run the
@@ -23,8 +23,10 @@
  *      or:  { ok: false; error: string }
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { LAYOUT_CRITIC_SYSTEM_PROMPT, LAYOUT_CRITIC_TOOL } from "@/app/lib/prompts";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import {
   componentBodyBox,
@@ -38,9 +40,6 @@ import type { SchematicState } from "@/lib/schematic-types";
 
 export const runtime = "nodejs";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
-
 // How much EXTRA courtyard clearance (px) a flagged component earns, by severity.
 // Grid snap is 20px, so these are ~1–3.5 grid steps of additional breathing room.
 const SPREAD_PX: Record<string, number> = { low: 24, medium: 44, high: 70 };
@@ -49,7 +48,7 @@ type Group = { refDes: string[]; reason: string; severity: string };
 
 const SUPPORTED_IMAGE = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-/** Split a data URL into an Anthropic image source, or null if unusable. */
+/** Validate and split a supported image data URL. */
 function parseDataUrl(
   url: unknown,
 ): { media_type: "image/png" | "image/jpeg" | "image/webp" | "image/gif"; data: string } | null {
@@ -63,7 +62,7 @@ function parseDataUrl(
 }
 
 export async function POST(req: Request): Promise<Response> {
-  let body: { state?: SchematicState; image?: unknown };
+  let body: { state?: SchematicState; image?: unknown; provider?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -71,6 +70,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const state = body.state;
+  const provider = requestedProvider(body.provider);
   const kicad = state?.kicadComponents ?? [];
   if (!state || kicad.length === 0) {
     return Response.json(
@@ -109,19 +109,20 @@ export async function POST(req: Request): Promise<Response> {
     .filter((m): m is NonNullable<typeof m> => m !== null);
   const knownRefDes = new Set(manifest.map((m) => m.refDes));
 
-  let response: Anthropic.Message;
+  let response;
   try {
-    response = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1536,
+    response = await llmRouter.generate({
+      provider,
+      maxTokens: 1536,
       system: LAYOUT_CRITIC_SYSTEM_PROMPT,
       tools: [LAYOUT_CRITIC_TOOL],
-      tool_choice: { type: "tool", name: "report_layout_issues" },
+      toolChoice: { name: "report_layout_issues" },
+      schematicState: state,
       messages: [
         {
           role: "user",
           content: [
-            { type: "image", source: { type: "base64", media_type: image.media_type, data: image.data } },
+            { type: "image", dataUrl: body.image as string, detail: "high" },
             {
               type: "text",
               text:
@@ -134,14 +135,11 @@ export async function POST(req: Request): Promise<Response> {
         },
       ],
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: msg }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 
-  const toolUse = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "report_layout_issues",
-  );
+  const toolUse = response.toolCalls.find((call) => call.name === "report_layout_issues");
   if (!toolUse) {
     return Response.json({ ok: false, error: "no layout critique returned" }, { status: 500 });
   }

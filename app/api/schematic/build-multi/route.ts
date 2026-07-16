@@ -18,8 +18,11 @@
  *      or:  { ok: false; error: string }
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { runBuildToolLoop } from "@/app/lib/build-loop";
+import { llmRouter } from "@/app/lib/llm/router";
+import { LLMProviderError, providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
+import type { LLMProviderId } from "@/app/lib/llm/types";
 import { mergeBuildNetlists } from "@/app/lib/merge-netlists";
 import { getPartsByIds } from "@/app/lib/parts-search";
 import { runErc } from "@/lib/erc";
@@ -32,23 +35,22 @@ import {
 
 export const runtime = "nodejs";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const PLANNER_MODEL = "claude-sonnet-4-6";
-
 type Block = { name: string; brief: string; sharedNets: string[] };
 
-async function plan(prompt: string): Promise<{ blocks: Block[]; rationale: string }> {
-  const res = await anthropic.messages.create({
-    model: PLANNER_MODEL,
-    max_tokens: 2048,
+async function plan(
+  prompt: string,
+  provider: LLMProviderId,
+): Promise<{ blocks: Block[]; rationale: string }> {
+  const res = await llmRouter.generate({
+    provider,
+    maxTokens: 2048,
     system: PLAN_SYSTEM_PROMPT,
     tools: [PLAN_TOOL],
-    tool_choice: { type: "tool", name: "submit_plan" },
+    toolChoice: { name: "submit_plan" },
+    userRequest: prompt,
     messages: [{ role: "user", content: prompt }],
   });
-  const tool = res.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "submit_plan",
-  );
+  const tool = res.toolCalls.find((call) => call.name === "submit_plan");
   const raw = (tool?.input ?? {}) as { blocks?: unknown; rationale?: unknown };
   const blocks: Block[] = Array.isArray(raw.blocks)
     ? (raw.blocks as Record<string, unknown>[])
@@ -64,8 +66,12 @@ async function plan(prompt: string): Promise<{ blocks: Block[]; rationale: strin
 
 export async function POST(req: Request): Promise<Response> {
   let prompt: unknown;
+  let requested: unknown;
   try {
-    ({ prompt } = (await req.json()) as { prompt?: unknown });
+    ({ prompt, provider: requested } = (await req.json()) as {
+      prompt?: unknown;
+      provider?: unknown;
+    });
   } catch {
     return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
   }
@@ -73,21 +79,30 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: "prompt is required" }, { status: 400 });
   }
   const userPrompt = prompt;
+  const provider = requestedProvider(requested);
 
   // 1. Plan. On any planner failure, fall back to the single loop.
   let blocks: Block[] = [];
   let rationale = "";
   try {
-    ({ blocks, rationale } = await plan(userPrompt));
+    ({ blocks, rationale } = await plan(userPrompt, provider));
   } catch (err) {
+    if (err instanceof LLMProviderError) return providerErrorResponse(err, provider);
     console.warn("[build-multi] planner failed; falling back to single loop:", err);
   }
 
   // 2. Complexity gate — simple circuit (or no plan) → normal single build loop.
   if (blocks.length <= 1) {
-    const result = await runBuildToolLoop({ systemPrompt: BUILD_SYSTEM_PROMPT, userMessage: userPrompt });
+    const result = await runBuildToolLoop({
+      provider,
+      systemPrompt: BUILD_SYSTEM_PROMPT,
+      userMessage: userPrompt,
+    });
     if (result.ok) return Response.json({ ok: true, netlist: result.netlist, explanation: result.explanation });
-    return Response.json({ ok: false, error: result.error }, { status: result.status });
+    return Response.json(
+      { ok: false, error: result.error, code: result.code, provider: result.provider },
+      { status: result.status },
+    );
   }
 
   // 3. Design every block in parallel, each scoped to its brief + shared nets.
@@ -97,6 +112,7 @@ export async function POST(req: Request): Promise<Response> {
         `Block: ${block.name}\n\n${block.brief}\n\n` +
         `SHARED BOARD NETS (connect to these by exact-name labels): ${block.sharedNets.join(", ") || "(none)"}`;
       const result = await runBuildToolLoop({
+        provider,
         systemPrompt: BUILD_SUBSYSTEM_SYSTEM_PROMPT,
         userMessage,
       });
@@ -109,6 +125,21 @@ export async function POST(req: Request): Promise<Response> {
     result: Extract<(typeof designed)[number]["result"], { ok: true }>;
   }[];
   const failed = designed.filter((d) => !d.result.ok).map((d) => d.name);
+
+  const providerFailure = designed.find(
+    (d) => !d.result.ok && d.result.code === "provider_unavailable",
+  );
+  if (providerFailure && !providerFailure.result.ok) {
+    return Response.json(
+      {
+        ok: false,
+        error: providerFailure.result.error,
+        code: providerFailure.result.code,
+        provider: providerFailure.result.provider,
+      },
+      { status: providerFailure.result.status },
+    );
+  }
 
   if (ok.length === 0) {
     return Response.json(

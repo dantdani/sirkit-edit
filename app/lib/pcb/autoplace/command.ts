@@ -20,7 +20,7 @@
  */
 
 import { produce } from "immer";
-import type { PcbBoard } from "../types";
+import type { PcbBoard, BoardOutline } from "../types";
 import type { Vec2 } from "../geometry";
 import type { AutoPlaceResult } from "./types";
 
@@ -35,9 +35,16 @@ export interface AutoPlaceApplyCommand {
   kind: "AutoPlaceApply";
   before: FootprintSnapshot[];
   after: FootprintSnapshot[];
+  outlineBefore?: BoardOutline;
+  outlineAfter?: BoardOutline;
 }
 
 const cloneSnap = (s: FootprintSnapshot): FootprintSnapshot => ({ ...s, at: { ...s.at } });
+
+const cloneOutline = (outline: BoardOutline): BoardOutline =>
+  outline.kind === "polygon"
+    ? { kind: "polygon", points: outline.points.map((point) => ({ ...point })) }
+    : { ...outline, origin: { ...outline.origin } };
 
 /**
  * Build the command from the CURRENT board (captures `before`) and an
@@ -47,6 +54,7 @@ const cloneSnap = (s: FootprintSnapshot): FootprintSnapshot => ({ ...s, at: { ..
 export function buildAutoPlaceCommand(
   board: PcbBoard,
   placements: AutoPlaceResult["placements"],
+  outlineAfter?: BoardOutline,
 ): AutoPlaceApplyCommand {
   const before: FootprintSnapshot[] = [];
   const after: FootprintSnapshot[] = [];
@@ -64,7 +72,14 @@ export function buildAutoPlaceCommand(
     before.push({ id: inst.id, at: { ...inst.at }, rotationDeg: inst.rotationDeg, side: inst.side });
     after.push({ id: inst.id, at: { ...p.position }, rotationDeg: p.rotationDeg, side: p.side });
   }
-  return { kind: "AutoPlaceApply", before, after };
+  const outlineChanged = outlineAfter !== undefined && JSON.stringify(board.outline) !== JSON.stringify(outlineAfter);
+  return {
+    kind: "AutoPlaceApply",
+    before,
+    after,
+    outlineBefore: outlineChanged ? cloneOutline(board.outline) : undefined,
+    outlineAfter: outlineChanged ? cloneOutline(outlineAfter) : undefined,
+  };
 }
 
 /**
@@ -80,6 +95,7 @@ export function mutateBoardWithAutoPlace(board: PcbBoard, cmd: AutoPlaceApplyCom
     fp.rotationDeg = s.rotationDeg;
     fp.side = s.side;
   }
+  if (cmd.outlineAfter) board.outline = cloneOutline(cmd.outlineAfter);
 }
 
 /** Pure form — returns a new board. Tests and redo reference. */
@@ -93,5 +109,7 @@ export function invertAutoPlaceCommand(cmd: AutoPlaceApplyCommand): AutoPlaceApp
     kind: "AutoPlaceApply",
     before: cmd.after.map(cloneSnap),
     after: cmd.before.map(cloneSnap),
+    outlineBefore: cmd.outlineAfter ? cloneOutline(cmd.outlineAfter) : undefined,
+    outlineAfter: cmd.outlineBefore ? cloneOutline(cmd.outlineBefore) : undefined,
   };
 }

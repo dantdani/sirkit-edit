@@ -6,6 +6,7 @@ import type { KicadPin } from "@/app/lib/kicad/types";
 import { parseKicadMod } from "../kicad-mod";
 import { mmToNm } from "../units";
 import type { PcbBoard, Track } from "../types";
+import { createEmptyBoard } from "../types";
 import {
   buildNetlist,
   netlistHash,
@@ -215,14 +216,45 @@ describe("syncFromSchematic", () => {
     expect(ka.footprintId).toBe("Resistor_SMD:R_0805_2012Metric");
     expect(ka.padNets).toEqual({ "1": 1, "2": 3 });
     expect(kb.padNets).toEqual({ "1": 3, "2": 2 });
-    // Staged left of the outline (origin x=0).
-    expect(ka.at.x).toBeLessThan(0);
+    // Default import is centered inside the 100x80 mm board and spread.
+    for (const footprint of first.board.footprints) {
+      expect(footprint.at.x).toBeGreaterThan(mmToNm(20));
+      expect(footprint.at.x).toBeLessThan(mmToNm(80));
+      expect(footprint.at.y).toBeGreaterThan(mmToNm(20));
+      expect(footprint.at.y).toBeLessThan(mmToNm(60));
+    }
+    expect(first.report.placement).toMatchObject({
+      mode: "centered",
+      spreadOverlaps: true,
+      allInsideBoard: true,
+      overlapCount: 0,
+    });
 
     // Hard invariant: syncing again with no schematic change is a no-op.
     const second = await syncFromSchematic(s, first.board, { getPart, resolver });
     expect(second.board).toEqual(first.board);
     expect(second.report.added).toEqual([]);
     expect(second.report.kept.sort()).toEqual(["ka", "kb"]);
+  });
+
+  it("only leaves new parts in the outside staging strip when explicitly requested", async () => {
+    const result = await syncFromSchematic(buildFixture(), undefined, {
+      getPart,
+      resolver: fakeResolver(),
+      placement: { preserveAbsoluteCoordinates: true },
+    });
+    expect(result.board.footprints.every((footprint) => footprint.at.x < 0)).toBe(true);
+    expect(result.report.placement.mode).toBe("preserved-staging");
+    expect(result.report.placement.warning).toMatch(/outside the board/);
+  });
+
+  it("centers an oversized import but reports that the board cannot contain it", async () => {
+    const tiny = createEmptyBoard();
+    tiny.outline = { kind: "rect", origin: { x: 0, y: 0 }, width: mmToNm(2), height: mmToNm(2) };
+    const result = await syncFromSchematic(buildFixture(), tiny, { getPart, resolver: fakeResolver() });
+    expect(result.report.placement.mode).toBe("centered");
+    expect(result.report.placement.allInsideBoard).toBe(false);
+    expect(result.report.placement.warning).toMatch(/do not fit/);
   });
 
   it("re-sync preserves moved positions and orphans copper of removed nets", async () => {

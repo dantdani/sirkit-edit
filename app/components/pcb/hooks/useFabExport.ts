@@ -1,13 +1,4 @@
-/**
- * useFabExport (PCB Stage 14) — drives the "Send to fab" dialog: client-side
- * DRC preview (same engine the server gate re-runs authoritatively), POST to
- * /api/pcb/export/gerbers, browser download of the returned zip. Mirrors
- * useDrc's editor-ref pattern.
- *
- * The DRC gate is HARD by default — `start` refuses on errors unless the
- * user's explicit `overrideDrcFail` is passed through; the server re-checks
- * regardless, so a misbehaving client still can't skip it.
- */
+/** Client controller for verified native-beta and KiCad-assisted fab exports. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbBoard } from "@/app/lib/pcb/types";
@@ -18,13 +9,30 @@ import type { DrcResult } from "@/app/lib/pcb/drc/types";
 import type { FabPresetId } from "@/app/lib/pcb/fab/types";
 import { getFabPreset } from "@/app/lib/pcb/fab/presets";
 
+export type FabEngine = "native-beta" | "kicad";
 export type FabExportState =
   | "idle"
   | "checkingDrc"
+  | "preflighting"
+  | "ready"
+  | "compilingNative"
   | "runningKicadCli"
   | "zipping"
   | "done"
   | "error";
+
+export interface NativePreflightSummary {
+  packageId: string;
+  packageSha256: string;
+  files: Array<{ path: string; kind: string; bytes: number; sha256: string }>;
+  diagnostics: Array<{
+    code: string;
+    severity: "info" | "warning" | "error";
+    message: string;
+    file?: string;
+  }>;
+  stages: Array<{ stage: string; status: "passed" | "failed"; elapsedMs: number }>;
+}
 
 export interface FabExportEditor {
   getBoard: () => PcbBoard | null;
@@ -36,23 +44,22 @@ export interface FabExportHandle {
   state: FabExportState;
   drcResult?: DrcResult;
   lastError?: string;
-  /** From the response headers on success: file count + zip size. */
   lastStats?: { files: number; totalBytes: number };
+  nativePreflight?: NativePreflightSummary;
   elapsedMs: number;
-  /** Synchronous client-side DRC against the fab preset's linked rules —
-   * feeds the dialog chip; the server re-runs the same check on export. */
   checkDrc(fabPresetId: FabPresetId): DrcResult | undefined;
-  start(fabPresetId: FabPresetId, overrideDrcFail?: boolean): Promise<void>;
+  preflight(fabPresetId: FabPresetId): Promise<void>;
+  start(engine: FabEngine, fabPresetId: FabPresetId, overrideDrcFail?: boolean): Promise<void>;
 }
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
   URL.revokeObjectURL(url);
 }
 
@@ -68,9 +75,10 @@ export function useFabExport(editor: FabExportEditor): FabExportHandle {
   });
 
   const [state, setState] = useState<FabExportState>("idle");
-  const [drcResult, setDrcResult] = useState<DrcResult | undefined>(undefined);
-  const [lastError, setLastError] = useState<string | undefined>(undefined);
-  const [lastStats, setLastStats] = useState<{ files: number; totalBytes: number } | undefined>(undefined);
+  const [drcResult, setDrcResult] = useState<DrcResult>();
+  const [lastError, setLastError] = useState<string>();
+  const [lastStats, setLastStats] = useState<{ files: number; totalBytes: number }>();
+  const [nativePreflight, setNativePreflight] = useState<NativePreflightSummary>();
   const [elapsedMs, setElapsedMs] = useState(0);
 
   const checkDrc = useCallback((fabPresetId: FabPresetId): DrcResult | undefined => {
@@ -83,85 +91,149 @@ export function useFabExport(editor: FabExportEditor): FabExportHandle {
     return result;
   }, []);
 
-  const start = useCallback(
-    async (fabPresetId: FabPresetId, overrideDrcFail = false): Promise<void> => {
-      const board = editorRef.current.getBoard();
-      if (!board) return;
-      const boardName = editorRef.current.boardName ?? "sirkit-board";
-      const t0 = Date.now();
-      const tick = (): void => setElapsedMs(Date.now() - t0);
-      setLastError(undefined);
-      setLastStats(undefined);
+  const preflight = useCallback(async (fabPresetId: FabPresetId): Promise<void> => {
+    const board = editorRef.current.getBoard();
+    if (!board) return;
+    const started = Date.now();
+    const boardName = editorRef.current.boardName ?? "sirkit-board";
+    setNativePreflight(undefined);
+    setLastError(undefined);
+    setState("checkingDrc");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const drc = checkDrc(fabPresetId);
+    if (drc && !drc.ok) {
+      const errors = drc.violations.filter((violation) => violation.severity === "error").length;
+      setLastError(`Native export is fail-closed: fix ${errors} DRC error${errors === 1 ? "" : "s"} before preflight.`);
+      setElapsedMs(Date.now() - started);
+      setState("error");
+      return;
+    }
 
-      setState("checkingDrc");
-      // Yield a frame so the state paints before the sync DRC blocks.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const drc = checkDrc(fabPresetId);
+    setState("preflighting");
+    try {
+      const response = await fetch("/api/pcb/export/gerbers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          board,
+          netlist: editorRef.current.getNetlist() ?? undefined,
+          fabPresetId,
+          boardName,
+          engine: "native-beta",
+          action: "preflight",
+        }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          message?: string;
+          diagnostics?: Array<{ message?: string }>;
+        };
+        const first = body.diagnostics?.find((item) => item.message)?.message;
+        throw new Error(first ?? body.message ?? body.error ?? `preflight failed (HTTP ${response.status})`);
+      }
+      setNativePreflight((await response.json()) as NativePreflightSummary);
+      setState("ready");
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : String(error));
+      setState("error");
+    } finally {
+      setElapsedMs(Date.now() - started);
+    }
+  }, [checkDrc]);
+
+  const start = useCallback(async (
+    engine: FabEngine,
+    fabPresetId: FabPresetId,
+    overrideDrcFail = false,
+  ): Promise<void> => {
+    const board = editorRef.current.getBoard();
+    if (!board) return;
+    const boardName = editorRef.current.boardName ?? "sirkit-board";
+    const started = Date.now();
+    const tick = (): void => setElapsedMs(Date.now() - started);
+    setLastError(undefined);
+    setLastStats(undefined);
+
+    setState("checkingDrc");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const drc = checkDrc(fabPresetId);
+    tick();
+    if (drc && !drc.ok && (engine === "native-beta" || !overrideDrcFail)) {
+      const errors = drc.violations.filter((violation) => violation.severity === "error").length;
+      setLastError(
+        engine === "native-beta"
+          ? `Native export is fail-closed: fix ${errors} DRC error${errors === 1 ? "" : "s"}.`
+          : `DRC found ${errors} error${errors === 1 ? "" : "s"} - fix them or check "Export anyway".`,
+      );
+      setState("error");
+      return;
+    }
+
+    setState(engine === "native-beta" ? "compilingNative" : "runningKicadCli");
+    try {
+      const response = await fetch("/api/pcb/export/gerbers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          board,
+          netlist: editorRef.current.getNetlist() ?? undefined,
+          fabPresetId,
+          overrideDrcFail: engine === "kicad" && overrideDrcFail,
+          boardName,
+          engine,
+          action: "package",
+        }),
+      });
       tick();
-      if (drc && !drc.ok && !overrideDrcFail) {
-        const errors = drc.violations.filter((v) => v.severity === "error").length;
-        setLastError(`DRC found ${errors} error${errors === 1 ? "" : "s"} — fix them or check "Export anyway".`);
+      if (!response.ok) {
+        let message = `export failed (HTTP ${response.status})`;
+        try {
+          const body = (await response.json()) as { error?: string; message?: string };
+          if (body.error === "drc-failed") message = "DRC failed on the server - re-run DRC and review.";
+          else if (body.error === "native-preflight-failed") {
+            message = body.message ?? "Native parse-back or manufacturing preflight failed.";
+          } else if (body.error === "kicad-cli-missing") {
+            message = "kicad-cli not found - set KICAD_CLI in .env.local (see docs/pcb-quickstart.md).";
+          } else if (body.message || body.error) message = body.message ?? body.error!;
+        } catch {
+          // Keep the HTTP status message for non-JSON failures.
+        }
+        setLastError(message);
         setState("error");
         return;
       }
 
-      setState("runningKicadCli");
-      try {
-        const res = await fetch("/api/pcb/export/gerbers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            board,
-            netlist: editorRef.current.getNetlist() ?? undefined,
-            fabPresetId,
-            overrideDrcFail,
-            boardName,
-          }),
-        });
-        tick();
-        if (!res.ok) {
-          let message = `export failed (HTTP ${res.status})`;
-          try {
-            const body = (await res.json()) as { error?: string; message?: string };
-            if (body.error === "drc-failed") message = "DRC failed on the server — re-run DRC and review.";
-            else if (body.error === "kicad-cli-missing") {
-              message = "kicad-cli not found — set KICAD_CLI in .env.local (see docs/pcb-quickstart.md).";
-            } else if (body.message || body.error) message = body.message ?? body.error!;
-          } catch {
-            /* non-JSON error body — keep the HTTP message */
-          }
-          setLastError(message);
-          setState("error");
-          return;
-        }
-
-        setState("zipping");
-        const blob = await res.blob();
-        tick();
-        const statsHeader = res.headers.get("X-Sirkit-Bundle-Stats");
-        if (statsHeader) {
-          try {
-            const s = JSON.parse(statsHeader) as { files?: number; totalBytes?: number };
-            setLastStats({ files: s.files ?? 0, totalBytes: s.totalBytes ?? blob.size });
-          } catch {
-            setLastStats({ files: 0, totalBytes: blob.size });
-          }
-        } else {
+      setState("zipping");
+      const blob = await response.blob();
+      tick();
+      const statsHeader = response.headers.get("X-Sirkit-Bundle-Stats");
+      if (statsHeader) {
+        try {
+          const parsed = JSON.parse(statsHeader) as { files?: number; totalBytes?: number };
+          setLastStats({ files: parsed.files ?? 0, totalBytes: parsed.totalBytes ?? blob.size });
+        } catch {
           setLastStats({ files: 0, totalBytes: blob.size });
         }
-        triggerDownload(
-          blob,
-          filenameFromDisposition(res.headers.get("Content-Disposition"), `${boardName}.zip`),
-        );
-        tick();
-        setState("done");
-      } catch (e) {
-        setLastError(e instanceof Error ? e.message : String(e));
-        setState("error");
-      }
-    },
-    [checkDrc],
-  );
+      } else setLastStats({ files: 0, totalBytes: blob.size });
+      triggerDownload(blob, filenameFromDisposition(response.headers.get("Content-Disposition"), `${boardName}.zip`));
+      tick();
+      setState("done");
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : String(error));
+      setState("error");
+    }
+  }, [checkDrc]);
 
-  return { state, drcResult, lastError, lastStats, elapsedMs, checkDrc, start };
+  return {
+    state,
+    drcResult,
+    lastError,
+    lastStats,
+    nativePreflight,
+    elapsedMs,
+    checkDrc,
+    preflight,
+    start,
+  };
 }

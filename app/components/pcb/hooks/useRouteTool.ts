@@ -20,10 +20,12 @@ import type { PcbScene, ScenePointerEvent } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { LayerId } from "@/app/lib/pcb/layers";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
-import { createRouteTool } from "@/app/lib/pcb/route-tool";
+import { createRouteTool, type RouteToolState } from "@/app/lib/pcb/route-tool";
 import { routeCommandLabel, mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
 import { computeConnectivity } from "@/app/lib/pcb/connectivity-board";
 import { renderRoutePreview } from "@/app/lib/pcb/render/route-preview";
+import { getNetClass } from "@/app/lib/pcb/netclass";
+import { resolveRoutingProfile } from "@/app/lib/pcb/routing-profile";
 
 export interface RouteToolEditor {
   scene: PcbScene | null;
@@ -37,12 +39,47 @@ export interface RouteToolHandle {
   activate(): void;
   deactivate(): void;
   active: boolean;
+  status: RouteToolStatusView | null;
+}
+
+export interface RouteToolStatusView {
+  status: "ready" | "walking-around" | "blocked";
+  mode: "direct" | "walk-around" | "blocked";
+  alternatives: number;
+  selected: number;
+  elapsedMs: number;
+  explanation: string;
+}
+
+function statusFromState(state: RouteToolState): RouteToolStatusView | null {
+  if (state.kind !== "routing" || !state.preview.smartStatus) return null;
+  const candidates = state.preview.candidates ?? [];
+  const selected = Math.max(0, candidates.findIndex((candidate) => candidate.id === state.preview.selectedCandidateId));
+  const chosen = candidates[selected];
+  return {
+    status: state.preview.smartStatus,
+    mode: chosen?.mode ?? "blocked",
+    alternatives: candidates.length,
+    selected: candidates.length ? selected + 1 : 0,
+    elapsedMs: state.preview.searchElapsedMs ?? 0,
+    explanation: state.preview.smartExplanation ?? "Smart Route is ready.",
+  };
+}
+
+function sameStatus(a: RouteToolStatusView | null, b: RouteToolStatusView | null): boolean {
+  return a?.status === b?.status
+    && a?.mode === b?.mode
+    && a?.alternatives === b?.alternatives
+    && a?.selected === b?.selected
+    && a?.explanation === b?.explanation
+    && Math.round(a?.elapsedMs ?? 0) === Math.round(b?.elapsedMs ?? 0);
 }
 
 const EMPTY_BOARD = createEmptyBoard();
 
 export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
   const [active, setActive] = useState(false);
+  const [status, setStatus] = useState<RouteToolStatusView | null>(null);
   const editorRef = useRef(editor);
   useEffect(() => {
     editorRef.current = editor; // keep getHistory/getActiveLayer/toast fresh
@@ -64,21 +101,43 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
       (cmd) => {
         const h = getHistory();
         if (!h) return;
-        h.execute(routeCommandLabel(cmd, h.present), (draft) => mutateBoardWithCommand(draft, cmd));
+        const event = "historyEvents" in cmd ? cmd.historyEvents?.at(-1) : undefined;
+        const netId = "netId" in cmd
+          ? cmd.netId
+          : cmd.kind === "PlaceViaAndFlipLayer"
+            ? cmd.via.netId
+            : cmd.kind === "StretchTrack"
+              ? cmd.after[0]?.netId
+              : undefined;
+        const layer = cmd.kind === "PlaceViaAndFlipLayer"
+          ? cmd.via.layers[0]
+          : cmd.kind === "CommitRouteSegment"
+            ? cmd.segments[0]?.layer
+            : cmd.kind === "StretchTrack"
+              ? cmd.after[0]?.layer
+              : undefined;
+        h.execute(routeCommandLabel(cmd, h.present), (draft) => mutateBoardWithCommand(draft, cmd), {
+          operationType: cmd.kind,
+          ...(netId === undefined ? {} : { netId }),
+          ...(layer === undefined ? {} : { layer }),
+          ...(event ? { details: { candidateId: event.candidateId, mode: event.mode, direction: event.direction, rules: event.rules } } : {}),
+        });
       },
       {
         undo: () => getHistory()?.undo(),
         getActiveLayer: () => editorRef.current.getActiveLayer?.() ?? "copperTop",
+        netClass: (netId) => getNetClass(getBoard(), netId),
+        routingProfile: (netId) => resolveRoutingProfile(getBoard(), netId),
       },
     );
 
-    // Preview lives on a fresh container parented to the stable `edge` layer
-    // (never cleared by copper/footprint rebuilds), so it survives setBoard.
+    // Preview lives above every physical layer, so hiding Board Outline or
+    // changing the active copper layer never hides the in-progress route.
     const previewContainer = new Container();
     previewContainer.eventMode = "none";
     let previewParent: Container | null = null;
     try {
-      previewParent = scene.getLayerContainer("edge");
+      previewParent = scene.getOverlayContainer();
       previewParent.addChild(previewContainer);
     } catch {
       previewParent = null;
@@ -107,6 +166,8 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
         renderRaf = requestAnimationFrame(() => {
           renderRaf = 0;
           renderRoutePreview(tool.state, getLayer, previewContainer);
+          const next = statusFromState(tool.state);
+          setStatus((current) => sameStatus(current, next) ? current : next);
         });
       }
       // Airwires get their OWN handle, cancel+re-registered on every call so this
@@ -193,11 +254,12 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
       if (renderRaf) cancelAnimationFrame(renderRaf);
       if (airRaf) cancelAnimationFrame(airRaf);
       tool.cancel();
+      setStatus(null);
       renderRoutePreview({ kind: "idle" }, getLayer, previewContainer); // clear + tooltip null
       previewParent?.removeChild(previewContainer);
       previewContainer.destroy({ children: true });
     };
   }, [active, scene]);
 
-  return { activate, deactivate, active };
+  return { activate, deactivate, active, status };
 }

@@ -2,9 +2,9 @@
  * POST /api/pcb/ai-rules/from-brief (PCB Stage 10)
  *
  * Turns a one-line board brief ("2A USB-C power board") into a schema-validated
- * `RuleDelta` the deterministic net-class engine consumes. Claude WRITES config
- * (a single emit_rule_delta tool call at temperature 0); the server VALIDATES it
- * — Claude never free-forms. On validation failure we retry once with a
+ * `RuleDelta` the deterministic net-class engine consumes. The selected brain WRITES config
+ * (a single emit_rule_delta tool call); the server VALIDATES it
+ * — the model never free-forms. On validation failure we retry once with a
  * correction, then return 422 with the first error.
  *
  * Body:     { brief: string; board: { netNames: string[]; hasIcs: boolean } }
@@ -16,15 +16,20 @@
  * union). Mirrors the client/model config of app/lib/build-loop.ts.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "node:crypto";
+import { llmRouter } from "@/app/lib/llm/router";
+import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { requestedProvider } from "@/app/lib/llm/request";
+import {
+  assistantResponseMessage,
+  toolResultsMessage,
+  type LLMMessage,
+  type LLMTool,
+} from "@/app/lib/llm/types";
 import type { NetClassId, RuleDelta, RuleDeltaChange } from "@/app/lib/pcb/netclass";
 
 export const runtime = "nodejs";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const MODEL = "claude-sonnet-4-6";
 const CLASS_IDS: readonly NetClassId[] = ["Default", "Power", "HighCurrent"];
 const MM_TO_NM = 1_000_000;
 const MAX_ATTEMPTS = 2; // one call + one retry
@@ -38,10 +43,10 @@ const MM_RANGES = {
   viaDrillMm: { min: 0.2, max: 2.0 },
 } as const;
 
-const RULE_DELTA_TOOL: Anthropic.Tool = {
+const RULE_DELTA_TOOL: LLMTool = {
   name: "emit_rule_delta",
   description: "Emit a rule delta based on the user's board brief.",
-  input_schema: {
+  inputSchema: {
     type: "object",
     properties: {
       changes: {
@@ -72,7 +77,10 @@ const RULE_DELTA_TOOL: Anthropic.Tool = {
   },
 };
 
-const SYSTEM_PROMPT = `You are sirkit's rules assistant. The user describes their PCB design intent in one or two sentences. You emit a rule delta as a single emit_rule_delta tool call. Use IPC-2152 principles for current-carrying widths (external layer, 1 oz copper, 10 °C temperature rise unless the user specifies otherwise). Prefer conservative widths. Never invent net names the user did not mention — target classes or name patterns instead. Return exactly one tool call. Keep the explanation to 1-2 sentences.`;
+const SYSTEM_PROMPT = `You are sirkit's PCB routing-rules advisor. The user describes board intent and you emit one reviewable rule delta through emit_rule_delta.
+Use IPC-2152 principles for current-carrying track widths (external layer, 1 oz copper, 10 °C rise unless specified). Prefer conservative manufacturable values.
+For every power or current-carrying recommendation, assess BOTH copper width AND the layer-transition via. Emit viaSizeMm and viaDrillMm together when a via recommendation is relevant; preserve at least 0.10 mm annular ring per side. Mention when multiple parallel vias may be needed rather than pretending one via is sufficient.
+Never invent net names. Target known classes or safe name patterns. Do not route geometry. Return exactly one tool call and explain the electrical/manufacturing reason in 1-2 sentences.`;
 
 // ── Request parsing ──────────────────────────────────────────────────────────
 
@@ -159,6 +167,13 @@ function validateChange(raw: unknown): RuleDeltaChange | { error: string } {
   if (drill === null) return { error: `viaDrillMm out of range (${MM_RANGES.viaDrillMm.min}..${MM_RANGES.viaDrillMm.max})` };
   if (drill !== undefined) change.viaDrillNm = drill;
 
+  if ((via === undefined) !== (drill === undefined)) {
+    return { error: "viaSizeMm and viaDrillMm must be recommended together" };
+  }
+  if (via !== undefined && drill !== undefined && (via - drill) / 2 < 100_000) {
+    return { error: "via recommendation needs at least 0.10 mm annular ring per side" };
+  }
+
   if (
     change.className === undefined &&
     change.trackWidthNm === undefined &&
@@ -225,7 +240,10 @@ export async function POST(req: Request): Promise<Response> {
     board: { netNames: parsed.netNames.slice(0, 256), hasIcs: parsed.hasIcs },
   });
 
-  const messages: Anthropic.MessageParam[] = [
+  const provider = requestedProvider(
+    typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>).provider : undefined,
+  );
+  const messages: LLMMessage[] = [
     { role: "user", content: `Emit a rule delta for this board brief:\n${userMessage}` },
   ];
 
@@ -233,37 +251,36 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const response = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
+      const response = await llmRouter.generate({
+        provider,
+        maxTokens: 2048,
         temperature: 0,
         system: SYSTEM_PROMPT,
         tools: [RULE_DELTA_TOOL],
-        tool_choice: { type: "tool", name: "emit_rule_delta" },
+        toolChoice: { name: "emit_rule_delta" },
+        boardState: { netNames: parsed.netNames, hasIcs: parsed.hasIcs },
+        designConstraints: parsed.brief,
         messages,
       });
 
-      const toolUse = response.content.find(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "emit_rule_delta",
-      );
+      const toolUse = response.toolCalls.find((call) => call.name === "emit_rule_delta");
 
       if (toolUse) {
         const result = buildDelta(toolUse.input, parsed.brief);
         if (result.ok) return Response.json({ ok: true, delta: result.delta });
         if (firstError === null) firstError = result.error;
         if (attempt + 1 >= MAX_ATTEMPTS) break;
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({
-          role: "user",
-          content: [
+        messages.push(assistantResponseMessage(response));
+        messages.push(
+          toolResultsMessage([
             {
               type: "tool_result",
-              tool_use_id: toolUse.id,
-              content: `Your previous output failed validation: ${result.error}. Return valid JSON matching the schema.`,
-              is_error: true,
+              toolCallId: toolUse.id,
+              output: `Your previous output failed validation: ${result.error}. Return valid JSON matching the schema.`,
+              isError: true,
             },
-          ],
-        });
+          ]),
+        );
         continue;
       }
 
@@ -271,10 +288,8 @@ export async function POST(req: Request): Promise<Response> {
       if (firstError === null) firstError = "model did not emit an emit_rule_delta tool call";
       break;
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[ai-rules/from-brief] ${message}`);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+  } catch (error) {
+    return providerErrorResponse(error, provider);
   }
 
   return Response.json({ ok: false, error: firstError ?? "validation failed" }, { status: 422 });

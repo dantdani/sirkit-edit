@@ -108,6 +108,7 @@ export function buildStoryDemo(): PcbBoard {
     formatVersion: 1,
     stackup: 2,
     outline: { kind: "rect", width: mmToNm(40), height: mmToNm(30), origin: { x: 0, y: 0 } },
+    placementPolicy: { outlineSource: "generated" },
     nets: STORY_NETS.map((n) => ({ ...n })),
     footprints,
     tracks: [],

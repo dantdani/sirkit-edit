@@ -52,3 +52,7 @@ next-env.d.ts
 # needed to re-run scripts/build-kg.ts.
 /SchGen
 /PCBSchemaGen_v2
+
+# Pinned external GPLv3 source clone + verified local JAR/JRE. Recreate with
+# `npm run setup:freerouting`; Sirkit talks to it only as a child process.
+/vendor/freerouting/

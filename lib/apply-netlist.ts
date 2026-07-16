@@ -1,8 +1,9 @@
 import type { LogicalNetlist, SchematicState } from "./schematic-types";
 import { autoLayout } from "./auto-layout";
 import { validateTheoryNetlist, type NetlistValidation } from "./validate-netlist";
+import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
 
-export async function generateSchematic(prompt: string): Promise<{
+export async function generateSchematic(prompt: string, retry?: () => void): Promise<{
   state: SchematicState;
   netlist: LogicalNetlist;
   validation: NetlistValidation;
@@ -10,11 +11,10 @@ export async function generateSchematic(prompt: string): Promise<{
   const res = await fetch("/api/schematic", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify(withAiBrain({ prompt })),
   });
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Schematic API failed: ${err}`);
+    await throwAiResponseError(res, retry);
   }
   const netlist = (await res.json()) as LogicalNetlist;
   const state = autoLayout(netlist);
