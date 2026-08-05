@@ -1,0 +1,9 @@
+tool_id,binding_id,binding_version,kind,module,symbol,descriptor_match
+sirkit.component-authority.inspect,read.component-authority,1.0.0,read,app/lib/engineering/component-authority.ts,inspectComponentAuthority,true
+sirkit.manufacturing.readiness-inspect,read.readiness,1.0.0,read,app/lib/pcb/readiness/evaluate.ts,evaluatePcbFabricationReadiness,true
+sirkit.pcb.board-inspect,read.board-snapshot,1.0.0,read,app/lib/pcb/ai/snapshot.ts,buildAIPcbSnapshot,true
+sirkit.pcb.revision-inspect,read.pcb-revision,1.0.0,read,app/lib/pcb/revision.ts,pcbRevisionId,true
+sirkit.project.canonical-revision-inspect,read.canonical-revision,1.0.0,read,app/lib/engineering/revision.ts,computeProjectRevision,true
+sirkit.selection.inspect,read.selection,1.0.0,read,app/lib/pcb/selection-queries.ts,getItems,true
+sirkit.validation.connectivity-verify,read.connectivity,1.0.0,read,app/lib/pcb/connectivity-board.ts,computeConnectivity,true
+sirkit.validation.drc-run,read.drc,1.0.0,read,app/lib/pcb/drc/run-drc.ts,runDrc,true

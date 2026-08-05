@@ -1,0 +1,9 @@
+tool_id,version,owning_command,operation_class,binding_status,why_not_callable
+sirkit.manufacturing.release,1.0.0,manufacturing.release,release,unbound,Release authority is the MFG01 gate (app/api/pcb/release); it must never receive a general tool binding and the canonical executor categorically refuses release-tier commands.
+sirkit.pcb.create-via,1.0.0,pcb.create-via,mutate,unbound,"Schema-only B01 declaration; no shared implementation. The kernel binding exists but the command's coverage is partial, so the executor refuses it (fail-closed)."
+sirkit.pcb.dimension,1.0.0,pcb.dimension,mutate,unbound,"B01 status: missing. There is no handler, no schema, no operation kind."
+sirkit.pcb.zone-edit,1.0.0,pcb.zone,mutate,unbound,Partial B01 coverage; not migrated in B03 and no shared implementation.
+sirkit.schematic.add-component,1.0.0,schematic.add-component,mutate,unbound,UI-only B01 coverage; no shared implementation and no canonical operation vocabulary for schematic topology.
+sirkit.schematic.inspect,1.0.0,schematic.review-advisory,read,unbound,Schematic state lives in page-level React state; no reusable accessor library exists. Route-local review endpoints are not shared tools.
+sirkit.view.canvas-navigation,1.0.0,view.canvas-navigation,view-session,unbound,"UI/session-only. No external session adapter exists; PCBViewAdapter is an editor-internal seam, not a shared runtime."
+sirkit.view.pcb-3d,1.0.0,view.pcb-3d-control,view-session,unbound,Component-local state; no session adapter.

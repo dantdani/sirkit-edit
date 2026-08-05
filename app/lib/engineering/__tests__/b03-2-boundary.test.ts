@@ -183,7 +183,13 @@ describe("interactive-channel composition boundary", () => {
     const barrel = await import("../index");
     expect(Object.keys(barrel)).not.toContain("InteractiveUiChannel");
     expect(Object.keys(barrel)).not.toContain("createEditorSessionChannel");
-    expect(Object.keys(barrel).some((name) => name.toLowerCase().includes("channel"))).toBe(false);
+    // No exported VALUE is (or can create) the capability: nothing exported
+    // exposes the channel's approval surface. (Name-based heuristics are too
+    // blunt — B04 legitimately exports discovery-channel enums.)
+    for (const [name, value] of Object.entries(barrel)) {
+      if (typeof value !== "function") continue;
+      expect((value as { prototype?: Record<string, unknown> }).prototype?.approvesDestructive, name).toBeUndefined();
+    }
   });
 
   it("10. no production file outside the approved composition boundary imports the channel module", () => {
