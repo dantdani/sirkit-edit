@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "sirkit.pcb-sync-stage4-handoff.v1",
+  "consumer": "app/lib/pcb-sync/providers.ts#AtomicPcbSyncResourceProvider",
+  "acceptedArtifactSchema": "sirkit.verified-pin-pad-mapping.v1",
+  "acceptedVerifierVersions": [
+    "sirkit.atomic-mapping/1",
+    "physical-binding-validator/1"
+  ],
+  "currentState": "Stage 3 consumes approved existing certificates; it never creates or repairs mappings.",
+  "requiredIdentity": {
+    "symbol": ["symbolAssetVersionId", "symbolRevision", "symbolContentDigest"],
+    "footprint": ["footprintAssetVersionId", "footprintContentDigest", "footprintSemanticDigest"],
+    "scope": ["exactPartRevisionId", "packageRevisionId", "assemblyVariantId"],
+    "certificate": ["mappingCertificateId", "verifierVersion", "state", "artifactDigest"]
+  },
+  "entryContract": {
+    "required": ["symbolPinNumber", "padNumbers", "mappingKind"],
+    "optional": ["pinInstanceId"],
+    "mappingKinds": ["electrical", "exposed-pad", "intentional-no-connect", "mechanical"],
+    "rules": [
+      "Repeated physical pads are represented by distinct exact pad identifiers, never array order.",
+      "Multiple pads per symbol pin are one entry with every exact pad number.",
+      "Multiple symbol pins per pad require explicit entries and a verifier finding proving shared electrical intent.",
+      "Mechanical pads and mounting holes are listed separately and cannot acquire a signal net.",
+      "No-connect and do-not-connect pins use intentional-no-connect with explicit evidence.",
+      "Hidden pins remain explicit symbol identities; they cannot be inferred from power-net names.",
+      "Exposed pads use exposed-pad and require the exact thermal/electrical intent evidence."
+    ]
+  },
+  "requiredFindings": [
+    "duplicate_symbol_pin",
+    "duplicate_or_missing_pad",
+    "unmapped_electrical_pin",
+    "unexpected_electrical_pad",
+    "ambiguous_shared_pad",
+    "mechanical_pad_classification",
+    "no_connect_intent",
+    "exposed_pad_intent"
+  ],
+  "freshnessDependencies": [
+    "symbol asset version/content digest",
+    "footprint asset version/content digest",
+    "exact-part revision",
+    "package revision",
+    "assembly variant",
+    "mapping policy/verifier version"
+  ],
+  "approval": {
+    "requiredState": "approved",
+    "authorizedActors": ["human curator", "authorized validation service followed by policy approval"],
+    "aiAuthority": "proposal_only",
+    "writeRule": "Write a new immutable mapping certificate and atomic revision; never mutate an existing certificate or PCB."
+  },
+  "stage3Invalidation": {
+    "behavior": "Any mapping certificate ID, artifact digest, symbol/footprint dependency, verifier policy, or approval-state change invalidates the materialization and every unapplied plan.",
+    "response": "Stage 3 must reacquire the snapshot, rerun Stage 2 and re-preflight before apply.",
+    "requiredStage3Codes": ["PS_MAPPING_MISSING", "PS_MAPPING_PIN_MISSING", "PS_MAPPING_VERIFIER_UNSUPPORTED", "PS_MAPPING_ASSET_MISMATCH", "PS_PLAN_STALE"]
+  },
+  "legacyMigration": "Legacy order/count/name-derived mappings remain unverified and blocked. Stage 4 may create a reviewed immutable certificate; it may not relabel legacy data as verified.",
+  "fixturesToPreserve": [
+    "two-pad exact electrical mapping",
+    "multiple pads per pin",
+    "shared pad with explicit intent",
+    "mechanical/mounting pads",
+    "no-connect and hidden pins",
+    "exposed thermal pad",
+    "same footprint name with changed content digest",
+    "mapping certificate changed under unchanged footprint"
+  ],
+  "authorityBoundaries": [
+    "Stage 4 does not choose a footprint.",
+    "Stage 4 does not alter schematic or PCB connectivity authority.",
+    "Stage 4 does not mutate a board.",
+    "Stage 3 accepts only an exact current approved mapping and uses its pad assignments verbatim."
+  ]
+}

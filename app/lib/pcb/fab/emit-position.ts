@@ -10,6 +10,7 @@
 import type { PcbBoard, FootprintInstance, FpGraphic } from "../types";
 import type { PosFormat } from "./types";
 import { csvField } from "./emit-bom";
+import { assertValidBoardReferences } from "../integrity";
 
 const NM_PER_MM = 1_000_000;
 
@@ -64,6 +65,7 @@ export function emitPositionCsv(
   format: PosFormat,
   side: "top" | "bottom" | "both",
 ): string {
+  assertValidBoardReferences(board);
   const spec = FORMATS[format];
   const instances = board.footprints
     .filter((i) => !i.def.attributes.excludeFromPos && i.def.pads.length > 0)

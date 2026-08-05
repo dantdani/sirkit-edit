@@ -50,6 +50,8 @@ export interface DsnBoard {
   rules: DsnRule[]; // default + per-used-class
   routingSettings: DsnRoutingSettings;
   wiring: DsnWiringItem[]; // existing copper exported as protected geometry
+  /** Internal defense-in-depth manifest; not serialized into Specctra text. */
+  integrity?: DsnIntegrityManifest;
 }
 
 export interface DsnBoundary {
@@ -66,6 +68,22 @@ export interface DsnLayer {
   preferredDirection: DsnPreferredDirection;
   traceWidthNm: number;
   planeNetName?: string;
+  /** Native plane certificate; polygon comes from the generated zone, never a synthetic board boundary. */
+  plane?: {
+    zoneId: string;
+    stableNetId: string;
+    netName: string;
+    polygonNm: Vec2Nm[];
+    sourceRevision: string;
+    fillHash: string;
+    algorithmVersion: string;
+    fillStatus: "current";
+    regionCount: number;
+    holeCount: number;
+    filledAreaNm2: number;
+    exportedRepresentationId: string;
+    unsupportedConstructs: string[];
+  };
 }
 
 export interface DsnRoutingSettings {
@@ -85,7 +103,11 @@ export interface DsnPadstack {
 }
 
 export interface DsnPin {
+  /** Unique image-local export identity; duplicate source pad numbers receive deterministic suffixes. */
   padNumber: string;
+  /** Original footprint pad number used by the Sirkit mapping contract. */
+  sourcePadNumber?: string;
+  padInstanceId?: string;
   padstackName: string;
   atNm: Vec2Nm; // ABSOLUTE world position (components place at origin)
 }
@@ -94,11 +116,66 @@ export interface DsnComponent {
   ref: string; // e.g. "R7"
   imageName: string; // library image (1:1 with this instance)
   pins: DsnPin[];
+  componentId?: string;
 }
 
 export interface DsnNetworkNode {
   componentRef: string;
   padNumber: string;
+  componentId?: string;
+  endpointKey?: string;
+  padInstanceId?: string;
+}
+
+export interface DsnIntegrityManifest {
+  schemaVersion: "sirkit.dsn-integrity.v2";
+  sourceRevision: string;
+  electricalTruthSchema: "sirkit.electrical-truth.v1";
+  nets: Array<{
+    stableNetId: string;
+    numericNetId: number;
+    serializedName: string;
+    endpointKeys: string[];
+    terminalGroupIds: string[];
+    physicalPadInstanceIds: string[];
+  }>;
+  layers: Array<{ layerId: string; dsnName: DsnLayerName }>;
+  planes?: Array<{
+    layerId: string;
+    dsnName: DsnLayerName;
+    zoneId: string;
+    stableNetId: string;
+    sourceRevision: string;
+    fillHash: string;
+    algorithmVersion: string;
+    fillStatus: "current";
+    regionCount: number;
+    holeCount: number;
+    filledAreaNm2: number;
+    exportedRepresentationId: string;
+    unsupportedConstructs: string[];
+  }>;
+  viaPadstacks: Array<{ name: string; diameterNm: number; drillNm: number; onLayers: DsnLayerName[] }>;
+  expectedEndpoints: Array<{
+    endpointKey: string;
+    componentId: string;
+    componentRef: string;
+    symbolPinNumber: string;
+    sourcePadNumbers: string[];
+    padNumbers: string[];
+    physicalPadInstanceIds: string[];
+    netId: number;
+    netStableId?: string;
+    netName: string;
+  }>;
+  /** Stage 6 explicit semantic-loss ledger for the exact compiled program. */
+  constraintProgramHash?: string;
+  constraintLoss?: Array<{
+    constraintIds: string[];
+    disposition: "exact" | "conservative" | "post_route_check" | "unsupported";
+    severity: "warning" | "error";
+    message: string;
+  }>;
 }
 
 export interface DsnNetwork {

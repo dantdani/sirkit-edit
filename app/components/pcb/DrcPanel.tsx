@@ -15,6 +15,9 @@ import type { DrcViolation, DrcSeverity, DrcPresetId } from "@/app/lib/pcb/drc/t
 import type { DrcHandle } from "./hooks/useDrc";
 import type { PcbRepairHandle } from "./hooks/usePcbRepair";
 import { BoardRepairPanel } from "./BoardRepairPanel";
+import type { ReadinessReport } from "@/app/lib/pcb/readiness/types";
+import { readinessViewModel } from "@/app/lib/pcb/readiness/evaluate";
+import type { ConstraintProgram } from "@/app/lib/constraints/types";
 
 const DOT: Record<DrcSeverity, string> = {
   error: "bg-red-500",
@@ -54,6 +57,12 @@ function ViolationRow({
                 Actual: {v.kind === "incompleteNet" ? v.measuredNm : `${(v.measuredNm / 1_000_000).toFixed(3)} mm`} · Required: {v.kind === "incompleteNet" ? v.thresholdNm : `${(v.thresholdNm / 1_000_000).toFixed(3)} mm`}
               </span>
               {proposal && <span className="mt-1 block text-teal-400">Proposed fix: {proposal}</span>}
+              {v.constraintIds && v.constraintIds.length > 0 && (
+                <span className="mt-1 block font-mono text-[9px] text-violet-300/80">
+                  Rules: {v.constraintIds.join(", ")}
+                </span>
+              )}
+              {v.ruleResolutionHash && <span className="block font-mono text-[9px] text-zinc-600">Resolution: {v.ruleResolutionHash}</span>}
               <span className="mt-1 block text-zinc-600">Clicking this row focuses and highlights the violating geometry.</span>
             </span>
           )}
@@ -63,16 +72,18 @@ function ViolationRow({
   );
 }
 
-export function DrcPanel({ drc, repair }: { drc: DrcHandle; repair: PcbRepairHandle }): React.JSX.Element {
+export function DrcPanel({ drc, repair, readiness, constraintProgram }: { drc: DrcHandle; repair: PcbRepairHandle; readiness?: ReadinessReport; constraintProgram?: ConstraintProgram }): React.JSX.Element {
   const [grouped, setGrouped] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [collapsedKinds, setCollapsedKinds] = useState<Set<string>>(new Set());
+  const [showConstraints, setShowConstraints] = useState(false);
 
   const result = drc.lastResult;
   const preset = PRESETS.find((p) => p.id === drc.activePresetId);
   const running = drc.state === "running";
-  const errors = result?.readiness.errors ?? 0;
-  const warnings = result?.readiness.warnings ?? 0;
+  const errors = result?.summary.errors ?? 0;
+  const warnings = result?.summary.warnings ?? 0;
+  const readinessView = readiness ? readinessViewModel(readiness) : undefined;
 
   const onRow = (v: DrcViolation): void => {
     drc.zoomToViolation(v);
@@ -125,18 +136,51 @@ export function DrcPanel({ drc, repair }: { drc: DrcHandle; repair: PcbRepairHan
         </div>
       </div>
 
+      {constraintProgram && (
+        <div className="border-b border-violet-900/40 bg-violet-950/10 px-3 py-2 text-[10px] text-zinc-400">
+          <button type="button" onClick={() => setShowConstraints((value) => !value)} className="flex w-full items-center justify-between text-left">
+            <span className="font-medium text-violet-300">Typed constraint program</span>
+            <span className="font-mono text-[9px] text-zinc-500">{constraintProgram.programHash.slice(0, 18)}…</span>
+          </button>
+          <div className="mt-1 flex gap-2">
+            <span>{constraintProgram.activeConstraintIds.length} active</span>
+            <span>{constraintProgram.conflicts.length} conflicts</span>
+            <span>{constraintProgram.coverage.filter((item) => ["unsupported", "unknown", "declarative_only"].includes(item.support)).length} incomplete coverage</span>
+          </div>
+          {showConstraints && (
+            <div className="mt-2 max-h-36 space-y-1 overflow-y-auto border-t border-violet-900/30 pt-2">
+              {constraintProgram.coverage.map((item) => (
+                <div key={`${item.constraintId}:${item.consumerId}`} className="rounded bg-zinc-950/40 px-2 py-1">
+                  <div className="flex justify-between gap-2"><span className="truncate font-mono text-violet-200">{item.constraintId}</span><span className={item.support === "enforced" ? "text-emerald-400" : "text-amber-400"}>{item.support}</span></div>
+                  <div className="truncate text-zinc-600">{item.consumerId} · {item.targetIds.length} target(s)</div>
+                </div>
+              ))}
+              {constraintProgram.coverage.length === 0 && <p>No active target coverage.</p>}
+            </div>
+          )}
+        </div>
+      )}
+
       {!result ? (
         <div className="px-3 py-4 text-xs text-zinc-500">
           Click <span className="text-zinc-300">Run DRC</span> to check the board against the current preset.
         </div>
       ) : (
         <>
+          {readinessView && <div className={`border-b px-3 py-2 text-[11px] ${
+            readinessView.state === "ready" ? "border-emerald-900/50 bg-emerald-950/15 text-emerald-300" :
+              readinessView.state === "blocked" ? "border-red-900/50 bg-red-950/15 text-red-300" :
+                "border-amber-900/50 bg-amber-950/15 text-amber-300"
+          }`}>
+            <p className="font-medium">{readinessView.label}</p>
+            <p className="mt-0.5 text-[10px] opacity-75">{readinessView.detail}</p>
+          </div>}
           <BoardRepairPanel result={result} repair={repair} />
           <div className="px-3 py-2 border-b border-zinc-800 shrink-0 space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs">
-                {result.readiness.state === "ready" ? (
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">Ready</span>
+                {result.summary.state === "passed" ? (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">DRC complete</span>
                 ) : (
                   <>
                     {errors > 0 && <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">{errors} errors</span>}
@@ -151,8 +195,8 @@ export function DrcPanel({ drc, repair }: { drc: DrcHandle; repair: PcbRepairHan
                 Group by kind
               </label>
             </div>
-            <p className={`text-[10px] ${result.readiness.state === "not-ready" ? "text-red-300" : result.readiness.state === "needs-review" ? "text-amber-300" : "text-emerald-300"}`}>
-              {result.readiness.message}
+            <p className={`text-[10px] ${result.summary.state === "failed" ? "text-red-300" : result.summary.state !== "passed" ? "text-amber-300" : "text-emerald-300"}`}>
+              {result.summary.message}
             </p>
           </div>
 

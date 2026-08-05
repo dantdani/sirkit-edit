@@ -1,0 +1,10 @@
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://10.250.138.168:3001
+- Environments: .env.local
+✓ Ready in 2.2s
+
+○ Compiling / ...
+ GET / 200 in 27.9s (next.js: 25.8s, application-code: 2.1s)
+ GET /api/passive-policy 200 in 426ms (next.js: 363ms, application-code: 63ms)
+ GET / 200 in 1959ms (next.js: 853ms, application-code: 1106ms)

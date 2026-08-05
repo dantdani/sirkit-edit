@@ -33,6 +33,14 @@ export function getSqlClient(): Sql {
     ssl: url.includes("supabase.") ? "require" : undefined,
     // Fail fast with a real error instead of hanging on a cold/unreachable host.
     connect_timeout: 15,
+    // Supabase's session-mode pooler caps concurrent clients (15 by default).
+    // Concurrent request handlers — per-component binding writes, parallel
+    // subsystem builds — otherwise exhaust it and every query fails with
+    // EMAXCONNSESSION. Bound our own pool well under that ceiling and let
+    // callers queue instead; idle sockets are returned promptly.
+    max: Number(process.env.SIRKIT_DB_POOL_MAX ?? 8),
+    idle_timeout: 20,
+    max_lifetime: 60 * 30,
     // Swallow benign server NOTICEs (e.g. "extension already exists").
     onnotice: () => {},
   });

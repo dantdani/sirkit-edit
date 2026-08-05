@@ -1,0 +1,50 @@
+import { describe, expect, it } from "vitest";
+import { FootprintResolutionService } from "../../footprint-resolver/service";
+import { InMemoryPassivePolicyContextProvider } from "../../passive-policy/providers";
+import { ScopedPassivePolicyInvalidationTarget } from "../../passive-policy/invalidation";
+import { InMemoryPassivePolicyRepository } from "../../passive-policy/repository";
+import { PassivePolicyService } from "../../passive-policy/service";
+import { PcbSynchronizationService } from "../../pcb-sync/service";
+import { preflightRequest } from "../../pcb-sync/__tests__/fixtures";
+import { InMemoryPhysicalBindingRepository, PhysicalBindingService } from "../../physical-binding/repository";
+import { createApprovedValidation } from "../../physical-binding/transitions";
+import { withBindingDigests, withoutBindingDigests } from "../../physical-binding/stable";
+import { ACTOR as PB_ACTOR, exactCandidate } from "../../physical-binding/__tests__/fixtures";
+import { InMemoryDurableWorkflowRepository } from "../../durable-workflow/repository";
+import { DurableOutboxDispatcher } from "../../durable-workflow/outbox";
+import { durableEventContractKey, durableOutboxEventDigest, durableWorkflowDigest } from "../../durable-workflow/stable";
+import { assignmentCandidateFromBinding, buildAssignmentSourceBundle } from "../adapters";
+import { DurableAssignmentQueueRepository } from "../repository";
+import { ASSIGNMENT_REVALIDATION_EVENT_TYPE, assignmentRevalidationOutboxHandlers, AssignmentRevalidationCoordinator } from "../revalidation";
+import { AssignmentQueueService } from "../service";
+import { ASSIGNMENT_REQUEST_VERSION, type AssignmentDecisionRequest } from "../types";
+import { ACTOR, NOW } from "./fixtures";
+import { resolverRequest } from "../../footprint-resolver/__tests__/fixtures";
+
+describe("assignment revalidation coordinator", () => {
+  it("rebuilds trusted owner evidence and replaces the old blocker with the current blocker", async () => {
+    const physicalRepository = new InMemoryPhysicalBindingRepository(), physicalService = new PhysicalBindingService(physicalRepository);
+    const raw = withoutBindingDigests(exactCandidate("component-1"));
+    raw.pinPadMapping = { ...raw.pinPadMapping, state: "verified", verifierVersion: "sirkit.mapping-verifier/4.0.0", verificationTier: "exact_part", mappingRevisionId: "mapping:r1", mappingContentDigest: "mapping-content", mappingDependencyDigest: "mapping-dependency", verificationResultDigest: "mapping-result", mappingApprovalState: "approved", mappingFreshnessState: "current", mappingConflictState: "none", mappingLifecycleState: "active" };
+    const binding = withBindingDigests(raw); let state = await physicalService.createCandidate(binding, "revalidation-create");
+    state = await physicalService.transition(state.set.setId, { schemaVersion: "sirkit.physical-binding-transition.v1", action: "revalidate", bindingRevisionId: binding.revisionId, expectedSetRevision: state.set.revision, idempotencyKey: "revalidation-validate", reason: "Validate exact physical evidence.", actor: PB_ACTOR, at: "2026-07-19T17:59:00.000Z", validation: createApprovedValidation(binding, { validatorVersion: "test-validator/1", at: "2026-07-19T17:59:00.000Z", evidenceRefs: ["proof"] }) });
+    const current = state.bindings.find((value) => state.set.candidateRevisionIds.includes(value.revisionId))!, candidate = assignmentCandidateFromBinding({ binding: current, set: state.set });
+    const databaseUrl = process.env.R03_B10D_RETRY02_DATABASE_URL; if (databaseUrl) process.env.DATABASE_URL = databaseUrl; const workflow = databaseUrl ? new (await import("../../durable-workflow/server-repository")).PostgresDurableWorkflowRepository() : new InMemoryDurableWorkflowRepository(), queueRepository = new DurableAssignmentQueueRepository(workflow), passiveRepository = new InMemoryPassivePolicyRepository(), passivePolicy = new PassivePolicyService({ repository: passiveRepository, contextProvider: new InMemoryPassivePolicyContextProvider(), invalidation: new ScopedPassivePolicyInvalidationTarget() }), queueService = new AssignmentQueueService({ repository: queueRepository, physicalBindings: physicalService, passivePolicy });
+    const source = buildAssignmentSourceBundle({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", designId: "design-1", componentId: "component-1", componentRevision: "component-1:r1", referenceDesignator: "U1", displayName: "Controller", assemblyVariantId: "variant-default", stage1Gates: [{ code: "PB_EFFECTIVE_SELECTION", status: "fail", message: "Select the verified exact candidate.", recordPath: "lifecycleState", remediationCategory: "lifecycle", severity: "blocking", blocking: true, evidenceRefs: [] }], candidates: [candidate], ownerReferences: { stage1: { setId: state.set.setId, expectedSetRevision: state.set.revision } }, resolutionRequest: resolverRequest("component-1"), pcbPreflightRequest: preflightRequest(), capturedAt: NOW });
+    const queue = await queueService.refresh(source, ACTOR), item = queue.items[0]!;
+    const previewRequest: AssignmentDecisionRequest = { requestSchemaVersion: ASSIGNMENT_REQUEST_VERSION, requestId: "revalidation-select-request", tenantId: item.tenantId, projectId: item.projectId, branchId: item.branchId, itemId: item.itemId, expectedItemRevision: item.itemRevision, expectedItemDigest: item.itemDigest, action: "select_candidate", selectedCandidateId: candidate.candidateId, selectedCandidateDigest: candidate.candidateDigest, decisionEvidenceRefs: ["evidence-datasheet"], reason: "Select verified controller package.", actorContext: ACTOR, mode: "preview", idempotencyKey: "revalidation-select", requestedAt: NOW };
+    const preview = await queueService.preview(previewRequest), decision = await queueService.commit({ ...previewRequest, mode: "commit", planId: preview.plan.planId, planDigest: preview.plan.planDigest });
+
+    const resolution = new FootprintResolutionService(physicalRepository, { clock: () => NOW });
+    const pcbComponent = { componentInstanceId: "component-1", referenceDesignator: "U1", hierarchyPath: ["root", "motor-control"], componentRevision: "component-1:r1", applicability: "applicable" as const, resolutionStatus: "blocked_unapproved" as const, mappingStatus: "verified" as const, proposedOperation: "blocked" as const, risk: "none" as const, status: "blocked_unresolved_footprint" as const, blockers: [], warnings: [], resolverBlockerCodes: [], evidenceRefs: [] };
+    const pcbSync = { preflight: async () => ({ components: [pcbComponent] }) } as unknown as PcbSynchronizationService;
+    const recreatedRepository = new DurableAssignmentQueueRepository(workflow), recreatedService = new AssignmentQueueService({ repository: recreatedRepository, physicalBindings: physicalService, passivePolicy }), coordinator = new AssignmentRevalidationCoordinator({ queueRepository: recreatedRepository, queueService: recreatedService, physicalBindings: physicalRepository, resolver: resolution, pcbSync, passivePolicy, passiveRepository, clock: () => "2026-07-19T18:05:00.000Z" });
+    const committed = await recreatedRepository.getItem(item, item.itemId), revalidation = { tenantId: item.tenantId, projectId: item.projectId, branchId: item.branchId, itemId: item.itemId, decisionId: decision.decisionId, sourceSnapshotId: item.snapshot.snapshotId, expectedItemRevision: committed!.itemRevision, expectedItemDigest: committed!.itemDigest }, events = await workflow.listOutbox({ eventType: ASSIGNMENT_REVALIDATION_EVENT_TYPE }), event = events[0]!;
+    expect(event).toMatchObject({ eventType: ASSIGNMENT_REVALIDATION_EVENT_TYPE, eventVersion: 2, ownerAggregateType: "assignment-queue.decision.v1", ownerAggregateKey: decision.decisionId, ownerAggregateRevision: 1, payload: revalidation });
+    const handlers = assignmentRevalidationOutboxHandlers(coordinator), handler = handlers.get(durableEventContractKey(ASSIGNMENT_REVALIDATION_EVENT_TYPE, 2))!; expect(handler).toBeTruthy(); expect(handlers.has(durableEventContractKey(ASSIGNMENT_REVALIDATION_EVENT_TYPE, 1))).toBe(false);
+    const badPayload = { ...revalidation, projectId: "wrong-project" }, badBase = { ...event, payload: badPayload, payloadDigest: durableWorkflowDigest(badPayload) }, badEvent = { ...badBase, eventDigest: durableOutboxEventDigest(badBase) }; await expect(handler(badEvent)).rejects.toThrow("AQ_REVALIDATION_EVENT_SCOPE_MISMATCH");
+    expect(await new DurableOutboxDispatcher(workflow, handlers).dispatch({ workerId: "revalidation-worker", now: "2026-07-21T18:05:00.000Z", topics: [ASSIGNMENT_REVALIDATION_EVENT_TYPE] })).toMatchObject({ completed: 1, failed: 0 });
+    expect((await recreatedRepository.getItem(item, item.itemId))?.lifecycle).toBe("superseded"); expect(await coordinator.revalidate(revalidation)).toBeNull();
+    const refreshed = await recreatedRepository.listItems({ ...item, assemblyVariantId: item.assemblyVariantId, includeHistorical: false }); expect(refreshed).toHaveLength(1); expect(refreshed[0]?.primaryBlocker.sourceIssueCode).not.toBe("PB_EFFECTIVE_SELECTION"); expect(refreshed[0]?.sourceIssues.some((issue) => issue.sourceIssueCode === "PB_APPROVAL")).toBe(true);
+  });
+});

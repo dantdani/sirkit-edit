@@ -3,8 +3,9 @@
 import { LAYERS, type LayerId } from "../layers";
 import type { PcbBoard } from "../types";
 import type { Vec2 } from "../geometry";
-import type { CopperItemRef } from "../connectivity-board";
+import { copperItemId, type CopperItemRef } from "../connectivity-board";
 import { padWorldPosition } from "../geometry-copper";
+import { physicalPadByIdentity } from "../pad-identity";
 
 /**
  * Nanometers → millimeter string with 2–3 decimals: 100_000 → "0.10",
@@ -29,7 +30,7 @@ export function layerName(layer?: LayerId): string {
 export function refKey(ref: CopperItemRef): string {
   switch (ref.kind) {
     case "pad":
-      return `pad:${ref.instanceId}.${ref.padNumber}`;
+      return copperItemId(ref);
     case "track":
       return `track:${ref.id}`;
     case "via":
@@ -60,7 +61,7 @@ export function refLocation(board: PcbBoard, ref: CopperItemRef): Vec2 {
     if (b) return { x: Math.round((b.minX + b.maxX) / 2), y: Math.round((b.minY + b.maxY) / 2) };
   } else {
     const inst = board.footprints.find((f) => f.id === ref.instanceId);
-    const pad = inst?.def.pads.find((p) => p.number === ref.padNumber);
+    const pad = inst ? physicalPadByIdentity(inst, ref.padInstanceId, ref.padIndex, ref.padNumber)?.pad : undefined;
     if (inst && pad) return padWorldPosition(inst, pad);
   }
   return { x: 0, y: 0 };

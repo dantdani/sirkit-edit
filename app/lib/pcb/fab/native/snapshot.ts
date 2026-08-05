@@ -2,22 +2,24 @@ import { runDrc } from "../../drc/run-drc";
 import { outlinePolygon, polygonBBox } from "../../zones/geometry";
 import type { PcbBoard } from "../../types";
 import type { PcbNetlist } from "../../netlist-bridge";
-import type { CopperItemRef } from "../../connectivity-board";
+import { copperItemId, type CopperItemRef } from "../../connectivity-board";
 import { STRICT_NATIVE_RECIPE } from "./recipe";
 import { deepFreeze, deterministicUuid, safeFabName, sha256, stableJson } from "./stable";
 import type {
   FabDiagnostic,
   ManufacturingSnapshot,
   NativeFabCompileInput,
+  NativeFabMaskPolicy,
   NativeFabRecipe,
 } from "./types";
+import { validateReferenceDesignators } from "../../integrity";
+import { computeElectricalTruth } from "../../electrical-truth";
+import { zoneFillIsCurrent } from "../../zones/fill-lifecycle";
 
 const byStringId = <T extends { id: string }>(a: T, b: T): number => a.id.localeCompare(b.id);
 
 function copperSourceId(item: CopperItemRef): string {
-  if (item.kind === "pad") return `${item.instanceId}:pad:${item.padNumber}`;
-  if (item.kind === "zone-region") return `${item.zoneId}:region:${item.regionIndex}`;
-  return item.id;
+  return copperItemId(item);
 }
 
 function canonicalBoard(board: PcbBoard): PcbBoard {
@@ -79,12 +81,35 @@ export function createManufacturingSnapshot(
   const board = canonicalBoard(input.board);
   const netlist = canonicalNetlist(input.netlist);
   const recipe: NativeFabRecipe = structuredClone(input.recipe ?? STRICT_NATIVE_RECIPE);
+  const maskPolicy: NativeFabMaskPolicy = structuredClone(input.maskPolicy ?? {
+    schemaVersion: "sirkit.native-mask-policy.v1",
+    defaultComponentPadsOpen: false,
+    defaultExpansionNm: 0,
+    defaultViaTenting: "tented",
+    sourceProfileDigest: "legacy-explicit-pad-layers-only",
+  });
   const boardName = safeFabName(input.boardName);
 
   validateFiniteNumbers(board, "board", diagnostics);
+  if (!Number.isSafeInteger(maskPolicy.defaultExpansionNm) || maskPolicy.defaultExpansionNm < 0 || !maskPolicy.sourceProfileDigest) diagnostics.push({
+    code: "SNAPSHOT_MASK_POLICY_INVALID",
+    severity: "error",
+    category: "snapshot",
+    message: "Native mask policy requires a non-negative integer expansion and an exact source-profile digest.",
+  });
+
+  for (const diagnostic of validateReferenceDesignators(board.footprints)) {
+    diagnostics.push({
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      category: "snapshot",
+      message: diagnostic.summary,
+      sourceIds: diagnostic.componentIds,
+    });
+  }
 
   for (const zone of board.zones) {
-    if (zone.dirty || zone.fill.length === 0) {
+    if (!zoneFillIsCurrent(board, zone) || zone.fill.length === 0) {
       diagnostics.push({
         code: "SNAPSHOT_STALE_ZONE_FILL",
         severity: "error",
@@ -95,7 +120,20 @@ export function createManufacturingSnapshot(
     }
   }
 
-  const drc = runDrc(board, input.drcPreset.rules, { presetId: input.drcPreset.id });
+  const electricalTruth = computeElectricalTruth(board);
+  for (const unknown of electricalTruth.unresolved) {
+    diagnostics.push({
+      code: unknown.code,
+      severity: "warning",
+      category: "snapshot",
+      message: unknown.summary,
+      sourceIds: unknown.objectIds,
+    });
+  }
+  const drc = runDrc(board, input.drcPreset.rules, {
+    presetId: input.drcPreset.id,
+    electricalReport: electricalTruth,
+  });
   for (const violation of drc.violations) {
     diagnostics.push({
       code: `DRC_${violation.kind.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`,
@@ -124,6 +162,7 @@ export function createManufacturingSnapshot(
       fabPreset: input.fabPreset,
       drcPreset: input.drcPreset,
       recipe,
+      maskPolicy,
       boardName,
     }),
   );
@@ -131,7 +170,7 @@ export function createManufacturingSnapshot(
   const sameCoordinatesId = deterministicUuid(sourceHash);
 
   const snapshot: ManufacturingSnapshot = {
-    schemaVersion: "sirkit.manufacturing-snapshot.v1",
+    schemaVersion: "sirkit.manufacturing-snapshot.v2",
     boardName,
     sourceHash,
     revisionId,
@@ -141,6 +180,26 @@ export function createManufacturingSnapshot(
     fabPreset: deepFreeze(structuredClone(input.fabPreset)),
     drcPreset: deepFreeze(structuredClone(input.drcPreset)),
     recipe: deepFreeze(recipe),
+    maskPolicy: deepFreeze(maskPolicy),
+    electricalTruth: deepFreeze(electricalTruth),
+    planeCertificates: deepFreeze(board.zones.flatMap((zone) => {
+      const net = board.nets.find((candidate) => candidate.id === zone.netId);
+      if (zone.source !== "stackup-plane" || !net?.stableId || !zoneFillIsCurrent(board, zone) || !zone.fillState?.fillHash) return [];
+      return [{
+        zoneId: zone.id,
+        stableNetId: net.stableId,
+        layerId: zone.layer,
+        sourceRevision: zone.fillState.sourceRevision,
+        algorithmVersion: zone.fillState.algorithmVersion,
+        fillHash: zone.fillState.fillHash,
+        regionCount: zone.fill.length,
+        holeCount: zone.fill.reduce((sum, region) => sum + region.holes.length, 0),
+        filledAreaNm2: zone.fill.reduce((sum, region) => sum + region.areaNm2, 0),
+        representationId: `native:${zone.layer}:${zone.id}`,
+        status: "current" as const,
+        unsupportedConstructs: [],
+      }];
+    }).sort((a, b) => a.zoneId.localeCompare(b.zoneId))),
     transform: {
       originXNm: bbox.minX,
       originYNm: bbox.maxY,

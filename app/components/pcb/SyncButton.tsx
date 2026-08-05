@@ -11,11 +11,14 @@ import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
 export function SyncButton({
   dirty,
   syncing,
+  progress,
   onSync,
   onOptions,
 }: {
   dirty: boolean;
   syncing: boolean;
+  /** Live phase text while syncing (e.g. "Binding parts 3/10…"). */
+  progress?: string | null;
   onSync: () => void;
   onOptions: () => void;
 }) {
@@ -30,7 +33,7 @@ export function SyncButton({
         className="relative flex items-center gap-1.5 px-2.5 py-1 font-medium hover:bg-teal-500/20 disabled:opacity-50"
       >
         {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-        Schematic → PCB
+        {syncing && progress ? progress : "Schematic → PCB"}
         {dirty && !syncing && (
           <span
             className="absolute right-1 top-0.5 size-1.5 rounded-full bg-amber-400"

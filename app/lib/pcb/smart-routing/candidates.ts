@@ -22,6 +22,7 @@ import type {
   SmartRouteIntent,
   WalkDirection,
 } from "./types";
+import { classifyNetRelation } from "../copper-policy";
 
 const MIN_SEARCH_NM = 2_000_000;
 const MAX_SEARCH_NM = 12_000_000;
@@ -63,6 +64,17 @@ export function generateDirectCandidates(
   intent: SmartRouteIntent,
   rules: EffectiveRoutingRules,
 ): SmartRouteCandidate[] {
+  if (intent.posture === "arbitrary") {
+    return [makeCandidate(
+      world,
+      intent,
+      rules,
+      "direct",
+      undefined,
+      [intent.start, intent.end],
+      "Native straight copper at the requested arbitrary angle.",
+    )];
+  }
   const paths = [
     octilinearConnection(intent.start, intent.end, true),
     octilinearConnection(intent.start, intent.end, false),
@@ -120,8 +132,9 @@ function searchObstacles(
   return world.spatial
     .queryBox(intent.layer, corridor)
     .filter((item) => {
-      if (item.kind === "zone" && item.netId === intent.netId) return false;
-      const endpointItem = item.netId === intent.netId
+      const sameNet = classifyNetRelation(world.board, item.netId, intent.netId) === "same-proven-net";
+      if (item.kind === "zone" && sameNet) return false;
+      const endpointItem = sameNet
         && (bboxContainsPoint(item.bbox, intent.start) || bboxContainsPoint(item.bbox, intent.end));
       return !endpointItem;
     })

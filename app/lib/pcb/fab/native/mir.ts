@@ -7,6 +7,7 @@ import type { SilkTextItem } from "../../silk/types";
 import { transformPoint } from "../../geometry";
 import type { FootprintInstance, FpGraphic, Pad } from "../../types";
 import { outlinePolygon } from "../../zones/geometry";
+import { zoneFillIsCurrent } from "../../zones/fill-lifecycle";
 import { stableJson } from "./stable";
 import { toManufacturingPoint } from "./snapshot";
 import type {
@@ -64,6 +65,14 @@ function normalizeDeg(deg: number): number {
 function mirShape(shape: PadShape): PadShape {
   if (shape.kind !== "polygon") return structuredClone(shape);
   return { kind: "polygon", points: shape.points.map((p) => ({ x: p.x, y: -p.y })) };
+}
+
+function expandedMaskShape(shape: PadShape, marginNm: number): PadShape | null {
+  if (shape.kind === "circle") return shape.radius + marginNm > 0 ? { kind: "circle", radius: shape.radius + marginNm } : null;
+  if (shape.kind === "rect") return shape.width + marginNm * 2 > 0 && shape.height + marginNm * 2 > 0 ? { kind: "rect", width: shape.width + marginNm * 2, height: shape.height + marginNm * 2 } : null;
+  if (shape.kind === "oval") return shape.width + marginNm * 2 > 0 && shape.height + marginNm * 2 > 0 ? { kind: "oval", width: shape.width + marginNm * 2, height: shape.height + marginNm * 2 } : null;
+  if (shape.kind === "roundrect") return shape.width + marginNm * 2 > 0 && shape.height + marginNm * 2 > 0 && shape.cornerRadius + marginNm >= 0 ? { kind: "roundrect", width: shape.width + marginNm * 2, height: shape.height + marginNm * 2, cornerRadius: shape.cornerRadius + marginNm } : null;
+  return marginNm === 0 ? mirShape(shape) : null;
 }
 
 function objectAttributes(
@@ -422,7 +431,15 @@ export function compileManufacturingIr(
         fp.ref,
         pad.number || undefined,
       );
-      for (const padLayer of effectivePadLayers(pad, fp.side)) {
+      const authoredLayers = effectivePadLayers(pad, fp.side);
+      const effectiveLayers = new Set(authoredLayers);
+      if (snapshot.maskPolicy.defaultComponentPadsOpen && pad.type !== "np_thru_hole") {
+        if (pad.type === "thru_hole") {
+          effectiveLayers.add("maskTop");
+          effectiveLayers.add("maskBottom");
+        } else effectiveLayers.add(fp.side === "top" ? "maskTop" : "maskBottom");
+      }
+      for (const padLayer of effectiveLayers) {
         const target = layers.get(padLayer);
         if (!target) continue;
         if (padLayer === "in1" || padLayer === "in2") {
@@ -432,11 +449,25 @@ export function compileManufacturingIr(
           continue;
         }
         const isCopper = ACTIVE_COPPER[board.stackup].includes(padLayer);
+        const maskMarginNm = pad.solderMaskMarginNm ?? snapshot.maskPolicy.defaultExpansionNm;
+        const shape = padLayer === "maskTop" || padLayer === "maskBottom"
+          ? expandedMaskShape(placed.shape, maskMarginNm)
+          : mirShape(placed.shape);
+        if (!shape) {
+          diagnostics.push({
+            code: "MIR_MASK_EXPANSION_UNSUPPORTED",
+            severity: "error",
+            category: "geometry",
+            message: `Pad ${fp.ref}.${pad.number} requires polygon mask expansion unsupported by the exact MIR.`,
+            sourceIds: [fp.id, `${fp.id}:pad:${pad.number}`],
+          });
+          continue;
+        }
         const flash: MirFlash = {
           kind: "flash",
           id: `${fp.id}-pad-${pad.number}-${padLayer}`,
           at: toManufacturingPoint(snapshot, placed.at),
-          shape: mirShape(placed.shape),
+          shape,
           rotationDeg: normalizeDeg(placed.rotationDeg),
           apertureFunction: isCopper
             ? pad.type === "smd"
@@ -454,6 +485,7 @@ export function compileManufacturingIr(
   }
 
   for (const zone of board.zones) {
+    if (!zoneFillIsCurrent(board, zone)) continue;
     const target = layers.get(zone.layer);
     if (!target) continue;
     for (let index = 0; index < zone.fill.length; index++) {

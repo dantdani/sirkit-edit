@@ -161,7 +161,9 @@ Stay focused — don't over-engineer. A simple LED circuit needs an MCU, a resis
 
 CRITICAL: in submit_schematic, every component's "partId" must be the exact "partId" value (a UUID) copied from a search_parts result. NEVER put the part name or MPN in "partId" — names go in "value".
 
-Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections (supply pairs, pins that must not float). Treat designNotes as authoritative: satisfy every listed requirement in your connections.
+When an LED is driven from a logic or timer OUTPUT pin, size its series resistor from that pin's specified output-high voltage UNDER LOAD, not from the supply rail. A bipolar 555 (NE555/SA555/NA555) sources with roughly a 1.5-2 V internal drop, so a 5 V part delivers only about 3.3 V; a 1 kOhm resistor then yields near 1 mA and the LED is barely visible. Target 3-8 mA of actual LED current at the WORST-CASE forward voltage - for a 5 V bipolar 555 driving a red LED that means roughly 220-470 Ohm. CMOS timers (TLC555/LMC555) swing closer to the rail but source far less current; check the datasheet before relying on them for direct LED drive.
+
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections (supply pairs, pins that must not float). Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. STRONGLY PREFER a verified part for every component; a part without this flag has no footprint authority and is blocked before the PCB is built, so choose one only when no verified part can fill the role. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
 
 WHEN TO CALL find_alternates:
 
@@ -323,6 +325,7 @@ export const RERANK_SYSTEM_PROMPT = `You re-rank candidate electronic components
 You are given a role description and a list of candidate parts, each with an index, name, MPN, category, pin count, and a short description. Return the candidate indices ordered from best to worst fit for the role by calling rank_parts.
 
 Judge fit by:
+- physical authority FIRST: a candidate marked "physicalAuthority":"verified" has a proven symbol, footprint and pin-to-pad mapping and can actually be manufactured. Rank verified candidates above unverified ones whenever they can fill the role at all; an unverified part is blocked before a board is produced.
 - how directly the part fulfills the stated role;
 - match to any specifics in the role — package size (e.g. "0805"), family (e.g. "ESP32", "STM32F103"), or value;
 - category appropriateness and a sensible pin count for the role.
@@ -540,6 +543,8 @@ Connections (identical rules to the full generator):
 
 Use refDes by EE convention (U for ICs, R/C/L, D, Q, J, Y, …). Don't worry about refDes clashing with other blocks — collisions are renumbered automatically when blocks are merged.
 
-Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections.
+When an LED is driven from a logic or timer OUTPUT pin, size its series resistor from that pin's specified output-high voltage UNDER LOAD, not from the supply rail. A bipolar 555 (NE555/SA555/NA555) sources with roughly a 1.5-2 V internal drop, so a 5 V part delivers only about 3.3 V; a 1 kOhm resistor then yields near 1 mA and the LED is barely visible. Target 3-8 mA of actual LED current at the WORST-CASE forward voltage - for a 5 V bipolar 555 driving a red LED that means roughly 220-470 Ohm. CMOS timers (TLC555/LMC555) swing closer to the rail but source far less current; check the datasheet before relying on them for direct LED drive.
+
+Some search results carry a "designNotes" field with datasheet-derived pin roles and REQUIRED connections. Treat designNotes as authoritative: satisfy every listed requirement in your connections. Some results carry "physicalAuthority":"verified" plus "verifiedFootprint" — these are the ONLY parts with a proven symbol/footprint/pin-pad mapping that can actually reach a manufactured board. STRONGLY PREFER a verified part for every component; a part without this flag has no footprint authority and is blocked before the PCB is built, so choose one only when no verified part can fill the role. Verified results may also carry "orderableValues": when present, the component's "value" MUST be exactly one of those strings (pick the closest listed value and adjust the surrounding design to suit).
 
 Every component's partId must be a real UUID copied from a search_parts result. END with exactly one submit_schematic call. Don't narrate after.`;

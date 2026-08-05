@@ -1,0 +1,148 @@
+{
+  "schemaVersion": "sirkit.passive-policy-stage6-handoff.v1",
+  "producer": {
+    "policy": "sirkit.project-passive-package-policy.v1",
+    "profile": "sirkit.passive-package-profile.v1",
+    "facts": "sirkit.passive-fact-snapshot.v1",
+    "result": "sirkit.passive-policy-evaluation-result.v1",
+    "evaluator": "sirkit.passive-policy-evaluator/5.0.0"
+  },
+  "queueCreation": {
+    "create": [
+      "requires_exact_part",
+      "missing_required_facts",
+      "conflicting_facts",
+      "conflicting_rules",
+      "profile_unavailable",
+      "mapping_unverified",
+      "policy_draft_unapproved",
+      "policy_stale",
+      "unsupported",
+      "error"
+    ],
+    "informationalUnlessProjectPolicyRequiresReview": [
+      "not_applicable",
+      "excluded_safety",
+      "excluded_specialized_role"
+    ],
+    "noQueueWhenAcceptedForLayout": [
+      "eligible_exact_part",
+      "eligible_characterized_generic",
+      "eligible_layout_reservation"
+    ],
+    "reservationWarningMustRemainVisible": true
+  },
+  "stableIdentity": [
+    "tenantId",
+    "projectId",
+    "branchId",
+    "boardInstanceId",
+    "componentInstanceId",
+    "hierarchyPath",
+    "assemblyVariantId",
+    "componentRevisionId",
+    "policyId",
+    "policyRevisionId",
+    "policyTechnicalDigest",
+    "dependencySnapshot.dependencyDigest",
+    "evaluationId",
+    "resultDigest"
+  ],
+  "issueFamilies": {
+    "missingFacts": ["PP_REQUIRED_FACTS_MISSING", "PP_COMPONENT_CLASS_UNKNOWN"],
+    "specializedOrSafety": ["PP_SPECIALIZED_ROLE_EXCLUDED", "PP_MANDATORY_SAFETY_EXCLUSION", "PP_COMPONENT_CLASS_SPECIALIZED_EXCLUDED"],
+    "exactPart": ["PP_COMPONENT_EXCEPTION_REQUIRES_EXACT", "PP_EXACT_PART_PROFILE_COMPATIBILITY_REQUIRED"],
+    "conflicts": ["PP_CLASS_OR_ROLE_CONFLICTING", "PP_WINNING_RULES_CONFLICT", "PP_COMPONENT_EXCEPTIONS_CONFLICT", "PP_OVERLAPPING_PUBLISHED_POLICIES"],
+    "profile": ["PP_PROFILE_UNAVAILABLE", "PP_REFERENCED_PROFILE_UNAVAILABLE"],
+    "mapping": ["PP_MAPPING_UNVERIFIED", "PP_PROFILE_STAGE4_MAPPING_UNACCEPTED"]
+  },
+  "presentation": {
+    "show": [
+      "status",
+      "mode",
+      "selectedProfile as non-authoritative suggestion only",
+      "selectedRuleIds and full rule dispositions",
+      "eligibility gates",
+      "blockers and warnings",
+      "fact assessment including unknown/conflicting/stale/permittedUnknown",
+      "manufacturing gaps",
+      "reservation warning",
+      "bounded policy trace"
+    ],
+    "mustNeverLabel": [
+      "manufacturing ready",
+      "purchasable exact part",
+      "availability verified",
+      "derating verified",
+      "approved mapping when Stage 4 did not approve it"
+    ]
+  },
+  "allowedDecisionTypes": [
+    "choose_exact_component_and_footprint",
+    "approve_component_exception",
+    "provide_missing_authoritative_facts",
+    "opt_out_component_from_policy",
+    "request_project_policy_edit"
+  ],
+  "authorization": {
+    "view": ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin", "migration_admin"],
+    "provideOrEdit": ["pcb_editor", "reviewer", "project_admin"],
+    "approveExceptionOrExactBinding": ["reviewer", "project_admin"],
+    "publishPolicy": ["project_admin"],
+    "humanAuthorityRequired": true,
+    "aiMaySuggestOnly": true
+  },
+  "persistence": {
+    "target": "Stage 1 immutable binding/exception successor with exact decision evidence",
+    "precedence": "approved exact Stage 1 binding outranks Stage 5 policy; approved opt-out/exception is evaluated before ordinary rules",
+    "afterDecision": [
+      "rebuild authoritative component snapshot",
+      "rerun Stage 5 evaluation",
+      "rerun Stage 2 resolution",
+      "stale affected Stage 3 plans",
+      "require a new Stage 3 preflight before apply"
+    ]
+  },
+  "staleness": {
+    "invalidateOn": [
+      "component revision/fact/evidence change",
+      "policy/rule/exception revision change",
+      "package profile/footprint asset/mapping change",
+      "assembly profile change",
+      "Stage 1 selected binding change",
+      "evaluation/result/dependency digest mismatch"
+    ],
+    "behavior": "mark queue item stale; preserve history; do not apply its prior decision; recompute a successor item"
+  },
+  "bulkResolution": {
+    "allowedOnlyWhen": "all stable scopes, fact states, risk flags, mode, winning rules, profile revision, mapping/asset digests and dependency digests are identical and each item independently passes",
+    "forbiddenFor": [
+      "specialized or safety exclusions",
+      "polarized/bulk/high-voltage/high-power/RF/current-sense/timing/unknown components",
+      "conflicting facts or rules",
+      "exact-part choices without per-component proof"
+    ]
+  },
+  "prohibitions": [
+    "do not infer role, package, voltage, technology, risk or exact part from refdes/value/name/order",
+    "do not silently persist or approve any suggestion",
+    "do not weaken Stage 4 mapping gates",
+    "do not make a generic/reservation result manufacturing ready",
+    "do not edit PCB placement, copper, zones, outline, stackup or connectivity directly"
+  ],
+  "fixturesToPreserve": [
+    "100 nF characterized ordinary decoupler",
+    "100 nF layout reservation with named unknown voltage",
+    "insufficient-fact/no-policy component",
+    "10 uF bulk capacitor",
+    "polarized capacitor",
+    "ordinary pull-up resistor",
+    "current-sense/high-power resistor",
+    "exact Stage 1 binding override",
+    "ambiguous bare 0603",
+    "equal-precedence conflicting profiles",
+    "stale Stage 4 mapping",
+    "Stage 3 plan invalidation with byte-identical board"
+  ],
+  "productionBlocker": "Do not start authoritative Stage 6 integration until durable Stage 1 policy-decision persistence, Stage 3 invalidation, audit/idempotency, PostgreSQL migration and process-restart recovery are qualified."
+}

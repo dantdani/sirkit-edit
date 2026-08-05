@@ -46,7 +46,12 @@ export function buildSmartRoutingDemo(): PcbBoard {
   };
   return {
     ...createEmptyBoard(),
-    nets: [{ id: 0, name: "" }, { id: 1, name: "SIGNAL" }, { id: 2, name: "BLOCKER" }],
+    identityVersion: 1,
+    nets: [
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      { id: 1, name: "SIGNAL", stableId: "net:signal", endpointKeys: [] },
+      { id: 2, name: "BLOCKER", stableId: "net:blocker", endpointKeys: [] },
+    ],
     footprints: [terminal("smart-a", "J1", 20), terminal("smart-b", "J2", 60)],
     tracks: [blocker],
   };

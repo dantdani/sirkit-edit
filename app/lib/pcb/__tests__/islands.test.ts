@@ -80,7 +80,10 @@ const via = (netId: number, at: Vec2): Via => ({
 
 function boardWith(parts: Partial<Pick<PcbBoard, "footprints" | "tracks" | "vias">>): PcbBoard {
   const b = createEmptyBoard();
-  b.nets.push({ id: 1, name: "GND" }, { id: 2, name: "SIG" });
+  b.nets.push(
+    { id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] },
+    { id: 2, name: "SIG", stableId: "net:sig", endpointKeys: [] },
+  );
   Object.assign(b, parts);
   return b;
 }

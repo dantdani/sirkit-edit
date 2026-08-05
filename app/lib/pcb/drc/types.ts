@@ -6,6 +6,7 @@ import type { LayerId } from "../layers";
 import type { PcbBoard } from "../types";
 import type { BoardConnectivity, CopperItemRef } from "../connectivity-board";
 import type { NetClassId } from "../netclass";
+import type { ElectricalTruthReport } from "../electrical-truth";
 
 export type DrcCheckKind =
   | "clearance"
@@ -75,9 +76,19 @@ export interface DrcViolation {
   thresholdNm: number; // the rule threshold
   summary: string; // <=120 chars, human, no codes
   detail: string; // 2-3 sentences with values in mm
+  /** Stage 6 exact effective-rule lineage for this measurement. */
+  constraintIds?: string[];
+  constraintProgramHash?: string;
+  ruleResolutionHash?: string;
 }
 
 export interface DrcResult {
+  schemaVersion: "sirkit.pcb-drc.v2";
+  checkVersion: "pcb-drc/2";
+  execution: "completed" | "aborted";
+  completedChecks: string[];
+  /** Exact semantic board revision described by this result. */
+  designRevision: string;
   ok: boolean; // true when zero errors
   violations: DrcViolation[]; // sorted: errors→warnings→info; within each by layer then location
   stats: {
@@ -86,8 +97,23 @@ export interface DrcResult {
     perCheck: Partial<Record<DrcCheckKind, number>>; // count per kind
   };
   presetId?: DrcPresetId; // which preset was used
-  readiness: {
-    state: "ready" | "needs-review" | "not-ready";
+  /** Stage 6 source program plus the resolved manufacturing-input hash. */
+  constraintProgramHash?: string;
+  ruleResolutionHash?: string;
+  electrical: {
+    schemaVersion: ElectricalTruthReport["schemaVersion"];
+    state: ElectricalTruthReport["realized"]["state"];
+    requiredConnections: number;
+    completedConnections: number;
+    remainingConnections: number;
+    stableNetIds: string[];
+    shortIds: string[];
+    orphanObjectIds: string[];
+    unresolvedCodes: string[];
+  };
+  /** DRC-only execution summary. This is not a fabrication-readiness claim. */
+  summary: {
+    state: "passed" | "warnings" | "failed" | "incomplete";
     errors: number;
     warnings: number;
     incompleteNets: number;
@@ -105,7 +131,11 @@ export interface DrcResult {
 export interface DrcCheckContext {
   board: PcbBoard;
   rules: DrcRules;
+  electricalTruth: ElectricalTruthReport;
   connectivity: BoardConnectivity;
   /** effectiveRules(rules, netId, getNetClass(board, netId)), memoized per netId. */
   eff: (netId: number) => DrcRuleSet;
+  constraintProgramHash?: string;
+  ruleResolutionHash?: string;
+  ruleLineage?: (netId: number) => string[];
 }

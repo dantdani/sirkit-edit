@@ -1,0 +1,33 @@
+{
+  "schema": "sirkit.cd2-implementation-evidence.v1",
+  "evaluatedAt": "2026-07-17T21:45:29.670-04:00",
+  "branch": "codex/cd-02-functional-architecture",
+  "protectedCopy": "C:/Users/robsa/Documents/Codex/2026-07-13/do/work/sirkit-edit",
+  "originalUntouched": "C:/Users/robsa/sirkit",
+  "productionCd1GatePreserved": true,
+  "verification": {
+    "focusedCd2": { "testFiles": 8, "passed": 59, "failed": 0 },
+    "focusedCd2AndStage9": { "testFiles": 8, "passed": 72, "failed": 0 },
+    "fullSerialSuite": { "testFilesPassed": 144, "testFilesSkipped": 2, "testsPassed": 954, "testsSkipped": 9, "testsFailed": 0 },
+    "typescript": "passed",
+    "eslint": "passed",
+    "productionBuild": "passed",
+    "stage9Corpus": { "packages": 28, "diagnostics": 0 },
+    "architectureCorpusFixtures": 20
+  },
+  "benchmarks": [
+    { "package": "cd2-problem-corpus", "runId": "benchmark-run:81344362377659b3d519750c148e31e8", "status": "passed", "resultDigest": "sha256:274146ab4bd4748bc27c6ec6f5798393eb94596f0a03b5134c81b06232a8dde1" },
+    { "package": "cd2-material-alternatives", "runId": "benchmark-run:9c58dec6e6d5547185f1e731319e513e", "status": "passed", "resultDigest": "sha256:410fff529a8865f0f977cc376f09ccd78cb834b67e4b0739622032564ea55d34" },
+    { "package": "cd2-hard-coverage", "runId": "benchmark-run:d28114341ec4bee2d58a3394cdf39957", "status": "passed", "resultDigest": "sha256:2ac9822e09f4323e933189542e2ddcc69cd5b68958ba972c68de386ebfd58d74" },
+    { "package": "cd2-adversarial-schema", "runId": "benchmark-run:8b851b42b8b8ff4cc7e53029de65d555", "status": "passed", "resultDigest": "sha256:19261ebbb66d21862f2615eae3b9664d95bcd57ca96b1c097e99305c23180baf" }
+  ],
+  "remainingGaps": [
+    "CD-1 repository verdict remains incomplete",
+    "no real accepted project package exercised",
+    "no paid live-provider architecture proposal run",
+    "no independent expert review",
+    "no CD-3/CD-4 consumer yet",
+    "migration not applied to an external production database"
+  ],
+  "verdict": "CD-2 INCOMPLETE"
+}

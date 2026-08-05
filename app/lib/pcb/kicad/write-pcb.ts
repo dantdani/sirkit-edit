@@ -31,6 +31,7 @@ import { emitTrack } from "./emit-track";
 import { emitVia } from "./emit-via";
 import { emitZone } from "./emit-zone";
 import { emitSilkItem } from "./emit-silk"; // Stage 16
+import { assertValidBoardReferences } from "../integrity";
 
 export type { WriteKicadPcbOptions } from "./types";
 
@@ -41,7 +42,7 @@ export function netlistFromBoard(board: PcbBoard): PcbNetlist {
     components: [],
     nets: board.nets
       .filter((n) => n.id !== 0)
-      .map((n) => ({ id: n.id, name: n.name, nodes: [] })),
+      .map((n) => ({ id: n.id, name: n.name, nodes: [], endpointKeys: [...(n.endpointKeys ?? [])] })),
   };
 }
 
@@ -93,6 +94,7 @@ export function writeKicadPcb(
   netlist: PcbNetlist,
   options?: WriteKicadPcbOptions,
 ): string {
+  assertValidBoardReferences(board);
   const rules = options?.drcRules ?? getPreset("jlcpcb-2l").rules;
   const includeZones = options?.includeZones ?? true;
   const nets = netTable(board, netlist);
@@ -104,7 +106,12 @@ export function writeKicadPcb(
   // still emits (outline only, no filled_polygon) — callers that need fresh
   // copper (Stage 14's fab bundle) re-pour before writing.
   const zones = includeZones
-    ? [...board.zones].sort(byZone).map((z) => emitZone(z, board, netlist))
+    ? [...board.zones].sort(byZone).map((z) => {
+        const precedence = board.zones
+          .filter((candidate) => candidate.layer === z.layer)
+          .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0) || a.id.localeCompare(b.id));
+        return emitZone(z, board, netlist, precedence.findIndex((candidate) => candidate.id === z.id));
+      })
     : [];
 
   return (

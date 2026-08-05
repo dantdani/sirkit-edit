@@ -162,6 +162,7 @@ export function previewEdits(
   const scopedCtx: DrcCheckContext = {
     board: { ...next, tracks, vias },
     rules,
+    electricalTruth: undefined as unknown as DrcCheckContext["electricalTruth"],
     connectivity: undefined as unknown as BoardConnectivity,
     eff,
   };

@@ -106,6 +106,8 @@ function describeOne(board: PcbBoard, cmd: EditCommand): string {
       const name = getPadstack(board, cmd.padstackId)?.name;
       return `Set ${plural(cmd.viaIds.length, "via")} to ${name ? `'${name}'` : "padstack"}`;
     }
+    case "set-copper-locked":
+      return `${cmd.locked ? "Lock" : "Unlock"} ${describeRefs(board, cmd.refs)}`;
     case "delete-padstack": {
       const name = getPadstack(board, cmd.id)?.name;
       return name ? `Delete padstack '${name}'` : "Delete padstack";

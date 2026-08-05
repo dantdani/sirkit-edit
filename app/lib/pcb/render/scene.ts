@@ -56,6 +56,7 @@ import {
 } from "./colors";
 import { drawGrid, gridNeedsRebuild, type GridCoverage, type ViewRectMm } from "./grid";
 import { drawOutline, outlineBBoxNm, outlineHandleSpots, type HandleSpot } from "./outline";
+import { footprintWorldBBox } from "../edit/arrange";
 import {
   buildPickIndex,
   buildBoardPickEntries,
@@ -111,6 +112,8 @@ export interface PcbScene {
    *  pick index is intentionally left stale — `setBoard` (drop/undo/sync)
    *  remains the full-rebuild path that refreshes it. */
   setInstanceTransform(id: string, at: Vec2, rotationDeg: number, side: "top" | "bottom"): void;
+  /** Translucent, non-mutating candidate transforms; null restores live board transforms. */
+  setPlacementPreview(preview: Array<{ id: string; at: Vec2; rotationDeg: number; side: "top" | "bottom" }> | null): void;
   /** Stage 6 hooks copper rendering here. Throws for paste layers (no
    *  container in the pinned paint order). */
   getLayerContainer(layer: LayerId): Container;
@@ -228,7 +231,9 @@ export function createPcbScene(): PcbScene {
   let airwires: Airwire[] = [];
   let marqueeRect: BBox | null = null;
   /** Ghost states survive setBoard rebuilds (persistent courtyard violations). */
-  const ghosts = new Map<string, "illegal">();
+  const ghosts = new Map<string, "illegal" | "preview">();
+  const placementPreviewIds = new Set<string>();
+  const placementPreviewPreviousGhost = new Map<string, "illegal" | undefined>();
 
   // Overlay children, created lazily in paint order: airwires under the
   // selection/hover boxes, marquee on top.
@@ -387,9 +392,11 @@ export function createPcbScene(): PcbScene {
 
   /** Apply (or clear) the ghost tint on every display object of a record. */
   function applyGhost(rec: InstanceRecord): void {
-    const illegal = ghosts.get(rec.id) === "illegal";
-    for (const gfx of rec.parts) gfx.tint = illegal ? GHOST_TINT : 0xffffff;
-    for (const t of rec.texts) t.bt.tint = illegal ? GHOST_TINT : t.baseTint;
+    const state = ghosts.get(rec.id);
+    const tint = state === "illegal" ? GHOST_TINT : state === "preview" ? ACCENT_COLOR : 0xffffff;
+    const alpha = state === "preview" ? 0.68 : 1;
+    for (const gfx of rec.parts) { gfx.tint = tint; gfx.alpha = alpha; }
+    for (const t of rec.texts) { t.bt.tint = state ? tint : t.baseTint; t.bt.alpha = alpha; }
   }
 
   type InstancePlacement = Pick<
@@ -990,9 +997,23 @@ export function createPcbScene(): PcbScene {
 
   function zoomToFit(): void {
     if (!viewport || !hostEl) return;
-    const bb = board
+    // R06 Section 9: fit must frame the board AND every placed footprint.
+    // Newly synchronized components are deliberately staged OUTSIDE the board
+    // outline (negative-x staging strip); an outline-only fit left them
+    // rendered but permanently out of view.
+    let bb = board
       ? outlineBBoxNm(board.outline)
       : { minX: 0, minY: 0, maxX: 100 * NM_PER_MM, maxY: 80 * NM_PER_MM };
+    for (const fp of board?.footprints ?? []) {
+      const fpBox = footprintWorldBBox(fp);
+      if (!Number.isFinite(fpBox.minX) || !Number.isFinite(fpBox.minY) || !Number.isFinite(fpBox.maxX) || !Number.isFinite(fpBox.maxY)) continue;
+      bb = {
+        minX: Math.min(bb.minX, fpBox.minX),
+        minY: Math.min(bb.minY, fpBox.minY),
+        maxX: Math.max(bb.maxX, fpBox.maxX),
+        maxY: Math.max(bb.maxY, fpBox.maxY),
+      };
+    }
     const wMm = Math.max(mm(bb.maxX - bb.minX), 1);
     const hMm = Math.max(mm(bb.maxY - bb.minY), 1);
     const sw = Math.max(hostEl.clientWidth, 1);
@@ -1020,6 +1041,55 @@ export function createPcbScene(): PcbScene {
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
+
+  function updateInstanceTransform(id: string, at: Vec2, rotationDeg: number, side: "top" | "bottom"): void {
+    const rec = instanceById.get(id);
+    if (!rec) return;
+    if (side !== rec.side) {
+      destroyInstanceObjects(rec);
+      instanceById.delete(id);
+      const next = buildInstance({ id, def: rec.def, at, rotationDeg, side });
+      const index = instances.indexOf(rec);
+      if (index >= 0) instances[index] = next;
+      else instances.push(next);
+      redrawOverlay();
+      return;
+    }
+    rec.at = at;
+    rec.rotationDeg = rotationDeg;
+    const xMm = mm(at.x);
+    const yMm = mm(at.y);
+    const rotation = pixiRotation(rotationDeg);
+    for (const gfx of rec.parts) {
+      gfx.position.set(xMm, yMm);
+      gfx.rotation = rotation;
+    }
+    for (const text of rec.texts) placeText(text.bt, text.op, at, rotationDeg, side);
+    rec.bboxNm = instanceBBoxNm(rec.def, at, rotationDeg, side);
+    redrawOverlay();
+  }
+
+  function setPlacementPreview(preview: Array<{ id: string; at: Vec2; rotationDeg: number; side: "top" | "bottom" }> | null): void {
+    for (const id of placementPreviewIds) {
+      const live = board?.footprints.find((footprint) => footprint.id === id);
+      if (live) updateInstanceTransform(id, live.at, live.rotationDeg, live.side);
+      const previous = placementPreviewPreviousGhost.get(id);
+      if (previous) ghosts.set(id, previous);
+      else ghosts.delete(id);
+      const rec = instanceById.get(id);
+      if (rec) applyGhost(rec);
+    }
+    placementPreviewIds.clear();
+    placementPreviewPreviousGhost.clear();
+    for (const transform of preview ?? []) {
+      placementPreviewIds.add(transform.id);
+      placementPreviewPreviousGhost.set(transform.id, ghosts.get(transform.id) === "illegal" ? "illegal" : undefined);
+      ghosts.set(transform.id, "preview");
+      updateInstanceTransform(transform.id, transform.at, transform.rotationDeg, transform.side);
+      const rec = instanceById.get(transform.id);
+      if (rec) applyGhost(rec);
+    }
+  }
 
   return {
     mount,
@@ -1090,36 +1160,8 @@ export function createPcbScene(): PcbScene {
       if (mounted) redrawAirwires();
     },
 
-    setInstanceTransform(id: string, at: Vec2, rotationDeg: number, side: "top" | "bottom"): void {
-      const rec = instanceById.get(id);
-      if (!rec) return;
-
-      if (side !== rec.side) {
-        // Side changes swap geometry contexts and containers — a per-instance
-        // rebuild (keypress-rate, never per-frame).
-        destroyInstanceObjects(rec);
-        instanceById.delete(id);
-        const next = buildInstance({ id, def: rec.def, at, rotationDeg, side });
-        const idx = instances.indexOf(rec);
-        if (idx >= 0) instances[idx] = next;
-        else instances.push(next);
-        redrawOverlay();
-        return;
-      }
-
-      rec.at = at;
-      rec.rotationDeg = rotationDeg;
-      const xMm = mm(at.x);
-      const yMm = mm(at.y);
-      const rot = pixiRotation(rotationDeg);
-      for (const gfx of rec.parts) {
-        gfx.position.set(xMm, yMm);
-        gfx.rotation = rot;
-      }
-      for (const t of rec.texts) placeText(t.bt, t.op, at, rotationDeg, side);
-      rec.bboxNm = instanceBBoxNm(rec.def, at, rotationDeg, side);
-      redrawOverlay(); // selection/hover boxes follow the drag
-    },
+    setInstanceTransform: updateInstanceTransform,
+    setPlacementPreview,
 
     getLayerContainer(layer: LayerId): Container {
       if (layer === "pasteTop" || layer === "pasteBottom") {

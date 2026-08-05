@@ -32,7 +32,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries, alternates } from "@/app/lib/db/schema";
+import { parts, libraries, alternates, partsAtomicLinks } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import type { KicadPin } from "@/app/lib/kicad/types";
@@ -60,6 +60,22 @@ export type AiPartResult = {
   lifecycleStatus: string;
   /** Cosine similarity to the query (1 = identical). */
   similarity: number;
+  /**
+   * Component values that resolve to a PUBLISHED exact part (verified symbol,
+   * footprint, pin-to-pad mapping and package authority). When present, only
+   * these values are PCB-ready for this symbol — any other value has no
+   * physical authority and will be blocked before the PCB is mutated.
+   */
+  orderableValues?: string[];
+  /**
+   * "verified" when this symbol is linked to a published exact part with proven
+   * symbol/footprint/pin-pad/package authority — i.e. it can actually reach a
+   * manufactured board. Absent means electrically plausible but PCB-unready:
+   * durable publication will block it rather than guess a footprint.
+   */
+  physicalAuthority?: "verified";
+  /** Exact footprint bound to this part, e.g. "LED_SMD:LED_0805_2012Metric". */
+  verifiedFootprint?: string;
 };
 
 /**
@@ -127,7 +143,39 @@ export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))
     .where(inArray(parts.id, unique));
-  return rows as CachedPart[];
+
+  // Carry published atomic authority exactly as /api/parts/[id] does, so a
+  // server-side caller builds instances with the same footprint-ready identity
+  // the browser cache would have.
+  const links = await db
+    .select({
+      partId: partsAtomicLinks.partId,
+      valueKey: partsAtomicLinks.valueKey,
+      atomicPartRevisionId: partsAtomicLinks.atomicPartRevisionId,
+      symbolAssetVersionId: partsAtomicLinks.symbolAssetVersionId,
+      footprintAssetVersionId: partsAtomicLinks.footprintAssetVersionId,
+      mappingCertificateId: partsAtomicLinks.mappingCertificateId,
+      footprintFullName: partsAtomicLinks.footprintFullName,
+    })
+    .from(partsAtomicLinks)
+    .where(inArray(partsAtomicLinks.partId, unique));
+  const byPart = new Map<string, Record<string, NonNullable<CachedPart["atomicAssignment"]>>>();
+  for (const link of links) {
+    const entry = byPart.get(link.partId) ?? {};
+    entry[link.valueKey] = {
+      revisionId: link.atomicPartRevisionId,
+      symbolVersionId: link.symbolAssetVersionId,
+      footprintVersionId: link.footprintAssetVersionId,
+      mappingCertificateId: link.mappingCertificateId,
+      footprintFullName: link.footprintFullName,
+      approved: true,
+    };
+    byPart.set(link.partId, entry);
+  }
+  return rows.map((row) => {
+    const assignments = byPart.get(row.id);
+    return (assignments ? { ...row, atomicAssignments: assignments } : row) as CachedPart;
+  });
 }
 
 // ─── Retrieval / rerank tuning ──────────────────────────────────────────────
@@ -136,6 +184,8 @@ export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
 const VECTOR_POOL = 30;
 /** Exact-token candidates pulled via ILIKE. */
 const LEXICAL_POOL = 30;
+/** Candidates with published exact-part authority (their own recall channel). */
+const AUTHORITY_POOL = 12;
 /** Size of the fused pool handed to the reranker. */
 const CANDIDATE_POOL = 12;
 /** Reciprocal-rank-fusion constant (standard default). */
@@ -224,15 +274,33 @@ export async function searchPartsForAI(
   // Generic KiCad template symbols (Device.R, …) have no orderable MPN; exclude
   // them by default so the AI only ever sees buyable parts. The library panel
   // can opt back in via excludeGenerics: false.
+  //
+  // Exception: a generic symbol that has been linked to a PUBLISHED atomic part
+  // revision *is* buyable — the link carries an exact MPN plus verified
+  // symbol/footprint/mapping authority — so it stays visible. Unlinked generics
+  // remain hidden.
   const excludeGenerics = options?.excludeGenerics ?? true;
   const genericWhere: SQL | undefined = excludeGenerics
-    ? eq(parts.isGeneric, false)
+    ? or(
+        eq(parts.isGeneric, false),
+        sql`exists (select 1 from ${partsAtomicLinks} where ${partsAtomicLinks.partId} = ${parts.id})`,
+      )
     : undefined;
   const baseWhere: SQL | undefined = and(categoryWhere, genericWhere);
 
-  const queryEmbedding = await embedQuery(query);
-  const distance = cosineDistance(parts.embedding, queryEmbedding);
-  const similarity = sql<number>`1 - (${distance})`;
+  // Embeddings are provider-hosted (OpenAI, fixed model). When that provider is
+  // unavailable (missing key, exhausted quota, outage), semantic recall
+  // degrades to lexical-only instead of failing the entire search: exact-token
+  // recall still surfaces canonical parts, and every selected partId is
+  // re-validated downstream, so degraded recall can never fabricate a part.
+  let queryEmbedding: number[] | null = null;
+  try {
+    queryEmbedding = await embedQuery(query);
+  } catch (error) {
+    console.warn("[parts-search] embedding provider unavailable; using lexical-only recall:", error instanceof Error ? error.message : String(error));
+  }
+  const distance = queryEmbedding ? cosineDistance(parts.embedding, queryEmbedding) : null;
+  const similarity = distance ? sql<number>`1 - (${distance})` : sql<number>`0`;
 
   const baseSelect = {
     id: parts.id,
@@ -246,13 +314,15 @@ export async function searchPartsForAI(
   };
 
   // --- Stage 1a: vector recall (HNSW, semantic) ---
-  const vectorRows: SearchRow[] = await db
-    .select(baseSelect)
-    .from(parts)
-    .innerJoin(libraries, eq(parts.libraryId, libraries.id))
-    .where(baseWhere)
-    .orderBy(distance)
-    .limit(VECTOR_POOL);
+  const vectorRows: SearchRow[] = distance
+    ? await db
+        .select(baseSelect)
+        .from(parts)
+        .innerJoin(libraries, eq(parts.libraryId, libraries.id))
+        .where(baseWhere)
+        .orderBy(distance)
+        .limit(VECTOR_POOL)
+    : [];
 
   // --- Stage 1b: lexical recall (exact tokens over name/mpn/keywords) ---
   // The cosine `similarity` is still computed here so fused rows carry a real
@@ -284,7 +354,33 @@ export async function searchPartsForAI(
       .limit(LEXICAL_POOL);
   }
 
-  // --- Stage 1c: Reciprocal Rank Fusion ---
+  // --- Stage 1c: authority recall (parts that can actually be manufactured) ---
+  // Text similarity alone can bury a part that has proven symbol/footprint/
+  // pin-pad authority beneath dozens of unbuildable near-matches. Give those
+  // parts their own recall channel so a manufacturable option is always a
+  // candidate whenever it matches the query at all.
+  let authorityRows: SearchRow[] = [];
+  if (tokens.length > 0) {
+    const anyToken = or(...tokens.map((t) => {
+      const p = `%${t}%`;
+      return or(ilike(parts.name, p), ilike(parts.mpn, p), ilike(parts.keywords, p), ilike(parts.description, p))!;
+    }))!;
+    const authScore = sql<number>`(${sql.join(
+      tokens.map((t) => sql`(case when ${parts.name} ilike ${`%${t}%`} or ${parts.mpn} ilike ${`%${t}%`} or ${parts.keywords} ilike ${`%${t}%`} or ${parts.description} ilike ${`%${t}%`} then 1 else 0 end)`),
+      sql` + `,
+    )})`;
+    authorityRows = await db
+      .select(baseSelect)
+      .from(parts)
+      .innerJoin(libraries, eq(parts.libraryId, libraries.id))
+      .innerJoin(partsAtomicLinks, eq(partsAtomicLinks.partId, parts.id))
+      .where(and(categoryWhere, anyToken))
+      .groupBy(parts.id, libraries.mainCategory)
+      .orderBy(desc(authScore))
+      .limit(AUTHORITY_POOL);
+  }
+
+  // --- Stage 1d: Reciprocal Rank Fusion ---
   const fused = new Map<string, { row: SearchRow; score: number }>();
   const accumulate = (rows: SearchRow[]) => {
     rows.forEach((row, idx) => {
@@ -296,17 +392,59 @@ export async function searchPartsForAI(
   };
   accumulate(vectorRows);
   accumulate(lexicalRows);
+  accumulate(authorityRows);
 
-  const candidates = [...fused.values()]
+  // Annotate the FULL fused set before trimming. A part with proven physical
+  // authority is the only kind that can actually reach a manufactured board, so
+  // it must never be cut by the candidate trim in favour of an unbuildable part
+  // that merely scored higher on text similarity.
+  const fusedAll = [...fused.values()]
     .sort((a, b) => b.score - a.score)
-    .slice(0, CANDIDATE_POOL)
     .map((entry) => toAiPart(entry.row));
-
-  if (candidates.length === 0) return [];
+  if (fusedAll.length === 0) return [];
+  const annotated = await attachOrderableValues(db, fusedAll);
+  const candidates = [
+    ...annotated.filter((item) => item.physicalAuthority === "verified"),
+    ...annotated.filter((item) => item.physicalAuthority !== "verified"),
+  ].slice(0, CANDIDATE_POOL);
 
   // --- Stage 2 + 3: rerank for the role, then trim ---
   const reranked = await rerankParts(query, candidates, limit);
   return reranked.slice(0, limit);
+}
+
+/**
+ * Annotate results with the values that have published exact-part authority.
+ * A part with no links is left untouched (the field stays absent) so the agent
+ * only sees the constraint where one genuinely exists.
+ */
+async function attachOrderableValues(
+  db: ReturnType<typeof getDb>,
+  results: AiPartResult[],
+): Promise<AiPartResult[]> {
+  const ids = results.map((item) => item.partId);
+  if (ids.length === 0) return results;
+  const links = await db
+    .select({ partId: partsAtomicLinks.partId, valueKey: partsAtomicLinks.valueKey, footprintFullName: partsAtomicLinks.footprintFullName })
+    .from(partsAtomicLinks)
+    .where(inArray(partsAtomicLinks.partId, ids));
+  if (links.length === 0) return results;
+  const byPart = new Map<string, { values: string[]; footprint: string }>();
+  for (const link of links) {
+    const entry = byPart.get(link.partId) ?? { values: [], footprint: link.footprintFullName };
+    if (link.valueKey) entry.values.push(link.valueKey); // '' = value-agnostic
+    byPart.set(link.partId, entry);
+  }
+  return results.map((item) => {
+    const entry = byPart.get(item.partId);
+    if (!entry) return item;
+    return {
+      ...item,
+      physicalAuthority: "verified" as const,
+      verifiedFootprint: entry.footprint,
+      ...(entry.values.length ? { orderableValues: [...entry.values].sort() } : {}),
+    };
+  });
 }
 
 // ─── Stage 2: rerank ─────────────────────────────────────────────────────────
@@ -337,6 +475,9 @@ async function rerankParts(
     category: c.mainCategory,
     pinCount: c.pins.length,
     description: (c.description ?? "").slice(0, 200),
+    // Surfaced so the reranker does not demote a part that can actually be
+    // manufactured below one that has no footprint authority.
+    ...(c.physicalAuthority === "verified" ? { physicalAuthority: "verified", verifiedFootprint: c.verifiedFootprint } : {}),
   }));
 
   try {

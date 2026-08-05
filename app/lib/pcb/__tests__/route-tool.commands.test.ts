@@ -29,6 +29,7 @@ function track(id: string, netId: number, ax: number, ay: number, bx: number, by
     start: { x: mmToNm(ax), y: mmToNm(ay) },
     end: { x: mmToNm(bx), y: mmToNm(by) },
     netId,
+    source: "human",
   };
 }
 
@@ -40,6 +41,7 @@ function via(id: string, netId: number, x: number, y: number): Via {
     drill: mmToNm(0.4),
     netId,
     layers: ["copperTop", "copperBottom"],
+    source: "human",
   };
 }
 

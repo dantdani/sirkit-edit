@@ -1,0 +1,23 @@
+import { defaultCircuitVerificationCapabilityProfile } from "@/app/lib/circuit-verification/capability";
+import { compileRequiredRuleDenominator, compileVerificationContexts } from "@/app/lib/circuit-verification/contexts";
+import { runFullCircuitOracle } from "@/app/lib/circuit-verification/oracle";
+import { validateCircuitVerificationProblem } from "@/app/lib/circuit-verification/problem";
+import { validateRuleRegistry } from "@/app/lib/circuit-verification/registry";
+import type { CircuitVerificationProblem, RequirementCoverageRecord, RuleRegistrySnapshot } from "@/app/lib/circuit-verification/types";
+import { validateSchematicGraph } from "@/app/lib/schematic-compiler/graph";
+import type { SchematicSemanticGraph } from "@/app/lib/schematic-compiler/types";
+import { projectAllSchematicVariants } from "@/app/lib/schematic-compiler/variants";
+import { object, scopedJson } from "../_scope";
+export const runtime = "nodejs";
+
+export async function POST(request: Request): Promise<Response> {
+  const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response;
+  const { body, scope } = parsed;
+  if (!object(body.problem) || !object(body.graph) || !object(body.registry)) return Response.json({ ok: false, error: "problem, authoritative graph, and approved registry are required" }, { status: 400 });
+  const problem = body.problem as unknown as CircuitVerificationProblem, graph = body.graph as unknown as SchematicSemanticGraph, registry = body.registry as unknown as RuleRegistrySnapshot;
+  const errors = [...validateCircuitVerificationProblem(problem), ...validateRuleRegistry(registry), ...validateSchematicGraph(graph).diagnostics.map((item) => item.code)];
+  if (errors.length || problem.projectId !== scope.projectId || problem.branchId !== scope.branchId || graph.projectId !== scope.projectId || problem.semanticGraphDigest !== graph.deterministicDigest || problem.ruleRegistryDigest !== registry.deterministicDigest) return Response.json({ ok: false, error: "verification input integrity, pin, or scope failed", diagnostics: errors }, { status: 422 });
+  const capabilityProfile = defaultCircuitVerificationCapabilityProfile(), projections = projectAllSchematicVariants(graph), contexts = compileVerificationContexts({ problem, graph }), denominator = compileRequiredRuleDenominator({ problem, graph, projections, registry, capabilityProfile, contexts }), startedAt = new Date().toISOString();
+  const run = runFullCircuitOracle({ problem, graph, projections, registry, capabilityProfile, contexts, denominator, requirementCoverage: Array.isArray(body.requirementCoverage) ? body.requirementCoverage as RequirementCoverageRecord[] : [], startedAt, finishedAt: startedAt });
+  return Response.json({ ok: true, contexts, denominator, run }, { headers: { "Cache-Control": "no-store" } });
+}

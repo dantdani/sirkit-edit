@@ -18,7 +18,8 @@ import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { DrcRules, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { SelectionStore } from "@/app/lib/pcb/selection";
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
-import { applyEdits, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply";
+import { selectionBBoxCenter } from "@/app/lib/pcb/edit/apply";
+import { applyEditsCanonical } from "@/app/lib/engineering/editor-adapter";
 import { previewEdits, type EditPreview } from "@/app/lib/pcb/edit/preview";
 import { getItems, type ResolvedItem } from "@/app/lib/pcb/selection-queries";
 import { useSelection } from "./hooks/useSelection";
@@ -91,11 +92,14 @@ export function Inspector({
   const items = getItems(board, set.refs);
   if (items.length === 0) return null;
 
+  // B03: slice-representable batches execute through the canonical executor;
+  // everything else falls back to the legacy path inside applyEditsCanonical.
   const commit = (cmds: EditCommand[]): void => {
     const h = getHistory();
     if (!h) return;
-    const result = applyEdits(h, cmds);
-    if (!result.ok && result.errors[0]) toast(result.errors[0]);
+    void applyEditsCanonical(h, cmds).then((result) => {
+      if (!result.ok && result.errors[0]) toast(result.errors[0]);
+    });
   };
   const preview = (cmds: EditCommand[]): EditPreview => previewEdits(board, cmds, rules);
 

@@ -29,6 +29,10 @@ import {
   viaShape,
   viaSpannedLayers,
 } from "./geometry-copper";
+import { physicalPadInstances } from "./pad-identity";
+import { stableHash } from "./smart-routing/hash";
+import { createCopperPolicy } from "./copper-policy";
+import { zoneFillIsCurrent } from "./zones/fill-lifecycle";
 
 // PENDING (Stage 6 integration window): once Stage 5's ratsnest.ts merges,
 // replace this local declaration with `import type { Airwire } from "./ratsnest"`.
@@ -40,11 +44,18 @@ export interface Airwire {
 }
 
 export type CopperItemRef =
-  | { kind: "pad"; instanceId: string; padNumber: string }
+  | { kind: "pad"; instanceId: string; padNumber: string; padIndex?: number; padInstanceId?: string }
   | { kind: "track"; id: string }
   | { kind: "via"; id: string }
   // Stage 11: one entry per Zone.fill region (zones with an empty fill emit nothing).
-  | { kind: "zone-region"; zoneId: string; regionIndex: number };
+  | { kind: "zone-region"; zoneId: string; regionIndex: number; regionId?: string };
+
+/** Stable/deterministic conductive-object identity shared by every consumer. */
+export function copperItemId(ref: CopperItemRef): string {
+  if (ref.kind === "pad") return ref.padInstanceId ?? `pad:${encodeURIComponent(ref.instanceId)}:${encodeURIComponent(ref.padNumber)}`;
+  if (ref.kind === "zone-region") return ref.regionId ?? `zone:${ref.zoneId}:region:${ref.regionIndex}`;
+  return `${ref.kind}:${ref.id}`;
+}
 
 export interface NetConnectivity {
   netId: number;
@@ -62,6 +73,8 @@ export interface BoardConnectivity {
   airwires: Airwire[];
   /** Geometric touches between items of DIFFERENT nonzero nets (deduped pairs). */
   shorts: [CopperItemRef, CopperItemRef][];
+  /** Touches whose same/different ownership cannot be proven from stable identities. */
+  unknownContacts: [CopperItemRef, CopperItemRef][];
   /** Tracks/vias with netId 0, or touching nothing. */
   orphans: CopperItemRef[];
 }
@@ -120,13 +133,20 @@ function viaBBox(v: Via): BBox {
 function collectItems(board: PcbBoard): Item[] {
   const items: Item[] = [];
   for (const inst of board.footprints) {
-    for (const pad of inst.def.pads) {
+    for (const physicalPad of physicalPadInstances(inst)) {
+      const pad = physicalPad.pad;
       if (pad.type === "np_thru_hole") continue; // hole, no copper
       const layers = padCopperLayers(inst, pad);
       if (layers.length === 0) continue;
       const shape = padWorldShape(inst, pad); // pads keep an eager shape (rotation-aware bbox needs it anyway)
       items.push({
-        ref: { kind: "pad", instanceId: inst.id, padNumber: pad.number },
+        ref: {
+          kind: "pad",
+          instanceId: inst.id,
+          padNumber: pad.number,
+          padIndex: physicalPad.padIndex,
+          padInstanceId: physicalPad.id,
+        },
         netId: inst.padNets[pad.number] ?? 0,
         layers,
         bbox: shapeBBox(shape),
@@ -164,10 +184,24 @@ function collectItems(board: PcbBoard): Item[] {
   // vertices (fine for airwires); anchorsInside=false keeps them out of the
   // exact-anchor fast path, so every touch runs the hole-aware distance.
   for (const zone of board.zones) {
-    zone.fill.forEach((region, regionIndex) => {
+    if (!zoneFillIsCurrent(board, zone)) continue;
+    const regions = zone.fill.map((region, regionIndex) => ({
+      region,
+      regionIndex,
+      key: JSON.stringify({ outer: region.outer, holes: region.holes, boundingBox: region.boundingBox, areaNm2: region.areaNm2 }),
+    })).sort((a, b) => a.key.localeCompare(b.key) || a.regionIndex - b.regionIndex);
+    const occurrences = new Map<string, number>();
+    regions.forEach(({ region, regionIndex, key }) => {
       if (region.outer.length < 3) return;
+      const occurrence = (occurrences.get(key) ?? 0) + 1;
+      occurrences.set(key, occurrence);
       items.push({
-        ref: { kind: "zone-region", zoneId: zone.id, regionIndex },
+        ref: {
+          kind: "zone-region",
+          zoneId: zone.id,
+          regionIndex,
+          regionId: `zone:${zone.id}:region:${stableHash(key)}:${occurrence}`,
+        },
         netId: zone.netId,
         layers: [zone.layer],
         bbox: region.boundingBox,
@@ -351,17 +385,23 @@ export function computeConnectivity(board: PcbBoard): BoardConnectivity {
   const uf = new UnionFind(items.length);
   const touched = new Array<boolean>(items.length).fill(false);
   const shorts: [CopperItemRef, CopperItemRef][] = [];
+  const unknownContacts: [CopperItemRef, CopperItemRef][] = [];
+  const copperPolicy = createCopperPolicy(board);
 
   const onTouch = (i: number, j: number): void => {
     const a = items[i];
     const b = items[j];
     touched[i] = true;
     touched[j] = true;
-    if (a.netId === b.netId) {
-      if (a.netId !== 0) uf.union(i, j);
-    } else if (a.netId !== 0 && b.netId !== 0) {
-      shorts.push([a.ref, b.ref]); // pair already deduped by the broad phase
-    }
+    const decision = copperPolicy.decide({
+      leftNetId: a.netId,
+      rightNetId: b.netId,
+      operation: "connectivity",
+      interNetClearanceNm: 0,
+    });
+    if (decision.shouldUnionWhenTouching) uf.union(i, j);
+    else if (decision.createsShortWhenTouching) shorts.push([a.ref, b.ref]);
+    else unknownContacts.push([a.ref, b.ref]);
   };
 
   // Candidate pairs share a copper layer by construction (per-layer trees).
@@ -384,7 +424,13 @@ export function computeConnectivity(board: PcbBoard): BoardConnectivity {
     const j = deferred[k + 1];
     const a = items[i];
     const b = items[j];
-    if (a.netId === b.netId && (a.netId === 0 || uf.find(i) === uf.find(j))) continue;
+    const pairDecision = copperPolicy.decide({
+      leftNetId: a.netId,
+      rightNetId: b.netId,
+      operation: "connectivity",
+      interNetClearanceNm: 0,
+    });
+    if (pairDecision.shouldUnionWhenTouching && uf.find(i) === uf.find(j)) continue;
     const d =
       a.region || b.region ? zoneAwareDistance(a, b) : shapeDistance(shapeOf(a), shapeOf(b));
     if (d <= 0) onTouch(i, j);
@@ -460,6 +506,7 @@ export function computeConnectivity(board: PcbBoard): BoardConnectivity {
     },
     airwires,
     shorts,
+    unknownContacts,
     orphans,
   };
 }

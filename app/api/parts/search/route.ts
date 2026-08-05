@@ -13,7 +13,7 @@
  * pagination metadata { total, offset, limit }.
  */
 
-import { and, cosineDistance, count, eq, sql, type SQL } from "drizzle-orm";
+import { and, cosineDistance, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
@@ -189,7 +189,57 @@ function browse(
     .offset(offset);
 }
 
-/** Semantic ranking by cosine similarity; HNSW serves the ORDER BY ... LIMIT. */
+/** Exact-token ranking used when the embedding provider is unavailable. */
+function lexical(
+  db: ReturnType<typeof getDb>,
+  where: SQL | undefined,
+  query: string,
+  limit: number,
+  offset: number,
+): Promise<Row[]> {
+  // Tokenized, not whole-phrase: "555 timer" must still match a part named
+  // "NE555D" described as a timer.
+  const tokens = [...new Set((query.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => t.length >= 2))].slice(0, 8);
+  const patterns = (tokens.length ? tokens : [query.trim()]).map((t) => `%${t}%`);
+  const score = sql<number>`(${sql.join(
+    patterns.map((p) => sql`(case when ${parts.name} ilike ${p} then 2 when ${parts.mpn} ilike ${p} then 2 when ${parts.keywords} ilike ${p} or ${parts.description} ilike ${p} then 1 else 0 end)`),
+    sql` + `,
+  )})`;
+  const match = or(...patterns.map((p) => or(ilike(parts.name, p), ilike(parts.mpn, p), ilike(parts.keywords, p), ilike(parts.description, p))!));
+  return db
+    .select({
+      id: parts.id,
+      name: parts.name,
+      description: parts.description,
+      keywords: parts.keywords,
+      mpn: parts.mpn,
+      manufacturer: parts.manufacturer,
+      datasheet: parts.datasheet,
+      mainCategory: libraries.mainCategory,
+      libraryName: libraries.name,
+      pins: parts.pins,
+      score,
+      internalPartNumber: parts.internalPartNumber,
+      lifecycleStatus: parts.lifecycleStatus,
+      rohsStatus: parts.rohsStatus,
+      packageNormalized: parts.packageNormalized,
+    })
+    .from(parts)
+    .innerJoin(libraries, eq(parts.libraryId, libraries.id))
+    .where(and(where, match))
+    .orderBy(desc(score), parts.name)
+    .limit(limit)
+    .offset(offset);
+}
+
+/**
+ * Semantic ranking by cosine similarity; HNSW serves the ORDER BY ... LIMIT.
+ *
+ * Embeddings come from a hosted provider. When it is unavailable (missing key,
+ * exhausted quota, outage) the browser must still be able to find parts, so
+ * ranking degrades to an exact-token lexical match rather than failing the
+ * whole request.
+ */
 async function semantic(
   db: ReturnType<typeof getDb>,
   where: SQL | undefined,
@@ -197,7 +247,13 @@ async function semantic(
   limit: number,
   offset: number,
 ): Promise<Row[]> {
-  const queryEmbedding = await embedQuery(query);
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await embedQuery(query);
+  } catch (error) {
+    console.warn("[parts/search] embedding provider unavailable; lexical fallback:", error instanceof Error ? error.message : String(error));
+    return lexical(db, where, query, limit, offset);
+  }
   const distance = cosineDistance(parts.embedding, queryEmbedding);
   return db
     .select({

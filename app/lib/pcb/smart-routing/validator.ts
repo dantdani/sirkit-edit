@@ -44,10 +44,10 @@ export function validateSmartRoute(
     violations.push({ code: "ENDPOINT_MISMATCH", message: "Route does not connect the requested endpoints." });
   }
   for (let index = 0; index + 1 < points.length; index++) {
-    if (!isOctilinearSegment(points[index], points[index + 1])) {
+    if (intent.posture !== "arbitrary" && !isOctilinearSegment(points[index], points[index + 1])) {
       violations.push({
         code: "NON_OCTILINEAR",
-        message: "Only horizontal, vertical, and 45-degree copper is accepted.",
+        message: "The selected orthogonal/octilinear posture does not permit this segment angle.",
         segmentIndex: index,
       });
     }

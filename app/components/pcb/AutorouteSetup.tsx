@@ -10,6 +10,9 @@ import {
 } from "@/app/lib/pcb/stackup";
 import type { AutorouteResult } from "./hooks/useAutoroute";
 import type { AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
+import { readinessViewModel } from "@/app/lib/pcb/readiness/evaluate";
+import { zoneFillIsCurrent } from "@/app/lib/pcb/zones/fill-lifecycle";
+import { viaSpannedLayers } from "@/app/lib/pcb/geometry-copper";
 
 const PROFILES: Array<{ id: StackupProfileId; label: string }> = [
   { id: "simple-2", label: "Simple 2-layer" },
@@ -58,12 +61,25 @@ export function AutorouteSetup({
       </label>
       <div className="mt-2 space-y-2">
         {stackup.copperLayers.filter((layer) => layer.enabled).map((layer) => {
-          const usage = result?.layerUsage[layer.id];
+          const layerZones = board.zones.filter((zone) => zone.layer === layer.id);
+          const currentZones = layerZones.filter((zone) => zoneFillIsCurrent(board, zone));
+          const reported = result?.layerUsage[layer.id];
+          const usage = {
+            segments: reported?.segments ?? board.tracks.filter((track) => track.layer === layer.id).length,
+            trackLengthNm: reported?.trackLengthNm ?? board.tracks.filter((track) => track.layer === layer.id)
+              .reduce((sum, track) => sum + Math.hypot(track.end.x - track.start.x, track.end.y - track.start.y), 0),
+            filledAreaNm2: reported?.filledAreaNm2 ?? currentZones.flatMap((zone) => zone.fill).reduce((sum, region) => sum + region.areaNm2, 0),
+            viaAccessCount: reported?.viaAccessCount ?? board.vias.filter((via) => viaSpannedLayers(via).includes(layer.id)).length,
+          };
           return (
             <div key={layer.id} className="rounded border border-zinc-800 bg-zinc-950/50 p-2">
               <div className="flex items-center justify-between text-[10px] text-zinc-300">
                 <span>{layer.name}</span>
-                <span className="text-zinc-600">{usage ? `${(usage.trackLengthNm / 1_000_000).toFixed(1)} mm` : "unused"}</span>
+                <span className="text-zinc-600">{usage
+                  ? usage.filledAreaNm2
+                    ? `${(usage.filledAreaNm2 / 1_000_000_000_000).toFixed(1)} mm² plane`
+                    : `${(usage.trackLengthNm / 1_000_000).toFixed(1)} mm`
+                  : "unused"}</span>
               </div>
               <div className="mt-1 grid grid-cols-2 gap-1">
                 <select
@@ -91,6 +107,11 @@ export function AutorouteSetup({
                   <option value="any">Any</option>
                 </select>
               </div>
+              {layerZones.length > 0 && (
+                <p className="mt-1 text-[9px] text-zinc-500">
+                  {currentZones.length}/{layerZones.length} fills current · {usage.viaAccessCount} via access{usage.viaAccessCount === 1 ? "" : "es"}
+                </p>
+              )}
               <label className="mt-1 flex items-center gap-2 text-[10px] text-zinc-500">
                 <input
                   type="checkbox"
@@ -120,6 +141,12 @@ export function AutorouteSetup({
           <p className={result.status === "complete" ? "text-emerald-400" : "text-amber-400"}>
             {result.status === "complete" ? "Complete" : "Partial"}: {result.completedConnections}/{result.requiredConnections} connections · {result.acceptedPasses}/{result.passCount} improving passes
           </p>
+          {(() => {
+            const view = readinessViewModel(result.fabricationReadiness);
+            return <p className={view.state === "ready" ? "text-emerald-400" : view.state === "blocked" ? "text-red-400" : "text-amber-400"}>
+              {view.label}
+            </p>;
+          })()}
           {result.failures.length > 0 && (
             <details className="rounded border border-amber-900/60 bg-amber-950/10 p-1.5">
               <summary className="cursor-pointer text-amber-300">{result.failures.length} unresolved connection{result.failures.length === 1 ? "" : "s"}</summary>

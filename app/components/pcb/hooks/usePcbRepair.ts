@@ -8,11 +8,13 @@ import { parseSes } from "@/app/lib/pcb/dsn/read-ses";
 import { PCBToolService } from "@/app/lib/pcb/ai/pcb-tool-service";
 import type { PCBRepairPlan, RepairExecutionMode, RepairTransactionPreview } from "@/app/lib/pcb/repair/types";
 import { withAiBrain } from "@/app/lib/ai-preferences";
+import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 
 export interface PcbRepairEditor {
   getHistory(): PcbHistory | null;
   getRules(): DrcRules;
   getPresetId?(): string;
+  getNetlist?(): PcbNetlist | null;
   toast?(message: string): void;
   onApplied?(): Promise<void> | void;
 }
@@ -88,6 +90,7 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     const instance = new PCBToolService({
       history,
       rules: editorRef.current.getRules(),
+      netlist: editorRef.current.getNetlist?.() ?? undefined,
       autoroute: async (board, netIds) => {
         const response = await fetch("/api/pcb/autoroute", {
           method: "POST",
@@ -122,6 +125,7 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
             headers: { "content-type": "application/json" },
             body: JSON.stringify(withAiBrain({
               board,
+              netlist: editorRef.current.getNetlist?.() ?? undefined,
               presetId: editorRef.current.getPresetId?.(),
               instruction: "Inspect every copper layer, group the DRC errors by root cause, and prepare a safe repair plan. Do not weaken rules.",
             })),

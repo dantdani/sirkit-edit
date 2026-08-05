@@ -17,6 +17,7 @@ import type { Vec2 } from "../../geometry";
 import type { DrcCheckContext, DrcViolation } from "../types";
 import { fmtMm, layerName, refKey, violationId } from "../format";
 import { trackInsideBoard, viaInsideBoard } from "./containment";
+import type { NetRelation } from "../../copper-policy";
 
 export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
   const { board } = ctx;
@@ -31,6 +32,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
     blockedBy: CopperItemRef,
     distance: number,
     threshold: number,
+    relation: NetRelation | undefined,
   ): void => {
     const key = [refKey(cand), refKey(blockedBy)].sort().join("|");
     if (seenPairs.has(key)) return;
@@ -47,7 +49,9 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
       measuredNm: distance,
       thresholdNm: threshold,
       summary: `Two ${where} objects are ${fmtMm(distance)} mm apart; need ≥ ${fmtMm(threshold)} mm.`,
-      detail: `A copper clearance violation on ${where}: the gap measures ${fmtMm(distance)} mm, but this fab needs at least ${fmtMm(threshold)} mm between copper on different nets. Widen the spacing or move one object.`,
+      detail: relation === "different-proven-nets"
+        ? `A copper clearance violation on ${where}: the gap measures ${fmtMm(distance)} mm, but this fab needs at least ${fmtMm(threshold)} mm between copper on different proven nets. Widen the spacing or move one object.`
+        : `A conservative copper clearance violation on ${where}: net ownership is ${relation ?? "unknown"}, so the ${fmtMm(distance)} mm gap cannot be accepted against the ${fmtMm(threshold)} mm threshold. Repair stable net ownership or widen the spacing.`,
     });
   };
 
@@ -83,6 +87,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
       ignoreItemIds: new Set([track.id]),
       netId: track.netId,
       clearance: eff.clearanceNm,
+      clearanceForNet: (netId) => ctx.eff(netId).clearanceNm,
       edgeClearance: eff.minEdgeClearanceNm,
     });
     if (res.legal) continue;
@@ -91,7 +96,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
     if (res.blockedByEdge) {
       if (trackInsideBoard(board, track)) emitEdge(cand, loc, track.layer, res.distance ?? 0, eff.minEdgeClearanceNm);
     } else if (res.blockedBy && (res.distance ?? 0) > 0) {
-      emitClearance(cand, loc, track.layer, res.blockedBy, res.distance ?? 0, eff.clearanceNm);
+      emitClearance(cand, loc, track.layer, res.blockedBy, res.distance ?? 0, res.requiredClearance ?? eff.clearanceNm, res.netRelation);
     }
   }
 
@@ -103,6 +108,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
       ignoreItemIds: new Set([via.id]),
       netId: via.netId,
       clearance: eff.clearanceNm,
+      clearanceForNet: (netId) => ctx.eff(netId).clearanceNm,
       edgeClearance: eff.minEdgeClearanceNm,
     });
     if (res.legal) continue;
@@ -111,7 +117,7 @@ export function checkCopperClearance(ctx: DrcCheckContext): DrcViolation[] {
     if (res.blockedByEdge) {
       if (viaInsideBoard(board, via)) emitEdge(cand, loc, via.layers[0], res.distance ?? 0, eff.minEdgeClearanceNm);
     } else if (res.blockedBy && (res.distance ?? 0) > 0) {
-      emitClearance(cand, loc, via.layers[0], res.blockedBy, res.distance ?? 0, eff.clearanceNm);
+      emitClearance(cand, loc, via.layers[0], res.blockedBy, res.distance ?? 0, res.requiredClearance ?? eff.clearanceNm, res.netRelation);
     }
   }
 

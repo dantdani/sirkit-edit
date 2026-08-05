@@ -23,6 +23,7 @@ import { toKicadLayer } from "./layer-map";
 import { nmToMm } from "./units";
 import { newUuid } from "./types";
 import { netTable, netNameOf } from "./emit-board";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
 
 const SLIT_HALF_NM = 50; // slit height 100 nm
 const SLIT_OVERSHOOT_NM = 1_000_000; // extend 1 mm past the region's right edge
@@ -64,7 +65,7 @@ function fracture(region: FilledRegion): Vec2[][] {
   return polys.map((rings) => rings[0]).filter((r) => r.length >= 3);
 }
 
-export function emitZone(zone: Zone, board: PcbBoard, netlist: PcbNetlist): string {
+export function emitZone(zone: Zone, board: PcbBoard, netlist: PcbNetlist, exportPriority = 0): string {
   if (zone.polygon.length < 3) return "";
   const nets = netTable(board, netlist);
   const layer = q(toKicadLayer(zone.layer));
@@ -75,13 +76,14 @@ export function emitZone(zone: Zone, board: PcbBoard, netlist: PcbNetlist): stri
     zone.connection === "solid"
       ? `(connect_pads yes (clearance ${clearance}))`
       : `(connect_pads (clearance ${clearance}))`;
-  const outlines = zone.fill.flatMap(fracture);
+  const outlines = zoneFillIsCurrent(board, zone) ? zone.fill.flatMap(fracture) : [];
 
   return block("zone", [
     sexpr("net", zone.netId),
     sexpr("net_name", q(netNameOf(nets, zone.netId))),
     `(layer ${layer})`,
     sexpr("uuid", q(newUuid())),
+    ...(exportPriority > 0 ? [sexpr("priority", exportPriority)] : []),
     `(hatch edge 0.508000)`,
     connectPads,
     sexpr("min_thickness", "0.100000"),

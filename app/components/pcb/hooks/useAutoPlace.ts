@@ -9,7 +9,7 @@ import {
   type AutoPlaceProgress,
 } from "@/app/lib/pcb/autoplace/auto-place";
 import type { AutoPlaceResult } from "@/app/lib/pcb/autoplace/types";
-import { buildAutoPlaceCommand, mutateBoardWithAutoPlace } from "@/app/lib/pcb/autoplace/command";
+import { applyPlacementCandidate } from "@/app/lib/pcb/placement/transaction";
 import { pcbRevisionId } from "@/app/lib/pcb/ai/snapshot";
 import type { AutoPlaceWorkerRequest, AutoPlaceWorkerResponse } from "./autoplace.worker";
 
@@ -31,6 +31,8 @@ export interface AutoPlaceHandle {
   lastError?: string;
   progress?: AutoPlaceUiProgress;
   run(): Promise<void>;
+  apply(): void;
+  discard(): void;
   cancel(): void;
 }
 
@@ -47,6 +49,7 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
   const runningRef = useRef(false);
   const workerRef = useRef<Worker | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
+  const candidateRef = useRef<{ result: AutoPlaceResult; revision: string } | undefined>(undefined);
 
   useEffect(() => () => {
     workerRef.current?.terminate();
@@ -111,6 +114,7 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
         throw new Error("Board changed while auto-placement was running; candidate discarded.");
       }
       if (!result.report.success) {
+        candidateRef.current = { result, revision };
         setLastResult(result);
         setState("done");
         editorRef.current.toast?.(
@@ -119,16 +123,15 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
         return;
       }
 
-      const command = buildAutoPlaceCommand(board, result.placements, result.outlineAfter);
-      if (command.after.length === 0 && !command.outlineAfter) {
-        setLastResult(result);
-        setState("done");
+      const engineering = result.engineering;
+      if (!engineering) throw new Error("Placement result is missing Stage 7 candidate evidence.");
+      candidateRef.current = { result, revision };
+      setLastResult(result);
+      setState("done");
+      if (engineering.selectedCandidate.moves.length === 0 && engineering.selectedCandidate.copperPlan.removeTrackIds.length === 0) {
         editorRef.current.toast?.("Auto-place: nothing to move");
         return;
       }
-      history.execute("Auto-place", (draft) => mutateBoardWithAutoPlace(draft, command));
-      setLastResult(result);
-      setState("done");
       const { initialRatsnestLengthNm: before, finalRatsnestLengthNm: after, elapsedMs } = result.stats;
       const drop = before > 0 ? ` · rats-nest −${Math.round(((before - after) / before) * 100)}%` : "";
       const outline = result.outlineResized ? " · generated placement region +10%" : "";
@@ -136,7 +139,7 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
         ? ` · routeability +${Math.round(result.routeabilityBefore.score - result.routeabilityAfter.score)}`
         : "";
       const envelope = ` · envelope +${Math.round((result.report.envelopeScale - 1) * 100)}%`;
-      editorRef.current.toast?.(`Placed ${command.after.length} footprints in ${elapsedMs}ms${envelope}${outline}${drop}${routeability}`);
+      editorRef.current.toast?.(`Placement preview ready: ${engineering.selectedCandidate.moves.length} moves in ${elapsedMs}ms${envelope}${outline}${drop}${routeability}. Review and apply explicitly.`);
     } catch (error) {
       if (error instanceof AutoPlaceCancelledError) {
         setState("cancelled");
@@ -155,5 +158,58 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
     }
   }, []);
 
-  return { state, lastResult, lastError, progress, run, cancel };
+  const apply = useCallback((): void => {
+    const pending = candidateRef.current;
+    const history = editorRef.current.getHistory();
+    if (!pending || !history) return;
+    const { result, revision } = pending;
+    const engineering = result.engineering;
+    if (!engineering || !result.report.success) {
+      editorRef.current.toast?.("This placement candidate is not hard-legal and cannot be applied.");
+      return;
+    }
+    if (pcbRevisionId(history.present) !== revision) {
+      setLastError("Board changed after placement preview; candidate discarded.");
+      setState("error");
+      setLastResult(undefined);
+      candidateRef.current = undefined;
+      editorRef.current.toast?.("Board changed after placement preview; candidate discarded.");
+      return;
+    }
+    const approved = applyPlacementCandidate({ board: history.present, problem: engineering.problem, candidate: engineering.selectedCandidate, actorId: "user:pcb-editor" });
+    if (!approved.ok) {
+      setLastError(approved.message);
+      setState("error");
+      editorRef.current.toast?.(`Placement apply rejected: ${approved.message}`);
+      return;
+    }
+    history.execute("Engineering-aware auto-place", (draft) => {
+      draft.footprints = structuredClone(approved.board.footprints);
+      draft.tracks = structuredClone(approved.board.tracks);
+      draft.vias = structuredClone(approved.board.vias);
+      draft.zones = structuredClone(approved.board.zones);
+      draft.constraintState = structuredClone(approved.board.constraintState);
+    }, {
+      operationType: "auto_place_footprints",
+      actor: "human",
+      reason: `Approved Stage 7 candidate ${engineering.selectedCandidate.candidateId}; hard legality verified.`,
+      transactionId: approved.transaction.id,
+      details: { candidateHash: engineering.selectedCandidate.candidateHash, problemHash: engineering.problemHash, objectiveReport: engineering.selectedCandidate.objectiveReport },
+    });
+    candidateRef.current = undefined;
+    setLastResult(undefined);
+    setLastError(undefined);
+    setState("idle");
+    editorRef.current.toast?.(`Applied ${engineering.selectedCandidate.moves.length} placement moves as one undoable transaction.`);
+  }, []);
+
+  const discard = useCallback((): void => {
+    candidateRef.current = undefined;
+    setLastResult(undefined);
+    setLastError(undefined);
+    setState("idle");
+    editorRef.current.toast?.("Placement candidate discarded; board unchanged.");
+  }, []);
+
+  return { state, lastResult, lastError, progress, run, apply, discard, cancel };
 }

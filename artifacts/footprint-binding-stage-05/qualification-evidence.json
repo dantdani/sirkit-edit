@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "sirkit.passive-policy-stage5-qualification-evidence.v1",
+  "generatedAt": "2026-07-19T07:39:34.468Z",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "win32",
+    "release": "10.0.26200",
+    "arch": "x64"
+  },
+  "versions": {
+    "evaluator": "sirkit.passive-policy-evaluator/5.0.0",
+    "result": "sirkit.passive-policy-evaluation-result.v1"
+  },
+  "budgets": {
+    "singleEvaluationP95Ms": 100,
+    "preview1000Ms": 5000,
+    "previewMaxBytes": 8000000,
+    "previewMaxComponents": 4096
+  },
+  "measurements": {
+    "singleEvaluation100": {
+      "samples": 100,
+      "meanMs": 2.274,
+      "p50Ms": 2.029,
+      "p95Ms": 4.103,
+      "maxMs": 6.51
+    },
+    "preview1000": {
+      "elapsedMs": 1522.442,
+      "bytes": 7929530,
+      "results": 1000
+    }
+  },
+  "representative": {
+    "ordinaryMlcc": {
+      "status": "eligible_characterized_generic",
+      "profile": "chip:0603-imperial:1608-metric",
+      "claims": {
+        "reservesLayoutPackage": true,
+        "selectsExactPart": false,
+        "manufacturingReady": false,
+        "certifiesAvailability": false,
+        "certifiesDerating": false,
+        "mutatesSchematic": false,
+        "mutatesPcb": false
+      },
+      "gaps": [
+        "PP_GAP_ASSEMBLY",
+        "PP_GAP_AVAILABILITY",
+        "PP_GAP_DERATING",
+        "PP_GAP_EXACT_PART",
+        "PP_GAP_MANUFACTURING_EVIDENCE",
+        "PP_GAP_RATING"
+      ]
+    },
+    "ordinaryPullUp": {
+      "status": "eligible_characterized_generic"
+    },
+    "polarizedCapacitor": {
+      "status": "excluded_safety",
+      "blockers": [
+        "PP_MANDATORY_SAFETY_EXCLUSION"
+      ]
+    },
+    "bulkCapacitor": {
+      "status": "excluded_specialized_role",
+      "blockers": [
+        "PP_SPECIALIZED_ROLE_EXCLUDED"
+      ]
+    }
+  },
+  "assertions": {
+    "defaultResultNeverManufacturingReady": true,
+    "schematicUnchanged": true,
+    "pcbUnchanged": true,
+    "exactPartNotSelected": true
+  }
+}

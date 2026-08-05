@@ -3,7 +3,7 @@
 
 import type { PcbBoard } from "../../types";
 import type { LayerId } from "../../layers";
-import type { CopperItemRef } from "../../connectivity-board";
+import { copperItemId, type CopperItemRef } from "../../connectivity-board";
 import type { DrcCheckContext, DrcViolation } from "../types";
 import { refKey, refLocation, violationId } from "../format";
 
@@ -32,21 +32,23 @@ function netName(board: PcbBoard, netId: number): string {
 }
 
 export function checkUnconnectedAndShorts(ctx: DrcCheckContext): DrcViolation[] {
-  const { board, connectivity } = ctx;
+  const { board, connectivity, electricalTruth } = ctx;
   const out: DrcViolation[] = [];
 
-  for (const net of connectivity.nets.values()) {
-    if (net.complete) continue;
-    const airwires = connectivity.airwires.filter((wire) => wire.netId === net.netId);
-    const remaining = Math.max(airwires.length, net.clusters.length - 1, 1);
+  for (const netStatus of electricalTruth.nets) {
+    if (netStatus.remainingConnections === 0 || netStatus.realizationState === "unknown") continue;
+    const net = connectivity.nets.get(netStatus.netId);
+    const clusters = net?.clusters ?? [];
+    const airwires = electricalTruth.realized.airwires.filter((wire) => wire.netId === netStatus.netId);
+    const remaining = netStatus.remainingConnections;
     const firstWire = airwires[0];
-    const firstRef = net.clusters.flat().find((ref) => ref.kind === "pad") ?? net.clusters.flat()[0];
+    const firstRef = clusters.flat().find((ref) => ref.kind === "pad") ?? clusters.flat()[0];
     const location = firstWire
       ? { x: Math.round((firstWire.from.x + firstWire.to.x) / 2), y: Math.round((firstWire.from.y + firstWire.to.y) / 2) }
       : firstRef
         ? refLocation(board, firstRef)
         : { x: 0, y: 0 };
-    const padRefs = net.clusters
+    const padRefs = clusters
       .flat()
       .filter((ref): ref is Extract<CopperItemRef, { kind: "pad" }> => ref.kind === "pad")
       .map((ref) => {
@@ -54,19 +56,25 @@ export function checkUnconnectedAndShorts(ctx: DrcCheckContext): DrcViolation[] 
         return `${footprint?.ref ?? ref.instanceId}.${ref.padNumber}`;
       });
     out.push({
-      id: violationId("incompleteNet", firstRef ? [firstRef] : [], remaining, 0, String(net.netId)),
+      id: violationId("incompleteNet", firstRef ? [firstRef] : [], remaining, 0, netStatus.stableNetId),
       kind: "incompleteNet",
       severity: "error",
       items: firstRef ? [firstRef] : [],
       location,
       measuredNm: remaining,
       thresholdNm: 0,
-      summary: `${netName(board, net.netId)} is incomplete: ${remaining} connection${remaining === 1 ? "" : "s"} remain.`,
-      detail: `${netName(board, net.netId)} still has ${net.clusters.length} disconnected copper groups${padRefs.length > 0 ? ` across ${padRefs.join(", ")}` : ""}. Finish the highlighted airwire connections before manufacturing.`,
+      summary: `${netStatus.name} is incomplete: ${remaining} connection${remaining === 1 ? "" : "s"} remain.`,
+      detail: `${netStatus.name} still has ${netStatus.padContainingClusterCount} disconnected terminal groups${padRefs.length > 0 ? ` across ${padRefs.join(", ")}` : ""}. Finish the highlighted airwire connections before manufacturing.`,
     });
   }
 
-  for (const [a, b] of connectivity.shorts) {
+  for (const short of electricalTruth.shorts) {
+    const pair = connectivity.shorts.find(([left, right]) => {
+      const ids = [copperItemId(left), copperItemId(right)].sort();
+      return ids[0] === short.objectIds[0] && ids[1] === short.objectIds[1];
+    });
+    if (!pair) continue;
+    const [a, b] = pair;
     const items = [a, b];
     const na = netName(board, refNet(board, a));
     const nb = netName(board, refNet(board, b));
@@ -84,7 +92,12 @@ export function checkUnconnectedAndShorts(ctx: DrcCheckContext): DrcViolation[] 
     });
   }
 
-  for (const ref of connectivity.orphans) {
+  const allRefs = new Map<string, CopperItemRef>();
+  for (const net of connectivity.nets.values()) for (const cluster of net.clusters) for (const ref of cluster) allRefs.set(copperItemId(ref), ref);
+  for (const ref of connectivity.orphans) allRefs.set(copperItemId(ref), ref);
+  for (const orphan of electricalTruth.orphanCopper) {
+    const ref = allRefs.get(orphan.objectId);
+    if (!ref) continue;
     const items = [ref];
     const net = refNet(board, ref);
     const where = net === 0 ? "isn't assigned to a net" : `is not connected to the rest of ${netName(board, net)}`;

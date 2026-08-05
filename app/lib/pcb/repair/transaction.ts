@@ -3,10 +3,10 @@ import type { PcbBoard } from "../types";
 import type { PcbHistory } from "../history";
 import { compileEdits } from "../edit/apply";
 import { runDrc } from "../drc/run-drc";
-import { computeFill } from "../zones/compute-fill";
-import { makeEffectiveClearance } from "../zones/types";
+import { applyZoneFillCandidate, computeZoneFillCandidate } from "../zones/fill-lifecycle";
 import { pcbRevisionId } from "../ai/snapshot";
 import { stableHash } from "../smart-routing/hash";
+import { validateLockedCopperUnchanged } from "../integrity";
 import type {
   AutorouteRepairExecutor,
   PCBRepairPlan,
@@ -26,12 +26,9 @@ export function refillZonesForRepair(board: PcbBoard, requestedIds?: ReadonlySet
   const ids = requestedIds ?? new Set(board.zones.map((zone) => zone.id));
   for (const zone of current.zones) {
     if (!ids.has(zone.id)) continue;
-    const result = computeFill({ board: current, zone, effectiveClearance: makeEffectiveClearance(current, zone) });
+    const result = computeZoneFillCandidate(current, zone);
     current = produce(current, (draft) => {
-      const target = draft.zones.find((candidate) => candidate.id === zone.id);
-      if (!target) return;
-      target.fill = result.regions;
-      target.dirty = false;
+      applyZoneFillCandidate(draft, result);
     });
   }
   return current;
@@ -57,12 +54,12 @@ function repairMetrics(
   const beforePositions = new Map(before.footprints.map((footprint) => [footprint.id, `${footprint.at.x},${footprint.at.y},${footprint.rotationDeg},${footprint.side}`]));
   const movedFootprints = after.footprints.filter((footprint) => beforePositions.get(footprint.id) !== `${footprint.at.x},${footprint.at.y},${footprint.rotationDeg},${footprint.side}`).length;
   return {
-    errorsBefore: beforeDrc.readiness.errors,
-    errorsAfter: afterDrc.readiness.errors,
-    warningsBefore: beforeDrc.readiness.warnings,
-    warningsAfter: afterDrc.readiness.warnings,
-    unroutedBefore: beforeDrc.readiness.unroutedConnections,
-    unroutedAfter: afterDrc.readiness.unroutedConnections,
+    errorsBefore: beforeDrc.summary.errors,
+    errorsAfter: afterDrc.summary.errors,
+    warningsBefore: beforeDrc.summary.warnings,
+    warningsAfter: afterDrc.summary.warnings,
+    unroutedBefore: beforeDrc.summary.unroutedConnections,
+    unroutedAfter: afterDrc.summary.unroutedConnections,
     totalTrackLengthBefore: totalTrackLength(before),
     totalTrackLengthAfter: totalTrackLength(after),
     viaCountBefore: before.vias.length,
@@ -124,6 +121,8 @@ export async function previewRepairTransaction(
   if (commands.length > 0 || reroutedNetIds.length > 0) for (const zone of candidate.zones) requestedZones.add(zone.id);
   if (requestedZones.size > 0) candidate = refillZonesForRepair(candidate, requestedZones);
 
+  blockers.push(...validateLockedCopperUnchanged(board, candidate).map((diagnostic) => diagnostic.summary));
+
   const drcAfter = runDrc(candidate, plan.rules);
   const beforeIds = new Set(plan.drcBefore.violations.map((violation) => violation.id));
   const afterIds = new Set(drcAfter.violations.map((violation) => violation.id));
@@ -132,7 +131,7 @@ export async function previewRepairTransaction(
     .map((violation) => violation.id);
   const resolvedViolationIds = plan.drcBefore.violations.filter((violation) => !afterIds.has(violation.id)).map((violation) => violation.id);
   if (newViolationIds.length > 0) blockers.push(`Candidate introduces ${newViolationIds.length} new error-level violation${newViolationIds.length === 1 ? "" : "s"}.`);
-  if (drcAfter.readiness.errors > plan.drcBefore.readiness.errors) blockers.push("Candidate increases the total DRC error count.");
+  if (drcAfter.summary.errors > plan.drcBefore.summary.errors) blockers.push("Candidate increases the total DRC error count.");
   const metrics = repairMetrics(board, candidate, plan, newViolationIds, reroutedNetIds);
   if (
     fixes.length > 0 &&
@@ -169,6 +168,8 @@ export function applyRepairTransaction(
 ): { ok: boolean; error?: string } {
   if (preview.status === "rejected" || preview.blockers.length > 0) return { ok: false, error: preview.blockers[0] ?? "Repair preview was rejected." };
   if (pcbRevisionId(history.present) !== preview.baseRevisionId) return { ok: false, error: "Board changed after preview; generate a new repair plan." };
+  const lockedMutation = validateLockedCopperUnchanged(history.present, preview.candidateBoard)[0];
+  if (lockedMutation) return { ok: false, error: lockedMutation.summary };
   const approved = new Set(approvedFixIds);
   const missingApproval = plan.fixes.find((fix) => preview.selectedFixIds.includes(fix.id) && fix.requiresApproval && !approved.has(fix.id));
   if (missingApproval) return { ok: false, error: `${missingApproval.title} requires explicit approval.` };

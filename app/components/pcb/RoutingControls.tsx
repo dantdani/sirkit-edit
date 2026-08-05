@@ -42,6 +42,35 @@ export function RoutingControls({
         <p className="mt-0.5 text-[10px] leading-snug text-zinc-500">Captured when you click the starting pad.</p>
       </div>
       <div className="p-3 space-y-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="block mb-1 text-[11px] text-zinc-400">Interaction</span>
+            <select
+              aria-label="Routing interaction mode"
+              value={preferences.routeMode ?? "walk_around"}
+              onChange={(event) => onChange({ ...preferences, routeMode: event.target.value as NonNullable<RoutingPreferences["routeMode"]> })}
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 focus:border-teal-500 focus:outline-none"
+            >
+              <option value="highlight_stop">Highlight</option>
+              <option value="walk_around">Walk around</option>
+              <option value="shove">Shove</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="block mb-1 text-[11px] text-zinc-400">Posture</span>
+            <select
+              aria-label="Routing posture"
+              value={preferences.posture ?? "octilinear_a"}
+              onChange={(event) => onChange({ ...preferences, posture: event.target.value as NonNullable<RoutingPreferences["posture"]> })}
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-100 focus:border-teal-500 focus:outline-none"
+            >
+              <option value="orthogonal">90°</option>
+              <option value="octilinear_a">45° A</option>
+              <option value="octilinear_b">45° B</option>
+              <option value="arbitrary">Any angle</option>
+            </select>
+          </label>
+        </div>
         <div className="rounded-md border border-zinc-800 bg-zinc-900/70 p-2" data-testid="smart-route-status">
           <div className="flex items-center gap-2 text-[11px]">
             <span

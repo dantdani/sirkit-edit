@@ -1,0 +1,25 @@
+{
+  "schema": "sirkit.cd2-prerequisite-gate.v1",
+  "evaluatedAt": "2026-07-17T20:56:00.000-04:00",
+  "prompt": {
+    "path": "C:/Users/robsa/Downloads/sirkit-cd-02-functional-architecture-alternative-synthesis-agent-prompt.md",
+    "sha256": "FDF4CA93F4B03859DC37FCE70E285B969746CA9A51BDAA5237BEF907E254D000"
+  },
+  "branch": "codex/cd-02-functional-architecture",
+  "protectedCopy": "C:/Users/robsa/Documents/Codex/2026-07-13/do/work/sirkit-edit",
+  "originalUntouched": "C:/Users/robsa/sirkit",
+  "checks": [
+    { "id": "cd1-verdict", "required": "CD-1 COMPLETE", "actual": "CD-1 INCOMPLETE", "state": "fail" },
+    { "id": "accepted-package", "required": "current immutable accepted project package", "actual": "no project package supplied; SavedProject.requirements is optional", "state": "fail" },
+    { "id": "live-build-gate", "required": "accepted package required before schematic/build", "actual": "raw prompt routes call build loop directly", "state": "fail" },
+    { "id": "profile-and-resolution", "required": "current pinned profile and governed blockers", "actual": "available only inside an unbound compile input", "state": "fail" },
+    { "id": "stage10-intent", "required": "durable collaborative requirements operations and invalidation", "actual": "foundation adapter; canonical Stage 10 union is PCB-only", "state": "fail" }
+  ],
+  "verification": {
+    "command": "npx vitest run app/lib/requirements/__tests__ app/components/requirements/__tests__ --reporter=dot",
+    "result": "6 files passed; 56 tests passed"
+  },
+  "cd2FilesImplemented": [],
+  "verdict": "BLOCKED BY CD-1"
+}
+

@@ -61,6 +61,10 @@ export interface SmartRouteIntent {
   start: Vec2;
   end: Vec2;
   movementPolicy: "keep-existing-copper-fixed";
+  /** Stage 8 interaction policy. Highlight never detours; shove is handled by the professional solver. */
+  routeMode?: "highlight_stop" | "walk_around" | "shove";
+  /** Arbitrary permits one native straight segment at any angle. */
+  posture?: "orthogonal" | "octilinear_a" | "octilinear_b" | "arbitrary";
   maxCandidates: number;
 }
 

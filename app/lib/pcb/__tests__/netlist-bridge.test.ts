@@ -5,7 +5,7 @@ import type { SchematicState, NetLabel } from "@/lib/schematic-types";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { parseKicadMod } from "../kicad-mod";
 import { mmToNm } from "../units";
-import type { PcbBoard, Track } from "../types";
+import type { PcbBoard, Track, Via, Zone } from "../types";
 import { createEmptyBoard } from "../types";
 import {
   buildNetlist,
@@ -15,6 +15,8 @@ import {
   type PartLookup,
 } from "../netlist-bridge";
 import type { FootprintSearchHit } from "../footprint-api-types";
+import { createHistory } from "../history";
+import { stackupProfile } from "../stackup";
 
 function readFixture(name: string): string {
   return readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), "utf-8");
@@ -104,7 +106,7 @@ describe("buildNetlist", () => {
     const netlist = buildNetlist(theoryFixture());
 
     expect(netlist.components.map((c) => c.ref)).toEqual(["R1", "R2", "C1", "D1", "L1"]);
-    expect(netlist.nets).toEqual([
+    expect(netlist.nets.map((net) => ({ id: net.id, name: net.name, nodes: net.nodes }))).toEqual([
       { id: 1, name: "+3V3", nodes: [{ componentId: "c1", pinNumber: "2" }] },
       { id: 2, name: "GND", nodes: [{ componentId: "r1", pinNumber: "1" }] },
       {
@@ -132,6 +134,13 @@ describe("buildNetlist", () => {
           { componentId: "r2", pinNumber: "1" },
         ],
       },
+    ]);
+    expect(netlist.nets.map((net) => net.endpointKeys)).toEqual([
+      ["c1::2"],
+      ["r1::1"],
+      ["c1::1", "d1::2", "r2::2"],
+      ["d1::1", "l1::1"],
+      ["r1::2", "r2::1"],
     ]);
   });
 
@@ -165,6 +174,13 @@ const PARTS: Record<string, ReturnType<PartLookup>> = {
     footprintHint: "Package_QFP:LQFP-48_7x7mm_P0.5mm",
     mpn: null,
     name: "weird",
+    description: null,
+  },
+  "part-number-mismatch": {
+    pins: [R_PINS[0], { ...R_PINS[1], number: "3" }],
+    footprintHint: "Resistor_SMD:R_0805_2012Metric",
+    mpn: null,
+    name: "mismatched pin numbers",
     description: null,
   },
   // No hint; the description carries a package token for the heuristic tier.
@@ -205,12 +221,13 @@ describe("syncFromSchematic", () => {
     expect(first.report.resolvedBy).toEqual({ hint: 2, heuristic: 0, manual: 0 });
 
     // Nets: GND=1, OUT=2, N$3 the middle net.
-    expect(first.board.nets).toEqual([
+    expect(first.board.nets.map(({ id, name }) => ({ id, name }))).toEqual([
       { id: 0, name: "" },
       { id: 1, name: "GND" },
       { id: 2, name: "OUT" },
       { id: 3, name: "N$3" },
     ]);
+    expect(first.board.nets.every((net) => typeof net.stableId === "string")).toBe(true);
     const ka = first.board.footprints.find((f) => f.id === "ka")!;
     const kb = first.board.footprints.find((f) => f.id === "kb")!;
     expect(ka.footprintId).toBe("Resistor_SMD:R_0805_2012Metric");
@@ -257,7 +274,7 @@ describe("syncFromSchematic", () => {
     expect(result.report.placement.warning).toMatch(/do not fit/);
   });
 
-  it("re-sync preserves moved positions and orphans copper of removed nets", async () => {
+  it("rejects deletion of a routed net atomically", async () => {
     const resolver = fakeResolver();
     const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
 
@@ -284,16 +301,12 @@ describe("syncFromSchematic", () => {
     s.netLabels = s.netLabels!.filter((l) => l.id !== "nl2");
 
     const resync = await syncFromSchematic(s, edited, { getPart, resolver });
+    expect(resync.ok).toBe(false);
     expect(resync.report.removed).toEqual(["kb"]);
     expect(resync.report.kept).toEqual(["ka"]);
-
-    const ka = resync.board.footprints.find((f) => f.id === "ka")!;
-    expect(ka.at).toEqual(movedAt); // placement survives
-    expect(resync.board.footprints).toHaveLength(1);
-
-    // Net OUT is gone; the track is orphaned to net 0, not deleted.
-    expect(resync.board.nets.map((n) => n.name)).toEqual(["", "GND"]);
-    expect(resync.board.tracks).toEqual([{ ...track, netId: 0 }]);
+    expect(resync.board).toBe(edited);
+    expect(resync.board).toEqual(edited);
+    expect(resync.diagnostics.some((diagnostic) => diagnostic.code === "ROUTED_NET_DELETION_CONFLICT")).toBe(true);
   });
 
   it("demotes pad/pin mismatches to unresolved with a reason", async () => {
@@ -310,8 +323,8 @@ describe("syncFromSchematic", () => {
     expect(board.footprints).toEqual([]);
     expect(report.unresolved).toHaveLength(1);
     expect(report.unresolved[0].componentId).toBe("km");
-    expect(report.unresolved[0].reason).toContain("48 pads");
-    expect(report.unresolved[0].reason).toContain("2 pins");
+    expect(report.unresolved[0].reason).toMatch(/footprint pad|no exact physical pad/);
+    expect(report.diagnostics.some((diagnostic) => diagnostic.code === "UNCLASSIFIED_FOOTPRINT_PAD")).toBe(true);
   });
 
   it("falls back to the package heuristic when there is no hint", async () => {
@@ -328,5 +341,202 @@ describe("syncFromSchematic", () => {
     expect(report.unresolved).toEqual([]);
     expect(report.resolvedBy).toEqual({ hint: 0, heuristic: 1, manual: 0 });
     expect(board.footprints[0].footprintId).toBe("Resistor_SMD:R_0805_2012Metric");
+  });
+
+  it("C-01 remaps every net-bearing board object when an earlier named net is inserted", async () => {
+    const resolver = fakeResolver();
+    const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
+    expect(first.ok).toBe(true);
+    const outBefore = first.board.nets.find((net) => net.name === "OUT")!;
+    const track: Track = {
+      id: "out-track", layer: "copperTop", width: mmToNm(0.25),
+      start: { x: 0, y: 0 }, end: { x: mmToNm(2), y: 0 }, netId: outBefore.id, locked: true,
+    };
+    const via: Via = {
+      id: "out-via", at: { x: mmToNm(2), y: 0 }, size: mmToNm(0.8), drill: mmToNm(0.4),
+      netId: outBefore.id, layers: ["copperTop", "copperBottom"], locked: true,
+    };
+    const zone: Zone = {
+      id: "out-zone", layer: "copperTop", netId: outBefore.id,
+      polygon: [{ x: 0, y: 0 }, { x: mmToNm(1), y: 0 }, { x: 0, y: mmToNm(1) }],
+      appearance: "solid", connection: "thermal", fill: [], dirty: true,
+    };
+    const stackupConfig = stackupProfile("signal-plane-4");
+    stackupConfig.copperLayers.find((layer) => layer.id === "in1")!.planeNetId = outBefore.id;
+    const routingHistory = [{
+      schemaVersion: 1 as const, id: "out-route", tool: "smart-route" as const,
+      baseWorldRevision: "before", netId: outBefore.id, layer: "copperTop" as const,
+      candidateId: "candidate-out", mode: "direct" as const,
+      points: [track.start, track.end], segmentIds: [track.id],
+      rules: { trackWidthNm: track.width, clearanceNm: 200_000, edgeClearanceNm: 200_000, gridNm: 50_000 },
+      score: 1, explanation: "identity remap fixture",
+    }];
+    const netClassing = {
+      version: 1 as const,
+      assignments: {},
+      ruleDeltas: [{
+        id: "out-rule", createdAt: "2026-07-16T00:00:00.000Z", source: "manual" as const,
+        explanation: "direct net target",
+        changes: [{ appliesTo: { kind: "nets" as const, netIds: [outBefore.id] }, trackWidthNm: 300_000 }],
+      }],
+    };
+    const edited = {
+      ...first.board, stackup: 4 as const, stackupConfig, tracks: [track], vias: [via], zones: [zone],
+      routingHistory, netClassing,
+    };
+    const schematic = buildFixture();
+    schematic.kicadComponents!.push({
+      id: "kc", partId: "part-r", x: 300, y: 200, rotation: 0, refDes: "R3", value: "1k",
+    });
+    schematic.netLabels!.push(label("nl-a", 280, 200, "A", "label"));
+
+    const synced = await syncFromSchematic(schematic, edited, { getPart, resolver });
+    expect(synced.ok).toBe(true);
+    const outAfter = synced.board.nets.find((net) => net.name === "OUT")!;
+    expect(outAfter.id).not.toBe(outBefore.id);
+    expect(outAfter.stableId).toBe(outBefore.stableId);
+    expect(synced.board.tracks[0]).toEqual({ ...track, netId: outAfter.id });
+    expect(synced.board.vias[0]).toEqual({ ...via, netId: outAfter.id });
+    expect(synced.board.zones[0]).toMatchObject({ ...zone, netId: outAfter.id });
+    expect(synced.board.stackupConfig?.copperLayers.find((layer) => layer.id === "in1")?.planeNetId).toBe(outAfter.id);
+    expect(synced.board.routingHistory?.[0].netId).toBe(outAfter.id);
+    expect(synced.board.netClassing?.ruleDeltas[0].changes[0].appliesTo).toEqual({
+      kind: "nets", netIds: [outAfter.id],
+    });
+  });
+
+  it("preserves a routed net stable identity across rename, endpoint growth, and shrink", async () => {
+    const resolver = fakeResolver();
+    const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
+    const out = first.board.nets.find((net) => net.name === "OUT")!;
+    const track: Track = {
+      id: "t-identity", layer: "copperTop", width: mmToNm(0.25),
+      start: { x: 0, y: 0 }, end: { x: mmToNm(1), y: 0 }, netId: out.id,
+    };
+    const routed = { ...first.board, tracks: [track] };
+
+    const renamedSchematic = buildFixture();
+    renamedSchematic.netLabels!.find((item) => item.id === "nl2")!.name = "RENAMED";
+    const renamed = await syncFromSchematic(renamedSchematic, routed, { getPart, resolver });
+    expect(renamed.ok).toBe(true);
+    const renamedNet = renamed.board.nets.find((net) => net.name === "RENAMED")!;
+    expect(renamedNet.stableId).toBe(out.stableId);
+
+    const grownSchematic = structuredClone(renamedSchematic);
+    grownSchematic.kicadComponents!.push({
+      id: "kc", partId: "part-r", x: 300, y: 200, rotation: 0, refDes: "R3", value: "1k",
+    });
+    grownSchematic.netLabels!.push(label("nl-grow", 280, 200, "RENAMED", "label"));
+    const grown = await syncFromSchematic(grownSchematic, renamed.board, { getPart, resolver });
+    expect(grown.ok).toBe(true);
+    expect(grown.board.nets.find((net) => net.name === "RENAMED")!.stableId).toBe(out.stableId);
+
+    const shrunk = await syncFromSchematic(renamedSchematic, grown.board, { getPart, resolver });
+    expect(shrunk.ok).toBe(true);
+    expect(shrunk.board.nets.find((net) => net.name === "RENAMED")!.stableId).toBe(out.stableId);
+  });
+
+  it("rejects routed split and merge conflicts without changing the board", async () => {
+    const resolver = fakeResolver();
+    const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
+    const middle = first.board.nets.find((net) => net.name.startsWith("N$"))!;
+    const splitBoard = {
+      ...first.board,
+      tracks: [{
+        id: "middle-track", layer: "copperTop" as const, width: mmToNm(0.25),
+        start: { x: 0, y: 0 }, end: { x: mmToNm(1), y: 0 }, netId: middle.id,
+      }],
+    };
+    const splitSchematic = buildFixture();
+    splitSchematic.wires = [];
+    splitSchematic.netLabels!.push(label("split-a", 120, 100, "A", "label"));
+    splitSchematic.netLabels!.push(label("split-b", 180, 100, "B", "label"));
+    const split = await syncFromSchematic(splitSchematic, splitBoard, { getPart, resolver });
+    expect(split.ok).toBe(false);
+    expect(split.board).toBe(splitBoard);
+    expect(split.diagnostics.some((diagnostic) => diagnostic.code === "ROUTED_NET_SPLIT_CONFLICT")).toBe(true);
+
+    const gnd = first.board.nets.find((net) => net.name === "GND")!;
+    const out = first.board.nets.find((net) => net.name === "OUT")!;
+    const mergeBoard = {
+      ...first.board,
+      tracks: [
+        { id: "gnd", layer: "copperTop" as const, width: mmToNm(0.25), start: { x: 0, y: 0 }, end: { x: 1, y: 0 }, netId: gnd.id },
+        { id: "out", layer: "copperTop" as const, width: mmToNm(0.25), start: { x: 0, y: 1 }, end: { x: 1, y: 1 }, netId: out.id },
+      ],
+    };
+    const mergeSchematic = buildFixture();
+    mergeSchematic.netLabels!.find((item) => item.id === "nl2")!.name = "GND";
+    const merge = await syncFromSchematic(mergeSchematic, mergeBoard, { getPart, resolver });
+    expect(merge.ok).toBe(false);
+    expect(merge.board).toBe(mergeBoard);
+    expect(merge.diagnostics.some((diagnostic) => diagnostic.code === "ROUTED_NET_MERGE_CONFLICT")).toBe(true);
+  });
+
+  it("C-02 rejects equal-count pin/pad identifier mismatch atomically", async () => {
+    const schematic: SchematicState = {
+      components: [], wires: [], netLabels: [],
+      kicadComponents: [
+        { id: "bad", partId: "part-number-mismatch", x: 100, y: 100, rotation: 0, refDes: "R7", value: "1k" },
+      ],
+    };
+    const original = createEmptyBoard();
+    const result = await syncFromSchematic(schematic, original, { getPart, resolver: fakeResolver() });
+    expect(result.ok).toBe(false);
+    expect(result.board).toBe(original);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "UNMAPPED_SCHEMATIC_PIN")).toBe(true);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "UNCLASSIFIED_FOOTPRINT_PAD")).toBe(true);
+  });
+
+  it("C-04 rejects duplicate canonical references atomically", async () => {
+    const schematic = buildFixture();
+    schematic.kicadComponents![1].refDes = "r1";
+    const original = createEmptyBoard();
+    const result = await syncFromSchematic(schematic, original, { getPart, resolver: fakeResolver() });
+    expect(result.ok).toBe(false);
+    expect(result.board).toBe(original);
+    expect(result.diagnostics.some((diagnostic) => diagnostic.code === "DUPLICATE_REFERENCE_DESIGNATOR")).toBe(true);
+  });
+
+  it("reannotation changes the exported reference while retaining stable component placement and net identity", async () => {
+    const resolver = fakeResolver();
+    const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
+    const placed = structuredClone(first.board);
+    placed.footprints.find((footprint) => footprint.id === "ka")!.at = { x: mmToNm(31), y: mmToNm(27) };
+    const oldStableIds = new Map(placed.nets.map((net) => [net.endpointKeys?.join("|"), net.stableId]));
+    const schematic = buildFixture();
+    schematic.kicadComponents!.find((component) => component.id === "ka")!.refDes = "R9";
+    const result = await syncFromSchematic(schematic, placed, { getPart, resolver });
+    expect(result.ok).toBe(true);
+    const footprint = result.board.footprints.find((candidate) => candidate.id === "ka")!;
+    expect(footprint.ref).toBe("R9");
+    expect(footprint.at).toEqual({ x: mmToNm(31), y: mmToNm(27) });
+    for (const net of result.board.nets) {
+      expect(net.stableId).toBe(oldStableIds.get(net.endpointKeys?.join("|")));
+    }
+  });
+
+  it("successful sync is one undoable identity transaction while failed sync creates no entry", async () => {
+    const resolver = fakeResolver();
+    const first = await syncFromSchematic(buildFixture(), undefined, { getPart, resolver });
+    const history = createHistory(first.board);
+    const renamedSchematic = buildFixture();
+    renamedSchematic.netLabels!.find((item) => item.id === "nl2")!.name = "RENAMED";
+    const renamed = await syncFromSchematic(renamedSchematic, history.present, { getPart, resolver });
+    expect(renamed.ok).toBe(true);
+    history.execute("Sync schematic to PCB", (draft) => Object.assign(draft, renamed.board));
+    expect(history.present.nets.some((net) => net.name === "RENAMED")).toBe(true);
+    history.undo();
+    expect(history.present.nets.some((net) => net.name === "OUT")).toBe(true);
+    history.redo();
+    expect(history.present.nets.some((net) => net.name === "RENAMED")).toBe(true);
+
+    const invalid = buildFixture();
+    invalid.kicadComponents![1].refDes = "R1";
+    const failed = await syncFromSchematic(invalid, history.present, { getPart, resolver });
+    expect(failed.ok).toBe(false);
+    expect(history.entries).toHaveLength(1);
+    expect(history.present).toBe(failed.board); // failed result is the supplied frozen board; no execute occurred
+    expect(history.present).toEqual(failed.board);
   });
 });

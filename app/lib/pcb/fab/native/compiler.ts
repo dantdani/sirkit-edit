@@ -20,6 +20,8 @@ import type {
   NativeFabStageReport,
 } from "./types";
 import { NativeFabBlockedError } from "./types";
+import { evaluatePcbFabricationReadiness } from "../../readiness/evaluate";
+import { createManufacturingReleaseManifest, prepareManufacturingRelease } from "../../readiness/release";
 
 const FIXED_ZIP_DATE = new Date("1980-01-01T00:00:00.000Z");
 
@@ -99,11 +101,28 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
   const stages: NativeFabStageReport[] = [];
   const allDiagnostics: FabDiagnostic[] = [];
 
+  const prepared = prepareManufacturingRelease({
+    board: input.board,
+    disposition: input.releaseDisposition ?? "verified_manufacturing_release",
+    priorReport: input.priorReadinessReport,
+    evaluate: (board) => evaluatePcbFabricationReadiness({
+      board,
+      netlist: input.schematicIntentAvailable === false ? undefined : input.netlist,
+      fabPreset: input.fabPreset,
+      drcPreset: input.drcPreset,
+      exporter: "sirkit-native",
+      waivers: input.waivers,
+    }),
+  });
+
   let started = Date.now();
-  const { snapshot, diagnostics: snapshotDiagnostics } = createManufacturingSnapshot(input);
+  const { snapshot, diagnostics: snapshotDiagnostics } = createManufacturingSnapshot({ ...input, board: prepared.snapshot });
   allDiagnostics.push(...snapshotDiagnostics);
   stage(stages, "immutable-snapshot", started, snapshotDiagnostics);
-  blockIfErrors("Immutable snapshot", snapshotDiagnostics);
+  const snapshotBlocking = prepared.disposition === "verified_manufacturing_release"
+    ? snapshotDiagnostics
+    : snapshotDiagnostics.filter((diagnostic) => diagnostic.category !== "drc" && diagnostic.code !== "SNAPSHOT_STALE_ZONE_FILL");
+  blockIfErrors("Immutable snapshot", snapshotBlocking);
 
   started = Date.now();
   const mir = compileManufacturingIr(snapshot);
@@ -199,19 +218,32 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
   stage(stages, "assembly-deliverables", started, []);
 
   started = Date.now();
+  const generatedAt = input.generatedAt ?? new Date().toISOString();
+  const releaseManifest = createManufacturingReleaseManifest({
+    prepared,
+    projectIdentity: input.projectIdentity ?? snapshot.boardName,
+    exporterVersion: "sirkit-native-fab/1",
+    generatedAt,
+    actor: input.actor,
+    artifacts: files.map((item) => ({ path: item.path, kind: item.kind, bytes: item.bytes.byteLength, sha256: item.sha256 })),
+  });
+  files.push(file(prefix(snapshot, "release-manifest.json"), "manifest", "application/json", `${JSON.stringify(releaseManifest, null, 2)}\n`));
   const packageId = sha256(stableJson({
     snapshot: snapshot.sourceHash,
     recipe: snapshot.recipe,
     files: files.map((item) => ({ path: item.path, sha256: item.sha256 })).sort((a, b) => a.path.localeCompare(b.path)),
   }));
   const manifest: NativeFabManifest = {
-    schemaVersion: "sirkit.native-fab-manifest.v1",
+    schemaVersion: "sirkit.native-fab-manifest.v2",
     packageId,
     snapshotHash: snapshot.sourceHash,
     recipe: { id: snapshot.recipe.id, version: snapshot.recipe.version, mode: snapshot.recipe.mode },
     generator: { vendor: "Sirkit", application: "Sirkit Fab Compiler", version: "0.1.0" },
     standards: { gerber: snapshot.recipe.gerberRevision, xnc: snapshot.recipe.xncRevision, gerberJob: "2020.08" },
-    signoff: "native-beta-verified",
+    signoff: prepared.disposition === "verified_manufacturing_release" ? "pcb-fabrication-checks-passed" : "engineering-prototype-unverified",
+    releaseTransactionId: releaseManifest.transactionId,
+    readinessReportId: prepared.report.reportId,
+    planeCertificates: snapshot.planeCertificates,
     files: files
       .map((item) => ({ path: item.path, kind: item.kind, bytes: item.bytes.byteLength, sha256: item.sha256 }))
       .sort((a, b) => a.path.localeCompare(b.path)),
@@ -230,6 +262,8 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
     files,
     stages,
     diagnostics: allDiagnostics,
+    readiness: prepared.report,
+    releaseManifest,
   };
 }
 
@@ -239,6 +273,7 @@ export function summarizeNativePreflight(result: NativeFabCompileResult): {
   files: Array<{ path: string; kind: NativeFabFile["kind"]; bytes: number; sha256: string }>;
   diagnostics: FabDiagnostic[];
   stages: NativeFabStageReport[];
+  readiness: NativeFabCompileResult["readiness"];
 } {
   return {
     packageId: result.manifest.packageId,
@@ -246,5 +281,6 @@ export function summarizeNativePreflight(result: NativeFabCompileResult): {
     files: result.files.map((item) => ({ path: item.path, kind: item.kind, bytes: item.bytes.byteLength, sha256: item.sha256 })),
     diagnostics: result.diagnostics,
     stages: result.stages,
+    readiness: result.readiness,
   };
 }

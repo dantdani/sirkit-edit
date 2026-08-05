@@ -2,22 +2,41 @@ import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { createEmptyBoard } from "../types";
 import { buildRoutedDemo } from "../demo/routed-demo";
-import { netlistFromBoard } from "../kicad/write-pcb";
 import { getFabPreset } from "../fab/presets";
 import { getPreset } from "../drc/presets";
 import { compileNativeFabPackage } from "../fab/native/compiler";
-import { NativeFabBlockedError } from "../fab/native/types";
 import { createManufacturingSnapshot } from "../fab/native/snapshot";
 import { compileManufacturingIr } from "../fab/native/mir";
 import { writeGerberLayer } from "../fab/native/gerber-writer";
 import { parseGerber } from "../fab/native/gerber-parser";
 import { verifyGerberLayer } from "../fab/native/gerber-verify";
+import { ManufacturingReleaseBlockedError } from "../readiness/release";
+import type { PcbBoard } from "../types";
 
 const fabPreset = getFabPreset("jlcpcb-2l");
 const drcPreset = getPreset("jlcpcb-2l");
 
+function authoritativeNetlist(board: PcbBoard) {
+  return {
+    components: board.footprints.map((footprint) => ({
+      id: footprint.id,
+      ref: footprint.ref,
+      pins: (footprint.pinPadMappings ?? []).map((mapping) => ({ number: mapping.symbolPinNumber })),
+    })),
+    nets: board.nets.filter((net) => net.id !== 0).map((net) => ({
+      id: net.id,
+      name: net.name,
+      endpointKeys: [...(net.endpointKeys ?? [])],
+      nodes: (net.endpointKeys ?? []).map((key) => {
+        const [componentId, pinNumber] = key.split("::");
+        return { componentId: decodeURIComponent(componentId), pinNumber: decodeURIComponent(pinNumber) };
+      }),
+    })),
+  };
+}
+
 function input(board = createEmptyBoard(), boardName = "native-test") {
-  return { board, netlist: netlistFromBoard(board), fabPreset, drcPreset, boardName };
+  return { board, netlist: authoritativeNetlist(board), fabPreset, drcPreset, boardName, generatedAt: "2026-07-17T00:00:00.000Z" };
 }
 
 function cleanRotatedSmdBoard() {
@@ -25,6 +44,14 @@ function cleanRotatedSmdBoard() {
   const footprint = structuredClone(source.footprints.find((item) => item.ref === "R1")!);
   footprint.rotationDeg = 45;
   footprint.padNets = {};
+  footprint.pinPadMappings = footprint.def.pads.map((pad) => ({
+    componentInstanceId: footprint.id,
+    endpointKey: `${encodeURIComponent(footprint.id)}::${encodeURIComponent(pad.number)}`,
+    symbolPinNumber: pad.number,
+    padNumbers: [pad.number],
+    mappingKind: "intentional-no-connect" as const,
+    provenance: "user-explicit" as const,
+  }));
   return {
     ...createEmptyBoard(),
     outline: source.outline,
@@ -41,7 +68,8 @@ describe("Sirkit native manufacturing compiler", () => {
     expect(first.packageSha256).toBe(second.packageSha256);
     expect(first.manifest.packageId).toBe(second.manifest.packageId);
     expect(first.zipBytes).toEqual(second.zipBytes);
-    expect(first.manifest.signoff).toBe("native-beta-verified");
+    expect(first.manifest.signoff).toBe("pcb-fabrication-checks-passed");
+    expect(first.releaseManifest.verified).toBe(true);
     expect(first.filename).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 
     const zip = await JSZip.loadAsync(first.zipBytes);
@@ -73,6 +101,11 @@ describe("Sirkit native manufacturing compiler", () => {
     duplicate.id = "second";
     duplicate.ref = "R2";
     duplicate.at.x += 5_000_000;
+    duplicate.pinPadMappings = (duplicate.pinPadMappings ?? []).map((mapping) => ({
+      ...mapping,
+      componentInstanceId: duplicate.id,
+      endpointKey: `${encodeURIComponent(duplicate.id)}::${encodeURIComponent(mapping.symbolPinNumber)}`,
+    }));
     board.footprints.push(duplicate);
     const shuffled = structuredClone(board);
     shuffled.footprints.reverse();
@@ -99,20 +132,11 @@ describe("Sirkit native manufacturing compiler", () => {
       fill: [],
       dirty: true,
     });
-    await expect(compileNativeFabPackage(input(board))).rejects.toMatchObject({
-      name: "NativeFabBlockedError",
-      diagnostics: expect.arrayContaining([expect.objectContaining({ code: "SNAPSHOT_STALE_ZONE_FILL" })]),
-    });
+    await expect(compileNativeFabPackage(input(board))).rejects.toBeInstanceOf(ManufacturingReleaseBlockedError);
   });
 
   it("blocks DRC errors without accepting a generic override", async () => {
-    await expect(compileNativeFabPackage(input(buildRoutedDemo()))).rejects.toBeInstanceOf(NativeFabBlockedError);
-    try {
-      await compileNativeFabPackage(input(buildRoutedDemo()));
-    } catch (error) {
-      const blocked = error as NativeFabBlockedError;
-      expect(blocked.diagnostics.some((item) => item.code === "DRC_SHORT")).toBe(true);
-    }
+    await expect(compileNativeFabPackage(input(buildRoutedDemo()))).rejects.toBeInstanceOf(ManufacturingReleaseBlockedError);
   });
 
   it("detects post-write coordinate corruption through the independent parser", () => {

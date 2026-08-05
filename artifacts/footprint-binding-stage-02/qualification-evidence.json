@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "sirkit.footprint-resolver-stage2-qualification.v1",
+  "verdict": "BLOCKED",
+  "safeMode": "read_only_api_and_optional_shadow",
+  "versions": {
+    "resolver": "sirkit.footprint-resolver/2.0.0",
+    "request": "sirkit.footprint-resolution-request.v1",
+    "context": "sirkit.footprint-resolution-context.v1",
+    "result": "sirkit.footprint-resolution-result.v1",
+    "policy": "sirkit.footprint-resolution-policy/1.0.0",
+    "normalization": "sirkit.footprint-resolution-normalization/1",
+    "compatibilityValidator": "sirkit.footprint-compatibility/1"
+  },
+  "focused": {
+    "typescript": { "command": "pnpm exec tsc --noEmit --pretty false", "exitCode": 0 },
+    "lint": { "command": "pnpm exec eslint app/lib/footprint-resolver app/api/footprint-resolution scripts/footprint-resolver-stage2-evidence.ts --max-warnings=0", "exitCode": 0, "warnings": 0 },
+    "stage1Tests": { "command": "pnpm exec vitest run app/lib/physical-binding/__tests__ --reporter=dot", "exitCode": 0, "filesPassed": 5, "testsPassed": 25 },
+    "stage2Tests": { "command": "pnpm exec vitest run app/lib/footprint-resolver/__tests__ --reporter=dot", "exitCode": 0, "filesPassed": 5, "testsPassed": 39 },
+    "migrationCheck": { "command": "pnpm exec drizzle-kit check", "exitCode": 0 },
+    "build": { "command": "pnpm build", "exitCode": 0, "buildIdPresent": true, "routePresent": "/api/footprint-resolution" },
+    "website": { "url": "http://localhost:3001", "status": 200 }
+  },
+  "repositoryRegression": {
+    "command": "pnpm exec vitest run --reporter=json --silent --outputFile=artifacts/footprint-binding-stage-02/full-suite.json",
+    "exitCode": 0,
+    "filesExecuted": 195,
+    "testsPassed": 1306,
+    "testsFailed": 0,
+    "testsSkipped": 9
+  },
+  "broadLint": {
+    "command": "pnpm exec eslint . --max-warnings=0 -f json -o artifacts/footprint-binding-stage-02/full-lint.json",
+    "exitCode": 1,
+    "errors": 30,
+    "warnings": 13,
+    "stage2Findings": 0,
+    "classification": "pre-existing findings outside Stage 2 paths"
+  },
+  "shadowEquivalence": {
+    "productionPath": "app/lib/pcb/netlist-bridge.ts#syncFromSchematic",
+    "disabledAndEnabledResultsDeepEqual": true,
+    "schematicMutation": false,
+    "pcbMutation": false,
+    "productionBehaviorChanged": false,
+    "knownCapacitorCategory": "legacy_default_new_requires_policy"
+  },
+  "performance": {
+    "environment": { "platform": "win32", "architecture": "x64", "node": "v24.15.0" },
+    "exactSingle": { "samples": 50, "meanMs": 2.571, "p95Ms": 3.961, "maxMs": 5.276 },
+    "missingSingle": { "samples": 50, "meanMs": 1.337, "p95Ms": 1.988, "maxMs": 2.367 },
+    "batch100": { "samples": 5, "meanMs": 81.264, "p95Ms": 100.995, "maxMs": 100.995 },
+    "normalization256": { "samples": 20, "meanMs": 22.926, "p95Ms": 31.463, "maxMs": 33.198 },
+    "shadowMeanOverheadMs": 0.652,
+    "cacheDecision": "disabled"
+  },
+  "representativeStatuses": {
+    "genericJ1": "unresolved_missing_data",
+    "generic100n": "unresolved_missing_data",
+    "ambiguous0603": "unresolved_ambiguous",
+    "exactApproved": "resolved",
+    "layoutResolvedManufacturingIncomplete": "unresolved_missing_data",
+    "twoApprovedConflict": "blocked_conflict",
+    "staleFootprint": "blocked_stale",
+    "dnp": "not_applicable"
+  },
+  "strictCompletionBlockers": [
+    "Stage 1 live PostgreSQL migration apply/rollback/restart qualification is still unproven.",
+    "Nine repository tests remain skipped, so the prompt's no-skipped-required-verification rule is not provable.",
+    "No mutation-testing runner exists in the repository.",
+    "Broad repository lint has 30 errors and 13 warnings outside Stage 2, although focused Stage 2 lint is clean."
+  ]
+}

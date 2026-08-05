@@ -24,6 +24,9 @@ export interface NetClass {
   viaSize: number; // outer diameter, nm
   viaDrill: number; // nm
   explanation: string; // one-line "why" (populated for non-Default assignments)
+  /** Stage 6 lineage. Present when the authoritative compiled program supplied values. */
+  constraintIds?: string[];
+  constraintProgramHash?: string;
 }
 
 /** The three MVP classes. Values match Stage 7's hard-coded defaults for Default. */
@@ -87,9 +90,29 @@ export interface BoardNetClassing {
  */
 export function getNetClass(board: PcbBoard, netId: number): NetClass {
   const assignment = board.netClassing?.assignments[netId];
+  const classId = assignment?.classId ?? "Default";
+  const displayBase = DEFAULT_CLASSES[classId] ?? DEFAULT_CLASSES.Default;
+  const net = board.nets.find((item) => item.id === netId);
+  const program = board.constraintState?.activeProgram;
+  const compiled = net?.stableId ? program?.lowerings.physicalByTarget[net.stableId] : undefined;
+  if (program && compiled) {
+    // The compiler already merged the legacy Default class, explicit deltas,
+    // manufacturing/project rules, and safety minima. Do not reapply the old
+    // class assignment (which may be only an unapproved name inference).
+    const base = DEFAULT_CLASSES.Default;
+    return {
+      ...displayBase,
+      trackWidth: compiled.minTrackWidthNm ?? base.trackWidth,
+      clearance: compiled.clearanceNm ?? base.clearance,
+      viaSize: compiled.minViaOuterNm ?? base.viaSize,
+      viaDrill: compiled.minViaDrillNm ?? base.viaDrill,
+      explanation: `Compiled Stage 6 rules (${compiled.constraintIds.join(", ") || "default"})`,
+      constraintIds: [...compiled.constraintIds],
+      constraintProgramHash: program.programHash,
+    };
+  }
   if (!assignment) return { ...DEFAULT_CLASSES.Default, explanation: "" };
-  const base = DEFAULT_CLASSES[assignment.classId] ?? DEFAULT_CLASSES.Default;
-  return { ...base, explanation: assignment.explanation, ...(assignment.override ?? {}) };
+  return { ...displayBase, explanation: assignment.explanation, ...(assignment.override ?? {}) };
 }
 
 // ── Rule deltas ──────────────────────────────────────────────────────────────

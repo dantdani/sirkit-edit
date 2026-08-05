@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "sirkit.physical-binding-stage1-qualification-evidence.v1",
+  "verdict": "BLOCKED",
+  "safeMode": "disabled_or_shadow",
+  "focused": {
+    "typescript": { "command": "pnpm exec tsc --noEmit --pretty false", "exitCode": 0 },
+    "lint": { "command": "pnpm exec eslint app/lib/physical-binding app/api/physical-bindings --max-warnings=0", "exitCode": 0, "warnings": 0 },
+    "tests": { "command": "pnpm exec vitest run app/lib/physical-binding/__tests__ --reporter=dot", "exitCode": 0, "filesPassed": 5, "testsPassed": 25 },
+    "migrationCheck": { "command": "pnpm exec drizzle-kit check", "exitCode": 0 },
+    "build": { "command": "pnpm build", "exitCode": 0, "routePresent": "/api/physical-bindings" }
+  },
+  "repositoryRegression": {
+    "command": "pnpm test -- --reporter=dot",
+    "exitCode": 0,
+    "filesPassed": 188,
+    "filesSkipped": 2,
+    "testsPassed": 1267,
+    "testsSkipped": 9
+  },
+  "shadowEquivalence": {
+    "productionPath": "app/lib/pcb/netlist-bridge.ts#syncFromSchematic",
+    "fixture": "R_0805_2012Metric.kicad_mod",
+    "disabledAndEnabledResultsDeepEqual": true,
+    "pcbOrSchematicMutationAddedByStage1": false
+  },
+  "performance": {
+    "environment": { "platform": "win32", "architecture": "x64", "node": "v24.15.0" },
+    "canonicalDigests": { "fixtures": 10000, "elapsedMs": 88.272, "budgetMs": 5000, "passed": true },
+    "legacyMigrations": { "fixtures": 1000, "elapsedMs": 371.786, "budgetMs": 5000, "passed": true, "ambiguous": 1000 },
+    "readinessAssessments": { "fixtures": 1000, "elapsedMs": 153.04, "budgetMs": 5000, "passed": true, "blocked": 1000 },
+    "candidateOrdering": { "fixtures": 256, "elapsedMs": 0.238, "budgetMs": 100, "passed": true }
+  },
+  "unmetQualification": [
+    "Migration apply/rollback and restart persistence were not executed against an isolated PostgreSQL database.",
+    "The repository has no formatter command and no mutation-testing runner.",
+    "The broad suite contains nine pre-existing skipped tests.",
+    "Full repository lint has 30 errors and 13 warnings in unrelated pre-existing UI/test files; Stage 1 paths are clean."
+  ]
+}

@@ -70,6 +70,12 @@ export type KicadComponentInstance = {
   rotation: Rotation;
   refDes: string;      // user-facing reference designator, e.g. "U1", "R5"
   value: string;       // user-overridable display value
+  /** Exact immutable Stage 5 identity. Absent means legacy/unresolved. */
+  atomicPartRevisionId?: string;
+  symbolAssetVersionId?: string;
+  footprintAssetVersionId?: string;
+  mappingCertificateId?: string;
+  selectionRecordId?: string;
 };
 
 // ─── Page size ─────────────────────────────────────────────────────────────────
@@ -187,6 +193,8 @@ export type BuildLogicalComponent = {
   value: string;           // display value, e.g. "10k" or "ESP32-WROOM-32"
   role: ComponentRole;     // layout zone assignment (see ComponentRole)
   parentRefDes?: string;   // for "support" components: the refDes of the owning IC
+  /** Agent-selected exact revision; only persisted after user confirmation. */
+  atomicPartRevisionId?: string;
 };
 
 // A Build-mode connection is either a literal wire between two pins, or a net

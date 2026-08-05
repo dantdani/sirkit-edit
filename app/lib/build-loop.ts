@@ -99,7 +99,10 @@ export async function runBuildToolLoop(opts: {
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const response = await llmRouter.generate({
         provider: opts.provider,
-        maxTokens: 8192,
+        // This bounds one structured tool turn, not the input context. Leaving
+        // every parallel turn at the provider's 128K output maximum can reserve
+        // enough TPM to rate-limit a multi-block build before it starts.
+        maxTokens: 8_192,
         temperature: 0,
         system: opts.systemPrompt,
         tools: [BUILD_SEARCH_PARTS_TOOL, BUILD_FIND_ALTERNATES_TOOL, BUILD_SUBMIT_SCHEMATIC_TOOL],
@@ -259,7 +262,7 @@ export async function runBuildToolLoop(opts: {
     if (err instanceof LLMProviderError) {
       return {
         ok: false,
-        error: `${err.provider === "openai" ? "OpenAI" : "Anthropic"} is currently unavailable.`,
+        error: err.message,
         status: 503,
         code: err.code,
         provider: err.provider,

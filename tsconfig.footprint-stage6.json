@@ -1,0 +1,51 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [],
+  "files": [
+    "app/lib/db/schema.ts",
+    "app/lib/durable-workflow/types.ts",
+    "app/lib/durable-workflow/stable.ts",
+    "app/lib/durable-workflow/repository.ts",
+    "app/lib/durable-workflow/server-repository.ts",
+    "app/lib/durable-workflow/outbox.ts",
+    "app/lib/durable-workflow/runtime.ts",
+    "app/lib/durable-workflow/effects-runtime.ts",
+    "app/lib/pcb-sync/durable.ts",
+    "app/lib/mapping-verification/types.ts",
+    "app/lib/mapping-verification/durable.ts",
+    "app/lib/mapping-verification/service.ts",
+    "app/lib/passive-policy/types.ts",
+    "app/lib/passive-policy/durable.ts",
+    "app/lib/passive-policy/service.ts",
+    "app/lib/assignment-queue/types.ts",
+    "app/lib/assignment-queue/stable.ts",
+    "app/lib/assignment-queue/adapters.ts",
+    "app/lib/assignment-queue/materializer.ts",
+    "app/lib/assignment-queue/repository.ts",
+    "app/lib/assignment-queue/service.ts",
+    "app/lib/assignment-queue/rollout.ts",
+    "app/lib/assignment-queue/runtime.ts",
+    "app/lib/assignment-queue/revalidation.ts",
+    "app/api/pcb-sync/route.ts",
+    "app/api/mapping-verification/route.ts",
+    "app/api/passive-policy/route.ts",
+    "app/api/passive-policy/handler.ts",
+    "app/api/engineering-effects/route.ts"
+    ,"app/api/assignment-queue/_scope.ts"
+    ,"app/api/assignment-queue/route.ts"
+    ,"app/api/assignment-queue/materialize/route.ts"
+    ,"app/api/assignment-queue/revalidate/route.ts"
+    ,"app/components/pcb/AssignmentQueuePanel.tsx"
+    ,"app/components/pcb/PcbToolbar.tsx"
+    ,"app/components/pcb/PcbEditor.tsx"
+    ,"app/lib/pcb/board-persistence.ts"
+    ,"app/lib/assignment-queue/__tests__/revalidation.test.ts"
+    ,"app/lib/durable-workflow/__tests__/stage3-stage5-owners.test.ts"
+    ,"app/api/assignment-queue/__tests__/_scope.test.ts"
+    ,"app/components/pcb/__tests__/assignment-queue-panel.test.tsx"
+  ]
+}

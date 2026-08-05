@@ -10,6 +10,7 @@ import type { PCBRepairPlan, RepairExecutionMode, RepairFix, RepairGroup } from 
 import { buildPlacementEnvelope } from "../autoplace/envelope";
 import { isLocked } from "../autoplace/auto-place";
 import { outlineBBox, worldCourtyardBBox } from "../autoplace/geometry";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
 
 function footprintIdForViolation(violation: DrcViolation): string | undefined {
   const pad = violation.items.find((item) => item.kind === "pad");
@@ -204,7 +205,7 @@ export function planDrcRepairs(
     groupMap.set(groupInfo.key, group);
   }
 
-  const dirtyZoneIds = board.zones.filter((zone) => zone.dirty).map((zone) => zone.id);
+  const dirtyZoneIds = board.zones.filter((zone) => !zoneFillIsCurrent(board, zone)).map((zone) => zone.id);
   if (dirtyZoneIds.length > 0) {
     const fix: RepairFix = {
       id: `repair-fix-${stableHash(`refill|${dirtyZoneIds.join(",")}`)}`,

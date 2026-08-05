@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "surfaces": {
+    "app/page.tsx": [
+      "* token context; * maximum output",
+      "AI Brain",
+      "Add pane",
+      "Analysis settings",
+      "Analysis type",
+      "Apply bounded support-part fixes via a validated edit",
+      "Close",
+      "Close pane",
+      "Delete",
+      "Delete \"*\"",
+      "Delete project *",
+      "Dismiss",
+      "Export as KiCad (.kicad_sch)",
+      "Fit page to view",
+      "Ignore these suggestions",
+      "Independent domain model designs the same request and diffs it (slow, ~1–2 min)",
+      "Junction — mark a wire crossing as connected",
+      "More checks",
+      "Move mode (M)",
+      "Net label — name a net; same-name labels connect electrically",
+      "Open \"*\"",
+      "Open a Sirkit project file",
+      "Open project file",
+      "Place a * *",
+      "Probe mode (P)",
+      "Re-run simulation",
+      "Redo schematic action",
+      "Rename project",
+      "Revision history",
+      "Revision history / checkpoints",
+      "Save project file",
+      "Save project to a local .sirkit.json file",
+      "Select",
+      "Sheet size — also sets the KiCad export page",
+      "Toggle AI chat",
+      "Undo schematic action",
+      "Wire"
+    ],
+    "app/components/pcb/PcbEditor.tsx": [
+      "Close 3D preview",
+      "Close AI assist",
+      "Design rule check",
+      "Run DRC to check the board against the current fab preset."
+    ],
+    "app/components/pcb/PcbToolbar.tsx": [
+      "3D preview",
+      "Add plane",
+      "Autoroute board locally with Freerouting",
+      "Autoroute locally with Freerouting (no API key)",
+      "Board height (mm)",
+      "Board width (mm)",
+      "Draw copper zone (Z)",
+      "Edit history",
+      "Export KiCad PCB",
+      "Export KiCad PCB (.kicad_pcb)",
+      "Fill layer as plane",
+      "Keyboard shortcuts",
+      "Keyboard shortcuts (?)",
+      "Padstack library",
+      "Padstacks",
+      "Pan",
+      "Pan tool",
+      "Physical assignment queue",
+      "Rounded corners (2 mm)",
+      "Route tool",
+      "Route tracks (R)",
+      "Run DRC",
+      "Run design rule check",
+      "Select",
+      "Select tool",
+      "Send to fab",
+      "Send to fab (Gerbers, drill, BOM, pick-and-place)",
+      "Silkscreen text & graphics (S)",
+      "Silkscreen tool",
+      "Stackup",
+      "Toggle grid",
+      "Zone tool",
+      "Zoom to fit"
+    ],
+    "app/components/pcb/SyncButton.tsx": [
+      "Schematic changed since last sync",
+      "Schematic to PCB",
+      "Schematic to PCB placement options"
+    ],
+    "app/components/pcb/FabDialog.tsx": [
+      "Fab preset",
+      "Manufacturing engine",
+      "Send to fab",
+      "Zoom to violation"
+    ],
+    "app/components/pcb/DrcPanel.tsx": [],
+    "app/components/pcb/BoardRepairPanel.tsx": [
+      "PCB repair execution mode"
+    ],
+    "app/components/pcb/AssignmentQueuePanel.tsx": [
+      "Assignment filter",
+      "Close assignment queue",
+      "Footprint assignment queue",
+      "Refresh assignment queue"
+    ],
+    "app/components/pcb/RoutingRulesPanel.tsx": [
+      "* (mm)",
+      "Close routing rules editor",
+      "Routing rules editor"
+    ],
+    "app/components/pcb/AssistBox.tsx": [
+      "Assist instruction"
+    ],
+    "app/components/pcb/CommandPalette.tsx": [
+      "Search actions"
+    ],
+    "app/components/pcb/SyncPlacementDialog.tsx": [
+      "Close import placement",
+      "Schematic import placement"
+    ],
+    "app/components/editor/BuildLibraryPanel.tsx": [
+      "Close"
+    ],
+    "app/components/bom/BomView.tsx": [
+      "Bypass the cache and re-fetch live pricing from all selected sources",
+      "Close",
+      "Dismiss",
+      "Open distributor product page",
+      "Supply-chain notifications",
+      "View alternate parts",
+      "best price",
+      "cheapest of all sources"
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "sirkit.stage08-audited-baseline.v1",
+  "date": "2026-07-17",
+  "baseCommit": "2bd1603a775bd4b409b89710cd4e5f8d70201632",
+  "branch": "codex/stage-08-professional-routing",
+  "protectedOriginal": "C:\\Users\\robsa\\sirkit",
+  "workingCopy": "C:\\Users\\robsa\\Documents\\Codex\\2026-07-13\\do\\work\\sirkit-edit",
+  "findings": [
+    { "id": "R8-A01", "before": "Non-octilinear candidate rejected as NON_OCTILINEAR", "after": "Arbitrary posture creates and validates one native straight segment", "test": "keeps arbitrary-angle copper native through topology, preview, and measurement", "status": "fixed" },
+    { "id": "R8-A02", "before": "Track click selected the nearest endpoint only", "after": "Exact projected interior anchor is deterministic and source tracks split transactionally", "test": "starts and finishes at exact arbitrary interior points and splits both source tracks", "status": "fixed" },
+    { "id": "R8-A03", "before": "V flipped top to bottom and every other layer to top", "after": "Configured stackup graph produces legal target choices and physical through-via spans", "test": "uses the physical four-layer graph rather than a binary front/back flip", "status": "fixed" },
+    { "id": "R8-A04", "before": "Track/via IDs used Math.random plus a process counter", "after": "Candidate, object, event and transaction IDs derive from canonical semantic input", "test": "commits one immutable candidate, rejects stale input, and exactly reverts", "status": "fixed" },
+    { "id": "R8-A05", "before": "Each click and via mutated board history immediately", "after": "All route legs/vias remain staged; finish emits one candidate command", "test": "keeps a multi-click route off-board until finish, then emits exactly one command", "status": "fixed" },
+    { "id": "R8-A06", "before": "Backspace delegated to global history undo", "after": "Backspace removes candidate steps only", "test": "Backspace and cancel modify candidate steps only, including staged vias", "status": "fixed" },
+    { "id": "R8-A07", "before": "Right-click ripped every unlocked object on a net", "after": "Right-click removes only the selected eligible segment", "test": "ripupNetAt removes only the explicitly selected GND segment", "status": "fixed" },
+    { "id": "R8-A08", "before": "Protection was mostly a locked boolean", "after": "Central policy covers locked/imported/manual/unknown/generated provenance", "test": "preserves locked, imported, out-of-scope manual, and unknown copper centrally", "status": "fixed" }
+  ]
+}

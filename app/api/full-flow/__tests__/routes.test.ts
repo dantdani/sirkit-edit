@@ -1,0 +1,11 @@
+import { describe, expect, it } from "vitest";
+import { POST as createRun } from "../run/route";
+import { POST as propose } from "../propose/route";
+import { POST as transition } from "../transition/route";
+const headers = { "content-type": "application/json", "x-sirkit-tenant-id": "tenant:test", "x-sirkit-project-id": "project:test", "x-sirkit-branch-id": "branch:test", "x-sirkit-actor-id": "engineer:test", "x-sirkit-role": "project_admin" };
+describe("CD-13 API authority and prerequisite behavior", () => {
+  it("creates a durable draft run while reporting the implementation CD-12 blocker", async () => { const response = await createRun(new Request("http://localhost/api/full-flow/run", { method: "POST", headers, body: JSON.stringify({ requestedOutcome: "routed_pcb_candidate", productBriefRef: "brief:1", productBriefDigest: "sha256:brief", autonomyTier: 2 }) })); expect(response.status).toBe(201); const body = await response.json(); expect(body.run.lifecycleState).toBe("created"); expect(body.implementationPrerequisite.verdict).toBe("BLOCKED BY CD-12"); expect(body.authoritativeEngineeringArtifactsCreated).toBe(false); });
+  it("accepts narrow AI proposals with no direct commit or side effect", async () => { const response = await propose(new Request("http://localhost/api/full-flow/propose", { method: "POST", headers: { ...headers, "x-sirkit-actor-kind": "ai" }, body: JSON.stringify({ runRef: "run:1", stateDigest: "state:1", kind: "stage_evaluation", targetRefs: ["candidate:1"], typedPayload: { stage: "CD-7" }, rationale: "close analytical uncertainty", evidenceRefs: ["finding:1"] }) })); expect(response.status).toBe(200); const body = await response.json(); expect(body.proposal.authority).toBe("proposal_only"); expect(body.externalSideEffects).toBe(false); });
+  it("rejects LLM attempts to commit a transition before parsing a run mutation", async () => { const response = await transition(new Request("http://localhost/api/full-flow/transition", { method: "POST", headers: { ...headers, "x-sirkit-actor-kind": "ai" }, body: JSON.stringify({ run: {}, expectedStateDigest: "state", to: "planning", payloadDigest: "payload" }) })); expect(response.status).toBe(403); });
+});
+

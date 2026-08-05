@@ -17,7 +17,7 @@ export function routeSmart(
   let status: SmartRouteResult["status"] = "ready";
   let walkCandidates = 0;
 
-  if (!legalDirect.length) {
+  if (!legalDirect.length && (intent.routeMode ?? "walk_around") === "walk_around") {
     const walk = generateWalkAroundCandidates(world, intent, rules, direct);
     candidates = walk.candidates;
     consideredObstacleIds = walk.consideredObstacleIds;
@@ -49,6 +49,10 @@ export function routeSmart(
       ? selected.mode === "direct"
         ? `Direct route is legal. ${rules.explanation}`
         : `Direct copper was blocked, so Smart Route walked around it without moving existing copper.`
-      : `No legal one-layer walk-around was found. Existing copper was not changed.`,
+      : intent.routeMode === "highlight_stop"
+        ? "The direct posture is blocked. Highlight mode stopped without changing copper."
+        : intent.routeMode === "shove"
+          ? "The direct posture is blocked. A bounded professional shove candidate is required before commit."
+          : `No legal one-layer walk-around was found. Existing copper was not changed.`,
   };
 }

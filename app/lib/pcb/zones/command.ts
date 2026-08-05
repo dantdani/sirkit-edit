@@ -18,6 +18,7 @@
 
 import { produce } from "immer";
 import type { PcbBoard, Zone, FilledRegion } from "../types";
+import { markZoneFillDirty } from "./fill-lifecycle";
 
 export type ZoneCommand =
   | { kind: "AddZone"; zone: Zone }
@@ -38,6 +39,13 @@ export function cloneZone(z: Zone): Zone {
     ...z,
     polygon: z.polygon.map((p) => ({ ...p })),
     ...(z.thermal ? { thermal: { ...z.thermal } } : {}),
+    ...(z.fillState ? {
+      fillState: {
+        ...z.fillState,
+        diagnostics: z.fillState.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+        ...(z.fillState.stats ? { stats: { ...z.fillState.stats } } : {}),
+      },
+    } : {}),
     fill: z.fill.map(cloneRegion),
   };
 }
@@ -49,15 +57,20 @@ export function cloneZone(z: Zone): Zone {
 export function mutateBoardWithZoneCommand(board: PcbBoard, cmd: ZoneCommand): void {
   switch (cmd.kind) {
     case "AddZone":
-      board.zones.push({ ...cloneZone(cmd.zone), dirty: true });
+      if (board.zones.some((zone) => zone.id === cmd.zone.id)) return;
+      board.zones.push(cloneZone(cmd.zone));
+      markZoneFillDirty(board.zones[board.zones.length - 1]);
       return;
     case "EditZone": {
       const i = board.zones.findIndex((z) => z.id === cmd.id);
-      if (i >= 0) board.zones[i] = { ...cloneZone(cmd.after), dirty: true };
+      if (i >= 0 && board.zones[i].locked !== true && board.zones[i].source !== "stackup-plane") {
+        board.zones[i] = cloneZone(cmd.after);
+        markZoneFillDirty(board.zones[i]);
+      }
       return;
     }
     case "DeleteZone":
-      board.zones = board.zones.filter((z) => z.id !== cmd.before.id);
+      board.zones = board.zones.filter((zone) => zone.id !== cmd.before.id || zone.locked === true || zone.source === "stackup-plane");
       return;
   }
 }

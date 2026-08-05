@@ -4,7 +4,6 @@ import { worldCourtyardBBox } from "../autoplace/geometry";
 import { buildPlacementEnvelope, validBBox } from "../autoplace/envelope";
 import { analyzePlacementRouteability } from "../autoplace/routeability";
 import { padCopperLayers, padWorldPosition, viaSpannedLayers } from "../geometry-copper";
-import { computeConnectivity, type CopperItemRef } from "../connectivity-board";
 import { getBoardStackup } from "../stackup";
 import { getNetClass } from "../netclass";
 import { runDrc, buildDrcContext } from "../drc/run-drc";
@@ -14,15 +13,29 @@ import type { LayerId } from "../layers";
 import { LAYERS } from "../layers";
 import type { PcbBoard } from "../types";
 import type { PcbEngineeringEvent } from "../history";
-import { stableHash } from "../smart-routing/hash";
 import { normalizeDrcReport, type NormalizedDrcViolation } from "./violation-normalizer";
+import { computeElectricalTruth, type ElectricalTruthReport } from "../electrical-truth";
+import { pcbRevisionId } from "../revision";
+import { physicalPadInstances } from "../pad-identity";
+import type { PcbNetlist } from "../netlist-bridge";
+import type { DrcPreset } from "../drc/types";
+import type { FabPreset } from "../fab/types";
+import { getFabPreset } from "../fab/presets";
+import { evaluatePcbFabricationReadiness } from "../readiness/evaluate";
+import type { ReadinessReport } from "../readiness/types";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+
+export { pcbRevisionId } from "../revision";
 
 const NM_PER_MM = 1_000_000;
 
 export interface AIPcbSnapshotOptions {
   projectId?: string;
   schematicRevisionId?: string;
-  schematicParity?: "pass" | "fail" | "unknown";
+  /** Authoritative current schematic intent. Absence means parity is unknown. */
+  netlist?: PcbNetlist;
+  drcPreset?: DrcPreset;
+  fabPreset?: FabPreset;
   rules?: DrcRules;
   drcResult?: DrcResult;
   visibleLayers?: Partial<Record<LayerId, boolean>>;
@@ -30,7 +43,7 @@ export interface AIPcbSnapshotOptions {
 }
 
 export interface AIPcbSnapshot {
-  schemaVersion: "sirkit.ai-pcb.v1";
+  schemaVersion: "sirkit.ai-pcb.v3";
   projectId: string;
   boardRevisionId: string;
   schematicRevisionId: string;
@@ -46,19 +59,14 @@ export interface AIPcbSnapshot {
   keepouts: unknown[];
   rules: unknown[];
   connectivity: unknown;
+  electricalTruth: unknown;
   drcSummary: {
     errors: number;
     warnings: number;
     violations: NormalizedDrcViolation[];
   };
   layerUsage: unknown[];
-  readiness: {
-    geometryDrc: "clean" | "errors";
-    connectivity: "complete" | "incomplete";
-    schematicParity: "pass" | "fail" | "unknown";
-    zonesCurrent: boolean;
-    fabricationReadiness: "ready" | "not_ready";
-  };
+  readiness: ReadinessReport;
   placement: unknown;
   changeHistory: readonly PcbEngineeringEvent[];
   generatedInMs: number;
@@ -114,35 +122,33 @@ const bboxMm = (bounds: BBox): BBox => ({
   maxY: bounds.maxY / NM_PER_MM,
 });
 
-function refId(ref: CopperItemRef): string {
-  if (ref.kind === "pad") return `pad:${ref.instanceId}:${ref.padNumber}`;
-  if (ref.kind === "zone-region") return `zone:${ref.zoneId}:region:${ref.regionIndex}`;
-  return `${ref.kind}:${ref.id}`;
-}
-
-export function pcbRevisionId(board: PcbBoard): string {
-  const payload = {
-    stackup: board.stackup,
-    stackupConfig: board.stackupConfig,
-    outline: board.outline,
-    footprints: board.footprints.map((footprint) => ({
-      id: footprint.id,
-      at: footprint.at,
-      rotationDeg: footprint.rotationDeg,
-      side: footprint.side,
-      locked: footprint.locked,
-      placementConstraints: footprint.placementConstraints,
-      padNets: footprint.padNets,
-      pads: footprint.def.pads,
-    })),
-    tracks: board.tracks,
-    vias: board.vias,
-    zones: board.zones,
-    keepouts: board.routingKeepouts,
-    rules: board.netClassing,
-    placementPreferences: board.placementPreferences,
+function serializableElectricalTruth(report: ElectricalTruthReport): unknown {
+  return {
+    schemaVersion: report.schemaVersion,
+    designRevision: report.designRevision,
+    units: report.units,
+    intended: report.intended,
+    assigned: {
+      state: report.assigned.state,
+      terminalGroups: report.assigned.terminalGroups,
+      missingEndpointKeys: report.assigned.missingEndpointKeys,
+      unaccountedPadInstanceIds: report.assigned.unaccountedPadInstanceIds,
+    },
+    realized: {
+      state: report.realized.state,
+      requiredConnections: report.realized.requiredConnections,
+      completedConnections: report.realized.completedConnections,
+      remainingConnections: report.realized.remainingConnections,
+      routedNets: report.realized.routedNets,
+      totalNets: report.realized.totalNets,
+      percent: report.realized.percent,
+    },
+    nets: report.nets,
+    shorts: report.shorts,
+    orphanCopper: report.orphanCopper,
+    unresolved: report.unresolved,
+    diagnosticCodes: [...new Set(report.diagnostics.map((diagnostic) => diagnostic.code))].sort(),
   };
-  return `pcb1-${stableHash(JSON.stringify(payload))}`;
 }
 
 function outlineSnapshot(board: PcbBoard): unknown {
@@ -159,11 +165,16 @@ function outlineSnapshot(board: PcbBoard): unknown {
 
 export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOptions = {}): AIPcbSnapshot {
   const started = performance.now();
-  const rules = options.rules ?? getPreset(board.stackup === 4 ? "jlcpcb-4l" : "jlcpcb-2l").rules;
-  const drc = options.drcResult ?? runDrc(board, rules);
+  const defaultPreset = getPreset(board.stackup === 4 ? "jlcpcb-4l" : "jlcpcb-2l");
+  const drcPreset = options.drcPreset ?? { ...defaultPreset, rules: options.rules ?? defaultPreset.rules };
+  const fabPreset = options.fabPreset ?? getFabPreset(board.stackup === 4 ? "jlcpcb-4l" : "jlcpcb-2l");
+  const rules = drcPreset.rules;
+  const electricalTruth = computeElectricalTruth(board);
+  const drc = options.drcResult?.designRevision === electricalTruth.designRevision
+    ? options.drcResult
+    : runDrc(board, rules, { presetId: drcPreset.id, electricalReport: electricalTruth });
   const normalized = normalizeDrcReport(board, drc);
-  const connectivity = computeConnectivity(board);
-  const drcContext = buildDrcContext(board, rules);
+  const drcContext = buildDrcContext(board, rules, electricalTruth);
   const envelopeScale = board.placementPreferences?.envelopeScale ?? 1.15;
   const stackup = getBoardStackup(board);
 
@@ -190,7 +201,8 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
       placementEnvelopeScale: envelope.scale,
       placementEnvelopeSource: envelope.source,
       routingMarginMm: envelope.routingMarginNm / NM_PER_MM,
-      padIds: footprint.def.pads.map((pad) => `pad:${footprint.id}:${pad.number}`),
+      padIds: physicalPadInstances(footprint).map((pad) => pad.id),
+      pinPadMappings: footprint.pinPadMappings ?? [],
       constraints: [
         ...(footprint.locked ? ["locked"] : []),
         ...(footprint.placementConstraints?.fixedPosition ? ["fixed_position"] : []),
@@ -203,8 +215,10 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
     };
   });
 
-  const pads = board.footprints.flatMap((footprint) => footprint.def.pads.map((pad) => ({
-    id: `pad:${footprint.id}:${pad.number}`,
+  const pads = board.footprints.flatMap((footprint) => physicalPadInstances(footprint).map((physicalPad) => {
+    const pad = physicalPad.pad;
+    return {
+    id: physicalPad.id,
     footprintId: footprint.id,
     reference: `${footprint.ref}.${pad.number}`,
     netId: String(footprint.padNets[pad.number] ?? 0),
@@ -213,20 +227,26 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
     shape: pad.shape,
     layers: padCopperLayers(footprint, pad),
     ...(pad.drill ? { drillMm: pad.drill.diameter / NM_PER_MM } : {}),
-  })));
+  }; }));
 
   const nets = board.nets.filter((net) => net.id !== 0).map((net) => {
-    const state = connectivity.nets.get(net.id);
+    const state = electricalTruth.nets.find((candidate) => candidate.netId === net.id);
     const netClass = getNetClass(board, net.id);
     const resolved = drcContext.eff(net.id);
     return {
       id: String(net.id),
+      stableId: net.stableId,
+      endpointKeys: net.endpointKeys ?? [],
       name: net.name || `net${net.id}`,
       classId: netClass.id,
       padIds: pads.filter((pad) => pad.netId === String(net.id)).map((pad) => pad.id),
       trackIds: board.tracks.filter((track) => track.netId === net.id).map((track) => track.id),
       viaIds: board.vias.filter((via) => via.netId === net.id).map((via) => via.id),
-      complete: state?.complete ?? true,
+      electricalState: state?.state ?? "unknown",
+      complete: state?.realizationState === "proven" && state.remainingConnections === 0,
+      requiredConnections: state?.requiredConnections ?? 0,
+      completedConnections: state?.completedConnections ?? 0,
+      remainingConnections: state?.remainingConnections ?? 0,
       resolvedConstraints: {
         preferredTrackWidthMm: netClass.trackWidth / NM_PER_MM,
         minimumTrackWidthMm: resolved.minTrackWidthNm / NM_PER_MM,
@@ -263,16 +283,30 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
     layerId: zone.layer,
     polygon: zone.polygon.map(pointMm),
     dirty: zone.dirty,
+    source: zone.source ?? "user",
+    priority: zone.priority ?? 0,
+    fillStatus: zone.fillState?.status ?? "legacy-unproven",
+    fillCurrent: zoneFillIsCurrent(board, zone),
+    fillHash: zone.fillState?.fillHash,
     filledRegionCount: zone.fill.length,
+    filledAreaMm2: zoneFillIsCurrent(board, zone)
+      ? zone.fill.reduce((sum, region) => sum + region.areaNm2, 0) / (NM_PER_MM * NM_PER_MM)
+      : 0,
+    cachedStaleAreaMm2: zoneFillIsCurrent(board, zone)
+      ? 0
+      : zone.fill.reduce((sum, region) => sum + region.areaNm2, 0) / (NM_PER_MM * NM_PER_MM),
+    thermalAccessCount: zone.fillState?.stats?.thermalAccessCount ?? 0,
     clearanceMm: (zone.clearanceOverrideNm ?? getNetClass(board, zone.netId).clearance) / NM_PER_MM,
   }));
 
   const incompleteNetIds = new Set(
-    [...connectivity.nets.values()].filter((net) => !net.complete).map((net) => String(net.netId)),
+    electricalTruth.nets.filter((net) => net.remainingConnections > 0).map((net) => String(net.netId)),
   );
   const layerUsage = stackup.copperLayers.filter((layer) => layer.enabled).map((layer) => {
     const layerViolations = normalized.filter((violation) => violation.layerIds.includes(layer.id));
     const layerTracks = board.tracks.filter((track) => track.layer === layer.id);
+    const layerZones = board.zones.filter((zone) => zone.layer === layer.id);
+    const currentLayerZones = layerZones.filter((zone) => zoneFillIsCurrent(board, zone));
     return {
       layerId: layer.id,
       name: layer.name,
@@ -281,23 +315,31 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
       trackCount: layerTracks.length,
       totalTrackLengthMm: layerTracks.reduce((sum, track) => sum + Math.hypot(track.end.x - track.start.x, track.end.y - track.start.y), 0) / NM_PER_MM,
       viaTransitions: board.vias.filter((via) => viaSpannedLayers(via).includes(layer.id)).length,
-      zoneCount: board.zones.filter((zone) => zone.layer === layer.id).length,
+      zoneCount: layerZones.length,
+      zoneIds: layerZones.map((zone) => zone.id).sort(),
+      stableNetIds: [...new Set(currentLayerZones.map((zone) => board.nets.find((net) => net.id === zone.netId)?.stableId).filter((id): id is string => Boolean(id)))].sort(),
+      fillStatuses: layerZones.map((zone) => zone.fillState?.status ?? "legacy-unproven").sort(),
+      filledAreaMm2: currentLayerZones.flatMap((zone) => zone.fill).reduce((sum, region) => sum + region.areaNm2, 0) / (NM_PER_MM * NM_PER_MM),
+      thermalAccessCount: currentLayerZones.reduce((sum, zone) => sum + (zone.fillState?.stats?.thermalAccessCount ?? 0), 0),
       violationIds: layerViolations.map((violation) => violation.id),
       unroutedNetIds: [...incompleteNetIds],
     };
   });
 
-  const geometryErrors = normalized.filter((violation) => violation.severity === "error" && violation.type !== "incompleteNet").length;
-  const connectivityComplete = connectivity.completion.routedNets === connectivity.completion.totalNets && connectivity.shorts.length === 0;
-  const zonesCurrent = board.zones.every((zone) => !zone.dirty);
-  const schematicParity = options.schematicParity ?? "unknown";
-  const ready = geometryErrors === 0 && connectivityComplete && zonesCurrent && schematicParity !== "fail";
+  const readiness = evaluatePcbFabricationReadiness({
+    board,
+    netlist: options.netlist,
+    fabPreset,
+    drcPreset,
+    electricalTruth,
+    drcResult: drc,
+  });
 
   return {
-    schemaVersion: "sirkit.ai-pcb.v1",
+    schemaVersion: "sirkit.ai-pcb.v3",
     projectId: options.projectId ?? "local-project",
     boardRevisionId: pcbRevisionId(board),
-    schematicRevisionId: options.schematicRevisionId ?? "unknown",
+    schematicRevisionId: options.schematicRevisionId ?? readiness.parity.schematicRevision ?? "unknown",
     units: "mm",
     board: { outline: outlineSnapshot(board), stackupLayers: board.stackup, formatVersion: board.formatVersion },
     stackup,
@@ -310,29 +352,30 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
     keepouts: (board.routingKeepouts ?? []).map((keepout) => ({ ...keepout, polygon: keepout.polygon.map(pointMm) })),
     rules: nets.map((net) => ({ netId: net.id, netName: net.name, ...net.resolvedConstraints })),
     connectivity: {
-      completion: connectivity.completion,
-      nets: [...connectivity.nets.values()].map((net) => ({
+      completion: {
+        routedNets: electricalTruth.realized.routedNets,
+        totalNets: electricalTruth.realized.totalNets,
+        percent: electricalTruth.realized.percent,
+      },
+      nets: electricalTruth.nets.map((net) => ({
         netId: String(net.netId),
-        complete: net.complete,
-        clusters: net.clusters.map((cluster) => cluster.map(refId)),
+        stableNetId: net.stableNetId,
+        state: net.state,
+        complete: net.realizationState === "proven" && net.remainingConnections === 0,
+        clusters: net.conductiveClusters,
       })),
-      airwires: connectivity.airwires.map((wire) => ({ netId: String(wire.netId), from: pointMm(wire.from), to: pointMm(wire.to) })),
-      shorts: connectivity.shorts.map(([a, b]) => [refId(a), refId(b)]),
-      orphans: connectivity.orphans.map(refId),
+      airwires: electricalTruth.realized.airwires.map((wire) => ({ netId: String(wire.netId), from: pointMm(wire.from), to: pointMm(wire.to) })),
+      shorts: electricalTruth.shorts.map((short) => short.objectIds),
+      orphans: electricalTruth.orphanCopper.map((orphan) => orphan.objectId),
     },
+    electricalTruth: serializableElectricalTruth(electricalTruth),
     drcSummary: {
       errors: normalized.filter((violation) => violation.severity === "error").length,
       warnings: normalized.filter((violation) => violation.severity === "warning").length,
       violations: normalized,
     },
     layerUsage,
-    readiness: {
-      geometryDrc: geometryErrors === 0 ? "clean" : "errors",
-      connectivity: connectivityComplete ? "complete" : "incomplete",
-      schematicParity,
-      zonesCurrent,
-      fabricationReadiness: ready ? "ready" : "not_ready",
-    },
+    readiness,
     placement: analyzePlacementRouteability(board, { envelopeScale }),
     changeHistory: options.events ?? [],
     generatedInMs: Math.round((performance.now() - started) * 10) / 10,

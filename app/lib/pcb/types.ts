@@ -12,6 +12,7 @@ import type { BoardNetClassing } from "./netclass"; // Stage 10 (type-only; no r
 import type { SilkItem } from "./silk/types"; // Stage 16 (type-only; no runtime cycle)
 import type { Padstack } from "./padstack/types"; // Stage 17 (type-only; no runtime cycle)
 import type { BoardStackup } from "./stackup";
+import type { BoardConstraintState } from "../constraints/types";
 
 export type PadType = "smd" | "thru_hole" | "np_thru_hole";
 
@@ -23,6 +24,11 @@ export interface Pad {
   rotationDeg: number; // local to footprint (library files are unrotated)
   layers: LayerId[]; // wildcards expanded (see kicad-mod.ts)
   drill?: { diameter: Nm; width?: Nm; height?: Nm; offset?: Vec2 }; // width/height for oval drills
+  /** Explicit per-pad fabrication overrides from KiCad; undefined = library/default policy. */
+  solderMaskMarginNm?: Nm;
+  solderPasteMarginNm?: Nm;
+  solderPasteMarginRatio?: number;
+  plated?: boolean;
 }
 
 export type FpGraphic =
@@ -79,6 +85,7 @@ export interface Track {
   /** Provenance used by repair policy; absent legacy copper is treated as human/imported. */
   source?: "human" | "ai" | "autorouter" | "imported";
   locked?: boolean;
+  routingProvenance?: RoutingObjectProvenance;
 }
 
 export interface Via {
@@ -93,6 +100,17 @@ export interface Via {
   padstackId?: string;
   source?: "human" | "ai" | "autorouter" | "imported";
   locked?: boolean;
+  routingProvenance?: RoutingObjectProvenance;
+}
+
+/** Deterministic event reference and lineage for authoritative route mutations. */
+export interface RoutingObjectProvenance {
+  operationId: string;
+  candidateId: string;
+  eventId: string;
+  actorId: string;
+  createdBy: "interactive" | "deterministic-router" | "autorouter-import" | "ai-requested" | "migration";
+  lineageObjectIds: string[];
 }
 
 /**
@@ -141,10 +159,39 @@ export interface FilledRegion {
   areaNm2: number; // for stats + island scoring
 }
 
+export type ZoneFillStatus = "dirty" | "filling" | "current" | "failed" | "unsupported" | "stale";
+
+/** Deterministic proof that persisted derived copper belongs to this exact board input. */
+export interface ZoneFillState {
+  status: ZoneFillStatus;
+  algorithmVersion: string;
+  sourceRevision: string;
+  fillHash?: string;
+  diagnostics: Array<{ code: string; message: string }>;
+  stats?: {
+    rawRegions: number;
+    regions: number;
+    islandsDropped: number;
+    filledAreaNm2: number;
+    thermalAccessCount: number;
+  };
+}
+
 export interface Zone {
   id: string;
   layer: LayerId;
   netId: number;
+  /** User pours coexist with deterministic stackup-generated plane intent. */
+  source?: "user" | "stackup-plane";
+  /** Stable owner for a generated stackup plane; never inferred from a display name. */
+  sourceLayerId?: LayerId;
+  /** Higher priority wins contested copper; stable id breaks ties. */
+  priority?: number;
+  /** Optional island policy; connection-based removal remains the safe default. */
+  keepUnconnectedIslands?: boolean;
+  minIslandAreaNm2?: number;
+  /** Locked copper zones are immutable outside an explicit unlock transaction. */
+  locked?: boolean;
   polygon: Vec2[];
   // Stage 11 additions — appearance is render-only; DRC/export always see solid fills.
   appearance: "solid" | "hatched";
@@ -153,6 +200,46 @@ export interface Zone {
   thermal?: { spokeWidthNm?: number; gapNm?: number; spokes?: 2 | 4; angleOffsetDeg?: number };
   fill: FilledRegion[]; // derived — recomputed when dirty, never an undo entry
   dirty: boolean; // true after any board mutation that could affect the fill
+  fillState?: ZoneFillState;
+}
+
+/**
+ * Persistent electrical identity for a logical PCB net. `id` remains the
+ * compact board-local serialization id used by geometry and interchange;
+ * `stableId` is the engineering identity used when those ids are rebuilt.
+ * Optional fields are the on-disk compatibility shape for format-v1 boards;
+ * board loading and successful schematic sync populate both fields.
+ */
+export interface PcbNet {
+  id: number;
+  name: string;
+  stableId?: string;
+  /** Canonical `component-id::pin-number` keys, sorted and unique. */
+  endpointKeys?: string[];
+}
+
+export type PinPadMappingKind =
+  | "electrical"
+  | "internally-common"
+  | "exposed-pad"
+  | "intentional-no-connect"
+  | "schematic-only";
+
+export type PinPadMappingProvenance =
+  | "exact-number"
+  | "library-explicit"
+  | "user-explicit"
+  | "legacy-inferred";
+
+/** Resolved, persisted proof that one schematic endpoint reached physical pads. */
+export interface ResolvedPinPadMapping {
+  componentInstanceId: string;
+  endpointKey: string;
+  symbolPinNumber: string;
+  /** Pad-number identities; every physical pad carrying a listed number participates. */
+  padNumbers: string[];
+  mappingKind: PinPadMappingKind;
+  provenance: PinPadMappingProvenance;
 }
 
 export interface BoardText {
@@ -180,6 +267,20 @@ export interface FootprintInstance {
   rotationDeg: number;
   side: "top" | "bottom";
   padNets: Record<string, number>; // pad number -> net id; absent/0 = unconnected
+  /** Stage 1 integrity proof. Missing only on legacy/manually-constructed boards. */
+  pinPadMappings?: ResolvedPinPadMapping[];
+  /** Explicit accounting for electrical-looking footprint pads with no symbol endpoint. */
+  footprintPadClassifications?: Record<string, "mechanical" | "intentional-no-connect">;
+  /** Stage 3 immutable schematic/binding/asset association. Display names are never identity. */
+  syncIdentity?: {
+    componentInstanceId: string;
+    bindingRevisionId: string;
+    footprintAssetVersionId: string;
+    footprintContentDigest: string;
+    mappingCertificateId: string;
+    symbolAssetVersionId: string;
+    syncPlanId: string;
+  };
   /** Stage 17: locked instances refuse move/rotate edit commands. Optional/additive. */
   locked?: boolean;
   /** Explicitly suppress the default body-overhang warning (pads still must be inside). */
@@ -197,11 +298,13 @@ export interface FootprintInstance {
 
 export interface PcbBoard {
   formatVersion: 1;
+  /** Additive migration marker for persistent electrical identity. */
+  identityVersion?: 1;
   stackup: 2 | 4;
   /** Stable multilayer roles and autoroute policy. Legacy boards resolve from `stackup`. */
   stackupConfig?: BoardStackup;
   outline: BoardOutline;
-  nets: { id: number; name: string }[]; // net 0 reserved = unconnected
+  nets: PcbNet[]; // net 0 reserved = unconnected
   footprints: FootprintInstance[];
   tracks: Track[];
   vias: Via[];
@@ -227,6 +330,8 @@ export interface PcbBoard {
     spacingPreset: "compact" | "comfortable" | "spacious" | "custom";
     envelopeScale: number;
   };
+  /** Stage 6 authoritative typed constraint sources/program. Optional only for legacy-load migration. */
+  constraintState?: BoardConstraintState;
 }
 
 /** Optional so legacy boards continue to resolve to net-class defaults. */
@@ -236,6 +341,9 @@ export interface RoutingPreferences {
   customTrackWidthNm?: Nm;
   viaMode: "net-class" | "padstack";
   viaPadstackId?: string;
+  /** Stage 8 interaction choices, optional for legacy project migration. */
+  routeMode?: "highlight_stop" | "walk_around" | "shove";
+  posture?: "orthogonal" | "octilinear_a" | "octilinear_b" | "arbitrary";
 }
 
 /** 100×80 mm rect at origin, 2-layer stackup, only the reserved net 0. */
@@ -249,7 +357,8 @@ export function createEmptyBoard(): PcbBoard {
       height: mmToNm(80),
       origin: { x: 0, y: 0 },
     },
-    nets: [{ id: 0, name: "" }],
+    identityVersion: 1,
+    nets: [{ id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] }],
     footprints: [],
     tracks: [],
     vias: [],

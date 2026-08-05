@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "sirkit.pcb-sync-stage3-qualification-evidence.v1",
+  "generatedAt": "2026-07-19T05:05:40.624Z",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "win32",
+    "release": "10.0.26200",
+    "arch": "x64"
+  },
+  "budgets": {
+    "smallPreviewMs": 2000,
+    "blocked500Ms": 10000,
+    "maxApiBytes": 8000000,
+    "maxTraceSteps": 8192,
+    "resolverBatchMax": 256,
+    "resolverBatchConcurrency": 4
+  },
+  "measurements": {
+    "smallPreview": {
+      "samples": 20,
+      "meanMs": 5.5558950000000324,
+      "p95Ms": 7.059299999999894,
+      "maxMs": 20.94739999999956
+    },
+    "blocked500": {
+      "samples": 1,
+      "elapsedMs": 515.2586000000001,
+      "componentAssessments": 500,
+      "blockers": 1502,
+      "resultBytes": 1867944,
+      "traceSteps": 6,
+      "batchSizes": [
+        244,
+        256
+      ]
+    },
+    "concurrentPreview16": {
+      "elapsedMs": 44.065399999999954,
+      "stablePlanDigestCount": 1
+    }
+  },
+  "assertions": {
+    "smallBoardUnchanged": true,
+    "completeBlockedDiagnostics": true,
+    "noLargeBoardCreated": true,
+    "concurrentPlanStable": true
+  }
+}

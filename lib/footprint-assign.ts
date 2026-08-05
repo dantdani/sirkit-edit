@@ -5,9 +5,9 @@
  * needs a PCB *footprint* (land pattern). This module maps each placed component
  * to a KiCad footprint id ("Library:Name"), deterministically:
  *
- *   1. If the part's KiCad symbol already carries a real footprint id
- *      (its `Footprint` property, surfaced as `footprintHint`), trust it.
- *   2. Otherwise fall back to a category default keyed off the refDes prefix
+ *   1. If the part's KiCad symbol carries a footprint id, expose it as a
+ *      candidate. A name/hint is never package proof.
+ *   2. Otherwise expose a category default candidate keyed off the refDes prefix
  *      (R/C/L/D/Q…), mirroring SchGen's `DEFAULT_MAP_RCL` approach.
  *   3. Otherwise leave it unresolved (`null`) — surfaced, never guessed, so the
  *      caller can flag "these parts still need a footprint" rather than shipping
@@ -20,7 +20,8 @@
  * below for a different house default.
  */
 
-export type FootprintSource = "hint" | "default" | "none";
+export type FootprintSource = "atomic-approved" | "hint" | "default" | "none";
+export type FootprintProofState = "approved" | "candidate" | "unresolved";
 
 export type FootprintAssignment = {
   refDes: string;
@@ -28,6 +29,8 @@ export type FootprintAssignment = {
   /** KiCad footprint id "Library:Name", or null when unresolved. */
   footprint: string | null;
   source: FootprintSource;
+  proofState: FootprintProofState;
+  mappingCertificateId?: string;
 };
 
 /** Minimal part shape the resolver reads (satisfied by CachedPart). */
@@ -43,6 +46,11 @@ export type FootprintInput = {
   value?: string | null;
   name?: string | null;
   category?: string | null;
+  approvedAtomic?: {
+    footprint: string;
+    footprintAssetVersionId: string;
+    mappingCertificateId: string;
+  };
 };
 
 // Category defaults by refDes prefix. SMD 0603 (1608 metric) for two-terminal
@@ -85,22 +93,25 @@ function looksLikeLed(input: FootprintInput): boolean {
 }
 
 /** Resolve one component to a footprint id (or null) + how it was chosen. */
-export function resolveFootprint(input: FootprintInput): { footprint: string | null; source: FootprintSource } {
-  // 1) Trust a real footprint id carried by the symbol.
+export function resolveFootprint(input: FootprintInput): { footprint: string | null; source: FootprintSource; proofState: FootprintProofState; mappingCertificateId?: string } {
+  if (input.approvedAtomic && isFootprintId(input.approvedAtomic.footprint) && input.approvedAtomic.footprintAssetVersionId && input.approvedAtomic.mappingCertificateId) {
+    return { footprint: input.approvedAtomic.footprint, source: "atomic-approved", proofState: "approved", mappingCertificateId: input.approvedAtomic.mappingCertificateId };
+  }
+  // A symbol hint is candidate generation only, never package proof.
   if (isFootprintId(input.footprintHint)) {
-    return { footprint: input.footprintHint.trim(), source: "hint" };
+    return { footprint: input.footprintHint.trim(), source: "hint", proofState: "candidate" };
   }
 
   // 2) Category default by refDes prefix.
   const prefix = refDesPrefix(input.refDes);
   if (prefix === "LED" || (prefix === "D" && looksLikeLed(input))) {
-    return { footprint: LED_FOOTPRINT, source: "default" };
+    return { footprint: LED_FOOTPRINT, source: "default", proofState: "candidate" };
   }
   const def = CATEGORY_DEFAULTS[prefix];
-  if (def) return { footprint: def, source: "default" };
+  if (def) return { footprint: def, source: "default", proofState: "candidate" };
 
   // 3) Unresolved — surface it, don't guess.
-  return { footprint: null, source: "none" };
+  return { footprint: null, source: "none", proofState: "unresolved" };
 }
 
 /**
@@ -115,13 +126,13 @@ export function assignFootprints(
 ): FootprintAssignment[] {
   return components.map((c) => {
     const part = parts.get(c.partId);
-    const { footprint, source } = resolveFootprint({
+    const { footprint, source, proofState, mappingCertificateId } = resolveFootprint({
       refDes: c.refDes,
       value: c.value,
       footprintHint: part?.footprintHint,
       name: part?.name,
       category: part?.mainCategory,
     });
-    return { refDes: c.refDes, partId: c.partId, footprint, source };
+    return { refDes: c.refDes, partId: c.partId, footprint, source, proofState, mappingCertificateId };
   });
 }

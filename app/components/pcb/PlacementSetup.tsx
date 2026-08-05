@@ -15,10 +15,14 @@ export function PlacementSetup({
   board,
   result,
   onChange,
+  onApply,
+  onDiscard,
 }: {
   board: PcbBoard;
   result?: AutoPlaceResult;
   onChange: (preferences: NonNullable<PcbBoard["placementPreferences"]>) => void;
+  onApply?: () => void;
+  onDiscard?: () => void;
 }) {
   const preferences = board.placementPreferences ?? { spacingPreset: "comfortable" as const, envelopeScale: 1.15 };
   const setPreset = (preset: SpacingPreset): void => {
@@ -78,6 +82,38 @@ export function PlacementSetup({
           <p>{result.report.padsInsideBoard}/{result.report.totalPads} pads inside · {result.report.envelopeOverlaps} envelope overlaps</p>
           <p>{result.report.blockedPadEscapes} blocked escapes · congestion {result.report.congestion}</p>
           <p>Envelope +{Math.round((result.report.envelopeScale - 1) * 100)}%</p>
+          {result.engineering && (() => {
+            const candidate = result.engineering.selectedCandidate;
+            return (
+              <div className="mt-2 border-t border-zinc-800 pt-2">
+                <p className="font-mono text-[9px] text-cyan-400" title={candidate.candidateId}>
+                  {candidate.candidateHash.slice(0, 15)} · {result.engineering.termination.replaceAll("_", " ")}
+                </p>
+                <p>{candidate.moves.length} moved · {candidate.moves.filter((move) => move.rotated).length} rotated · {candidate.moves.filter((move) => move.flipped).length} flipped</p>
+                <p>{candidate.congestion.totalOverflowTracks.toFixed(2)} total overflow · {candidate.congestion.maximumOverflowTracks.toFixed(2)} max</p>
+                <p>{candidate.congestion.overCapacityCutlines} overloaded cutlines · {candidate.viaPressure.maximumPressure.toFixed(2)} max via pressure</p>
+                <p>{candidate.pinEscape.deficits} escape deficits · {candidate.pinEscape.unknown} unknown</p>
+                <p className="text-cyan-300">Cyan ghost preview is active; the board is unchanged until Apply.</p>
+                {candidate.copperPlan.requiresRoutingFollowUp && (
+                  <p className="mt-1 text-amber-400">Would remove {candidate.copperPlan.removeTrackIds.length} generated tracks and {candidate.copperPlan.removeViaIds.length} generated vias; affected nets become incomplete.</p>
+                )}
+                {candidate.objectiveReport.objectives.filter((objective) => objective.state === "evaluated").slice(0, 6).map((objective) => (
+                  <p key={objective.id} className="flex justify-between gap-2">
+                    <span>{objective.kind.replaceAll("_", " ")}</span>
+                    <span className="tabular-nums">{objective.normalizedPenalty?.toFixed(3) ?? "—"} × {objective.weight}</span>
+                  </p>
+                ))}
+                {candidate.hardReport.violations.slice(0, 4).map((violation) => (
+                  <p key={violation.id} className="mt-1 text-rose-400">{violation.code}: {violation.message}</p>
+                ))}
+                <p className="mt-1 text-[9px] text-zinc-600">Capacity, escape, via, thermal and high-speed values are placement estimates—not routing or signoff.</p>
+                <div className="mt-2 flex gap-1">
+                  <button type="button" onClick={onApply} disabled={!candidate.hardReport.legal} className="rounded bg-teal-600 px-2 py-1 text-white disabled:cursor-not-allowed disabled:opacity-40">Apply candidate</button>
+                  <button type="button" onClick={onDiscard} className="rounded border border-zinc-700 px-2 py-1 text-zinc-300">Discard</button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </details>

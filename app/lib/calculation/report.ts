@@ -1,0 +1,25 @@
+import { calculationDigest, calculationId } from "./stable";
+import type { CalculationResult, CircuitCalculationProblem, CircuitCalculationReport, ConstraintMargin, CornerCoverageCertificate, NumericSolverCertificate, SelectedCircuitValue, CalculationDerivationGraph } from "./types";
+import type { EngineeringActor } from "../engineering/types";
+
+export type ReportMaterialization = { ok: true; report: CircuitCalculationReport } | { ok: false; diagnostics: string[] };
+
+export function materializeCircuitCalculationReport(input: { problem: CircuitCalculationProblem; graph: CalculationDerivationGraph; registrySnapshotId: string; selectedValues: SelectedCircuitValue[]; results: CalculationResult[]; margins: ConstraintMargin[]; coverage: CornerCoverageCertificate[]; solverCertificates: NumericSolverCertificate[]; unresolvedModelReportIds: string[]; downstreamVerificationObligations: string[]; fixedPoint: { iterationCount: number; assignmentDigestHistory: string[]; state: "stable" | "pending" | "oscillation" | "blocked" }; actor: EngineeringActor; createdAt: string }): ReportMaterialization {
+  const diagnostics: string[] = [];
+  if (input.graph.validationState !== "valid") diagnostics.push("CD7_DERIVATION_GRAPH_NOT_VALID");
+  if (input.problem.blockingUnknownIds.length) diagnostics.push("CD7_PROBLEM_HAS_BLOCKING_UNKNOWNS");
+  if (input.results.length < input.problem.calculationObligations.length) diagnostics.push("CD7_REQUIRED_RESULT_COVERAGE_INCOMPLETE");
+  if (input.coverage.length < input.problem.calculationObligations.length + input.problem.hardConstraints.length) diagnostics.push("CD7_REQUIRED_CORNER_COVERAGE_INCOMPLETE");
+  if (input.margins.length < input.problem.hardConstraints.length) diagnostics.push("CD7_REQUIRED_MARGIN_COVERAGE_INCOMPLETE");
+  if (input.unresolvedModelReportIds.length) diagnostics.push("CD7_UNRESOLVED_MODEL_REPORTS_PRESENT");
+  if (input.results.some((item) => !["pass", "not_applicable"].includes(item.supportState))) diagnostics.push("CD7_RESULT_SET_NOT_PROVEN");
+  if (input.margins.some((item) => !["pass", "not_applicable"].includes(item.status))) diagnostics.push("CD7_HARD_MARGIN_SET_NOT_PROVEN");
+  if (input.coverage.some((item) => !["proven_complete", "complete_with_external_model", "not_applicable"].includes(item.coverageState))) diagnostics.push("CD7_CORNER_COVERAGE_NOT_PROVEN");
+  if (input.fixedPoint.state !== "stable") diagnostics.push(`CD7_CD6_REBINDING_${input.fixedPoint.state.toUpperCase()}`);
+  if (diagnostics.length) return { ok: false, diagnostics: [...new Set(diagnostics)].sort() };
+  const marginSummary = { pass: input.margins.filter((item) => item.status === "pass").length, fail: input.margins.filter((item) => item.status === "fail").length, unknown: input.margins.filter((item) => ["unknown", "unsupported", "stale", "conflict", "external_review_required", "resource_limit"].includes(item.status)).length, indeterminate: input.margins.filter((item) => item.status === "indeterminate_numeric").length };
+  const cornerCoverageSummary = { required: input.coverage.length, provenComplete: input.coverage.filter((item) => ["proven_complete", "complete_with_external_model", "not_applicable"].includes(item.coverageState)).length, blocked: input.coverage.filter((item) => !["proven_complete", "complete_with_external_model", "not_applicable"].includes(item.coverageState)).length };
+  const semantic = { projectId: input.problem.projectId, problemRevisionId: input.problem.problemId, upstreamRevisionRefs: input.problem.upstreamRevisionRefs, equationModelRegistrySnapshotId: input.registrySnapshotId, selectedValues: input.selectedValues, blockReportIds: [], derivationGraph: input.graph, results: input.results, globalConstraintResults: input.margins, cornerCoverageCertificates: input.coverage, cornerCoverageSummary, marginSummary, stressAndThermalSummary: { supported: input.results.filter((item) => item.outputSemanticKind.includes("thermal") && item.supportState === "pass").length, estimateOnly: 0, blocked: 0 }, exactPartRebindingSummary: input.fixedPoint, unresolvedModelReportIds: [], assumptionAndWaiverSummary: { assumptionIds: input.problem.assumptionIds, waiverIds: input.problem.waiverIds, waiversChangePhysicalStatus: false as const }, downstreamVerificationObligations: [...new Set(input.downstreamVerificationObligations)].sort(), approvalState: "unreviewed" as const, lifecycleState: "calculation_complete_pending_review" as const, solverNumericManifest: input.solverCertificates, reproducibilityDigest: calculationDigest({ graph: input.graph.deterministicDigest, results: input.results.map((item) => item.deterministicDigest), margins: input.margins.map((item) => item.deterministicDigest), coverage: input.coverage.map((item) => item.deterministicDigest) }), createdBy: structuredClone(input.actor), createdAt: input.createdAt };
+  const withId = { ...semantic, reportId: calculationId("circuit-calculation-report", semantic) };
+  return { ok: true, report: { ...withId, deterministicDigest: calculationDigest(withId) } };
+}

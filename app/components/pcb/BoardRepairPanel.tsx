@@ -19,7 +19,7 @@ export function BoardRepairPanel({ result, repair }: { result: DrcResult; repair
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="flex items-center gap-1.5 text-xs font-medium text-zinc-200"><Wrench className="size-3.5 text-teal-400" /> Board Repair</p>
-          <p className="mt-0.5">{result.readiness.errors} errors · {result.readiness.warnings} warnings · {result.readiness.unroutedConnections} unrouted</p>
+          <p className="mt-0.5">{result.summary.errors} errors · {result.summary.warnings} warnings · {result.summary.unroutedConnections} unrouted</p>
         </div>
         {busy ? (
           <button type="button" onClick={repair.cancel} className="flex items-center gap-1 rounded border border-amber-700 px-2 py-1 text-[10px] text-amber-300">

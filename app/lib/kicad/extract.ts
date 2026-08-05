@@ -210,20 +210,32 @@ function extractPins(symbolNode: SExpr[]): KicadPin[] {
   const pins: KicadPin[] = [];
 
   for (const pin of findChildren(symbolNode, "pin")) {
-    const parsed = parsePin(pin);
+    const parsed = parsePin(pin, 1, 1);
     if (parsed) pins.push(parsed);
   }
   for (const unit of findChildren(symbolNode, "symbol")) {
+    const unitIdentity = parseUnitBodyIdentity(getString(unit[1]));
     for (const pin of findChildren(unit, "pin")) {
-      const parsed = parsePin(pin);
+      const parsed = parsePin(pin, unitIdentity.unit, unitIdentity.bodyStyle);
       if (parsed) pins.push(parsed);
     }
   }
+  const counts = new Map<string, number>();
+  for (const pin of pins) counts.set(pin.number, (counts.get(pin.number) ?? 0) + 1);
+  for (const pin of pins) pin.stacked = (counts.get(pin.number) ?? 0) > 1;
   return pins;
 }
 
+function parseUnitBodyIdentity(name: string | null): { unit: number; bodyStyle: number } {
+  const match = name?.match(/_(\d+)_(\d+)$/);
+  return {
+    unit: match ? Number(match[1]) : 1,
+    bodyStyle: match ? Number(match[2]) : 1,
+  };
+}
+
 /** Parse a single `(pin <type> <style> (at x y angle) (length L) (name ..) (number ..))`. */
-function parsePin(pinNode: SExpr[]): KicadPin | null {
+function parsePin(pinNode: SExpr[], unit: number, bodyStyle: number): KicadPin | null {
   const at = findChild(pinNode, "at");
   const x = getNumber(at?.[1]) ?? 0;
   const y = getNumber(at?.[2]) ?? 0;
@@ -242,6 +254,10 @@ function parsePin(pinNode: SExpr[]): KicadPin | null {
     position: { x, y },
     orientation: normalizePinOrientation(angle),
     length,
+    unit,
+    bodyStyle,
+    hidden: pinNode.some((node) => node === "hide"),
+    stacked: false,
   };
 }
 

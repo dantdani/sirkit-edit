@@ -7,9 +7,9 @@ import { buildAIPcbSnapshot, pcbRevisionId, type AIPcbSnapshot, type AIPcbSnapsh
 import { normalizeDrcReport } from "./violation-normalizer";
 import { getBoardStackup } from "../stackup";
 import { analyzePlacementRouteability } from "../autoplace/routeability";
-import { autoPlace } from "../autoplace/auto-place";
-import type { AutoPlaceParams, AutoPlaceResult } from "../autoplace/types";
-import { buildAutoPlaceCommand, mutateBoardWithAutoPlace } from "../autoplace/command";
+import type { AutoPlaceParams } from "../autoplace/types";
+import { runEngineeringPlacement } from "../placement/engine";
+import type { PlacementCandidate as EngineeringPlacementCandidate, PlacementRunResult } from "../placement/types";
 import { planDrcRepairs } from "../repair/planner";
 import {
   applyRepairTransaction,
@@ -27,7 +27,15 @@ import type {
 } from "../repair/types";
 import { getNetClass } from "../netclass";
 import { buildDrcContext } from "../drc/run-drc";
-import { computeConnectivity } from "../connectivity-board";
+import { computeElectricalTruth } from "../electrical-truth";
+import type { PcbNetlist } from "../netlist-bridge";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+import { ProfessionalRoutingService } from "../routing/service";
+import type { ProfessionalRouteMode, RoutePosture } from "../routing/types";
+import { evaluateAutonomousCapability } from "../autonomous/capability-profile";
+import type { AutonomousDesignDeclaration } from "../autonomous/capability-profile";
+import { qualifyAutonomousLayout as runAutonomousLayoutQualification } from "../autonomous/qualify-layout";
+import type { AutonomousLayoutQualificationResult, AutonomousRouteExecutor } from "../autonomous/qualify-layout";
 
 export interface PCBViewAdapter {
   setActiveLayer?(layerId: LayerId): void;
@@ -61,12 +69,15 @@ export interface PCBToolServiceContract {
   previewChanges(args: { planId: string; fixIds?: string[] }): Promise<ChangePreview>;
   applyTransaction(args: { previewId: string; approvedFixIds?: string[] }): Promise<TransactionResult>;
   undoTransaction(args: { transactionId: string }): Promise<TransactionResult>;
+  evaluateAutonomousCapability(): Promise<ReturnType<typeof evaluateAutonomousCapability>>;
+  qualifyAutonomousLayout(args?: { seeds?: number[]; placementCandidateCount?: number; routedCandidateLimit?: number; maxRuntimeMs?: number }): Promise<AutonomousLayoutQualificationResult>;
 }
 
 interface PlacementCandidate {
   id: string;
   baseRevisionId: string;
-  result: AutoPlaceResult;
+  run: PlacementRunResult;
+  candidate: EngineeringPlacementCandidate;
 }
 
 export interface PCBToolServiceOptions {
@@ -74,9 +85,11 @@ export interface PCBToolServiceOptions {
   rules: DrcRules;
   projectId?: string;
   schematicRevisionId?: string;
-  schematicParity?: "pass" | "fail" | "unknown";
+  netlist?: PcbNetlist;
   schematicConnectivity?: unknown;
   autoroute?: AutorouteRepairExecutor;
+  autonomousDeclaration?: AutonomousDesignDeclaration;
+  autonomousRouter?: AutonomousRouteExecutor;
   view?: PCBViewAdapter;
 }
 
@@ -96,7 +109,7 @@ export class PCBToolService implements PCBToolServiceContract {
       snapshot: buildAIPcbSnapshot(this.board, {
         projectId: this.options.projectId,
         schematicRevisionId: this.options.schematicRevisionId,
-        schematicParity: this.options.schematicParity,
+        netlist: this.options.netlist,
         rules: this.options.rules,
         events: this.options.history.events,
         ...options,
@@ -106,6 +119,33 @@ export class PCBToolService implements PCBToolServiceContract {
 
   async runDrc(): Promise<ReturnType<typeof runDrc>> {
     return runDrc(this.board, this.options.rules);
+  }
+
+  async evaluateAutonomousCapability(): Promise<ReturnType<typeof evaluateAutonomousCapability>> {
+    return evaluateAutonomousCapability({ board: this.board, rules: this.options.rules, declaration: this.options.autonomousDeclaration, phase: "pre_placement" });
+  }
+
+  async qualifyAutonomousLayout(args: { seeds?: number[]; placementCandidateCount?: number; routedCandidateLimit?: number; maxRuntimeMs?: number } = {}): Promise<AutonomousLayoutQualificationResult> {
+    if (!this.options.autonomousRouter) throw new Error("Autonomous layout requires the RC02 router executor.");
+    const sourceBoard = this.board;
+    return runAutonomousLayoutQualification({
+      board: sourceBoard,
+      rules: this.options.rules,
+      declaration: this.options.autonomousDeclaration,
+      router: this.options.autonomousRouter,
+      projectId: this.options.projectId,
+      ...args,
+      commitSelected: async ({ board, expectedSourceRevision, selectedRevision, runId }) => {
+        if (pcbRevisionId(this.board) !== expectedSourceRevision) return { ok: false, error: "Authoritative board changed before autonomous layout commit." };
+        this.options.history.execute("Autonomous placement and routing", (draft) => {
+          const writable = draft as unknown as Record<string, unknown>;
+          for (const key of Object.keys(writable)) delete writable[key];
+          Object.assign(writable, structuredClone(board));
+        }, { actor: "system", operationType: "autonomous_layout", transactionId: runId, reason: "Selected only after capability, placement, RC02 connectivity, and DRC verification." });
+        const committedRevision = pcbRevisionId(this.board);
+        return committedRevision === selectedRevision ? { ok: true, committedRevision } : { ok: false, committedRevision, error: "Committed board revision differs from the selected verified candidate." };
+      },
+    });
   }
 
   async getViolation(id: string): Promise<ReturnType<typeof normalizeDrcReport>[number] | undefined> {
@@ -135,14 +175,15 @@ export class PCBToolService implements PCBToolServiceContract {
   }
 
   async planRepairs(mode: RepairExecutionMode = "safe_fixes_automatically"): Promise<PCBRepairPlan> {
-    if (this.board.zones.some((zone) => zone.dirty)) {
+    if (this.board.zones.some((zone) => !zoneFillIsCurrent(this.board, zone))) {
       const filled = refillZonesForRepair(this.board);
       this.options.history.applyDerived("AI repair: refill zones", (draft) => {
         for (const zone of draft.zones) {
           const source = filled.zones.find((candidate) => candidate.id === zone.id);
           if (!source) continue;
           zone.fill = source.fill;
-          zone.dirty = false;
+          zone.fillState = source.fillState;
+          zone.dirty = source.dirty;
         }
       });
     }
@@ -175,13 +216,14 @@ export class PCBToolService implements PCBToolServiceContract {
       iterations.push({ planId: plan.id, previewId: preview.id, metrics: preview.metrics, outcome: applied.ok ? "committed" : `blocked: ${applied.error}` });
       if (!applied.ok) break;
       const after = await this.runDrc();
-      if (after.readiness.errors === 0 && after.readiness.unroutedConnections === 0) break;
+      if (after.summary.errors === 0 && after.summary.unroutedConnections === 0) break;
     }
     const finalDrc = await this.runDrc();
     return {
-      status: finalDrc.readiness.errors === 0 && finalDrc.readiness.unroutedConnections === 0 ? "clean" : "blocked",
+      status: finalDrc.summary.errors === 0 && finalDrc.summary.unroutedConnections === 0 ? "drc_clean" : "drc_blocked",
       iterations,
-      finalReadiness: finalDrc.readiness,
+      finalDrcSummary: finalDrc.summary,
+      fabricationReadiness: (await this.inspectBoard()).snapshot.readiness,
     };
   }
 
@@ -240,7 +282,7 @@ export class PCBToolService implements PCBToolServiceContract {
   async previewReroute(netIds?: number[]): Promise<ChangePreview> {
     const targets = netIds?.length
       ? [...new Set(netIds)]
-      : [...computeConnectivity(this.board).nets.values()].filter((net) => !net.complete).map((net) => net.netId);
+      : computeElectricalTruth(this.board).nets.filter((net) => net.remainingConnections > 0).map((net) => net.netId);
     if (targets.length === 0) throw new Error("No incomplete or selected nets require rerouting.");
     for (const netId of targets) if (!this.board.nets.some((net) => net.id === netId && netId !== 0)) throw new Error(`No routable net ${netId} on this board.`);
     return this.previewDirectAction({
@@ -269,7 +311,20 @@ export class PCBToolService implements PCBToolServiceContract {
   }
 
   async analyzePlacement(options: { envelopeScale?: number } = {}): Promise<unknown> {
-    return analyzePlacementRouteability(this.board, options);
+    const run = runEngineeringPlacement({ board: this.board, options: { projectId: this.options.projectId ?? "ai-placement", candidateCount: 2, localRefinementPasses: 0 } });
+    const candidate = run.candidates.find((item) => item.candidateId === run.selectedCandidateId) ?? run.candidates[0];
+    return {
+      problemHash: run.problem.problemHash,
+      constraintProgramHash: run.problem.constraintProgramHash,
+      termination: run.termination,
+      hardReport: candidate?.hardReport,
+      congestion: candidate?.congestion,
+      pinEscape: candidate?.pinEscape,
+      viaPressure: candidate?.viaPressure,
+      objectives: candidate?.objectiveReport,
+      legacyComparison: analyzePlacementRouteability(this.board, options),
+      proxyWarning: "Placement capacity/access metrics are estimates, not routed, SI/PI, thermal, or manufacturing proof.",
+    };
   }
 
   async previewPlacement(options: AutoPlaceParams = {}, footprintIds?: string[]): Promise<PlacementCandidate> {
@@ -277,13 +332,19 @@ export class PCBToolService implements PCBToolServiceContract {
     const placementBoard: PcbBoard = requested
       ? { ...this.board, footprints: this.board.footprints.map((footprint) => requested.has(footprint.id) ? footprint : { ...footprint, locked: true }) }
       : this.board;
-    const result = autoPlace(placementBoard, null, {
-      envelopeScale: options.envelopeScale ?? 1.15,
-      allowBoardResize: options.allowBoardResize ?? false,
-      ...options,
-    });
-    const id = `placement:${pcbRevisionId(this.board)}:${result.stats.finalRatsnestLengthNm}:${result.report.envelopeScale}`;
-    const candidate = { id, baseRevisionId: pcbRevisionId(this.board), result };
+    const run = runEngineeringPlacement({ board: placementBoard, options: {
+      projectId: this.options.projectId ?? "ai-placement",
+      mode: requested ? "selected_scope" : this.board.tracks.length > 0 ? "preserve_routed" : "initial_unrouted",
+      selectedInstanceIds: requested ? [...requested].sort() : undefined,
+      seeds: options.seed === undefined ? undefined : [options.seed],
+      candidateCount: options.candidateCount,
+      maxIterations: options.maxIterations,
+      gridNm: options.gridNm,
+    } });
+    const selected = run.candidates.find((item) => item.candidateId === run.selectedCandidateId);
+    if (!selected) throw new Error(`No legal placement candidate: ${run.termination}.`);
+    const id = selected.candidateId;
+    const candidate = { id, baseRevisionId: pcbRevisionId(this.board), run, candidate: selected };
     this.placementCandidates.set(id, candidate);
     return candidate;
   }
@@ -292,16 +353,7 @@ export class PCBToolService implements PCBToolServiceContract {
     const candidate = this.placementCandidates.get(candidateId);
     if (!candidate) return { ok: false, error: `Unknown placement candidate ${candidateId}.` };
     if (candidate.baseRevisionId !== pcbRevisionId(this.board)) return { ok: false, error: "Board changed after placement preview." };
-    if (!candidate.result.report.success) return { ok: false, error: "Placement has blocked pads or envelope collisions." };
-    const command = buildAutoPlaceCommand(this.board, candidate.result.placements, candidate.result.outlineAfter);
-    this.options.history.execute("AI auto-place footprints", (draft) => mutateBoardWithAutoPlace(draft, command), {
-      operationType: "auto_place_footprints",
-      actor: "ai",
-      reason: `Routing-aware placement using ${Math.round((candidate.result.report.envelopeScale - 1) * 100)}% virtual envelopes.`,
-      transactionId: candidate.id,
-      details: { report: candidate.result.report },
-    });
-    return { ok: true, transactionId: candidate.id };
+    return { ok: false, error: "AI placement tools are preview/compare/explain only. Apply requires explicit user approval through the PCB placement UI." };
   }
 
   async call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
@@ -357,6 +409,36 @@ export class PCBToolService implements PCBToolServiceContract {
         return this.analyzePlacement({ envelopeScale: typeof args.envelopeScale === "number" ? args.envelopeScale : undefined });
       case "get_change_history":
         return this.options.history.events;
+      case "evaluate_autonomous_capability":
+        return this.evaluateAutonomousCapability();
+      case "qualify_autonomous_layout":
+        return this.qualifyAutonomousLayout({
+          ...(Array.isArray(args.seeds) ? { seeds: args.seeds.map(Number) } : {}),
+          ...(typeof args.placementCandidateCount === "number" ? { placementCandidateCount: args.placementCandidateCount } : {}),
+          ...(typeof args.routedCandidateLimit === "number" ? { routedCandidateLimit: args.routedCandidateLimit } : {}),
+          ...(typeof args.maxRuntimeMs === "number" ? { maxRuntimeMs: args.maxRuntimeMs } : {}),
+        });
+      case "get_routing_snapshot":
+        return new ProfessionalRoutingService(() => this.board).snapshot();
+      case "get_route_anchors":
+        return new ProfessionalRoutingService(() => this.board).anchors({
+          ...(typeof args.objectId === "string" ? { objectId: args.objectId } : {}),
+          ...(typeof args.netId === "number" ? { netId: args.netId } : {}),
+        });
+      case "get_via_transition_choices":
+        return new ProfessionalRoutingService(() => this.board).viaTransitions({ netId: Number(args.netId), fromLayer: args.fromLayer as LayerId });
+      case "preview_route_connection":
+        return new ProfessionalRoutingService(() => this.board).previewConnection({
+          startAnchorId: String(args.startAnchorId ?? ""),
+          endAnchorId: String(args.endAnchorId ?? ""),
+          ...(typeof args.mode === "string" ? { mode: args.mode as ProfessionalRouteMode } : {}),
+          ...(typeof args.posture === "string" ? { posture: args.posture as RoutePosture } : {}),
+          ...(typeof args.preferredLayer === "string" ? { preferredLayer: args.preferredLayer as LayerId } : {}),
+          actorId: "pcb-ai",
+          actorKind: "ai",
+        });
+      case "measure_route_path":
+        return new ProfessionalRoutingService(() => this.board).measure({ netId: Number(args.netId), endpointNodeA: String(args.endpointNodeA ?? ""), endpointNodeB: String(args.endpointNodeB ?? "") });
       case "preview_placement":
       case "auto_place_footprints":
         return this.previewPlacement({ envelopeScale: typeof args.envelopeScale === "number" ? args.envelopeScale : 1.15 });

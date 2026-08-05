@@ -69,18 +69,21 @@ function board(footprints: FootprintInstance[], tracks: Track[] = []): PcbBoard 
   return {
     ...createEmptyBoard(),
     outline: { kind: "rect", origin: { x: 0, y: 0 }, width: mm(10), height: mm(10) },
-    nets: [{ id: 0, name: "" }, { id: 1, name: "SIGNAL" }],
+    nets: [
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      { id: 1, name: "SIGNAL", stableId: "net:signal", endpointKeys: [] },
+    ],
     footprints,
     tracks,
   };
 }
 
-describe("DRC containment and readiness", () => {
+describe("DRC containment and execution summary", () => {
   it("blocks a completely unrouted net and reports remaining airwires", () => {
     const result = runDrc(board([part("a", "J1", 2, 5), part("b", "U1", 8, 5)]), ZERO);
     expect(result.ok).toBe(false);
     expect(result.violations.some((v) => v.kind === "incompleteNet" && v.severity === "error")).toBe(true);
-    expect(result.readiness).toMatchObject({ state: "not-ready", incompleteNets: 1, unroutedConnections: 1 });
+    expect(result.summary).toMatchObject({ state: "failed", incompleteNets: 1, unroutedConnections: 1 });
   });
 
   it("blocks a partially routed three-pad net", () => {
@@ -91,17 +94,17 @@ describe("DRC containment and readiness", () => {
       ),
       ZERO,
     );
-    expect(result.readiness.state).toBe("not-ready");
-    expect(result.readiness.unroutedConnections).toBe(1);
+    expect(result.summary.state).toBe("failed");
+    expect(result.summary.unroutedConnections).toBe(1);
   });
 
-  it("marks a fully routed, contained net ready", () => {
+  it("marks a fully routed, contained net DRC-passed without making a fabrication claim", () => {
     const result = runDrc(
       board([part("a", "J1", 2, 5), part("b", "U1", 8, 5)], [track("ab", 2, 5, 8, 5)]),
       ZERO,
     );
     expect(result.violations).toEqual([]);
-    expect(result.readiness).toMatchObject({ state: "ready", errors: 0, warnings: 0, unroutedConnections: 0 });
+    expect(result.summary).toMatchObject({ state: "passed", errors: 0, warnings: 0, unroutedConnections: 0 });
   });
 
   it("blocks pads and tracks outside the manufactured outline", () => {
@@ -111,7 +114,7 @@ describe("DRC containment and readiness", () => {
     );
     expect(result.violations.some((v) => v.kind === "padOutsideBoard" && v.severity === "error")).toBe(true);
     expect(result.violations.some((v) => v.kind === "trackOutsideBoard" && v.severity === "error")).toBe(true);
-    expect(result.readiness.state).toBe("not-ready");
+    expect(result.summary.state).toBe("failed");
   });
 
   it("allows an explicitly reviewed connector body overhang when its pad remains inside", () => {

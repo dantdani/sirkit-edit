@@ -41,10 +41,11 @@ import {
   unionWithHoles,
   type PolyWithHoles,
 } from "./clipper-adapter";
-import { generateThermalSpokes } from "./thermals";
+import { generateRadialThermalSpokes, generateThermalSpokes } from "./thermals";
 import { filterIslandsByConnection } from "./islands";
 import type { ComputeFillInput, ComputeFillResult, FilledRegion } from "./types";
 import { DEFAULT_BOARD_EDGE_CLEARANCE_NM, thermalParamsFor } from "./types";
+import { classifyNetRelation } from "../copper-policy";
 
 interface SameNetPad {
   inst: FootprintInstance;
@@ -53,11 +54,48 @@ interface SameNetPad {
   worldRotationDeg: number;
 }
 
+function canonicalRing(input: Vec2[]): Vec2[] {
+  const ring = input.length > 1 && input[0].x === input[input.length - 1].x && input[0].y === input[input.length - 1].y
+    ? input.slice(0, -1)
+    : [...input];
+  if (ring.length < 2) return ring.map((point) => ({ ...point }));
+  const compare = (a: Vec2[], b: Vec2[]): number => {
+    for (let index = 0; index < a.length; index++) {
+      if (a[index].x !== b[index].x) return a[index].x - b[index].x;
+      if (a[index].y !== b[index].y) return a[index].y - b[index].y;
+    }
+    return 0;
+  };
+  const bestRotation = (points: Vec2[]): Vec2[] => {
+    let minX = Infinity;
+    let minY = Infinity;
+    for (const point of points) {
+      if (point.x < minX || (point.x === minX && point.y < minY)) {
+        minX = point.x;
+        minY = point.y;
+      }
+    }
+    let best: Vec2[] | undefined;
+    points.forEach((point, index) => {
+      if (point.x !== minX || point.y !== minY) return;
+      const candidate = [...points.slice(index), ...points.slice(0, index)];
+      if (!best || compare(candidate, best) < 0) best = candidate;
+    });
+    return best ?? points;
+  };
+  const forward = bestRotation(ring);
+  const reverse = bestRotation([...ring].reverse());
+  return (compare(forward, reverse) <= 0 ? forward : reverse).map((point) => ({ ...point }));
+}
+
 function toRegions(polys: PolyWithHoles[]): FilledRegion[] {
   const out: FilledRegion[] = [];
   for (const rings of polys) {
-    const [outer, ...holes] = rings;
+    const [rawOuter, ...rawHoles] = rings;
+    const outer = rawOuter ? canonicalRing(rawOuter) : undefined;
     if (!outer || outer.length < 3) continue;
+    const holes = rawHoles.map(canonicalRing).filter((ring) => ring.length >= 3)
+      .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     out.push({
       outer,
       holes,
@@ -65,7 +103,7 @@ function toRegions(polys: PolyWithHoles[]): FilledRegion[] {
       areaNm2: Math.round(regionAreaNm2(outer, holes)),
     });
   }
-  return out;
+  return out.sort((a, b) => JSON.stringify({ outer: a.outer, holes: a.holes }).localeCompare(JSON.stringify({ outer: b.outer, holes: b.holes })));
 }
 
 export function computeFill(input: ComputeFillInput): ComputeFillResult {
@@ -76,7 +114,7 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
 
   const empty = (): ComputeFillResult => ({
     regions: [],
-    stats: { rawRegions: 0, islandsDropped: 0, elapsedMs: performance.now() - t0 },
+    stats: { rawRegions: 0, islandsDropped: 0, elapsedMs: performance.now() - t0, thermalAccessCount: 0 },
   });
   if (zone.polygon.length < 3) return empty();
 
@@ -87,13 +125,23 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
 
   // 2 — clearance cutouts around foreign copper on this layer.
   const clips: Vec2[][] = [];
+  const sameNet = (netId: number): boolean => classifyNetRelation(board, zone.netId, netId) === "same-proven-net";
   for (const t of board.tracks) {
-    if (t.layer !== layer || t.netId === zone.netId) continue;
+    if (t.layer !== layer || sameNet(t.netId)) continue;
     clips.push(capsulePolygon(t.start, t.end, t.width / 2 + effectiveClearance(t.netId, layer)));
   }
+  const sameNetVias = [] as typeof board.vias;
   for (const v of board.vias) {
-    if (v.netId === zone.netId || !viaSpannedLayers(v).includes(layer)) continue;
+    if (!viaSpannedLayers(v).includes(layer)) continue;
+    if (sameNet(v.netId)) {
+      sameNetVias.push(v);
+      continue;
+    }
     clips.push(circlePolygon(v.at, v.size / 2 + effectiveClearance(v.netId, layer)));
+  }
+  for (const keepout of board.routingKeepouts ?? []) {
+    if (!keepout.layers.includes(layer) || (!keepout.forbidTracks && !keepout.forbidVias) || keepout.polygon.length < 3) continue;
+    clips.push(canonicalRing(keepout.polygon));
   }
   const sameNetPads: SameNetPad[] = [];
   for (const inst of board.footprints) {
@@ -109,7 +157,7 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
       if (!padCopperLayers(inst, pad).includes(layer)) continue;
       const netId = inst.padNets[pad.number] ?? 0;
       const shape = padWorldShape(inst, pad);
-      if (netId !== zone.netId) {
+      if (!sameNet(netId)) {
         const { pts, r } = decomposeShape(shape);
         clips.push(...inflatePointSet(pts, r + effectiveClearance(netId, layer)));
       } else {
@@ -122,13 +170,12 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
       }
     }
   }
-  // Later-drawn foreign zones on the same layer cut into this fill (draw
-  // order precedence: later zones win the contested area).
-  const myIndex = board.zones.findIndex((z) => z.id === zone.id);
-  for (let i = 0; i < board.zones.length; i++) {
-    const other = board.zones[i];
-    if (other.layer !== layer || other.netId === zone.netId) continue;
-    if (myIndex >= 0 && i <= myIndex) continue;
+  // Explicit priority wins contested copper; stable id is the deterministic tie-break.
+  for (const other of board.zones) {
+    if (other.id === zone.id || other.layer !== layer || sameNet(other.netId)) continue;
+    const otherPriority = other.priority ?? 0;
+    const myPriority = zone.priority ?? 0;
+    if (otherPriority < myPriority || (otherPriority === myPriority && other.id.localeCompare(zone.id) <= 0)) continue;
     if (other.polygon.length < 3) continue;
     clips.push(...polygonInflate(other.polygon, effectiveClearance(other.netId, layer)));
   }
@@ -137,7 +184,8 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
 
   // 3 — same-net pad connection: thermal gap + spokes, or direct (solid).
   let filled = allowed;
-  if (zone.connection === "thermal" && sameNetPads.length > 0) {
+  let thermalAccessCount = 0;
+  if (zone.connection === "thermal" && (sameNetPads.length > 0 || sameNetVias.length > 0)) {
     const params = thermalParamsFor(board, zone);
     const gapCutouts: Vec2[][] = [];
     const spokes: Vec2[][] = [];
@@ -145,6 +193,12 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
       const { pts, r } = decomposeShape(padWorldShape(inst, pad));
       gapCutouts.push(...inflatePointSet(pts, r + params.gapNm));
       spokes.push(...generateThermalSpokes(pad, world, worldRotationDeg, params));
+      thermalAccessCount++;
+    }
+    for (const via of sameNetVias) {
+      gapCutouts.push(circlePolygon(via.at, via.size / 2 + params.gapNm));
+      spokes.push(...generateRadialThermalSpokes(via.at, via.size / 2 + 2 * params.gapNm, 0, params));
+      thermalAccessCount++;
     }
     const relieved = differenceWithHoles(allowed, gapCutouts);
     const clippedSpokes = intersectionWithHoles(allowed, spokes);
@@ -161,6 +215,7 @@ export function computeFill(input: ComputeFillInput): ComputeFillResult {
       rawRegions: rawRegions.length,
       islandsDropped: dropped,
       elapsedMs: performance.now() - t0,
+      thermalAccessCount,
     },
   };
 }

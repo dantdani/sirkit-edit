@@ -1,0 +1,6 @@
+import { validateSchematicGraph } from "@/app/lib/schematic-compiler/graph";
+import { projectAllSchematicVariants, projectSchematicVariant } from "@/app/lib/schematic-compiler/variants";
+import type { SchematicSemanticGraph } from "@/app/lib/schematic-compiler/types";
+import { object, scopedJson } from "../_scope";
+export const runtime = "nodejs";
+export async function POST(request: Request): Promise<Response> { const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response; const { body, scope } = parsed; if (!object(body.graph)) return Response.json({ ok: false, error: "graph is required" }, { status: 400 }); const graph = body.graph as unknown as SchematicSemanticGraph; if (graph.projectId !== scope.projectId || !validateSchematicGraph(graph).valid) return Response.json({ ok: false, error: "graph integrity or scope failed" }, { status: 422 }); try { const projections = typeof body.variantId === "string" ? [projectSchematicVariant(graph, body.variantId)] : projectAllSchematicVariants(graph); return Response.json({ ok: true, projections }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 422 }); } }

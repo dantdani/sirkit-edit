@@ -43,6 +43,153 @@
       "when": 1783214442707,
       "tag": "0005_nice_meteorite",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784267142990,
+      "tag": "0006_stage05_atomic_component_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1784267603522,
+      "tag": "0007_stage05_atomic_raw_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784271535829,
+      "tag": "0008_stage06_hierarchical_constraints",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784275200000,
+      "tag": "0009_cd01_requirements_compiler",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1784347200000,
+      "tag": "0010_cd02_functional_architecture",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784433600000,
+      "tag": "0011_cd03_power_architecture",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784520000000,
+      "tag": "0012_cd04_interface_planning",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784606400000,
+      "tag": "0013_cd05_circuit_knowledge",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1784692800000,
+      "tag": "0014_cd06_component_selection",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1784779200000,
+      "tag": "0015_cd07_deterministic_calculation",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1784865600000,
+      "tag": "0016_cd08_semantic_schematic_compiler",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784952000000,
+      "tag": "0017_cd09_circuit_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785038400000,
+      "tag": "0018_cd10_model_backed_simulation",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785124800000,
+      "tag": "0019_cd11_firmware_bringup",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785211200000,
+      "tag": "0020_cd12_supply_chain_release",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785297600000,
+      "tag": "0021_cd13_full_flow_orchestrator",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785384000000,
+      "tag": "0022_footprint_binding_stage01",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785470400000,
+      "tag": "0023_footprint_binding_durable_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785556800000,
+      "tag": "0024_footprint_binding_durable_workflow_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785643200000,
+      "tag": "0025_footprint_binding_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785272400000,
+      "tag": "0026_parts_atomic_links",
+      "breakpoints": true
     }
   ]
 }

@@ -12,6 +12,7 @@ import { polygonBBox } from "../zones/geometry";
 import { stableHash } from "./hash";
 import { RoutingSpatialIndex } from "./spatial-index";
 import { SMART_ROUTING_SCHEMA_VERSION, type RoutingWorld, type RoutingWorldItem } from "./types";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
 
 function copperLayersFor(board: PcbBoard): readonly LayerId[] {
   return board.stackup === 2 ? ["copperTop", "copperBottom"] : COPPER_LAYERS;
@@ -112,6 +113,7 @@ export function adaptBoardToRoutingWorld(board: PcbBoard): RoutingWorld {
     });
   }
   for (const zone of board.zones) {
+    if (!zoneFillIsCurrent(board, zone)) continue;
     zone.fill.forEach((region, index) => {
       items.push({
         id: `zone:${zone.id}#${index}`,

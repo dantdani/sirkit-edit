@@ -1,6 +1,6 @@
 import type { PcbBoard } from "../types";
 import type { BBox, Vec2 } from "../geometry";
-import { computeRatsnest } from "../ratsnest";
+import { computePlacementRatsnestProxy } from "../ratsnest";
 import { padWorldPosition } from "../geometry-copper";
 import { mmToNm } from "../units";
 import { bboxesOverlap, courtyardFitsOutline, pointInOutline, worldCourtyardBBox } from "./geometry";
@@ -106,7 +106,7 @@ export function analyzePlacementRouteability(
     }
   }
 
-  const airwires = computeRatsnest(board);
+  const airwires = computePlacementRatsnestProxy(board);
   let ratsnestLengthNm = 0;
   let airwireCrossings = 0;
   for (let i = 0; i < airwires.length; i++) {

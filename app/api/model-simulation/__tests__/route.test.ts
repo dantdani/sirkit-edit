@@ -1,0 +1,11 @@
+import { describe, expect, it } from "vitest";
+import { POST as execute } from "../execute/route";
+import { POST as problem } from "../problem/route";
+import { POST as propose } from "../propose/route";
+
+function request(path: string, body: unknown, extra: Record<string, string> = {}) { return new Request(`http://localhost${path}`, { method: "POST", headers: { "content-type": "application/json", "x-sirkit-tenant-id": "tenant:test", "x-sirkit-project-id": "project:test", "x-sirkit-branch-id": "branch:test", "x-sirkit-actor-id": "actor:test", "x-sirkit-role": "project_admin", ...extra }, body: JSON.stringify(body) }); }
+describe("CD-10 scoped API authority", () => {
+  it("rejects unscoped calls", async () => { const response = await problem(new Request("http://localhost/api/model-simulation/problem", { method: "POST", body: "{}" })); expect(response.status).toBe(401); });
+  it("allows AI to create proposal-only artifacts", async () => { const response = await propose(request("/api/model-simulation/propose", { problemDigest: "problem:test", proposalKind: "diagnostic", proposedActions: [{ action: "review_model", rationale: "Missing exact model" }] }, { "x-sirkit-actor-kind": "ai" })); const body = await response.json(); expect(response.status).toBe(200); expect(body.proposal.authority).toBe("proposal_only"); expect(body.requiresHumanReview).toBe(true); });
+  it("denies execution when provider/environment authority is absent", async () => { const response = await execute(request("/api/model-simulation/execute", { provider: { deterministicDigest: "provider:test", reviewState: "diagnostic_only", lifecycleState: "active", authoritativeEligible: false }, environment: { providerRevisionId: "provider:test", validationState: "diagnostic_only", networkPolicy: "allowlisted", resourceLimits: { timeoutMs: 1000, outputBytes: 1000, memoryMiB: 0 } }, manifest: { providerRevisionId: "provider:test", modelIncludeAndDigestMappings: [], structuralValidationResults: [] }, availableContentDigests: [], requestedTimeoutMs: 100, requestedOutputBytes: 100 })); const body = await response.json(); expect(response.status).toBe(409); expect(body.authorization.mode).not.toBe("authoritative"); });
+});

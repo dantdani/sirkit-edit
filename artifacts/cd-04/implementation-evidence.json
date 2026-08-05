@@ -1,0 +1,29 @@
+{
+  "schema": "sirkit.cd04-implementation-evidence.v1",
+  "generatedAt": "2026-07-17T23:18:00-04:00",
+  "specificationSha256": "3ADD58FA44736F8596B62C504542FCCCF936196A34DF242E43AA2994505EB64C",
+  "branch": "codex/cd-04-interface-planning",
+  "verdict": "CD-4 INCOMPLETE",
+  "verification": {
+    "focusedCoreApi": { "filesPassed": 7, "testsPassed": 43 },
+    "focusedUi": { "filesPassed": 1, "testsPassed": 2 },
+    "fullSuite": { "command": "npx vitest run --maxWorkers=2", "filesPassed": 159, "filesSkipped": 2, "testsPassed": 1040, "testsSkipped": 9 },
+    "typeScript": "passed",
+    "focusedEslint": "passed",
+    "productionBuild": { "state": "passed", "pageCount": 71, "existingTracingWarnings": 5 },
+    "stage9Manifest": { "packageCount": 36, "diagnostics": 0 }
+  },
+  "stage9Runs": [
+    { "operation": "interface_problem_corpus", "runId": "benchmark-run:c04c27181098687e13aaf8b6bd28d1e3", "status": "passed", "resultDigest": "sha256:10168a5417773529557a490fd733da620dd4f4d6816ba974f0eec97df360a34c" },
+    { "operation": "interface_allocation_oracle", "runId": "benchmark-run:027ad45184a3c46f85304ef1adc8b9e0", "status": "passed", "resultDigest": "sha256:71a1a4a7c342a313f50dad1f4948d8e7d864b55d562aa1a2f190a9eb4af568fc" },
+    { "operation": "interface_electrical_oracle", "runId": "benchmark-run:8905bb620271212a5e74f077f80bcdc9", "status": "passed", "resultDigest": "sha256:575a564876769019612609b8fa5ebc8f394b9887df68fc75693295729ba8615c" },
+    { "operation": "interface_adversarial_schema", "runId": "benchmark-run:632fd9d9bf1d53dcd1cd31258fde4aa8", "status": "passed", "resultDigest": "sha256:81c9804b12e19333c18d146e3b5c44e2450a708a3d3970dbc754c8c168f61750" }
+  ],
+  "knownGaps": [
+    "Formal repository CD-1/CD-2/CD-3 completion evidence is absent.",
+    "Production atomic catalog lacks normalized exact alternate-function/bank/bondout/errata records.",
+    "Not all 72 requested test categories and scale/expert/downstream calibrations are complete.",
+    "No live paid-provider, firmware, hardware, or deployed-database evidence was produced."
+  ]
+}
+

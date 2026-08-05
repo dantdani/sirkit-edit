@@ -9,6 +9,7 @@ import { requestedProvider } from "@/app/lib/llm/request";
 import { providerErrorResponse } from "@/app/lib/llm/errors";
 import { assistantResponseMessage, toolResultsMessage, type LLMMessage } from "@/app/lib/llm/types";
 import type { PCBRepairPlan } from "@/app/lib/pcb/repair/types";
+import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 
 export const runtime = "nodejs";
 
@@ -38,12 +39,16 @@ const ALLOWED_TOOLS = new Set([
   "plan_drc_repairs",
 ]);
 
-const SYSTEM = `You are Sirkit's engine-grounded PCB repair planner. You never invent geometry and never weaken rules. Inspect exact native board state using tools, run DRC, group violations by root cause, and call plan_drc_repairs. Explain safe fixes separately from approval-required, schematic-change, and manual-review blockers. You may not apply changes in this server planning pass. OpenAI and Anthropic receive this identical prompt and tool contract.`;
+const SYSTEM = `You are Sirkit's engine-grounded PCB repair planner. You never invent geometry and never weaken rules. Inspect exact native board state using tools, run DRC, group violations by root cause, and call plan_drc_repairs. The PCB snapshot's PCB_FABRICATION_CHECKS report is the only fabrication-readiness authority: preserve failed, unknown, stale, warning, and waiver states exactly. Never infer readiness from raw geometry, clean DRC, or zero airwires; never approve a waiver; and never describe fabrication checks as proof of circuit function or production qualification. Explain safe fixes separately from approval-required, schematic-change, and manual-review blockers. You may not apply changes in this server planning pass. OpenAI and Anthropic receive this identical prompt and tool contract.`;
 
 function isBoard(value: unknown): value is PcbBoard {
   if (typeof value !== "object" || value === null) return false;
   const board = value as Record<string, unknown>;
   return (board.stackup === 2 || board.stackup === 4) && Array.isArray(board.nets) && Array.isArray(board.footprints) && Array.isArray(board.tracks) && Array.isArray(board.vias) && Array.isArray(board.zones);
+}
+
+function isNetlist(value: unknown): value is PcbNetlist {
+  return typeof value === "object" && value !== null && Array.isArray((value as PcbNetlist).components) && Array.isArray((value as PcbNetlist).nets);
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -67,7 +72,7 @@ export async function POST(request: Request): Promise<Response> {
     rules: getPreset(presetId).rules,
     projectId: typeof body.projectId === "string" ? body.projectId : "local-project",
     schematicRevisionId: typeof body.schematicRevisionId === "string" ? body.schematicRevisionId : "unknown",
-    schematicParity: body.schematicParity === "pass" || body.schematicParity === "fail" ? body.schematicParity : "unknown",
+    netlist: isNetlist(body.netlist) ? body.netlist : undefined,
     schematicConnectivity: body.schematicConnectivity,
   });
   const snapshot = (await service.inspectBoard()).snapshot;

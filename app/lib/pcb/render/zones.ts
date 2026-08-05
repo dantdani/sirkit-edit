@@ -20,6 +20,7 @@ import type { LayerId } from "../layers";
 import { COPPER_LAYERS } from "../layers";
 import { NM_PER_MM } from "../units";
 import { layerColor } from "./colors";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
 
 const mm = (nm: number): number => nm / NM_PER_MM;
 const label = (layer: LayerId): string => `zones:${layer}`;
@@ -91,7 +92,7 @@ export function renderZones(
     const color = layerColor(zone.layer);
     const g = gfx(zone.layer);
 
-    if (zone.fill.length === 0) {
+    if (!zoneFillIsCurrent(board, zone) || zone.fill.length === 0) {
       // Not poured (dirty / just drawn): outline hint, Stage 6 style.
       g.poly(toMmPts(zone.polygon), true)
         .fill({ color, alpha: UNFILLED_ALPHA })

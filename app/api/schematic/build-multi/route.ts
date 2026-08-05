@@ -43,7 +43,9 @@ async function plan(
 ): Promise<{ blocks: Block[]; rationale: string }> {
   const res = await llmRouter.generate({
     provider,
-    maxTokens: 2048,
+    // Plans are compact JSON. Keep ample reasoning/output room without making
+    // this request reserve the model's full 128K output allowance.
+    maxTokens: 4_096,
     system: PLAN_SYSTEM_PROMPT,
     tools: [PLAN_TOOL],
     toolChoice: { name: "submit_plan" },

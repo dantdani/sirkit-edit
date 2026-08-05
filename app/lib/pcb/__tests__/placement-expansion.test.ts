@@ -8,7 +8,7 @@ describe("route-aware placement region", () => {
   it("expands generated placement width and height by exactly 10 percent", () => {
     const board = makeBoard(100, 80, [makeInstance("r1", makeResistorDef(), { x: 10, y: 10 })], 0);
     board.placementPolicy = { outlineSource: "generated" };
-    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1 });
+    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1, allowBoardResize: true });
     expect(result.outlineAfter).toEqual({
       kind: "rect",
       width: mmToNm(110),
@@ -21,7 +21,7 @@ describe("route-aware placement region", () => {
   it("does not silently resize a user-authored outline", () => {
     const board = makeBoard(100, 80, [makeInstance("r1", makeResistorDef(), { x: 10, y: 10 })], 0);
     board.placementPolicy = { outlineSource: "user" };
-    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1 });
+    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1, allowBoardResize: true });
     expect(result.outlineAfter).toEqual(board.outline);
     expect(result.outlineResized).toBe(false);
   });
@@ -29,7 +29,7 @@ describe("route-aware placement region", () => {
   it("applies and undoes placement plus outline expansion as one transaction", () => {
     const board = makeBoard(100, 80, [makeInstance("r1", makeResistorDef(), { x: 10, y: 10 })], 0);
     board.placementPolicy = { outlineSource: "generated" };
-    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1 });
+    const result = autoPlace(board, null, { maxIterations: 1, candidateCount: 1, allowBoardResize: true });
     const command = buildAutoPlaceCommand(board, result.placements, result.outlineAfter);
     const applied = applyAutoPlaceCommand(board, command);
     expect(applied.outline).toEqual(result.outlineAfter);

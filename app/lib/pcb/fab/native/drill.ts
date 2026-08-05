@@ -8,9 +8,20 @@ export interface DrillGroup {
   drills: MirDrill[];
 }
 
+/**
+ * Millimetre value with an ALWAYS-EXPLICIT decimal point.
+ *
+ * This file declares `METRIC` with no number-format statement, so values
+ * carrying an explicit decimal point are unambiguous while bare integers are
+ * not: a reader that assumes implied decimals may interpret `C1` as 1 µm rather
+ * than 1 mm. Emitting `C1.0` / `X40.0` keeps every value self-describing, which
+ * third-party CAM parsers require (gerbonara rejects the bare-integer form
+ * outright).
+ */
 function decimalNm(nm: number): string {
-  const text = (nm / 1_000_000).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
-  return text === "-0" || text === "" ? "0" : text;
+  const text = (nm / 1_000_000).toFixed(6).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ".0");
+  const normalized = text === "-0" || text === "" ? "0.0" : text;
+  return normalized.includes(".") ? normalized : `${normalized}.0`;
 }
 
 function coordinate(nm: number): string {

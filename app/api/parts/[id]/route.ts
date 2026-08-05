@@ -8,8 +8,9 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
-import { parts, libraries, type KeySpecs } from "@/app/lib/db/schema";
+import { parts, libraries, partsAtomicLinks, type KeySpecs } from "@/app/lib/db/schema";
 import type { KicadPin } from "@/app/lib/kicad/types";
+import { legacyPartToAtomicDraft, type LegacyAtomicDraft } from "@/app/lib/atomic/compatibility";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,25 @@ type PartDetail = {
   rohsStatus: RohsStatus | null;
   packageNormalized: string | null;
   keySpecs: KeySpecs | null;
+  isGeneric: boolean;
+  /** Draft-only bridge; never represents approval or package proof. */
+  atomicCompatibility?: LegacyAtomicDraft;
+  /**
+   * Published atomic authority links keyed by normalized value ('' = value
+   * agnostic default). Present only when a published atomic part revision has
+   * been linked to this catalog part — carries exact symbol/footprint/mapping
+   * identity for footprint-ready schematic instances.
+   */
+  atomicAssignments?: Record<string, AtomicAssignment>;
+};
+
+type AtomicAssignment = {
+  revisionId: string;
+  symbolVersionId: string;
+  footprintVersionId: string;
+  mappingCertificateId: string;
+  footprintFullName: string;
+  approved: true;
 };
 
 export async function GET(
@@ -73,13 +93,57 @@ export async function GET(
         rohsStatus: parts.rohsStatus,
         packageNormalized: parts.packageNormalized,
         keySpecs: parts.keySpecs,
+        isGeneric: parts.isGeneric,
       })
       .from(parts)
       .innerJoin(libraries, eq(parts.libraryId, libraries.id))
       .where(eq(parts.id, id))
       .limit(1);
 
-    const part: PartDetail | null = rows[0] ?? null;
+    const linkRows = rows[0]
+      ? await db
+          .select({
+            valueKey: partsAtomicLinks.valueKey,
+            atomicPartRevisionId: partsAtomicLinks.atomicPartRevisionId,
+            symbolAssetVersionId: partsAtomicLinks.symbolAssetVersionId,
+            footprintAssetVersionId: partsAtomicLinks.footprintAssetVersionId,
+            mappingCertificateId: partsAtomicLinks.mappingCertificateId,
+            footprintFullName: partsAtomicLinks.footprintFullName,
+          })
+          .from(partsAtomicLinks)
+          .where(eq(partsAtomicLinks.partId, id))
+      : [];
+    const atomicAssignments: Record<string, AtomicAssignment> = {};
+    for (const link of linkRows) {
+      atomicAssignments[link.valueKey] = {
+        revisionId: link.atomicPartRevisionId,
+        symbolVersionId: link.symbolAssetVersionId,
+        footprintVersionId: link.footprintAssetVersionId,
+        mappingCertificateId: link.mappingCertificateId,
+        footprintFullName: link.footprintFullName,
+        approved: true,
+      };
+    }
+
+    const row = rows[0] ?? null;
+    const part: PartDetail | null = row
+      ? {
+          ...row,
+          ...(linkRows.length ? { atomicAssignments } : {}),
+          atomicCompatibility: legacyPartToAtomicDraft({
+            id: row.id,
+            name: row.name,
+            mpn: row.mpn,
+            manufacturer: row.manufacturer,
+            libraryName: row.libraryName,
+            symbolRaw: row.symbolRaw,
+            pins: row.pins,
+            properties: row.properties,
+            footprintHint: row.footprintHint,
+            isGeneric: row.isGeneric,
+          }),
+        }
+      : null;
     return Response.json({ ok: true, part });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

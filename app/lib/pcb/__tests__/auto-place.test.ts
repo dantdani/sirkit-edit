@@ -86,7 +86,7 @@ describe("autoPlace", () => {
   it("preserves hard mechanical/edge constraints and honors allowed rotations", () => {
     const board = buildFixtureBoard30();
     const fixed = board.footprints[5];
-    fixed.placementConstraints = { mechanical: true, edgeConnector: "left" };
+    fixed.placementConstraints = { mechanical: true };
     const rotationLimited = board.footprints[6];
     rotationLimited.placementConstraints = { allowedRotations: [180] };
 

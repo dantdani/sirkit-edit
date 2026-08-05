@@ -90,7 +90,11 @@ function board(parts: {
   b.footprints = parts.footprints ?? [];
   b.tracks = parts.tracks ?? [];
   b.vias = parts.vias ?? [];
-  if (parts.nets) b.nets = [{ id: 0, name: "" }, ...parts.nets];
+  const declaredNets = parts.nets ?? [{ id: 1, name: "N1" }];
+  b.nets = [
+    { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+    ...declaredNets.map((net) => ({ ...net, stableId: `net:test-${net.id}`, endpointKeys: [] })),
+  ];
   return b;
 }
 

@@ -56,8 +56,12 @@ export function buildAutorouteImportCommand(
     vias: imported.vias.map(cloneVia),
     replacedNetIds,
     removed: {
-      tracks: board.tracks.filter((t) => replaced.has(t.netId)).map(cloneTrack),
-      vias: board.vias.filter((v) => replaced.has(v.netId)).map(cloneVia),
+      tracks: board.tracks.filter((track) => replaced.has(track.netId) && track.locked !== true).map(cloneTrack),
+      vias: board.vias.filter((via) => replaced.has(via.netId) && via.locked !== true).map(cloneVia),
+    },
+    protected: {
+      tracks: board.tracks.filter((track) => replaced.has(track.netId) && track.locked === true).map(cloneTrack),
+      vias: board.vias.filter((via) => replaced.has(via.netId) && via.locked === true).map(cloneVia),
     },
   };
 }

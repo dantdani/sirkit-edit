@@ -1,0 +1,6 @@
+import { LOW_VOLTAGE_SCHEMATIC_PROFILE_V1 } from "@/app/lib/schematic-compiler/capability";
+import { validateSchematicGraph } from "@/app/lib/schematic-compiler/graph";
+import type { SchematicSemanticGraph } from "@/app/lib/schematic-compiler/types";
+import { object, scopedJson } from "../../_scope";
+export const runtime = "nodejs";
+export async function POST(request: Request): Promise<Response> { const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response; const { body, scope } = parsed; if (!object(body.graph)) return Response.json({ ok: false, error: "graph is required" }, { status: 400 }); const graph = body.graph as unknown as SchematicSemanticGraph; if (graph.projectId !== scope.projectId) return Response.json({ ok: false, error: "graph scope mismatch" }, { status: 403 }); const limits = LOW_VOLTAGE_SCHEMATIC_PROFILE_V1.limits, result = validateSchematicGraph(graph, limits); return Response.json({ ok: result.valid, ...result, counts: { components: graph.components?.length ?? 0, pins: graph.pins?.length ?? 0, nets: graph.nets?.length ?? 0, endpoints: graph.endpoints?.length ?? 0, sheets: graph.sheetInstances?.length ?? 0 } }, { status: result.valid ? 200 : 422, headers: { "Cache-Control": "no-store" } }); }

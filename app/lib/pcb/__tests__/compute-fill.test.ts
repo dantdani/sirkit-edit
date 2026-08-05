@@ -9,13 +9,12 @@ import type { Vec2 } from "../geometry";
 import type { LayerId } from "../layers";
 import type { PcbBoard, Track, Zone } from "../types";
 import { createEmptyBoard } from "../types";
-import { computeFill } from "../zones/compute-fill";
-import { makeEffectiveClearance } from "../zones/types";
 import { regionContainsPoint, regionShapeDistance, outlinePolygon } from "../zones/geometry";
 import { trackShape } from "../geometry-copper";
 import { buildRoutedDemo } from "../demo/routed-demo";
 import { runDrc } from "../drc/run-drc";
 import { getPreset, DEFAULT_PRESET_ID } from "../drc/presets";
+import { applyZoneFillCandidate, computeZoneFillCandidate } from "../zones/fill-lifecycle";
 
 const mm = (v: number): number => mmToNm(v);
 const v2 = (xMm: number, yMm: number): Vec2 => ({ x: mm(xMm), y: mm(yMm) });
@@ -41,7 +40,9 @@ function rect(x0: number, y0: number, x1: number, y1: number): Vec2[] {
 
 function fill(board: PcbBoard, z: Zone) {
   board.zones.push(z);
-  return computeFill({ board, zone: z, effectiveClearance: makeEffectiveClearance(board, z) });
+  const candidate = computeZoneFillCandidate(board, z);
+  applyZoneFillCandidate(board, candidate);
+  return candidate.result;
 }
 
 let trackN = 0;
@@ -85,7 +86,7 @@ function gndPadInstance(at: Vec2) {
 describe("computeFill", () => {
   it("(a) empty board: one region matching the polygon (well inside the outline)", () => {
     const board = createEmptyBoard(); // 100×80 mm
-    board.nets.push({ id: 1, name: "GND" });
+    board.nets.push({ id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] });
     const z = zone(rect(10, 10, 40, 40));
     const { regions, stats } = fill(board, z);
     expect(regions).toHaveLength(1);
@@ -101,7 +102,7 @@ describe("computeFill", () => {
 
   it("(a2) full-board zone is inset from the outline by the edge clearance", () => {
     const board = createEmptyBoard();
-    board.nets.push({ id: 1, name: "GND" });
+    board.nets.push({ id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] });
     const z = zone(outlinePolygon(board.outline));
     const { regions } = fill(board, z);
     expect(regions).toHaveLength(1);
@@ -115,7 +116,10 @@ describe("computeFill", () => {
 
   it("(b) a foreign-net track through the middle splits the fill in two, clearance respected", () => {
     const board = createEmptyBoard();
-    board.nets.push({ id: 1, name: "GND" }, { id: 2, name: "SIG" });
+    board.nets.push(
+      { id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] },
+      { id: 2, name: "SIG", stableId: "net:sig", endpointKeys: [] },
+    );
     const t = track(2, v2(5, 25), v2(45, 25));
     board.tracks.push(t);
     const z = zone(rect(10, 10, 40, 40));
@@ -129,7 +133,7 @@ describe("computeFill", () => {
 
   it("(c) a same-net pad gets a thermal relief: gap holes + 4 reconnecting spokes", () => {
     const board = createEmptyBoard();
-    board.nets.push({ id: 1, name: "GND" });
+    board.nets.push({ id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] });
     board.footprints.push(gndPadInstance(v2(25, 25)));
     const z = zone(rect(10, 10, 40, 40), { connection: "thermal" });
     const { regions } = fill(board, z);
@@ -151,7 +155,7 @@ describe("computeFill", () => {
 
   it("(c2) solid connection pours straight over the same-net pad (no holes)", () => {
     const board = createEmptyBoard();
-    board.nets.push({ id: 1, name: "GND" });
+    board.nets.push({ id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] });
     board.footprints.push(gndPadInstance(v2(25, 25)));
     const z = zone(rect(10, 10, 40, 40), { connection: "solid" });
     const { regions } = fill(board, z);
@@ -194,7 +198,10 @@ describe("computeFill", () => {
 
   it("(d2) an under-rules clearance override makes DRC fire against the zone", () => {
     const board = createEmptyBoard();
-    board.nets.push({ id: 1, name: "GND" }, { id: 2, name: "SIG" });
+    board.nets.push(
+      { id: 1, name: "GND", stableId: "net:gnd", endpointKeys: [] },
+      { id: 2, name: "SIG", stableId: "net:sig", endpointKeys: [] },
+    );
     const t = track(2, v2(5, 25), v2(45, 25));
     board.tracks.push(t);
     const z = zone(rect(10, 10, 40, 40), { clearanceOverrideNm: 100_000 }); // rules want ≥ 0.127+ mm

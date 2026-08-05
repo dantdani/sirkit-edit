@@ -59,6 +59,7 @@ export type EditCommand =
   | { op: "create-padstack"; padstack: PadstackInput } // Phase C impl
   | { op: "edit-padstack"; id: string; patch: Partial<PadstackInput> }
   | { op: "set-via-padstack"; viaIds: string[]; padstackId: string }
+  | { op: "set-copper-locked"; refs: Array<{ kind: "track" | "via" | "zone"; id: string }>; locked: boolean }
   | { op: "delete-padstack"; id: string };
 
 export interface EditResult {
@@ -66,6 +67,7 @@ export interface EditResult {
   errors: string[];
   violations: DrcViolation[];
   label: string;
+  diagnostics?: import("../integrity").EngineeringDiagnostic[];
 }
 
 /** Stable identity key for a ref — selection-set membership and dedupe. */

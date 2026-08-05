@@ -128,6 +128,58 @@ function pointInPolygon(p: Vec2, poly: readonly Vec2[]): boolean {
   return inside;
 }
 
+function pointOnSegment(point: Vec2, start: Vec2, end: Vec2): boolean {
+  const cross = (point.y - start.y) * (end.x - start.x) - (point.x - start.x) * (end.y - start.y);
+  if (Math.abs(cross) > 1e-6) return false;
+  return point.x >= Math.min(start.x, end.x) && point.x <= Math.max(start.x, end.x) && point.y >= Math.min(start.y, end.y) && point.y <= Math.max(start.y, end.y);
+}
+
+function pointInOrOnPolygon(point: Vec2, polygon: readonly Vec2[]): boolean {
+  return polygon.some((start, index) => pointOnSegment(point, start, polygon[(index + 1) % polygon.length])) || pointInPolygon(point, polygon);
+}
+
+/** Liang-Barsky clipping against a closed axis-aligned box. */
+function segmentBoxInterval(start: Vec2, end: Vec2, box: BBox): [number, number] | undefined {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  let enter = 0;
+  let leave = 1;
+  for (const [p, q] of [[-dx, start.x - box.minX], [dx, box.maxX - start.x], [-dy, start.y - box.minY], [dy, box.maxY - start.y]] as const) {
+    if (p === 0) {
+      if (q < 0) return undefined;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) enter = Math.max(enter, ratio);
+    else leave = Math.min(leave, ratio);
+    if (enter > leave) return undefined;
+  }
+  return [enter, leave];
+}
+
+function segmentEntersBoxInterior(start: Vec2, end: Vec2, box: BBox): boolean {
+  const interval = segmentBoxInterval(start, end, box);
+  if (!interval) return false;
+  const at = (interval[0] + interval[1]) / 2;
+  const point = { x: start.x + (end.x - start.x) * at, y: start.y + (end.y - start.y) * at };
+  return point.x > box.minX && point.x < box.maxX && point.y > box.minY && point.y < box.maxY;
+}
+
+export function bboxFitsPolygon(box: BBox, polygon: readonly Vec2[]): boolean {
+  if (polygon.length < 3) return false;
+  const corners = [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.minY }, { x: box.maxX, y: box.maxY }, { x: box.minX, y: box.maxY }];
+  if (!corners.every((corner) => pointInOrOnPolygon(corner, polygon))) return false;
+  return !polygon.some((start, index) => segmentEntersBoxInterior(start, polygon[(index + 1) % polygon.length], box));
+}
+
+export function bboxIntersectsPolygon(box: BBox, polygon: readonly Vec2[]): boolean {
+  if (polygon.length < 3) return false;
+  const corners = [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.minY }, { x: box.maxX, y: box.maxY }, { x: box.minX, y: box.maxY }];
+  if (corners.some((corner) => pointInOrOnPolygon(corner, polygon))) return true;
+  if (polygon.some((point) => point.x >= box.minX && point.x <= box.maxX && point.y >= box.minY && point.y <= box.maxY)) return true;
+  return polygon.some((start, index) => segmentBoxInterval(start, polygon[(index + 1) % polygon.length], box) !== undefined);
+}
+
 export function pointInOutline(p: Vec2, outline: BoardOutline): boolean {
   if (outline.kind === "polygon") return pointInPolygon(p, outline.points);
   const b = outlineBBox(outline);
@@ -149,9 +201,8 @@ function cornerOk(p: Vec2, b: BBox, r: number): boolean {
 /**
  * True when the world courtyard bbox sits entirely inside the outline.
  * Rect: exact containment. Roundrect: containment + all four bbox corners
- * inside the corner arcs. Polygon: all four bbox corners inside (exact for
- * convex outlines; concave outlines may accept a bbox spanning a notch —
- * Stage 12's DRC surfaces those).
+ * inside the corner arcs. Polygon: exact axis-aligned bbox containment,
+ * including boundary-edge crossings through concave notches.
  */
 export function courtyardFitsOutline(box: BBox, outline: BoardOutline): boolean {
   const corners: Vec2[] = [
@@ -160,7 +211,7 @@ export function courtyardFitsOutline(box: BBox, outline: BoardOutline): boolean 
     { x: box.maxX, y: box.maxY },
     { x: box.minX, y: box.maxY },
   ];
-  if (outline.kind === "polygon") return corners.every((c) => pointInPolygon(c, outline.points));
+  if (outline.kind === "polygon") return bboxFitsPolygon(box, outline.points);
   const b = outlineBBox(outline);
   if (box.minX < b.minX || box.maxX > b.maxX || box.minY < b.minY || box.maxY > b.maxY) return false;
   if (outline.kind === "roundrect") return corners.every((c) => cornerOk(c, b, outline.cornerRadius));

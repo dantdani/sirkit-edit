@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "sirkit.mapping-stage4-qualification-evidence.v1",
+  "generatedAt": "2026-07-19T05:47:45.787Z",
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "win32",
+    "release": "10.0.26200",
+    "arch": "x64"
+  },
+  "versions": {
+    "verifier": "sirkit.mapping-verifier/4.0.0",
+    "policy": "1.0.0",
+    "result": "sirkit.mapping-verification-result.v1",
+    "parserVersions": {
+      "symbol": "sirkit.kicad-assets/1",
+      "footprint": "sirkit.kicad-assets/1",
+      "packageTerminal": "sirkit.package-terminal-facts/1"
+    }
+  },
+  "budgets": {
+    "singleSmallP95Ms": 100,
+    "exact512Ms": 5000,
+    "maxPins": 4096,
+    "maxTerminals": 4096,
+    "maxPads": 8192,
+    "maxEdges": 16384,
+    "maxBatchSize": 64,
+    "timeoutMs": 5000
+  },
+  "measurements": {
+    "exactTwoTerminal100": {
+      "samples": 100,
+      "meanMs": 1.074,
+      "p50Ms": 0.77,
+      "p95Ms": 2.565,
+      "maxMs": 5.657
+    },
+    "exact512": {
+      "elapsedMs": 42.532,
+      "pins": 512,
+      "terminals": 512,
+      "pads": 512,
+      "findings": 0
+    }
+  },
+  "representative": {
+    "exactPassive": {
+      "status": "verified",
+      "tier": "exact_part",
+      "resultDigest": "mv1-4bb79879190eec49f18b41dd49bcc32226ba4e7e7c5aa85d9f911e2b288007e1",
+      "claims": {
+        "selectsFootprint": false,
+        "approvesMapping": false,
+        "mutatesSchematic": false,
+        "mutatesPcb": false,
+        "certifiesLandPatternGeometry": false
+      }
+    },
+    "numericConnector": {
+      "status": "ambiguous",
+      "tier": null,
+      "findings": [
+        "MV_EVIDENCE_MISSING",
+        "MV_UNSAFE_HEURISTIC_ORIGIN"
+      ],
+      "ambiguities": [
+        "MV_MAPPING_AUTHORITY_AMBIGUOUS"
+      ]
+    },
+    "reversedPolarized": {
+      "status": "electrically_inconsistent",
+      "findings": [
+        "MV_EDGE_FUNCTION_ASSERTION_CONTRADICTION",
+        "MV_EDGE_FUNCTION_ASSERTION_CONTRADICTION",
+        "MV_FUNCTION_CONTRADICTION",
+        "MV_FUNCTION_CONTRADICTION",
+        "MV_POLARITY_ORIENTATION_REVERSED",
+        "MV_POLARITY_ORIENTATION_REVERSED"
+      ]
+    },
+    "omittedExposedPad": {
+      "status": "incomplete",
+      "findings": [
+        "MV_PAD_COVERAGE_INCOMPLETE",
+        "MV_SYMBOL_COVERAGE_INCOMPLETE",
+        "MV_TERMINAL_COVERAGE_INCOMPLETE"
+      ]
+    }
+  },
+  "assertions": {
+    "pureVerificationDoesNotApprove": true,
+    "schematicUnchanged": true,
+    "pcbUnchanged": true,
+    "exact512Complete": true
+  }
+}

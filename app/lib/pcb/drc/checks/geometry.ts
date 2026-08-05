@@ -162,6 +162,42 @@ export function checkHoleToHole(ctx: DrcCheckContext): DrcViolation[] {
 // ── #8 Courtyard overlap ──────────────────────────────────────────────────────
 
 /** The footprint's courtyard as a world-placed oriented rectangle, or null. */
+/**
+ * Strict interior-overlap test for two placed rects (SAT with a 1 nm touch
+ * tolerance). Needed because `shapeDistance` is sign-only for zero-radius
+ * shapes: two OVERLAPPING rect courtyards measure gap 0, identical to
+ * touching — so with a preset courtyard clearance of 0 (touching allowed),
+ * `gap >= threshold` could never flag a true overlap.
+ */
+function rectInteriorsOverlap(a: PlacedShape, b: PlacedShape): boolean {
+  if (a.shape.kind !== "rect" || b.shape.kind !== "rect") return false;
+  const corners = (p: PlacedShape): Vec2[] => {
+    const { width, height } = p.shape as { width: number; height: number };
+    const hw = width / 2, hh = height / 2;
+    return [{ x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }]
+      .map((corner) => transformPoint(corner, p.at, p.rotationDeg, false));
+  };
+  const ca = corners(a), cb = corners(b);
+  const axes: Vec2[] = [];
+  for (const poly of [ca, cb]) for (let i = 0; i < 2; i++) {
+    const edge = { x: poly[(i + 1) % 4]!.x - poly[i]!.x, y: poly[(i + 1) % 4]!.y - poly[i]!.y };
+    axes.push({ x: -edge.y, y: edge.x });
+  }
+  const TOUCH_NM = 1;
+  for (const axis of axes) {
+    const length = Math.hypot(axis.x, axis.y);
+    if (length === 0) continue;
+    const project = (pts: Vec2[]) => {
+      let min = Infinity, max = -Infinity;
+      for (const pt of pts) { const d = (pt.x * axis.x + pt.y * axis.y) / length; if (d < min) min = d; if (d > max) max = d; }
+      return { min, max };
+    };
+    const pa = project(ca), pb = project(cb);
+    if (Math.min(pa.max, pb.max) - Math.max(pa.min, pb.min) <= TOUCH_NM) return false; // separated or merely touching on this axis
+  }
+  return true;
+}
+
 function courtyardShape(inst: FootprintInstance): PlacedShape | null {
   const cb = inst.def.courtyardBBox;
   if (!cb) return null;
@@ -191,7 +227,7 @@ export function checkCourtyardOverlap(ctx: DrcCheckContext): DrcViolation[] {
       if (!b) continue;
       if (insts[i].side !== insts[j].side) continue; // opposite sides never collide
       const gap = shapeDistance(a, b);
-      if (gap >= threshold) continue;
+      if (gap >= threshold && !rectInteriorsOverlap(a, b)) continue;
       const layer = insts[i].side === "bottom" ? "courtyardBottom" : "courtyardTop";
       const extra = [insts[i].id, insts[j].id].sort().join("|");
       out.push({

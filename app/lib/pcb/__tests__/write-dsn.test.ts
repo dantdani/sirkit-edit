@@ -3,6 +3,7 @@
 
 import { describe, it, expect } from "vitest";
 import { boardToDsn, writeDsn } from "../dsn/write-dsn";
+import { assertDsnReady, validateDsn } from "../dsn/preflight";
 import { createEmptyBoard } from "../types";
 import type { PcbBoard, FootprintDef, FootprintInstance, Pad } from "../types";
 import { buildRoutedDemo } from "../demo/routed-demo";
@@ -140,5 +141,59 @@ describe("boardToDsn / writeDsn", () => {
     expect(first.trimEnd().endsWith(")")).toBe(true);
     expect(first).toContain("(wiring");
     expect(first).toContain("(type protect)");
+  });
+
+  it("rejects two schematic endpoints claiming one pad without internally-common authority", () => {
+    const fp = inst("u1", "U1", [smdPad("1", 0)], { "1": 1 });
+    fp.pinPadMappings = [
+      { componentInstanceId: "u1", endpointKey: "u1::A", symbolPinNumber: "A", padNumbers: ["1"], mappingKind: "electrical", provenance: "library-explicit" },
+      { componentInstanceId: "u1", endpointKey: "u1::B", symbolPinNumber: "B", padNumbers: ["1"], mappingKind: "electrical", provenance: "library-explicit" },
+    ];
+    const b = board({ 1: "SIG" }, [fp]);
+    b.nets[1] = { id: 1, name: "SIG", stableId: "stable-sig", endpointKeys: ["u1::A", "u1::B"] };
+
+    const report = validateDsn(b, boardToDsn(b));
+
+    expect(report.ok).toBe(false);
+    expect(report.issues.map((issue) => issue.code)).toContain("PAD_NET_CONFLICT");
+  });
+
+  it("accepts one verified endpoint mapped to multiple physical pads", () => {
+    const fp = inst("u1", "U1", [smdPad("1", 0), smdPad("2", 1)], { "1": 1, "2": 1 });
+    fp.pinPadMappings = [
+      { componentInstanceId: "u1", endpointKey: "u1::GND", symbolPinNumber: "GND", padNumbers: ["1", "2"], mappingKind: "internally-common", provenance: "library-explicit" },
+    ];
+    const b = board({ 1: "GND" }, [fp]);
+    b.nets[1] = { id: 1, name: "GND", stableId: "stable-gnd", endpointKeys: ["u1::GND"] };
+
+    const report = assertDsnReady(b, boardToDsn(b));
+
+    expect(report.ok).toBe(true);
+    expect(boardToDsn(b).integrity?.expectedEndpoints[0]?.padNumbers).toEqual(["1", "2"]);
+  });
+
+  it("blocks an unclassified exposed pad but ignores an explicit mechanical NPTH hole", () => {
+    const mechanical: Pad = {
+      number: "MH",
+      type: "np_thru_hole",
+      shape: { kind: "circle", radius: mmToNm(0.5) },
+      at: { x: mmToNm(3), y: 0 },
+      rotationDeg: 0,
+      layers: [],
+      drill: { diameter: mmToNm(0.8) },
+    };
+    const fp = inst("u1", "U1", [smdPad("1", 0), smdPad("EP", 1), mechanical], { "1": 1 });
+    fp.pinPadMappings = [
+      { componentInstanceId: "u1", endpointKey: "u1::1", symbolPinNumber: "1", padNumbers: ["1"], mappingKind: "electrical", provenance: "library-explicit" },
+    ];
+    fp.footprintPadClassifications = { MH: "mechanical" };
+    const b = board({ 1: "SIG" }, [fp]);
+    b.nets[1] = { id: 1, name: "SIG", stableId: "stable-sig", endpointKeys: ["u1::1"] };
+
+    const blocked = validateDsn(b, boardToDsn(b));
+    expect(blocked.issues.map((issue) => issue.code)).toContain("UNCLASSIFIED_FOOTPRINT_PAD");
+
+    fp.footprintPadClassifications.EP = "intentional-no-connect";
+    expect(assertDsnReady(b, boardToDsn(b)).ok).toBe(true);
   });
 });

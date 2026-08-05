@@ -25,6 +25,8 @@ import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
 import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
 import { assignFootprints } from "@/lib/footprint-assign";
+import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { atomicSnapshotToCachedPart } from "@/app/lib/atomic/kicad-adapters";
 
 export type KicadExportInput = {
   state: SchematicState;
@@ -32,6 +34,8 @@ export type KicadExportInput = {
   title?: string;
   description?: string;
   company?: string;
+  /** Exact offline snapshots keyed by schematic component instance id. */
+  componentSelections?: Readonly<Record<string, ProjectComponentPin>>;
 };
 
 // KiCad 10.0 stable schematic format version (matches a schematic freshly saved
@@ -159,6 +163,17 @@ export function exportToKicadSch(input: KicadExportInput): string {
   const kicadComponents = state.kicadComponents ?? [];
   const wires = state.wires ?? [];
   const netLabels = state.netLabels ?? [];
+  const effectivePartByInstance = new Map<string, CachedPart>();
+  for (const instance of kicadComponents) {
+    const selection = input.componentSelections?.[instance.id];
+    const exact = selection
+      && selection.atomicRevisionId === instance.atomicPartRevisionId
+      && selection.symbolVersionId === instance.symbolAssetVersionId
+      ? atomicSnapshotToCachedPart(selection.embeddedSnapshot)
+      : null;
+    const part = exact ?? parts.get(instance.partId);
+    if (part) effectivePartByInstance.set(instance.id, part);
+  }
 
   const schematicUuid = uuidFor("schematic", "root");
   // For a single-sheet design the symbol instance path is the root schematic
@@ -181,16 +196,17 @@ export function exportToKicadSch(input: KicadExportInput): string {
   lines.push(`\t)`);
 
   // ── (A) lib_symbols: embed unique KiCad part symbols (deduped by partId) ──
-  const partLibId = new Map<string, string>(); // partId -> "Library:Name"
+  const partLibId = new Map<string, string>(); // instance id -> "Library:Name"
   lines.push(`\t(lib_symbols`);
   const embedded = new Set<string>();
   for (const inst of kicadComponents) {
-    if (embedded.has(inst.partId)) continue;
-    embedded.add(inst.partId);
-    const part = parts.get(inst.partId);
+    const assetKey = inst.atomicPartRevisionId ?? inst.partId;
+    const part = effectivePartByInstance.get(inst.id);
     if (!part) continue; // missing parts are surfaced by the API layer
     const libId = `${part.libraryName}:${part.name}`;
-    partLibId.set(inst.partId, libId);
+    partLibId.set(inst.id, libId);
+    if (embedded.has(assetKey)) continue;
+    embedded.add(assetKey);
     const raw = rewriteSymbolName(part.symbolRaw.trim(), libId);
     if (raw) lines.push(indent(raw, 2));
   }
@@ -214,9 +230,19 @@ export function exportToKicadSch(input: KicadExportInput): string {
   // Footprint per KiCad component: the symbol's own footprint id when it has
   // one, else a deterministic category default (R/C/L/D/Q…). Parts left
   // unresolved export with an empty Footprint, same as before.
-  const footprintByRefDes = new Map(
-    assignFootprints(kicadComponents, parts).map((a) => [a.refDes, a.footprint] as const),
-  );
+  const footprintByRefDes = new Map(assignFootprints(kicadComponents, parts).map((a) => [a.refDes, a.footprint] as const));
+  for (const inst of kicadComponents) {
+    const selection = input.componentSelections?.[inst.id];
+    const snapshot = selection?.embeddedSnapshot;
+    if (
+      selection && snapshot?.mapping?.state === "approved" && snapshot.footprint
+      && selection.atomicRevisionId === inst.atomicPartRevisionId
+      && selection.footprintVersionId === inst.footprintAssetVersionId
+      && selection.mappingCertificateId === inst.mappingCertificateId
+    ) {
+      footprintByRefDes.set(inst.refDes, `${snapshot.footprint.origin.libraryNickname}:${snapshot.footprint.footprintName}`);
+    }
+  }
 
   // Per-type refDes counters for Theory components (R1, C1, ...).
   const refDesCount: Record<string, number> = {};
@@ -227,9 +253,9 @@ export function exportToKicadSch(input: KicadExportInput): string {
   };
 
   for (const inst of kicadComponents) {
-    const libId = partLibId.get(inst.partId);
+    const libId = partLibId.get(inst.id);
     if (!libId) continue;
-    const part = parts.get(inst.partId);
+    const part = effectivePartByInstance.get(inst.id);
     lines.push(
       buildSymbolInstance({
         libId,

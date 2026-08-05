@@ -70,6 +70,10 @@ export interface PcbHistoryRecord {
 
 export interface PcbHistory {
   readonly present: PcbBoard;
+  /** B03: the last COMMITTED board — `present` unless transient edits are in
+   *  flight, in which case the pre-transient base (what `execute` commits
+   *  from, and what undo restores). Canonical lineage tracking keys off this. */
+  readonly committedPresent: PcbBoard;
   /** Commit one undoable step. Mutations apply to the pre-transient state. */
   execute(label: string, mutate: (draft: PcbBoard) => void, metadata?: Partial<PcbHistoryMetadata>): void;
   undo(): void;
@@ -90,6 +94,13 @@ export interface PcbHistory {
    * of N transient frames + one execute yields exactly one entry.
    */
   transient(mutate: (draft: PcbBoard) => void): void;
+  /**
+   * B03: discard uncommitted transient edits, restoring the pre-transient
+   * board WITHOUT creating an entry or notifying subscribers — the canonical
+   * adapter reverts a rejected gesture commit through this (the drag preview
+   * never reached React state, so no notification is owed).
+   */
+  cancelTransient(): void;
   /**
    * Stage 11: write DERIVED state (zone fills) onto `present` with NO history
    * entry, notifying subscribers so the editor/renderer pick it up. Unlike
@@ -148,6 +159,9 @@ export function createHistory(initial: PcbBoard): PcbHistory {
     get present(): PcbBoard {
       return present;
     },
+    get committedPresent(): PcbBoard {
+      return transientBase ?? present;
+    },
     get canUndo(): boolean {
       return past.length > 0;
     },
@@ -175,6 +189,9 @@ export function createHistory(initial: PcbBoard): PcbHistory {
       transientBase = null;
       const [next, patches, inversePatches] = produceWithPatches(base, mutate);
       present = next;
+      // A denied protected-object mutation is a true no-op: it must not create
+      // a false engineering event or consume an undo step.
+      if (patches.length === 0) return;
       const entryId = `pcb-history-${nextId++}`;
       const fullMetadata: PcbHistoryMetadata = {
         operationType: metadata?.operationType ?? label.split(/[ :]/, 1)[0].toLowerCase(),
@@ -264,6 +281,10 @@ export function createHistory(initial: PcbBoard): PcbHistory {
     transient(mutate: (draft: PcbBoard) => void): void {
       if (transientBase === null) transientBase = present;
       present = produce(present, mutate);
+    },
+
+    cancelTransient(): void {
+      dropTransient();
     },
 
     applyDerived(label: string, mutate: (draft: PcbBoard) => void): void {

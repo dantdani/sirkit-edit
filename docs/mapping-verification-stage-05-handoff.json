@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "sirkit.mapping-verification-stage5-handoff.v1",
+  "producer": {
+    "verifier": "sirkit.mapping-verifier/4.0.0",
+    "policy": "sirkit.mapping-verification-policy/1.0.0",
+    "record": "sirkit.mapping-record.v1"
+  },
+  "requiredConsumerGate": {
+    "verificationStatuses": ["verified"],
+    "acceptedTiers": ["exact_part", "package_family", "curated_pair"],
+    "approvalState": "approved",
+    "freshnessState": "current",
+    "conflictState": "none",
+    "lifecycle": "active",
+    "exactDigestMatch": true,
+    "limitedDirectPairAccepted": false
+  },
+  "requiredPinnedDependencies": [
+    "tenant/project/branch/component/assembly variant scope",
+    "symbol asset version/content/semantic digest",
+    "exact part and package revision",
+    "footprint asset version/content/semantic digest",
+    "mapping content/result/dependency digest",
+    "policy/verifier/parser versions",
+    "human approval decision"
+  ],
+  "stage5May": [
+    "propose a passive package default using evidence",
+    "reuse an active approved current mapping for the exact compatible dependency set",
+    "surface unresolved package requirements"
+  ],
+  "stage5MustNot": [
+    "infer a footprint or mapping from value, count, name, number or order",
+    "treat AI/vendor/import confidence as approval",
+    "reuse a stale, revoked, conflicting, unapproved or limited-direct mapping for layout",
+    "change schematic connectivity or PCB copper",
+    "silently broaden equivalence or package compatibility"
+  ],
+  "invalidation": {
+    "newImmutableMappingRevision": true,
+    "stage1ReferenceSuccessor": true,
+    "stage2Cache": "disabled",
+    "stage3AffectedPlans": "stale",
+    "boardMutation": false
+  },
+  "productionBlocker": "A durable atomic-catalog + Stage 1 mapping transaction and restart qualification are required before authoritative rollout."
+}

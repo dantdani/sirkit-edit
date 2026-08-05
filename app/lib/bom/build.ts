@@ -25,6 +25,8 @@ import {
   type LineRiskBreakdown,
   type DesignRiskSummary,
 } from "@/app/lib/risk-scoring";
+import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
   resistor: "Resistor",
@@ -38,6 +40,7 @@ const THEORY_LABEL: Record<SchComponentType, string> = {
 
 export type BomRow = {
   partId: string | null; // FK to parts table, null for SchComponent (Theory)
+  atomicRevisionId: string | null;
   refDes: string; // pretty list, e.g. "U1, U2"
   refDesList: string[]; // individual refDes values
   qty: number;
@@ -95,6 +98,8 @@ type Group = {
   type: SchComponentType | null;
   value: string;
   refs: string[];
+  componentInstanceIds: string[];
+  atomicRevisionId: string | null;
 };
 
 /** Currency of the price break that produced `bestUnitPrice`, defaulting USD. */
@@ -109,6 +114,7 @@ export async function buildBom(
   state: SchematicState,
   pricingChoice: DistributorChoice,
   forceRefresh = false,
+  componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
 ): Promise<BomResult> {
   const kicadComponents = state.kicadComponents ?? [];
   const components = state.components ?? [];
@@ -117,13 +123,14 @@ export async function buildBom(
   const groups = new Map<string, Group>();
 
   for (const k of kicadComponents) {
-    const key = `k|${k.partId}|${k.value}`;
+    const key = `k|${k.atomicPartRevisionId ?? k.partId}|${k.value}`;
     let g = groups.get(key);
     if (!g) {
-      g = { partId: k.partId, type: null, value: k.value, refs: [] };
+      g = { partId: k.partId, type: null, value: k.value, refs: [], componentInstanceIds: [], atomicRevisionId: k.atomicPartRevisionId ?? null };
       groups.set(key, g);
     }
     g.refs.push(k.refDes);
+    g.componentInstanceIds.push(k.id);
   }
 
   for (const c of components) {
@@ -131,14 +138,17 @@ export async function buildBom(
     const key = `t|${c.type}|${c.value}`;
     let g = groups.get(key);
     if (!g) {
-      g = { partId: null, type: c.type, value: c.value, refs: [] };
+      g = { partId: null, type: c.type, value: c.value, refs: [], componentInstanceIds: [], atomicRevisionId: null };
       groups.set(key, g);
     }
     g.refs.push(c.id);
   }
 
   // ── Enrich KiCad groups with catalog metadata (one DB round-trip) ────────────
-  const partIds = [...new Set([...groups.values()].map((g) => g.partId).filter((p): p is string => p !== null))];
+  const partIds = [...new Set([...groups.values()]
+    .filter((group) => !group.componentInstanceIds.some((id) => componentSelections[id]))
+    .map((g) => g.partId)
+    .filter((p): p is string => p !== null))];
   const [partMeta, alternatesCounts] = await Promise.all([
     loadPartMeta(partIds),
     loadAlternatesCounts(partIds),
@@ -149,7 +159,8 @@ export async function buildBom(
   const seenPid = new Set<string>();
   for (const g of groups.values()) {
     if (!g.partId || seenPid.has(g.partId)) continue;
-    const mpn = partMeta.get(g.partId)?.mpn ?? null;
+    const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
+    const mpn = pinned?.exactPart?.exactMpn ?? partMeta.get(g.partId)?.mpn ?? null;
     if (mpn) {
       partsForPricing.push({ partId: g.partId, mpn });
       seenPid.add(g.partId);
@@ -178,7 +189,8 @@ export async function buildBom(
   for (const g of groups.values()) {
     const refDesList = [...g.refs].sort(refDesSort);
     const meta = g.partId ? partMeta.get(g.partId) : undefined;
-    const mpn = meta?.mpn ?? null;
+    const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
+    const mpn = pinned?.exactPart?.exactMpn ?? meta?.mpn ?? null;
     const pricing = g.partId ? pricingMap.get(g.partId) ?? null : null;
 
     // Lifecycle is sourced from the aggregator's consolidated verdict, which
@@ -189,13 +201,16 @@ export async function buildBom(
 
     rows.push({
       partId: g.partId,
+      atomicRevisionId: pinned?.atomicRevision.id ?? g.atomicRevisionId,
       refDes: refDesList.join(", "),
       refDesList,
       qty: refDesList.length,
-      name: meta?.name ?? (g.type ? THEORY_LABEL[g.type] : "Unknown"),
+      name: pinned?.exactPart?.exactMpn ?? pinned?.genericDevice?.name ?? meta?.name ?? (g.type ? THEORY_LABEL[g.type] : "Unknown"),
       mpn,
-      manufacturer: meta?.manufacturer ?? pricing?.bestOverall?.manufacturer ?? null,
-      package: meta?.footprintHint ?? pricing?.bestOverall?.package ?? null,
+      manufacturer: pinned?.manufacturer?.canonicalName ?? meta?.manufacturer ?? pricing?.bestOverall?.manufacturer ?? null,
+      package: pinned?.footprint
+        ? `${pinned.footprint.origin.libraryNickname}:${pinned.footprint.footprintName}`
+        : meta?.footprintHint ?? pricing?.bestOverall?.package ?? null,
       value: g.value || null,
       datasheet: meta?.datasheet ?? pricing?.bestOverall?.datasheet ?? null,
       category: meta?.mainCategory ?? (g.type ? "Theory" : null),
@@ -330,7 +345,7 @@ function credentialWarning(name: DistributorName): string {
 // ─── CSV serialization (shared with the export route) ──────────────────────────
 
 function csvCell(v: string | number | null): string {
-  const s = v === null ? "" : String(v);
+  const s = v === null ? "" : safeSpreadsheetCell(String(v));
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -339,6 +354,7 @@ export function bomToCsv(result: BomResult): string {
     "refDes",
     "Qty",
     "Name",
+    "Sirkit Atomic Revision",
     "MPN",
     "Manufacturer",
     "Package",
@@ -363,6 +379,7 @@ export function bomToCsv(result: BomResult): string {
       row.refDes,
       row.qty,
       row.name,
+      row.atomicRevisionId ?? "",
       row.mpn ?? "",
       row.manufacturer ?? "",
       row.package ?? "",

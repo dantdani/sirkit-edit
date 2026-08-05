@@ -59,9 +59,20 @@ type PartDetail = {
   pins: KicadPin[];
   symbolRaw: string;
   properties: Record<string, string>;
+  atomicCompatibility?: {
+    revision: { publicationState: string };
+    unresolved: string[];
+  };
 };
 
 const PAGE_SIZE = 30;
+
+async function fetchCategories(): Promise<Category[]> {
+  const res = await fetch("/api/parts/categories");
+  const data = await res.json();
+  if (!data.ok) throw new Error("bad response");
+  return data.categories as Category[];
+}
 
 export function BuildLibraryPanel({
   onSelectForPlacement,
@@ -88,20 +99,30 @@ export function BuildLibraryPanel({
   // ── Categories ────────────────────────────────────────────────────────────
 
   const loadCategories = useCallback(async () => {
-    setCategoriesError(false);
     try {
-      const res = await fetch("/api/parts/categories");
-      const data = await res.json();
-      if (!data.ok) throw new Error("bad response");
-      setCategories(data.categories as Category[]);
+      const categories = await fetchCategories();
+      setCategoriesError(false);
+      setCategories(categories);
     } catch {
       setCategoriesError(true);
     }
   }, []);
 
   useEffect(() => {
-    void loadCategories();
-  }, [loadCategories]);
+    let cancelled = false;
+    void fetchCategories()
+      .then((categories) => {
+        if (cancelled) return;
+        setCategoriesError(false);
+        setCategories(categories);
+      })
+      .catch(() => {
+        if (!cancelled) setCategoriesError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // ── Parts search (browse + semantic) ───────────────────────────────────────
 
@@ -141,14 +162,8 @@ export function BuildLibraryPanel({
   // ── Part detail ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (selectedPartId === null) {
-      setDetail(null);
-      return;
-    }
+    if (selectedPartId === null) return;
     let cancelled = false;
-    setIsLoadingDetail(true);
-    setDetailError(false);
-    setDetail(null);
     fetch(`/api/parts/${selectedPartId}`)
       .then((r) => r.json())
       .then((data) => {
@@ -167,6 +182,19 @@ export function BuildLibraryPanel({
     };
   }, [selectedPartId]);
 
+  function selectPart(partId: string) {
+    setSelectedPartId(partId);
+    setIsLoadingDetail(true);
+    setDetailError(false);
+    setDetail(null);
+  }
+
+  function closePart() {
+    setSelectedPartId(null);
+    setDetail(null);
+    setIsLoadingDetail(false);
+  }
+
   // ── Handlers ────────────────────────────────────────────────────────────────
 
   function openCategory(category: string) {
@@ -174,14 +202,14 @@ export function BuildLibraryPanel({
     setSearchQuery("");
     setResults([]);
     setPagination({ total: 0, offset: 0, limit: PAGE_SIZE });
-    setSelectedPartId(null);
+    closePart();
   }
 
   function backToCategories() {
     setSelectedCategory(null);
     setSearchQuery("");
     setResults([]);
-    setSelectedPartId(null);
+    closePart();
   }
 
   function loadMore() {
@@ -202,7 +230,7 @@ export function BuildLibraryPanel({
           detail={detail}
           isLoading={isLoadingDetail}
           error={detailError}
-          onClose={() => setSelectedPartId(null)}
+          onClose={closePart}
           onPlace={onSelectForPlacement}
         />
       )}
@@ -287,7 +315,7 @@ export function BuildLibraryPanel({
               {results.map((part) => (
                 <button
                   key={part.id}
-                  onClick={() => setSelectedPartId(part.id)}
+                  onClick={() => selectPart(part.id)}
                   className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition ${
                     selectedPartId === part.id
                       ? "bg-zinc-800 text-zinc-100"
@@ -373,6 +401,11 @@ function PreviewPanel({
 
             {/* Metadata */}
             <div className="space-y-1.5 text-xs">
+              {detail.atomicCompatibility && (
+                <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-[10px] text-amber-200">
+                  Legacy catalog candidate — not an approved atomic revision. PCB assignment still requires exact mapping/package proof.
+                </div>
+              )}
               <MetaRow label="MPN" value={detail.mpn} mono />
               <MetaRow label="Manufacturer" value={detail.manufacturer} />
               <MetaRow label="Library" value={detail.libraryName} mono />

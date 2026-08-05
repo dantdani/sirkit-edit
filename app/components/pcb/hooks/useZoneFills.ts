@@ -23,8 +23,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbHistory } from "@/app/lib/pcb/history";
-import { computeFill } from "@/app/lib/pcb/zones/compute-fill";
-import { makeEffectiveClearance } from "@/app/lib/pcb/zones/types";
+import {
+  applyZoneFillCandidate,
+  computeZoneFillCandidate,
+  zoneFillIsCurrent,
+} from "@/app/lib/pcb/zones/fill-lifecycle";
 
 export const ZONE_FILL_LABEL = "Fill zones";
 const DEBOUNCE_MS = 250;
@@ -58,7 +61,7 @@ export function useZoneFills(editor: ZoneFillsEditor): ZoneFillsHandle {
     if (!h) return;
     const board = h.present;
     const dirtyIds = new Set(
-      board.zones.filter((z) => treatAllDirty || z.dirty).map((z) => z.id),
+      board.zones.filter((z) => treatAllDirty || z.dirty || !zoneFillIsCurrent(board, z)).map((z) => z.id),
     );
     if (dirtyIds.size === 0) return;
 
@@ -70,31 +73,19 @@ export function useZoneFills(editor: ZoneFillsEditor): ZoneFillsHandle {
     const current = h.present; // may have advanced during the yield
     const results = new Map(
       current.zones
-        .filter((z) => dirtyIds.has(z.id) || z.dirty)
-        .map((z) => [
-          z.id,
-          computeFill({
-            board: current,
-            zone: z,
-            effectiveClearance: makeEffectiveClearance(current, z),
-          }),
-        ]),
+        .filter((z) => dirtyIds.has(z.id) || z.dirty || !zoneFillIsCurrent(current, z))
+        .map((z) => [z.id, computeZoneFillCandidate(current, z)]),
     );
 
     h.applyDerived(ZONE_FILL_LABEL, (draft) => {
-      for (const zone of draft.zones) {
-        const r = results.get(zone.id);
-        if (!r) continue;
-        zone.fill = r.regions;
-        zone.dirty = false;
-      }
+      for (const candidate of results.values()) applyZoneFillCandidate(draft, candidate);
     });
     lastDerivedRef.current = h.present;
     setLastFillMs(Math.round((performance.now() - t0) * 10) / 10);
     setIsFilling(false);
   }, []);
 
-  const fillAllDirty = useCallback((): Promise<void> => runFill(false), [runFill]);
+  const fillAllDirty = useCallback((): Promise<void> => runFill(true), [runFill]);
 
   const board = editor.board;
   useEffect(() => {

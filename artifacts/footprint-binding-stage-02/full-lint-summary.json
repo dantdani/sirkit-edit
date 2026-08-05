@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "sirkit.eslint-summary.v1",
+  "command": "pnpm exec eslint . --max-warnings=0",
+  "exitCode": 1,
+  "filesInspected": 1143,
+  "errors": 30,
+  "warnings": 13,
+  "stage2Findings": 0,
+  "classification": "pre-existing findings outside footprint resolver and footprint resolution API paths",
+  "rawSourceEmbedded": false
+}

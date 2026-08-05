@@ -22,7 +22,7 @@ import type { LayerId } from "@/app/lib/pcb/layers";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import { createRouteTool, type RouteToolState } from "@/app/lib/pcb/route-tool";
 import { routeCommandLabel, mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
-import { computeConnectivity } from "@/app/lib/pcb/connectivity-board";
+import { computeElectricalTruth } from "@/app/lib/pcb/electrical-truth";
 import { renderRoutePreview } from "@/app/lib/pcb/render/route-preview";
 import { getNetClass } from "@/app/lib/pcb/netclass";
 import { resolveRoutingProfile } from "@/app/lib/pcb/routing-profile";
@@ -104,6 +104,8 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
         const event = "historyEvents" in cmd ? cmd.historyEvents?.at(-1) : undefined;
         const netId = "netId" in cmd
           ? cmd.netId
+          : cmd.kind === "CommitRouteCandidate"
+            ? cmd.candidate.request.startAnchor?.netId ?? cmd.candidate.delta.createdTracks[0]?.netId
           : cmd.kind === "PlaceViaAndFlipLayer"
             ? cmd.via.netId
             : cmd.kind === "StretchTrack"
@@ -111,6 +113,8 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
               : undefined;
         const layer = cmd.kind === "PlaceViaAndFlipLayer"
           ? cmd.via.layers[0]
+          : cmd.kind === "CommitRouteCandidate"
+            ? cmd.candidate.request.preferredLayer ?? cmd.candidate.delta.createdTracks[0]?.layer
           : cmd.kind === "CommitRouteSegment"
             ? cmd.segments[0]?.layer
             : cmd.kind === "StretchTrack"
@@ -120,7 +124,9 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
           operationType: cmd.kind,
           ...(netId === undefined ? {} : { netId }),
           ...(layer === undefined ? {} : { layer }),
-          ...(event ? { details: { candidateId: event.candidateId, mode: event.mode, direction: event.direction, rules: event.rules } } : {}),
+          ...(cmd.kind === "CommitRouteCandidate"
+            ? { details: { candidateId: cmd.candidate.candidateId, candidateDigest: cmd.candidate.candidateDigest, mode: cmd.candidate.request.routeMode, posture: cmd.candidate.request.posture } }
+            : event ? { details: { candidateId: event.candidateId, mode: event.mode, direction: event.direction, rules: event.rules } } : {}),
         });
       },
       {
@@ -128,6 +134,9 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
         getActiveLayer: () => editorRef.current.getActiveLayer?.() ?? "copperTop",
         netClass: (netId) => getNetClass(getBoard(), netId),
         routingProfile: (netId) => resolveRoutingProfile(getBoard(), netId),
+        onProtected: (objectIds) => editorRef.current.toast?.(
+          `${objectIds.length} locked copper object${objectIds.length === 1 ? " was" : "s were"} protected. Unlock explicitly before modifying.`,
+        ),
       },
     );
 
@@ -153,7 +162,7 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
       if (b === lastBoard) return;
       lastBoard = b;
       try {
-        scene.setAirwires(computeConnectivity(b).airwires);
+        scene.setAirwires(computeElectricalTruth(b).realized.airwires);
       } catch {
         /* board unmounted mid-frame */
       }
@@ -189,7 +198,7 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
           if (e.buttons & 2) {
             // Right-click → rip up the net under the cursor.
             if (tool.ripupNetAt(e.world)) {
-              editorRef.current.toast?.("Ripped up net");
+              editorRef.current.toast?.("Ripped up selected route segment");
               scheduleRender();
             }
             return;

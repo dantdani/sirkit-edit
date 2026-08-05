@@ -50,6 +50,13 @@ export type KicadPin = {
   position: { x: number; y: number };
   orientation: PinOrientation;
   length: number;
+  /** KiCad symbol unit/body identity. Additive for legacy cached rows. */
+  unit?: number;
+  bodyStyle?: number;
+  /** Hidden is electrical semantics, not merely a renderer preference. */
+  hidden?: boolean;
+  /** True when another graphical pin represents the same electrical identity. */
+  stacked?: boolean;
 };
 
 /**

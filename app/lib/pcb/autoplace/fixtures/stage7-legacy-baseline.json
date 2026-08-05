@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-17",
+  "algorithm": "legacy-force-clique/1",
+  "note": "Fresh pre-Stage-7 measurements. Runtime is observational; tests must not require this exact wall time.",
+  "fixtures": [
+    {
+      "id": "fixture-30",
+      "revision": "pcb2-0e3cf1b96631968e",
+      "seed": 3554712899,
+      "options": { "candidateCount": 2, "maxIterations": 400, "envelopeScale": 1.15 },
+      "runtimeMs": 191,
+      "before": { "hardProxyFailures": 4, "airwireCrossings": 42, "ratsnestLengthNm": 963679419, "estimatedViaDemand": 74 },
+      "after": { "hardProxyFailures": 0, "airwireCrossings": 7, "ratsnestLengthNm": 166683927, "estimatedViaDemand": 12, "collisionsResolved": 224 }
+    },
+    {
+      "id": "fixture-100",
+      "revision": "pcb2-84092a2e88cea4cd",
+      "seed": 1961901958,
+      "options": { "candidateCount": 2, "maxIterations": 400, "envelopeScale": 1.15 },
+      "runtimeMs": 216,
+      "before": { "hardProxyFailures": 8, "airwireCrossings": 125, "ratsnestLengthNm": 2774817617, "estimatedViaDemand": 217 },
+      "after": { "hardProxyFailures": 0, "airwireCrossings": 13, "ratsnestLengthNm": 422926090, "estimatedViaDemand": 27, "collisionsResolved": 683 }
+    }
+  ]
+}

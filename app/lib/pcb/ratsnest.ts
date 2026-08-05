@@ -1,6 +1,6 @@
 /**
- * Rats-nest airwires (PCB Stage 5) — per-net minimum spanning tree over pad
- * world positions, straight from `padNets`.
+ * Placement-only rats-nest proxy — per-net minimum spanning tree over pad
+ * world positions, straight from `padNets`. It never proves route completion.
  *
  * NOTE for Stage 6: once copper exists, `computeConnectivity().airwires`
  * (cluster-MST over copper-connected islands) supersedes this. The pad-MST
@@ -71,6 +71,9 @@ export function computeRatsnest(board: PcbBoard, changedNets?: number[]): Airwir
   }
   return out;
 }
+
+/** Explicit name for new placement/congestion consumers. */
+export const computePlacementRatsnestProxy = computeRatsnest;
 
 /** Pad world positions per net; `only` restricts the gather to those nets. */
 function gatherPads(board: PcbBoard, only: ReadonlySet<number> | null): Map<number, Vec2[]> {

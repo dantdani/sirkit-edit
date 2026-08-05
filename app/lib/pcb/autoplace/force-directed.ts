@@ -1,5 +1,5 @@
 /**
- * Force-directed placement core (PCB Stage 8) — the pinned algorithm.
+ * Force-directed placement core used by the Stage 7 global initializer.
  *
  * Springs pull netlist-connected footprints toward `springRestLengthNm`
  * apart, Coulomb 1/d² repulsion keeps every pair from collapsing, and a soft
@@ -45,6 +45,8 @@ export interface ForceDirectedResult {
   iterations: number;
   converged: boolean;
   finalMaxDisplacementNm: number;
+  hyperedgeCount: number;
+  springIncidences: number;
 }
 
 /** Broad-phase cutoff: skip repulsion when courtyard bboxes are > 20 mm apart. */
@@ -61,7 +63,7 @@ export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult
   const fps = [...input.footprints].sort((a, b) => a.id.localeCompare(b.id));
   const n = fps.length;
   if (n === 0) {
-    return { positions: new Map(), iterations: 0, converged: true, finalMaxDisplacementNm: 0 };
+    return { positions: new Map(), iterations: 0, converged: true, finalMaxDisplacementNm: 0, hyperedgeCount: 0, springIncidences: 0 };
   }
 
   const rng = mulberry32(params.seed);
@@ -113,8 +115,8 @@ export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult
     });
   }
 
-  // Spring graph from padNets: one spring per (pair, shared net). Stored as a
-  // pair → multiplicity map so a pair sharing k nets pulls k× as hard.
+  // O(k) hyperedges from padNets. A k-terminal net is represented by k
+  // member-to-center incidences, never k*(k-1)/2 pair springs.
   const indexById = new Map<string, number>(fps.map((f, i) => [f.id, i]));
   const netMembers = new Map<number, Set<number>>();
   for (const inst of board.footprints) {
@@ -130,24 +132,12 @@ export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult
       members.add(i);
     }
   }
-  const springCount = new Map<number, number>(); // key = i * n + j (i < j)
-  for (const members of netMembers.values()) {
-    const list = [...members].sort((a, b) => a - b);
-    for (let a = 0; a < list.length; a++) {
-      for (let b = a + 1; b < list.length; b++) {
-        const key = list[a] * n + list[b];
-        springCount.set(key, (springCount.get(key) ?? 0) + 1);
-      }
-    }
-  }
-  const springI: number[] = [];
-  const springJ: number[] = [];
-  const springMult: number[] = [];
-  for (const key of [...springCount.keys()].sort((a, b) => a - b)) {
-    springI.push(Math.floor(key / n));
-    springJ.push(key % n);
-    springMult.push(springCount.get(key) ?? 1);
-  }
+  const planeNetIds = new Set(board.zones.filter((zone) => zone.fillState?.status === "current" && zone.fill.length > 0).map((zone) => zone.netId));
+  const springEdges = [...netMembers.entries()]
+    .filter(([netId, members]) => !planeNetIds.has(netId) && members.size > 1)
+    .map(([netId, members]) => ({ netId, members: [...members].sort((a, b) => a - b) }))
+    .sort((a, b) => a.netId - b.netId);
+  const springIncidences = springEdges.reduce((sum, edge) => sum + edge.members.length, 0);
 
   const vx = new Float64Array(n);
   const vy = new Float64Array(n);
@@ -165,22 +155,28 @@ export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult
     fx.fill(0);
     fy.fill(0);
 
-    // Springs (attractive toward rest length; repels when compressed).
-    for (let s = 0; s < springI.length; s++) {
-      const i = springI[s];
-      const j = springJ[s];
-      const dx = x[j] - x[i];
-      const dy = y[j] - y[i];
-      const d = Math.max(Math.hypot(dx, dy), 1);
-      let f = springK * (d - springRestLengthNm) * springMult[s];
-      if (f > maxStepNm) f = maxStepNm; // cap per pair — no explosions
-      else if (f < -maxStepNm) f = -maxStepNm;
-      const ux = dx / d;
-      const uy = dy / d;
-      fx[i] += f * ux;
-      fy[i] += f * uy;
-      fx[j] -= f * ux;
-      fy[j] -= f * uy;
+    for (const edge of springEdges) {
+      const centerX = edge.members.reduce((sum, index) => sum + x[index], 0) / edge.members.length;
+      const centerY = edge.members.reduce((sum, index) => sum + y[index], 0) / edge.members.length;
+      const targetRadius = edge.members.length === 2
+        ? springRestLengthNm / 2
+        : springRestLengthNm * Math.max(0.75, Math.sqrt(edge.members.length) / 2);
+      const edgeScale = 1 / Math.sqrt(edge.members.length);
+      for (const i of edge.members) {
+        let dx = centerX - x[i];
+        let dy = centerY - y[i];
+        let distance = Math.hypot(dx, dy);
+        if (distance < 1) {
+          const angle = (((i * 31 + edge.netId * 17) % 360) * Math.PI) / 180;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        let force = springK * (distance - targetRadius) * edgeScale;
+        force = Math.max(-maxStepNm, Math.min(maxStepNm, force));
+        fx[i] += force * (dx / distance);
+        fy[i] += force * (dy / distance);
+      }
     }
 
     // Coulomb repulsion between every pair, broad-phased on bbox gap.
@@ -278,5 +274,5 @@ export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult
       fps[i].locked ? { ...fps[i].position } : { x: Math.round(x[i]), y: Math.round(y[i]) },
     );
   }
-  return { positions, iterations, converged, finalMaxDisplacementNm: maxDisp };
+  return { positions, iterations, converged, finalMaxDisplacementNm: maxDisp, hyperedgeCount: springEdges.length, springIncidences };
 }

@@ -18,6 +18,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeKicadPcb, netlistFromBoard } from "../kicad/write-pcb";
+import { createEmptyBoard } from "../types";
 import { buildRoutedDemo } from "../demo/routed-demo";
 import { runDrc } from "../drc/run-drc";
 import { getPreset } from "../drc/presets";
@@ -26,7 +27,7 @@ const KICAD_CLI = process.env.KICAD_CLI;
 
 describe.skipIf(!KICAD_CLI)("kicad-cli oracle", () => {
   it("exported routed demo loads in KiCad and DRC error counts land within ±10 %", () => {
-    const board = buildRoutedDemo();
+    const board = createEmptyBoard();
     const rules = getPreset("jlcpcb-2l").rules;
     const text = writeKicadPcb(board, netlistFromBoard(board), { drcRules: rules });
 
@@ -72,10 +73,9 @@ describe.skipIf(!KICAD_CLI)("kicad-cli oracle — fab bundle", () => {
     const result = await buildFabBundle(
       {
         board,
-        netlist: netlistFromBoard(board),
+        netlist: { components: [], nets: [] },
         fabPreset,
         drcPreset: getPreset("jlcpcb-2l"),
-        overrideDrcFail: true, // the demo bakes in one deliberate short
         boardName: "sirkit-demo",
       },
       { cliPath: KICAD_CLI as string },

@@ -25,13 +25,18 @@
  */
 
 import type { PcbBoard } from "../types";
+import { assertValidBoardReferences } from "../integrity";
 import type { PadShape } from "../geometry";
 import { transformPoint } from "../geometry";
 import type { LayerId } from "../layers";
 import { mmToNm } from "../units";
 import { getBoardStackup } from "../stackup";
 import { padWorldShape, padCopperLayers } from "../geometry-copper";
+import { physicalPadInstances } from "../pad-identity";
+import { computeElectricalTruth } from "../electrical-truth";
 import { getNetClass, DEFAULT_CLASSES, type NetClassId } from "../netclass";
+import { stackupPlaneZoneId } from "../zones/plane";
+import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
 import type {
   DsnBoard,
   DsnBoundary,
@@ -109,19 +114,42 @@ function activeDsnLayers(board: PcbBoard): DsnLayer[] {
   return stackup.copperLayers
     .filter((layer) => layer.enabled)
     .sort((a, b) => a.order - b.order)
-    .map((layer, index) => ({
-      name: layer.name,
-      type: layer.role === "plane" ? "power" : "signal",
-      index,
-      role: layer.role,
-      autorouteEnabled: layer.autorouteEnabled && layer.role !== "plane",
-      preferredDirection: layer.preferredDirection,
-      traceWidthNm: mmToNm(layer.defaultTraceWidthMm ?? 0.25),
-      planeNetName:
-        layer.role === "plane" && layer.planeNetId !== undefined
-          ? dsnNetName(board.nets.find((net) => net.id === layer.planeNetId) ?? { id: layer.planeNetId })
-          : undefined,
-    }));
+    .map((layer, index) => {
+      const zone = board.zones.find((candidate) =>
+        candidate.id === stackupPlaneZoneId(layer.id)
+        && candidate.source === "stackup-plane"
+        && candidate.sourceLayerId === layer.id
+        && candidate.netId === layer.planeNetId,
+      );
+      const net = zone ? board.nets.find((candidate) => candidate.id === zone.netId) : undefined;
+      const plane = zone && net?.stableId && zoneFillIsCurrent(board, zone) && zone.fill.length > 0 && zone.fillState?.fillHash
+        ? {
+            zoneId: zone.id,
+            stableNetId: net.stableId,
+            netName: dsnNetName(net),
+            polygonNm: zone.polygon.map((point) => ({ ...point })),
+            sourceRevision: zone.fillState.sourceRevision,
+            fillHash: zone.fillState.fillHash,
+            algorithmVersion: zone.fillState.algorithmVersion,
+            fillStatus: "current" as const,
+            regionCount: zone.fill.length,
+            holeCount: zone.fill.reduce((sum, region) => sum + region.holes.length, 0),
+            filledAreaNm2: zone.fill.reduce((sum, region) => sum + region.areaNm2, 0),
+            exportedRepresentationId: `dsn-plane:${layer.name}:${zone.id}`,
+            unsupportedConstructs: [],
+          }
+        : undefined;
+      return {
+        name: layer.name,
+        type: layer.role === "plane" ? "power" as const : "signal" as const,
+        index,
+        role: layer.role,
+        autorouteEnabled: layer.autorouteEnabled && layer.role !== "plane",
+        preferredDirection: layer.preferredDirection,
+        traceWidthNm: mmToNm(layer.defaultTraceWidthMm ?? 0.25),
+        ...(plane ? { planeNetName: plane.netName, plane } : {}),
+      };
+    });
 }
 
 function sortDsnLayers(ls: DsnLayerName[]): DsnLayerName[] {
@@ -208,29 +236,14 @@ function boardBoundary(board: PcbBoard): DsnBoundary {
   };
 }
 
-function stableBoardKey(board: PcbBoard): string {
-  return JSON.stringify({
-    stackup: board.stackup,
-    outline: board.outline,
-    nets: board.nets,
-    footprints: board.footprints.map((f) => ({
-      id: f.id,
-      ref: f.ref,
-      at: f.at,
-      rotationDeg: f.rotationDeg,
-      side: f.side,
-      padNets: f.padNets,
-      pads: f.def.pads.map((p) => ({ number: p.number, shape: p.shape, at: p.at, rotationDeg: p.rotationDeg })),
-    })),
-  });
-}
-
 export interface BoardToDsnOptions {
   /** When set, only these nets are offered as unrouted work. Existing copper on all nets remains protected. */
   includeNetIds?: readonly number[];
 }
 
 export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): DsnBoard {
+  assertValidBoardReferences(board);
+  const electricalTruth = computeElectricalTruth(board);
   const stackup = getBoardStackup(board);
   const dsnLayers = activeDsnLayers(board);
   const activeCopper = new Set<LayerId>(
@@ -258,48 +271,123 @@ export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): Ds
   // network can never reference a pin that has no image entry.
   const components: DsnComponent[] = [];
   const nodesByNet = new Map<number, DsnNetworkNode[]>();
+  const expectedEndpoints: NonNullable<DsnBoard["integrity"]>["expectedEndpoints"] = [];
   for (const inst of board.footprints) {
+    const emittedPads = physicalPadInstances(inst).flatMap((physicalPad) => {
+      const pad = physicalPad.pad;
+      if (pad.type === "np_thru_hole") return [];
+      const copper = padCopperLayers(inst, pad).filter((layer) => activeCopper.has(layer));
+      const layers = copper.map(layerIdToDsn).filter((layer): layer is DsnLayerName => layer !== null);
+      return layers.length > 0 ? [{ physicalPad, pad, layers }] : [];
+    });
+    const padNumberCounts = new Map<string, number>();
+    for (const { pad } of emittedPads) padNumberCounts.set(pad.number, (padNumberCounts.get(pad.number) ?? 0) + 1);
+    const padNumberOccurrences = new Map<string, number>();
+    const exportedPads = emittedPads.map(({ physicalPad, pad, layers }) => {
+      const occurrence = (padNumberOccurrences.get(pad.number) ?? 0) + 1;
+      padNumberOccurrences.set(pad.number, occurrence);
+      const exportPadNumber = (padNumberCounts.get(pad.number) ?? 0) > 1
+        ? `${pad.number}@${occurrence}`
+        : pad.number;
+      return { physicalPad, pad, layers, exportPadNumber };
+    });
+    const exportPadNumbersBySource = new Map<string, string[]>();
+    const physicalPadIdsBySource = new Map<string, string[]>();
+    for (const { physicalPad, pad, exportPadNumber } of exportedPads) {
+      const bucket = exportPadNumbersBySource.get(pad.number) ?? [];
+      bucket.push(exportPadNumber);
+      exportPadNumbersBySource.set(pad.number, bucket);
+      const physicalBucket = physicalPadIdsBySource.get(pad.number) ?? [];
+      physicalBucket.push(physicalPad.id);
+      physicalPadIdsBySource.set(pad.number, physicalBucket);
+    }
+    for (const mapping of inst.pinPadMappings ?? []) {
+      if (mapping.mappingKind === "intentional-no-connect" || mapping.mappingKind === "schematic-only") continue;
+      const netIds = new Set(mapping.padNumbers.map((padNumber) => inst.padNets[padNumber] ?? 0).filter((id) => id !== 0));
+      if (netIds.size !== 1) continue;
+      const netId = [...netIds][0];
+      const net = board.nets.find((candidate) => candidate.id === netId);
+      if (!net) continue;
+      expectedEndpoints.push({
+        endpointKey: mapping.endpointKey,
+        componentId: inst.id,
+        componentRef: inst.ref,
+        symbolPinNumber: mapping.symbolPinNumber,
+        sourcePadNumbers: [...mapping.padNumbers],
+        padNumbers: mapping.padNumbers.flatMap((padNumber) => exportPadNumbersBySource.get(padNumber) ?? []),
+        physicalPadInstanceIds: mapping.padNumbers.flatMap((padNumber) => physicalPadIdsBySource.get(padNumber) ?? []).sort(),
+        netId,
+        ...(net.stableId ? { netStableId: net.stableId } : {}),
+        netName: dsnNetName(net),
+      });
+    }
     const pins: DsnPin[] = [];
-    for (const pad of inst.def.pads) {
-      if (pad.type === "np_thru_hole") continue; // mechanical hole — never a routing target
-      const copper = padCopperLayers(inst, pad).filter((l) => activeCopper.has(l));
-      const dsnLayers = copper.map(layerIdToDsn).filter((l): l is DsnLayerName => l !== null);
-      if (dsnLayers.length === 0) continue; // non-copper pad — no routing target
+    for (const { physicalPad, pad, layers: dsnLayers, exportPadNumber } of exportedPads) {
       const ws = padWorldShape(inst, pad);
       const dsnShape = padShapeToDsn(ws.shape, ws.rotationDeg);
       const psName = internPadstack(dsnShape, pad.drill?.diameter, dsnLayers);
-      pins.push({ padNumber: pad.number, padstackName: psName, atNm: { x: ws.at.x, y: ws.at.y } });
+      pins.push({
+        padNumber: exportPadNumber,
+        sourcePadNumber: pad.number,
+        padInstanceId: physicalPad.id,
+        padstackName: psName,
+        atNm: { x: ws.at.x, y: ws.at.y },
+      });
 
       const netId = inst.padNets[pad.number];
       if (netId) {
         const list = nodesByNet.get(netId) ?? [];
-        list.push({ componentRef: inst.ref, padNumber: pad.number });
+        const endpointKey = inst.pinPadMappings?.find((mapping) => mapping.padNumbers.includes(pad.number))?.endpointKey;
+        list.push({
+          componentRef: inst.ref,
+          padNumber: exportPadNumber,
+          componentId: inst.id,
+          padInstanceId: physicalPad.id,
+          ...(endpointKey ? { endpointKey } : {}),
+        });
         nodesByNet.set(netId, list);
       }
     }
-    components.push({ ref: inst.ref, imageName: `img-${inst.id}`, pins });
+    components.push({ ref: inst.ref, imageName: `img-${inst.id}`, pins, componentId: inst.id });
   }
 
   const networks: DsnNetwork[] = [];
   const usedClasses = new Set<NetClassId>();
+  const effectiveByClass = new Map<NetClassId, ReturnType<typeof getNetClass>[]>();
   const includedNetIds = options.includeNetIds ? new Set(options.includeNetIds) : undefined;
   for (const net of board.nets) {
     if (net.id === 0) continue;
     if (includedNetIds && !includedNetIds.has(net.id)) continue;
     const nodes = nodesByNet.get(net.id);
     if (!nodes || nodes.length === 0) continue; // net with no pins won't route
-    const classRef = getNetClass(board, net.id).id as DsnClassId;
+    const effectiveClass = getNetClass(board, net.id);
+    const classRef = effectiveClass.id as DsnClassId;
     usedClasses.add(classRef);
+    effectiveByClass.set(classRef, [...(effectiveByClass.get(classRef) ?? []), effectiveClass]);
     networks.push({ name: dsnNetName(net), nodes, classRef });
   }
 
   // Vias — one candidate per class (Freerouting picks from these).
+  const viaNameByClass = new Map<NetClassId, string>();
+  const resolvedByClass = new Map<NetClassId, { trackWidth: number; clearance: number; viaSize: number; viaDrill: number }>();
   const vias: DsnVia[] = (Object.keys(VIA_NAME_BY_CLASS) as NetClassId[]).map((classId) => {
-    const name = VIA_NAME_BY_CLASS[classId];
+    const base = DEFAULT_CLASSES[classId];
+    const effective = effectiveByClass.get(classId) ?? [];
+    const resolved = {
+      trackWidth: Math.max(base.trackWidth, ...effective.map((item) => item.trackWidth)),
+      clearance: Math.max(base.clearance, ...effective.map((item) => item.clearance)),
+      viaSize: Math.max(base.viaSize, ...effective.map((item) => item.viaSize)),
+      viaDrill: Math.max(base.viaDrill, ...effective.map((item) => item.viaDrill)),
+    };
+    resolvedByClass.set(classId, resolved);
+    const name = resolved.viaSize === base.viaSize && resolved.viaDrill === base.viaDrill
+      ? VIA_NAME_BY_CLASS[classId]
+      : existingViaName(resolved.viaSize, resolved.viaDrill);
+    viaNameByClass.set(classId, name);
     return {
       name,
-      diameterNm: VIA_DIMENSIONS[name].sizeNm,
-      drillNm: VIA_DIMENSIONS[name].drillNm,
+      diameterNm: resolved.viaSize,
+      drillNm: resolved.viaDrill,
       onLayers: dsnLayers.map((l) => l.name),
       startLayer: dsnLayers[0].name,
       endLayer: dsnLayers[dsnLayers.length - 1].name,
@@ -327,21 +415,22 @@ export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): Ds
   const rules: DsnRule[] = [
     {
       scope: { kind: "default" },
-      widthNm: DEFAULT_CLASSES.Default.trackWidth,
-      clearanceNm: DEFAULT_CLASSES.Default.clearance,
-      viaCandidateName: VIA_NAME_BY_CLASS.Default,
+      widthNm: resolvedByClass.get("Default")!.trackWidth,
+      clearanceNm: resolvedByClass.get("Default")!.clearance,
+      viaCandidateName: viaNameByClass.get("Default")!,
       layerWidthsNm: Object.fromEntries(dsnLayers.map((layer) => [layer.name, layer.traceWidthNm])),
     },
   ];
   for (const classId of ["Default", "Power", "HighCurrent"] as NetClassId[]) {
     if (!usedClasses.has(classId)) continue;
+    const resolved = resolvedByClass.get(classId)!;
     rules.push({
       scope: { kind: "class", classId },
-      widthNm: DEFAULT_CLASSES[classId].trackWidth,
-      clearanceNm: DEFAULT_CLASSES[classId].clearance,
-      viaCandidateName: VIA_NAME_BY_CLASS[classId],
+      widthNm: resolved.trackWidth,
+      clearanceNm: resolved.clearance,
+      viaCandidateName: viaNameByClass.get(classId)!,
       layerWidthsNm: Object.fromEntries(
-        dsnLayers.map((layer) => [layer.name, Math.max(layer.traceWidthNm, DEFAULT_CLASSES[classId].trackWidth)]),
+        dsnLayers.map((layer) => [layer.name, Math.max(layer.traceWidthNm, resolved.trackWidth)]),
       ),
     });
   }
@@ -368,7 +457,7 @@ export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): Ds
   }
 
   return {
-    name: `sirkit-export-${fnv1a(stableBoardKey(board))}`,
+    name: `sirkit-export-${electricalTruth.designRevision}`,
     resolution: "um",
     boundary: boardBoundary(board),
     layers: dsnLayers,
@@ -379,6 +468,84 @@ export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): Ds
     rules,
     routingSettings: { ...stackup.routing },
     wiring,
+    integrity: {
+      schemaVersion: "sirkit.dsn-integrity.v2",
+      sourceRevision: electricalTruth.designRevision,
+      electricalTruthSchema: electricalTruth.schemaVersion,
+      nets: electricalTruth.nets.map((net) => ({
+        stableNetId: net.stableNetId,
+        numericNetId: net.netId,
+        serializedName: dsnNetName({ id: net.netId, name: net.name }),
+        endpointKeys: [...net.endpointKeys],
+        terminalGroupIds: [...net.terminalGroupIds],
+        physicalPadInstanceIds: [...net.physicalPadInstanceIds],
+      })).sort((a, b) => a.stableNetId.localeCompare(b.stableNetId)),
+      layers: dsnLayers.map((layer) => ({
+        layerId: stackup.copperLayers.find((candidate) => candidate.name === layer.name)?.id ?? layer.name,
+        dsnName: layer.name,
+      })),
+      planes: dsnLayers.flatMap((layer) => layer.plane ? [{
+        layerId: stackup.copperLayers.find((candidate) => candidate.name === layer.name)?.id ?? layer.name,
+        dsnName: layer.name,
+        zoneId: layer.plane.zoneId,
+        stableNetId: layer.plane.stableNetId,
+        sourceRevision: layer.plane.sourceRevision,
+        fillHash: layer.plane.fillHash,
+        algorithmVersion: layer.plane.algorithmVersion,
+        fillStatus: layer.plane.fillStatus,
+        regionCount: layer.plane.regionCount,
+        holeCount: layer.plane.holeCount,
+        filledAreaNm2: layer.plane.filledAreaNm2,
+        exportedRepresentationId: layer.plane.exportedRepresentationId,
+        unsupportedConstructs: [...layer.plane.unsupportedConstructs],
+      }] : []),
+      viaPadstacks: vias.map((via) => ({
+        name: via.name,
+        diameterNm: via.diameterNm,
+        drillNm: via.drillNm,
+        onLayers: [...via.onLayers],
+      })).sort((a, b) => a.name.localeCompare(b.name)),
+      expectedEndpoints: expectedEndpoints.sort((a, b) => a.endpointKey.localeCompare(b.endpointKey)),
+      ...(board.constraintState?.activeProgram ? {
+        constraintProgramHash: board.constraintState.activeProgram.programHash,
+        constraintLoss: (() => {
+          const loss: NonNullable<DsnBoard["integrity"]>["constraintLoss"] = [];
+          for (const classId of [...usedClasses].sort()) {
+            const members = effectiveByClass.get(classId) ?? [];
+            const signatures = new Set(members.map((item) => `${item.trackWidth}/${item.clearance}/${item.viaSize}/${item.viaDrill}`));
+            if (signatures.size > 1) loss.push({
+              constraintIds: [...new Set(members.flatMap((item) => item.constraintIds ?? []))].sort(),
+              disposition: "conservative",
+              severity: "warning",
+              message: `DSN class ${classId} conservatively uses the most restrictive width, clearance, and via dimensions across its member nets.`,
+            });
+          }
+          for (const net of board.nets.filter((item) => item.id !== 0 && item.stableId)) {
+            const physical = board.constraintState?.activeProgram?.lowerings.physicalByTarget[net.stableId!];
+            if (!physical) continue;
+            if (physical.allowedLayerIds || physical.forbiddenLayerIds) loss.push({
+              constraintIds: [...physical.constraintIds],
+              disposition: "unsupported",
+              severity: "error",
+              message: `FreeRouting DSN cannot preserve the exact per-net layer set for ${net.stableId}.`,
+            });
+            if (physical.allowedViaTypes || physical.allowedViaSpans) loss.push({
+              constraintIds: [...physical.constraintIds],
+              disposition: "unsupported",
+              severity: "error",
+              message: `FreeRouting DSN cannot prove the exact per-net via type/span policy for ${net.stableId}.`,
+            });
+            if (physical.maxViaCount !== undefined) loss.push({
+              constraintIds: [...physical.constraintIds],
+              disposition: "post_route_check",
+              severity: "warning",
+              message: `Maximum via count for ${net.stableId} requires deterministic post-route evaluation.`,
+            });
+          }
+          return loss.sort((a, b) => a.severity.localeCompare(b.severity) || a.message.localeCompare(b.message));
+        })(),
+      } : {}),
+    },
   };
 }
 
@@ -438,8 +605,11 @@ export function writeDsn(dsn: DsnBoard): string {
   const closed = first ? `${boundaryCoords} ${n(first.x)} ${n(first.y)}` : boundaryCoords;
   L.push(`    (boundary (path pcb 0 ${closed}))`);
   for (const layer of dsn.layers) {
-    if (layer.role !== "plane" || !layer.planeNetName) continue;
-    L.push(`    (plane ${q(layer.planeNetName)} (polygon ${layer.name} 0 ${closed}))`);
+    if (layer.role !== "plane" || !layer.plane) continue;
+    const coords = layer.plane.polygonNm.map((point) => `${n(point.x)} ${n(point.y)}`).join(" ");
+    const firstPlanePoint = layer.plane.polygonNm[0];
+    const closedPlane = firstPlanePoint ? `${coords} ${n(firstPlanePoint.x)} ${n(firstPlanePoint.y)}` : coords;
+    L.push(`    (plane ${q(layer.plane.netName)} (polygon ${layer.name} 0 ${closedPlane}))`);
   }
   L.push(`    (via ${dsn.vias.map((v) => q(v.name)).join(" ")})`);
   const defRule = dsn.rules.find((r) => r.scope.kind === "default");

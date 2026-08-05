@@ -27,7 +27,7 @@ export function LayerPanel({
   onActivate: (layer: LayerId) => void;
   onIsolate: (layer: LayerId) => void;
   onShowAllCopper: () => void;
-  layerUsage?: Partial<Record<LayerId, { segments: number; trackLengthNm: number }>>;
+  layerUsage?: Partial<Record<LayerId, { segments: number; trackLengthNm: number; filledAreaNm2?: number; zoneIds?: string[] }>>;
 }) {
   const rows = LAYERS.filter(
     (l) => stackup === 4 || (l.id !== "in1" && l.id !== "in2"),
@@ -79,7 +79,9 @@ export function LayerPanel({
                   {layer.displayName}
                 </span>
                 {layerUsage?.[layer.id] && (
-                  <span className="text-[8px] text-zinc-600">{layerUsage[layer.id]!.segments}</span>
+                  <span className="text-[8px] text-zinc-600">
+                    {layerUsage[layer.id]!.filledAreaNm2 ? `${layerUsage[layer.id]!.zoneIds?.length ?? 0}Z` : layerUsage[layer.id]!.segments}
+                  </span>
                 )}
                 {active && <span className="text-[8px] font-semibold tracking-wider text-teal-400">ACTIVE</span>}
               </button>

@@ -1,7 +1,7 @@
 import type { PcbBoard } from "./types";
-import { computeConnectivity } from "./connectivity-board";
+import { computeElectricalTruth } from "./electrical-truth";
 import { getBoardStackup } from "./stackup";
-import { analyzePlacementRouteability } from "./autoplace/routeability";
+import { runEngineeringPlacement } from "./placement/engine";
 import { boardToDsn, writeDsn } from "./dsn/write-dsn";
 import { validateDsn } from "./dsn/preflight";
 
@@ -22,7 +22,11 @@ export function runRoutingAiTool(board: PcbBoard, request: RoutingAiToolRequest)
     case "getStackup":
       return getBoardStackup(board);
     case "analyzeRouteability":
-      return analyzePlacementRouteability(board);
+      {
+        const run = runEngineeringPlacement({ board, options: { projectId: "routing-ai", candidateCount: 2, localRefinementPasses: 0 } });
+        const candidate = run.candidates.find((item) => item.candidateId === run.selectedCandidateId) ?? run.candidates[0];
+        return { problemHash: run.problem.problemHash, constraintProgramHash: run.problem.constraintProgramHash, termination: run.termination, hardReport: candidate?.hardReport, congestion: candidate?.congestion, pinEscape: candidate?.pinEscape, viaPressure: candidate?.viaPressure, objectives: candidate?.objectiveReport, proxyWarning: "Placement evidence is not routing completion or engineering signoff." };
+      }
     case "getLayerUsage": {
       const usage = Object.fromEntries(
         getBoardStackup(board).copperLayers.filter((layer) => layer.enabled).map((layer) => [layer.id, {
@@ -44,12 +48,15 @@ export function runRoutingAiTool(board: PcbBoard, request: RoutingAiToolRequest)
       return usage;
     }
     case "getUnroutedConnections": {
-      const connectivity = computeConnectivity(board);
+      const electricalTruth = computeElectricalTruth(board);
       return {
-        completion: connectivity.completion,
-        airwires: connectivity.airwires,
-        shorts: connectivity.shorts,
-        incompleteNets: [...connectivity.nets.values()].filter((net) => !net.complete),
+        designRevision: electricalTruth.designRevision,
+        completion: electricalTruth.realized,
+        airwires: electricalTruth.realized.airwires,
+        shorts: electricalTruth.shorts,
+        orphanCopper: electricalTruth.orphanCopper,
+        unresolved: electricalTruth.unresolved,
+        incompleteNets: electricalTruth.nets.filter((net) => net.remainingConnections > 0),
       };
     }
     case "prepareAutoroute": {
@@ -64,7 +71,7 @@ export const ROUTING_AI_TOOL_DESCRIPTIONS: ReadonlyArray<{
   description: string;
 }> = [
   { name: "getStackup", description: "Read canonical copper layers, roles, directions, plane nets, and autoroute policy." },
-  { name: "analyzeRouteability", description: "Score placement congestion, pad access, outline fit, airwire crossings, and estimated via demand." },
+  { name: "analyzeRouteability", description: "Inspect Stage 7 physical cutline capacity, pad escape, via pressure, and normalized placement evidence without claiming routing completion." },
   { name: "getLayerUsage", description: "Report existing track length, segment count, and via activity by physical copper layer." },
   { name: "getUnroutedConnections", description: "Return exact pad-level connectivity, remaining airwires, incomplete nets, and shorts." },
   { name: "prepareAutoroute", description: "Generate and preflight the exact multilayer DSN without launching or mutating the board." },

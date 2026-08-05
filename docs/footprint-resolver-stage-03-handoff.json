@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "sirkit.footprint-resolver-stage3-handoff.v1",
+  "resolverVersion": "sirkit.footprint-resolver/2.0.0",
+  "publicService": "app/lib/footprint-resolver/service.ts#FootprintResolutionService",
+  "api": "app/api/footprint-resolution/route.ts",
+  "productionAuthority": "legacy_until_stage3",
+  "readOnly": true,
+  "acceptedInput": {
+    "schemaVersion": "sirkit.footprint-resolution-request.v1",
+    "requiredScope": ["tenantId", "projectId", "branchId", "boardInstanceId", "componentId", "hierarchyPath", "assemblyVariantId"],
+    "revisionGuards": ["expectedComponentRevision", "expectedBindingSetDigest"],
+    "layoutPurpose": "layout_transfer"
+  },
+  "onlyTransferableOutput": {
+    "condition": "result.status === resolved",
+    "field": "result.resolvedBinding",
+    "requiredProof": ["bindingRevisionId", "bindingTechnicalDigest", "footprintAsset.assetVersionId", "footprintAsset.contentDigest", "packageIdentity.packageRevisionId", "pinPadMapping.mappingCertificateId", "dependencyDigest", "readiness.layout"]
+  },
+  "mustReject": [
+    "all non-resolved statuses",
+    "suggestedCandidates",
+    "legacy footprint strings",
+    "display-name-only identity",
+    "mismatched dependency digest or binding revision",
+    "unverified or stale mapping",
+    "manufacturing claim when manufacturing readiness is not ready"
+  ],
+  "requiredStage3Transaction": [
+    "capture one schematic/board revision snapshot",
+    "resolve every populated component for the exact assembly variant",
+    "fail before mutation when any component is unresolved or stale",
+    "revalidate result dependency/revision guards",
+    "apply exact immutable assets and certified pin-pad mappings atomically",
+    "preserve manual board edits under documented reconciliation rules",
+    "record one undoable project-history event",
+    "run connectivity and DRC validation",
+    "roll back the whole transaction on failure"
+  ],
+  "rollout": {
+    "shadowFlag": "SIRKIT_FOOTPRINT_RESOLVER_SHADOW",
+    "baseline": "app/lib/pcb/netlist-bridge.ts#syncFromSchematic",
+    "comparison": "app/lib/footprint-resolver/shadow.ts#compareLegacyResolution",
+    "cutoverForbiddenUntil": ["Stage 1 isolated PostgreSQL apply/rollback/restart qualification", "Stage 3 acceptance suite", "explicit rollout approval"]
+  },
+  "deferredOwnership": {
+    "stage4": "new pin-pad verification",
+    "stage5": "passive package policy",
+    "stage6": "user decision and approval workflow",
+    "stage9": "AI/catalog suggestion enrichment only",
+    "stage10": "generated/custom footprint overlays"
+  }
+}

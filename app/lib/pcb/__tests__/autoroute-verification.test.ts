@@ -31,6 +31,26 @@ describe("autoroute candidate verification", () => {
     expect(after.layerUsage.copperTop?.segments).toBe(1);
   });
 
+  it("does not call a connected but fabrication-invalid thin route complete", () => {
+    const footprint = makeInstance("r1", makeResistorDef(), { x: 10, y: 10 }, { "1": 1, "2": 1 });
+    const board = makeBoard(30, 20, [footprint], 1);
+    const candidate = buildAutorouteCandidate(board, {
+      tracks: [{
+        id: "thin",
+        layer: "copperTop",
+        width: mmToNm(0.05),
+        start: { x: mmToNm(9.1), y: mmToNm(10) },
+        end: { x: mmToNm(10.9), y: mmToNm(10) },
+        netId: 1,
+      }],
+      vias: [],
+    });
+    const result = verifyAutorouteCandidate(candidate, getPreset("jlcpcb-2l").rules);
+    expect(result).toMatchObject({ remainingConnections: 0, status: "partial" });
+    expect(result.routeBlockingDrcErrors).toBeGreaterThan(0);
+    expect(result.violations.some((violation) => violation.kind === "minTrackWidth")).toBe(true);
+  });
+
   it("accepts a forced two-layer crossing only when legal vias complete both nets and DRC passes", () => {
     const onePad = makeDef("ONE_PAD", 1, 1, [makePad("1", 0, 0)]);
     const board = makeBoard(20, 20, [

@@ -92,8 +92,15 @@ export function renderRoutePreview(
   }
 
   if (toolState.kind === "routing") {
-    const { activeLayer, trackWidth, clearance, anchor, preview } = toolState;
+    const { activeLayer, trackWidth, clearance, anchor, preview, stagedTracks, stagedVias } = toolState;
     const pts = preview.points?.length ? [...preview.points] : [anchor, preview.corner, preview.end];
+    for (const track of stagedTracks) {
+      dashedPath(g, [track.start, track.end], mm(track.width), layerColor(track.layer), SELECTED_ALPHA);
+    }
+    for (const via of stagedVias) {
+      g.circle(mm(via.at.x), mm(via.at.y), mm(via.size / 2));
+      g.stroke({ width: Math.max(0.08, mm(via.size - via.drill) / 2), color: layerColor(activeLayer), alpha: SELECTED_ALPHA });
+    }
     for (const candidate of preview.candidates ?? []) {
       if (candidate.id === preview.selectedCandidateId) continue;
       dashedPath(g, [...candidate.points], mm(trackWidth), layerColor(activeLayer), ALTERNATIVE_ALPHA);

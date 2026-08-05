@@ -74,11 +74,12 @@ export function makeInstance(
 export function makeBoard(wMm: number, hMm: number, footprints: LockableInstance[], netCount: number): PcbBoard {
   return {
     formatVersion: 1,
+    identityVersion: 1,
     stackup: 2,
     outline: { kind: "rect", width: mmToNm(wMm), height: mmToNm(hMm), origin: { x: 0, y: 0 } },
     nets: [
-      { id: 0, name: "" },
-      ...Array.from({ length: netCount }, (_, i) => ({ id: i + 1, name: `NET_${i + 1}` })),
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      ...Array.from({ length: netCount }, (_, i) => ({ id: i + 1, name: `NET_${i + 1}`, stableId: `net:fixture-${i + 1}`, endpointKeys: [] })),
     ],
     footprints,
     tracks: [],

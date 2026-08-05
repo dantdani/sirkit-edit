@@ -15,8 +15,11 @@
  * re-add loses original array position, which is immaterial to the board).
  */
 
-import { produce } from "immer";
+import { current, isDraft, produce } from "immer";
 import type { PcbBoard, RoutingHistoryEvent, Track, Via } from "./types";
+import { commitRouteCandidate } from "./routing/candidate";
+import type { RouteCandidate } from "./routing/types";
+import { canMutateCopper } from "./routing/protection";
 
 interface RoutingHistoryPayload {
   historyEvents?: RoutingHistoryEvent[];
@@ -25,9 +28,11 @@ interface RoutingHistoryPayload {
 interface RemovedCopper extends RoutingHistoryPayload {
   tracks: Track[];
   vias: Via[];
+  protected?: { tracks: Track[]; vias: Via[] };
 }
 
 export type RouteCommand =
+  | ({ kind: "CommitRouteCandidate"; candidate: RouteCandidate; actorId: string } & RoutingHistoryPayload)
   | ({ kind: "CommitRouteSegment"; segments: Track[]; netId: number } & RoutingHistoryPayload)
   | ({ kind: "PlaceViaAndFlipLayer"; via: Via; segments: Track[] } & RoutingHistoryPayload)
   | { kind: "StretchTrack"; before: Track[]; after: Track[] } // matched by id
@@ -41,6 +46,7 @@ export type RouteCommand =
       vias: Via[];
       replacedNetIds: number[];
       removed: { tracks: Track[]; vias: Via[] };
+      protected?: { tracks: Track[]; vias: Via[] };
     };
 
 function cloneTrack(t: Track): Track {
@@ -72,6 +78,18 @@ function appendHistory(board: PcbBoard, events?: readonly RoutingHistoryEvent[])
  */
 export function mutateBoardWithCommand(board: PcbBoard, cmd: RouteCommand): void {
   switch (cmd.kind) {
+    case "CommitRouteCandidate": {
+      const source = isDraft(board) ? current(board) as PcbBoard : board;
+      const committed = commitRouteCandidate({ board: source, candidate: cmd.candidate, actorId: cmd.actorId });
+      if (!committed.ok) return;
+      board.tracks = committed.board.tracks.map(cloneTrack);
+      board.vias = committed.board.vias.map(cloneVia);
+      board.zones = structuredClone(committed.board.zones);
+      if (committed.board.constraintState) board.constraintState = structuredClone(committed.board.constraintState);
+      else delete board.constraintState;
+      appendHistory(board, cmd.historyEvents);
+      return;
+    }
     case "CommitRouteSegment":
       for (const s of cmd.segments) board.tracks.push(cloneTrack(s));
       appendHistory(board, cmd.historyEvents);
@@ -82,6 +100,9 @@ export function mutateBoardWithCommand(board: PcbBoard, cmd: RouteCommand): void
       appendHistory(board, cmd.historyEvents);
       return;
     case "StretchTrack": {
+      const targetIds = new Set(cmd.after.map((track) => track.id));
+      const scope = { mutationScope: { kind: "selected_objects" as const, objectIds: [...targetIds].map((id) => `track:${id}`) }, preservePolicy: "selected_manual_movable" as const };
+      if (board.tracks.some((track) => targetIds.has(track.id) && !canMutateCopper(track, scope).allowed)) return;
       const after = new Map(cmd.after.map((t) => [t.id, t]));
       board.tracks = board.tracks.map((t) => {
         const next = after.get(t.id);
@@ -90,8 +111,13 @@ export function mutateBoardWithCommand(board: PcbBoard, cmd: RouteCommand): void
       return;
     }
     case "RipupNet":
-      board.tracks = board.tracks.filter((t) => t.netId !== cmd.netId);
-      board.vias = board.vias.filter((v) => v.netId !== cmd.netId);
+      {
+        const removedTracks = new Set(cmd.removed.tracks.map((track) => track.id));
+        const removedVias = new Set(cmd.removed.vias.map((via) => via.id));
+        const scope = { mutationScope: { kind: "selected_objects" as const, objectIds: [...removedTracks].map((id) => `track:${id}`).concat([...removedVias].map((id) => `via:${id}`)) }, preservePolicy: "selected_manual_movable" as const };
+        board.tracks = board.tracks.filter((track) => !removedTracks.has(track.id) || !canMutateCopper(track, scope).allowed);
+        board.vias = board.vias.filter((via) => !removedVias.has(via.id) || !canMutateCopper(via, scope).allowed);
+      }
       if (cmd.removed.historyEvents?.length && board.routingHistory) {
         const removed = new Set(cmd.removed.historyEvents.map((event) => event.id));
         const remaining = board.routingHistory.filter((event) => !removed.has(event.id));
@@ -101,10 +127,12 @@ export function mutateBoardWithCommand(board: PcbBoard, cmd: RouteCommand): void
       return;
     case "AutorouteImport": {
       const replaced = new Set(cmd.replacedNetIds);
-      board.tracks = board.tracks.filter((t) => !replaced.has(t.netId));
-      board.vias = board.vias.filter((v) => !replaced.has(v.netId));
-      for (const t of cmd.tracks) board.tracks.push(cloneTrack(t));
-      for (const v of cmd.vias) board.vias.push(cloneVia(v));
+      const lockedTrackIds = new Set(board.tracks.filter((track) => track.locked).map((track) => track.id));
+      const lockedViaIds = new Set(board.vias.filter((via) => via.locked).map((via) => via.id));
+      board.tracks = board.tracks.filter((track) => !replaced.has(track.netId) || track.locked === true);
+      board.vias = board.vias.filter((via) => !replaced.has(via.netId) || via.locked === true);
+      for (const track of cmd.tracks) if (!lockedTrackIds.has(track.id)) board.tracks.push(cloneTrack(track));
+      for (const via of cmd.vias) if (!lockedViaIds.has(via.id)) board.vias.push(cloneVia(via));
       return;
     }
   }
@@ -124,6 +152,8 @@ export function applyRouteCommand(board: PcbBoard, cmd: RouteCommand): PcbBoard 
  */
 export function invertRouteCommand(cmd: RouteCommand): RouteCommand {
   switch (cmd.kind) {
+    case "CommitRouteCandidate":
+      throw new Error("invertRouteCommand: immutable route candidates use the history patch stack for exact undo");
     case "CommitRouteSegment":
       return {
         kind: "RipupNet",
@@ -177,21 +207,45 @@ export function invertRouteCommand(cmd: RouteCommand): RouteCommand {
         vias: cmd.removed.vias.map(cloneVia),
         replacedNetIds: [...cmd.replacedNetIds],
         removed: { tracks: cmd.tracks.map(cloneTrack), vias: cmd.vias.map(cloneVia) },
+        ...(cmd.protected ? { protected: { tracks: cmd.protected.tracks.map(cloneTrack), vias: cmd.protected.vias.map(cloneVia) } } : {}),
       };
   }
 }
 
 /** Collect a net's entire copper for a `RipupNet` command (per-net ripup UI). */
 export function buildRipupNetCommand(board: PcbBoard, netId: number): RouteCommand {
+  const protectedTracks = board.tracks.filter((track) => track.netId === netId && track.locked === true);
+  const protectedVias = board.vias.filter((via) => via.netId === netId && via.locked === true);
+  const protectedTrackIds = new Set(protectedTracks.map((track) => track.id));
   return {
     kind: "RipupNet",
     netId,
     removed: {
-      tracks: board.tracks.filter((t) => t.netId === netId).map(cloneTrack),
-      vias: board.vias.filter((v) => v.netId === netId).map(cloneVia),
-      ...((board.routingHistory?.some((event) => event.netId === netId) ?? false)
-        ? { historyEvents: board.routingHistory?.filter((event) => event.netId === netId).map(cloneHistoryEvent) }
+      tracks: board.tracks.filter((track) => track.netId === netId && track.locked !== true).map(cloneTrack),
+      vias: board.vias.filter((via) => via.netId === netId && via.locked !== true).map(cloneVia),
+      protected: { tracks: protectedTracks.map(cloneTrack), vias: protectedVias.map(cloneVia) },
+      ...((board.routingHistory?.some((event) => event.netId === netId && event.segmentIds.every((id) => !protectedTrackIds.has(id))) ?? false)
+        ? { historyEvents: board.routingHistory?.filter((event) => event.netId === netId && event.segmentIds.every((id) => !protectedTrackIds.has(id))).map(cloneHistoryEvent) }
         : {}),
+    },
+  };
+}
+
+/** Default interactive rip-up is deliberately selection-scoped; whole-net rip-up remains an explicit command. */
+export function buildRipupSelectionCommand(board: PcbBoard, trackId: string): RouteCommand | null {
+  const track = board.tracks.find((candidate) => candidate.id === trackId);
+  if (!track || track.netId === 0) return null;
+  const scope = { mutationScope: { kind: "selected_objects" as const, objectIds: [`track:${track.id}`] }, preservePolicy: "selected_manual_movable" as const };
+  const decision = canMutateCopper(track, scope);
+  const historyEvents = board.routingHistory?.filter((event) => event.segmentIds.length === 1 && event.segmentIds[0] === track.id);
+  return {
+    kind: "RipupNet",
+    netId: track.netId,
+    removed: {
+      tracks: decision.allowed ? [cloneTrack(track)] : [],
+      vias: [],
+      protected: { tracks: decision.allowed ? [] : [cloneTrack(track)], vias: [] },
+      ...(historyEvents?.length ? { historyEvents: historyEvents.map(cloneHistoryEvent) } : {}),
     },
   };
 }
@@ -201,6 +255,8 @@ export function routeCommandLabel(cmd: RouteCommand, board?: PcbBoard): string {
   const netName = (netId: number): string =>
     board?.nets.find((n) => n.id === netId)?.name || `net ${netId}`;
   switch (cmd.kind) {
+    case "CommitRouteCandidate":
+      return `Route ${netName(cmd.candidate.request.startAnchor?.netId ?? cmd.candidate.delta.createdTracks[0]?.netId ?? 0)}`;
     case "CommitRouteSegment":
       return `Route ${netName(cmd.netId)}`;
     case "PlaceViaAndFlipLayer":

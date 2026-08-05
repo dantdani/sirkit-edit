@@ -1,0 +1,11 @@
+import { normalizeSchematicChangeProposal } from "./agent-tools";
+import { CD8_CORPUS_MANIFEST } from "./corpus";
+import { createEmptySchematicGraph } from "./graph";
+import { schematicDigest } from "./stable";
+import type { SchematicCompilationProblem } from "./types";
+export function executeSchematicCompilerBenchmark(operation: string): Record<string, unknown> {
+  if (operation === "schematic_compiler_manifest") return { fixtureCount: CD8_CORPUS_MANIFEST.length, invalidManifestHashes: CD8_CORPUS_MANIFEST.filter((item) => item.immutableManifestHash !== schematicDigest({ fixtureId: item.fixtureId, family: item.family, title: item.title, expectedOutcome: item.expectedOutcome, sourceLicenseId: item.sourceLicenseId, provenance: item.provenance, implementationState: item.implementationState })).length, fullyImplementedEvidenceFixtures: 0, manifestOnlyCasesVisible: CD8_CORPUS_MANIFEST.length };
+  if (operation === "schematic_compiler_authority") { const graph = createEmptySchematicGraph({ projectId: "benchmark", variantIds: ["default"], dependencyRefs: ["pinned"], namingPolicyRevisionId: "policy" }), problem = { projectId: "benchmark", deterministicDigest: "benchmark-problem" } as SchematicCompilationProblem; const proposal = normalizeSchematicChangeProposal({ proposalKind: "review_questions", referencedSemanticObjectIds: [graph.graphId], proposedActions: [{ actionKind: "request_review", targetObjectIds: [graph.graphId], rationale: "Review missing exact connections" }], assumptions: [], warnings: [] }, problem, graph); return { coordinateCreatesConnectivity: false, matchingLabelsMergeNets: false, aiCanMutateGraph: proposal.authority !== "proposal_only", unsupportedAdapterCanApprove: false, pcbMutated: false }; }
+  if (operation === "schematic_compiler_scale") { const objects = Array.from({ length: 10_000 }, (_, index) => ({ componentId: `component:${index}`, pinIds: [`pin:${index}:a`, `pin:${index}:b`], netId: `net:${index % 1000}`, variant: index % 2 ? "a" : "b" })), first = schematicDigest(objects), second = schematicDigest([...objects]); return { semanticObjectCount: objects.length, deterministic: first === second, digestPresent: first.startsWith("sch8-") }; }
+  throw new Error(`SCHEMATIC_COMPILER_BENCHMARK_OPERATION_UNSUPPORTED:${operation}`);
+}

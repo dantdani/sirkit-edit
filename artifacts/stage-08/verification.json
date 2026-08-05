@@ -1,0 +1,19 @@
+{
+  "schema": "sirkit.stage08-verification.v1",
+  "date": "2026-07-17",
+  "environment": { "os": "Windows", "node": "v24.15.0", "npm": "11.12.1", "cpu": "Intel Core Ultra 5 125U", "cores": 12, "logicalProcessors": 14 },
+  "commands": [
+    { "command": "npx tsc --noEmit", "result": "passed" },
+    { "command": "npx vitest run app/lib/pcb/__tests__/stage-08-professional-routing.test.ts app/lib/pcb/__tests__/route-tool.test.ts --reporter=dot", "result": "2 files, 35 tests passed" },
+    { "command": "npm test -- --reporter=dot", "result": "125 files passed, 2 skipped; 792 tests passed, 9 skipped" },
+    { "command": "npx eslint <Stage 8 changed paths>", "result": "passed" },
+    { "command": "npm run build", "result": "passed with pre-existing broad executable discovery warnings" }
+  ],
+  "performance": [
+    { "fixture": "500 background tracks, focused run", "operation": "direct pointer preview", "samples": 200, "p50Ms": 5.934, "p95Ms": 9.313, "maxMs": 11.315, "budget": "p50 < 50 ms regression sentinel", "result": "passed" },
+    { "fixture": "500 background tracks, full parallel suite", "operation": "direct pointer preview", "samples": 200, "p50Ms": 18.492, "p95Ms": 53.062, "maxMs": 99.130, "budget": "p50 < 50 ms regression sentinel", "result": "passed; loaded-run tail recorded" },
+    { "fixture": "forced obstacle", "operation": "walk-around pointer preview", "samples": 80, "p95Ms": 0.321, "budget": "p95 < 50 ms", "result": "passed" }
+  ],
+  "skips": { "testFiles": 2, "tests": 9, "stage08RequiredMatrixComplete": false },
+  "verdict": "STAGE 8 INCOMPLETE"
+}

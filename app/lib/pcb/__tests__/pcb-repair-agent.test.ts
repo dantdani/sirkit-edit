@@ -54,7 +54,10 @@ function repair71Board(): PcbBoard {
   return {
     ...createEmptyBoard(),
     outline: { kind: "rect", origin: { x: 0, y: 0 }, width: mmToNm(152), height: mmToNm(10) },
-    nets: [{ id: 0, name: "" }, { id: 1, name: "FIXTURE" }],
+    nets: [
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      { id: 1, name: "FIXTURE", stableId: "net:fixture", endpointKeys: [] },
+    ],
     footprints,
     tracks,
   };
@@ -65,7 +68,7 @@ describe("engine-grounded PCB repair", () => {
     const board = repair71Board();
     const rules = getPreset("jlcpcb-2l").rules;
     const before = runDrc(board, rules);
-    expect(before.readiness.errors).toBe(71);
+    expect(before.summary.errors).toBe(71);
     expect(before.violations.every((violation) => violation.kind === "minTrackWidth")).toBe(true);
     const plan = planDrcRepairs(board, before, rules);
     expect(plan.groups).toHaveLength(1);
@@ -79,7 +82,7 @@ describe("engine-grounded PCB repair", () => {
 
     const history = createHistory(board);
     expect(applyRepairTransaction(history, plan, preview, []).ok).toBe(true);
-    expect(runDrc(history.present, rules).readiness.errors).toBe(0);
+    expect(runDrc(history.present, rules).summary.errors).toBe(0);
     expect(history.events.at(-1)).toMatchObject({ actor: "ai", operation: "pcb_repair", transactionId: preview.id });
     history.undo();
     expect(history.present.tracks.every((track) => track.width === mmToNm(0.05))).toBe(true);
@@ -87,8 +90,8 @@ describe("engine-grounded PCB repair", () => {
 
   it("builds a versioned all-layer snapshot with exact normalized DRC values under the performance target", () => {
     const board = repair71Board();
-    const snapshot = buildAIPcbSnapshot(board, { schematicParity: "pass" });
-    expect(snapshot.schemaVersion).toBe("sirkit.ai-pcb.v1");
+    const snapshot = buildAIPcbSnapshot(board);
+    expect(snapshot.schemaVersion).toBe("sirkit.ai-pcb.v3");
     expect(snapshot.units).toBe("mm");
     expect(snapshot.drcSummary.errors).toBe(71);
     expect(snapshot.drcSummary.violations[0]).toMatchObject({
@@ -129,6 +132,7 @@ describe("engine-grounded PCB repair", () => {
       "get_footprint", "get_net", "get_track", "get_via", "get_zone",
       "preview_drc_repairs", "apply_drc_repairs", "undo_transaction",
       "run_autorouter", "reroute_nets", "ripup_nets", "optimize_local_placement", "refill_zones", "verify_connectivity",
+      "evaluate_autonomous_capability", "qualify_autonomous_layout",
     ]));
     const board = repair71Board();
     const service = new PCBToolService({ history: createHistory(board), rules: getPreset("jlcpcb-2l").rules });
@@ -139,6 +143,15 @@ describe("engine-grounded PCB repair", () => {
       immutableDuringRepair: true,
       ruleWeakeningAllowed: false,
     });
+    expect(await service.call("evaluate_autonomous_capability")).toMatchObject({
+      status: "unsupported",
+      placementMayStart: false,
+      blockers: expect.arrayContaining([
+        expect.objectContaining({ code: "CAP_COUNT_LIMIT_EXCEEDED" }),
+        expect.objectContaining({ code: "CAP_RISK_DECLARATION_MISSING" }),
+      ]),
+    });
+    await expect(service.call("qualify_autonomous_layout")).rejects.toThrow("requires the RC02 router executor");
   });
 
   it("diffs exact snapshot objects by stable ID", () => {

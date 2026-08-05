@@ -55,8 +55,8 @@ describe("autoroute integration (coordinate contract, no JAR)", () => {
     const board: PcbBoard = {
       ...createEmptyBoard(),
       nets: [
-        { id: 0, name: "" },
-        { id: 1, name: "SIG" },
+        { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+        { id: 1, name: "SIG", stableId: "net:sig", endpointKeys: [] },
       ],
       footprints: [fp],
     };
@@ -76,7 +76,7 @@ describe("autoroute integration (coordinate contract, no JAR)", () => {
 
     // Craft the SES Freerouting *would* return: one F.Cu wire joining the pins.
     const netName = dsnNetName({ id: 1, name: "SIG" });
-    const ses = `(session x (routes (network_out (net "${netName}"
+    const ses = `(session x (routes (resolution nm 1) (network_out (net "${netName}"
       (wire (path F.Cu 250000 ${pinA.atNm.x} ${pinA.atNm.y} ${pinB.atNm.x} ${pinB.atNm.y}) (net "${netName}"))
     ))))`;
 

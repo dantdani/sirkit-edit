@@ -6,9 +6,9 @@
  * outline controls (size presets, roundrect toggle, numeric width/height mm).
  */
 
-import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, History, Keyboard, Layers, LayoutGrid, Loader2, Maximize2, MousePointer, Redo2, ShieldCheck, Sparkles, Spline, Square, Type, Undo2, Zap } from "lucide-react";
+import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, History, Keyboard, Layers, LayoutGrid, ListChecks, Loader2, Maximize2, MousePointer, Redo2, ShieldCheck, Sparkles, Spline, Square, Type, Undo2, Zap } from "lucide-react";
 import type { BoardOutline } from "@/app/lib/pcb/types";
-import type { DrcResult } from "@/app/lib/pcb/drc/types";
+import type { ReadinessViewModel } from "@/app/lib/pcb/readiness/types";
 import type { PcbHistoryRecord } from "@/app/lib/pcb/history";
 import { mmToNm, nmToMm } from "@/app/lib/pcb/units";
 
@@ -57,6 +57,8 @@ export function PcbToolbar({
   preview3dOpen,
   onTogglePadstacks,
   padstacksOpen,
+  onToggleAssignments,
+  assignmentsOpen,
   onUndo,
   onRedo,
   canUndo,
@@ -104,6 +106,8 @@ export function PcbToolbar({
   /** Stage 17: toggle the padstack library panel (button hidden when absent). */
   onTogglePadstacks?: () => void;
   padstacksOpen?: boolean;
+  onToggleAssignments?: () => void;
+  assignmentsOpen?: boolean;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -111,7 +115,7 @@ export function PcbToolbar({
   undoLabel?: string;
   redoLabel?: string;
   historyEntries: readonly PcbHistoryRecord[];
-  readiness: DrcResult["readiness"];
+  readiness?: ReadinessViewModel;
   /** Primary schematic-to-PCB action, intentionally first so it stays visible. */
   children?: React.ReactNode;
 }) {
@@ -368,6 +372,11 @@ export function PcbToolbar({
           <CircleDot className="size-3.5" />
         </button>
       )}
+      {onToggleAssignments && (
+        <button type="button" title="Physical assignment queue" aria-label="Physical assignment queue" onClick={onToggleAssignments} className={iconButtonClass(assignmentsOpen === true)}>
+          <ListChecks className="size-3.5" />
+        </button>
+      )}
 
       <div className="w-px h-4 bg-zinc-800 mx-1" />
 
@@ -438,19 +447,19 @@ export function PcbToolbar({
         </span>
       )}
 
-      <span
-        title={readiness.message}
+      {readiness && <span
+        title={readiness.detail}
         className={`ml-1 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
           readiness.state === "ready"
             ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-            : readiness.state === "needs-review"
+            : readiness.state === "verification_incomplete" || readiness.state === "stale"
               ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
               : "border-red-500/35 bg-red-500/10 text-red-300"
         }`}
       >
-        {readiness.state === "ready" ? "Ready" : readiness.state === "needs-review" ? "Needs review" : "Not ready"}
-        {readiness.unroutedConnections > 0 ? ` · ${readiness.unroutedConnections} unrouted` : ""}
-      </span>
+        {readiness.label}
+        {readiness.remainingConnections > 0 ? ` · ${readiness.remainingConnections} unrouted` : ""}
+      </span>}
 
     </div>
   );

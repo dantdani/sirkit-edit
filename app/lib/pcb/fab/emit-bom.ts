@@ -12,6 +12,7 @@
 // parsers choke on the marker (test asserts byte 0 !== 0xEF).
 
 import type { PcbBoard } from "../types";
+import { assertValidBoardReferences } from "../integrity";
 import type { PcbNetlist } from "../netlist-bridge";
 import type { BomColumn } from "./types";
 
@@ -41,6 +42,7 @@ const numericCompare = (a: string, b: string): number =>
   a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
 export function computeBomRows(board: PcbBoard, netlist: PcbNetlist): BomRow[] {
+  assertValidBoardReferences(board);
   const componentById = new Map(netlist.components.map((c) => [c.id, c]));
 
   interface Group {

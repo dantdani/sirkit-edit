@@ -17,7 +17,10 @@ const RULES: DrcRules = { default: { ...getPreset("jlcpcb-2l").rules.default, cl
 function board(nets: Record<number, string>, footprints: FootprintInstance[] = [], tracks: Track[] = []): PcbBoard {
   return {
     ...createEmptyBoard(),
-    nets: [{ id: 0, name: "" }, ...Object.entries(nets).map(([id, name]) => ({ id: Number(id), name }))],
+    nets: [
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      ...Object.entries(nets).map(([id, name]) => ({ id: Number(id), name, stableId: `net:${name.toLowerCase()}`, endpointKeys: [] })),
+    ],
     footprints,
     tracks,
   };
@@ -62,14 +65,29 @@ function inst(id: string, netId: number): FootprintInstance {
 }
 
 describe("DRC clearance", () => {
-  it("(a) two same-net tracks 0.10 mm apart (under 0.20 mm) → 1 clearance violation", () => {
-    // widths 0.15 mm; centres 0.25 mm apart → 0.10 mm edge gap.
-    const b = board({ 1: "N1" }, [], [htrack("t1", 1, 40), htrack("t2", 1, 40.25)]);
-    const v = checkCopperClearance(buildDrcContext(b, RULES)).filter((x) => x.kind === "clearance");
+  it("(a/C-06) two same-3V3 tracks 0.048 mm apart under 0.127 mm → no inter-net violation", () => {
+    const rules: DrcRules = { default: { ...RULES.default, clearanceNm: 127_000 }, perClass: {} };
+    // widths 0.15 mm; centres 0.198 mm apart → 0.048 mm edge gap.
+    const b = board({ 1: "3V3" }, [], [htrack("t1", 1, 40), htrack("t2", 1, 40.198)]);
+    const v = checkCopperClearance(buildDrcContext(b, rules)).filter((x) => x.kind === "clearance");
+    expect(v).toEqual([]);
+  });
+
+  it("(a2) changing one close track to another proven net preserves inter-net clearance", () => {
+    const rules: DrcRules = { default: { ...RULES.default, clearanceNm: 127_000 }, perClass: {} };
+    const b = board({ 1: "3V3", 2: "GND" }, [], [htrack("t1", 1, 40), htrack("t2", 2, 40.198)]);
+    const v = checkCopperClearance(buildDrcContext(b, rules)).filter((x) => x.kind === "clearance");
     expect(v).toHaveLength(1);
-    expect(v[0].measuredNm).toBe(100_000);
-    expect(v[0].thresholdNm).toBe(200_000);
+    expect(v[0].measuredNm).toBe(48_000);
+    expect(v[0].thresholdNm).toBe(127_000);
     expect(v[0].items).toHaveLength(2);
+  });
+
+  it("does not grant the same-net exemption to two unassigned net-zero tracks", () => {
+    const rules: DrcRules = { default: { ...RULES.default, clearanceNm: 127_000 }, perClass: {} };
+    const b = board({}, [], [htrack("u1", 0, 40), htrack("u2", 0, 40.198)]);
+    const violations = checkCopperClearance(buildDrcContext(b, rules)).filter((item) => item.kind === "clearance");
+    expect(violations).toHaveLength(1);
   });
 
   it("(b) same tracks 0.30 mm apart → 0 clearance violations", () => {

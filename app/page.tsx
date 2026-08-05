@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
@@ -47,11 +46,26 @@ import {
   throwAiResponseError,
 } from "@/app/lib/ai-preferences";
 import type { LLMProviderId } from "@/app/lib/llm/types";
+import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
+import { bootstrapCurrentProject, openProject, startNewProject } from "@/app/lib/project/current";
+import { createAutosaver, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
+import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history";
+import { checkpointStore, type ProjectCheckpoint } from "@/app/lib/project/checkpoints";
+import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION } from "@/app/lib/project/file";
+import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
+import { Undo2, Redo2, History, Save, FolderInput } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Mode = "theory" | "build";
 type View = "schematic" | "pcb" | "3d" | "bom" | "sim";
+/** The undoable schematic model state (R06 Section 7). */
+type SchematicSnapshot = {
+  components: SchComponent[];
+  wires: Wire[];
+  kicadComponents: KicadComponentInstance[];
+  netLabels: NetLabel[];
+};
 type LeftPanel = "projects" | "library" | null;
 type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
@@ -64,6 +78,18 @@ type ActivityLogMessage = {
 };
 type Message = ChatMessage | ActivityLogMessage;
 type AiProviderFailureState = { provider: LLMProviderId };
+type AiRuntimeProviderInfo = {
+  model: string;
+  label: string;
+  contextWindowTokens?: number;
+  maxOutputTokens?: number;
+  appContextCapTokens?: number | null;
+  reasoningEffort?: string;
+};
+type AiRuntimeInfo = {
+  providers: Record<LLMProviderId, AiRuntimeProviderInfo>;
+  embeddings: { provider: "openai"; model: string };
+};
 type PendingSuggestion = {
   title: string;
   detail: string;
@@ -2307,6 +2333,7 @@ export default function Home() {
   const [leftPanelWidth, setLeftPanelWidth] = useState(240);
   const [aiBrain, setAiBrain] = useState<LLMProviderId>("openai");
   const aiBrainRef = useRef<LLMProviderId>("openai");
+  const [aiRuntime, setAiRuntime] = useState<AiRuntimeInfo | null>(null);
   const [aiProviderFailure, setAiProviderFailure] = useState<AiProviderFailureState | null>(null);
   const lastAiRetryRef = useRef<(() => void) | null>(null);
 
@@ -2389,6 +2416,20 @@ export default function Home() {
   // Hydrate analysis config from localStorage post-mount (SSR safety).
   useEffect(() => { setAnalysisConfig(loadAnalysisConfig()); }, []);
   useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/ai/runtime", { signal: controller.signal, cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((runtime: AiRuntimeInfo | null) => {
+        if (runtime) setAiRuntime(runtime);
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          console.warn("Could not load AI runtime metadata.");
+        }
+      });
+    return () => controller.abort();
+  }, []);
+  useEffect(() => {
     const storedBrain = loadAiBrainPreference();
     aiBrainRef.current = storedBrain;
     setAiBrain(storedBrain);
@@ -2422,6 +2463,332 @@ export default function Home() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
+
+  // ─── R06: durable project memory, undo/redo, checkpoints ───────────────────
+  // One stable project identity; schematic + chat + workflow stage hydrate
+  // from the SavedProject record on mount and autosave after every committed
+  // mutation. Reload must return the exact same project.
+  const [project, setProject] = useState<{ id: string; name: string } | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>({ state: "idle", at: 0 });
+  const [schHistoryView, setSchHistoryView] = useState<SchematicHistoryView>({ canUndo: false, canRedo: false, entries: [] });
+  const [checkpoints, setCheckpoints] = useState<ProjectCheckpoint[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [projectList, setProjectList] = useState<SavedProject[]>([]);
+  const [pcbMounted, setPcbMounted] = useState(false);
+  const [pcbHydrateToken, setPcbHydrateToken] = useState(0);
+  const hydratedRef = useRef(false);
+  const applyingHistoryRef = useRef(false);
+  // Latch the PCB editor mounted the first time it is opened (see the render
+  // site: it is hidden, not unmounted, on tab switches).
+  useEffect(() => { if (view === "pcb") setPcbMounted(true); }, [view]);
+  const schHistoryRef = useRef<SchematicHistory<SchematicSnapshot> | null>(null);
+  const historyLabelRef = useRef<string | null>(null);
+  const pendingRecordRef = useRef<{ timer: ReturnType<typeof setTimeout>; snap: SchematicSnapshot; label: string } | null>(null);
+  const autosaverRef = useRef<Autosaver | null>(null);
+  const projectRef = useRef(project);
+  useEffect(() => { projectRef.current = project; }, [project]);
+  const liveStateRef = useRef({ components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt });
+  useEffect(() => { liveStateRef.current = { components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt }; });
+  // R06 wipe guard: between hydrateProject() switching projectRef and the
+  // React commit that lands the hydrated values in liveStateRef, the live
+  // state still holds the PREVIOUS (possibly initial-empty) values. A flush
+  // in that window — pagehide during a slow first paint, autosaver destroy —
+  // wrote empty state over a populated record. persistProject refuses to
+  // write while this ref names the current project; the effect below clears
+  // it in the same commit that carries the hydrated state (setProject and the
+  // hydrated setStates batch together), so the first allowed write is always
+  // the hydrated one.
+  const pendingHydrationForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (project && pendingHydrationForRef.current === project.id) pendingHydrationForRef.current = null;
+  }, [project, components, wires, kicadComponents, netLabels, messages, view]);
+
+  /** User prompts + user-visible responses only — no secrets, no hidden reasoning. */
+  function toStoredChat(all: Message[]): StoredChatMessage[] {
+    return all.slice(-200).map((message) => message.role === "log"
+      ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
+      : { id: message.id, role: message.role, content: message.content });
+  }
+
+  /** Reload during a pending operation must show a truthful interrupted state. */
+  function fromStoredChat(stored: StoredChatMessage[]): Message[] {
+    return stored.map((message) => message.role === "log"
+      ? {
+          id: message.id, role: "log" as const, title: message.title,
+          status: message.status === "running" ? ("error" as const) : message.status,
+          entries: message.entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
+        }
+      : message);
+  }
+
+  const persistProject = useCallback((): { ok: true } | { ok: false; reason: string } => {
+    const meta = projectRef.current;
+    if (!meta) return { ok: false, reason: "No active project" };
+    if (pendingHydrationForRef.current === meta.id) {
+      // The hydrated values have not committed into liveStateRef yet — writing
+      // now would overwrite the stored record with pre-hydration (empty)
+      // state. Refuse; the autosaver keeps the save pending and retries after
+      // the commit. If the page dies first, the stored record stays intact —
+      // exactly the "preserve the last complete valid revision" contract.
+      return { ok: false, reason: "Project hydration has not committed yet; nothing was written" };
+    }
+    const live = liveStateRef.current;
+    const ok = saveProjectFields(meta.id, {
+      state: { components: live.components, wires: live.wires, kicadComponents: live.kicadComponents, netLabels: live.netLabels, pageSize: live.pageSize },
+      chat: toStoredChat(live.messages),
+      designPrompt: live.lastDesignPrompt,
+      workflowView: live.view,
+    });
+    return ok ? { ok: true } : { ok: false, reason: "Browser storage write failed (quota exceeded or storage unavailable)" };
+  }, []);
+
+  const refreshCheckpoints = useCallback(() => {
+    const id = projectRef.current?.id;
+    if (!id) { setCheckpoints([]); return; }
+    void checkpointStore().list(id).then(setCheckpoints).catch(() => setCheckpoints([]));
+  }, []);
+
+  const addCheckpoint = useCallback((label: string) => {
+    const meta = projectRef.current;
+    if (!meta) return;
+    const live = liveStateRef.current;
+    void checkpointStore().add({
+      projectId: meta.id, label, at: Date.now(),
+      schematic: { components: live.components, wires: live.wires, kicadComponents: live.kicadComponents, netLabels: live.netLabels, pageSize: live.pageSize },
+      chat: toStoredChat(live.messages),
+      workflowView: live.view,
+    }).then(refreshCheckpoints).catch((error: unknown) => {
+      showToast(`Checkpoint could not be saved: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }, [refreshCheckpoints]);
+
+  /** Apply a loaded project record to the live editor state. */
+  const hydrateProject = useCallback((record: SavedProject, opts?: { announce?: string }) => {
+    applyingHistoryRef.current = true; // hydration is not an undoable edit
+    pendingHydrationForRef.current = record.id; // block persists until the hydrated commit lands
+    if (pendingRecordRef.current) { clearTimeout(pendingRecordRef.current.timer); pendingRecordRef.current = null; }
+    const state = record.state;
+    setComponents(state.components ?? []);
+    setWires(state.wires ?? []);
+    setKicadComponents(state.kicadComponents ?? []);
+    setNetLabels(state.netLabels ?? []);
+    if (state.pageSize) setPageSize(state.pageSize);
+    setMessages(record.chat ? fromStoredChat(record.chat) : []);
+    if (record.designPrompt) setLastDesignPrompt(record.designPrompt);
+    const storedView = record.workflowView;
+    if (storedView === "schematic" || storedView === "pcb" || storedView === "3d" || storedView === "bom" || storedView === "sim") {
+      setView(storedView);
+      if (storedView === "pcb") setPcbMounted(true);
+    } else {
+      setView("schematic");
+    }
+    setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
+    setProject({ id: record.id, name: record.name });
+    projectRef.current = { id: record.id, name: record.name };
+    schHistoryRef.current = new SchematicHistory<SchematicSnapshot>({
+      components: state.components ?? [], wires: state.wires ?? [],
+      kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
+    }, { label: "Opened project" });
+    setSchHistoryView(schHistoryRef.current.view());
+    setPcbHydrateToken((token) => token + 1);
+    if (opts?.announce) showToast(opts.announce);
+    void checkpointStore().list(record.id).then(setCheckpoints).catch(() => setCheckpoints([]));
+  }, []);
+
+  // Mount bootstrap: resolve or create the current project, hydrate, then arm
+  // autosave. Runs post-mount because localStorage is browser-only.
+  useEffect(() => {
+    const boot = bootstrapCurrentProject();
+    hydrateProject(boot.project);
+    if (boot.dropped.length) showToast(`Recovered project "${boot.project.name}" — ${boot.dropped.length} corrupt optional record(s) were set aside: ${boot.dropped.join(", ")}`);
+    setProjectList(listProjects());
+    const autosaver = createAutosaver(persistProject);
+    autosaverRef.current = autosaver;
+    const unsubscribe = autosaver.subscribe(setSaveStatus);
+    hydratedRef.current = true;
+    const flush = () => { autosaver.flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flush(); });
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      unsubscribe();
+      autosaver.destroy();
+      autosaverRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Design-state watcher: records undo history (debounced so a drag becomes
+  // one step) and schedules autosave. Hydration/undo/redo set the applying
+  // guard so they never re-record themselves.
+  useEffect(() => {
+    if (!hydratedRef.current || !schHistoryRef.current) return;
+    const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels };
+    if (applyingHistoryRef.current) {
+      applyingHistoryRef.current = false;
+      autosaverRef.current?.schedule();
+      return;
+    }
+    if (snap.components === schHistoryRef.current.present.components
+      && snap.wires === schHistoryRef.current.present.wires
+      && snap.kicadComponents === schHistoryRef.current.present.kicadComponents
+      && snap.netLabels === schHistoryRef.current.present.netLabels) return;
+    const label = historyLabelRef.current ?? "Edited schematic";
+    historyLabelRef.current = null;
+    if (pendingRecordRef.current) clearTimeout(pendingRecordRef.current.timer);
+    pendingRecordRef.current = {
+      snap, label,
+      timer: setTimeout(() => {
+        const pending = pendingRecordRef.current;
+        pendingRecordRef.current = null;
+        if (pending && schHistoryRef.current) {
+          schHistoryRef.current.record(pending.label, pending.snap);
+          setSchHistoryView(schHistoryRef.current.view());
+        }
+      }, 350),
+    };
+    autosaverRef.current?.schedule();
+  }, [components, wires, kicadComponents, netLabels]);
+
+  // Non-design persisted state (chat, stage, prompt, page size) — autosave only.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    autosaverRef.current?.schedule();
+  }, [messages, view, lastDesignPrompt, pageSize]);
+
+  /** Commit any debounce-pending history record immediately (before undo/redo). */
+  const flushPendingRecord = useCallback(() => {
+    const pending = pendingRecordRef.current;
+    if (!pending || !schHistoryRef.current) return;
+    clearTimeout(pending.timer);
+    pendingRecordRef.current = null;
+    schHistoryRef.current.record(pending.label, pending.snap);
+  }, []);
+
+  const applySchematicSnapshot = useCallback((snap: SchematicSnapshot) => {
+    applyingHistoryRef.current = true;
+    setComponents(snap.components);
+    setWires(snap.wires);
+    setKicadComponents(snap.kicadComponents);
+    setNetLabels(snap.netLabels);
+    setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
+  }, []);
+
+  const undoSchematic = useCallback(() => {
+    flushPendingRecord();
+    const history = schHistoryRef.current;
+    if (!history) return;
+    const snap = history.undo();
+    if (snap) { applySchematicSnapshot(snap); setSchHistoryView(history.view()); }
+  }, [applySchematicSnapshot, flushPendingRecord]);
+
+  const redoSchematic = useCallback(() => {
+    flushPendingRecord();
+    const history = schHistoryRef.current;
+    if (!history) return;
+    const snap = history.redo();
+    if (snap) { applySchematicSnapshot(snap); setSchHistoryView(history.view()); }
+  }, [applySchematicSnapshot, flushPendingRecord]);
+
+  // Ctrl+Z / Ctrl+Y for the schematic editor (the PCB editor owns its own
+  // shortcuts and is gated by its `active` prop while hidden).
+  useEffect(() => {
+    if (view !== "schematic") return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      e.preventDefault();
+      if (key === "y" || (key === "z" && e.shiftKey)) redoSchematic();
+      else undoSchematic();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, undoSchematic, redoSchematic]);
+
+  /** Restore a checkpoint as one undoable operation; board (if any) rehydrates the PCB editor. */
+  const restoreCheckpoint = useCallback((checkpoint: ProjectCheckpoint) => {
+    const meta = projectRef.current;
+    if (!meta) return;
+    flushPendingRecord();
+    historyLabelRef.current = `Restored checkpoint: ${checkpoint.label}`;
+    setComponents(checkpoint.schematic.components ?? []);
+    setWires(checkpoint.schematic.wires ?? []);
+    setKicadComponents(checkpoint.schematic.kicadComponents ?? []);
+    setNetLabels(checkpoint.schematic.netLabels ?? []);
+    if (checkpoint.schematic.pageSize) setPageSize(checkpoint.schematic.pageSize);
+    if (checkpoint.chat) setMessages(fromStoredChat(checkpoint.chat));
+    if (checkpoint.board) {
+      // Persist first (survives a crash before the editor consumes it), then
+      // hand the exact board to the PCB editor — an explicit restore wins even
+      // when the durable server authority has advanced past this checkpoint.
+      const ok = saveProjectFields(meta.id, { pcbWorking: { board: checkpoint.board, baseRevision: checkpoint.boardBase?.revision ?? null, baseDigest: checkpoint.boardBase?.digest ?? null, updatedAt: Date.now() } });
+      if (!ok) { showToast("Checkpoint board could not be written to browser storage; schematic was restored, PCB was not."); return; }
+      requestBoardRestore(checkpoint.board);
+      setPcbMounted(true);
+      setPcbHydrateToken((token) => token + 1);
+    }
+    showToast(`Restored checkpoint: ${checkpoint.label}`);
+    setHistoryOpen(false);
+  }, [flushPendingRecord]);
+
+  const switchProject = useCallback((id: string) => {
+    if (projectRef.current?.id === id) return;
+    autosaverRef.current?.flush();
+    const opened = openProject(id);
+    if (!opened) { showToast("That project could not be loaded — its record is missing or unreadable. It was not opened and nothing was lost."); return; }
+    hydrateProject(opened.project, { announce: `Opened "${opened.project.name}"` });
+    if (opened.dropped.length) showToast(`Opened with ${opened.dropped.length} corrupt optional record(s) set aside: ${opened.dropped.join(", ")}`);
+    setProjectList(listProjects());
+  }, [hydrateProject]);
+
+  const createNewProject = useCallback(() => {
+    autosaverRef.current?.flush();
+    const created = startNewProject();
+    hydrateProject(created, { announce: `Created "${created.name}"` });
+    setProjectList(listProjects());
+  }, [hydrateProject]);
+
+  const handleExportProject = useCallback(async () => {
+    const meta = projectRef.current;
+    if (!meta) return;
+    const flushed = autosaverRef.current?.flush() ?? true;
+    if (!flushed) { showToast("Cannot export: the latest changes failed to save to browser storage."); return; }
+    const result = await exportProjectFile(meta.id);
+    if (!result.ok) { showToast(`Export failed: ${result.reason}`); return; }
+    const blob = new Blob([result.content], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = result.fileName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    showToast(`Project saved to ${result.fileName}`);
+  }, []);
+
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const handleImportProjectFile = useCallback(async (file: File) => {
+    const content = await file.text();
+    const result = await importProjectFile(content);
+    if (!result.ok) { showToast(`Open project failed: ${result.reason}`); return; }
+    openProject(result.project.id);
+    hydrateProject(result.project, { announce: `Opened "${result.project.name}" from file (${result.checkpointsImported} checkpoint(s) restored)` });
+    for (const warning of result.warnings) showToast(warning);
+    setProjectList(listProjects());
+  }, [hydrateProject]);
+
+  const handleRenameProject = useCallback(() => {
+    const meta = projectRef.current;
+    if (!meta) return;
+    const name = window.prompt("Project name", meta.name)?.trim();
+    if (!name || name === meta.name) return;
+    const renamed = renameProject(meta.id, name);
+    if (!renamed) { showToast("Rename failed: the project record could not be updated."); return; }
+    setProject({ id: meta.id, name });
+    setProjectList(listProjects());
+  }, []);
 
   function selectAiBrain(provider: LLMProviderId) {
     saveAiBrainPreference(provider);
@@ -2510,12 +2877,14 @@ export default function Home() {
         setWireDraftStart(null);
       } else if (binding.action === "rotate") {
         if (selectedId && tool === "select") {
+          historyLabelRef.current = "Rotated component";
           setComponents((cs) => cs.map((c) =>
             c.id === selectedId
               ? { ...c, rotation: ((c.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
               : c
           ));
         } else if (selectedKicadId && tool === "select") {
+          historyLabelRef.current = `Rotated ${liveStateRef.current.kicadComponents.find((k) => k.id === selectedKicadId)?.refDes ?? "component"}`;
           setKicadComponents((ks) => ks.map((k) =>
             k.id === selectedKicadId
               ? { ...k, rotation: ((k.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
@@ -2526,9 +2895,11 @@ export default function Home() {
         }
       } else if (binding.action === "delete-selection") {
         if (selectedId) {
+          historyLabelRef.current = "Deleted component";
           setComponents((cs) => cs.filter((c) => c.id !== selectedId));
           setSelectedId(null);
         } else if (selectedKicadId) {
+          historyLabelRef.current = `Deleted ${liveStateRef.current.kicadComponents.find((k) => k.id === selectedKicadId)?.refDes ?? "component"}`;
           setKicadComponents((ks) => ks.filter((k) => k.id !== selectedKicadId));
           setSelectedKicadId(null);
         }
@@ -2725,6 +3096,9 @@ export default function Home() {
     prompt: string,
     opts?: { skipAutoRun?: boolean; promptAlreadyLogged?: boolean; suppressChat?: boolean },
   ) {
+    // One AI application = one undoable transaction (R06 Section 7).
+    flushPendingRecord();
+    historyLabelRef.current = opts?.skipAutoRun ? "Applied AI edit" : `Generated schematic: ${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}`;
     setComponents(state.components);
     setWires(state.wires);
     setKicadComponents(state.kicadComponents ?? []);
@@ -2748,6 +3122,11 @@ export default function Home() {
         ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
         { id: crypto.randomUUID(), role: "assistant", content: explanation },
       ]);
+    }
+    // Durable revision checkpoint for the applied generation (after React
+    // commits the new state into liveStateRef).
+    if (!opts?.skipAutoRun) {
+      setTimeout(() => addCheckpoint(`Generated schematic: ${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}`), 600);
     }
   }
 
@@ -3573,7 +3952,76 @@ export default function Home() {
         </div>
 
         <div className="text-sm text-zinc-500">/</div>
-        <div className="text-sm">LED dimmer (9V)</div>
+        <button
+          type="button"
+          className="text-sm hover:text-teal-300 transition-colors"
+          onClick={handleRenameProject}
+          title="Rename project"
+        >
+          {project?.name ?? "Loading…"}
+        </button>
+        <span
+          className={`text-[11px] px-1.5 py-0.5 rounded ${
+            saveStatus.state === "error" ? "bg-red-500/20 text-red-300"
+            : saveStatus.state === "saving" || saveStatus.state === "dirty" ? "text-zinc-400"
+            : saveStatus.state === "saved" ? "text-zinc-500"
+            : "text-zinc-600"
+          }`}
+          title={saveStatus.detail ?? undefined}
+          data-testid="save-status"
+        >
+          {saveStatus.state === "error" ? `Save failed — ${saveStatus.detail ?? "storage error"}`
+            : saveStatus.state === "saving" ? "Saving…"
+            : saveStatus.state === "dirty" ? "Unsaved changes…"
+            : saveStatus.state === "saved" ? "Saved"
+            : ""}
+        </span>
+
+        <div className="ml-2 flex items-center gap-0.5">
+          <Button
+            size="sm" variant="ghost" className="px-2 text-zinc-300 disabled:opacity-40"
+            onClick={undoSchematic}
+            disabled={view !== "schematic" || !schHistoryView.canUndo}
+            title={view !== "schematic" ? "Undo (schematic view)" : schHistoryView.canUndo ? `Undo: ${schHistoryView.undoLabel ?? "last action"} (Ctrl+Z)` : "Nothing to undo"}
+            aria-label="Undo schematic action"
+          ><Undo2 className="size-3.5" /></Button>
+          <Button
+            size="sm" variant="ghost" className="px-2 text-zinc-300 disabled:opacity-40"
+            onClick={redoSchematic}
+            disabled={view !== "schematic" || !schHistoryView.canRedo}
+            title={view !== "schematic" ? "Redo (schematic view)" : schHistoryView.canRedo ? `Redo: ${schHistoryView.redoLabel ?? "next action"} (Ctrl+Y)` : "Nothing to redo"}
+            aria-label="Redo schematic action"
+          ><Redo2 className="size-3.5" /></Button>
+          <Button
+            size="sm" variant="ghost" className="px-2 text-zinc-300"
+            onClick={() => { refreshCheckpoints(); setHistoryOpen(true); }}
+            title="Revision history / checkpoints"
+            aria-label="Revision history"
+          ><History className="size-3.5" /></Button>
+          <Button
+            size="sm" variant="ghost" className="px-2 text-zinc-300"
+            onClick={() => void handleExportProject()}
+            title="Save project to a local .sirkit.json file"
+            aria-label="Save project file"
+          ><Save className="size-3.5" /></Button>
+          <Button
+            size="sm" variant="ghost" className="px-2 text-zinc-300"
+            onClick={() => importInputRef.current?.click()}
+            title="Open a Sirkit project file"
+            aria-label="Open project file"
+          ><FolderInput className="size-3.5" /></Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept={`${PROJECT_FILE_EXTENSION},.json,application/json`}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) void handleImportProjectFile(file);
+            }}
+          />
+        </div>
 
         <div className="ml-auto flex items-center gap-1">
           <Button
@@ -3620,20 +4068,46 @@ export default function Home() {
             {leftPanel === "projects" ? (
               <>
                 <div className="p-3 border-b border-zinc-800">
-                  <Button variant="secondary" size="sm" className="w-full justify-start gap-2">
+                  <Button
+                    variant="secondary" size="sm" className="w-full justify-start gap-2"
+                    onClick={createNewProject}
+                  >
                     <Plus className="size-3.5" /> New project
                   </Button>
                 </div>
                 <ScrollArea className="flex-1">
                   <div className="px-2 pb-3">
-                    <div className="text-xs text-zinc-500 px-2 py-1.5">Recent</div>
-                    <ProjectTreeItem name="LED dimmer (9V)" active />
-                    <ProjectTreeItem name="555 timer blinker" />
-                    <ProjectTreeItem name="USB-C charger" />
-                    <Separator className="my-2 bg-zinc-800" />
-                    <div className="text-xs text-zinc-500 px-2 py-1.5">Pinned</div>
-                    <ProjectTreeItem name="Audio preamp" />
-                    <ProjectTreeItem name="Solar charger" />
+                    <div className="text-xs text-zinc-500 px-2 py-1.5">Projects</div>
+                    {projectList.length === 0 && (
+                      <div className="text-xs text-zinc-600 px-2 py-1.5">No saved projects yet.</div>
+                    )}
+                    {projectList.map((item) => (
+                      <div key={item.id} className="group flex items-center">
+                        <button
+                          type="button"
+                          onClick={() => switchProject(item.id)}
+                          className={`flex-1 text-left text-sm px-2 py-1.5 rounded truncate ${item.id === project?.id ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"}`}
+                          title={`Open "${item.name}"`}
+                        >
+                          {item.name}
+                        </button>
+                        {item.id !== project?.id && (
+                          <button
+                            type="button"
+                            className="opacity-0 group-hover:opacity-100 px-1 text-zinc-600 hover:text-red-400"
+                            title={`Delete "${item.name}"`}
+                            aria-label={`Delete project ${item.name}`}
+                            onClick={() => {
+                              if (!window.confirm(`Delete project "${item.name}"? This removes its local record (durable server boards are kept).`)) return;
+                              if (deleteProject(item.id)) { void checkpointStore().removeProject(item.id).catch(() => {}); setProjectList(listProjects()); showToast(`Deleted "${item.name}"`); }
+                              else showToast("Delete failed: project record could not be removed.");
+                            }}
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </ScrollArea>
               </>
@@ -3765,19 +4239,23 @@ export default function Home() {
                   {selectedKicad && (
                     <KicadPropertiesPanel
                       instance={selectedKicad}
-                      onRefDesChange={(v) =>
-                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, refDes: v } : k))
-                      }
-                      onValueChange={(v) =>
-                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, value: v } : k))
-                      }
-                      onRotate={() =>
+                      onRefDesChange={(v) => {
+                        historyLabelRef.current = `Renamed ${selectedKicad.refDes} to ${v}`;
+                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, refDes: v } : k));
+                      }}
+                      onValueChange={(v) => {
+                        historyLabelRef.current = `Changed ${selectedKicad.refDes} value to ${v}`;
+                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, value: v } : k));
+                      }}
+                      onRotate={() => {
+                        historyLabelRef.current = `Rotated ${selectedKicad.refDes}`;
                         setKicadComponents((ks) => ks.map((k) =>
                           k.id === selectedKicadId
                             ? { ...k, rotation: ((k.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
-                            : k))
-                      }
+                            : k));
+                      }}
                       onDelete={() => {
+                        historyLabelRef.current = `Deleted ${selectedKicad.refDes}`;
                         setKicadComponents((ks) => ks.filter((k) => k.id !== selectedKicadId));
                         setSelectedKicadId(null);
                       }}
@@ -3818,11 +4296,22 @@ export default function Home() {
                   state={{ components, kicadComponents, wires, netLabels }}
                   onSwapPart={handleSwapPart}
                 />
-              ) : view === "pcb" ? (
-                <PcbEditor schematic={{ components, kicadComponents, wires, netLabels }} />
-              ) : (
+              ) : view !== "pcb" ? (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
                   {view === "3d"        && "3D view"}
+                </div>
+              ) : null}
+              {/* R06: the PCB editor stays MOUNTED once opened — unmounting on
+                  tab switch destroyed the board state and its undo history.
+                  While hidden it is display:none and its shortcuts are gated
+                  by `active`. */}
+              {(pcbMounted || view === "pcb") && (
+                <div className={view === "pcb" ? "absolute inset-0" : "hidden"}>
+                  <PcbEditor
+                    schematic={{ components, kicadComponents, wires, netLabels }}
+                    active={view === "pcb"}
+                    hydrateToken={pcbHydrateToken}
+                  />
                 </div>
               )}
             </div>
@@ -3880,6 +4369,50 @@ export default function Home() {
           </DialogContent>
         </Dialog>
 
+        {/* R06: durable revision history / checkpoint restore */}
+        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Revision history</DialogTitle>
+            </DialogHeader>
+            {schHistoryView.entries.length > 1 && (
+              <div className="mb-2">
+                <div className="text-xs text-zinc-500 mb-1">This session (undo/redo)</div>
+                <div className="max-h-28 overflow-y-auto rounded border border-zinc-800 px-2 py-1 space-y-0.5">
+                  {[...schHistoryView.entries].reverse().map((entry, index) => (
+                    <div key={`${entry.at}-${index}`} className="text-[11px] text-zinc-400 truncate">
+                      {entry.label} <span className="text-zinc-600">· {new Date(entry.at).toLocaleTimeString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="text-xs text-zinc-500 mb-1">Durable checkpoints</div>
+            <div className="max-h-80 overflow-y-auto space-y-1">
+              {checkpoints.length === 0 && (
+                <p className="text-sm text-zinc-500">No checkpoints yet. Checkpoints are recorded when a schematic is generated, footprints are placed, the board is routed, or a release is produced.</p>
+              )}
+              {[...checkpoints].reverse().map((checkpoint) => (
+                <div key={checkpoint.id} className="flex items-center gap-2 rounded border border-zinc-800 px-2 py-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-zinc-200 truncate">{checkpoint.label}</div>
+                    <div className="text-[11px] text-zinc-500">
+                      #{checkpoint.seq} · {new Date(checkpoint.at).toLocaleString()}
+                      {checkpoint.board ? " · includes board" : ""}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => restoreCheckpoint(checkpoint)}>
+                    Restore
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              Restoring applies the checkpoint as a new undoable operation — nothing is deleted.
+            </p>
+          </DialogContent>
+        </Dialog>
+
         {/* Right Chat Panel */}
         {chatOpen && (
           <aside
@@ -3912,6 +4445,13 @@ export default function Home() {
                 </label>
                 <div className="pb-0.5 text-[10px] leading-4 text-zinc-500">
                   <div>Brain: <span className="text-teal-300">{aiBrain === "openai" ? "OpenAI" : "Anthropic"}</span></div>
+                  <div>Model: <span className="text-zinc-300">{aiRuntime?.providers[aiBrain].label ?? "Loading…"}</span></div>
+                  {aiBrain === "openai" && aiRuntime?.providers.openai.contextWindowTokens ? (
+                    <div title={`${aiRuntime.providers.openai.contextWindowTokens.toLocaleString()} token context; ${aiRuntime.providers.openai.maxOutputTokens?.toLocaleString() ?? "provider-defined"} maximum output`}>
+                      Context: <span className="text-zinc-300">{(aiRuntime.providers.openai.contextWindowTokens / 1_000_000).toFixed(2)}M</span>
+                      {" · "}App cap: <span className="text-zinc-300">none</span>
+                    </div>
+                  ) : null}
                   <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
                 </div>
               </div>
@@ -5402,16 +5942,8 @@ function ActivityBarButton({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function ProjectTreeItem({ name, active }: { name: string; active?: boolean }) {
-  return (
-    <button className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md text-left transition ${
-      active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
-    }`}>
-      <ChevronRight className="size-3.5 shrink-0" />
-      <span className="truncate">{name}</span>
-    </button>
-  );
-}
+// R06: the mock ProjectTreeItem list was replaced by the real project list
+// backed by lib/persistence (see the projects panel in Home).
 
 function ViewTab({ icon: Icon, label, active, onClick }: {
   icon: LucideIcon; label: string; active?: boolean; onClick: () => void;

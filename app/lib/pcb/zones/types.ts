@@ -33,7 +33,7 @@ export interface ComputeFillInput {
 
 export interface ComputeFillResult {
   regions: FilledRegion[];
-  stats: { rawRegions: number; islandsDropped: number; elapsedMs: number };
+  stats: { rawRegions: number; islandsDropped: number; elapsedMs: number; thermalAccessCount?: number };
 }
 
 /** Fully-resolved thermal-relief parameters (zone overrides merged over defaults). */
@@ -46,7 +46,11 @@ export interface ThermalParams {
 
 /** The zone's own clearance: explicit override, else its net class's clearance. */
 export function zoneClearanceNm(board: PcbBoard, zone: Zone): number {
-  return zone.clearanceOverrideNm ?? getNetClass(board, zone.netId).clearance;
+  const compiledMinimum = getNetClass(board, zone.netId).clearance;
+  if (zone.clearanceOverrideNm === undefined) return compiledMinimum;
+  return board.constraintState?.activeProgram
+    ? Math.max(zone.clearanceOverrideNm, compiledMinimum)
+    : zone.clearanceOverrideNm;
 }
 
 /**
@@ -62,7 +66,7 @@ export function makeEffectiveClearance(
   zone: Zone,
 ): (itemNetId: number, itemLayer: LayerId) => number {
   if (zone.clearanceOverrideNm !== undefined) {
-    const override = zone.clearanceOverrideNm;
+    const override = zoneClearanceNm(board, zone);
     return () => override;
   }
   const zoneClr = getNetClass(board, zone.netId).clearance;

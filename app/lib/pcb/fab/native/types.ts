@@ -4,6 +4,8 @@ import type { PadShape, Vec2 } from "../../geometry";
 import type { LayerId } from "../../layers";
 import type { PcbBoard } from "../../types";
 import type { FabPreset } from "../types";
+import type { ElectricalTruthReport } from "../../electrical-truth";
+import type { ManufacturingReleaseManifest, ReadinessReport, ReleaseDisposition, ReleaseWaiver } from "../../readiness/types";
 
 export type FabDiagnosticSeverity = "info" | "warning" | "error";
 export type FabDiagnosticCategory =
@@ -41,8 +43,16 @@ export interface NativeFabRecipe {
   includeBom: boolean;
 }
 
+export interface NativeFabMaskPolicy {
+  schemaVersion: "sirkit.native-mask-policy.v1";
+  defaultComponentPadsOpen: boolean;
+  defaultExpansionNm: number;
+  defaultViaTenting: "tented";
+  sourceProfileDigest: string;
+}
+
 export interface ManufacturingSnapshot {
-  schemaVersion: "sirkit.manufacturing-snapshot.v1";
+  schemaVersion: "sirkit.manufacturing-snapshot.v2";
   boardName: string;
   sourceHash: string;
   revisionId: string;
@@ -52,6 +62,22 @@ export interface ManufacturingSnapshot {
   fabPreset: Readonly<FabPreset>;
   drcPreset: Readonly<DrcPreset>;
   recipe: Readonly<NativeFabRecipe>;
+  maskPolicy: Readonly<NativeFabMaskPolicy>;
+  electricalTruth: Readonly<ElectricalTruthReport>;
+  planeCertificates: ReadonlyArray<{
+    zoneId: string;
+    stableNetId: string;
+    layerId: LayerId;
+    sourceRevision: string;
+    algorithmVersion: string;
+    fillHash: string;
+    regionCount: number;
+    holeCount: number;
+    filledAreaNm2: number;
+    representationId: string;
+    status: "current";
+    unsupportedConstructs: string[];
+  }>;
   transform: {
     /** Sirkit +Y is down. Manufacturing +Y is up, with origin at board lower-left. */
     originXNm: number;
@@ -180,13 +206,16 @@ export interface NativeFabStageReport {
 }
 
 export interface NativeFabManifest {
-  schemaVersion: "sirkit.native-fab-manifest.v1";
+  schemaVersion: "sirkit.native-fab-manifest.v2";
   packageId: string;
   snapshotHash: string;
   recipe: { id: string; version: number; mode: NativeFabMode };
   generator: { vendor: "Sirkit"; application: "Sirkit Fab Compiler"; version: string };
   standards: { gerber: "2026.05"; xnc: "2021.11"; gerberJob: "2020.08" };
-  signoff: "native-beta-verified";
+  signoff: "pcb-fabrication-checks-passed" | "engineering-prototype-unverified";
+  releaseTransactionId: string;
+  readinessReportId: string;
+  planeCertificates: ManufacturingSnapshot["planeCertificates"];
   files: Array<{ path: string; kind: NativeFabFile["kind"]; bytes: number; sha256: string }>;
   diagnostics: { errors: number; warnings: number; infos: number };
 }
@@ -198,6 +227,14 @@ export interface NativeFabCompileInput {
   drcPreset: DrcPreset;
   boardName: string;
   recipe?: NativeFabRecipe;
+  maskPolicy?: NativeFabMaskPolicy;
+  schematicIntentAvailable?: boolean;
+  releaseDisposition?: ReleaseDisposition;
+  waivers?: ReleaseWaiver[];
+  priorReadinessReport?: ReadinessReport;
+  projectIdentity?: string;
+  actor?: string;
+  generatedAt?: string;
 }
 
 export interface NativeFabCompileResult {
@@ -208,6 +245,8 @@ export interface NativeFabCompileResult {
   files: NativeFabFile[];
   stages: NativeFabStageReport[];
   diagnostics: FabDiagnostic[];
+  readiness: ReadinessReport;
+  releaseManifest: ManufacturingReleaseManifest;
 }
 
 export class NativeFabBlockedError extends Error {

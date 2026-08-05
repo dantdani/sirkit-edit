@@ -22,7 +22,8 @@ import {
 } from "./arrange";
 
 export { selectionBBoxCenter } from "./arrange"; // re-export (Phase B consumers)
-import { validateCommand } from "./validate";
+import { validateCommandDiagnostics } from "./validate";
+import type { EngineeringDiagnostic } from "../integrity";
 import { describeEdits } from "./describe";
 import { addPadstack, syncViasToPadstack } from "../padstack/registry";
 import { applyPadstackToVia } from "../padstack/defaults";
@@ -238,6 +239,17 @@ function compileCommand(board: PcbBoard, cmd: EditCommand): Mutator {
       };
     }
 
+    case "set-copper-locked": {
+      const tracks = new Set(cmd.refs.filter((ref) => ref.kind === "track").map((ref) => ref.id));
+      const vias = new Set(cmd.refs.filter((ref) => ref.kind === "via").map((ref) => ref.id));
+      const zones = new Set(cmd.refs.filter((ref) => ref.kind === "zone").map((ref) => ref.id));
+      return (draft) => {
+        for (const track of draft.tracks) if (tracks.has(track.id)) track.locked = cmd.locked;
+        for (const via of draft.vias) if (vias.has(via.id)) via.locked = cmd.locked;
+        for (const zone of draft.zones) if (zones.has(zone.id)) zone.locked = cmd.locked;
+      };
+    }
+
     case "delete-padstack": {
       const { id } = cmd;
       return (draft) => {
@@ -312,21 +324,23 @@ function makeTransformMutator(refs: SelectionRef[], f: (p: Vec2) => Vec2): Mutat
 export function compileEdits(
   board: PcbBoard,
   cmds: EditCommand[],
-): { errors: string[]; mutators: ((draft: PcbBoard) => void)[]; result: PcbBoard } {
+): { errors: string[]; diagnostics: EngineeringDiagnostic[]; mutators: ((draft: PcbBoard) => void)[]; result: PcbBoard } {
   const errors: string[] = [];
+  const diagnostics: EngineeringDiagnostic[] = [];
   const mutators: Mutator[] = [];
   let cur = board;
   for (const cmd of cmds) {
-    const errs = validateCommand(cur, cmd);
-    if (errs.length > 0) {
-      errors.push(...errs);
+    const commandDiagnostics = validateCommandDiagnostics(cur, cmd);
+    if (commandDiagnostics.length > 0) {
+      diagnostics.push(...commandDiagnostics);
+      errors.push(...commandDiagnostics.map((diagnostic) => diagnostic.summary));
       continue;
     }
     const m = compileCommand(cur, cmd);
     mutators.push(m);
     cur = produce(cur, m);
   }
-  return { errors, mutators, result: cur };
+  return { errors, diagnostics, mutators, result: cur };
 }
 
 /**
@@ -351,19 +365,19 @@ export function applyEdits(
 ): EditResult {
   const board = history.present;
   if (cmds.length === 0) {
-    return { ok: true, errors: [], violations: [], label: "" };
+    return { ok: true, errors: [], violations: [], label: "", diagnostics: [] };
   }
 
-  const { errors, mutators } = compileEdits(board, cmds);
+  const { errors, diagnostics, mutators } = compileEdits(board, cmds);
   if (errors.length > 0) {
-    return { ok: false, errors, violations: [], label: "" };
+    return { ok: false, errors, violations: [], label: "", diagnostics };
   }
 
   const label = labelOverride ?? describeEdits(board, cmds);
   history.execute(label, (draft) => {
     for (const m of mutators) m(draft);
   });
-  return { ok: true, errors: [], violations: [], label };
+  return { ok: true, errors: [], violations: [], label, diagnostics: [] };
 }
 
 /** Refs that still resolve on `board` — prunes a selection after commits. */

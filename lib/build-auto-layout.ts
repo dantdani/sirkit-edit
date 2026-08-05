@@ -36,6 +36,7 @@ import {
 } from "./schematic-types";
 import { planPageFit, type Bounds } from "./page-sizes";
 import type { CachedPart } from "@/app/lib/parts-cache";
+import { normalizeValueKey } from "@/app/lib/atomic/value-key";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
 import {
@@ -982,6 +983,13 @@ export function autoLayoutBuild(
     const part = parts.get(c.partId);
     const role = normalizeComponentRole(c.role, c.refDes, part?.pins.length ?? 0);
     const { w, h } = estimateSize(part, role);
+    // Published atomic authority: exact symbol/footprint/mapping identity for
+    // this part at this value ('' link = value-agnostic default). Instances
+    // without a matching link simply carry no authority and fail closed at
+    // durable PCB publication — never guessed here.
+    const assignment =
+      part?.atomicAssignments?.[normalizeValueKey(c.value)] ??
+      part?.atomicAssignments?.[""];
     byRefDes.set(c.refDes, {
       comp: c,
       part,
@@ -998,6 +1006,14 @@ export function autoLayoutBuild(
         rotation: 0,
         refDes: c.refDes,
         value: c.value,
+        ...(assignment
+          ? {
+              atomicPartRevisionId: assignment.revisionId,
+              symbolAssetVersionId: assignment.symbolVersionId,
+              footprintAssetVersionId: assignment.footprintVersionId,
+              mappingCertificateId: assignment.mappingCertificateId,
+            }
+          : {}),
       },
     });
   }

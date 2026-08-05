@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "sirkit.physical-binding-stage2-handoff.v1",
+  "authoritativeModel": "app/lib/physical-binding/types.ts#ComponentPhysicalBinding",
+  "serviceBoundary": "app/lib/physical-binding/repository.ts#PhysicalBindingService",
+  "candidateQuery": {
+    "input": ["tenantId", "projectId", "branchId", "boardInstanceId", "componentInstanceId", "hierarchyPath", "assemblyVariantIds"],
+    "result": "ComponentPhysicalBindingSet plus current candidate revisions",
+    "ordering": "revisionId ascending",
+    "maximumCandidates": 256
+  },
+  "effectiveSelection": {
+    "field": "ComponentPhysicalBindingSet.effectiveSelectedRevisionId",
+    "absenceMeans": "no effective selection",
+    "invariant": "at most one effective selected revision per exact scope"
+  },
+  "rawFacts": {
+    "fields": ["exactPart", "package", "footprint", "pinPadMapping", "origin", "evidenceRefs", "legacySource"],
+    "rule": "presence, origin and confidence never imply selection, approval or technical validity"
+  },
+  "proposal": {
+    "operation": "createPhysicalBindingCandidate then PhysicalBindingService.createCandidate",
+    "mustNot": ["set lifecycle selected", "set approval approved", "set mapping verified without a certificate", "write legacy schematic fields"],
+    "requiredProvenance": ["origin.kind", "origin.actor", "origin.sourceRef", "origin.createdAt", "origin.evidenceRefs", "origin.ruleVersion", "origin.confidence"]
+  },
+  "selectionAndApproval": {
+    "operation": "PhysicalBindingService.transition",
+    "required": ["authorized human actor", "expected set revision", "idempotency key", "reason"],
+    "approvalScope": "exact technicalDigest"
+  },
+  "readiness": {
+    "operation": "evaluatePhysicalReadiness or PhysicalBindingService.assess",
+    "result": "all deterministic gate results plus separate layout/manufacturing state",
+    "states": ["ready", "not_ready", "not_applicable"],
+    "uncertaintyStates": ["missing", "pending", "legacy_unverified", "ambiguous", "unknown", "stale", "conflict", "invalid", "unsupported"]
+  },
+  "legacyRollout": {
+    "view": "legacyFootprintAssignmentView",
+    "authoritative": false,
+    "shadow": "withPhysicalBindingShadow",
+    "productionBehaviorChanged": false
+  },
+  "concurrency": {
+    "control": "ComponentPhysicalBindingSet.revision optimistic lock",
+    "retry": "scoped idempotency key",
+    "conflictCode": "PB_OPTIMISTIC_LOCK_CONFLICT",
+    "activeSelectionConflictCode": "PB_ACTIVE_SELECTION_CONFLICT"
+  },
+  "importantGateCodes": [
+    "PB_COMPONENT_IDENTITY", "PB_APPLICABILITY", "PB_PACKAGE_IDENTITY", "PB_FOOTPRINT_ASSET", "PB_FOOTPRINT_DIGEST",
+    "PB_ASSET_AVAILABILITY", "PB_PACKAGE_COMPATIBILITY", "PB_PIN_PAD_MAPPING", "PB_EFFECTIVE_SELECTION", "PB_APPROVAL",
+    "PB_TECHNICAL_VALIDATION", "PB_FRESHNESS", "PB_CONFLICT", "PB_LIFECYCLE", "PB_VARIANT_SCOPE", "PB_EVIDENCE",
+    "PB_EXACT_PART", "PB_MANUFACTURER_IDENTITY", "PB_EXACT_PART_PACKAGE", "PB_ELECTRICAL_CONSTRAINTS", "PB_ASSEMBLY_DATA",
+    "PB_MANUFACTURING_GEOMETRY", "PB_EXACT_PART_FOOTPRINT", "PB_MANUFACTURING_EVIDENCE", "PB_SUPPLY_EVIDENCE", "PB_EXTERNAL_PREREQUISITES"
+  ],
+  "stage2MayChange": ["candidate synthesis", "resolver priority proposal", "resolver-origin candidate creation"],
+  "stage2MustNotChange": ["production PCB sync without Stage 3 cutover", "approval semantics", "pin-pad verification", "passive package policy", "board geometry", "routing", "copper", "AI editor guard"]
+}

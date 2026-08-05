@@ -33,12 +33,16 @@ import { mmToNm } from "../units";
 import type { PcbScene, ScenePointerEvent } from "../render/scene";
 import type { PickResult } from "../render/pick";
 import type { PcbHistory } from "../history";
-import { computeRatsnest } from "../ratsnest";
+import { computeElectricalTruth } from "../electrical-truth";
 import type { SelectionStore } from "../selection";
 import type { SelectionRef } from "../edit/commands";
 import { refKey } from "../edit/commands";
 import { applyEdits } from "../edit/apply";
 import { selectNet } from "../selection-queries";
+// B03: gesture commits route through the canonical executor when the host
+// bound a session to this history; without one, behavior is unchanged.
+import { applyEditsCanonical, canonicalSessionFor } from "../../engineering/editor-adapter";
+import type { EngineeringOperation } from "../../engineering/types";
 
 const GRID_NM = mmToNm(0.5);
 const FINE_NM = mmToNm(0.1);
@@ -240,7 +244,10 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
     const nets = [...pendingNets];
     pendingFull = false;
     pendingNets.clear();
-    scene.setAirwires(computeRatsnest(history.present, full ? undefined : nets));
+    // UI airwires are electrical facts, not the placement-only pad MST proxy.
+    void full;
+    void nets;
+    scene.setAirwires(computeElectricalTruth(history.present).realized.airwires);
   }
 
   function scheduleAirwires(changedNets?: number[]): void {
@@ -409,6 +416,50 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
       g.moveIds.length === 1
         ? `Move ${g.origins.get(g.moveIds[0])?.ref ?? g.moveIds[0]}`
         : `Move ${g.moveIds.length} parts`;
+    const session = canonicalSessionFor(history);
+    if (session) {
+      // B03: the canonical executor is the mutation authority — the gesture's
+      // absolute drop positions become one move_footprint transaction; the
+      // entry commits from the pre-transient board (one gesture = one step).
+      const targets = [...g.origins].map(([footprintId, origin]) => ({
+        footprintId,
+        at: { x: Math.round(origin.at.x + eff.x), y: Math.round(origin.at.y + eff.y) },
+      }));
+      void session
+        .commit({
+          commandId: "pcb.move-footprint",
+          label,
+          buildOperations: (): EngineeringOperation[] =>
+            targets.map((target, index) => ({
+              operationId: `op:move:${index}`,
+              schemaVersion: 1,
+              units: "nm",
+              kind: "move_footprint",
+              footprintId: target.footprintId,
+              at: target.at,
+            })),
+        })
+        .then((result) => {
+          if (destroyed) return;
+          if (!result.ok) {
+            // Rejected: nothing was applied — revert the drag preview exactly
+            // like an illegal drop and surface the structured failure.
+            history.cancelTransient();
+            for (const [id, origin] of g.origins) {
+              scene.setInstanceTransform(id, origin.at, origin.rotationDeg, origin.side);
+              scene.setGhost(id, violations.has(id) ? "illegal" : "none");
+            }
+            scheduleAirwires(g.changedNets);
+            deps.toast(result.message);
+            return;
+          }
+          const anyIllegal = reevaluateViolations(g.moveIds);
+          if (anyIllegal) {
+            deps.toast("Placed with courtyard overlap — move it to a clear spot to resolve.");
+          }
+        });
+      return;
+    }
     history.execute(label, (draft) => {
       for (const fp of draft.footprints) {
         const origin = g.origins.get(fp.id);
@@ -480,6 +531,39 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
       GRID_NM,
     );
     const idSet = new Set(insts.map((i) => i.id));
+    const session = canonicalSessionFor(history);
+    if (session) {
+      void session
+        .commit({
+          commandId: "pcb.rotate-side-footprint",
+          label: gestureLabel("Rotate", insts),
+          buildOperations: (board): EngineeringOperation[] =>
+            board.footprints
+              .filter((fp) => idSet.has(fp.id))
+              .map((fp, index) => {
+                // 90° CW in a +y-down world: (x, y) → (−y, x) about the center.
+                const rx = fp.at.x - center.x;
+                const ry = fp.at.y - center.y;
+                const at = snapVec({ x: center.x - ry, y: center.y + rx }, GRID_NM);
+                return {
+                  operationId: `op:rotate:${index}`,
+                  schemaVersion: 1,
+                  units: "nm",
+                  kind: "move_footprint",
+                  footprintId: fp.id,
+                  at: { x: Math.round(at.x), y: Math.round(at.y) },
+                  // KiCad rotations are CCW-positive, so CW is −90.
+                  rotationDeg: (fp.rotationDeg - 90 + 360) % 360,
+                };
+              }),
+        })
+        .then((result) => {
+          if (destroyed) return;
+          if (!result.ok) deps.toast(result.message);
+          else reevaluateViolations(ids);
+        });
+      return;
+    }
     history.execute(gestureLabel("Rotate", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -500,6 +584,36 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
     const insts = movableInstances(ids);
     if (insts.length === 0) return;
     const idSet = new Set(insts.map((i) => i.id));
+    const session = canonicalSessionFor(history);
+    if (session) {
+      void session
+        .commit({
+          commandId: "pcb.rotate-side-footprint",
+          label: gestureLabel("Flip", insts),
+          buildOperations: (board): EngineeringOperation[] =>
+            board.footprints
+              .filter((fp) => idSet.has(fp.id))
+              .map((fp, index) => {
+                const at = snapVec(fp.at, GRID_NM);
+                return {
+                  operationId: `op:flip:${index}`,
+                  schemaVersion: 1,
+                  units: "nm",
+                  kind: "move_footprint",
+                  footprintId: fp.id,
+                  at: { x: Math.round(at.x), y: Math.round(at.y) },
+                  rotationDeg: (360 - fp.rotationDeg) % 360,
+                  side: fp.side === "top" ? ("bottom" as const) : ("top" as const),
+                };
+              }),
+        })
+        .then((result) => {
+          if (destroyed) return;
+          if (!result.ok) deps.toast(result.message);
+          else reevaluateViolations(ids);
+        });
+      return;
+    }
     history.execute(gestureLabel("Flip", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -516,6 +630,33 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
     if (insts.length === 0) return;
     const step = fine ? FINE_NM : GRID_NM;
     const idSet = new Set(insts.map((i) => i.id));
+    const session = canonicalSessionFor(history);
+    if (session) {
+      void session
+        .commit({
+          commandId: "pcb.move-footprint",
+          label: gestureLabel("Nudge", insts),
+          // Evaluated when the (serialized) commit runs, so a burst of nudges
+          // composes correctly — each step moves from the then-current position.
+          buildOperations: (board): EngineeringOperation[] =>
+            board.footprints
+              .filter((fp) => idSet.has(fp.id))
+              .map((fp, index) => ({
+                operationId: `op:nudge:${index}`,
+                schemaVersion: 1,
+                units: "nm",
+                kind: "move_footprint",
+                footprintId: fp.id,
+                at: { x: Math.round(fp.at.x + dx * step), y: Math.round(fp.at.y + dy * step) },
+              })),
+        })
+        .then((result) => {
+          if (destroyed) return;
+          if (!result.ok) deps.toast(result.message);
+          else reevaluateViolations(ids);
+        });
+      return;
+    }
     history.execute(gestureLabel("Nudge", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -718,9 +859,19 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
         (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
       );
       if (deletable.length > 0) {
-        const result = applyEdits(history, [{ op: "delete-items", refs: deletable }]);
-        if (result.ok) store.remove(deletable);
-        else deps.toast(result.errors[0]);
+        if (canonicalSessionFor(history)) {
+          // B03: canonical delete (track/via/zone); silk text falls back to
+          // the legacy path inside applyEditsCanonical.
+          void applyEditsCanonical(history, [{ op: "delete-items", refs: deletable }]).then((result) => {
+            if (destroyed) return;
+            if (result.ok) store.remove(deletable);
+            else deps.toast(result.errors[0]);
+          });
+        } else {
+          const result = applyEdits(history, [{ op: "delete-items", refs: deletable }]);
+          if (result.ok) store.remove(deletable);
+          else deps.toast(result.errors[0]);
+        }
       }
       if (refs.some((r) => r.kind === "footprint")) {
         deps.toast(

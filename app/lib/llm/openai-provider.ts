@@ -11,6 +11,11 @@ import type {
 } from "openai/resources/responses/responses";
 import { composeInstructions } from "./context";
 import { toProviderError } from "./errors";
+import {
+  configuredOpenAIModel,
+  configuredOpenAIReasoningEffort,
+  type OpenAIReasoningEffort,
+} from "./openai-config";
 import type {
   LLMChunk,
   LLMContentPart,
@@ -128,7 +133,9 @@ export class OpenAIProvider implements LLMProvider {
 
   constructor(
     client?: OpenAIClient,
-    private readonly model = process.env.SIRKIT_OPENAI_MODEL ?? "gpt-5.4",
+    private readonly model = configuredOpenAIModel(),
+    private readonly reasoningEffort: OpenAIReasoningEffort | undefined =
+      configuredOpenAIReasoningEffort(model),
   ) {
     this.client = client;
   }
@@ -142,7 +149,11 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private getClient(): OpenAIClient {
-    this.client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    this.client ??= new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      maxRetries: 5,
+      timeout: 10 * 60 * 1000,
+    });
     return this.client;
   }
 
@@ -155,6 +166,7 @@ export class OpenAIProvider implements LLMProvider {
       tools: mapTools(request),
       tool_choice: request.tools?.length ? mapToolChoice(request.toolChoice) : undefined,
       max_output_tokens: request.maxTokens,
+      reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
       temperature: supportsTemperature ? request.temperature : undefined,
       store: false,
     };

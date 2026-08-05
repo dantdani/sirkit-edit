@@ -9,6 +9,7 @@ import type { Vec2, BBox } from "../geometry";
 import type { BoardOutline } from "../types";
 import { mmToNm } from "../units";
 import type { PlacementRouteabilityReport } from "./routeability";
+import type { PlacementCandidate, PlacementProblem, PlacementTermination } from "../placement/types";
 
 export type AutoPlaceRotation = 0 | 90 | 180 | 270;
 
@@ -106,5 +107,15 @@ export interface AutoPlaceResult {
     finalRatsnestLengthNm: number; // sum AFTER placement (goal: ≥ 60% reduction on demo)
     collisionsResolved: number; // # nudges/relocations made in collision-resolution pass
     footprintsClippedToBoundary: number;
+  };
+  /** Stage 7 evidence; legacy fields above remain compatibility projections. */
+  engineering?: {
+    problem: PlacementProblem;
+    problemHash: string;
+    constraintProgramHash: string;
+    termination: PlacementTermination;
+    searchComplete: boolean;
+    selectedCandidate: PlacementCandidate;
+    frontierCandidateIds: string[];
   };
 }

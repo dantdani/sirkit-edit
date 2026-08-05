@@ -11,6 +11,9 @@
  */
 
 import type { KicadPin } from "@/app/lib/kicad/types";
+import type { LegacyAtomicDraft } from "@/app/lib/atomic/compatibility";
+import type { PinPadMappingContract } from "@/app/lib/pcb/pin-pad-mapping";
+import type { NetlistComponent } from "@/app/lib/pcb/netlist-bridge";
 
 export type CachedPart = {
   id: string;
@@ -25,6 +28,12 @@ export type CachedPart = {
   pins: KicadPin[];
   symbolRaw: string;
   properties: Record<string, string>;
+  /** Draft-only compatibility view; exact approved selections use project pins. */
+  atomicCompatibility?: LegacyAtomicDraft;
+  pinPadMapping?: PinPadMappingContract;
+  atomicAssignment?: NetlistComponent["atomicAssignment"];
+  /** Published atomic authority per normalized value ('' = default). */
+  atomicAssignments?: Record<string, NonNullable<NetlistComponent["atomicAssignment"]>>;
 };
 
 const cache = new Map<string, CachedPart>();

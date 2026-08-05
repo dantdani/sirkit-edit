@@ -90,7 +90,7 @@ export function buildRoutedDemo(): PcbBoard {
   const tracks: Track[] = [];
   let n = 0;
   const track = (netId: number, layer: LayerId, start: Vec2, end: Vec2): Vec2 => {
-    tracks.push({ id: `rd-t${++n}`, layer, width: TRACK_W, start, end, netId });
+    tracks.push({ id: `rd-t${++n}`, layer, width: TRACK_W, start, end, netId, source: "human" });
     return end; // chainable: each call returns its endpoint
   };
 
@@ -132,8 +132,8 @@ export function buildRoutedDemo(): PcbBoard {
   track(0, "copperTop", { x: mmToNm(10), y: mmToNm(52) }, { x: mmToNm(14), y: mmToNm(52) });
 
   const vias: Via[] = [
-    { id: "rd-v1", at: viaA, size: VIA_SIZE, drill: VIA_DRILL, netId: VCC, layers: ["copperTop", "copperBottom"] },
-    { id: "rd-v2", at: viaB, size: VIA_SIZE, drill: VIA_DRILL, netId: VCC, layers: ["copperTop", "copperBottom"] },
+    { id: "rd-v1", at: viaA, size: VIA_SIZE, drill: VIA_DRILL, netId: VCC, layers: ["copperTop", "copperBottom"], source: "human" },
+    { id: "rd-v2", at: viaB, size: VIA_SIZE, drill: VIA_DRILL, netId: VCC, layers: ["copperTop", "copperBottom"], source: "human" },
   ];
 
   // GND zone (Stage 11: starts dirty/unfilled; useZoneFills pours it on load).
@@ -157,13 +157,14 @@ export function buildRoutedDemo(): PcbBoard {
 
   return {
     formatVersion: 1,
+    identityVersion: 1,
     stackup: 2,
     outline: { kind: "rect", width: mmToNm(80), height: mmToNm(60), origin: { x: 0, y: 0 } },
     nets: [
-      { id: 0, name: "" },
-      { id: GND, name: "GND" },
-      { id: VCC, name: "VCC" },
-      { id: SIG, name: "SIG" },
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      { id: GND, name: "GND", stableId: "net:gnd", endpointKeys: [] },
+      { id: VCC, name: "VCC", stableId: "net:vcc", endpointKeys: [] },
+      { id: SIG, name: "SIG", stableId: "net:sig", endpointKeys: [] },
     ],
     footprints: [u1, r1, r2, r3, r4, r5, j1, j2],
     tracks,

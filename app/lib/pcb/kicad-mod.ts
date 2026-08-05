@@ -212,8 +212,15 @@ function parsePad(padNode: SList, warnings: string[]): Pad {
     at,
     rotationDeg,
     layers: expandPadLayers(padNode, warnings),
+    ...(type === "thru_hole" ? { plated: true } : type === "np_thru_hole" ? { plated: false } : {}),
   };
   if (drill) pad.drill = drill;
+  const maskMargin = child(padNode, "solder_mask_margin");
+  const pasteMargin = child(padNode, "solder_paste_margin");
+  const pasteRatio = child(padNode, "solder_paste_margin_ratio");
+  if (maskMargin) pad.solderMaskMarginNm = mmToNm(numAt(maskMargin, 1, 0));
+  if (pasteMargin) pad.solderPasteMarginNm = mmToNm(numAt(pasteMargin, 1, 0));
+  if (pasteRatio) pad.solderPasteMarginRatio = numAt(pasteRatio, 1, 0);
   return pad;
 }
 

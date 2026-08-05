@@ -5,15 +5,15 @@
  * unconnected).
  *
  * Sync is FORWARD-ONLY: the schematic is the source of truth; this module
- * never writes schematic state. Net ids are deterministic — the same
- * schematic always produces the same ids (named nets sorted alphabetically
- * get 1..k, then unnamed nets in a stable order) — so Stage 6 connectivity
- * and Stage 9 DSN export don't churn between syncs.
+ * never writes schematic state. Numeric net ids are rebuilt deterministically
+ * for serialization, while persistent stable ids are reconciled from exact
+ * schematic endpoint membership so renames and numeric reordering cannot move
+ * copper to a different electrical net.
  *
  * Footprint resolution is deterministic-first: (1) the symbol's footprint
  * hint via /api/pcb/footprints/resolve, (2) the package-map heuristic table,
  * (3) the assignment queue (AI suggestions run on-demand there, never during
- * sync). Every tier is verified by pad-count == pin-count.
+ * sync). Every tier must pass explicit, lossless pin-to-pad accounting.
  */
 
 import type { SchematicState } from "@/lib/schematic-types";
@@ -27,6 +27,21 @@ import { parseKicadMod } from "./kicad-mod";
 import { heuristicFootprint, guessPackageToken } from "./package-map";
 import type { FootprintDef, FootprintInstance, PcbBoard } from "./types";
 import { createEmptyBoard } from "./types";
+import {
+  compareDiagnostics,
+  engineeringDiagnostic,
+  migrateBoardElectricalIdentities,
+  schematicEndpointKey,
+  stableNetIdForEndpoints,
+  validateReferenceDesignators,
+  type EngineeringDiagnostic,
+} from "./integrity";
+import {
+  resolvePinPadMapping,
+  type PinPadMappingContract,
+  type PinPadMappingResult,
+} from "./pin-pad-mapping";
+import { reconcileBoardNets, remapNumericNetId, type NetReconciliationResult } from "./net-reconciliation";
 import { mmToNm } from "./units";
 import {
   bboxesOverlap,
@@ -37,6 +52,8 @@ import {
 } from "./autoplace/geometry";
 import type { BBox, Vec2 } from "./geometry";
 import { reclassifyBoard } from "./netclass-rules";
+import { pcbSyncDigest, publicationSourceDigest } from "../pcb-sync/stable";
+import type { PcbSyncIssue, PcbSyncSchematicComponent, PcbSyncSchematicNet } from "../pcb-sync/types";
 
 // ─── Pinned netlist types ────────────────────────────────────────────────────
 
@@ -48,12 +65,24 @@ export interface NetlistComponent {
   package?: string;
   footprintHint?: string; // 'Resistor_SMD:R_0603_1608Metric' from ingested symbol data
   pins: { number: string; name?: string }[];
+  /** Optional trusted library/user mapping; absent means exact string identity only. */
+  pinPadMapping?: PinPadMappingContract;
+  atomicPartRevisionId?: string;
+  atomicAssignment?: {
+    revisionId: string;
+    symbolVersionId: string;
+    footprintVersionId: string;
+    mappingCertificateId: string;
+    footprintFullName: string;
+    approved: true;
+  };
 }
 
 export interface NetlistNet {
   id: number;
   name: string;
   nodes: { componentId: string; pinNumber: string }[];
+  endpointKeys: string[];
 }
 
 export interface PcbNetlist {
@@ -67,6 +96,8 @@ export interface SyncReport {
   kept: string[];
   footprintChanged: string[]; // kept position, def replaced
   unresolved: { componentId: string; ref: string; reason: string }[];
+  diagnostics: EngineeringDiagnostic[];
+  reconciliation: NetReconciliationResult["changes"];
   resolvedBy: Record<"hint" | "heuristic" | "manual", number>;
   placement: {
     mode: "centered" | "preserved-staging";
@@ -91,6 +122,10 @@ export interface NetlistPartData {
   mpn?: string | null;
   name?: string | null;
   description?: string | null;
+  /** Trusted library enrichment. Without it, exact pin-number = pad-number is required. */
+  pinPadMapping?: PinPadMappingContract;
+  /** Exact Stage 5 bundle. Candidates/hints must not populate this field. */
+  atomicAssignment?: NetlistComponent["atomicAssignment"];
 }
 
 export type PartLookup = (partId: string) => NetlistPartData | null;
@@ -173,6 +208,15 @@ export function buildNetlist(
       value: inst.value,
       ...(pkg ? { package: pkg } : {}),
       ...(part?.footprintHint ? { footprintHint: part.footprintHint } : {}),
+      ...(part?.pinPadMapping ? { pinPadMapping: part.pinPadMapping } : {}),
+      ...(inst.atomicPartRevisionId ? { atomicPartRevisionId: inst.atomicPartRevisionId } : {}),
+      ...(part?.atomicAssignment &&
+        part.atomicAssignment.revisionId === inst.atomicPartRevisionId &&
+        part.atomicAssignment.symbolVersionId === inst.symbolAssetVersionId &&
+        part.atomicAssignment.footprintVersionId === inst.footprintAssetVersionId &&
+        part.atomicAssignment.mappingCertificateId === inst.mappingCertificateId
+        ? { atomicAssignment: part.atomicAssignment }
+        : {}),
       pins,
     });
   }
@@ -253,6 +297,7 @@ export function buildNetlist(
       id: nextId++,
       name,
       nodes: nodes.map(({ componentId, pinNumber }) => ({ componentId, pinNumber })),
+      endpointKeys: nodes.map(({ componentId, pinNumber }) => schematicEndpointKey(componentId, pinNumber)).sort(),
     });
   }
   for (const nodes of unnamedNets) {
@@ -261,6 +306,7 @@ export function buildNetlist(
       id,
       name: `N$${id}`,
       nodes: nodes.sort(compareNodes).map(({ componentId, pinNumber }) => ({ componentId, pinNumber })),
+      endpointKeys: nodes.map(({ componentId, pinNumber }) => schematicEndpointKey(componentId, pinNumber)).sort(),
     });
   }
 
@@ -273,6 +319,42 @@ export function netlistHash(netlist: PcbNetlist): string {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36);
+}
+
+/** Deterministic, non-mutating graph accepted by the durable PCB-sync publisher. */
+export interface PcbSyncPublicationGraph { components: PcbSyncSchematicComponent[]; nets: PcbSyncSchematicNet[]; prerequisiteIssues: PcbSyncIssue[]; sourceDigest: string }
+
+export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart: PartLookup = () => null): PcbSyncPublicationGraph {
+  const netlist = buildNetlist(schematic, getPart), refs = new Set<string>(), componentIds = new Set<string>(), pinIds = new Set<string>(), connected = new Set<string>();
+  const instanceById = new Map((schematic.kicadComponents ?? []).map((item) => [item.id, item]));
+  for (const component of netlist.components) {
+    if (componentIds.has(component.id) || refs.has(component.ref)) throw new Error("PS_COMPONENT_IDENTITY_DUPLICATE");
+    componentIds.add(component.id); refs.add(component.ref);
+    const numbers = new Set<string>();
+    for (const pin of component.pins) { const pinId = `${component.id}:pin:${pin.number}`; if (numbers.has(pin.number) || pinIds.has(pinId)) throw new Error("PS_PIN_IDENTITY_DUPLICATE"); numbers.add(pin.number); pinIds.add(pinId); }
+  }
+  for (const net of netlist.nets) for (const node of net.nodes) { const pinId = `${node.componentId}:pin:${node.pinNumber}`; if (!componentIds.has(node.componentId) || !pinIds.has(pinId)) throw new Error("PS_NET_MEMBER_REFERENCE_INVALID"); if (connected.has(pinId)) throw new Error("PS_NET_MEMBER_DUPLICATE"); connected.add(pinId); }
+  const components = netlist.components.map((component): PcbSyncSchematicComponent => {
+    const instance = instanceById.get(component.id), symbolAssetVersionId = instance?.symbolAssetVersionId ?? (instance ? "" : `sirkit.theory-symbol:${component.ref.replace(/[0-9]+$/, "").toLowerCase()}:v1`);
+    if (!symbolAssetVersionId) throw new Error("PS_SYMBOL_ASSET_REQUIRED");
+    const pins = component.pins.map((pin) => ({ pinInstanceId: `${component.id}:pin:${pin.number}`, number: pin.number, ...(pin.name ? { name: pin.name } : {}), disposition: connected.has(`${component.id}:pin:${pin.number}`) ? "connected" as const : "unconnected" as const }));
+    return { componentInstanceId: component.id, componentRevision: `schematic-component:${pcbSyncDigest({ id: component.id, ref: component.ref, value: component.value, symbolAssetVersionId, pins })}`, referenceDesignator: component.ref, ...(component.value ? { value: component.value } : {}), hierarchyPath: ["root"], symbolAssetVersionId, applicability: "applicable", pins };
+  }).sort((a, b) => a.referenceDesignator.localeCompare(b.referenceDesignator, undefined, { numeric: true }));
+  const netIds = new Set<string>(), nets = netlist.nets.map((net): PcbSyncSchematicNet => {
+    const members = net.nodes.map((node) => ({ componentInstanceId: node.componentId, pinInstanceId: `${node.componentId}:pin:${node.pinNumber}`, pinNumber: node.pinNumber })).sort((a, b) => a.pinInstanceId.localeCompare(b.pinInstanceId));
+    if (!members.length) throw new Error("PS_NET_MEMBER_REFERENCE_INVALID");
+    // RC01/MFG parity recomputes canonical endpoint-derived identity
+    // (integrity.ts stableNetIdForEndpoints) from the source netlist, so the
+    // published identity must be the same scheme — not an ad-hoc member digest.
+    const stableNetId = stableNetIdForEndpoints(net.endpointKeys, net.name); if (netIds.has(stableNetId)) throw new Error("PS_NET_IDENTITY_DUPLICATE"); netIds.add(stableNetId);
+    const name = net.name.trim(), upper = name.toUpperCase(), classification: PcbSyncSchematicNet["classification"] = /^(GND|VSS|AGND|DGND|PGND)/.test(upper) ? "ground" : /^(VCC|VDD|VBUS|VIN|\+)/.test(upper) ? "power" : "signal";
+    return { stableNetId, connectivityRevision: `connectivity:${pcbSyncDigest({ stableNetId, members })}`, canonicalScope: ["root"], displayName: name, aliases: [], classification, members, explicitNoConnectPinIds: [], constraintRefs: [] };
+  }).sort((a, b) => a.stableNetId.localeCompare(b.stableNetId));
+  // Digest the SHARED canonical form the publisher recomputes server-side —
+  // digesting these arrays as built would disagree with it (different component,
+  // pin and member orderings) and publication would reject a valid graph.
+  const prerequisiteIssues: PcbSyncIssue[] = [], sourceDigest = publicationSourceDigest({ components, nets, prerequisiteIssues });
+  return { components, nets, prerequisiteIssues, sourceDigest };
 }
 
 // ─── Footprint resolution ────────────────────────────────────────────────────
@@ -540,16 +622,22 @@ async function resolveFootprint(
     hit: FootprintSearchHit,
     tier: "hint" | "heuristic",
   ): Promise<Resolution> => {
-    if (hit.padCount !== c.pins.length) {
-      return {
-        ok: false,
-        reason: `${hit.fullName} has ${hit.padCount} pads but ${c.ref} has ${c.pins.length} pins`,
-      };
-    }
     const detail = await resolver.detail(hit.id);
     if (!detail) return { ok: false, reason: `footprint source unavailable for ${hit.fullName}` };
     return { ok: true, tier, fullName: hit.fullName, def: parseKicadMod(detail.rawSexpr, detail.libName) };
   };
+
+  // An exact Stage 5 selection may only reach PCB through its approved,
+  // revision-bound bundle. Falling back to a same-name hint would detach the
+  // project pin from the physical asset and is therefore rejected atomically.
+  if (c.atomicPartRevisionId) {
+    if (!c.atomicAssignment || !c.pinPadMapping) {
+      return { ok: false, reason: "atomic component is missing an approved revision-bound footprint/mapping certificate" };
+    }
+    const hit = await resolver.resolve(c.atomicAssignment.footprintFullName);
+    if (!hit) return { ok: false, reason: `approved atomic footprint "${c.atomicAssignment.footprintFullName}" is unavailable` };
+    return fetchDef(hit, "hint");
+  }
 
   // Tier 1: the symbol's footprint hint. A pad/pin mismatch demotes straight
   // to unresolved (the hint names a specific footprint — silently substituting
@@ -592,7 +680,13 @@ export async function syncFromSchematic(
   schematic: SchematicState,
   existing?: PcbBoard,
   opts: SyncOptions = {},
-): Promise<{ board: PcbBoard; report: SyncReport; netlist: PcbNetlist }> {
+): Promise<{
+  ok: boolean;
+  board: PcbBoard;
+  report: SyncReport;
+  netlist: PcbNetlist;
+  diagnostics: EngineeringDiagnostic[];
+}> {
   const resolver = opts.resolver ?? createFetchFootprintResolver();
   const netlist = buildNetlist(schematic, opts.getPart);
 
@@ -602,6 +696,8 @@ export async function syncFromSchematic(
     kept: [],
     footprintChanged: [],
     unresolved: [],
+    diagnostics: [],
+    reconciliation: [],
     resolvedBy: { hint: 0, heuristic: 0, manual: 0 },
     placement: {
       mode: "centered",
@@ -611,75 +707,130 @@ export async function syncFromSchematic(
     },
   };
 
-  const base = existing ?? createEmptyBoard();
+  const original = existing ?? createEmptyBoard();
+  const migration = migrateBoardElectricalIdentities(original);
+  if (migration.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    report.diagnostics = migration.diagnostics;
+    return { ok: false, board: original, report, netlist, diagnostics: report.diagnostics };
+  }
+  const base = migration.board;
   const existingById = new Map(base.footprints.map((f) => [f.id, f]));
 
   // pad number → net id, per component.
-  const padNetsById = new Map<string, Record<string, number>>();
+  report.diagnostics.push(...validateReferenceDesignators(netlist.components));
+  const netIdByEndpoint = new Map<string, number>();
   for (const net of netlist.nets) {
-    for (const node of net.nodes) {
-      const m = padNetsById.get(node.componentId) ?? {};
-      m[node.pinNumber] = net.id;
-      padNetsById.set(node.componentId, m);
-    }
+    for (const endpointKey of net.endpointKeys) netIdByEndpoint.set(endpointKey, net.id);
   }
 
-  const keptInstances: FootprintInstance[] = [];
-  const newcomers: { c: NetlistComponent; fullName: string; def: FootprintDef }[] = [];
+  interface PreparedComponent {
+    c: NetlistComponent;
+    prev?: FootprintInstance;
+    fullName: string;
+    def: FootprintDef;
+    mapping: PinPadMappingResult;
+  }
+  const prepared: PreparedComponent[] = [];
 
   for (const c of netlist.components) {
-    const padNets = padNetsById.get(c.id) ?? {};
     const prev = existingById.get(c.id);
+    let fullName: string;
+    let def: FootprintDef;
 
     if (prev) {
       report.kept.push(c.id);
-      let def = prev.def;
-      let footprintId = prev.footprintId;
+      def = prev.def;
+      fullName = prev.footprintId;
       // Footprint change detection is hint-string compare (MVP carve-out). On
       // resolution failure the placed def wins — never strand placed copper.
       if (c.footprintHint && c.footprintHint !== prev.footprintId) {
         const hit = await resolver.resolve(c.footprintHint);
-        if (hit && hit.padCount === c.pins.length) {
+        if (hit) {
           const detail = await resolver.detail(hit.id);
           if (detail) {
             def = parseKicadMod(detail.rawSexpr, detail.libName);
-            footprintId = hit.fullName;
+            fullName = hit.fullName;
             report.footprintChanged.push(c.id);
             report.resolvedBy.hint++;
+          } else {
+            const reason = `footprint source unavailable for ${hit.fullName}`;
+            report.unresolved.push({ componentId: c.id, ref: c.ref, reason });
+            report.diagnostics.push(engineeringDiagnostic("FOOTPRINT_RESOLUTION_FAILED", `${c.ref}: ${reason}`, { componentIds: [c.id] }));
           }
+        } else {
+          const reason = `footprint hint "${c.footprintHint}" not found`;
+          report.unresolved.push({ componentId: c.id, ref: c.ref, reason });
+          report.diagnostics.push(engineeringDiagnostic("FOOTPRINT_RESOLUTION_FAILED", `${c.ref}: ${reason}`, { componentIds: [c.id] }));
         }
       }
-      keptInstances.push({
-        ...prev,
-        id: c.id,
-        ref: c.ref,
-        footprintId,
-        def,
-        at: prev.at,
-        rotationDeg: prev.rotationDeg,
-        side: prev.side,
-        padNets,
-      });
-      continue;
+    } else {
+      report.added.push(c.id);
+      const res = await resolveFootprint(c, resolver);
+      if (!res.ok) {
+        report.unresolved.push({ componentId: c.id, ref: c.ref, reason: res.reason });
+        report.diagnostics.push(engineeringDiagnostic(
+          "FOOTPRINT_RESOLUTION_FAILED",
+          `${c.ref}: ${res.reason}`,
+          { componentIds: [c.id], suggestedActions: ["Assign a valid footprint and retry synchronization."] },
+        ));
+        continue;
+      }
+      report.resolvedBy[res.tier]++;
+      fullName = res.fullName;
+      def = res.def;
     }
 
-    report.added.push(c.id);
-    const res = await resolveFootprint(c, resolver);
-    if (!res.ok) {
-      report.unresolved.push({ componentId: c.id, ref: c.ref, reason: res.reason });
-      continue;
+    const mapping = resolvePinPadMapping(c, def, netIdByEndpoint);
+    report.diagnostics.push(...mapping.diagnostics);
+    if (!mapping.ok) {
+      report.unresolved.push({
+        componentId: c.id,
+        ref: c.ref,
+        reason: mapping.diagnostics.find((diagnostic) => diagnostic.severity === "error")?.summary
+          ?? "pin-to-pad mapping could not be proven",
+      });
     }
-    report.resolvedBy[res.tier]++;
-    newcomers.push({ c, fullName: res.fullName, def: res.def });
+    prepared.push({ c, ...(prev ? { prev } : {}), fullName, def, mapping });
   }
 
   for (const f of base.footprints) {
     if (!netlist.components.some((c) => c.id === f.id)) report.removed.push(f.id);
   }
 
+  report.diagnostics.sort(compareDiagnostics);
+  if (report.diagnostics.some((diagnostic) => diagnostic.severity === "error")) {
+    return { ok: false, board: original, report, netlist, diagnostics: report.diagnostics };
+  }
+
+  const reconciliation = reconcileBoardNets(base, netlist.nets);
+  report.reconciliation = reconciliation.changes;
+  report.diagnostics.push(...reconciliation.diagnostics);
+  report.diagnostics.sort(compareDiagnostics);
+  if (!reconciliation.ok) {
+    return { ok: false, board: original, report, netlist, diagnostics: report.diagnostics };
+  }
+
+  const keptInstances: FootprintInstance[] = prepared
+    .filter((item): item is PreparedComponent & { prev: FootprintInstance } => item.prev !== undefined)
+    .map(({ c, prev, fullName, def, mapping }) => ({
+      ...prev,
+      id: c.id,
+      ref: c.ref,
+      footprintId: fullName,
+      def,
+      at: prev.at,
+      rotationDeg: prev.rotationDeg,
+      side: prev.side,
+      padNets: mapping.padNets,
+      pinPadMappings: mapping.mappings,
+      footprintPadClassifications: mapping.footprintPadClassifications,
+    }));
+  const newcomers = prepared
+    .filter((item) => item.prev === undefined)
+    .sort((a, b) => compareRefs(a.c.ref, b.c.ref));
+
   // New parts default to a centered, spread cluster. The legacy staging strip
   // remains available only through an explicit preserve-coordinates option.
-  newcomers.sort((a, b) => compareRefs(a.c.ref, b.c.ref));
   const interim: PcbBoard = { ...base, footprints: keptInstances };
   const preserveCoordinates = opts.placement?.preserveAbsoluteCoordinates === true
     || opts.placement?.centerNewParts === false;
@@ -706,7 +857,7 @@ export async function syncFromSchematic(
     positions = centered.positions;
     report.placement = centered.placement;
   }
-  const newInstances = newcomers.map(({ c, fullName, def }, i): FootprintInstance => ({
+  const newInstances = newcomers.map(({ c, fullName, def, mapping }, i): FootprintInstance => ({
     id: c.id,
     ref: c.ref,
     footprintId: fullName,
@@ -714,33 +865,74 @@ export async function syncFromSchematic(
     at: positions[i],
     rotationDeg: 0,
     side: "top",
-    padNets: padNetsById.get(c.id) ?? {},
+    padNets: mapping.padNets,
+    pinPadMappings: mapping.mappings,
+    footprintPadClassifications: mapping.footprintPadClassifications,
   }));
 
-  // board.nets is rebuilt wholesale; net 0 stays the reserved unconnected net.
-  const nets = [{ id: 0, name: "" }, ...netlist.nets.map((n) => ({ id: n.id, name: n.name }))];
-  const validNetIds = new Set(nets.map((n) => n.id));
-  const remapNet = (netId: number): number => (validNetIds.has(netId) ? netId : 0);
+  const remapNet = (netId: number): number => remapNumericNetId(reconciliation.oldToNewId, netId);
+  const stackupConfig = base.stackupConfig
+    ? {
+        ...base.stackupConfig,
+        routing: { ...base.stackupConfig.routing },
+        copperLayers: base.stackupConfig.copperLayers.map((layer) => {
+          if (layer.planeNetId === undefined) return { ...layer };
+          const mapped = reconciliation.oldToNewId.get(layer.planeNetId);
+          if (mapped === undefined || mapped === 0) {
+            const withoutNet = { ...layer };
+            delete withoutNet.planeNetId;
+            return withoutNet;
+          }
+          return { ...layer, planeNetId: mapped };
+        }),
+      }
+    : undefined;
+  const routingHistory = base.routingHistory
+    ?.filter((event) => event.netId === 0 || reconciliation.oldToNewId.has(event.netId))
+    .map((event) => ({ ...event, netId: remapNet(event.netId) }));
+  const netClassing = base.netClassing
+    ? {
+        ...base.netClassing,
+        assignments: {},
+        base: {},
+        ruleDeltas: base.netClassing.ruleDeltas.map((delta) => ({
+          ...delta,
+          changes: delta.changes.map((change) => change.appliesTo.kind === "nets"
+            ? {
+                ...change,
+                appliesTo: {
+                  kind: "nets" as const,
+                  netIds: [...new Set(change.appliesTo.netIds.map(remapNet).filter((id) => id !== 0))].sort((a, b) => a - b),
+                },
+              }
+            : change),
+        })),
+      }
+    : undefined;
 
   const board: PcbBoard = {
     ...base,
     formatVersion: 1,
+    identityVersion: 1,
     stackup: base.stackup,
     outline: base.outline,
-    nets,
+    nets: reconciliation.nets,
     // Sorted by id so the array order is a pure function of the schematic —
     // required for the sync-twice deep-equal invariant.
     footprints: [...keptInstances, ...newInstances].sort((a, b) => a.id.localeCompare(b.id)),
-    // Copper whose net vanished is orphaned to net 0, never deleted (flagging
-    // orphans is Stage 12's job).
+    // Reconciliation rejects any routed deletion/split/merge before this
+    // candidate exists. Safe numeric-id changes are remapped by stable identity.
     tracks: base.tracks.map((t) => ({ ...t, netId: remapNet(t.netId) })),
     vias: base.vias.map((v) => ({ ...v, netId: remapNet(v.netId) })),
     zones: base.zones.map((z) => ({ ...z, netId: remapNet(z.netId) })),
     texts: base.texts,
+    ...(stackupConfig ? { stackupConfig } : {}),
+    ...(routingHistory ? { routingHistory } : {}),
+    ...(netClassing ? { netClassing } : {}),
   };
   // Net names and topology may have changed; retain manual/AI deltas while
   // rebuilding their deterministic assignment base for the synced netlist.
   if (board.netClassing) reclassifyBoard(board);
 
-  return { board, report, netlist };
+  return { ok: true, board, report, netlist, diagnostics: report.diagnostics };
 }

@@ -23,6 +23,8 @@ import type { CopperItemRef } from "../connectivity-board";
 import type { DrcCheckContext, DrcViolation } from "../drc/types";
 import { fmtMm, layerName, violationId } from "../drc/format";
 import { edgeShape, outlineSegments, regionShapeDistance } from "./geometry";
+import { classifyNetRelation } from "../copper-policy";
+import { zoneFillIsCurrent } from "./fill-lifecycle";
 
 interface CopperCandidate {
   ref: CopperItemRef;
@@ -35,12 +37,12 @@ interface CopperCandidate {
 function collectForeignCopper(board: PcbBoard, layer: LayerId, zoneNetId: number): CopperCandidate[] {
   const out: CopperCandidate[] = [];
   for (const t of board.tracks) {
-    if (t.layer !== layer || t.netId === zoneNetId) continue;
+    if (t.layer !== layer || classifyNetRelation(board, zoneNetId, t.netId) === "same-proven-net") continue;
     const shape = trackShape(t);
     out.push({ ref: { kind: "track", id: t.id }, netId: t.netId, shape, anchor: t.start, bbox: shapeBBox(shape) });
   }
   for (const v of board.vias) {
-    if (v.netId === zoneNetId || !viaSpannedLayers(v).includes(layer)) continue;
+    if (classifyNetRelation(board, zoneNetId, v.netId) === "same-proven-net" || !viaSpannedLayers(v).includes(layer)) continue;
     const shape = viaShape(v);
     out.push({ ref: { kind: "via", id: v.id }, netId: v.netId, shape, anchor: v.at, bbox: shapeBBox(shape) });
   }
@@ -49,7 +51,7 @@ function collectForeignCopper(board: PcbBoard, layer: LayerId, zoneNetId: number
       if (pad.type === "np_thru_hole") continue;
       if (!padCopperLayers(inst, pad).includes(layer)) continue;
       const netId = inst.padNets[pad.number] ?? 0;
-      if (netId === zoneNetId) continue;
+      if (classifyNetRelation(board, zoneNetId, netId) === "same-proven-net") continue;
       const shape = padWorldShape(inst, pad);
       out.push({
         ref: { kind: "pad", instanceId: inst.id, padNumber: pad.number },
@@ -93,7 +95,7 @@ export function checkZoneFills(ctx: DrcCheckContext): DrcViolation[] {
   const outlineSegs = outlineSegments(board.outline);
 
   for (const zone of board.zones) {
-    if (zone.fill.length === 0) continue;
+    if (!zoneFillIsCurrent(board, zone) || zone.fill.length === 0) continue;
     const zoneEff = ctx.eff(zone.netId);
 
     if (zone.netId === 0) {

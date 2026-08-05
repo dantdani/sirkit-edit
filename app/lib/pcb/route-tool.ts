@@ -34,19 +34,15 @@ import {
   segmentDistance,
 } from "./geometry-copper";
 import { polygonBBox, regionAreaNm2, regionShapeDistance } from "./zones/geometry"; // Stage 11: zone fills are obstacles
+import { zoneFillIsCurrent } from "./zones/fill-lifecycle";
 import type { CopperItemRef } from "./connectivity-board";
 import type { RouteCommand } from "./route-tool.commands";
-import { buildRipupNetCommand } from "./route-tool.commands";
+import { buildRipupSelectionCommand } from "./route-tool.commands";
 import { classDefaultPadstack, applyPadstackToVia } from "./padstack/defaults"; // Stage 17
 import { getPadstack } from "./padstack/registry";
 import { adaptBoardToRoutingWorld } from "./smart-routing/world";
 import { resolveSmartRoutingRules } from "./smart-routing/rules";
 import { routeSmart } from "./smart-routing/engine";
-import {
-  beginPreviewTransaction,
-  createRoutingHistoryEvent,
-  stagePreviewCandidates,
-} from "./smart-routing/transaction";
 import type {
   EffectiveRoutingRules,
   RoutingWorld,
@@ -54,6 +50,14 @@ import type {
   SmartRouteIntent,
   SmartRouteResult,
 } from "./smart-routing/types";
+import { decideCopperPair, violatesOrdinaryCopperClearance, type NetRelation } from "./copper-policy";
+import { bestRouteAnchor } from "./routing/anchors";
+import { buildRouteCandidate } from "./routing/candidate";
+import { defaultViaTransition } from "./routing/layers";
+import { buildRoutingSnapshot } from "./routing/snapshot";
+import { routingStableId } from "./routing/stable";
+import type { ProfessionalRouteMode, RouteAnchor, RoutePosture, RoutingSnapshot } from "./routing/types";
+import { canMutateCopper } from "./routing/protection";
 
 // ── Net-class defaults (Stage 10 `getNetClass` supersedes; see options.netClass)
 export const DEFAULT_TRACK_WIDTH = 250_000; // 0.25 mm
@@ -110,6 +114,11 @@ export type RouteToolState =
       viaSize: number;
       viaDrill: number;
       viaPadstackId?: string;
+      routeMode: ProfessionalRouteMode;
+      posture: RoutePosture;
+      sessionState: "anchor_selected" | "previewing" | "preview_with_collision" | "via_preview" | "layer_transitioned" | "finishing";
+      stagedTracks: readonly Track[];
+      stagedVias: readonly Via[];
       anchor: Vec2; // last committed vertex (world nm)
       preview: RoutePreview;
       preferHorizontalFirst: boolean; // Tab toggles this
@@ -130,7 +139,7 @@ export interface RouteToolAPI {
   onPointerUp(world: Vec2): void;
   onKey(key: "V" | "Escape" | "Backspace" | "X" | "Tab"): void;
   cancel(): void;
-  /** Rip up the whole net under `world` (right-click). Returns true if it acted. */
+  /** Rip up only the selected eligible segment under `world` (right-click). */
   ripupNetAt(world: Vec2): boolean;
   /** Frozen copy safe to render from. */
   snapshot(): RouteToolState;
@@ -149,8 +158,12 @@ export interface RouteToolOptions {
     viaSize: number;
     viaDrill: number;
     viaPadstackId?: string;
+    routeMode?: ProfessionalRouteMode;
+    posture?: RoutePosture;
   };
   grid?: number;
+  /** Structured lock guard surfaced by the React hook as a user explanation. */
+  onProtected?: (objectIds: string[]) => void;
 }
 
 // ── 45° corner (pinned math) ─────────────────────────────────────────────────
@@ -190,6 +203,8 @@ export interface ClearanceGuardInput {
   ignoreItemIds?: Set<string>;
   netId: number;
   clearance: number;
+  /** Consumer-specific resolved rule lookup (DRC presets may override board net classes). */
+  clearanceForNet?: (netId: number) => number;
   /** Distance every candidate must keep from the board outline. */
   edgeClearance?: number;
 }
@@ -200,6 +215,8 @@ export interface ClearanceGuardResult {
   /** A typed routing keepout is not conductive, so it is not a CopperItemRef. */
   blockedByKeepoutId?: string;
   distance?: number; // nm; negative = overlap
+  requiredClearance?: number;
+  netRelation?: NetRelation;
   /** Additive: the first violation is the board edge (has no CopperItemRef). */
   blockedByEdge?: boolean;
 }
@@ -298,6 +315,7 @@ function collectObstacles(board: PcbBoard, ignore: Set<string>): Obstacle[] {
   // the pour re-flows around/onto committed copper.
   for (const zone of board.zones) {
     if (ignore.has(zone.id)) continue;
+    if (!zoneFillIsCurrent(board, zone)) continue;
     zone.fill.forEach((region, regionIndex) => {
       out.push({
         ref: { kind: "zone-region", zoneId: zone.id, regionIndex },
@@ -367,12 +385,15 @@ function viaToObstacleDistance(v: Via, o: Obstacle): number {
   return viaPadDistance(v, o.inst as FootprintInstance, o.pad as Pad);
 }
 
-/** A gap violates when: same net → 0 < d < clearance; else → d < clearance. */
-function isViolation(d: number, obstacleNet: number, netId: number, clearance: number): boolean {
-  if (d === Infinity) return false; // not on a shared copper layer
-  const sameNet = obstacleNet === netId && netId !== 0;
-  if (sameNet) return d > 0 && d < clearance;
-  return d < clearance;
+function pairClearanceDecision(board: PcbBoard, d: number, obstacleNet: number, netId: number, clearance: number) {
+  const decision = decideCopperPair({
+    board,
+    leftNetId: netId,
+    rightNetId: obstacleNet,
+    operation: "route-preview",
+    interNetClearanceNm: clearance,
+  });
+  return { violation: violatesOrdinaryCopperClearance(d, decision), requiredClearance: decision.requiredElectricalClearanceNm ?? 0, netRelation: decision.relation };
 }
 
 const CORNER_CHORDS = 4; // arc-chords per rounded corner
@@ -447,10 +468,13 @@ interface Violation {
   ref?: CopperItemRef;
   keepoutId?: string;
   edge?: boolean;
+  requiredClearance?: number;
+  netRelation?: NetRelation;
 }
 
 export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): ClearanceGuardResult {
   const { candidateSegments, candidateVias = [], netId, clearance } = input;
+  const pairThreshold = (obstacleNetId: number): number => Math.max(clearance, input.clearanceForNet?.(obstacleNetId) ?? clearance);
   const ignore = input.ignoreItemIds ?? new Set<string>();
   const edgeClearance = input.edgeClearance ?? DEFAULT_EDGE_CLEARANCE;
 
@@ -462,26 +486,27 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
     for (const o of obstacles) tree.add(o.bbox.minX, o.bbox.minY, o.bbox.maxX, o.bbox.maxY);
     tree.finish();
 
+    const searchClearance = Math.max(clearance, ...board.nets.map((net) => input.clearanceForNet?.(net.id) ?? clearance));
     const query = (bb: BBox): number[] =>
-      tree.search(bb.minX - clearance, bb.minY - clearance, bb.maxX + clearance, bb.maxY + clearance);
+      tree.search(bb.minX - searchClearance, bb.minY - searchClearance, bb.maxX + searchClearance, bb.maxY + searchClearance);
 
     for (const seg of candidateSegments) {
       for (const hit of query(trackBBox(seg))) {
         const o = obstacles[hit];
-        if (o.kind === "zone" && o.netId === netId) continue; // pour joins same-net copper
         const d = trackToObstacleDistance(seg, o);
-        if (isViolation(d, o.netId, netId, clearance)) {
-          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref, keepoutId: o.keepoutId });
+        const pair = pairClearanceDecision(board, d, o.netId, netId, pairThreshold(o.netId));
+        if (pair.violation) {
+          violations.push({ rank: o.rank, key: o.key, distance: d, requiredClearance: pair.requiredClearance, netRelation: pair.netRelation, ref: o.ref, keepoutId: o.keepoutId });
         }
       }
     }
     for (const v of candidateVias) {
       for (const hit of query(viaBBox(v))) {
         const o = obstacles[hit];
-        if (o.kind === "zone" && o.netId === netId) continue; // pour joins same-net copper
         const d = viaToObstacleDistance(v, o);
-        if (isViolation(d, o.netId, netId, clearance)) {
-          violations.push({ rank: o.rank, key: o.key, distance: d, ref: o.ref, keepoutId: o.keepoutId });
+        const pair = pairClearanceDecision(board, d, o.netId, netId, pairThreshold(o.netId));
+        if (pair.violation) {
+          violations.push({ rank: o.rank, key: o.key, distance: d, requiredClearance: pair.requiredClearance, netRelation: pair.netRelation, ref: o.ref, keepoutId: o.keepoutId });
         }
       }
     }
@@ -523,6 +548,8 @@ export function checkClearance(board: PcbBoard, input: ClearanceGuardInput): Cle
     blockedBy: first.ref,
     blockedByKeepoutId: first.keepoutId,
     distance: first.distance,
+    requiredClearance: first.requiredClearance,
+    netRelation: first.netRelation,
     blockedByEdge: first.edge,
   };
 }
@@ -548,31 +575,32 @@ function describeBlock(
   }
   const ref = res.blockedBy;
   const d = res.distance ?? 0;
+  const required = res.requiredClearance ?? clearance;
   const near = (label: string): string =>
-    `Too close to ${label} (${nmMm(d)} mm; need ≥ ${nmMm(clearance)} mm)`;
+    `Too close to ${label} (${nmMm(d)} mm; need ≥ ${nmMm(required)} mm)`;
   if (!ref) return "Clearance violation";
   if (ref.kind === "pad") {
     const inst = board.footprints.find((f) => f.id === ref.instanceId);
     const padNet = inst?.padNets[ref.padNumber] ?? 0;
     const label = inst ? `${inst.ref}.${ref.padNumber}` : ref.padNumber;
-    if (padNet !== netId && d <= 0) return `Would touch ${netName(board, padNet)} (short)`;
+    if (res.netRelation === "different-proven-nets" && d <= 0) return `Would touch ${netName(board, padNet)} (short)`;
     return near(label);
   }
   if (ref.kind === "track") {
     const t = board.tracks.find((x) => x.id === ref.id);
     const tNet = t?.netId ?? 0;
-    if (tNet !== netId && d <= 0) return `Would touch ${netName(board, tNet)} (short)`;
+    if (res.netRelation === "different-proven-nets" && d <= 0) return `Would touch ${netName(board, tNet)} (short)`;
     return near(`a ${netName(board, tNet)} track`);
   }
   if (ref.kind === "zone-region") {
     // Stage 11: filled zone copper.
     const zNet = board.zones.find((z) => z.id === ref.zoneId)?.netId ?? 0;
-    if (zNet !== netId && d <= 0) return `Would touch the ${netName(board, zNet)} zone (short)`;
+    if (res.netRelation === "different-proven-nets" && d <= 0) return `Would touch the ${netName(board, zNet)} zone (short)`;
     return near(`the ${netName(board, zNet)} zone`);
   }
   const v = board.vias.find((x) => x.id === ref.id);
   const vNet = v?.netId ?? 0;
-  if (vNet !== netId && d <= 0) return `Would touch ${netName(board, vNet)} (short)`;
+  if (res.netRelation === "different-proven-nets" && d <= 0) return `Would touch ${netName(board, vNet)} (short)`;
   return near(`a ${netName(board, vNet)} via`);
 }
 
@@ -638,18 +666,6 @@ function hitTrack(board: PcbBoard, world: Vec2): TrackHit | null {
 }
 
 // ── Id generation (nanoid isn't a dependency; salted counter is unique) ──────
-let idSeq = 0;
-const idSalt = Math.random().toString(36).slice(2, 8);
-function freshId(prefix: string): string {
-  idSeq += 1;
-  return `${prefix}-${idSalt}-${idSeq}`;
-}
-
-/** MVP 2-layer flip; 4-layer inner-layer via posture is post-Stage-10. */
-function flipCopperLayer(layer: LayerId): LayerId {
-  return layer === "copperTop" ? "copperBottom" : "copperTop";
-}
-
 // ── The tool ─────────────────────────────────────────────────────────────────
 
 export function createRouteTool(
@@ -675,6 +691,12 @@ export function createRouteTool(
   let lastMoveWorld: Vec2 | null = null;
   let cachedWorldBoard: PcbBoard | null = null;
   let cachedWorld: RoutingWorld | null = null;
+  let sessionSnapshot: RoutingSnapshot | null = null;
+  let sessionStartAnchor: RouteAnchor | null = null;
+  let stagedTracks: Track[] = [];
+  let stagedVias: Via[] = [];
+  let stagedSteps: Array<{ trackCount: number; viaCount: number; anchor: Vec2; layer: LayerId }> = [];
+  let sessionId = "";
 
   function worldFor(board: PcbBoard): RoutingWorld {
     if (board !== cachedWorldBoard || !cachedWorld) {
@@ -683,9 +705,6 @@ export function createRouteTool(
     }
     return cachedWorld;
   }
-
-  // Routing bookkeeping (Backspace unwind of anchor + layer per committed step).
-  let routeStack: { anchor: Vec2; activeLayer: LayerId }[] = [];
 
   // Pending track-grab: idle down on a track → resolves to stretch (on drag) or
   // route-from-endpoint (on release without drag).
@@ -702,7 +721,14 @@ export function createRouteTool(
   } | null = null;
 
   function makeTrack(start: Vec2, end: Vec2, layer: LayerId, width: number, netId: number): Track {
-    return { id: freshId("rt-t"), layer, width, start, end, netId };
+    return {
+      id: routingStableId("route-stage-track", { sessionId, index: stagedTracks.length, start, end, layer, width, netId }),
+      layer,
+      width,
+      start,
+      end,
+      netId,
+    };
   }
 
   function buildSegmentsFromPoints(
@@ -718,7 +744,7 @@ export function createRouteTool(
       segs.push(committed
         ? makeTrack(points[index], points[index + 1], layer, width, netId)
         : {
-            id: `smart-preview-${index}`,
+            id: routingStableId("route-preview-track", { sessionId, index, layer, width, netId, start: points[index], end: points[index + 1] }),
             layer,
             width,
             start: { ...points[index] },
@@ -737,7 +763,7 @@ export function createRouteTool(
     blockedBy?: CopperItemRef;
     blockedByKeepoutId?: string;
     blockedText?: string;
-    targetPad: PadHit | null;
+    targetAnchor: RouteAnchor | null;
     points: readonly Vec2[];
     candidates: readonly SmartRouteCandidate[];
     selectedCandidate?: SmartRouteCandidate;
@@ -749,24 +775,28 @@ export function createRouteTool(
 
   function resolveRouting(world: Vec2): RoutingResolve {
     if (state.kind !== "routing") throw new Error("resolveRouting outside routing");
-    const board = getBoard();
+    const board = structuredClone(getBoard());
+    board.tracks.push(...stagedTracks.map((track) => structuredClone(track)));
+    board.vias.push(...stagedVias.map((via) => structuredClone(via)));
     const { netId, activeLayer, trackWidth, clearance, anchor, preferHorizontalFirst } = state;
 
     // Snap the end: a same-net pad with copper on the ACTIVE layer is an exact
     // connection; else the grid. (A same-net pad whose copper is on the other
     // layer is NOT a completion target — the user must drop a via first, or the
     // trace would end at the pad center electrically unconnected.)
-    const padHit = hitPad(board, world, activeLayer);
+    const target = sessionSnapshot
+      ? bestRouteAnchor({ snapshot: sessionSnapshot, point: world, preferredLayer: activeLayer, requestedNetId: netId })
+      : undefined;
     let end: Vec2;
-    let targetPad: PadHit | null = null;
+    let targetAnchor: RouteAnchor | null = null;
     if (
-      padHit &&
-      padHit.netId === netId &&
-      padHit.layer === activeLayer &&
-      !samePoint(padHit.world, anchor)
+      target &&
+      target.netId === netId &&
+      target.layers.includes(activeLayer) &&
+      !samePoint(target.point, anchor)
     ) {
-      end = padHit.world;
-      targetPad = padHit;
+      end = target.point;
+      targetAnchor = target;
     } else {
       end = snap(world);
     }
@@ -779,6 +809,8 @@ export function createRouteTool(
       start: anchor,
       end,
       movementPolicy: "keep-existing-copper-fixed",
+      routeMode: state.routeMode,
+      posture: state.posture,
       maxCandidates: 4,
     };
     const smartRules = resolveSmartRoutingRules(board, netId, activeLayer, {
@@ -805,7 +837,7 @@ export function createRouteTool(
         points,
         segments,
         legal: true,
-        targetPad,
+        targetAnchor,
         candidates: smartResult.candidates,
         selectedCandidate,
         smartResult,
@@ -832,7 +864,7 @@ export function createRouteTool(
         points,
         segments,
         legal: true,
-        targetPad: null,
+        targetAnchor: null,
         candidates: [],
         smartResult,
         smartIntent,
@@ -850,7 +882,7 @@ export function createRouteTool(
       blockedBy: res.blockedBy,
       blockedByKeepoutId: res.blockedByKeepoutId,
       blockedText: res.legal ? undefined : describeBlock(board, netId, clearance, res),
-      targetPad,
+      targetAnchor,
       candidates: [],
       smartResult,
       smartIntent,
@@ -877,11 +909,33 @@ export function createRouteTool(
       smartExplanation: r.smartResult.explanation,
       searchElapsedMs: r.smartResult.diagnostics.elapsedMs,
     };
+    state.sessionState = r.legal ? "previewing" : "preview_with_collision";
   }
 
-  function startRouting(netId: number, activeLayer: LayerId, anchor: Vec2): void {
+  function startRouting(netId: number, activeLayer: LayerId, anchor: Vec2, suppliedAnchor?: RouteAnchor): void {
+    const board = getBoard();
+    sessionSnapshot = buildRoutingSnapshot(board);
+    sessionStartAnchor = suppliedAnchor ?? bestRouteAnchor({
+      snapshot: sessionSnapshot,
+      point: anchor,
+      preferredLayer: activeLayer,
+      requestedNetId: netId,
+    }) ?? null;
+    if (!sessionStartAnchor || sessionStartAnchor.netId === 0) {
+      sessionSnapshot = null;
+      return;
+    }
+    stagedTracks = [];
+    stagedVias = [];
+    stagedSteps = [{ trackCount: 0, viaCount: 0, anchor: { ...sessionStartAnchor.point }, layer: activeLayer }];
+    sessionId = routingStableId("route-session", {
+      snapshotId: sessionSnapshot.snapshotId,
+      startAnchorId: sessionStartAnchor.anchorId,
+      activeLayer,
+    });
     const nc = netClassOf(netId);
     const profile = options.routingProfile?.(netId) ?? nc;
+    const interaction = profile as NetClass & { routeMode?: ProfessionalRouteMode; posture?: RoutePosture };
     const automaticPadstack = options.routingProfile ? undefined : classDefaultPadstack(getBoard(), netId);
     const profilePadstackId =
       "viaPadstackId" in profile && typeof profile.viaPadstackId === "string"
@@ -905,7 +959,12 @@ export function createRouteTool(
       viaSize: effective.viaSizeNm,
       viaDrill: effective.viaDrillNm,
       ...(profilePadstackId ? { viaPadstackId: profilePadstackId } : {}),
-      anchor,
+      routeMode: interaction.routeMode ?? "walk_around",
+      posture: interaction.posture ?? "octilinear_a",
+      sessionState: "anchor_selected",
+      stagedTracks: [],
+      stagedVias: [],
+      anchor: { ...sessionStartAnchor.point },
       preview: {
         corner: anchor,
         end: anchor,
@@ -917,7 +976,6 @@ export function createRouteTool(
       },
       preferHorizontalFirst: true,
     };
-    routeStack = [{ anchor, activeLayer }];
     lastMoveWorld = null;
   }
 
@@ -932,29 +990,64 @@ export function createRouteTool(
       state.netId,
       true,
     );
-    const transaction = stagePreviewCandidates(
-      beginPreviewTransaction(r.smartWorld, r.smartIntent),
-      r.smartResult.candidates,
-      r.selectedCandidate.id,
-    );
-    const historyEvent = createRoutingHistoryEvent(
-      transaction,
-      r.selectedCandidate,
-      r.smartRules,
-      segments.map((segment) => segment.id),
-    );
-    applyCommand({
-      kind: "CommitRouteSegment",
-      segments,
-      netId: state.netId,
-      historyEvents: [historyEvent],
-    });
+    stagedTracks.push(...segments);
     state.anchor = r.end;
-    routeStack.push({ anchor: r.end, activeLayer: state.activeLayer });
-    if (r.targetPad) {
-      cancel(); // completed a connection to a same-net pad
+    stagedSteps.push({ trackCount: stagedTracks.length, viaCount: stagedVias.length, anchor: { ...r.end }, layer: state.activeLayer });
+    state.stagedTracks = stagedTracks.map((track) => structuredClone(track));
+    state.stagedVias = stagedVias.map((via) => structuredClone(via));
+    if (r.targetAnchor && sessionSnapshot && sessionStartAnchor) {
+      state.sessionState = "finishing";
+      const selectedObjectIds = [sessionStartAnchor, r.targetAnchor]
+        .filter((anchor) => anchor.contactKind === "interior_track_junction")
+        .map((anchor) => anchor.objectId);
+      const requestId = routingStableId("route-request", {
+        sessionId,
+        start: sessionStartAnchor.anchorId,
+        end: r.targetAnchor.anchorId,
+        tracks: stagedTracks.map((track) => ({ start: track.start, end: track.end, layer: track.layer, width: track.width })),
+        vias: stagedVias.map((via) => ({ at: via.at, layers: via.layers, size: via.size, drill: via.drill })),
+      });
+      const candidate = buildRouteCandidate({
+        snapshot: sessionSnapshot,
+        request: {
+          requestId,
+          operationKind: "interactive_route",
+          targetIds: [sessionStartAnchor.objectId, r.targetAnchor.objectId],
+          startAnchor: sessionStartAnchor,
+          endAnchor: r.targetAnchor,
+          routeMode: state.routeMode,
+          posture: state.posture,
+          preferredLayer: state.activeLayer,
+          viaStrategy: stagedVias.length ? "through" : "none",
+          hardConstraintIds: [],
+          softPreferenceIds: [],
+          mutationScope: {
+            kind: selectedObjectIds.length ? "selected_objects" : "new_candidate",
+            objectIds: selectedObjectIds,
+          },
+          preservePolicy: selectedObjectIds.length ? "selected_manual_movable" : "preserve_manual_imported_unknown",
+          searchBudget: { maxNodes: 10_000, maxMovedObjects: 24, maxIterations: 64, timeoutMs: 250 },
+          deterministicSeed: 8,
+          requestedBy: { actorId: "interactive-user", kind: "human" },
+        },
+        tracks: stagedTracks,
+        vias: stagedVias,
+        anchors: [sessionStartAnchor, r.targetAnchor],
+      });
+      if (candidate.localValidation.legal) {
+        applyCommand({ kind: "CommitRouteCandidate", candidate, actorId: "interactive-user" });
+        cancel();
+      } else {
+        state.sessionState = "preview_with_collision";
+        state.preview = {
+          ...state.preview,
+          legal: false,
+          blockedText: candidate.localValidation.violations[0]?.message ?? "Candidate failed local validation.",
+        };
+      }
       return;
     }
+    state.sessionState = "previewing";
     state.preview = {
       corner: r.end,
       end: r.end,
@@ -962,50 +1055,62 @@ export function createRouteTool(
       points: [r.end],
       candidates: [],
       smartStatus: "ready",
-      smartExplanation: "Segment committed atomically.",
+      smartExplanation: "Route leg staged. The board remains unchanged until a valid destination is reached.",
     };
   }
 
   function placeVia(): void {
     if (state.kind !== "routing") return;
-    const newLayer = flipCopperLayer(state.activeLayer);
+    const transition = defaultViaTransition(getBoard(), state.netId, state.activeLayer);
+    if (!transition) return;
+    const newLayer = transition.targetLayer;
     const via: Via = {
-      id: freshId("rt-v"),
+      id: routingStableId("route-stage-via", { sessionId, index: stagedVias.length, at: state.anchor, transition: transition.choiceId }),
       at: { ...state.anchor },
       size: state.viaSize,
       drill: state.viaDrill,
       netId: state.netId,
-      layers: [state.activeLayer, newLayer],
+      layers: transition.physicalSpan,
     };
     // Stage 17: the active net class's default padstack wins when the board
     // has a library (dims denormalized onto the via — see padstack/registry).
     const padstack = state.viaPadstackId ? getPadstack(getBoard(), state.viaPadstackId) : undefined;
     if (padstack) applyPadstackToVia(via, padstack);
     // Guard the via itself before committing (edge / other-net proximity).
-    const res = checkClearance(getBoard(), {
+    const candidateBoard = structuredClone(getBoard());
+    candidateBoard.tracks.push(...stagedTracks.map((track) => structuredClone(track)));
+    candidateBoard.vias.push(...stagedVias.map((candidate) => structuredClone(candidate)));
+    const res = checkClearance(candidateBoard, {
       candidateSegments: [],
       candidateVias: [via],
       netId: state.netId,
       clearance: state.clearance,
     });
     if (!res.legal) return; // cannot drop an illegal via
-    applyCommand({ kind: "PlaceViaAndFlipLayer", via, segments: [] });
+    stagedVias.push(via);
     state.activeLayer = newLayer;
-    routeStack.push({ anchor: state.anchor, activeLayer: newLayer });
+    stagedSteps.push({ trackCount: stagedTracks.length, viaCount: stagedVias.length, anchor: { ...state.anchor }, layer: newLayer });
+    state.stagedTracks = stagedTracks.map((track) => structuredClone(track));
+    state.stagedVias = stagedVias.map((candidate) => structuredClone(candidate));
+    state.sessionState = "layer_transitioned";
     if (lastMoveWorld) updateRoutingPreview(lastMoveWorld);
   }
 
   function undoLastSegment(): void {
     if (state.kind !== "routing") return;
-    if (routeStack.length <= 1) {
+    if (stagedSteps.length <= 1) {
       cancel();
       return;
     }
-    options.undo?.();
-    routeStack.pop();
-    const top = routeStack[routeStack.length - 1];
+    stagedSteps.pop();
+    const top = stagedSteps[stagedSteps.length - 1];
+    stagedTracks = stagedTracks.slice(0, top.trackCount);
+    stagedVias = stagedVias.slice(0, top.viaCount);
     state.anchor = top.anchor;
-    state.activeLayer = top.activeLayer;
+    state.activeLayer = top.layer;
+    state.stagedTracks = stagedTracks.map((track) => structuredClone(track));
+    state.stagedVias = stagedVias.map((via) => structuredClone(via));
+    state.sessionState = "previewing";
     if (lastMoveWorld) updateRoutingPreview(lastMoveWorld);
     else state.preview = { corner: top.anchor, end: top.anchor, legal: true };
   }
@@ -1020,6 +1125,12 @@ export function createRouteTool(
       pendingGrab = null;
       return;
     }
+    const grabbedScope = { mutationScope: { kind: "selected_objects" as const, objectIds: [`track:${grabbed.id}`] }, preservePolicy: "selected_manual_movable" as const };
+    if (!canMutateCopper(grabbed, grabbedScope).allowed) {
+      options.onProtected?.([`track:${grabbed.id}`]);
+      pendingGrab = null;
+      return;
+    }
     const grabPos = pendingGrab.grabbedEnd === "a" ? grabbed.start : grabbed.end;
     // Every SAME-NET track sharing the grabbed vertex moves rigidly with it (a
     // real junction is same-net; a coincident other-net track is a short, left
@@ -1029,6 +1140,13 @@ export function createRouteTool(
         (t) => t.netId === grabbed.netId && (samePoint(t.start, grabPos) || samePoint(t.end, grabPos)),
       )
       .map((t) => ({ ...t, start: { ...t.start }, end: { ...t.end } }));
+    const junctionScope = { mutationScope: { kind: "selected_objects" as const, objectIds: origins.map((track) => `track:${track.id}`) }, preservePolicy: "selected_manual_movable" as const };
+    const protectedJunction = origins.filter((track) => !canMutateCopper(track, junctionScope).allowed);
+    if (protectedJunction.length > 0) {
+      options.onProtected?.(protectedJunction.map((track) => `track:${track.id}`));
+      pendingGrab = null;
+      return;
+    }
     const nc = netClassOf(grabbed.netId);
     stretch = {
       grabPos,
@@ -1094,7 +1212,12 @@ export function createRouteTool(
     state = { kind: "idle" };
     pendingGrab = null;
     stretch = null;
-    routeStack = [];
+    sessionSnapshot = null;
+    sessionStartAnchor = null;
+    stagedTracks = [];
+    stagedVias = [];
+    stagedSteps = [];
+    sessionId = "";
     lastMoveWorld = null;
   }
 
@@ -1149,8 +1272,13 @@ export function createRouteTool(
         const board = getBoard();
         const t = board.tracks.find((x) => x.id === pendingGrab!.trackId);
         if (t) {
-          const anchor = pendingGrab.grabbedEnd === "a" ? t.start : t.end;
-          startRouting(t.netId, t.layer, { ...anchor });
+          const anchor = bestRouteAnchor({
+            snapshot: buildRoutingSnapshot(board),
+            point: pendingGrab.downWorld,
+            preferredLayer: t.layer,
+            requestedNetId: t.netId,
+          });
+          if (anchor) startRouting(t.netId, t.layer, anchor.point, anchor);
           updateRoutingPreview(world);
         }
         pendingGrab = null;
@@ -1203,7 +1331,15 @@ export function createRouteTool(
       const board = getBoard();
       const hit = hitTrack(board, world);
       if (!hit || hit.track.netId === 0) return false;
-      applyCommand(buildRipupNetCommand(board, hit.track.netId));
+      const command = buildRipupSelectionCommand(board, hit.track.id);
+      if (!command || command.kind !== "RipupNet") return false;
+      const protectedIds = [
+        ...(command.removed.protected?.tracks ?? []).map((track) => `track:${track.id}`),
+        ...(command.removed.protected?.vias ?? []).map((via) => `via:${via.id}`),
+      ];
+      if (protectedIds.length > 0) options.onProtected?.(protectedIds);
+      if (command.removed.tracks.length === 0 && command.removed.vias.length === 0) return false;
+      applyCommand(command);
       cancel(); // always drop any in-flight gesture (incl. a pending track grab)
       return true;
     },

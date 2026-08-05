@@ -1,0 +1,4 @@
+import { createComponentSelectionFeedback } from "@/app/lib/component-selection/feedback";
+import { scopedJson } from "../_scope";
+export const runtime = "nodejs";
+export async function POST(request: Request): Promise<Response> { const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response; const { body } = parsed; try { const feedback = createComponentSelectionFeedback(body as unknown as Parameters<typeof createComponentSelectionFeedback>[0]); return Response.json({ ok: true, feedback, consequence: feedback.outcome === "confirm" ? "retain_candidate" : feedback.outcome === "stale_sourcing" ? "refresh_sourcing_without_rewriting_engineering_history" : "invalidate_affected_assignments_and_rerun_bounded_solver" }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 422 }); } }

@@ -24,6 +24,30 @@ export interface ThermalSpokeParams {
   angleOffsetDeg: number;
 }
 
+export function generateRadialThermalSpokes(
+  worldPosition: Vec2,
+  reachNm: number,
+  worldRotationDeg: number,
+  params: ThermalSpokeParams,
+): Vec2[][] {
+  const { spokeWidthNm, spokes, angleOffsetDeg } = params;
+  const half = spokeWidthNm / 2;
+  const out: Vec2[][] = [];
+  for (let i = 0; i < spokes; i++) {
+    const angle = (360 / spokes) * i + angleOffsetDeg + worldRotationDeg;
+    const u = direction(angle);
+    const n = { x: -u.y, y: u.x };
+    const c = worldPosition;
+    out.push([
+      { x: Math.round(c.x - n.x * half), y: Math.round(c.y - n.y * half) },
+      { x: Math.round(c.x + u.x * reachNm - n.x * half), y: Math.round(c.y + u.y * reachNm - n.y * half) },
+      { x: Math.round(c.x + u.x * reachNm + n.x * half), y: Math.round(c.y + u.y * reachNm + n.y * half) },
+      { x: Math.round(c.x + n.x * half), y: Math.round(c.y + n.y * half) },
+    ]);
+  }
+  return out;
+}
+
 /**
  * Spoke polygons for one same-net pad, in world coordinates. Each spoke is a
  * rectangle of width `spokeWidthNm` running from the pad center outward at
@@ -38,23 +62,9 @@ export function generateThermalSpokes(
   worldRotationDeg: number,
   params: ThermalSpokeParams,
 ): Vec2[][] {
-  const { spokeWidthNm, gapNm, spokes, angleOffsetDeg } = params;
+  const { gapNm } = params;
   const length =
     shapeOuterBoundNm({ shape: pad.shape, at: worldPosition, rotationDeg: worldRotationDeg }) +
     2 * gapNm;
-  const half = spokeWidthNm / 2;
-  const out: Vec2[][] = [];
-  for (let i = 0; i < spokes; i++) {
-    const angle = (360 / spokes) * i + angleOffsetDeg + worldRotationDeg;
-    const u = direction(angle);
-    const n = { x: -u.y, y: u.x }; // unit normal
-    const c = worldPosition;
-    out.push([
-      { x: Math.round(c.x - n.x * half), y: Math.round(c.y - n.y * half) },
-      { x: Math.round(c.x + u.x * length - n.x * half), y: Math.round(c.y + u.y * length - n.y * half) },
-      { x: Math.round(c.x + u.x * length + n.x * half), y: Math.round(c.y + u.y * length + n.y * half) },
-      { x: Math.round(c.x + n.x * half), y: Math.round(c.y + n.y * half) },
-    ]);
-  }
-  return out;
+  return generateRadialThermalSpokes(worldPosition, length, worldRotationDeg, params);
 }

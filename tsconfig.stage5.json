@@ -1,0 +1,43 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [],
+  "files": [
+    "app/lib/passive-policy/types.ts",
+    "app/lib/passive-policy/stable.ts",
+    "app/lib/passive-policy/value.ts",
+    "app/lib/passive-policy/package-profile.ts",
+    "app/lib/passive-policy/policy.ts",
+    "app/lib/passive-policy/adapters.ts",
+    "app/lib/passive-policy/evaluator.ts",
+    "app/lib/passive-policy/providers.ts",
+    "app/lib/passive-policy/preview.ts",
+    "app/lib/passive-policy/repository.ts",
+    "app/lib/passive-policy/invalidation.ts",
+    "app/lib/passive-policy/observability.ts",
+    "app/lib/passive-policy/rollout.ts",
+    "app/lib/passive-policy/service.ts",
+    "app/lib/passive-policy/stage2-adapter.ts",
+    "app/lib/passive-policy/index.ts",
+    "app/lib/footprint-resolver/types.ts",
+    "app/lib/footprint-resolver/policy.ts",
+    "app/lib/footprint-resolver/service.ts",
+    "app/lib/footprint-resolver/engine.ts",
+    "app/lib/pcb-sync/repository.ts",
+    "app/api/passive-policy/_scope.ts",
+    "app/api/passive-policy/handler.ts",
+    "app/api/passive-policy/route.ts",
+    "app/components/pcb/PassivePackagePolicyPanel.tsx",
+    "app/lib/passive-policy/__tests__/fixtures.ts",
+    "app/lib/passive-policy/__tests__/identity-value-evaluator.test.ts",
+    "app/lib/passive-policy/__tests__/lifecycle-preview-invalidation.test.ts",
+    "app/lib/passive-policy/__tests__/stage2-integration.test.ts",
+    "app/lib/passive-policy/__tests__/performance-property.test.ts",
+    "app/api/passive-policy/__tests__/route-security.test.ts",
+    "app/components/pcb/__tests__/passive-package-policy-panel.test.tsx",
+    "scripts/passive-policy-stage5-evidence.ts"
+  ]
+}

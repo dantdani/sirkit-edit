@@ -2,9 +2,10 @@
 // net-name→id resolution, unknown-node tolerance, and via padstack fallback.
 
 import { describe, it, expect } from "vitest";
-import { parseSes } from "../dsn/read-ses";
+import { parseSes, SesImportError } from "../dsn/read-ses";
 import { createEmptyBoard } from "../types";
 import type { PcbBoard } from "../types";
+import { boardToDsn } from "../dsn/write-dsn";
 
 function board(): PcbBoard {
   return {
@@ -66,6 +67,7 @@ describe("parseSes", () => {
   (parser (host_cad "other"))
   (library (image "junk"))
   (routes
+    (resolution nm 1)
     (network_out
       (net "GND"
         (junk 1 2 3)
@@ -102,14 +104,14 @@ describe("parseSes", () => {
   });
 
   it("rejects an unknown via padstack instead of inventing default geometry", () => {
-    const s = `(session x (routes (network_out (net "GND"
+    const s = `(session x (routes (resolution nm 1) (network_out (net "GND"
       (via "via_bogus" 5 5 (net "GND"))
     ))))`;
     expect(() => parseSes(s, board())).toThrow(/unknown via padstack/i);
   });
 
   it("rejects routes whose net name is not on the board", () => {
-    const s = `(session x (routes (network_out (net "MYSTERY"
+    const s = `(session x (routes (resolution nm 1) (network_out (net "MYSTERY"
       (wire (path F.Cu 250000 0 0 1000 0) (net "MYSTERY"))
       (via "via_default" 5 5 (net "MYSTERY"))
     ))))`;
@@ -131,16 +133,73 @@ describe("parseSes", () => {
   });
 
   it("rejects an inner-layer route when that layer is disabled by a two-layer stackup", () => {
-    const s = `(session x (routes (network_out (net "GND"
+    const s = `(session x (routes (resolution nm 1) (network_out (net "GND"
       (wire (path In1.Cu 200000 0 0 5000000 0) (net "GND"))
     ))))`;
     expect(() => parseSes(s, board())).toThrow(/unknown or disabled copper layer/i);
   });
 
-  it("returns an empty, unsuccessful result on unparseable input (no throw)", () => {
-    const r = parseSes("this is not ( balanced", board());
-    expect(r.wasSuccessful).toBe(false);
-    expect(r.tracks).toHaveLength(0);
-    expect(r.vias).toHaveLength(0);
+  it("rejects unparseable input without returning a partial candidate", () => {
+    expect(() => parseSes("this is not ( balanced", board())).toThrow(/not valid S-expression syntax/i);
+  });
+
+  it("rejects zero-byte and whitespace-only SES with explicit unsuccessful evidence", () => {
+    for (const input of ["", " \r\n\t "]) {
+      try {
+        parseSes(input, board());
+        throw new Error("expected SES rejection");
+      } catch (error) {
+        expect(error).toBeInstanceOf(SesImportError);
+        expect((error as SesImportError).result).toMatchObject({ phase: "file", wasSuccessful: false, tracks: [], vias: [] });
+      }
+    }
+  });
+
+  it("rejects missing and unknown coordinate units instead of guessing nanometers", () => {
+    expect(() => parseSes(`(session x (routes (network_out)))`, board())).toThrow(/no coordinate resolution/i);
+    expect(() => parseSes(`(session x (routes (resolution furlong 1) (network_out)))`, board())).toThrow(/unsupported/i);
+    expect(() => parseSes(`(session x (routes (resolution nm 0) (network_out)))`, board())).toThrow(/missing or invalid/i);
+  });
+
+  it.each([
+    ["nm", 1],
+    ["um", 1_000],
+    ["\u00b5m", 1_000],
+    ["\u03bcm", 1_000],
+    ["mm", 1_000_000],
+    ["mil", 25_400],
+    ["inch", 25_400_000],
+  ])("scales the supported %s unit exactly", (unit, expectedNm) => {
+    const ses = `(session x (routes (resolution ${unit} 1) (network_out (net "GND"
+      (wire (path F.Cu 1 0 0 1 0))
+    ))))`;
+    const parsed = parseSes(ses, board());
+    expect(parsed.nanometersPerCoordinate).toBe(expectedNm);
+    expect(parsed.tracks[0].end.x).toBe(expectedNm);
+  });
+
+  it("deduplicates exact/reversed segments and rejects conflicting duplicates", () => {
+    const duplicate = `(session x (routes (resolution nm 1) (network_out (net "GND"
+      (wire (path F.Cu 250000 0 0 1000 0))
+      (wire (path F.Cu 250000 1000 0 0 0))
+    ))))`;
+    const parsed = parseSes(duplicate, board());
+    expect(parsed.tracks).toHaveLength(1);
+    expect(parsed.deduplicatedSegments).toBe(1);
+    const conflict = duplicate.replace("250000 1000", "300000 1000");
+    expect(() => parseSes(conflict, board())).toThrow(/conflicting net or width/i);
+  });
+
+  it("rejects unsupported arc geometry", () => {
+    const arc = `(session x (routes (resolution nm 1) (network_out (net "GND" (wire (arc F.Cu 1 0 0 1 1 2 0))))))`;
+    expect(() => parseSes(arc, board())).toThrow(/arc geometry/i);
+  });
+
+  it("rejects an SES manifest after the source board revision changes", () => {
+    const source = board();
+    const manifest = boardToDsn(source).integrity!;
+    if (source.outline.kind === "polygon") throw new Error("fixture must have a rectangular outline");
+    source.outline = { ...source.outline, width: source.outline.width + 1 };
+    expect(() => parseSes(SES, source, { manifest, sourceRevision: manifest.sourceRevision })).toThrow(/does not match/i);
   });
 });

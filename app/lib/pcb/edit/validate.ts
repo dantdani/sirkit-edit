@@ -16,6 +16,12 @@ import type { Vec2 } from "../geometry";
 import type { PadstackInput } from "../padstack/types";
 import { getPadstack, usageCount } from "../padstack/registry";
 import type { EditCommand, SelectionRef } from "./commands";
+import {
+  engineeringDiagnostic,
+  lockedMutationDiagnostics,
+  type EngineeringDiagnostic,
+  type LockedCopperRef,
+} from "../integrity";
 
 // ── Item lookup (shared with apply.ts / describe.ts) ─────────────────────────
 
@@ -112,6 +118,12 @@ function checkRefs(
 
 /** Locked footprints refuse move/rotate — collect errors for any in `refs`. */
 function checkNotLocked(board: PcbBoard, refs: SelectionRef[], errors: string[], verb: string): void {
+  const copperRefs: LockedCopperRef[] = refs.flatMap((ref) =>
+    ref.kind === "track" || ref.kind === "via" || ref.kind === "zone"
+      ? [{ kind: ref.kind, id: ref.id }]
+      : [],
+  );
+  errors.push(...lockedMutationDiagnostics(board, copperRefs, verb).map((diagnostic) => diagnostic.summary));
   for (const ref of refs) {
     if (ref.kind !== "footprint") continue;
     const fp = findFootprint(board, ref.id);
@@ -168,6 +180,7 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
       for (const id of cmd.ids) {
         if (!findTrack(board, id)) errors.push(`No track ${id} on this board.`);
       }
+      checkNotLocked(board, cmd.ids.map((id) => ({ kind: "track" as const, id })), errors, "resized");
       if (!isPositiveDim(cmd.widthNm)) {
         errors.push("Track width must be a positive number of nanometers.");
       }
@@ -176,6 +189,7 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
 
     case "set-item-layer": {
       checkRefs(board, cmd.refs, errors, "re-layer");
+      checkNotLocked(board, cmd.refs, errors, "re-layered");
       for (const ref of cmd.refs) {
         if (ref.kind === "track" || ref.kind === "zone") {
           if (!copperLayers(board).includes(cmd.layer)) {
@@ -276,6 +290,7 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
         break;
       }
       const patch = cmd.patch ?? {};
+      checkNotLocked(board, [{ kind: "zone", id: cmd.id }], errors, "changed");
       if (Object.keys(patch).length === 0) errors.push("Nothing to change on the zone.");
       if (patch.netId !== undefined) {
         if (!Number.isInteger(patch.netId) || !board.nets.some((n) => n.id === patch.netId)) {
@@ -319,6 +334,7 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
 
     case "delete-items": {
       checkRefs(board, cmd.refs, errors, "delete");
+      checkNotLocked(board, cmd.refs, errors, "deleted");
       for (const ref of cmd.refs) {
         if (ref.kind === "footprint") {
           errors.push(
@@ -380,6 +396,12 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
         errors.push(`No padstack ${cmd.id} on this board.`);
         break;
       }
+      checkNotLocked(
+        board,
+        board.vias.filter((via) => via.padstackId === cmd.id).map((via) => ({ kind: "via" as const, id: via.id })),
+        errors,
+        "resized through its padstack",
+      );
       const patch = cmd.patch ?? {};
       if (Object.keys(patch).length === 0) {
         errors.push("Nothing to change on the padstack.");
@@ -396,10 +418,17 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
         for (const id of cmd.viaIds) {
           if (!findVia(board, id)) errors.push(`No via ${id} on this board.`);
         }
+        checkNotLocked(board, cmd.viaIds.map((id) => ({ kind: "via" as const, id })), errors, "resized");
       }
       if (!getPadstack(board, cmd.padstackId)) {
         errors.push(`No padstack ${cmd.padstackId} on this board.`);
       }
+      break;
+    }
+
+    case "set-copper-locked": {
+      checkRefs(board, cmd.refs, errors, cmd.locked ? "lock" : "unlock");
+      if (typeof cmd.locked !== "boolean") errors.push("Locked must be true or false.");
       break;
     }
 
@@ -426,4 +455,61 @@ export function validateCommand(board: PcbBoard, cmd: EditCommand): string[] {
   }
 
   return errors;
+}
+
+function copperRefs(refs: readonly SelectionRef[]): LockedCopperRef[] {
+  return refs.flatMap((ref) =>
+    ref.kind === "track" || ref.kind === "via" || ref.kind === "zone"
+      ? [{ kind: ref.kind, id: ref.id }]
+      : [],
+  );
+}
+
+function commandLockIntent(board: PcbBoard, cmd: EditCommand): { refs: LockedCopperRef[]; verb: string } | null {
+  switch (cmd.op) {
+    case "set-track-width":
+      return { refs: cmd.ids.map((id) => ({ kind: "track", id })), verb: "resized" };
+    case "set-item-layer":
+      return { refs: copperRefs(cmd.refs), verb: "re-layered" };
+    case "move-items":
+    case "align":
+    case "distribute":
+    case "snap-to-grid":
+      return { refs: copperRefs(cmd.refs), verb: "moved" };
+    case "set-position":
+      return { refs: copperRefs([cmd.ref]), verb: "moved" };
+    case "rotate-items":
+      return { refs: copperRefs(cmd.refs), verb: "rotated" };
+    case "set-zone-props":
+      return { refs: [{ kind: "zone", id: cmd.id }], verb: "changed" };
+    case "delete-items":
+      return { refs: copperRefs(cmd.refs), verb: "deleted" };
+    case "edit-padstack":
+      return {
+        refs: board.vias.filter((via) => via.padstackId === cmd.id).map((via) => ({ kind: "via", id: via.id })),
+        verb: "resized through its padstack",
+      };
+    case "set-via-padstack":
+      return { refs: cmd.viaIds.map((id) => ({ kind: "via", id })), verb: "resized" };
+    default:
+      return null;
+  }
+}
+
+/** Structured form used by transaction, AI, and telemetry boundaries. */
+export function validateCommandDiagnostics(board: PcbBoard, cmd: EditCommand): EngineeringDiagnostic[] {
+  const intent = commandLockIntent(board, cmd);
+  const protectedDiagnostics = intent ? lockedMutationDiagnostics(board, intent.refs, intent.verb) : [];
+  const protectedSummaries = new Set(protectedDiagnostics.map((diagnostic) => diagnostic.summary));
+  const validationDiagnostics = validateCommand(board, cmd)
+    .filter((summary) => !protectedSummaries.has(summary))
+    .filter((summary) => protectedDiagnostics.length === 0 || !summary.includes("is locked"))
+    .map((summary) => engineeringDiagnostic(
+      "EDIT_VALIDATION_FAILED",
+      summary,
+      { context: { operation: cmd.op } },
+    ));
+  return [...protectedDiagnostics, ...validationDiagnostics].sort((a, b) =>
+    a.code.localeCompare(b.code) || a.summary.localeCompare(b.summary)
+  );
 }

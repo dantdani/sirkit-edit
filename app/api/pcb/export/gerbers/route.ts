@@ -1,16 +1,15 @@
 /**
  * POST /api/pcb/export/gerbers (PCB Stage 14).
  *
- * Body:  { board, netlist?, fabPresetId, drcPresetId?, overrideDrcFail?, boardName? }
- * 200:   application/zip — the fab bundle; Content-Disposition names it.
- * 400:   { error: 'drc-failed', violations }  — hard DRC gate, no override
+ * Body:  { board, netlist?, fabPresetId, drcPresetId?, releaseMode?, waiverReason?, boardName? }
+ * 200:   application/zip — the revision-bound manufacturing package.
+ * 409:   { error: 'readiness-gate-failed', readiness } — scoped release gate
  * 400:   { error: 'bad-request', message }    — body shape problems
  * 500:   { error: 'kicad-cli-missing' | 'kicad-cli-failed', stderr? }
  *
  * Validation is minimal-shape by hand (no zod in the dep tree — same posture
- * as /api/pcb/autoroute and /api/pcb/export/kicad-pcb). The DRC gate re-runs
- * server-side inside buildFabBundle — the client's checkbox only sets
- * `overrideDrcFail`; it can never skip the check itself.
+ * as /api/pcb/autoroute and /api/pcb/export/kicad-pcb). The complete readiness
+ * policy is re-evaluated server-side against the immutable release snapshot.
  */
 
 import type { PcbBoard } from "@/app/lib/pcb/types";
@@ -20,12 +19,15 @@ import { getPreset } from "@/app/lib/pcb/drc/presets";
 import type { DrcPresetId } from "@/app/lib/pcb/drc/types";
 import { FAB_PRESETS } from "@/app/lib/pcb/fab/presets";
 import { buildFabBundle } from "@/app/lib/pcb/fab/build-bundle";
-import { FabExportGatedByDrc, KicadCliError } from "@/app/lib/pcb/fab/types";
+import { KicadCliError } from "@/app/lib/pcb/fab/types";
 import {
   compileNativeFabPackage,
-  summarizeNativePreflight,
 } from "@/app/lib/pcb/fab/native/compiler";
 import { NativeFabBlockedError } from "@/app/lib/pcb/fab/native/types";
+import { evaluatePcbFabricationReadiness } from "@/app/lib/pcb/readiness/evaluate";
+import { createReleaseWaiver } from "@/app/lib/pcb/readiness/waiver";
+import { ManufacturingReleaseBlockedError } from "@/app/lib/pcb/readiness/release";
+import type { ReleaseDisposition, ReleaseWaiver } from "@/app/lib/pcb/readiness/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // three kicad-cli invocations at 60 s each, worst case
@@ -72,6 +74,10 @@ export async function POST(req: Request): Promise<Response> {
     boardName?: unknown;
     engine?: unknown;
     action?: unknown;
+    releaseMode?: unknown;
+    waiverReason?: unknown;
+    actor?: unknown;
+    projectIdentity?: unknown;
   };
 
   if (!isBoardLike(body.board)) return bad("body.board must be a PcbBoard");
@@ -80,16 +86,15 @@ export async function POST(req: Request): Promise<Response> {
   }
   const fabPreset = FAB_PRESETS.find((p) => p.id === body.fabPresetId);
   if (!fabPreset) return bad(`unknown fabPresetId ${JSON.stringify(body.fabPresetId)}`);
-  if (body.overrideDrcFail !== undefined && typeof body.overrideDrcFail !== "boolean") {
-    return bad("overrideDrcFail must be a boolean");
-  }
+  if (body.overrideDrcFail !== undefined) return bad("overrideDrcFail is retired; use releaseMode='engineering' with a reasoned revision-bound override");
   const engine = body.engine ?? "kicad";
   if (engine !== "kicad" && engine !== "native-beta") return bad("engine must be kicad or native-beta");
   const action = body.action ?? "package";
   if (action !== "package" && action !== "preflight") return bad("action must be package or preflight");
-  if (action === "preflight" && engine !== "native-beta") return bad("preflight is available only for native-beta");
-  if (engine === "native-beta" && body.overrideDrcFail === true) {
-    return bad("native-beta is fail-closed and does not permit a generic DRC override");
+  const releaseMode = body.releaseMode ?? "verified";
+  if (releaseMode !== "verified" && releaseMode !== "engineering") return bad("releaseMode must be verified or engineering");
+  if (releaseMode === "engineering" && (typeof body.waiverReason !== "string" || body.waiverReason.trim().length < 8)) {
+    return bad("engineering release requires a waiverReason of at least 8 characters");
   }
 
   // DRC preset: explicit request wins, else the fab preset's soft link.
@@ -103,8 +108,53 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const board = body.board;
-  const netlist = isNetlistLike(body.netlist) ? body.netlist : netlistFromBoard(board);
+  const providedNetlist = isNetlistLike(body.netlist) ? body.netlist : undefined;
+  const schematicIntentAvailable = providedNetlist !== undefined;
+  const netlist: PcbNetlist = providedNetlist ?? netlistFromBoard(board);
   const boardName = typeof body.boardName === "string" ? body.boardName : "sirkit-board";
+  const exporter = engine === "native-beta" ? "sirkit-native" as const : "kicad-assisted" as const;
+  const initialReadiness = evaluatePcbFabricationReadiness({
+    board,
+    netlist: schematicIntentAvailable ? netlist : undefined,
+    fabPreset,
+    drcPreset,
+    exporter,
+  });
+  const waivers: ReleaseWaiver[] = [];
+  const disposition: ReleaseDisposition = releaseMode === "engineering" ? "engineering_prototype_export" : "verified_manufacturing_release";
+  const waivableCheckCodes = initialReadiness.checks.filter((check) => check.state !== "pass" && check.waivableForEngineeringExport).map((check) => check.code);
+  if (releaseMode === "engineering" && waivableCheckCodes.length > 0) waivers.push(createReleaseWaiver({
+    checkCodes: waivableCheckCodes,
+    diagnosticCodes: [...initialReadiness.blockers, ...initialReadiness.unknowns].map((item) => item.code),
+    componentIds: [...initialReadiness.blockers, ...initialReadiness.unknowns].flatMap((item) => item.componentIds ?? []),
+    netStableIds: [...initialReadiness.blockers, ...initialReadiness.unknowns].flatMap((item) => item.netStableIds ?? []),
+    objectIds: [...initialReadiness.blockers, ...initialReadiness.unknowns].flatMap((item) => item.objectIds ?? []),
+    reason: String(body.waiverReason),
+    actor: typeof body.actor === "string" ? body.actor : undefined,
+    designRevision: initialReadiness.designRevision,
+    manufacturingProfileId: fabPreset.id,
+    manufacturingProfileVersion: fabPreset.version,
+  }));
+  if (action === "preflight") return Response.json({
+    readiness: evaluatePcbFabricationReadiness({
+      board,
+      netlist: schematicIntentAvailable ? netlist : undefined,
+      fabPreset,
+      drcPreset,
+      exporter,
+      waivers,
+    }),
+  });
+
+  // MFG01: a browser-supplied board is never verified release authority. The
+  // authoritative release function reloads its immutable server source twice;
+  // this legacy endpoint remains available only for explicitly-labelled,
+  // revision-waived engineering artifacts until that server loader is wired.
+  if (releaseMode === "verified") return Response.json({
+    error: "authoritative-release-source-required",
+    message: "Verified release requires the MFG01 server-authoritative source loader; a browser PcbBoard cannot publish manufacturing authority.",
+    readiness: initialReadiness,
+  }, { status: 409 });
 
   try {
     if (engine === "native-beta") {
@@ -114,14 +164,20 @@ export async function POST(req: Request): Promise<Response> {
         fabPreset,
         drcPreset,
         boardName,
+        schematicIntentAvailable,
+        releaseDisposition: disposition,
+        waivers,
+        projectIdentity: typeof body.projectIdentity === "string" ? body.projectIdentity : boardName,
+        actor: typeof body.actor === "string" ? body.actor : undefined,
       });
-      if (action === "preflight") return Response.json(summarizeNativePreflight(result));
       return new Response(Buffer.from(result.zipBytes), {
         status: 200,
         headers: {
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="${result.filename}"`,
           "X-Sirkit-Native-Signoff": result.manifest.signoff,
+          "X-Sirkit-Readiness-Report": result.readiness.reportId,
+          "X-Sirkit-Release-Disposition": result.releaseManifest.disposition,
           "X-Sirkit-Package-SHA256": result.packageSha256,
           "X-Sirkit-Bundle-Stats": JSON.stringify({
             files: result.files.length,
@@ -138,14 +194,20 @@ export async function POST(req: Request): Promise<Response> {
       netlist,
       fabPreset,
       drcPreset,
-      overrideDrcFail: body.overrideDrcFail === true,
       boardName,
+      schematicIntentAvailable,
+      releaseDisposition: disposition,
+      waivers,
+      projectIdentity: typeof body.projectIdentity === "string" ? body.projectIdentity : boardName,
+      actor: typeof body.actor === "string" ? body.actor : undefined,
     });
     return new Response(Buffer.from(result.zipBytes), {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${result.filename}"`,
+        "X-Sirkit-Readiness-Report": result.readiness.reportId,
+        "X-Sirkit-Release-Disposition": result.releaseManifest.disposition,
         "X-Sirkit-Bundle-Stats": JSON.stringify({
           files: result.stats.gerberFiles.length + result.stats.drillFiles.length + result.stats.posFiles.length + 2,
           totalBytes: result.stats.totalBytes,
@@ -156,14 +218,17 @@ export async function POST(req: Request): Promise<Response> {
       },
     });
   } catch (e) {
+    if (e instanceof ManufacturingReleaseBlockedError) {
+      return Response.json(
+        { error: "readiness-gate-failed", code: e.code, message: e.message, readiness: e.report },
+        { status: 409 },
+      );
+    }
     if (e instanceof NativeFabBlockedError) {
       return Response.json(
         { error: "native-preflight-failed", message: e.message, diagnostics: e.diagnostics },
         { status: 400 },
       );
-    }
-    if (e instanceof FabExportGatedByDrc) {
-      return Response.json({ error: "drc-failed", violations: e.violations }, { status: 400 });
     }
     if (e instanceof KicadCliError) {
       return Response.json(

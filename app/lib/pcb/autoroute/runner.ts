@@ -39,12 +39,24 @@ export interface RunFreeroutingInput {
 }
 
 export type RunFreeroutingResult =
-  | { ok: true; sesText: string; stderr: string; elapsedMs: number }
   | {
-      ok: false;
-      error: "timeout" | "cancelled" | "exit-nonzero" | "jar-missing" | "java-missing" | "io";
+      ok: true;
+      sesText: string;
       stderr: string;
       elapsedMs: number;
+      processStatus: "exit-success";
+      outputFileStatus: "nonempty";
+      exitCode: 0;
+      sesByteLength: number;
+    }
+  | {
+      ok: false;
+      error: "timeout" | "cancelled" | "exit-nonzero" | "output-empty" | "jar-missing" | "java-missing" | "io";
+      stderr: string;
+      elapsedMs: number;
+      processStatus: "not-started" | "exit-nonzero" | "timeout" | "cancelled" | "spawn-failed" | "exit-success";
+      outputFileStatus: "not-checked" | "missing" | "empty";
+      exitCode?: number | null;
     };
 
 function errMsg(e: unknown): string {
@@ -96,7 +108,7 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
 
   const start = Date.now();
   const elapsed = (): number => Date.now() - start;
-  if (input.signal?.aborted) return { ok: false, error: "cancelled", stderr: "", elapsedMs: elapsed() };
+  if (input.signal?.aborted) return { ok: false, error: "cancelled", stderr: "", elapsedMs: elapsed(), processStatus: "cancelled", outputFileStatus: "not-checked" };
 
   // Fail fast + clean if the JAR isn't there (don't let it surface as a spawn error).
   try {
@@ -107,6 +119,8 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
       error: "jar-missing",
       stderr: `Freerouting JAR not found: ${freeroutingJarPath}`,
       elapsedMs: elapsed(),
+      processStatus: "not-started",
+      outputFileStatus: "not-checked",
     };
   }
 
@@ -118,7 +132,7 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
     try {
       await writeFile(inPath, dsnText, "utf8");
     } catch (e) {
-      return { ok: false, error: "io", stderr: errMsg(e), elapsedMs: elapsed() };
+      return { ok: false, error: "io", stderr: errMsg(e), elapsedMs: elapsed(), processStatus: "not-started", outputFileStatus: "not-checked" };
     }
 
     const outcome = await new Promise<
@@ -174,17 +188,17 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
     });
 
     if (outcome.kind === "timeout") {
-      return { ok: false, error: "timeout", stderr: outcome.stderr, elapsedMs: elapsed() };
+      return { ok: false, error: "timeout", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "timeout", outputFileStatus: "not-checked" };
     }
     if (outcome.kind === "cancelled") {
-      return { ok: false, error: "cancelled", stderr: outcome.stderr, elapsedMs: elapsed() };
+      return { ok: false, error: "cancelled", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "cancelled", outputFileStatus: "not-checked" };
     }
     if (outcome.kind === "spawn-error") {
       const error = outcome.err.code === "ENOENT" ? "java-missing" : "io";
-      return { ok: false, error, stderr: outcome.stderr || errMsg(outcome.err), elapsedMs: elapsed() };
+      return { ok: false, error, stderr: outcome.stderr || errMsg(outcome.err), elapsedMs: elapsed(), processStatus: "spawn-failed", outputFileStatus: "not-checked" };
     }
     if (outcome.code !== 0) {
-      return { ok: false, error: "exit-nonzero", stderr: outcome.stderr, elapsedMs: elapsed() };
+      return { ok: false, error: "exit-nonzero", stderr: outcome.stderr, elapsedMs: elapsed(), processStatus: "exit-nonzero", outputFileStatus: "not-checked", exitCode: outcome.code };
     }
 
     let sesText: string;
@@ -196,9 +210,32 @@ export async function runFreerouting(input: RunFreeroutingInput): Promise<RunFre
         error: "io",
         stderr: outcome.stderr || "Freerouting produced no .ses output file",
         elapsedMs: elapsed(),
+        processStatus: "exit-success",
+        outputFileStatus: "missing",
+        exitCode: 0,
       };
     }
-    return { ok: true, sesText, stderr: outcome.stderr, elapsedMs: elapsed() };
+    if (!sesText.trim()) {
+      return {
+        ok: false,
+        error: "output-empty",
+        stderr: outcome.stderr || "Freerouting produced an empty .ses output file",
+        elapsedMs: elapsed(),
+        processStatus: "exit-success",
+        outputFileStatus: "empty",
+        exitCode: 0,
+      };
+    }
+    return {
+      ok: true,
+      sesText,
+      stderr: outcome.stderr,
+      elapsedMs: elapsed(),
+      processStatus: "exit-success",
+      outputFileStatus: "nonempty",
+      exitCode: 0,
+      sesByteLength: Buffer.byteLength(sesText, "utf8"),
+    };
   } finally {
     await Promise.all([rm(inPath, { force: true }).catch(() => {}), rm(outPath, { force: true }).catch(() => {})]);
   }

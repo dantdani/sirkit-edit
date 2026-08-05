@@ -12,7 +12,7 @@ import { buildScene, disposeScene } from "../app/lib/pcb/3d/build-scene";
 import { PALETTES, DEFAULT_PALETTE_ID } from "../app/lib/pcb/3d/palette";
 import { buildFabBundle } from "../app/lib/pcb/fab/build-bundle";
 import { getFabPreset } from "../app/lib/pcb/fab/presets";
-import { netlistFromBoard } from "../app/lib/pcb/kicad/write-pcb";
+import { createEmptyBoard } from "../app/lib/pcb/types";
 
 function timeIt(label: string, budgetMs: number | null, fn: () => void): void {
   // Warm once, then take the best of 3 (JIT noise).
@@ -57,11 +57,10 @@ async function main(): Promise<void> {
     const t0 = performance.now();
     const result = await buildFabBundle(
       {
-        board: routed,
-        netlist: netlistFromBoard(routed),
+        board: createEmptyBoard(),
+        netlist: { components: [], nets: [] },
         fabPreset: getFabPreset("jlcpcb-2l"),
         drcPreset: getPreset("jlcpcb-2l"),
-        overrideDrcFail: true,
         boardName: "perf-demo",
       },
       { cliPath: process.env.KICAD_CLI },

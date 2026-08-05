@@ -7,7 +7,8 @@
 import type { LayerId } from "../layers";
 import type { PcbBoard } from "../types";
 import type { PcbNetlist } from "../netlist-bridge";
-import type { DrcPreset, DrcPresetId, DrcViolation } from "../drc/types";
+import type { DrcPreset, DrcPresetId } from "../drc/types";
+import type { ManufacturingReleaseManifest, ReadinessReport, ReleaseDisposition, ReleaseWaiver } from "../readiness/types";
 
 export type FabPresetId = "jlcpcb-2l" | "jlcpcb-4l" | "pcbway-standard" | "oshpark-4l";
 
@@ -51,11 +52,20 @@ export interface BundleInput {
   netlist: PcbNetlist;
   fabPreset: FabPreset;
   drcPreset: DrcPreset;
-  overrideDrcFail?: boolean; // required to proceed when drc.ok === false
+  /** Whether `netlist` is the current authoritative schematic rather than a board-derived writer adapter. */
+  schematicIntentAvailable?: boolean;
+  releaseDisposition?: ReleaseDisposition;
+  waivers?: ReleaseWaiver[];
+  priorReadinessReport?: ReadinessReport;
+  projectIdentity?: string;
+  actor?: string;
   boardName: string;
 }
 
 export interface BundleResult {
+  sourceRevision: string;
+  readiness: ReadinessReport;
+  releaseManifest: ManufacturingReleaseManifest;
   zipBytes: Uint8Array; // final .zip contents
   filename: string; // "<boardName>-<fabId>-<yyyy-mm-dd>.zip"
   stats: {
@@ -71,18 +81,6 @@ export interface BundleResult {
 }
 
 // ── Typed failures (API route maps these to HTTP statuses) ──────────────────
-
-/** DRC gate tripped and `overrideDrcFail` was not set → HTTP 400. */
-export class FabExportGatedByDrc extends Error {
-  readonly violations: DrcViolation[];
-
-  constructor(violations: DrcViolation[]) {
-    const errors = violations.filter((v) => v.severity === "error").length;
-    super(`DRC gate: ${errors} error${errors === 1 ? "" : "s"} — export blocked (override not set)`);
-    this.name = "FabExportGatedByDrc";
-    this.violations = violations;
-  }
-}
 
 /** kicad-cli missing/failed/timed out → HTTP 500. */
 export class KicadCliError extends Error {

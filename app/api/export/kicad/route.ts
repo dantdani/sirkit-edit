@@ -12,6 +12,7 @@
 import { exportToKicadSch } from "@/app/lib/kicad-export";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
+import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,7 @@ type ExportBody = {
   title?: string;
   description?: string;
   company?: string;
+  componentSelections?: Record<string, ProjectComponentPin>;
 };
 
 /** Make a title safe to use as a file name. */
@@ -52,7 +54,17 @@ export async function POST(req: Request): Promise<Response> {
 
   // Collect unique partIds and load full catalog data from the DB (server-side;
   // the client parts cache / ensurePartLoaded can't be called from a route).
-  const partIds = [...new Set(kicadComponents.map((c) => c.partId))];
+  const hasExactSelection = (component: (typeof kicadComponents)[number]): boolean => {
+    const selection = body.componentSelections?.[component.id];
+    return Boolean(
+      selection
+      && selection.atomicRevisionId === component.atomicPartRevisionId
+      && selection.symbolVersionId === component.symbolAssetVersionId
+      && selection.embeddedSnapshot.atomicRevision.id === selection.atomicRevisionId
+      && selection.embeddedSnapshot.symbol.versionId === selection.symbolVersionId,
+    );
+  };
+  const partIds = [...new Set(kicadComponents.filter((component) => !hasExactSelection(component)).map((c) => c.partId))];
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map(loaded.map((p) => [p.id, p] as const));
   const failed = partIds.filter((id) => !parts.has(id));
@@ -70,6 +82,7 @@ export async function POST(req: Request): Promise<Response> {
     title: body.title,
     description: body.description,
     company: body.company,
+    componentSelections: body.componentSelections,
   });
 
   const filename = `${sanitizeFilename(body.title ?? "sirkit_export")}.kicad_sch`;

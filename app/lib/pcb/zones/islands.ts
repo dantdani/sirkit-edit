@@ -19,6 +19,7 @@ import type { PcbBoard, FilledRegion, Zone } from "../types";
 import { computeConnectivity } from "../connectivity-board";
 import { padCopperLayers, padWorldPosition, viaSpannedLayers } from "../geometry-copper";
 import { pointInPolygon, segmentOverlapsRegion, regionContainsPoint } from "./geometry";
+import { classifyNetRelation } from "../copper-policy";
 
 export function filterIslandsByConnection(
   rawRegions: FilledRegion[],
@@ -27,23 +28,30 @@ export function filterIslandsByConnection(
 ): { keep: FilledRegion[]; dropped: number } {
   const netId = zone.netId;
   const layer = zone.layer;
+  const minimumArea = Math.max(0, zone.minIslandAreaNm2 ?? 0);
+  const applyAreaRule = (regions: FilledRegion[]): { keep: FilledRegion[]; dropped: number } => {
+    const keep = regions.filter((region) => region.areaNm2 >= minimumArea);
+    return { keep, dropped: regions.length - keep.length };
+  };
+
+  if (zone.keepUnconnectedIslands) return applyAreaRule([...rawRegions]);
 
   // Same-net copper on the zone's layer.
   const padCenters: { x: number; y: number }[] = [];
   for (const inst of board.footprints) {
     for (const pad of inst.def.pads) {
       if (pad.type === "np_thru_hole") continue;
-      if ((inst.padNets[pad.number] ?? 0) !== netId) continue;
+      if (classifyNetRelation(board, netId, inst.padNets[pad.number] ?? 0) !== "same-proven-net") continue;
       if (!padCopperLayers(inst, pad).includes(layer)) continue;
       padCenters.push(padWorldPosition(inst, pad));
     }
   }
-  const tracks = board.tracks.filter((t) => t.netId === netId && t.layer === layer);
-  const vias = board.vias.filter((v) => v.netId === netId && viaSpannedLayers(v).includes(layer));
+  const tracks = board.tracks.filter((t) => classifyNetRelation(board, netId, t.netId) === "same-proven-net" && t.layer === layer);
+  const vias = board.vias.filter((v) => classifyNetRelation(board, netId, v.netId) === "same-proven-net" && viaSpannedLayers(v).includes(layer));
 
   // Nothing on this net anywhere on this layer → nothing to connect to; keep all.
   if (padCenters.length === 0 && tracks.length === 0 && vias.length === 0) {
-    return { keep: [...rawRegions], dropped: 0 };
+    return applyAreaRule([...rawRegions]);
   }
 
   // Tracks/vias only anchor an island if they themselves reach a pad of the
@@ -76,5 +84,6 @@ export function filterIslandsByConnection(
     if (connected) keep.push(region);
     else dropped++;
   }
-  return { keep, dropped };
+  const area = applyAreaRule(keep);
+  return { keep: area.keep, dropped: dropped + area.dropped };
 }

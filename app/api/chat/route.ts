@@ -1,5 +1,6 @@
 import { llmRouter } from "@/app/lib/llm/router";
 import { providerErrorResponse } from "@/app/lib/llm/errors";
+import { configuredOpenAIModel } from "@/app/lib/llm/openai-config";
 import { requestedProvider } from "@/app/lib/llm/request";
 import type { LLMMessage } from "@/app/lib/llm/types";
 import { CHAT_SYSTEM_PROMPT } from "@/app/lib/prompts";
@@ -22,7 +23,6 @@ export async function POST(req: Request) {
   const iterator = llmRouter
     .stream({
       provider,
-      maxTokens: 1024,
       system: CHAT_SYSTEM_PROMPT,
       messages,
       boardState: body.boardState,
@@ -66,6 +66,7 @@ export async function POST(req: Request) {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "X-Sirkit-AI-Provider": provider,
+      "X-Sirkit-AI-Model": provider === "openai" ? configuredOpenAIModel() : "anthropic",
       "Cache-Control": "no-store",
     },
   });

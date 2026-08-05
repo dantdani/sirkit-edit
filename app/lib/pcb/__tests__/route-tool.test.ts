@@ -76,6 +76,7 @@ function trk(id: string, netId: number, ax: number, ay: number, bx: number, by: 
     start: { x: mmToNm(ax), y: mmToNm(ay) },
     end: { x: mmToNm(bx), y: mmToNm(by) },
     netId,
+    source: "human",
   };
 }
 
@@ -86,7 +87,11 @@ function boardWith(
 ): PcbBoard {
   return {
     ...createEmptyBoard(),
-    nets: [{ id: 0, name: "" }, ...nets.map((id) => ({ id, name: `N${id}` }))],
+    identityVersion: 1,
+    nets: [
+      { id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] },
+      ...nets.map((id) => ({ id, name: `N${id}`, stableId: `net:n${id}`, endpointKeys: [] })),
+    ],
     footprints,
     tracks,
   };
@@ -148,12 +153,12 @@ describe("route tool — happy path", () => {
 
     expect(commands).toHaveLength(1);
     const cmd = commands[0];
-    expect(cmd.kind).toBe("CommitRouteSegment");
-    if (cmd.kind !== "CommitRouteSegment") throw new Error("unreachable");
-    expect(cmd.segments.length).toBe(2); // L-bend
-    expect(cmd.segments[0].start).toEqual(P(20, 30));
-    expect(cmd.segments[cmd.segments.length - 1].end).toEqual(P(50, 45));
-    expect(new Set(cmd.segments.map((s) => s.id)).size).toBe(cmd.segments.length);
+    expect(cmd.kind).toBe("CommitRouteCandidate");
+    if (cmd.kind !== "CommitRouteCandidate") throw new Error("unreachable");
+    expect(cmd.candidate.delta.createdTracks.length).toBe(2); // L-bend
+    expect(cmd.candidate.delta.createdTracks.some((track) => track.start.x === P(20, 30).x && track.start.y === P(20, 30).y)).toBe(true);
+    expect(cmd.candidate.delta.createdTracks.some((track) => track.end.x === P(50, 45).x && track.end.y === P(50, 45).y)).toBe(true);
+    expect(new Set(cmd.candidate.delta.createdTracks.map((s) => s.id)).size).toBe(cmd.candidate.delta.createdTracks.length);
     expect(tool.state.kind).toBe("idle"); // completed onto a same-net pad
   });
 });
@@ -172,10 +177,10 @@ describe("route tool — live guard", () => {
     expect(st.preview.points?.length).toBeGreaterThan(2);
     tool.onPointerDown(P(60, 30), EV);
     expect(commands).toHaveLength(1);
-    expect(commands[0].kind).toBe("CommitRouteSegment");
-    if (commands[0].kind !== "CommitRouteSegment") throw new Error("expected route command");
-    expect(commands[0].segments.length).toBeGreaterThan(2);
-    expect(commands[0].historyEvents?.[0].mode).toBe("walk-around");
+    expect(commands[0].kind).toBe("CommitRouteCandidate");
+    if (commands[0].kind !== "CommitRouteCandidate") throw new Error("expected route command");
+    expect(commands[0].candidate.delta.createdTracks.length).toBeGreaterThan(2);
+    expect(commands[0].candidate.request.routeMode).toBe("walk_around");
     expect(tool.state.kind).toBe("idle");
   });
 
@@ -213,18 +218,17 @@ describe("route tool — via + layer flip", () => {
     tool.onPointerMove(P(40, 30));
     tool.onKey("V");
 
-    const viaCmd = commands.at(-1);
-    expect(viaCmd?.kind).toBe("PlaceViaAndFlipLayer");
-    if (viaCmd?.kind !== "PlaceViaAndFlipLayer") throw new Error("unreachable");
-    expect(viaCmd.via.layers).toEqual(["copperTop", "copperBottom"]);
-    expect(viaCmd.via.at).toEqual(P(20, 30));
-    expect(asRouting(tool.state).activeLayer).toBe("copperBottom");
+    expect(commands).toHaveLength(0);
+    const staged = asRouting(tool.state);
+    expect(staged.stagedVias).toHaveLength(1);
+    expect(staged.stagedVias[0].layers).toEqual(["copperTop", "copperBottom"]);
+    expect(staged.stagedVias[0].at).toEqual(P(20, 30));
+    expect(staged.activeLayer).toBe("copperBottom");
 
     tool.onPointerMove(P(40, 30));
     tool.onPointerDown(P(40, 30), EV);
-    const segCmd = commands.at(-1);
-    if (segCmd?.kind !== "CommitRouteSegment") throw new Error("expected segment");
-    expect(segCmd.segments[0].layer).toBe("copperBottom");
+    expect(commands).toHaveLength(0);
+    expect(asRouting(tool.state).stagedTracks[0].layer).toBe("copperBottom");
   });
 });
 
@@ -252,11 +256,10 @@ describe("route tool — resolved route profile", () => {
     tool.onPointerDown(P(20, 30), EV);
     expect(asRouting(tool.state).trackWidth).toBe(750_000);
     tool.onKey("V");
-    const command = commands.at(-1);
-    expect(command?.kind).toBe("PlaceViaAndFlipLayer");
-    if (command?.kind !== "PlaceViaAndFlipLayer") throw new Error("expected via command");
-    expect(command.via.padstackId).toBe("via-chosen");
-    expect([command.via.size, command.via.drill]).toEqual([1_000_000, 500_000]);
+    expect(commands).toHaveLength(0);
+    const via = asRouting(tool.state).stagedVias[0];
+    expect(via.padstackId).toBe("via-chosen");
+    expect([via.size, via.drill]).toEqual([1_000_000, 500_000]);
   });
 });
 
@@ -313,8 +316,73 @@ describe("route tool — Escape / cancel", () => {
   });
 });
 
+describe("route tool — Stage 8 candidate transaction", () => {
+  it("keeps a multi-click route off-board until finish, then emits exactly one command", () => {
+    const { tool, commands, board } = harness(boardWith([padInst("a", "A", 10, 10, 1), padInst("b", "B", 40, 30, 1)], [], [1]));
+    tool.onPointerDown(P(10, 10), EV);
+    tool.onPointerMove(P(20, 10));
+    tool.onPointerDown(P(20, 10), EV);
+    expect(commands).toHaveLength(0);
+    expect(board().tracks).toHaveLength(0);
+    expect(asRouting(tool.state).stagedTracks.length).toBeGreaterThan(0);
+    tool.onPointerMove(P(40, 30));
+    tool.onPointerDown(P(40, 30), EV);
+    expect(commands).toHaveLength(1);
+    expect(commands[0].kind).toBe("CommitRouteCandidate");
+    expect(board().tracks.length).toBeGreaterThan(1);
+    expect(tool.state.kind).toBe("idle");
+  });
+
+  it("Backspace and cancel modify candidate steps only, including staged vias", () => {
+    const { tool, commands, board } = harness(boardWith([padInst("a", "A", 10, 10, 1)], [], [1]));
+    tool.onPointerDown(P(10, 10), EV);
+    tool.onPointerMove(P(20, 10));
+    tool.onPointerDown(P(20, 10), EV);
+    tool.onKey("V");
+    expect(asRouting(tool.state).stagedVias).toHaveLength(1);
+    tool.onKey("Backspace");
+    expect(asRouting(tool.state).stagedVias).toHaveLength(0);
+    expect(asRouting(tool.state).stagedTracks.length).toBeGreaterThan(0);
+    tool.onKey("Escape");
+    expect(commands).toHaveLength(0);
+    expect(board().tracks).toHaveLength(0);
+    expect(board().vias).toHaveLength(0);
+  });
+
+  it("starts and finishes at exact arbitrary interior points and splits both source tracks", () => {
+    const first = trk("first", 1, 10, 10, 30, 20);
+    const second = trk("second", 1, 50, 20, 70, 30);
+    const { tool, commands, board } = harness(boardWith([], [first, second], [1]));
+    tool.onPointerDown(P(20, 15), EV);
+    tool.onPointerUp(P(20, 15));
+    expect(asRouting(tool.state).anchor).toEqual(P(20, 15));
+    tool.onPointerMove(P(60, 25));
+    tool.onPointerDown(P(60, 25), EV);
+    expect(commands).toHaveLength(1);
+    const command = commands[0];
+    if (command.kind !== "CommitRouteCandidate") throw new Error("expected one candidate command");
+    expect(command.candidate.delta.removedTracks.map((candidate) => candidate.id).sort()).toEqual(["first", "second"]);
+    expect(board().tracks.some((candidate) =>
+      candidate.start.x === P(20, 15).x && candidate.start.y === P(20, 15).y
+      || candidate.end.x === P(20, 15).x && candidate.end.y === P(20, 15).y,
+    )).toBe(true);
+  });
+
+  it("uses the persisted arbitrary posture for one straight non-45-degree candidate", () => {
+    const { tool, commands } = harness(boardWith([padInst("a", "A", 10, 10, 1), padInst("b", "B", 23, 17, 1)], [], [1]), {
+      routingProfile: () => ({ trackWidth: 250_000, clearance: 200_000, viaSize: 800_000, viaDrill: 400_000, routeMode: "highlight_stop", posture: "arbitrary" }),
+    });
+    tool.onPointerDown(P(10, 10), EV);
+    tool.onPointerMove(P(23, 17));
+    expect(asRouting(tool.state).preview.points).toHaveLength(2);
+    tool.onPointerDown(P(23, 17), EV);
+    expect(commands[0].kind).toBe("CommitRouteCandidate");
+    if (commands[0].kind === "CommitRouteCandidate") expect(commands[0].candidate.delta.createdTracks).toHaveLength(1);
+  });
+});
+
 describe("route tool — routed demo integration", () => {
-  it("ripupNetAt on a GND track removes the whole GND net", () => {
+  it("ripupNetAt removes only the explicitly selected GND segment", () => {
     const demo = buildRoutedDemo();
     const { tool, commands, board } = harness(demo);
     const g = demo.tracks.find((t) => t.netId === 1);
@@ -322,7 +390,7 @@ describe("route tool — routed demo integration", () => {
     const mid = { x: Math.round((g.start.x + g.end.x) / 2), y: Math.round((g.start.y + g.end.y) / 2) };
     expect(tool.ripupNetAt(mid)).toBe(true);
     expect(commands.at(-1)?.kind).toBe("RipupNet");
-    expect(board().tracks.filter((t) => t.netId === 1)).toHaveLength(0);
+    expect(board().tracks.filter((t) => t.netId === 1)).toHaveLength(demo.tracks.filter((t) => t.netId === 1).length - 1);
     expect(board().tracks.length).toBeGreaterThan(0); // other nets survive
   });
 });
@@ -338,10 +406,10 @@ describe("route tool — review-fix regressions", () => {
     tool.onPointerDown(P(20.015, 30), EV);
     expect(commands).toHaveLength(1);
     const cmd = commands[0];
-    if (cmd.kind !== "CommitRouteSegment") throw new Error("expected segment");
-    expect(cmd.segments).toHaveLength(1); // single exact segment, no doubled-back stub
-    expect(cmd.segments[0].start).toEqual(P(5, 30));
-    expect(cmd.segments[0].end).toEqual({ x: mmToNm(20.015), y: mmToNm(30) });
+    if (cmd.kind !== "CommitRouteCandidate") throw new Error("expected candidate");
+    expect(cmd.candidate.delta.createdTracks).toHaveLength(1); // single exact segment, no doubled-back stub
+    expect(cmd.candidate.delta.createdTracks[0].start).toEqual(P(5, 30));
+    expect(cmd.candidate.delta.createdTracks[0].end).toEqual({ x: mmToNm(20.015), y: mmToNm(30) });
   });
 
   it("does NOT auto-finish onto a same-net pad whose copper is on the other layer (F3)", () => {
@@ -353,8 +421,9 @@ describe("route tool — review-fix regressions", () => {
     tool.onPointerMove(P(30, 30));
     expect(asRouting(tool.state).preview.end).toEqual(P(30, 30)); // grid-snapped, not a pad target
     tool.onPointerDown(P(30, 30), EV);
-    expect(commands).toHaveLength(1); // committed a segment...
-    expect(tool.state.kind).toBe("routing"); // ...but did NOT auto-finish
+    expect(commands).toHaveLength(0); // candidate-only; nothing has entered board history
+    expect(asRouting(tool.state).stagedTracks).toHaveLength(1);
+    expect(tool.state.kind).toBe("routing");
   });
 
   it("checkClearance flags a candidate that lies entirely off-board (F4)", () => {
@@ -366,6 +435,24 @@ describe("route tool — review-fix regressions", () => {
     // sanity: a fully-inside track is legal
     const inside = trk("y", 1, 10, 10, 20, 10);
     expect(checkClearance(board, { candidateSegments: [inside], netId: 1, clearance: DEFAULT_CLEARANCE }).legal).toBe(true);
+  });
+
+  it("uses the same proven-net clearance semantics as batch DRC", () => {
+    const obstacle = trk("obstacle", 1, 10, 40, 20, 40);
+    const closeSameNet = trk("same", 1, 10, 40.3, 20, 40.3); // 0.05 mm edge gap
+    const closeOtherNet = trk("other", 2, 10, 40.3, 20, 40.3);
+    const proven = boardWith([], [obstacle], [1, 2]);
+    expect(checkClearance(proven, { candidateSegments: [closeSameNet], netId: 1, clearance: DEFAULT_CLEARANCE }).legal).toBe(true);
+    expect(checkClearance(proven, { candidateSegments: [closeOtherNet], netId: 2, clearance: DEFAULT_CLEARANCE })).toMatchObject({
+      legal: false,
+      netRelation: "different-proven-nets",
+    });
+
+    const orphan = boardWith([], [{ ...obstacle, netId: 0 }], []);
+    expect(checkClearance(orphan, { candidateSegments: [{ ...closeSameNet, netId: 0 }], netId: 0, clearance: DEFAULT_CLEARANCE })).toMatchObject({
+      legal: false,
+      netRelation: "unassigned-to-unassigned",
+    });
   });
 
   it("right-click rip-up clears an in-flight pending track grab (F6)", () => {

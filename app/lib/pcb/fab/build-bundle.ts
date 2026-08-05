@@ -1,6 +1,6 @@
 // Fab bundle orchestrator (PCB Stage 14) — the pinned entry point.
 //
-// DRC gate (HARD by default, override is opt-in) → re-pour dirty zones →
+// Capture immutable snapshot → evaluate scoped release policy →
 // write .kicad_pcb to a temp dir → kicad-cli gerbers + drill (never emit
 // RS-274X/Excellon ourselves) → rename per the fab preset's layerBundle →
 // our own pick-and-place + BOM CSVs → zip (jszip) with a README → cleanup.
@@ -10,18 +10,18 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import JSZip from "jszip";
-import type { PcbBoard } from "../types";
-import { runDrc } from "../drc/run-drc";
-import { computeFill } from "../zones/compute-fill";
-import { makeEffectiveClearance } from "../zones/types";
 import { writeKicadPcb } from "../kicad/write-pcb";
+import { computeElectricalTruth, type ElectricalTruthReport } from "../electrical-truth";
 import { layerHeaderEntries } from "../kicad/layer-map";
 import type { BundleInput, BundleResult, FabPreset } from "./types";
-import { FabExportGatedByDrc, KicadCliError } from "./types";
+import { KicadCliError } from "./types";
 import type { KicadCliRunner, RunKicadCliResult } from "./kicad-cli-runner";
 import { runKicadCli } from "./kicad-cli-runner";
 import { computeBomRows, emitBomCsv } from "./emit-bom";
 import { emitPositionCsv } from "./emit-position";
+import { evaluatePcbFabricationReadiness } from "../readiness/evaluate";
+import { createManufacturingReleaseManifest, prepareManufacturingRelease } from "../readiness/release";
+import { sha256 } from "./native/stable";
 
 const CLI_TIMEOUT_MS = 60_000; // per invocation (pinned)
 
@@ -34,25 +34,6 @@ export interface BuildBundleOptions {
 function safeName(name: string): string {
   const clean = name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "");
   return clean.length > 0 ? clean.slice(0, 80) : "sirkit-board";
-}
-
-/** Re-pour zones whose fill is stale/absent so the gerbers carry real copper —
- * the client normally ships filled zones, but the bundle must not depend on it. */
-function withFreshFills(board: PcbBoard): PcbBoard {
-  if (!board.zones.some((z) => z.dirty || z.fill.length === 0)) return board;
-  return {
-    ...board,
-    zones: board.zones.map((z) =>
-      z.dirty || z.fill.length === 0
-        ? {
-            ...z,
-            fill: computeFill({ board, zone: z, effectiveClearance: makeEffectiveClearance(board, z) })
-              .regions,
-            dirty: false,
-          }
-        : z,
-    ),
-  };
 }
 
 function checkCli(result: RunKicadCliResult, step: string): asserts result is Extract<RunKicadCliResult, { ok: true }> {
@@ -101,16 +82,26 @@ export async function buildFabBundle(
   const runner = opts.runner ?? runKicadCli;
   const cliPath = opts.cliPath ?? process.env.KICAD_CLI ?? "kicad-cli";
 
-  // ── 1. Hard DRC gate ────────────────────────────────────────────────────
-  const drcResult = runDrc(input.board, drcPreset.rules, { presetId: drcPreset.id });
-  const drcErrors = drcResult.violations.filter((v) => v.severity === "error").length;
-  const drcWarnings = drcResult.violations.filter((v) => v.severity === "warning").length;
-  if (!drcResult.ok && !input.overrideDrcFail) {
-    throw new FabExportGatedByDrc(drcResult.violations);
-  }
+  // ── 1. Immutable, scoped manufacturing-release gate ─────────────────────
+  const prepared = prepareManufacturingRelease({
+    board: input.board,
+    disposition: input.releaseDisposition ?? "verified_manufacturing_release",
+    priorReport: input.priorReadinessReport,
+    evaluate: (snapshot) => evaluatePcbFabricationReadiness({
+      board: snapshot,
+      netlist: input.schematicIntentAvailable === false ? undefined : netlist,
+      fabPreset,
+      drcPreset,
+      exporter: "kicad-assisted",
+      waivers: input.waivers,
+    }),
+  });
+  const board = prepared.snapshot;
+  const electricalTruth = computeElectricalTruth(board);
+  const drcErrors = prepared.report.metrics.drcErrors;
+  const drcWarnings = prepared.report.metrics.drcWarnings;
 
   // ── 2. Board → .kicad_pcb in a temp dir ─────────────────────────────────
-  const board = withFreshFills(input.board);
   const pcbText = writeKicadPcb(board, netlist, { boardName, drcRules: drcPreset.rules });
 
   const tmp = await mkdtemp(join(tmpdir(), "sirkit-fab-"));
@@ -123,10 +114,41 @@ export async function buildFabBundle(
       ? zip.folder(fabPreset.zipRootFolder.replace(/\/+$/, ""))!
       : zip;
     const zipped: string[] = [];
+    const releaseArtifacts: Array<{ path: string; kind: string; bytes: number; sha256: string }> = [];
     const add = (name: string, data: string | Uint8Array): void => {
       root.file(name, data);
       zipped.push(name);
+      const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
+      releaseArtifacts.push({
+        path: fabPreset.zipRootFolder ? `${fabPreset.zipRootFolder.replace(/\/+$/, "")}/${name}` : name,
+        kind: name.endsWith(".csv") ? "assembly" : name.endsWith(".drl") ? "drill" : name.endsWith(".json") ? "manifest" : name.endsWith(".txt") ? "readme" : "gerber",
+        bytes: bytes.byteLength,
+        sha256: sha256(bytes),
+      });
     };
+    const electricalManifest = (report: ElectricalTruthReport): unknown => ({
+      schemaVersion: report.schemaVersion,
+      designRevision: report.designRevision,
+      intended: report.intended,
+      assigned: {
+        state: report.assigned.state,
+        terminalGroups: report.assigned.terminalGroups,
+        missingEndpointKeys: report.assigned.missingEndpointKeys,
+        unaccountedPadInstanceIds: report.assigned.unaccountedPadInstanceIds,
+      },
+      realized: {
+        state: report.realized.state,
+        requiredConnections: report.realized.requiredConnections,
+        completedConnections: report.realized.completedConnections,
+        remainingConnections: report.realized.remainingConnections,
+      },
+      nets: report.nets,
+      shorts: report.shorts,
+      orphanCopper: report.orphanCopper,
+      unresolved: report.unresolved,
+    });
+    add("SIRKIT_ELECTRICAL_TRUTH.json", `${JSON.stringify(electricalManifest(electricalTruth), null, 2)}\n`);
+    add("SIRKIT_READINESS_REPORT.json", `${JSON.stringify(prepared.report, null, 2)}\n`);
 
     // ── 3. Gerbers (kicad-cli), renamed per the fab's layerBundle ──────────
     const enabledLayers = fabPreset.layerBundle.filter((e) => e.enabled);
@@ -218,13 +240,24 @@ export async function buildFabBundle(
         "",
         fabPreset.notes,
         "",
-        `DRC (${drcPreset.name}): ${drcErrors} error(s), ${drcWarnings} warning(s)` +
-          (drcResult.ok ? "" : " — exported with the user's manual-review override."),
+        `Release disposition: ${prepared.disposition === "verified_manufacturing_release" ? "verified PCB fabrication checks" : "unverified engineering prototype export"}.`,
+        `Readiness: ${prepared.report.overallState} (${prepared.report.reportId}).`,
+        `DRC (${drcPreset.name}): ${drcErrors} error(s), ${drcWarnings} warning(s).`,
         "",
         "Files:",
         ...zipped.map((f) => `  ${f}`),
       ].join("\r\n") + "\r\n",
     );
+
+    const releaseManifest = createManufacturingReleaseManifest({
+      prepared,
+      projectIdentity: input.projectIdentity ?? boardName,
+      exporterVersion: "kicad-assisted/1",
+      generatedAt,
+      actor: input.actor,
+      artifacts: releaseArtifacts,
+    });
+    add("SIRKIT_RELEASE_MANIFEST.json", `${JSON.stringify(releaseManifest, null, 2)}\n`);
 
     const zipBytes = await zip.generateAsync({
       type: "uint8array",
@@ -235,6 +268,9 @@ export async function buildFabBundle(
     const date = new Date().toISOString().slice(0, 10);
     return {
       zipBytes,
+      sourceRevision: electricalTruth.designRevision,
+      readiness: prepared.report,
+      releaseManifest,
       filename: `${boardName}-${fabPreset.id}-${date}.zip`,
       stats: {
         drcErrors,

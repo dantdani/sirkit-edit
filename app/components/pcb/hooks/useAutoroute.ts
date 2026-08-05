@@ -5,18 +5,23 @@ import type { PcbHistory } from "@/app/lib/pcb/history";
 import { createEmptyBoard, type PcbBoard, type Track, type Via } from "@/app/lib/pcb/types";
 import { parseSes, type SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
 import { buildAutorouteImportCommand } from "@/app/lib/pcb/autoroute/command";
-import { mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
-import { computeConnectivity } from "@/app/lib/pcb/connectivity-board";
+import { applyRouteCommand, mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
+import { computeElectricalTruth } from "@/app/lib/pcb/electrical-truth";
 import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
 import type { LayerId } from "@/app/lib/pcb/layers";
 import type { AutoroutePassReport, AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
 import { pcbRevisionId } from "@/app/lib/pcb/ai/snapshot";
+import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
+import type { DrcPresetId } from "@/app/lib/pcb/drc/types";
+import type { ReadinessReport } from "@/app/lib/pcb/readiness/types";
 
 export interface AutorouteEditor {
   getHistory: () => PcbHistory | null;
   toast?: (message: string) => void;
   getDrcRules?: () => DrcRules;
+  getNetlist?: () => PcbNetlist | null;
+  getDrcPresetId?: () => DrcPresetId;
 }
 
 export type AutorouteState = "idle" | "queued" | "running" | "complete" | "partial" | "failed" | "cancelled";
@@ -37,6 +42,7 @@ export interface AutorouteResult {
   failures: AutorouteUnresolvedConnection[];
   passReports: AutoroutePassReport[];
   debugDirectory?: string;
+  fabricationReadiness: ReadinessReport;
 }
 
 export interface AutorouteHandle {
@@ -50,6 +56,9 @@ export interface AutorouteHandle {
 
 interface AutorouteApiResponse {
   ok?: boolean;
+  sourceRevision?: string;
+  candidateRevision?: string;
+  routeAttemptId?: string;
   sesText?: string;
   routes?: { tracks: Track[]; vias: Via[] };
   error?: string;
@@ -74,6 +83,7 @@ interface AutorouteApiResponse {
     layerUsage?: Partial<Record<LayerId, SesLayerUsage>>;
   };
   debugDirectory?: string;
+  readiness?: ReadinessReport;
 }
 
 export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
@@ -131,17 +141,25 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
       const response = await fetch("/api/pcb/autoroute", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ board }),
+        body: JSON.stringify({
+          board,
+          netlist: editorRef.current.getNetlist?.() ?? undefined,
+          fabPresetId: editorRef.current.getDrcPresetId?.(),
+        }),
         signal: controller.signal,
       });
       const body = await response.json() as AutorouteApiResponse;
       if (!response.ok || !body.ok || (!body.routes && !body.sesText)) {
         throw new Error(body.error ?? `Autoroute failed (${response.status})`);
       }
+      if (!body.readiness) throw new Error("Autoroute response is missing the authoritative fabrication-readiness report.");
       const history = editorRef.current.getHistory();
       if (!history) throw new Error("No board to apply routes to");
       if (pcbRevisionId(history.present) !== baseRevision) {
         throw new Error("Board changed while autorouting; the stale route candidate was discarded.");
+      }
+      if (body.sourceRevision && body.sourceRevision !== baseRevision) {
+        throw new Error("Autoroute response was generated from a different board revision and was discarded.");
       }
       const current = history.present;
       const parsed = body.routes ? undefined : parseSes(body.sesText ?? "", current);
@@ -152,28 +170,38 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
 
       if (acceptedPasses > 0) {
         const command = buildAutorouteImportCommand(current, imported);
+        const projected = applyRouteCommand(current, command);
+        if (body.candidateRevision && pcbRevisionId(projected) !== body.candidateRevision) {
+          throw new Error("Autoroute candidate provenance check failed; board was left unchanged.");
+        }
         history.execute("Autoroute board", (draft) => mutateBoardWithCommand(draft, command), {
           operationType: "autoroute_completion",
           actor: "autorouter",
           reason: `Applied ${acceptedPasses} monotonic high-effort routing pass(es).`,
-          details: { passReports, failures },
+          details: {
+            routeAttemptId: body.routeAttemptId,
+            sourceRevision: body.sourceRevision ?? baseRevision,
+            candidateRevision: body.candidateRevision,
+            passReports,
+            failures,
+          },
         });
       }
 
-      const connectivity = computeConnectivity(history.present);
+      const electricalTruth = computeElectricalTruth(history.present);
       const drcRules = editorRef.current.getDrcRules?.();
       const drcErrors = drcRules
         ? runDrc(history.present, drcRules).violations.filter((violation) => violation.severity === "error").length
         : undefined;
-      const requiredConnections = body.verification?.requiredConnections ?? connectivity.airwires.length;
-      const completedConnections = body.verification?.completedConnections ?? Math.max(0, requiredConnections - connectivity.airwires.length);
-      const remainingConnections = Math.max(body.verification?.remainingConnections ?? 0, connectivity.airwires.length);
+      const requiredConnections = electricalTruth.realized.requiredConnections;
+      const completedConnections = electricalTruth.realized.completedConnections;
+      const remainingConnections = electricalTruth.realized.remainingConnections;
       const result: AutorouteResult = {
         status: body.job?.status === "complete" && remainingConnections === 0 ? "complete" : "partial",
         tracksImported: body.stats?.tracksImported ?? imported.tracks.length,
         viasImported: body.stats?.viasImported ?? imported.vias.length,
-        routedNets: body.verification?.routedNets ?? connectivity.completion.routedNets,
-        totalNets: body.verification?.totalNets ?? connectivity.completion.totalNets,
+        routedNets: electricalTruth.realized.routedNets,
+        totalNets: electricalTruth.realized.totalNets,
         drcErrors,
         requiredConnections,
         completedConnections,
@@ -184,6 +212,7 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
         failures,
         passReports,
         debugDirectory: body.debugDirectory,
+        fabricationReadiness: body.readiness,
       };
       setLastResult(result);
       setState(result.status);
