@@ -179,7 +179,9 @@ describe("executor lineage identity", () => {
 });
 
 describe("interactive-channel composition boundary", () => {
-  it("9. the engineering public barrel does not export the channel or its factory", async () => {
+  // Importing the full barrel transitively loads the PCB engine — allow
+  // for cold-transform time well beyond the 5s default.
+  it("9. the engineering public barrel does not export the channel or its factory", { timeout: 30_000 }, async () => {
     const barrel = await import("../index");
     expect(Object.keys(barrel)).not.toContain("InteractiveUiChannel");
     expect(Object.keys(barrel)).not.toContain("createEditorSessionChannel");

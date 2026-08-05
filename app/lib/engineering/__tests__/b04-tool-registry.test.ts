@@ -318,7 +318,9 @@ describe("provider adapters", () => {
     }
   });
 
-  it("27. the public barrel still cannot supply the interactive channel", async () => {
+  // Importing the full barrel transitively loads the PCB engine — allow
+  // for cold-transform time well beyond the 5s default.
+  it("27. the public barrel still cannot supply the interactive channel", { timeout: 30_000 }, async () => {
     const barrel = await import("../index");
     expect(Object.keys(barrel)).not.toContain("InteractiveUiChannel");
     expect(Object.keys(barrel)).not.toContain("createEditorSessionChannel");
