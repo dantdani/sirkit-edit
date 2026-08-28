@@ -1,56 +1,46 @@
 /**
- * /api/bom/notifications
+ * /api/bom/notifications — [B16.0.2 §B] project-owned notifications.
  *
- * GET    ?projectKey=...&unreadOnly=true|false  → list (dismissed excluded)
- * PATCH  { id, readAt?, dismissedAt? }           → mark one read/dismissed
- *        { projectKey, markAllRead: true }        → mark all unread as read
- * DELETE { projectKey, olderThan? }              → bulk cleanup
+ * GET    ?unreadOnly=true|false         → list (dismissed excluded) for the
+ *        caller's trusted project scope
+ * PATCH  { id, readAt?, dismissedAt? }   → mark ONE notification OWNED by the
+ *        caller's scope (a foreign/legacy id is a uniform 404, never touched)
+ *        { markAllRead: true }           → mark all unread in the caller's scope
+ * DELETE { olderThan? }                  → bulk cleanup inside the caller's scope
+ *
+ * The body may carry NO projectKey / tenant / project / branch / actor claim
+ * (refused); ownership is the server-derived trusted scope, always.
  */
 
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
-import { getDb } from "@/app/lib/db/client";
-import { bomNotifications } from "@/app/lib/db/schema";
+import { resolveBomRepository } from "@/app/lib/bom/snapshot-repository";
+import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
+import { BOM_FORBIDDEN_BODY_KEYS, bomNotFound, bomOwnershipScope } from "../_scope";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request): Promise<Response> {
-  const params = new URL(req.url).searchParams;
-  const projectKey = params.get("projectKey")?.trim() ?? "";
-  if (projectKey === "") {
-    return Response.json({ ok: false, error: "`projectKey` is required." }, { status: 400 });
+const MAX_BODY_BYTES = 16_000;
+const BODY_DEADLINE_MS = 10_000;
+
+function forbiddenClaim(body: Record<string, unknown>): Response | null {
+  for (const key of BOM_FORBIDDEN_BODY_KEYS) {
+    if (key in body) return Response.json({ ok: false, code: "AUTH_AUTHORITATIVE_INPUT_FORBIDDEN", error: `\`${key}\` is server-derived and may not be supplied.` }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
-  const unreadOnly = params.get("unreadOnly") === "true";
+  return null;
+}
 
+// [B16.0.11] canonical wrapper — the callback sees ONLY the bounded, frozen
+// query projection (meta.query), never the raw URL or Request.
+export const GET = authenticatedRoute({ query: true }, async ({ context, meta }): Promise<Response> => {
+  const scope = bomOwnershipScope(context);
+  const unreadOnly = meta.query?.unreadOnly === "true";
   try {
-    const where = unreadOnly
-      ? and(
-          eq(bomNotifications.projectKey, projectKey),
-          isNull(bomNotifications.dismissedAt),
-          isNull(bomNotifications.readAt),
-        )
-      : and(eq(bomNotifications.projectKey, projectKey), isNull(bomNotifications.dismissedAt));
-
-    const notifications = await getDb()
-      .select()
-      .from(bomNotifications)
-      .where(where)
-      .orderBy(desc(bomNotifications.createdAt))
-      .limit(200);
-
-    return Response.json({ ok: true, notifications });
+    const notifications = await resolveBomRepository().listNotifications(scope, { unreadOnly, limit: 200 });
+    return Response.json({ ok: true, notifications }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
-
-type PatchBody = {
-  id?: unknown;
-  projectKey?: unknown;
-  markAllRead?: unknown;
-  readAt?: unknown;
-  dismissedAt?: unknown;
-};
+});
 
 /** Coerce an incoming timestamp value (ISO string / null) to a Date or null. */
 function toDate(v: unknown): Date | null {
@@ -62,71 +52,55 @@ function toDate(v: unknown): Date | null {
   return null;
 }
 
-export async function PATCH(req: Request): Promise<Response> {
-  let body: PatchBody;
-  try {
-    body = (await req.json()) as PatchBody;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+export const PATCH = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS }, async ({ context, body }): Promise<Response> => {
+  const scope = bomOwnershipScope(context);
+  const claim = forbiddenClaim(body);
+  if (claim) return claim;
 
   try {
-    const db = getDb();
+    const repo = resolveBomRepository();
 
-    // Bulk "mark all as read" for a project.
-    if (body.markAllRead === true && typeof body.projectKey === "string") {
-      await db
-        .update(bomNotifications)
-        .set({ readAt: new Date() })
-        .where(
-          and(eq(bomNotifications.projectKey, body.projectKey), isNull(bomNotifications.readAt)),
-        );
-      return Response.json({ ok: true });
+    // Bulk "mark all as read" — inside the caller's trusted scope only.
+    if (body.markAllRead === true) {
+      const updated = await repo.markAllNotificationsRead(scope, new Date());
+      return Response.json({ ok: true, updated }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    if (typeof body.id !== "string") {
+    if (typeof body.id !== "string" || body.id.trim() === "") {
       return Response.json({ ok: false, error: "`id` is required." }, { status: 400 });
     }
 
     const patch: { readAt?: Date | null; dismissedAt?: Date | null } = {};
     if ("readAt" in body) patch.readAt = body.readAt === undefined ? new Date() : toDate(body.readAt);
-    if ("dismissedAt" in body) {
-      patch.dismissedAt = body.dismissedAt === undefined ? new Date() : toDate(body.dismissedAt);
-    }
+    if ("dismissedAt" in body) patch.dismissedAt = body.dismissedAt === undefined ? new Date() : toDate(body.dismissedAt);
     if (Object.keys(patch).length === 0) {
       return Response.json({ ok: false, error: "Nothing to update." }, { status: 400 });
     }
 
-    await db.update(bomNotifications).set(patch).where(eq(bomNotifications.id, body.id));
-    return Response.json({ ok: true });
+    // The predicate is (id AND full trusted scope): a foreign or legacy row is
+    // never updated and is reported as a uniform 404.
+    const changed = await repo.updateNotification(scope, body.id, patch);
+    if (!changed) return bomNotFound("Notification");
+    return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});
 
-type DeleteBody = { projectKey?: unknown; olderThan?: unknown };
-
-export async function DELETE(req: Request): Promise<Response> {
-  let body: DeleteBody;
-  try {
-    body = (await req.json()) as DeleteBody;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
-  if (typeof body.projectKey !== "string" || body.projectKey.trim() === "") {
-    return Response.json({ ok: false, error: "`projectKey` is required." }, { status: 400 });
-  }
+// [B16.0.11 §B] DELETE reads a bounded JSON body — the corrected target is
+// authenticatedJsonRoute (current behavior is authoritative).
+export const DELETE = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS }, async ({ context, body }): Promise<Response> => {
+  const scope = bomOwnershipScope(context);
+  const claim = forbiddenClaim(body);
+  if (claim) return claim;
 
   try {
     const olderThan = toDate(body.olderThan);
-    const where = olderThan
-      ? and(eq(bomNotifications.projectKey, body.projectKey), lt(bomNotifications.createdAt, olderThan))
-      : eq(bomNotifications.projectKey, body.projectKey);
-    await getDb().delete(bomNotifications).where(where);
-    return Response.json({ ok: true });
+    const deleted = await resolveBomRepository().deleteNotifications(scope, olderThan ? { olderThan } : {});
+    return Response.json({ ok: true, deleted }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});
