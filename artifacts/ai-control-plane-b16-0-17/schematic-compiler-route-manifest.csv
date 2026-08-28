@@ -1,0 +1,11 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/schematic-compiler/compare,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/diff,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/export,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/graph/validate,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/kicad/inspect,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/layout,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/problem,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/transaction,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/schematic-compiler/variants,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
