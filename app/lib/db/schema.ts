@@ -342,7 +342,13 @@ export const bomSnapshots = pgTable(
   "bom_snapshots",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** Arbitrary identifier the caller provides (project id or state hash). */
+    /** [B16.0.2 §B] SERVER-DERIVED ownership (trusted request context). NULL
+     *  on legacy rows ⇒ quarantined: the scope predicate can never match. */
+    tenantId: text("tenant_id"),
+    projectId: text("project_id"),
+    branchId: text("branch_id"),
+    /** NON-AUTHORITATIVE display/dedupe metadata (the server writes the trusted
+     *  project id); it never authorizes access. */
     projectKey: text("project_key").notNull(),
     /** Optional user-facing label, e.g. "Pre-EVT 2026-06-24". */
     label: text("label"),
@@ -355,6 +361,14 @@ export const bomSnapshots = pgTable(
   (table) => ({
     /** "list recent snapshots for project". */
     projectKeyIdx: index("bom_snapshots_project_idx").on(table.projectKey, table.takenAt.desc()),
+    /** [B16.0.2 §B] "list recent snapshots for the OWNING project". */
+    ownerIdx: index("bom_snapshots_owner_idx").on(table.tenantId, table.projectId, table.branchId, table.takenAt.desc()),
+    /** [B16.0.3 §D] ownership is all-or-nothing: either all three columns are
+     *  NULL (a quarantined legacy row) or all three are non-null AND nonblank.
+     *  The explicit IS NOT NULL makes a partial row FALSE (not UNKNOWN), so the
+     *  CHECK rejects it. Declared here so `db:push` / `db:generate` never omit
+     *  it. Name matches migration 0028. */
+    ownershipComplete: check("bom_snapshots_ownership_complete_check", sql`(${table.tenantId} IS NULL AND ${table.projectId} IS NULL AND ${table.branchId} IS NULL) OR (${table.tenantId} IS NOT NULL AND ${table.projectId} IS NOT NULL AND ${table.branchId} IS NOT NULL AND btrim(${table.tenantId}) <> '' AND btrim(${table.projectId}) <> '' AND btrim(${table.branchId}) <> '')`),
   }),
 );
 
@@ -366,6 +380,11 @@ export const bomNotifications = pgTable(
   "bom_notifications",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    /** [B16.0.2 §B] SERVER-DERIVED ownership (NULL on legacy rows ⇒ quarantined). */
+    tenantId: text("tenant_id"),
+    projectId: text("project_id"),
+    branchId: text("branch_id"),
+    /** NON-AUTHORITATIVE display/dedupe metadata — never authorizes access. */
     projectKey: text("project_key").notNull(),
     /** The snapshot the diff was made against. */
     sourceSnapshotId: uuid("source_snapshot_id").references(() => bomSnapshots.id, {
@@ -400,6 +419,11 @@ export const bomNotifications = pgTable(
       table.projectKey,
       table.createdAt.desc(),
     ),
+    /** [B16.0.2 §B] owner-scoped listing. */
+    ownerIdx: index("bom_notifications_owner_idx").on(table.tenantId, table.projectId, table.branchId, table.createdAt.desc()),
+    /** [B16.0.3 §D] ownership completeness (see bom_snapshots). Name matches
+     *  migration 0028. */
+    ownershipComplete: check("bom_notifications_ownership_complete_check", sql`(${table.tenantId} IS NULL AND ${table.projectId} IS NULL AND ${table.branchId} IS NULL) OR (${table.tenantId} IS NOT NULL AND ${table.projectId} IS NOT NULL AND ${table.branchId} IS NOT NULL AND btrim(${table.tenantId}) <> '' AND btrim(${table.projectId}) <> '' AND btrim(${table.branchId}) <> '')`),
   }),
 );
 
@@ -1288,6 +1312,34 @@ export const durableWorkflowOutbox = pgTable("durable_workflow_outbox", {
   leaseCheck: check("durable_workflow_outbox_lease_check", sql`(${table.state} = 'processing' AND ${table.leaseOwner} IS NOT NULL AND ${table.leaseToken} IS NOT NULL AND ${table.leaseExpiresAt} IS NOT NULL) OR (${table.state} <> 'processing' AND ${table.leaseOwner} IS NULL AND ${table.leaseToken} IS NULL AND ${table.leaseExpiresAt} IS NULL)`),
 }));
 
+// ─── B16.0 — authoritative project membership (server-owned role authority) ──
+// The one table that maps an authenticated user to a project ROLE. Role is
+// NEVER read from a client header or from user-editable JWT user_metadata; it
+// is looked up here server-side. Membership is unique per
+// (tenant, project, user); a revoked row fails closed. `user_id` is the
+// Supabase auth user id in production. See app/lib/auth/project-membership.ts.
+export const projectMembers = pgTable("project_members", {
+  membershipId: text("membership_id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  projectId: text("project_id").notNull(),
+  userId: text("user_id").notNull(),
+  role: text("role").$type<"viewer" | "commenter" | "editor" | "reviewer" | "admin">().notNull(),
+  state: text("state").$type<"active" | "revoked">().notNull(),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  auditActorId: text("audit_actor_id").notNull(),
+}, (table) => ({
+  // Exactly one membership per (tenant, project, user).
+  membershipUniq: uniqueIndex("project_members_tenant_project_user_uniq").on(table.tenantId, table.projectId, table.userId),
+  // Fast server-side role lookup by principal within a project.
+  lookupIdx: index("project_members_lookup_idx").on(table.tenantId, table.projectId, table.userId, table.state),
+  roleCheck: check("project_members_role_check", sql`${table.role} IN ('viewer','commenter','editor','reviewer','admin')`),
+  stateCheck: check("project_members_state_check", sql`${table.state} IN ('active','revoked')`),
+  versionCheck: check("project_members_version_check", sql`${table.version} > 0`),
+  identityCheck: check("project_members_identity_check", sql`btrim(${table.membershipId}) <> '' AND btrim(${table.tenantId}) <> '' AND btrim(${table.projectId}) <> '' AND btrim(${table.userId}) <> '' AND btrim(${table.auditActorId}) <> ''`),
+}));
+
 // ─── Inferred row types (consumed across the codebase) ──────────────────────
 
 export type Library = typeof libraries.$inferSelect;
@@ -1403,3 +1455,5 @@ export type DurableWorkflowHeadRecord = typeof durableWorkflowHeads.$inferSelect
 export type DurableWorkflowRecord = typeof durableWorkflowRecords.$inferSelect;
 export type DurableWorkflowReplayRecord = typeof durableWorkflowReplays.$inferSelect;
 export type DurableWorkflowOutboxRecord = typeof durableWorkflowOutbox.$inferSelect;
+export type ProjectMemberRecord = typeof projectMembers.$inferSelect;
+export type NewProjectMemberRecord = typeof projectMembers.$inferInsert;
