@@ -16,7 +16,11 @@ import {
 } from "./types";
 import type { PcbBoard } from "../pcb/types";
 
-export interface PcbSyncClientScope { tenantId: string; projectId: string; branchId: string; actor: EngineeringActor }
+// B16.0: the client no longer supplies an actor — identity/role are derived
+// server-side from the authenticated session + project membership. The scope
+// carries only the project/branch SELECTOR. `actor` is retained as an
+// OPTIONAL, IGNORED field for source compatibility during the migration.
+export interface PcbSyncClientScope { tenantId: string; projectId: string; branchId: string; actor?: EngineeringActor }
 export type PcbSyncClientFailureKind = "not_found" | "blocked" | "stale" | "conflict" | "retryable" | "terminal";
 export type PcbSyncClientResult<T> = { ok: true; value: T } | { ok: false; kind: PcbSyncClientFailureKind; code: string; status: number; detail?: string };
 export type PcbSyncFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -50,10 +54,18 @@ export class PcbSyncClient {
   // rebinds `this` to the client and browsers throw "Illegal invocation"
   // (Node's fetch ignores `this`, so only browser callers broke).
   constructor(private readonly scope: PcbSyncClientScope, private readonly request: PcbSyncFetch = (input, init) => fetch(input, init), private readonly endpoint = "/api/pcb-sync") {}
-  private headers(extra: Record<string, string> = {}): HeadersInit { return { "content-type": "application/json", "x-sirkit-tenant-id": this.scope.tenantId, "x-sirkit-project-id": this.scope.projectId, "x-sirkit-branch-id": this.scope.branchId, "x-sirkit-actor-id": this.scope.actor.actorId, "x-sirkit-actor-kind": this.scope.actor.actorKind, "x-sirkit-role": this.scope.actor.role, "x-sirkit-session-id": this.scope.actor.sessionId, ...extra }; }
-  private async post<T>(operation: string, request: object, guard: (value: unknown) => value is T, extraHeaders: Record<string, string> = {}): Promise<PcbSyncClientResult<T>> { let response: Response; try { response = await this.request(this.endpoint, { method: "POST", headers: this.headers(extraHeaders), body: JSON.stringify({ operation, request }) }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body)) return failure("PS_API_INVALID_RESPONSE", 502); if (body.ok !== true || !guard(body.result)) return failure(typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
+  // B16.0: only the project/branch SELECTOR is sent — never an actor id,
+  // actor kind, or role. Identity is established by the authenticated session
+  // cookie and the server-owned project membership. The authenticated cookie
+  // rides along automatically (same-origin fetch).
+  private headers(extra: Record<string, string> = {}): HeadersInit { return { "content-type": "application/json", "x-sirkit-tenant-id": this.scope.tenantId, "x-sirkit-project-id": this.scope.projectId, "x-sirkit-branch-id": this.scope.branchId, ...extra }; }
+  private async post<T>(operation: string, request: object, guard: (value: unknown) => value is T, extraHeaders: Record<string, string> = {}, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<T>> { let response: Response; try { response = await this.request(this.endpoint, { method: "POST", headers: this.headers(extraHeaders), body: JSON.stringify({ operation, request }), ...(options?.signal ? { signal: options.signal } : {}) }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body)) return failure("PS_API_INVALID_RESPONSE", 502); if (body.ok !== true || !guard(body.result)) return failure(typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
+  // B08.3 — publish/apply take NO AbortSignal deliberately: both commit
+  // durable server state, and the response is the caller's only evidence of
+  // commitment (a stale caller settles truthfully instead of canceling).
   publish(request: PcbSyncDemoSnapshotPublicationRequest): Promise<PcbSyncClientResult<PcbSyncSnapshotPublicationResult>> { return this.post("publish_demo_snapshot", request, publication); }
-  preflight(request: Omit<PcbSyncPreflightRequest, "tenantId" | "projectId" | "branchId" | "actorContext">): Promise<PcbSyncClientResult<PcbSyncPreflightResult>> { return this.post("preflight", request, preflight); }
+  /** Preflight is cancelable — its plan is inert until an explicit apply. */
+  preflight(request: Omit<PcbSyncPreflightRequest, "tenantId" | "projectId" | "branchId" | "actorContext">, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<PcbSyncPreflightResult>> { return this.post("preflight", request, preflight, {}, options); }
   apply(request: Omit<PcbSyncApplyRequest, "tenantId" | "projectId" | "branchId" | "actorContext">): Promise<PcbSyncClientResult<PcbSyncApplyResult>> { return this.post("apply", request, applyResult, { "x-sirkit-pcb-sync-opt-in": "true" }); }
   async loadBoard(boardId: string, known?: Pick<PcbSyncBoardRecord, "revision" | "digest">): Promise<PcbSyncClientResult<PcbSyncBoardLoadResult>> { const query = new URLSearchParams({ boardId, ...(known ? { knownRevision: known.revision, knownDigest: known.digest } : {}) }); let response: Response; try { response = await this.request(`${this.endpoint}?${query}`, { method: "GET", headers: this.headers() }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
 }
