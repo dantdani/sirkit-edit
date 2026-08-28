@@ -732,6 +732,10 @@ export interface RunRecord {
   createdAt: IsoTimestamp;
   artifactId?: string;
   error?: string;
+  /** [B16.0.2 B] the SERVER-DERIVED ownership scope the run is bound to
+   *  (trusted request context at start) — `projectId` above is only the
+   *  client-asserted SimulationProject id and is never an ownership key. */
+  scope?: { tenantId: string; projectId: string; branchId: string };
 }
 
 export interface RunBatchRecord {
@@ -746,6 +750,8 @@ export interface RunBatchRecord {
   cancelled: number;
   createdAt: IsoTimestamp;
   finishedAt?: IsoTimestamp;
+  /** [B16.0.2 B] the SERVER-DERIVED ownership scope (see RunRecord.scope). */
+  scope?: { tenantId: string; projectId: string; branchId: string };
 }
 
 export interface EvidenceRef {
