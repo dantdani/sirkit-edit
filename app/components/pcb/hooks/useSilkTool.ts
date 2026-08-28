@@ -12,7 +12,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { produce } from "immer";
 import { Container, Graphics } from "pixi.js";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbScene, ScenePointerEvent } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { Vec2 } from "@/app/lib/pcb/geometry";
@@ -74,7 +76,15 @@ export function useSilkTool({ scene, active, getHistory, toast }: SilkToolEditor
     const h = stateRef.current.getHistory();
     if (!h) return;
     const cmd: SilkCommand = { kind: "AddSilk", item };
-    h.execute(silkCommandLabel(cmd), (draft) => mutateBoardWithSilkCommand(draft, cmd));
+    // B08 — one silk placement = one canonical transaction (same domain
+    // mutator, delta-compiled through the canonical PCB commit gateway).
+    void commitPcbCandidate(h, {
+      commandId: "pcb.silkscreen-text",
+      label: silkCommandLabel(cmd),
+      buildCandidate: (board) => produce(board, (draft) => mutateBoardWithSilkCommand(draft, cmd)),
+    }).then((result) => {
+      if (!result.ok) stateRef.current.toast?.(result.message);
+    });
   }, []);
 
   const strokeNm = useCallback(

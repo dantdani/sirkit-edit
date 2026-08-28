@@ -6,7 +6,7 @@
  * outline controls (size presets, roundrect toggle, numeric width/height mm).
  */
 
-import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, History, Keyboard, Layers, LayoutGrid, ListChecks, Loader2, Maximize2, MousePointer, Redo2, ShieldCheck, Sparkles, Spline, Square, Type, Undo2, Zap } from "lucide-react";
+import { Box, CircleDot, Factory, FileDown, Hand, Hexagon, History, Keyboard, Layers, LayoutGrid, ListChecks, Loader2, Maximize2, MousePointer, Redo2, Ruler, ShieldCheck, Sparkles, Spline, Square, Type, Undo2, Zap } from "lucide-react";
 import type { BoardOutline } from "@/app/lib/pcb/types";
 import type { ReadinessViewModel } from "@/app/lib/pcb/readiness/types";
 import type { PcbHistoryRecord } from "@/app/lib/pcb/history";
@@ -69,8 +69,8 @@ export function PcbToolbar({
   readiness,
   children,
 }: {
-  tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
-  onToolChange: (tool: "select" | "pan" | "route" | "zone" | "silk") => void;
+  tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension"; // Stages 7/11/16 + B08 dimension
+  onToolChange: (tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension") => void;
   onZoomToFit: () => void;
   gridOn: boolean;
   onToggleGrid: () => void;
@@ -200,6 +200,15 @@ export function PcbToolbar({
         className={iconButtonClass(tool === "silk")}
       >
         <Type className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        title="Dimension annotation: click two points, then place the line (B08)"
+        aria-label="Dimension tool"
+        onClick={() => onToolChange("dimension")}
+        className={iconButtonClass(tool === "dimension")}
+      >
+        <Ruler className="size-3.5" />
       </button>
       {onAddPlane && (
         <button

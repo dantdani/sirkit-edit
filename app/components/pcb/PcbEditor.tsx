@@ -11,7 +11,7 @@
  * perf build) and NEVER persists.
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { CircuitBoard, Loader2, ShieldCheck, X } from "lucide-react";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -28,10 +28,17 @@ import {
   buildNetlist,
   buildPcbSyncPublicationGraph,
   netlistHash,
+  type PcbNetlist,
   type SyncReport,
 } from "@/app/lib/pcb/netlist-bridge";
+import type { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
+import { useEditorContextPublisher } from "@/app/lib/agent/use-editor-context-publisher"; // B10.1
+import { projectAgentNetlist } from "@/app/lib/agent/netlist-validation"; // B10.1
+import { schematicStateDigest } from "@/app/lib/engineering/schematic-model"; // B10
 import { ensureCurrentProjectScope, loadCurrentProjectScope, loadPcbSnapshotRevision, loadStageEvidence, loadWorkingCopy, normalizeBoardForEditor, saveAuthoritativeBoardCache, saveCurrentManufacturingRelease, savePcbSnapshotRevision, saveStageEvidence, saveWorkingCopy, stashWorkingConflict } from "@/app/lib/pcb/board-persistence";
+import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID } from "@/app/lib/pcb/board-identity";
 import { checkpointStore } from "@/app/lib/project/checkpoints";
+import type { AiRequestOwnership } from "@/app/lib/ai-preferences";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { arrangeStagedFootprints } from "@/app/lib/pcb/autoplace/arrange-staged";
 import { BOARD_RESTORE_EVENT, consumePendingBoardRestore } from "@/app/lib/pcb/board-restore";
@@ -49,6 +56,13 @@ import { liveRefs, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply"; // Sta
 // B03: the canonical editor session — slice mutations run through the
 // canonical executor; the wrapped history keeps undo/redo UI semantics.
 import { applyEditsCanonical, bindCanonicalEditorSession, canonicalSessionFor } from "@/app/lib/engineering/editor-adapter";
+import { ApprovedPcbMutationJournal } from "@/app/lib/engineering/approved-pcb-mutation-journal";
+import { IndexedDbApprovedPcbMutationJournalStore } from "@/app/lib/engineering/approved-pcb-mutation-journal-idb";
+import { approveAndApplyPcbEdit } from "@/app/lib/project/pcb-edit-approval-controller.internal";
+import { createPcbApplyReauthorizer } from "@/app/lib/project/pcb-apply-reauthorization";
+import { isPcbEditProposalExpired, verifySealedPcbEditProposalIntegrity, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
+import { PcbProposalReviewDialog } from "./PcbProposalReviewDialog";
+import type { ProjectCommitInterlock } from "@/app/lib/engineering/project-commit-interlock";
 import { BrowserIndexedDbProjectStore } from "@/app/lib/engineering/browser-indexeddb-store";
 import type { PcbCanonicalHead } from "@/lib/persistence";
 
@@ -101,7 +115,7 @@ import { ShortcutsHelp } from "./ShortcutsHelp"; // Stage 16
 import { useShortcutsHelp } from "./hooks/useShortcutsHelp"; // Stage 16
 import { EmptyState } from "./EmptyState"; // Stage 16
 import { DrcPanel } from "./DrcPanel"; // Stage 12
-import { getPreset } from "@/app/lib/pcb/drc/presets"; // Stage 12
+import { getPreset, DEFAULT_PRESET_ID } from "@/app/lib/pcb/drc/presets"; // Stage 12
 import { getFabPreset } from "@/app/lib/pcb/fab/presets";
 import { evaluatePcbFabricationReadiness, readinessViewModel } from "@/app/lib/pcb/readiness/evaluate";
 import { getCachedPart, ensurePartLoaded, subscribeToPart } from "@/app/lib/parts-cache";
@@ -109,12 +123,18 @@ import { PcbCanvas } from "./PcbCanvas";
 import { LayerPanel } from "./LayerPanel";
 import { PcbToolbar } from "./PcbToolbar";
 import { DebugHud } from "./DebugHud";
+import { produce } from "immer";
+import { divergenceNoticeCurrent, LOCAL_PCB_LIFECYCLE_IDENTITY, PcbBoardLifecycleOwner, settleServerCommit, type PcbBoardLifecycleIdentity, type PcbBoardLifecycleScope, type PcbServerDivergenceNotice, type ServerCommitSettlement } from "@/app/lib/pcb/lifecycle/board-lifecycle";
+import { PcbOwnedOperationRegistry, runOwnedSyncPreparation, runVerifiedServerAdoption, type SyncPreparationServerStage } from "@/app/lib/pcb/lifecycle/owned-operations";
+import { PcbEditorRuntime } from "@/app/lib/pcb/lifecycle/editor-runtime";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import { SyncButton } from "./SyncButton";
 import { SyncPlacementDialog } from "./SyncPlacementDialog";
 import { RoutingControls } from "./RoutingControls";
 import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
 import { PlacementSetup } from "./PlacementSetup";
+import { useDimensionTool } from "./hooks/useDimensionTool"; // B08
 import { stackupProfile } from "@/app/lib/pcb/stackup";
 import { AssignmentQueuePanel } from "./AssignmentQueuePanel";
 
@@ -133,7 +153,7 @@ interface EditorState {
   visibleOverrides: Partial<Record<LayerId, boolean>>;
   // Stage 17: selection moved out of React into the global SelectionStore
   // (app/lib/pcb/selection.ts) — the tool, scene overlay and inspector share it.
-  tool: "select" | "pan" | "route" | "zone" | "silk"; // Stages 7/11/16 add route/zone/silk
+  tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension"; // Stages 7/11/16 + B08 dimension
   gridOn: boolean;
 }
 
@@ -145,7 +165,7 @@ type EditorAction =
   | { type: "isolate-layer"; layer: LayerId }
   | { type: "show-copper" }
   | { type: "set-active-layer"; layer: LayerId }
-  | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" } // Stages 7 + 11 + 16
+  | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension" } // Stages 7 + 11 + 16 + B08
   | { type: "toggle-grid" };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
@@ -256,6 +276,12 @@ export default function PcbEditor({
   schematic,
   active = true,
   hydrateToken = 0,
+  gateSchematicSync,
+  aiOwnership,
+  editorContextBridge,
+  pcbProposalIntake,
+  onPcbProposalSettled,
+  currentInterlock,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -263,7 +289,40 @@ export default function PcbEditor({
   active?: boolean;
   /** R06: bump to re-run board hydration (checkpoint restore, project switch). */
   hydrateToken?: number;
+  /** B07.2 — readiness gate evaluated at SYNC time: while the schematic's
+   *  canonical session is conflicted or not ready, synchronization refuses
+   *  truthfully instead of consuming an unresolved projection. */
+  gateSchematicSync?: () => { allowed: true } | { allowed: false; reason: string };
+  /** B07.5 (failure F) — project-generation ownership factory for AI
+   *  requests (AssistBox, net-class briefs): captured per request so
+   *  provider-failure events, retries, and response application all die
+   *  with the owning project generation. */
+  aiOwnership?: () => AiRequestOwnership;
+  /** B10 — the page-owned editor-context bridge: this editor is the SOLE
+   *  producer of the chat request's PCB working-copy snapshot (exact
+   *  state.board + live selection + live netlist). Demo mode never
+   *  publishes. */
+  editorContextBridge?: EditorContextBridge;
+  /** [B15.3 §I] the pending sealed bounded PCB edit proposal narrowed by the
+   *  page's SAFE discriminator. Display grants nothing; apply authority
+   *  lives behind this editor's approval controller (the PCB composition
+   *  root), never the chat page or agent layer. */
+  pcbProposalIntake?: { proposal: SealedPcbEditProposal; originRunId: string | null } | null;
+  /** Settle the pending proposal (applied / cancelled / retired). */
+  onPcbProposalSettled?: (outcome: "applied" | "cancelled" | "retired") => void;
+  /** [B15.3 §J] the page-owned transition interlock accessor — the apply
+   *  acquires its commit lease at the serialized position. */
+  currentInterlock?: () => ProjectCommitInterlock | null;
 }) {
+  // Lint note (B08.3): this editor is an imperative orchestrator — canvas
+  // scene, gesture tool, and history/session refs are deliberately mutated
+  // across effects, which the react-hooks compiler rules reject (the same
+  // pre-existing rule family as the accepted app/page.tsx baseline).
+  // Before B08.3 those diagnostics were HIDDEN because the render-branch
+  // lazy ref-init made the compiler bail out of the whole component; the
+  // B08.3 state-held lifecycle owner removed that accidental bailout, so
+  // the pre-existing findings now surface (documented baseline — not
+  // suppressed, not introduced by B08.3 logic).
   // One-shot init: demo board via ?pcbdemo= (never persisted), otherwise the
   // current project's saved board (or none → empty state).
   const [init] = useState(() => {
@@ -294,7 +353,6 @@ export default function PcbEditor({
 
   const [state, dispatch] = useReducer(reducer, init.board, makeEditorState);
   const [scene, setScene] = useState<PcbScene | null>(null);
-  const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [placementWarning, setPlacementWarning] = useState<string | null>(null);
@@ -308,13 +366,58 @@ export default function PcbEditor({
   // cannot produce one, the truthful value is null ("unavailable").
   const [toast, setToast] = useState<string | null>(() => init.diagnostics[0]?.summary ?? null);
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
-  const [applying, setApplying] = useState(false);
   const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
-  const applyingRef = useRef(false);
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
-  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: `design:${init.scope.projectId}`, boardId: `board:${init.scope.projectId}`, assemblyVariantId: "variant-default" } : null, [init.scope]);
-  const client = useMemo(() => syncIdentity ? new PcbSyncClient({ tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, actor: { actorId: "local-user", actorKind: "human", role: "project_admin", sessionId: "pcb-editor-demo" } }) : null, [syncIdentity]);
+  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: `design:${init.scope.projectId}`, boardId: pcbBoardInstanceId(init.scope.projectId), assemblyVariantId: PCB_BOARD_ASSEMBLY_VARIANT_ID } : null, [init.scope]);
+  // B16.0: the client no longer asserts an actor/role — identity is derived
+  // server-side from the authenticated session and project membership.
+  const client = useMemo(() => syncIdentity ? new PcbSyncClient({ tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }) : null, [syncIdentity]);
   const snapshotRevisionRef = useRef(syncIdentity ? loadPcbSnapshotRevision(syncIdentity.projectId) : 0);
+  // B08.2 — the FULL board lifecycle identity: the durable sync scope's
+  // exact tenant/project/branch plus its board id (never a hardcoded
+  // branch); demo/local editors carry an explicit local sentinel identity.
+  const boardLifecycleIdentity = useMemo<PcbBoardLifecycleIdentity>(() => syncIdentity
+    ? { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardId: syncIdentity.boardId }
+    : { ...LOCAL_PCB_LIFECYCLE_IDENTITY, projectId: init.demo ? "demo" : "local", boardId: init.demo ? "board:demo" : "board:local" }, [syncIdentity, init.demo]);
+  // B08.2/B08.3 — THE PCB board lifecycle owner and the request-owned
+  // server-workflow registry (sync preparation / sync apply /
+  // qualification). One-shot state: the instances are stable for the
+  // component's lifetime (identity is bounded by the project-keyed mount)
+  // and safe to read during render.
+  const [pcbLifecycle] = useState(() => {
+    const owner = new PcbBoardLifecycleOwner();
+    owner.adopt(boardLifecycleIdentity);
+    return owner;
+  });
+  const [ownedOps] = useState(() => new PcbOwnedOperationRegistry(pcbLifecycle));
+  useEffect(() => () => pcbLifecycle.dispose(), [pcbLifecycle]);
+  // B08.3 — busy state derives from the registry (request-owned records,
+  // retired synchronously by lifecycle adoption) — never ambient booleans.
+  const [ownedBusy, setOwnedBusy] = useState({ syncing: false, applying: false, qualifying: false });
+  useEffect(() => {
+    const update = (): void => setOwnedBusy({ syncing: ownedOps.busy("sync-preparation"), applying: ownedOps.busy("sync-apply"), qualifying: ownedOps.busy("qualification") });
+    update();
+    const unsubscribe = ownedOps.subscribe(update);
+    return () => { unsubscribe(); };
+  }, [ownedOps]);
+  const { syncing, applying, qualifying } = ownedBusy;
+  // B09.0 — the live history/gesture-tool/teardown trio lives behind ONE
+  // stable method-encapsulated runtime (the PcbBoardLifecycleOwner
+  // pattern), replacing bare refs mutated from effects. The runtime also
+  // publishes the history VIEW snapshot for useSyncExternalStore, so the
+  // reseed effect never calls setState synchronously.
+  const [editorRuntime] = useState(() => new PcbEditorRuntime<SelectMoveTool, HistoryView>({ canUndo: false, canRedo: false, entries: [] }));
+  const subscribeEditorRuntime = useCallback((listener: () => void) => editorRuntime.subscribe(listener), [editorRuntime]);
+  const getEditorRuntimeSnapshot = useCallback(() => editorRuntime.getSnapshot(), [editorRuntime]);
+  const visibleHistory = useSyncExternalStore(subscribeEditorRuntime, getEditorRuntimeSnapshot, getEditorRuntimeSnapshot);
+  // Bumped by every lifecycle adoption — drives the hook invalidation
+  // effect and the AssistBox remount key (old previews/candidates/pending
+  // chips are discarded the moment the board is replaced).
+  const [lifecycleGeneration, setLifecycleGeneration] = useState(0);
+  // B08.2 — recorded server divergence (the ONE reconciliation-notice
+  // boundary's output): display-only, retired automatically by any later
+  // lifecycle adoption or identity change.
+  const [serverDivergence, setServerDivergence] = useState<PcbServerDivergenceNotice | null>(null);
 
   // Refs so the (stable) pointer callback sees current values without resubscribing.
   const activeRef = useRef(active);
@@ -335,29 +438,79 @@ export default function PcbEditor({
   // base matches the server revision); diverged → the working copy is stashed
   // as a recoverable conflict record, never silently overwritten; no server
   // board → the working copy alone restores the editor.
+  // B08 — the TYPED PCB lifecycle-adoption boundary. Every board
+  // REPLACEMENT that is not an ordinary user edit flows through here with a
+  // declared reason: initial hydration, working-copy restore, verified
+  // server-authority adoption, durable-sync adoption, qualification
+  // adoption, and checkpoint restore. Adoption dispatches a NEW board
+  // identity, which the history effect answers by reseeding PcbHistory and
+  // rebinding a fresh CanonicalEditorSession (verified head claims only,
+  // staged in pendingCanonicalClaims) — so undo can never cross the
+  // replacement, no lifecycle change ever masquerades as an undoable edit,
+  // and project identity is bounded by the project-keyed mount (B07.5).
+  // Late async producers are rejected by their effect's cancellation flag
+  // and, for stale service bindings, by the history-identity guards.
+  type BoardLifecycleReason =
+    | "initial-hydration"
+    | "working-copy-restore"
+    | "server-authority-adoption"
+    | "sync-adoption"
+    | "qualification-adoption"
+    | "checkpoint-restore";
+  const adoptBoardLifecycle = useCallback((reason: BoardLifecycleReason, board: PcbBoard): void => {
+    void reason; // classification anchor for the B08 mutation tripwire
+    // B08.1 — SYNCHRONOUS retirement before the replacement board is
+    // exposed: the previous canonical session/history ownership retires
+    // (its history becomes a permanent tombstone — no bare fallback), the
+    // gesture tool dies, and the PCB lifecycle GENERATION advances so every
+    // outstanding asynchronous producer (sync apply, qualification,
+    // hydration, autoroute, auto-place, repair) goes permanently stale
+    // before any of its callbacks can publish. Only then is the
+    // replacement dispatched; the reseed effect binds a fresh session.
+    editorRuntime.retire();
+    // B08.2 — full identity, generation-first: adoption ALWAYS advances the
+    // generation (even for a board with an identical digest), aborting every
+    // scope-signal listener (autoroute fetch, auto-place worker, repair)
+    // before the replacement board is dispatched.
+    pcbLifecycle.adopt(boardLifecycleIdentity);
+    // B08.3 — synchronously retire the server-workflow busy records (sync
+    // preparation/apply/qualification) so the replacement generation starts
+    // idle without waiting for any now-stale finalizer — including the
+    // SUCCESSFUL operation whose own adoption triggered this transition —
+    // and clear the sync progress line that belonged to the old generation.
+    ownedOps.retireGeneration();
+    setSyncProgress(null);
+    setLifecycleGeneration((generation) => generation + 1);
+    dispatch({ type: "set-board", board });
+  }, [boardLifecycleIdentity, ownedOps, pcbLifecycle, editorRuntime]);
+
   // Explicit checkpoint restore beats every other hydration source.
   useEffect(() => {
     if (init.demo) return;
     const onRestore = () => {
       const board = consumePendingBoardRestore();
-      if (board) dispatch({ type: "set-board", board });
+      if (board) adoptBoardLifecycle("checkpoint-restore", board);
     };
     window.addEventListener(BOARD_RESTORE_EVENT, onRestore);
     return () => window.removeEventListener(BOARD_RESTORE_EVENT, onRestore);
-  }, [init.demo]);
+  }, [init.demo, adoptBoardLifecycle]);
 
   useEffect(() => {
     if (init.demo || !client || !syncIdentity) return;
     let cancelled = false;
+    // B08.1 — a same-generation guard beyond the effect's own cleanup: a
+    // checkpoint restore mid-load advances the lifecycle generation, and
+    // this resolution must not overwrite the restored board.
+    const scope = pcbLifecycle.capture();
     void client.loadBoard(syncIdentity.boardId).then((loaded) => {
-      if (cancelled) return;
+      if (cancelled || !scope.isCurrent()) return;
       const restored = consumePendingBoardRestore();
       if (restored) {
         if (loaded.ok && loaded.value.status === "found" && loaded.value.record) {
           saveAuthoritativeBoardCache(loaded.value.record);
           setAuthoritativeRecord(loaded.value.record);
         }
-        dispatch({ type: "set-board", board: restored });
+        adoptBoardLifecycle("checkpoint-restore", restored);
         return;
       }
       const working = loadWorkingCopy(syncIdentity.projectId);
@@ -367,14 +520,14 @@ export default function PcbEditor({
         }
         if (working) {
           if (working.canonicalHead) pendingCanonicalClaims.set(working.board, working.canonicalHead);
-          dispatch({ type: "set-board", board: working.board });
+          adoptBoardLifecycle("working-copy-restore", working.board);
         }
         return;
       }
       if (loaded.value.status !== "found" || !loaded.value.record) {
         if (working) {
           if (working.canonicalHead) pendingCanonicalClaims.set(working.board, working.canonicalHead);
-          dispatch({ type: "set-board", board: working.board });
+          adoptBoardLifecycle("working-copy-restore", working.board);
         }
         return;
       }
@@ -382,23 +535,23 @@ export default function PcbEditor({
       saveAuthoritativeBoardCache(record);
       setAuthoritativeRecord(record);
       if (!working) {
-        dispatch({ type: "set-board", board: normalizeBoardForEditor(record.board, syncIdentity.projectId) });
+        adoptBoardLifecycle("server-authority-adoption", normalizeBoardForEditor(record.board, syncIdentity.projectId));
         return;
       }
       if (working.baseRevision === record.revision) {
         // Same ancestry: the local copy extends the current authority — it is
         // the newest complete state. Restore the user's editor work.
         if (working.canonicalHead) pendingCanonicalClaims.set(working.board, working.canonicalHead);
-        dispatch({ type: "set-board", board: working.board });
+        adoptBoardLifecycle("working-copy-restore", working.board);
         return;
       }
       // Diverged: server moved past this copy's base. Preserve, don't pick.
       stashWorkingConflict(syncIdentity.projectId, working, `Server board advanced to revision ${record.revision} while this local copy was based on ${working.baseRevision ?? "no durable base"}.`);
-      dispatch({ type: "set-board", board: normalizeBoardForEditor(record.board, syncIdentity.projectId) });
+      adoptBoardLifecycle("server-authority-adoption", normalizeBoardForEditor(record.board, syncIdentity.projectId));
       setToast("The durable server board advanced past your local working copy. The server board was loaded; your local copy was preserved as a recoverable conflict record.");
     });
     return () => { cancelled = true; };
-  }, [client, init.demo, syncIdentity, hydrateToken]);
+  }, [client, init.demo, syncIdentity, hydrateToken, adoptBoardLifecycle, pcbLifecycle]);
 
   // Stage 17: the global selection store — synchronous, shared by the
   // select-move tool, the scene overlay and (Phase B) the inspector.
@@ -407,11 +560,33 @@ export default function PcbEditor({
   const [ctxMenu, setCtxMenu] = useState<ContextMenuRequest | null>(null);
 
   // Stage 5: undo/redo history + select/move tool (see app/lib/pcb/history.ts
-  // and app/lib/pcb/tools/select-move.ts).
-  const historyRef = useRef<PcbHistory | null>(null);
-  const [visibleHistory, setVisibleHistory] = useState<HistoryView>({ canUndo: false, canRedo: false, entries: [] });
-  const moveToolRef = useRef<SelectMoveTool | null>(null);
-  const historyCleanupRef = useRef<(() => void) | null>(null);
+  // and app/lib/pcb/tools/select-move.ts) — owned by `editorRuntime` above
+  // (B09.0); `visibleHistory` is its published external-store snapshot.
+  // B08.2 — THE PCB board lifecycle owner (full identity, generation-first):
+  // every non-edit board replacement advances the generation, aborts every
+  // captured scope's signal, and stales everything captured before it.
+  // (B08.3 — `pcbLifecycle` and `ownedOps` are declared with the board
+  // lifecycle identity above; busy state is the registry-derived
+  // `syncing`/`applying`/`qualifying`.)
+  const captureLifecycle = useCallback((): PcbBoardLifecycleScope => pcbLifecycle.capture(), [pcbLifecycle]);
+  // B08.2 — AI request ownership = the page's project generation (B07.5)
+  // AND this board's lifecycle generation: an assist/brief response captured
+  // before a board replacement can never publish edits, notices, or retries
+  // into the replacement board's UI.
+  const assistOwnership = useCallback((): AiRequestOwnership => {
+    const pageOwner = aiOwnership?.();
+    const scope = pcbLifecycle.capture();
+    return { isCurrent: () => scope.isCurrent() && (pageOwner ? pageOwner.isCurrent() : true) };
+  }, [aiOwnership, pcbLifecycle]);
+  // B08.2 — THE reconciliation-notice boundary: a VERIFIED durable server
+  // commit whose scope went stale records ONLY a divergence notice (same
+  // board identity) or is discarded entirely (identity changed). It never
+  // adopts a board, writes caches/checkpoints/evidence, or toasts success.
+  const settleStaleServerCommit = useCallback((settlement: ServerCommitSettlement): void => {
+    if (settlement.kind !== "reconcile-required") return;
+    setServerDivergence(settlement.notice);
+    setToast(settlement.notice.description);
+  }, []);
 
   const handleSceneReady = useCallback((s: PcbScene | null) => setScene(s), []);
 
@@ -453,6 +628,69 @@ export default function PcbEditor({
     currentHash !== null &&
     currentHash !== lastSyncHash;
 
+  // B10/B10.1 — editor-context publisher: the chat request's PCB read
+  // source is the EXACT visible working copy (state.board via boardRef —
+  // so UNSAVED edits are captured), the live selectionStore selection, and
+  // the AUTHORITY-NEUTRAL projection of the live netlist. NEVER
+  // authorityRef (the durable server board can lag unsaved local edits),
+  // never storage reconstruction, never a refetch. Demo boards never
+  // publish. Registration lifecycle lives in the extracted PRODUCTION hook
+  // (useEditorContextPublisher): effect-local Strict-Mode-safe liveness +
+  // a captured PCB lifecycle scope, re-registered on every board lifecycle
+  // adoption via `lifecycleGeneration`; a hidden tab keeps publishing
+  // (`active` is display state, never board authority).
+  const liveNetlistRef = useRef<PcbNetlist | null>(null);
+  useEffect(() => { liveNetlistRef.current = liveNetlist; }, [liveNetlist]);
+  // [B15.3] mirror of the DRC hook's active preset for the read callback
+  // (the hook is initialized later in the component; the ref keeps the
+  // capture callback stable and always-current).
+  const activeDrcPresetIdRef = useRef<string>(DEFAULT_PRESET_ID);
+  const publisherScope = useMemo(
+    () => init.scope ? { tenantId: init.scope.tenantId, projectId: init.scope.projectId, branchId: init.scope.branchId } : null,
+    [init.scope],
+  );
+  const readEditorContext = useCallback(() => {
+    const currentSelection = selectionStore.get();
+    let digest: string | null = null;
+    try { digest = schematicStateDigest(schematicRef.current); } catch { digest = null; }
+    // [B15.3] the PCB proposal BASIS — captured atomically with the board:
+    // the canonical session head (sequence + lineage) for the EXACT current
+    // board, the head entry's label, and the ACTIVE DRC preset. When the
+    // session cannot prove the board is its canonical head (loading,
+    // transient, legacy-diverged, retired), the basis is truthfully null
+    // and the PCB proposal tool stays unavailable — nothing is fabricated.
+    let pcbProposalBasis: { historyHeadSequence: number; historyHeadLabel: string | null; lineageId: string; activeDrcPresetId: string } | null = null;
+    const liveHistory = editorRuntime.getHistory();
+    const liveBoard = boardRef.current;
+    if (liveHistory && liveBoard) {
+      const head = canonicalSessionFor(liveHistory)?.headMetadataFor(liveBoard) ?? null;
+      // A head without a lineage identity (legacy) cannot scope-seal.
+      if (head && typeof head.lineageId === "string" && head.lineageId.length > 0) {
+        pcbProposalBasis = {
+          historyHeadSequence: head.headSequence,
+          historyHeadLabel: liveHistory.undoLabel ?? null,
+          lineageId: head.lineageId,
+          activeDrcPresetId: activeDrcPresetIdRef.current,
+        };
+      }
+    }
+    return {
+      board: boardRef.current,
+      selection: { refs: currentSelection.refs, primary: currentSelection.primary ?? null },
+      netlist: liveNetlistRef.current ? projectAgentNetlist(liveNetlistRef.current) : null,
+      schematicDigest: digest,
+      pcbProposalBasis,
+    };
+  }, [selectionStore, editorRuntime]);
+  useEditorContextPublisher({
+    bridge: editorContextBridge,
+    enabled: !init.demo && init.scope !== null,
+    scope: publisherScope,
+    lifecycle: pcbLifecycle,
+    lifecycleGeneration,
+    read: readEditorContext,
+  });
+
   // R06: durable checkpoint carrying the board (placement/route/sync/release).
   const boardCheckpoint = useCallback((label: string, board: PcbBoard) => {
     const scope = init.scope;
@@ -472,105 +710,150 @@ export default function PcbEditor({
   // (off-board) footprints from the durable plan are arranged onto the board.
   const placementChoiceRef = useRef<{ centerNewParts: boolean } | null>(null);
   const handleSync = useCallback(async (placement?: { centerNewParts?: boolean; spreadOverlaps?: boolean; preserveAbsoluteCoordinates?: boolean }) => {
-    placementChoiceRef.current = { centerNewParts: placement?.centerNewParts !== false && placement?.preserveAbsoluteCoordinates !== true };
-    if (syncing || !client || !syncIdentity) return;
-    setSyncing(true);
-    try {
-      const s = schematicRef.current;
-      // Part catalog data must be in the cache before buildNetlist runs.
-      await Promise.allSettled(
-        [...new Set((s.kicadComponents ?? []).map((k) => k.partId))].map((id) =>
-          ensurePartLoaded(id),
-        ),
-      );
-      // Every instance carrying published atomic authority gets its Stage 1
-      // physical binding ensured through the ordinary lifecycle
-      // (create → select → revalidate → approve) under this user's identity
-      // before publication, so preflight resolution finds rank-1 authority.
-      // Instances without atomic identity are left alone and fail closed.
-      const atomicInstances = (s.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId);
-      const bindingHeaders = {
-        "content-type": "application/json",
-        "x-sirkit-tenant-id": syncIdentity.tenantId,
-        "x-sirkit-project-id": syncIdentity.projectId,
-        "x-sirkit-branch-id": syncIdentity.branchId,
-        "x-sirkit-actor-id": "local-user",
-        "x-sirkit-actor-kind": "human",
-        "x-sirkit-role": "project_admin",
-        "x-sirkit-session-id": "pcb-editor-demo",
-      };
-      // Each binding is a durable multi-write transaction; a small concurrency
-      // cap overlaps their latency without crowding the database pooler's
-      // session limit. Live progress is shown on the Sync button — the first
-      // pass takes seconds per component; replays of already-bound parts are
-      // fast and idempotent, so re-clicking Sync after an interruption resumes.
-      const bindingFailures: string[] = [];
-      const bindQueue = [...atomicInstances];
-      let boundCount = 0;
-      if (atomicInstances.length) setSyncProgress(`Binding parts 0/${atomicInstances.length}…`);
-      const bindWorker = async () => {
-        for (let k = bindQueue.shift(); k; k = bindQueue.shift()) {
-          try {
-            const res = await fetch("/api/physical-bindings", {
-              method: "POST",
-              headers: bindingHeaders,
-              body: JSON.stringify({ operation: "bind_atomic_selection", componentInstanceId: k.id, boardInstanceId: syncIdentity.boardId, atomicPartRevisionId: k.atomicPartRevisionId }),
-            });
-            if (!res.ok) {
-              const detail = (await res.json().catch(() => null)) as { code?: string } | null;
-              bindingFailures.push(`${k.refDes} (${detail?.code ?? res.status})`);
-            }
-          } catch {
-            bindingFailures.push(k.refDes);
-          }
-          boundCount += 1;
-          setSyncProgress(`Binding parts ${boundCount}/${atomicInstances.length}…`);
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(3, atomicInstances.length) }, bindWorker));
-      if (bindingFailures.length) { setToast(`Component binding failed: ${bindingFailures.join(", ")}`); return; }
-      setSyncProgress("Publishing schematic…");
-      const currentNetlist = buildNetlist(s, getCachedPart), graph = buildPcbSyncPublicationGraph(s, getCachedPart), token = graph.sourceDigest.replace(/^sha256:/, "").slice(0, 40), now = new Date().toISOString();
-      const published = await client.publish({ requestSchemaVersion: PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, requestId: `publish:${token}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, boardName: "Main Board", projectRevision: `project:${token}`, designRevision: `design:${token}`, schematicRevision: `schematic:${token}`, componentSetRevision: `components:${token}`, netGraphRevision: `netgraph:${token}`, assemblyVariantId: syncIdentity.assemblyVariantId, assemblyVariantRevision: "variant:default:1", librarySnapshotRevision: "library:current:1", expectedSnapshotRevision: snapshotRevisionRef.current, idempotencyKey: `publish:${token}`, components: graph.components, nets: graph.nets, prerequisiteIssues: graph.prerequisiteIssues, sourceDigest: graph.sourceDigest, requestedAt: now });
-      if (!published.ok) { setToast(`Publication failed: ${published.code}${published.detail ? ` — ${published.detail}` : ""}`); return; }
-      snapshotRevisionRef.current = published.value.snapshotRevision; savePcbSnapshotRevision(syncIdentity.projectId, published.value.snapshotRevision);
-      setSyncProgress("Preflighting board plan…");
-      const current = authorityRef.current, result = await client.preflight({ requestSchemaVersion: PCB_SYNC_REQUEST_VERSION, requestId: `preflight:${token}`, designId: syncIdentity.designId, schematicRevision: published.value.snapshot.schematicRevision, assemblyVariantId: syncIdentity.assemblyVariantId, target: current ? { kind: "existing_board", boardId: syncIdentity.boardId, expectedBoardRevision: current.revision } : { kind: "new_board", boardId: syncIdentity.boardId, boardName: "Main Board", boardFormatVersion: "sirkit-json-pcb/1" }, resolutionPolicyId: "sirkit.default-footprint-resolution", resolutionPolicyVersion: "1.0.0", syncPolicyId: "sirkit.safe-pcb-sync", syncPolicyVersion: "1.0.0", requestedAt: now, mode: "prepare_apply" });
-      if (!result.ok) { setToast(`Preflight failed: ${result.code}${result.detail ? ` — ${result.detail}` : ""}`); return; }
-      setLastSyncHash(netlistHash(currentNetlist)); setPendingPreflight(result.value.plan ? result.value : null); setPlacementWarning(null);
-      setToast(result.value.status === "ready_to_apply" && result.value.plan ? "Preflight ready. Review and explicitly apply the durable plan." : result.value.status === "ready_no_changes" ? "PCB is already synchronized." : `Sync blocked: ${result.value.blockers.map((item) => `${item.code} ${item.displayRefs.join(",")}`).join("; ") || result.value.status}`);
-      setSyncDialogOpen(false);
-    } catch (err) {
-      setToast(`Sync failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setSyncing(false);
-      setSyncProgress(null);
+    // B07.2 — refuse truthfully while the schematic's canonical session is
+    // conflicted or not ready: an unresolved projection must never be
+    // published to the durable board.
+    const gate = gateSchematicSync?.();
+    if (gate && !gate.allowed) {
+      setToast(gate.reason);
+      return;
     }
-  }, [client, syncIdentity, syncing]);
+    placementChoiceRef.current = { centerNewParts: placement?.centerNewParts !== false && placement?.preserveAbsoluteCoordinates !== true };
+    if (!client || !syncIdentity) return;
+    const s = schematicRef.current;
+    // Every instance carrying published atomic authority gets its Stage 1
+    // physical binding ensured through the ordinary lifecycle
+    // (create → select → revalidate → approve) under this user's identity
+    // before publication, so preflight resolution finds rank-1 authority.
+    // Instances without atomic identity are left alone and fail closed.
+    const atomicInstances = (s.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId);
+    // B16.0: only the project/branch SELECTOR is sent; identity/role are
+    // server-derived from the authenticated session + project membership.
+    const bindingHeaders = {
+      "content-type": "application/json",
+      "x-sirkit-tenant-id": syncIdentity.tenantId,
+      "x-sirkit-project-id": syncIdentity.projectId,
+      "x-sirkit-branch-id": syncIdentity.branchId,
+    };
+    // B08.3 — the whole preparation (bindings → publication → snapshot-
+    // revision persistence → preflight → plan/dialog/toast publication)
+    // runs as ONE owned workflow: request-owned busy record, ownership
+    // verified around every await, bindings/preflight on the lifecycle
+    // AbortSignal, per-stage truthful settlement when a lifecycle
+    // replacement races it. Each binding is a durable multi-write
+    // transaction; the small concurrency cap overlaps latency without
+    // crowding the database pooler, and replays of already-bound parts are
+    // fast and idempotent, so restarting Sync after an interruption resumes.
+    await runOwnedSyncPreparation(ownedOps, {
+      instances: atomicInstances,
+      concurrency: 3,
+      // Part catalog data must be in the cache before buildNetlist runs.
+      warmup: async () => {
+        await Promise.allSettled(
+          [...new Set((s.kicadComponents ?? []).map((k) => k.partId))].map((id) =>
+            ensurePartLoaded(id),
+          ),
+        );
+      },
+      bind: async (k, signal) => {
+        try {
+          const res = await fetch("/api/physical-bindings", {
+            method: "POST",
+            headers: bindingHeaders,
+            body: JSON.stringify({ operation: "bind_atomic_selection", componentInstanceId: k.id, boardInstanceId: syncIdentity.boardId, atomicPartRevisionId: k.atomicPartRevisionId }),
+            signal,
+          });
+          if (res.ok) return { ok: true };
+          const detail = (await res.json().catch(() => null)) as { code?: string } | null;
+          return { ok: false, failure: `${k.refDes} (${detail?.code ?? res.status})` };
+        } catch {
+          return { ok: false, failure: k.refDes };
+        }
+      },
+      publish: async () => {
+        const currentNetlist = buildNetlist(s, getCachedPart), graph = buildPcbSyncPublicationGraph(s, getCachedPart), token = graph.sourceDigest.replace(/^sha256:/, "").slice(0, 40), now = new Date().toISOString();
+        const published = await client.publish({ requestSchemaVersion: PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, requestId: `publish:${token}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, boardName: "Main Board", projectRevision: `project:${token}`, designRevision: `design:${token}`, schematicRevision: `schematic:${token}`, componentSetRevision: `components:${token}`, netGraphRevision: `netgraph:${token}`, assemblyVariantId: syncIdentity.assemblyVariantId, assemblyVariantRevision: "variant:default:1", librarySnapshotRevision: "library:current:1", expectedSnapshotRevision: snapshotRevisionRef.current, idempotencyKey: `publish:${token}`, components: graph.components, nets: graph.nets, prerequisiteIssues: graph.prerequisiteIssues, sourceDigest: graph.sourceDigest, requestedAt: now });
+        if (!published.ok) return { ok: false, message: `Publication failed: ${published.code}${published.detail ? ` — ${published.detail}` : ""}` };
+        return { ok: true, value: { published: published.value, currentNetlist, token, now } };
+      },
+      persistSnapshotRevision: ({ published }) => {
+        snapshotRevisionRef.current = published.snapshotRevision;
+        savePcbSnapshotRevision(syncIdentity.projectId, published.snapshotRevision);
+      },
+      preflight: async ({ published, currentNetlist, token, now }, signal) => {
+        const current = authorityRef.current;
+        const result = await client.preflight({ requestSchemaVersion: PCB_SYNC_REQUEST_VERSION, requestId: `preflight:${token}`, designId: syncIdentity.designId, schematicRevision: published.snapshot.schematicRevision, assemblyVariantId: syncIdentity.assemblyVariantId, target: current ? { kind: "existing_board", boardId: syncIdentity.boardId, expectedBoardRevision: current.revision } : { kind: "new_board", boardId: syncIdentity.boardId, boardName: "Main Board", boardFormatVersion: "sirkit-json-pcb/1" }, resolutionPolicyId: "sirkit.default-footprint-resolution", resolutionPolicyVersion: "1.0.0", syncPolicyId: "sirkit.safe-pcb-sync", syncPolicyVersion: "1.0.0", requestedAt: now, mode: "prepare_apply" }, { signal });
+        if (!result.ok) return { ok: false, message: `Preflight failed: ${result.code}${result.detail ? ` — ${result.detail}` : ""}` };
+        return { ok: true, value: { preflighted: result.value, syncHash: netlistHash(currentNetlist) } };
+      },
+      progress: setSyncProgress,
+      fail: setToast,
+      complete: ({ preflighted, syncHash }) => {
+        // (Owned-gated by the workflow — a stale preflight result can never
+        // repopulate pendingPreflight or touch the dialog/toast.)
+        setLastSyncHash(syncHash);
+        setPendingPreflight(preflighted.plan ? preflighted : null);
+        setPlacementWarning(null);
+        setToast(preflighted.status === "ready_to_apply" && preflighted.plan ? "Preflight ready. Review and explicitly apply the durable plan." : preflighted.status === "ready_no_changes" ? "PCB is already synchronized." : `Sync blocked: ${preflighted.blockers.map((item) => `${item.code} ${item.displayRefs.join(",")}`).join("; ") || preflighted.status}`);
+        setSyncDialogOpen(false);
+      },
+      settleStale: (stage: SyncPreparationServerStage, scope) => {
+        if (stage === "none") return; // nothing durable happened — discard
+        const settlement = settleServerCommit({
+          scope, owner: pcbLifecycle,
+          description: stage === "published"
+            ? "Sync preparation DID change server state (component bindings and the schematic snapshot publication committed) before this board was replaced locally. Restart Schematic → PCB to reconcile with the server."
+            : "Sync preparation had started changing server state (durable component bindings) before this board was replaced locally. Restart Schematic → PCB to resume and reconcile.",
+        });
+        settleStaleServerCommit(settlement);
+      },
+    });
+  }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle]);
 
   const handleApplySync = useCallback(async () => {
-    const plan = pendingPreflight?.plan; if (!client || !syncIdentity || !plan || applyingRef.current) return;
-    applyingRef.current = true; setApplying(true);
-    try {
-      const result = await client.apply({ requestSchemaVersion: PCB_SYNC_APPLY_REQUEST_VERSION, requestId: `apply:${plan.planId}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, planId: plan.planId, planDigest: plan.planDigest, expectedPlanLifecycle: "applicable", confirmation: "apply_exact_plan", idempotencyKey: `apply:${plan.planId}`, warningAcknowledgements: plan.prerequisites.filter((item) => !item.blocking).map((item) => item.code), requestedAt: new Date().toISOString() });
-      if (!result.ok || !["applied", "idempotent_replay"].includes(result.value.status) || !result.value.committedBoardRevision || !result.value.committedBoardDigest) { setToast(`Apply failed: ${result.ok ? result.value.status : `${result.code}${result.detail ? ` — ${result.detail}` : ""}`}`); return; }
-      const loaded = await client.loadBoard(syncIdentity.boardId); if (!loaded.ok || loaded.value.status !== "found" || !loaded.value.record || loaded.value.record.revision !== result.value.committedBoardRevision || loaded.value.record.digest !== result.value.committedBoardDigest) { setToast("Apply committed, but authoritative board verification failed; the current editor board was preserved."); return; }
-      const record = loaded.value.record; if (!saveAuthoritativeBoardCache(record)) { setToast("Authoritative board committed, but its matching browser cache could not be stored."); }
-      setAuthoritativeRecord(record);
-      // Honor the sync dialog's placement choice: staged (off-board) plan
-      // footprints are arranged onto the board deterministically. The server
-      // record stays the untouched authority; the arranged board is the local
-      // working copy layered on it.
-      const adopted = normalizeBoardForEditor(record.board, syncIdentity.projectId);
-      const arranged = placementChoiceRef.current?.centerNewParts ? arrangeStagedFootprints(adopted) : null;
-      dispatch({ type: "set-board", board: arranged ?? adopted });
-      setPendingPreflight(null);
-      setToast(arranged
-        ? "Durable PCB plan applied and verified; imported footprints were arranged near the board center."
-        : "Durable PCB plan applied and verified from the authoritative server board.");
-      boardCheckpoint(`Synchronized PCB (server revision ${record.revision.slice(0, 12)}…)`, arranged ?? record.board);
-    } finally { applyingRef.current = false; setApplying(false); }
-  }, [client, pendingPreflight, syncIdentity, boardCheckpoint]);
+    const plan = pendingPreflight?.plan; if (!client || !syncIdentity || !plan) return;
+    // B08.3 — request-owned apply: the workflow captures the lifecycle
+    // scope at submission, settles a stale server commit truthfully (the
+    // server may have committed irreversibly — never called canceled or
+    // unchanged), verifies the reloaded authority against the EXACT
+    // committed revision+digest+identity, and releases only its own busy
+    // record (a zombie finalizer cannot clear a newer request's state).
+    await runVerifiedServerAdoption(ownedOps, "sync-apply", pcbLifecycle, {
+      commit: async () => {
+        const result = await client.apply({ requestSchemaVersion: PCB_SYNC_APPLY_REQUEST_VERSION, requestId: `apply:${plan.planId}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, planId: plan.planId, planDigest: plan.planDigest, expectedPlanLifecycle: "applicable", confirmation: "apply_exact_plan", idempotencyKey: `apply:${plan.planId}`, warningAcknowledgements: plan.prerequisites.filter((item) => !item.blocking).map((item) => item.code), requestedAt: new Date().toISOString() });
+        if (!result.ok || !["applied", "idempotent_replay"].includes(result.value.status)) {
+          return { committed: false, message: `Apply failed: ${result.ok ? result.value.status : `${result.code}${result.detail ? ` — ${result.detail}` : ""}`}` };
+        }
+        return { committed: true, value: result.value, expected: { revision: result.value.committedBoardRevision ?? "", digest: result.value.committedBoardDigest ?? "" } };
+      },
+      reload: async () => {
+        const loaded = await client.loadBoard(syncIdentity.boardId);
+        return loaded.ok && loaded.value.status === "found" && loaded.value.record ? loaded.value.record : null;
+      },
+      recordKeys: (record) => ({ revision: record.revision, digest: record.digest }),
+      recordIdentity: (record) => ({ tenantId: record.tenantId, projectId: record.projectId, branchId: record.branchId, boardId: record.boardId }),
+      staleDescription: "The durable PCB plan WAS applied on the server, but this board was replaced locally while it ran. The local board was kept — re-open sync to reconcile with the server authority.",
+      verifyFailedDescription: "The durable PCB plan WAS applied on the server, but the authoritative board could not be verified locally. The local board was kept — reload the server authority to reconcile",
+      commitFailed: setToast,
+      adopt: (record) => {
+        if (!saveAuthoritativeBoardCache(record)) { setToast("Authoritative board committed, but its matching browser cache could not be stored."); }
+        setAuthoritativeRecord(record);
+        // Honor the sync dialog's placement choice: staged (off-board) plan
+        // footprints are arranged onto the board deterministically. The
+        // server record stays the untouched authority; the arranged board
+        // is the local working copy layered on it.
+        const adopted = normalizeBoardForEditor(record.board, syncIdentity.projectId);
+        const arranged = placementChoiceRef.current?.centerNewParts ? arrangeStagedFootprints(adopted) : null;
+        adoptBoardLifecycle("sync-adoption", arranged ?? adopted);
+        setPendingPreflight(null);
+        setToast(arranged
+          ? "Durable PCB plan applied and verified; imported footprints were arranged near the board center."
+          : "Durable PCB plan applied and verified from the authoritative server board.");
+        boardCheckpoint(`Synchronized PCB (server revision ${record.revision.slice(0, 12)}…)`, arranged ?? record.board);
+      },
+      settle: settleStaleServerCommit,
+    });
+  }, [client, pendingPreflight, syncIdentity, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle]);
 
   // ── History + move tool lifecycle ──────────────────────────────────────────
   // Boards arriving from OUTSIDE the history stack (initial load, demo, sync)
@@ -578,8 +861,9 @@ export default function PcbEditor({
   // recognized by identity and keep it.
   useEffect(() => {
     if (!scene || !state.board) return;
-    if (historyRef.current && historyRef.current.present === state.board) return;
-    historyCleanupRef.current?.();
+    const liveHistory = editorRuntime.getHistory();
+    if (liveHistory && liveHistory.present === state.board) return;
+    editorRuntime.retire();
     // B03: every fresh history gets a canonical session. The wrapped history
     // is a drop-in PcbHistory — undo/redo stay synchronous for the UI and are
     // reconciled onto the canonical lineage as audited inverse transactions.
@@ -597,8 +881,7 @@ export default function PcbEditor({
       { claim, ...(init.demo || !syncIdentity ? {} : { durableStore: canonicalEnvelopeStore() ?? undefined }) },
     );
     const history = bound.history;
-    historyRef.current = history;
-    setVisibleHistory(historyView(history));
+    editorRuntime.publishSnapshot(historyView(history));
     const tool = createSelectMoveTool({
       scene,
       history,
@@ -606,24 +889,24 @@ export default function PcbEditor({
       toast: setToast,
       onContextMenu: (request) => setCtxMenu(request),
     });
-    moveToolRef.current = tool;
     const unsubscribe = history.subscribe((board) => {
       dispatch({ type: "set-board", board });
-      setVisibleHistory(historyView(history));
+      editorRuntime.publishSnapshot(historyView(history));
       // Stage 17: drop selection refs whose items vanished (delete, undo, sync).
       const refs = selectionStore.get().refs;
       const live = liveRefs(board, refs);
       if (live.length !== refs.length) selectionStore.replace(live);
     });
     tool.refreshAirwires();
-    historyCleanupRef.current = () => {
+    // B09.0 — one atomic runtime adoption; retire() (reseed, lifecycle
+    // replacement, unmount) runs this teardown exactly once.
+    editorRuntime.bind(history, tool, () => {
       unsubscribe();
       tool.destroy();
-      moveToolRef.current = null;
       bound.session.dispose();
-    };
-  }, [scene, selectionStore, state.board, syncIdentity, init.demo]);
-  useEffect(() => () => historyCleanupRef.current?.(), []);
+    });
+  }, [scene, selectionStore, state.board, syncIdentity, init.demo, editorRuntime]);
+  useEffect(() => () => editorRuntime.retire(), [editorRuntime]);
 
   // ── R06: working-copy autosave, staleness, board checkpoints ───────────────
   const [boardSaveState, setBoardSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -643,7 +926,7 @@ export default function PcbEditor({
       // B03: persist the canonical head identity ONLY when this exact board is
       // the canonical head (a legacy-path edit clears it — reload then derives
       // a fresh lineage from the board instead of trusting a stale claim).
-      const canonicalHead = canonicalSessionFor(historyRef.current)?.headMetadataFor(board) ?? null;
+      const canonicalHead = canonicalSessionFor(editorRuntime.getHistory())?.headMetadataFor(board) ?? null;
       const ok = saveWorkingCopy(syncIdentity.projectId, board, base, canonicalHead);
       setBoardSaveState(ok ? "saved" : "error");
       if (!ok) setToast("PCB autosave FAILED: browser storage write failed (quota exceeded or unavailable). Your latest board changes are not saved.");
@@ -661,7 +944,7 @@ export default function PcbEditor({
     if (boardSaveTimerRef.current) clearTimeout(boardSaveTimerRef.current);
     boardSaveTimerRef.current = setTimeout(run, 600);
     return () => { clearTimeout(savingTick); if (boardSaveTimerRef.current) clearTimeout(boardSaveTimerRef.current); };
-  }, [state.board, init.demo, syncIdentity]);
+  }, [state.board, init.demo, syncIdentity, editorRuntime]);
   // Flush the pending board save on navigation/close and on unmount.
   useEffect(() => {
     const flush = () => pendingBoardSaveRef.current?.();
@@ -694,46 +977,63 @@ export default function PcbEditor({
   }, [visibleHistory, state.board, init.demo, syncIdentity, boardCheckpoint]);
 
   // ── R06: server qualification (real router + RC01–RC03) and MFG01 release ──
-  const [qualifying, setQualifying] = useState(false);
+  // B08.3 — `qualifying` (like `syncing`/`applying`) is derived from the
+  // request-owned operation registry above, never an ambient boolean.
   const [releasing, setReleasing] = useState(false);
+  // B16.0: qualify/release send only the project/branch SELECTOR; the server
+  // derives identity/role from the authenticated session + project membership.
   const scopeHeaders = useCallback((): Record<string, string> => syncIdentity ? {
     "content-type": "application/json",
     "x-sirkit-tenant-id": syncIdentity.tenantId,
     "x-sirkit-project-id": syncIdentity.projectId,
     "x-sirkit-branch-id": syncIdentity.branchId,
-    "x-sirkit-actor-id": "local-user",
-    "x-sirkit-actor-kind": "human",
-    "x-sirkit-role": "project_admin",
-    "x-sirkit-session-id": "pcb-editor-demo",
   } : {}, [syncIdentity]);
 
   const handleQualify = useCallback(async () => {
-    if (!syncIdentity || qualifying) return;
+    if (!syncIdentity || !client) return;
     if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; }
-    setQualifying(true);
-    try {
-      const res = await fetch("/api/pcb/qualify", { method: "POST", headers: scopeHeaders(), body: JSON.stringify({ boardId: syncIdentity.boardId, designId: syncIdentity.designId }) });
-      const body = (await res.json().catch(() => null)) as { ok?: boolean; code?: string; error?: string; rc02?: { remainingConnections: number; shorts: number; routeBlockingDrcErrors: number }; boardRevision?: string } | null;
-      if (!res.ok || !body?.ok) { setToast(`Qualification failed: ${body?.code ?? res.status}${body?.error ? ` — ${body.error}` : ""}`); return; }
-      // Adopt the server-routed, verified board as the new authority.
-      const loaded = await client?.loadBoard(syncIdentity.boardId);
-      if (loaded?.ok && loaded.value.status === "found" && loaded.value.record) {
-        const record = loaded.value.record;
+    // B08.3 — VERIFIED qualification adoption: the server's response must
+    // carry a non-empty boardRevision AND boardDigest, and the reloaded
+    // authoritative record must match BOTH (plus the captured tenant/
+    // project/branch/board identity) before anything is cached, adopted,
+    // written into evidence, checkpointed, or described as qualified. A
+    // missing/failed/mismatched reload preserves the local board and
+    // records a truthful authority-reconciliation notice — the server's
+    // irreversible qualification is never called unchanged.
+    await runVerifiedServerAdoption(ownedOps, "qualification", pcbLifecycle, {
+      commit: async () => {
+        try {
+          const res = await fetch("/api/pcb/qualify", { method: "POST", headers: scopeHeaders(), body: JSON.stringify({ boardId: syncIdentity.boardId, designId: syncIdentity.designId }) });
+          const body = (await res.json().catch(() => null)) as { ok?: boolean; code?: string; error?: string; rc02?: { remainingConnections: number; shorts: number; routeBlockingDrcErrors: number }; boardRevision?: string; boardDigest?: string } | null;
+          if (!res.ok || !body?.ok) return { committed: false, message: `Qualification failed: ${body?.code ?? res.status}${body?.error ? ` — ${body.error}` : ""}` };
+          return { committed: true, value: body, expected: { revision: body.boardRevision ?? "", digest: body.boardDigest ?? "" } };
+        } catch (error) {
+          return { committed: false, message: `Qualification failed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      },
+      reload: async () => {
+        const loaded = await client.loadBoard(syncIdentity.boardId);
+        return loaded.ok && loaded.value.status === "found" && loaded.value.record ? loaded.value.record : null;
+      },
+      recordKeys: (record) => ({ revision: record.revision, digest: record.digest }),
+      recordIdentity: (record) => ({ tenantId: record.tenantId, projectId: record.projectId, branchId: record.branchId, boardId: record.boardId }),
+      staleDescription: "The board WAS qualified and routed on the server, but this board was replaced locally while it ran. The local board was kept — reload the server authority to reconcile.",
+      verifyFailedDescription: "The board WAS qualified and routed on the server, but the authoritative result could not be verified locally. The local board was kept — reload the server authority to reconcile",
+      commitFailed: setToast,
+      adopt: (record, body) => {
+        // Adopt the EXACT verified server-routed board as the new authority.
         saveAuthoritativeBoardCache(record);
         setAuthoritativeRecord(record);
         const editorBoard = normalizeBoardForEditor(record.board, syncIdentity.projectId);
-        dispatch({ type: "set-board", board: editorBoard });
+        adoptBoardLifecycle("qualification-adoption", editorBoard);
         saveStageEvidence(syncIdentity.projectId, { routedBoardRevision: pcbRevisionId(editorBoard), routedAt: Date.now() });
         setRouteStaleNotice(null);
         boardCheckpoint("Qualified and routed board (server, RC01–RC03 verified)", editorBoard);
-      }
-      setToast(`Board qualified: routed with 0 remaining connections, 0 shorts, 0 route-blocking DRC errors (server revision ${body.boardRevision?.slice(0, 12) ?? "?"}…).`);
-    } catch (error) {
-      setToast(`Qualification failed: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setQualifying(false);
-    }
-  }, [syncIdentity, qualifying, client, scopeHeaders, boardCheckpoint]);
+        setToast(`Board qualified: routed with 0 remaining connections, 0 shorts, 0 route-blocking DRC errors (server revision ${body.boardRevision?.slice(0, 12) ?? "?"}…).`);
+      },
+      settle: settleStaleServerCommit,
+    });
+  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle]);
 
   /**
    * MFG01 verified release: the server reloads its OWN durable authority,
@@ -783,10 +1083,10 @@ export default function PcbEditor({
   }, [performVerifiedRelease]);
 
   // ── Stage 7: interactive routing tool (active only in "route" mode) ─────────
-  const netClasses = useNetClass({ getHistory: () => historyRef.current });
+  const netClasses = useNetClass({ getHistory: () => editorRuntime.getHistory() }, { ownership: assistOwnership });
   const routeTool = useRouteTool({
     scene,
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
     getActiveLayer: () => state.activeLayer,
     toast: setToast,
   });
@@ -797,27 +1097,33 @@ export default function PcbEditor({
   }, [state.tool, activateRoute, deactivateRoute]);
 
   const updateRoutingPreferences = useCallback((preferences: RoutingPreferences): void => {
-    const history = historyRef.current;
-    if (history) {
-      history.execute("Set routing width and via preset", (draft) => {
-        draft.routingPreferences = preferences;
-      });
+    const history = editorRuntime.getHistory();
+    if (!history) {
+      // B08 — no history means no canonical session yet: refuse truthfully
+      // instead of the former silent, non-undoable board replacement.
+      setToast("The board is still loading — routing preferences were not changed. Retry in a moment.");
       return;
     }
-    const board = boardRef.current;
-    if (board) dispatch({ type: "set-board", board: { ...board, routingPreferences: preferences } });
-  }, []);
+    void commitPcbCandidate(history, {
+      commandId: "pcb.rules",
+      label: "Set routing width and via preset",
+      buildCandidate: (board) => ({ ...structuredClone(board), routingPreferences: structuredClone(preferences) }),
+    }).then((result) => { if (!result.ok) setToast(result.message); });
+  }, [editorRuntime]);
 
   // ── Stage 12: batch DRC (panel + toolbar button + zoom-to) ──────────────────
   const drc = useDrc({
     scene,
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
     board: state.board,
     // Stage 17: the flash borrows the selection overlay — hand it back.
     restoreSelection: () => scene?.setSelectionRefs(selectionStore.get().refs),
   });
+  useEffect(() => { activeDrcPresetIdRef.current = drc.activePresetId; }, [drc.activePresetId]);
   const repair = usePcbRepair({
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
+    captureLifecycle,
+    getScope: () => syncIdentity ? { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } : null, // [B16.0.2 §B] selector only
     getRules: () => getPreset(drc.activePresetId).rules,
     getPresetId: () => drc.activePresetId,
     getNetlist: () => liveNetlist,
@@ -835,6 +1141,128 @@ export default function PcbEditor({
       fabPreset,
     });
   }, [state.board, liveNetlist, drc.activePresetId]);
+
+  // ── [B15.3 §I] the PCB proposal review + human-gated apply ─────────────────
+  const pendingPcbProposal = pcbProposalIntake?.proposal ?? null;
+  const [pcbProposalBusy, setPcbProposalBusy] = useState(false);
+  const [pcbProposalTick, setPcbProposalTick] = useState(0);
+  const pcbJournalStoreRef = useRef<IndexedDbApprovedPcbMutationJournalStore | null>(null);
+  if (pcbJournalStoreRef.current === null) pcbJournalStoreRef.current = new IndexedDbApprovedPcbMutationJournalStore();
+  // Expiry is time-based: tick while a proposal is open so the disable
+  // reason stays current without a manual refresh.
+  useEffect(() => {
+    if (!pendingPcbProposal) return;
+    const timer = setInterval(() => setPcbProposalTick((tick) => tick + 1), 5_000);
+    return () => clearInterval(timer);
+  }, [pendingPcbProposal]);
+  // Board lifecycle adoption / retirement while a proposal is pending
+  // RETIRES it (and any unused capability dies with its controller call).
+  const pcbProposalGenerationRef = useRef(lifecycleGeneration);
+  useEffect(() => {
+    if (pcbProposalGenerationRef.current !== lifecycleGeneration && pendingPcbProposal) {
+      onPcbProposalSettled?.("retired");
+    }
+    pcbProposalGenerationRef.current = lifecycleGeneration;
+  }, [lifecycleGeneration, pendingPcbProposal, onPcbProposalSettled]);
+  /** null ⇒ approval enabled; otherwise the PRECISE visible reason. Every
+   *  condition re-verifies against the LIVE editor state — and the apply
+   *  boundary re-verifies all of it AGAIN at the serialized position. */
+  const pcbProposalDisableReason = useMemo((): string | null => {
+    void pcbProposalTick; // expiry re-evaluation tick
+    if (!pendingPcbProposal) return null;
+    const verification = verifySealedPcbEditProposalIntegrity(pendingPcbProposal);
+    if (!verification.ok) return `the proposal failed integrity verification (${verification.code}).`;
+    if (isPcbEditProposalExpired(pendingPcbProposal, Date.now())) return "the proposal has expired — request a fresh proposal.";
+    if (init.demo || !syncIdentity) return "demo boards have no durable project scope; proposals cannot be applied here.";
+    if (pendingPcbProposal.scope.tenantId !== syncIdentity.tenantId
+      || pendingPcbProposal.scope.projectId !== syncIdentity.projectId
+      || pendingPcbProposal.scope.branchId !== syncIdentity.branchId
+      || pendingPcbProposal.scope.boardInstanceId !== syncIdentity.boardId) {
+      return "the proposal belongs to a different project, branch, or board instance — request a fresh proposal.";
+    }
+    if (currentInterlock?.()?.retired) return "the project is retiring; no further applies are accepted.";
+    const liveHistory = editorRuntime.getHistory();
+    const board = state.board;
+    if (!liveHistory || !board) return "the editor session is still loading (revalidation has not completed).";
+    if (pcbRevisionId(board) !== pendingPcbProposal.base.pcbRevisionId) {
+      return "the live board changed since the proposal was created — request a fresh proposal.";
+    }
+    const head = canonicalSessionFor(liveHistory)?.headMetadataFor(board) ?? null;
+    if (!head) return "the canonical editing session cannot prove the current board is its head (revalidation has not completed).";
+    if (head.headSequence !== pendingPcbProposal.base.historyHead.sequence) {
+      return "the board history advanced since the proposal was created — request a fresh proposal.";
+    }
+    if (head.lineageId !== pendingPcbProposal.base.lineageId) {
+      return "the editing session lineage changed since the proposal was created — request a fresh proposal.";
+    }
+    if (drc.activePresetId !== pendingPcbProposal.validationPolicy.presetId) {
+      return `the active DRC preset (${drc.activePresetId}) differs from the proposal's sealed validation policy (${pendingPcbProposal.validationPolicy.presetId}) — request a fresh proposal.`;
+    }
+    if (pcbProposalBusy) return "an apply is already in progress.";
+    return null;
+  }, [pendingPcbProposal, pcbProposalTick, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, pcbProposalBusy]);
+
+  const applyPcbProposal = useCallback(async () => {
+    const proposal = pendingPcbProposal;
+    const liveHistory = editorRuntime.getHistory();
+    const interlock = currentInterlock?.() ?? null;
+    if (!proposal || !liveHistory || !interlock || !syncIdentity) {
+      setToast("The PCB proposal cannot be applied: the editor session or project interlock is unavailable. Nothing was changed.");
+      return;
+    }
+    const lifecycleScope = pcbLifecycle.capture();
+    setPcbProposalBusy(true);
+    try {
+      const journal = new ApprovedPcbMutationJournal(pcbJournalStoreRef.current!, {
+        tenantId: syncIdentity.tenantId,
+        projectId: syncIdentity.projectId,
+        branchId: syncIdentity.branchId,
+        boardInstanceId: syncIdentity.boardId,
+      });
+      const outcome = await approveAndApplyPcbEdit({
+        proposal,
+        history: liveHistory,
+        interlock,
+        journal,
+        // [B16.0.1 §F] reload the live membership through the one narrow
+        // same-origin endpoint before any capability is minted — a revoked,
+        // downgraded, or logged-out author can never apply this sealed proposal.
+        reauthorize: createPcbApplyReauthorizer(),
+        stillCurrent: () => lifecycleScope.isCurrent(),
+        currentProjectId: syncIdentity.projectId,
+        currentBranchId: syncIdentity.branchId,
+        tenantId: syncIdentity.tenantId,
+        activeDrcPresetId: drc.activePresetId,
+        originRunId: pcbProposalIntake?.originRunId ?? null,
+        // §J step 17 — flush the working copy (with the canonical head
+        // claim) BEFORE final success is reported; failures are truthful.
+        settleAutosave: () => {
+          const settledHistory = editorRuntime.getHistory();
+          const settledBoard = settledHistory?.committedPresent ?? null;
+          if (!settledHistory || !settledBoard) return false;
+          const base = authorityRef.current ? { revision: authorityRef.current.revision, digest: authorityRef.current.digest } : null;
+          const canonicalHead = canonicalSessionFor(settledHistory)?.headMetadataFor(settledBoard) ?? null;
+          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead);
+        },
+      });
+      if (outcome.ok) {
+        if (outcome.status === "committed") {
+          setToast(`PCB proposal applied as ONE canonical transaction (${outcome.receipt.transactionId.slice(0, 18)}…). Undo restores the exact previous board.${outcome.autosaveSettled ? "" : " WARNING: the working-copy autosave did not settle — your latest board is committed canonically but the browser working copy save failed."}`);
+        } else {
+          setToast("This PCB proposal was already applied; no second transaction was created.");
+        }
+        if (lifecycleScope.isCurrent()) drc.run();
+        onPcbProposalSettled?.("applied");
+      } else {
+        setToast(`PCB proposal not applied: ${outcome.message}`);
+        if (outcome.code === "session-superseded" || outcome.code === "foreign-scope" || outcome.code === "identity-poisoned" || outcome.code === "proposal-expired") {
+          onPcbProposalSettled?.("retired");
+        }
+      }
+    } finally {
+      setPcbProposalBusy(false);
+    }
+  }, [pendingPcbProposal, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, pcbProposalIntake, onPcbProposalSettled]);
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
@@ -854,6 +1282,7 @@ export default function PcbEditor({
   const fabExport = useFabExport({
     getBoard: () => init.demo ? boardRef.current : authorityRef.current?.board ?? null,
     getNetlist: () => liveNetlist,
+    getScope: () => syncIdentity ? { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } : null, // [B16.0.2 §G] selector only
     recordRelease: (manifest) => {
       if (!init.demo && !saveCurrentManufacturingRelease(manifest)) {
         setToast("Bundle downloaded, but the historical release record could not be saved to this project.");
@@ -872,32 +1301,45 @@ export default function PcbEditor({
   const shortcuts = useShortcutsHelp(() => modalGuardRef.current.otherModalOpen);
 
   // ── Stage 11: zone fills (derived state — recomputed after commits) ─────────
-  const zoneFills = useZoneFills({ getHistory: () => historyRef.current, board: state.board });
+  const zoneFills = useZoneFills({ getHistory: () => editorRuntime.getHistory(), board: state.board });
   const [planeDialogOpen, setPlaneDialogOpen] = useState(false);
   const addPlane = useCallback((layer: LayerId, netId: number) => {
-    const h = historyRef.current;
+    const h = editorRuntime.getHistory();
     if (!h) return;
     const cmd: ZoneCommand = { kind: "AddZone", zone: makePlaneZone(h.present, layer, netId) };
-    h.execute(zoneCommandLabel(cmd, h.present), (d) => mutateBoardWithZoneCommand(d, cmd));
-    setToast("Plane added — filling…");
-  }, []);
+    void commitPcbCandidate(h, {
+      commandId: "pcb.zone",
+      label: zoneCommandLabel(cmd, h.present),
+      buildCandidate: (board) => produce(board, (d) => mutateBoardWithZoneCommand(d, cmd)),
+    }).then((result) => { setToast(result.ok ? "Plane added — filling…" : result.message); });
+  }, [editorRuntime]);
 
   // ── Stage 16: silkscreen tool ────────────────────────────────────────────────
   const silkTool = useSilkTool({
     scene,
     active: state.tool === "silk",
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
     toast: setToast,
   });
 
+  // ── B08: dimension-annotation tool ──────────────────────────────────────────
+  const dimensionTool = useDimensionTool({
+    scene,
+    active: state.tool === "dimension",
+    getHistory: () => editorRuntime.getHistory(),
+    toast: setToast,
+  });
+  void dimensionTool; // kind selection UI arrives with the toolbar segment
+
   // ── Stage 8: one-click auto-place (single-undo batch) ───────────────────────
   const autoPlace = useAutoPlace({
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
+    captureLifecycle,
     getNetlist: () => liveNetlist,
     toast: setToast,
   });
   const enlargeBoardToFit = useCallback((): void => {
-    const history = historyRef.current;
+    const history = editorRuntime.getHistory();
     if (!history) return;
     const current = history.present;
     if (current.outline.kind !== "rect" && current.outline.kind !== "roundrect") {
@@ -917,24 +1359,47 @@ export default function PcbEditor({
     };
     const maxX = Math.max(oldMaxX, Math.ceil(bounds.maxX + margin));
     const maxY = Math.max(oldMaxY, Math.ceil(bounds.maxY + margin));
-    history.execute("Enlarge board to fit imported parts", (draft) => {
-      if (draft.outline.kind !== "rect" && draft.outline.kind !== "roundrect") return;
-      draft.outline.origin = origin;
-      draft.outline.width = maxX - origin.x;
-      draft.outline.height = maxY - origin.y;
+    void commitPcbCandidate(history, {
+      commandId: "pcb.board-geometry",
+      label: "Enlarge board to fit imported parts",
+      buildCandidate: (board) => produce(board, (draft) => {
+        if (draft.outline.kind !== "rect" && draft.outline.kind !== "roundrect") return;
+        draft.outline.origin = origin;
+        draft.outline.width = maxX - origin.x;
+        draft.outline.height = maxY - origin.y;
+      }),
+    }).then((result) => {
+      if (!result.ok) { setToast(result.message); return; }
+      setPlacementWarning(null);
+      setToast("Board outline enlarged with a 5 mm placement margin. Undo is available.");
     });
-    setPlacementWarning(null);
-    setToast("Board outline enlarged with a 5 mm placement margin. Undo is available.");
-  }, []);
+  }, [editorRuntime]);
 
   // ── Stage 9: one-click Freerouting autoroute (single-undo import) ───────────
   const autoroute = useAutoroute({
-    getHistory: () => historyRef.current,
+    getHistory: () => editorRuntime.getHistory(),
+    captureLifecycle,
+    getScope: () => syncIdentity ? { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } : null, // [B16.0.2 §B] selector only
     toast: setToast,
     getDrcRules: () => getPreset(drc.activePresetId).rules, // Stage 12: DRC on completion
     getDrcPresetId: () => drc.activePresetId,
     getNetlist: () => liveNetlist,
   });
+
+  // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
+  // the adoption already aborted every captured scope's signal (fetches,
+  // workers) synchronously; this effect then discards the stale visible
+  // artifacts (previews, candidates, plans, busy state) so the fresh board
+  // starts clean and usable. The invalidate() calls are silent by contract.
+  const invalidateAutoPlace = autoPlace.invalidate;
+  const invalidateAutoroute = autoroute.invalidate;
+  const invalidateRepair = repair.invalidate;
+  useEffect(() => {
+    if (lifecycleGeneration === 0) return;
+    invalidateAutoPlace();
+    invalidateAutoroute();
+    invalidateRepair();
+  }, [lifecycleGeneration, invalidateAutoPlace, invalidateAutoroute, invalidateRepair]);
 
   // ── Scene sync (state → scene) ────────────────────────────────────────────
   useEffect(() => {
@@ -969,13 +1434,28 @@ export default function PcbEditor({
   useEffect(() => {
     // Route/zone/silk modes reuse the select viewport (middle-drag pans, left draws).
     scene?.setTool(
-      state.tool === "route" || state.tool === "zone" || state.tool === "silk" ? "select" : state.tool,
+      state.tool === "route" || state.tool === "zone" || state.tool === "silk" || state.tool === "dimension" ? "select" : state.tool,
     );
   }, [scene, state.tool]);
 
   useEffect(() => {
     scene?.setGridVisible(state.gridOn);
   }, [scene, state.gridOn]);
+
+  // B08 — outline-handle gestures commit ONE canonical transaction from the
+  // rubber-band outline (the transient frames live only in the reducer's
+  // set-outline preview; the canonical commit re-applies the final outline
+  // to the board at serialized execution time).
+  const commitOutlineGesture = useCallback((): void => {
+    const h = editorRuntime.getHistory();
+    const outline = boardRef.current?.outline;
+    if (!h || !outline || outline === h.present.outline) return;
+    void commitPcbCandidate(h, {
+      commandId: "pcb.board-geometry",
+      label: "Edit outline",
+      buildCandidate: (board) => produce(board, (d) => { d.outline = structuredClone(outline); }),
+    }).then((result) => { if (!result.ok) setToast(result.message); });
+  }, [editorRuntime]);
 
   // ── Pointer interaction (scene → state) ───────────────────────────────────
   useEffect(() => {
@@ -984,6 +1464,7 @@ export default function PcbEditor({
       if (toolRef.current === "route") return; // useRouteTool owns route-mode pointers
       if (toolRef.current === "zone") return; // ZoneTool owns zone-mode pointers
       if (toolRef.current === "silk") return; // useSilkTool owns silk-mode pointers (Stage 16)
+      if (toolRef.current === "dimension") return; // useDimensionTool owns dimension-mode pointers (B08)
       if (toolRef.current === "pan") {
         // Viewport owns left-drag in pan mode; just keep hover clean.
         if (e.type === "move" || e.type === "leave") scene.setHover(null);
@@ -993,7 +1474,7 @@ export default function PcbEditor({
         case "down": {
           if ((e.buttons & 2) !== 0) {
             // Right button: the select-move tool owns the context-menu flow.
-            moveToolRef.current?.handlePointer(e);
+            editorRuntime.getTool()?.handlePointer(e);
             return;
           }
           if ((e.buttons & 1) === 0) return; // left button only
@@ -1001,7 +1482,7 @@ export default function PcbEditor({
             dragRef.current = e.pick.handle;
             return;
           }
-          moveToolRef.current?.handlePointer(e);
+          editorRuntime.getTool()?.handlePointer(e);
           return;
         }
         case "move": {
@@ -1013,23 +1494,17 @@ export default function PcbEditor({
             });
             return;
           }
-          moveToolRef.current?.handlePointer(e);
+          editorRuntime.getTool()?.handlePointer(e);
           return;
         }
         case "up": {
           if (dragRef.current !== null) {
-            // Outline handle drag ends: record ONE history entry for the gesture.
+            // Outline handle drag ends: ONE canonical transaction for the gesture.
             dragRef.current = null;
-            const h = historyRef.current;
-            const outline = boardRef.current?.outline;
-            if (h && outline && outline !== h.present.outline) {
-              h.execute("Edit outline", (d) => {
-                d.outline = outline;
-              });
-            }
+            commitOutlineGesture();
             return;
           }
-          moveToolRef.current?.handlePointer(e);
+          editorRuntime.getTool()?.handlePointer(e);
           return;
         }
         case "leave": {
@@ -1038,19 +1513,15 @@ export default function PcbEditor({
             // uncommitted mutation — commit it as a visible history entry,
             // exactly like pointer-up does.
             dragRef.current = null;
-            const h = historyRef.current;
-            const outline = boardRef.current?.outline;
-            if (h && outline && outline !== h.present.outline) {
-              h.execute("Edit outline", (d) => { d.outline = outline; });
-            }
+            commitOutlineGesture();
             return;
           }
-          moveToolRef.current?.handlePointer(e);
+          editorRuntime.getTool()?.handlePointer(e);
           return;
         }
       }
     });
-  }, [scene]);
+  }, [scene, commitOutlineGesture, editorRuntime]);
 
   // Stage 16: keep the modal guard + global-action bindings current.
   // Stage 17: the palette gates global shortcuts too (it owns the keyboard).
@@ -1110,8 +1581,8 @@ export default function PcbEditor({
         const key = e.key.toLowerCase();
         if (key === "z" || key === "y") {
           e.preventDefault();
-          if (key === "y" || (key === "z" && e.shiftKey)) historyRef.current?.redo();
-          else historyRef.current?.undo();
+          if (key === "y" || (key === "z" && e.shiftKey)) editorRuntime.getHistory()?.redo();
+          else editorRuntime.getHistory()?.undo();
           return;
         }
       }
@@ -1135,7 +1606,7 @@ export default function PcbEditor({
         toolRef.current !== "route" &&
         toolRef.current !== "zone" &&
         toolRef.current !== "silk" &&
-        moveToolRef.current?.handleKey(e)
+        editorRuntime.getTool()?.handleKey(e)
       ) {
         return;
       }
@@ -1163,7 +1634,7 @@ export default function PcbEditor({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectionStore]);
+  }, [selectionStore, editorRuntime]);
 
   const isVisible = useCallback(
     (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
@@ -1224,9 +1695,9 @@ export default function PcbEditor({
     // picked item already); footprints are schematic-owned.
     const refs = selectionStore.get().refs;
     const deletable = refs.filter(
-      (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+      (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text" || r.kind === "dimension",
     );
-    const h = historyRef.current;
+    const h = editorRuntime.getHistory();
 
     // Stage 17 Phase D: arrange on multi-select — same commands as the
     // inspector's Arrange section and the palette.
@@ -1278,12 +1749,19 @@ export default function PcbEditor({
   // ── Stage 17 Phase D: the palette's action registry ────────────────────────
   // Every EditCommand-backed action + editor actions; the palette is the
   // discoverability answer (and mirrors the AI's action vocabulary).
+  // B09.0 — the export handler reads STATE (boardRef/authorityRef are mere
+  // mirrors of it), keeping the render-time palette builder free of any
+  // ref access.
+  const exportKicadFromPalette = useCallback((): void => {
+    const board = init.demo ? state.board : authoritativeRecord?.board ?? null;
+    if (board) void downloadKicadPcb(board, liveNetlist);
+  }, [init.demo, state.board, authoritativeRecord, liveNetlist]);
   const buildPaletteActions = (): PaletteAction[] => {
     const board = state.board;
     const refs = selectionStore.get().refs;
     const movable = movableRefs(refs);
     const primary = selectionStore.get().primary;
-    const h = historyRef.current;
+    const h = editorRuntime.getHistory();
     const commit = (cmds: EditCommand[]): void => {
       if (!h) return;
       void applyEditsCanonical(h, cmds).then((result) => {
@@ -1319,14 +1797,7 @@ export default function PcbEditor({
       { id: "autoroute", title: "Autoroute board", hint: "Ctrl+E", run: () => void autoroute.run() },
       { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => setPreview3dOpen((o) => !o) },
       { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
-      {
-        id: "export-kicad",
-        title: "Export .kicad_pcb",
-        run: () => {
-          const b = init.demo ? boardRef.current : authorityRef.current?.board;
-          if (b) void downloadKicadPcb(b, liveNetlist);
-        },
-      },
+      { id: "export-kicad", title: "Export .kicad_pcb", run: exportKicadFromPalette },
       { id: "padstacks", title: "Open padstack library", run: () => setPadstacksOpen(true) },
       { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => dispatch({ type: "toggle-grid" }) },
       { id: "shortcuts", title: "Keyboard shortcuts", hint: "?", run: shortcuts.show },
@@ -1368,7 +1839,7 @@ export default function PcbEditor({
             {
               op: "delete-items",
               refs: refs.filter(
-                (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+                (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text" || r.kind === "dimension",
               ),
             },
           ]),
@@ -1465,13 +1936,19 @@ export default function PcbEditor({
           onToggleGrid={() => dispatch({ type: "toggle-grid" })}
           stackup={state.board.stackup}
           onStackupChange={(stackup) => {
-            const h = historyRef.current;
-            if (h) h.execute("Set stackup", (d) => {
-              d.stackup = stackup;
-              d.stackupConfig = stackupProfile(stackup === 4 ? "all-signal-4" : "simple-2");
-              reconcileStackupPlaneZones(d);
-            });
-            else dispatch({ type: "set-stackup", stackup });
+            const h = editorRuntime.getHistory();
+            // B08 — no history means no canonical session: refuse truthfully
+            // (the former set-stackup dispatch was a silent, non-undoable write).
+            if (!h) { setToast("The board is still loading — the stackup was not changed. Retry in a moment."); return; }
+            void commitPcbCandidate(h, {
+              commandId: "pcb.board-geometry",
+              label: "Set stackup",
+              buildCandidate: (board) => produce(board, (d) => {
+                d.stackup = stackup;
+                d.stackupConfig = stackupProfile(stackup === 4 ? "all-signal-4" : "simple-2");
+                reconcileStackupPlaneZones(d);
+              }),
+            }).then((result) => { if (!result.ok) setToast(result.message); });
           }}
           outline={state.board.outline}
           onOutlineChange={(outline) => {
@@ -1479,12 +1956,16 @@ export default function PcbEditor({
             // The old fallback dispatched a silent set-outline before the
             // history existed — an untraceable board mutation that immediately
             // invalidated routing evidence. Refuse instead of mutating silently.
-            const h = historyRef.current;
+            const h = editorRuntime.getHistory();
             if (!h) { setToast("Board outline is still loading — try again in a moment."); return; }
-            h.execute("Edit outline", (d) => {
-              d.outline = outline;
-              reconcileStackupPlaneZones(d);
-            });
+            void commitPcbCandidate(h, {
+              commandId: "pcb.board-geometry",
+              label: "Edit outline",
+              buildCandidate: (board) => produce(board, (d) => {
+                d.outline = structuredClone(outline);
+                reconcileStackupPlaneZones(d);
+              }),
+            }).then((result) => { if (!result.ok) setToast(result.message); });
           }}
           onAutoPlace={() => void autoPlace.run()}
           onCancelAutoPlace={autoPlace.cancel}
@@ -1503,15 +1984,15 @@ export default function PcbEditor({
           padstacksOpen={padstacksOpen} // Stage 17
           onToggleAssignments={assignmentScope ? () => setAssignmentsOpen((open) => !open) : undefined}
           assignmentsOpen={assignmentsOpen}
-          onUndo={() => historyRef.current?.undo()}
-          onRedo={() => historyRef.current?.redo()}
+          onUndo={() => editorRuntime.getHistory()?.undo()}
+          onRedo={() => editorRuntime.getHistory()?.redo()}
           canUndo={visibleHistory.canUndo}
           canRedo={visibleHistory.canRedo}
           undoLabel={visibleHistory.undoLabel}
           redoLabel={visibleHistory.redoLabel}
           historyEntries={visibleHistory.entries}
           readiness={liveReadiness}
-          onExportKicad={() => { const b = init.demo ? boardRef.current : authorityRef.current?.board; if (b) void downloadKicadPcb(b, liveNetlist); else setToast("Export requires a verified authoritative board."); }} // Stage 13
+          onExportKicad={() => { const b = init.demo ? boardRef.current : authorityRef.current?.board; if (b) void downloadKicadPcb(b, liveNetlist, undefined, setToast); else setToast("Export requires a verified authoritative board."); }} // Stage 13
           onSendToFab={() => setFabDialogOpen(true)} // Stage 14
           onShowShortcuts={shortcuts.show} // Stage 16
         >
@@ -1559,6 +2040,15 @@ export default function PcbEditor({
               Routing evidence is stale: {routeStaleNotice}
             </div>
           )}
+          {/* B08.2 — divergence notice from the reconciliation boundary:
+              display-only, and self-retiring — any later lifecycle adoption
+              or identity change makes it disappear (never a stale banner
+              for an unrelated board). */}
+          {serverDivergence && divergenceNoticeCurrent(serverDivergence, pcbLifecycle) && (
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-40 max-w-xl rounded border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200" data-testid="server-divergence-banner">
+              Server authority diverged: {serverDivergence.description}
+            </div>
+          )}
           <DebugHud scene={scene} />
           {state.tool === "route" && (
             <RoutingControls
@@ -1572,7 +2062,7 @@ export default function PcbEditor({
             scene={scene}
             active={state.tool === "zone"}
             board={state.board}
-            getHistory={() => historyRef.current}
+            getHistory={() => editorRuntime.getHistory()}
             activeLayer={state.activeLayer}
             toast={setToast}
           />
@@ -1623,22 +2113,14 @@ export default function PcbEditor({
             <ContextMenu
               x={ctxMenu.screen.x}
               y={ctxMenu.screen.y}
-              items={
-                // Legacy action builders capture editor refs for click handlers.
-                // eslint-disable-next-line react-hooks/refs
-                buildCtxItems()
-              }
+              items={buildCtxItems()}
               onClose={() => setCtxMenu(null)}
             />
           )}
           {/* Stage 17 Phase D: command palette (Ctrl+K) */}
           <CommandPalette
             open={paletteOpen}
-            actions={
-              // Legacy action builders capture editor refs for click handlers.
-              // eslint-disable-next-line react-hooks/refs
-              buildPaletteActions()
-            }
+            actions={buildPaletteActions()}
             onClose={() => setPaletteOpen(false)}
           />
           {/* Stage 17 Phase D: floating AI assist (palette-launched; works
@@ -1659,12 +2141,14 @@ export default function PcbEditor({
                 </button>
               </div>
               <AssistBox
+                key={`assist-generation-${lifecycleGeneration}`}
                 board={state.board}
                 getSelectionRefs={() => selectionStore.get().refs}
-                getHistory={() => historyRef.current}
+                getHistory={() => editorRuntime.getHistory()}
                 rules={getPreset(drc.activePresetId).rules}
                 presetId={drc.activePresetId}
                 toast={setToast}
+                aiOwnership={assistOwnership}
               />
             </div>
           )}
@@ -1691,13 +2175,17 @@ export default function PcbEditor({
             scene?.setSelection([failure.from?.footprintId, failure.to?.footprintId].filter((id): id is string => Boolean(id)));
           }}
           onChange={(stackup, label) => {
-            const h = historyRef.current;
+            const h = editorRuntime.getHistory();
             if (!h) return;
-            h.execute(label, (draft) => {
-              draft.stackup = stackup.copperLayers.length as 2 | 4;
-              draft.stackupConfig = stackup;
-              reconcileStackupPlaneZones(draft);
-            });
+            void commitPcbCandidate(h, {
+              commandId: "pcb.board-geometry",
+              label,
+              buildCandidate: (board) => produce(board, (draft) => {
+                draft.stackup = stackup.copperLayers.length as 2 | 4;
+                draft.stackupConfig = structuredClone(stackup);
+                reconcileStackupPlaneZones(draft);
+              }),
+            }).then((result) => { if (!result.ok) setToast(result.message); });
           }}
         />
         <PlacementSetup
@@ -1706,11 +2194,15 @@ export default function PcbEditor({
           onApply={autoPlace.apply}
           onDiscard={autoPlace.discard}
           onChange={(preferences) => {
-            const h = historyRef.current;
+            const h = editorRuntime.getHistory();
             if (!h) return;
-            h.execute("Set auto-placement spacing", (draft) => {
-              draft.placementPreferences = preferences;
-            });
+            void commitPcbCandidate(h, {
+              commandId: "pcb.placement-settings",
+              label: "Set auto-placement spacing",
+              buildCandidate: (board) => produce(board, (draft) => {
+                draft.placementPreferences = structuredClone(preferences);
+              }),
+            }).then((result) => { if (!result.ok) setToast(result.message); });
           }}
         />
         <RoutingRulesPanel board={state.board} netClasses={netClasses} toast={setToast} />
@@ -1718,7 +2210,7 @@ export default function PcbEditor({
         <Inspector
           board={state.board}
           selection={selectionStore}
-          getHistory={() => historyRef.current}
+          getHistory={() => editorRuntime.getHistory()}
           scene={scene}
           rules={getPreset(drc.activePresetId).rules}
           presetId={drc.activePresetId}
@@ -1729,7 +2221,7 @@ export default function PcbEditor({
           // Stage 17: the padstack library borrows the DRC panel's slot.
           <PadstackPanel
             board={state.board}
-            getHistory={() => historyRef.current}
+            getHistory={() => editorRuntime.getHistory()}
             rules={getPreset(drc.activePresetId).rules}
             toast={setToast}
             onClose={() => setPadstacksOpen(false)}
@@ -1747,6 +2239,16 @@ export default function PcbEditor({
         )}
       </div>
       <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={drc.zoomToViolation} /> {/* Stage 14 */}
+      {/* [B15.3 §I] the human-gated PCB proposal review — display grants
+          nothing; only the explicit Approve click reaches the controller. */}
+      <PcbProposalReviewDialog
+        proposal={pendingPcbProposal}
+        busy={pcbProposalBusy}
+        disableReason={pcbProposalDisableReason}
+        onApply={() => void applyPcbProposal()}
+        onCancel={() => onPcbProposalSettled?.("cancelled")}
+      />
+
       <ShortcutsHelp open={shortcuts.open} onClose={shortcuts.hide} /> {/* Stage 16 */}
       <SyncPlacementDialog
         open={syncDialogOpen}

@@ -12,12 +12,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { produce } from "immer";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import { getNetClass, ensureNetClassing, type NetClass, type NetClassId, type RuleDelta } from "@/app/lib/pcb/netclass";
 import { reclassifyBoard } from "@/app/lib/pcb/netclass-rules";
-import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
+import { throwAiResponseError, withAiBrain, type AiRequestOwnership } from "@/app/lib/ai-preferences";
 
 export interface NetClassEditor {
   /** The CURRENT history (PcbEditor recreates it on board reseed). */
@@ -54,11 +56,27 @@ function boardNetNames(board: PcbBoard): string[] {
   return board.nets.filter((n) => n.id !== 0 && n.name).map((n) => n.name);
 }
 
-export function useNetClass(editor: NetClassEditor): NetClassHandle {
+export function useNetClass(editor: NetClassEditor, options?: {
+  /** B07.5 (failure F) — project-generation ownership captured per AI
+   *  brief request: a stale owner dispatches no provider-failure event and
+   *  its suggested delta is refused before application. Falls back to
+   *  hook-lifetime ownership when absent. */
+  ownership?: () => AiRequestOwnership;
+}): NetClassHandle {
   const editorRef = useRef(editor);
   useEffect(() => {
     editorRef.current = editor;
   });
+  const ownershipFactoryRef = useRef(options?.ownership);
+  useEffect(() => {
+    ownershipFactoryRef.current = options?.ownership;
+  });
+  // B07.5 — hook-lifetime half of AI request ownership.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
   const [latestDelta, setLatestDelta] = useState<RuleDelta | undefined>(undefined);
 
   const getBoard = useCallback((): PcbBoard => editorRef.current.getHistory()?.present ?? EMPTY_BOARD, []);
@@ -69,12 +87,25 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
     const h = editorRef.current.getHistory();
     if (!h) return;
     const pinNames = editorRef.current.getPinNames?.();
-    h.execute("Auto-classify nets", (draft) => reclassifyBoard(draft, { pinNames }));
+    // B08 — rules edits are canonical transactions (same deterministic
+    // reclassification, delta-compiled to an exact-snapshot settings op).
+    void commitPcbCandidate(h, {
+      commandId: "pcb.rules",
+      label: "Auto-classify nets",
+      buildCandidate: (board) => produce(board, (draft) => reclassifyBoard(draft, { pinNames })),
+    });
   }, []);
 
   const suggestBrief = useCallback(
     async (brief: string): Promise<{ ok: true; delta: RuleDelta } | { ok: false; error: string }> => {
       const board = getBoard();
+      // B07.5 (failure F) — ownership captured at SUBMISSION: the page's
+      // project generation (when provided) AND this hook's lifetime. A
+      // stale owner dispatches no provider-failure event and its suggested
+      // delta is REFUSED (never handed to applyBrief/applyDelta), so a
+      // brief begun in project A can never mutate project B's board rules.
+      const pageOwner = ownershipFactoryRef.current?.();
+      const ownership: AiRequestOwnership = { isCurrent: () => aliveRef.current && (pageOwner ? pageOwner.isCurrent() : true) };
       try {
         const res = await fetch("/api/pcb/ai-rules/from-brief", {
           method: "POST",
@@ -90,9 +121,12 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
             await throwAiResponseError(new Response(JSON.stringify(body), {
               status: res.status,
               headers: { "Content-Type": "application/json" },
-            }));
+            }), undefined, ownership);
           }
           return { ok: false, error: body.error ?? `Request failed (${res.status})` };
+        }
+        if (!ownership.isCurrent()) {
+          return { ok: false, error: "The project changed while routing rules were being suggested — nothing was applied." };
         }
         const delta = body.delta;
         // Append the delta, then reclassify: a fresh auto-classified base plus the
@@ -109,9 +143,13 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
     const h = editorRef.current.getHistory();
     if (!h) return;
     const pinNames = editorRef.current.getPinNames?.();
-    h.execute(`AI routing rules: ${(delta.brief ?? delta.explanation).slice(0, 40)}`, (draft) => {
-      ensureNetClassing(draft).ruleDeltas.push(delta);
-      reclassifyBoard(draft, { pinNames });
+    void commitPcbCandidate(h, {
+      commandId: "pcb.rules",
+      label: `AI routing rules: ${(delta.brief ?? delta.explanation).slice(0, 40)}`,
+      buildCandidate: (board) => produce(board, (draft) => {
+        ensureNetClassing(draft).ruleDeltas.push(structuredClone(delta));
+        reclassifyBoard(draft, { pinNames });
+      }),
     });
     setLatestDelta(delta);
   }, []);
@@ -145,14 +183,19 @@ export function useNetClass(editor: NetClassEditor): NetClassHandle {
       explanation: `Manual routing rules for ${netName}`,
     };
     const pinNames = editorRef.current.getPinNames?.();
-    h.execute(`Edit routing rules for ${netName}`, (draft) => {
-      ensureNetClassing(draft).ruleDeltas.push(delta);
-      reclassifyBoard(draft, { pinNames });
-    }, {
-      operationType: "routing-rules",
-      affectedObjects: [`net:${netId}`],
-      netId,
-      details: { ...values },
+    void commitPcbCandidate(h, {
+      commandId: "pcb.rules",
+      label: `Edit routing rules for ${netName}`,
+      metadata: {
+        operationType: "routing-rules",
+        affectedObjects: [`net:${netId}`],
+        netId,
+        details: { ...values },
+      },
+      buildCandidate: (board) => produce(board, (draft) => {
+        ensureNetClassing(draft).ruleDeltas.push(structuredClone(delta));
+        reclassifyBoard(draft, { pinNames });
+      }),
     });
     setLatestDelta(delta);
   }, []);
