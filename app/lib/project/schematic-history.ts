@@ -87,6 +87,18 @@ export class SchematicHistory<S> {
     return this.presentState;
   }
 
+  /** B07.3 — the state undo() WOULD restore, without moving the cursor.
+   *  Transactional undo reconciles canonically first and only then commits
+   *  the cursor move; a failed reconciliation must leave history untouched. */
+  peekUndo(): S | null {
+    return this.past.length > 0 ? this.past[this.past.length - 1]!.state : null;
+  }
+
+  /** B07.3 — the state redo() would restore, without moving the cursor. */
+  peekRedo(): S | null {
+    return this.future.length > 0 ? this.future[0]!.state : null;
+  }
+
   view(): SchematicHistoryView {
     return {
       canUndo: this.past.length > 0,

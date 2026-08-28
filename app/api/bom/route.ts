@@ -10,6 +10,7 @@
 
 import type { BomRow, BomLifecycleSummary } from "@/app/lib/bom/build";
 import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 import type { LineRiskBreakdown, DesignRiskSummary } from "@/app/lib/risk-scoring";
 
 export const runtime = "nodejs";
@@ -25,13 +26,11 @@ type BomBody = {
   forceRefresh?: unknown;
 };
 
-export async function POST(req: Request): Promise<Response> {
-  let body: BomBody;
-  try {
-    body = (await req.json()) as BomBody;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.11] canonical wrapper — exact route policy -> media -> bounded body
+// (8 MB / 30 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as BomBody;
 
   const state = body.state;
   if (!isSchematicState(state)) {
@@ -51,4 +50,4 @@ export async function POST(req: Request): Promise<Response> {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

@@ -14,6 +14,7 @@
  * without a parent change; the later integration pass can switch to `{ state }`.
  */
 
+import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   SchematicState,
@@ -38,8 +39,11 @@ type Props = (
   | { state: SchematicState }
   | { components: SchComponent[]; kicadComponents: KicadComponentInstance[] }
 ) & {
-  /** Caller-provided project id; defaults to a SHA-256 hash of the state. */
-  projectKey?: string;
+  /** [B16.0.2 §B] the ACTIVE project identity from the page — a SELECTOR only
+   *  (never authority; the server derives ownership from the session +
+   *  membership). Snapshot/notification/diff surfaces require it; there is NO
+   *  content-hash fallback. */
+  projectScope?: ProjectSelectorScope | null;
   /**
    * Called when the user clicks "Swap" on an alternate. The parent (page.tsx)
    * implements the schematic-state mutation. When undefined, Swap is disabled.
@@ -70,27 +74,7 @@ type NotifItem = {
 };
 
 /** Deterministic JSON with sorted object keys (for a stable state hash). */
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_k, v) => {
-    if (v && typeof v === "object" && !Array.isArray(v)) {
-      const o = v as Record<string, unknown>;
-      return Object.keys(o)
-        .sort()
-        .reduce<Record<string, unknown>>((acc, k) => {
-          acc[k] = o[k];
-          return acc;
-        }, {});
-    }
-    return v;
-  });
-}
 
-async function sha256Hex(s: string): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 function relativeTime(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
@@ -382,7 +366,6 @@ export function BomView(props: Props) {
   const [banner, setBanner] = useState<string | null>(null);
   const [packetOpen, setPacketOpen] = useState(false);
   // Snapshots / notifications (Stage 7).
-  const [hashedKey, setHashedKey] = useState<string | null>(null);
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [snapPopoverOpen, setSnapPopoverOpen] = useState(false);
@@ -394,7 +377,11 @@ export function BomView(props: Props) {
   const [highlightPartId, setHighlightPartId] = useState<string | null>(null);
 
   const onSwapPart = props.onSwapPart;
-  const projectKey = props.projectKey ?? hashedKey;
+  // [B16.0.2 §B] the active project identity is the ONLY key the durable BOM
+  // surfaces use, and it travels as a selector — never a content hash.
+  const projectScope = props.projectScope ?? null;
+  const projectKey = projectScope ? projectScope.projectId : null;
+  const selectorHeaders = useMemo(() => projectSelectorHeaders(projectScope), [projectScope]);
   const unreadCount = notifications.filter((n) => !n.readAt).length;
 
   // Auto-dismiss the post-action banner after 8s.
@@ -475,40 +462,27 @@ export function BomView(props: Props) {
     void fetchBom();
   }, [fetchBom]);
 
-  // ── Project key: explicit prop, else a SHA-256 hash of the state ──
-  useEffect(() => {
-    if (props.projectKey) return; // explicit key — no hash needed
-    let cancelled = false;
-    void sha256Hex(stableStringify(stateRef.current)).then((h) => {
-      if (!cancelled) setHashedKey(h);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.projectKey, signature]);
-
   const loadSnapshots = useCallback(async () => {
     if (!projectKey) return;
     try {
-      const res = await fetch(`/api/bom/snapshot?projectKey=${encodeURIComponent(projectKey)}`);
+      const res = await fetch("/api/bom/snapshot", { headers: selectorHeaders });
       const data = (await res.json()) as { ok: boolean; snapshots?: SnapshotMeta[] };
       if (data.ok && data.snapshots) setSnapshots(data.snapshots);
     } catch {
       /* non-fatal */
     }
-  }, [projectKey]);
+  }, [projectKey, selectorHeaders]);
 
   const loadNotifications = useCallback(async () => {
     if (!projectKey) return;
     try {
-      const res = await fetch(`/api/bom/notifications?projectKey=${encodeURIComponent(projectKey)}`);
+      const res = await fetch("/api/bom/notifications", { headers: selectorHeaders });
       const data = (await res.json()) as { ok: boolean; notifications?: NotifItem[] };
       if (data.ok && data.notifications) setNotifications(data.notifications);
     } catch {
       /* non-fatal */
     }
-  }, [projectKey]);
+  }, [projectKey, selectorHeaders]);
 
   useEffect(() => {
     void loadSnapshots();
@@ -522,10 +496,10 @@ export function BomView(props: Props) {
     try {
       const res = await fetch("/api/bom/snapshot", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
+        // selectors + data only — ownership is server-derived
         body: JSON.stringify({
           state: stateRef.current,
-          projectKey,
           label: snapLabel.trim() || undefined,
           pricingChoice,
         }),
@@ -548,15 +522,13 @@ export function BomView(props: Props) {
     setHistoryOpen(false);
     setError(null);
     try {
-      const stateB64 = btoa(unescape(encodeURIComponent(JSON.stringify(stateRef.current))));
-      const qs = new URLSearchParams({
-        from: snapshot.id,
-        to: "current",
-        projectKey,
-        state: stateB64,
-        pricingChoice,
+      // [B16.0.2 §B] bounded authenticated JSON POST — design state never
+      // enters a URL, browser history, proxy log, or analytics query string.
+      const res = await fetch("/api/bom/diff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
+        body: JSON.stringify({ from: snapshot.id, to: "current", state: stateRef.current, pricingChoice }),
       });
-      const res = await fetch(`/api/bom/diff?${qs.toString()}`);
       const data = (await res.json()) as { ok: boolean; changes?: Change[]; error?: string };
       if (!data.ok) throw new Error(data.error ?? "Diff failed");
       const label = snapshot.label ?? new Date(snapshot.takenAt).toLocaleString();
@@ -571,7 +543,7 @@ export function BomView(props: Props) {
     try {
       await fetch("/api/bom/notifications", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
         body: JSON.stringify({ id, dismissedAt: new Date().toISOString() }),
       });
     } catch {
@@ -585,8 +557,8 @@ export function BomView(props: Props) {
     try {
       await fetch("/api/bom/notifications", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectKey, markAllRead: true }),
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
+        body: JSON.stringify({ markAllRead: true }),
       });
     } catch {
       /* optimistic */

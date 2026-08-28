@@ -76,13 +76,13 @@ describe("constraint API and AI proposal boundaries", () => {
 
   it("previews and explains through stateless canonical API routes without exposing an activation bypass", async () => {
     const value = board();
-    const previewResponse = await previewRoute(new Request("http://localhost/api/constraints/preview", { method: "POST", body: JSON.stringify({ board: value, projectId: "fixture", documents: value.constraintState!.documents }) }));
+    const previewResponse = await previewRoute(new Request("http://localhost/api/constraints/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ board: value, projectId: "fixture", documents: value.constraintState!.documents }) }));
     expect(previewResponse.status).toBe(200);
     const preview = await previewResponse.json() as { ok: boolean; preview: { compilation: { ok: boolean } } };
     expect(preview.ok).toBe(true);
     expect(preview.preview.compilation.ok).toBe(true);
 
-    const explainResponse = await explainRoute(new Request("http://localhost/api/constraints/explain", { method: "POST", body: JSON.stringify({ program: value.constraintState!.activeProgram, targetId: "net:gnd" }) }));
+    const explainResponse = await explainRoute(new Request("http://localhost/api/constraints/explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ program: value.constraintState!.activeProgram, targetId: "net:gnd" }) }));
     expect(explainResponse.status).toBe(200);
     const explanation = await explainResponse.json() as { explanation: { programHash: string; matchedRules: unknown[] } };
     expect(explanation.explanation.programHash).toBe(value.constraintState!.activeProgram!.programHash);

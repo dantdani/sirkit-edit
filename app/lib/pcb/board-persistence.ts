@@ -43,9 +43,19 @@ export function loadCurrentProjectScope(): { tenantId: "local"; projectId: strin
   return projectId ? { tenantId: "local", projectId, branchId: "main" } : null;
 }
 
+/** [B12.5 §C] This function must NEVER write the current-project pointer:
+ *  activation — and the pointer — belong exclusively to the page's
+ *  transactional install. Existence is checked with the SALVAGE loader
+ *  (the page's own bootstrap semantics): a record whose optional staged
+ *  sub-states fail strict validation is still an EXISTING project, and
+ *  repointing away from it minted a phantom "Untitled project" that
+ *  desynchronized the persisted pointer from the visibly installed
+ *  project (adversarial finding on R2's closure). The degenerate
+ *  no-project fallback materializes a RECORD (persisted, inactive) so
+ *  PCB persistence has a stable home, but leaves the pointer untouched. */
 export function ensureCurrentProjectScope(schematic: SchematicState): { tenantId: "local"; projectId: string; branchId: "main" } {
-  const current = loadCurrentProjectScope(); if (current && loadProject(current.projectId)) return current;
-  const project = createProject("Untitled project", schematic); localStorage.setItem(CURRENT_PROJECT_KEY, project.id); saveAiBrainPreference(loadAiBrainPreference());
+  const current = loadCurrentProjectScope(); if (current && loadProjectSalvaged(current.projectId)) return current;
+  const project = createProject("Untitled project", schematic); saveAiBrainPreference(loadAiBrainPreference());
   return { tenantId: "local", projectId: project.id, branchId: "main" };
 }
 
@@ -113,16 +123,14 @@ export function saveCurrentBoard(
   lastSyncHash: string | null,
 ): boolean {
   let id = currentProjectId();
-  if (!id || !loadProject(id)) {
+  if (!id || !loadProjectSalvaged(id)) {
+    // [B12.5 §C] Materialize a record WITHOUT activating it — the
+    // current-project pointer is written only by the page's winning
+    // transactional install, never from PCB persistence.
     const project = createProject("Untitled project", schematic);
     id = project.id;
-    try {
-      localStorage.setItem(CURRENT_PROJECT_KEY, id);
-      // Attach the already-active global brain to the newly materialized project.
-      saveAiBrainPreference(loadAiBrainPreference());
-    } catch {
-      return false;
-    }
+    // Attach the already-active global brain to the newly materialized project.
+    saveAiBrainPreference(loadAiBrainPreference());
   }
   const ok = saveProjectPcb(id, board);
   if (ok && lastSyncHash !== null) {

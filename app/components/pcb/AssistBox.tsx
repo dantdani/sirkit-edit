@@ -11,18 +11,19 @@
  * auto-applies.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { DrcRules, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
 import { refKey } from "@/app/lib/pcb/edit/commands";
-import { applyEdits, compileEdits } from "@/app/lib/pcb/edit/apply";
+import { compileEdits } from "@/app/lib/pcb/edit/apply";
+import { applyEditsCanonical } from "@/app/lib/engineering/editor-adapter";
 import { previewEdits } from "@/app/lib/pcb/edit/preview";
 import { describeEdits } from "@/app/lib/pcb/edit/describe";
 import { buildDigest, buildItemIndex } from "@/app/lib/pcb/edit/digest";
-import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
+import { throwAiResponseError, withAiBrain, type AiRequestOwnership } from "@/app/lib/ai-preferences";
 
 interface PendingEdit {
   commands: EditCommand[];
@@ -75,6 +76,7 @@ export function AssistBox({
   rules,
   presetId,
   toast,
+  aiOwnership,
 }: {
   board: PcbBoard;
   /** Read at submit time so a stale render never sends a stale selection. */
@@ -83,15 +85,31 @@ export function AssistBox({
   rules: DrcRules;
   presetId: DrcPresetId;
   toast(message: string): void;
+  /** B07.5 (failure F) — project-generation ownership captured per request:
+   *  provider-failure events/retries and response application refuse once
+   *  the owning generation ends. Falls back to component-lifetime only. */
+  aiOwnership?: () => AiRequestOwnership;
 }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null); // question or discard message
+  // B07.5 — component-lifetime half of request ownership.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   const submit = async (): Promise<void> => {
     const instruction = text.trim();
     if (instruction === "" || busy) return;
+    // B07.5 (failure F) — ownership captured at SUBMISSION: the page's
+    // project generation (when provided) AND this component's lifetime.
+    // No pending edit, notice, or provider-failure event may surface for a
+    // stale owner, and the retry refuses once stale.
+    const pageOwner = aiOwnership?.();
+    const ownership: AiRequestOwnership = { isCurrent: () => aliveRef.current && (pageOwner ? pageOwner.isCurrent() : true) };
     setBusy(true);
     setNotice(null);
     setPending(null);
@@ -115,8 +133,9 @@ export function AssistBox({
         await throwAiResponseError(new Response(JSON.stringify(data), {
           status: res.status,
           headers: { "Content-Type": "application/json" },
-        }), () => void submit());
+        }), () => void submit(), ownership);
       }
+      if (!ownership.isCurrent()) return;
       if (data.question) {
         setNotice(data.question);
         return;
@@ -143,9 +162,11 @@ export function AssistBox({
         explanation: data.explanation ?? "",
       });
     } catch (err) {
-      setNotice(`Assist failed: ${err instanceof Error ? err.message : String(err)}`);
+      if (ownership.isCurrent()) setNotice(`Assist failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
-      setBusy(false);
+      // Busy is component-lifetime: it guards this component's own
+      // submission path, so it clears whenever the component is mounted.
+      if (aliveRef.current) setBusy(false);
     }
   };
 
@@ -153,15 +174,21 @@ export function AssistBox({
     if (!pending) return;
     const h = getHistory();
     if (!h) return;
-    const result = applyEdits(h, pending.commands, `AI: ${pending.instruction}`);
-    if (result.ok) {
-      toast(pending.label);
-      setPending(null);
-      setText("");
-    } else {
-      setNotice(`The edit no longer applies: ${result.errors[0]}`);
-      setPending(null);
-    }
+    const applied = pending;
+    // B08 — the explicit human apply commits ONE canonical transaction under
+    // the declared compound command (mixed batches compile atomically or
+    // fail closed; never a silent legacy fallback).
+    void applyEditsCanonical(h, applied.commands, `AI: ${applied.instruction}`, { declaredCommandId: "pcb.assist-edit" }).then((result) => {
+      if (!aliveRef.current) return;
+      if (result.ok) {
+        toast(applied.label);
+        setPending(null);
+        setText("");
+      } else {
+        setNotice(`The edit no longer applies: ${result.errors[0]}`);
+        setPending(null);
+      }
+    });
   };
 
   return (

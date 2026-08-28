@@ -2,7 +2,8 @@
 // timeout → 500, missing FREEROUTING_JAR → 500 (runner never called), bad body
 // → 400. runFreerouting is mocked; boardToDsn/writeDsn/parseSes run for real.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, describe, it, expect, vi, beforeEach } from "vitest";
+import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 
 const runMock = vi.hoisted(() => vi.fn());
 const runtimeMock = vi.hoisted(() => vi.fn());
@@ -96,11 +97,14 @@ function successfulRun(sesText: string, elapsedMs: number, stderr = "") {
   };
 }
 
+// [B16.0.2 §A] autoroute is authenticated + project-scoped (freerouting spawns
+// an external process): requests carry the project SELECTOR + same-origin Origin.
+const SELECTOR = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "project-autoroute", "x-sirkit-branch-id": "main" };
 function post(body: unknown): Promise<Response> {
   return POST(
     new Request("http://localhost/api/pcb/autoroute", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", origin: "http://localhost", ...SELECTOR },
       body: JSON.stringify(body),
     }),
   );
@@ -108,6 +112,7 @@ function post(body: unknown): Promise<Response> {
 
 describe("POST /api/pcb/autoroute", () => {
   beforeEach(() => {
+    injectAuthorizedPrincipal({ userId: "autoroute-editor", tenantId: "local", projectId: "project-autoroute", role: "editor" });
     runMock.mockReset();
     runtimeMock.mockReset();
     runtimeMock.mockResolvedValue({
@@ -254,12 +259,13 @@ describe("POST /api/pcb/autoroute", () => {
     expect(body.ok).toBe(false);
     expect(runMock).not.toHaveBeenCalled();
   });
+  afterEach(() => { resetInjectedIdentity(); });
 
   it("invalid JSON body → 400", async () => {
     const res = await POST(
       new Request("http://localhost/api/pcb/autoroute", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", origin: "http://localhost", ...SELECTOR },
         body: "{ not json",
       }),
     );

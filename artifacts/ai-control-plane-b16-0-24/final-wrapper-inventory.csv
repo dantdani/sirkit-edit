@@ -1,0 +1,11 @@
+measure,count
+total_methods,153
+canonical_wrappers,150
+factories,3
+raw_handlers,0
+baseline_rows,3
+migrated_this_stage,5
+new_raw_introduced,0
+agent_exposed_tools,12
+matrix_sha1,ad1c5c6558e80d378804142c222cc9d031c350f4
+baseline_sha1,d0542262ea713848e0e9ba9334739ef872a0cc00

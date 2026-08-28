@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderActionToolabilityCsv } from "../action-registry";
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
+import { resolveReadBinding } from "../tool-bindings-readonly";
 import {
   discoverTools,
   type DiscoveryContext,
@@ -223,7 +224,9 @@ describe("discovery engine (deterministic, contextual, fail closed)", () => {
 
 describe("truthful classification", () => {
   it("18+19. missing implementations and schema-only declarations are non-callable", () => {
-    for (const toolId of ["sirkit.pcb.create-via", "sirkit.pcb.zone-edit", "sirkit.schematic.inspect", "sirkit.view.canvas-navigation", "sirkit.view.pcb-3d"]) {
+    // [B09] sirkit.schematic.inspect gained a real reusable accessor
+    // (schematic-read.ts) and left this list.
+    for (const toolId of ["sirkit.pcb.create-via", "sirkit.pcb.zone-edit", "sirkit.view.canvas-navigation", "sirkit.view.pcb-3d"]) {
       const inspection = registry.inspectBinding(toolId);
       expect(inspection.state, toolId).toBe("not_callable");
       if (inspection.state === "not_callable") expect(inspection.reason).toContain("schema declarations are not implementations");
@@ -231,9 +234,17 @@ describe("truthful classification", () => {
     expect(registry.inspectBinding("sirkit.does.not-exist")).toEqual({ state: "not_registered" });
   });
 
-  it("20. UI-only actions are not agent discoverable (nor discoverable at all when internal-only)", () => {
-    const agent = discoverTools(registry, editorContext({ channel: "assistant-agent" }));
-    expect(agent.included).toEqual([]);
+  it("20. agent discovery yields ONLY explicitly agent-exposed read/propose tools; internal-only stays invisible", () => {
+    // [B09] the agent channel is no longer empty — but it may contain ONLY
+    // descriptors that are explicitly agentExposed, and only read/propose
+    // operation classes. Every included tool is re-checked here.
+    const agent = discoverTools(registry, editorContext({ channel: "assistant-agent", riskCeiling: "propose" }));
+    expect(agent.included.length).toBeGreaterThan(0);
+    for (const item of agent.included) {
+      const descriptor = registry.get(item.toolId, item.version)!;
+      expect(descriptor.agentExposed, item.toolId).toBe(true);
+      expect(["read", "propose"]).toContain(descriptor.operationClass);
+    }
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.schematic.add-component")).toBe(false); // internal-only: invisible to agents
   });
 
@@ -245,11 +256,16 @@ describe("truthful classification", () => {
       expect(descriptor.binding.status, toolId).toBe("bound-mutation-editor-session");
       expect(descriptor.binding.canonicalCommandId, toolId).toBe(descriptor.owningCommandId);
     }
-    // Interactive UI discovery includes them; agent discovery includes nothing.
+    // Interactive UI discovery includes them; agent/automation discovery
+    // NEVER includes any mutation-capable class ([B09]: reads/proposals may
+    // now appear, mutations still cannot).
     const ui = discoverTools(registry, editorContext());
     expect(ui.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
-    expect(discoverTools(registry, editorContext({ channel: "assistant-agent" })).included).toEqual([]);
-    expect(discoverTools(registry, editorContext({ channel: "automation" })).included).toEqual([]);
+    for (const channel of ["assistant-agent", "automation"] as const) {
+      const included = discoverTools(registry, editorContext({ channel, riskCeiling: "propose" })).included;
+      expect(included.every((item) => item.operationClass === "read" || item.operationClass === "propose"), channel).toBe(true);
+      expect(included.some((item) => item.toolId.startsWith("sirkit.pcb.move") || item.toolId === "sirkit.pcb.delete-item"), channel).toBe(false);
+    }
   });
 
   it("22. canonical undo/redo is absent from every discovery channel", () => {
@@ -272,28 +288,79 @@ describe("truthful classification", () => {
     }
   });
 
-  it("24. missing dimensions remain non-callable and draft", () => {
+  it("24. [B09.1] dimensions are IMPLEMENTED (B08 canonical interactive path) but still have no tool adapter: active, non-callable, never agent-visible", () => {
     const dimension = registry.get("sirkit.pcb.dimension")!;
     expect(dimension.callability).toBe("not-callable");
-    expect(dimension.lifecycle).toBe("draft");
+    expect(dimension.lifecycle).toBe("active");
+    expect(dimension.agentExposed).toBe(false);
+    expect(dimension.binding.status).toBe("unbound");
     expect(discoverTools(registry, editorContext()).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", riskCeiling: "propose" })).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
   });
 
-  it("no descriptor in the catalog is agent-exposed (B04 invariant)", () => {
-    expect(registry.coverageReport().agentExposedCount).toBe(0);
+  it("[B09] exactly the activated agent set is exposed, and EVERY exposed descriptor is backed by a real activated binding (tripwire)", () => {
+    const exposed = registry.list().filter((descriptor) => descriptor.agentExposed).map((descriptor) => descriptor.toolId).sort();
+    expect(exposed).toEqual([
+      "sirkit.component-authority.inspect", // B13 — server-owned authority resource gates per-run availability
+      "sirkit.manufacturing.readiness-inspect",
+      "sirkit.pcb.board-inspect",
+      "sirkit.pcb.propose-bounded-edit", // B15.3 — sealed bounded PCB proposal; board + PCB history basis gate per-run availability
+      "sirkit.pcb.revision-inspect",
+      "sirkit.project.canonical-revision-inspect",
+      "sirkit.schematic.inspect",
+      "sirkit.schematic.propose-component-replacement", // B14 — sealed replacement proposal; head mark + component-authority-records gate per-run availability
+      "sirkit.schematic.propose-tier1-edit",
+      "sirkit.selection.inspect", // B10
+      "sirkit.validation.connectivity-verify",
+      "sirkit.validation.drc-run",
+    ]);
+    for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
+      if (descriptor.operationClass === "read") {
+        // A registry declaration is NOT executable coverage: the read tool
+        // must resolve against the B05 allowlist.
+        const resolution = resolveReadBinding(descriptor);
+        expect(resolution.state, descriptor.toolId).toBe("resolved");
+      } else if (descriptor.operationClass === "propose") {
+        expect(["sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit", "sirkit.pcb.propose-bounded-edit"]).toContain(descriptor.toolId); // B14: + replacement proposal; B15.3: + bounded PCB proposal
+        expect(descriptor.binding.status).toBe("bound-proposal");
+        expect(descriptor.sideEffects).toBe("proposal-artifact");
+      } else {
+        throw new Error(`agent-exposed descriptor with forbidden class: ${descriptor.toolId} (${descriptor.operationClass})`);
+      }
+    }
+    // No mutation/destructive/release/undo/view-session descriptor is exposed.
+    for (const descriptor of registry.list()) {
+      if (["mutate", "destructive", "release", "view-session"].includes(descriptor.operationClass)) {
+        expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
+      }
+    }
   });
 });
 
 describe("provider adapters", () => {
-  it("25. OpenAI and Anthropic renderers preserve equivalent semantic contracts", () => {
+  it("25. [B09.1] ONE provider-rendering truth: flat OpenAI Responses shape + strict Anthropic shape, semantically equivalent over the wire subset; incompatible schemas fail closed", () => {
+    const parity = renderProviderParityReport(registry.list());
+    expect(parity.schema).toBe("sirkit.provider-schema-parity.v2");
+    const compatible = parity.tools.filter((entry) => entry.wireCompatible);
+    expect(compatible.length).toBeGreaterThanOrEqual(8);
+    expect(compatible.every((entry) => entry.semanticallyEquivalent)).toBe(true);
     for (const descriptor of registry.list()) {
-      const openAi = openAiSemanticCore(renderOpenAiTool(descriptor));
-      const anthropic = anthropicSemanticCore(renderAnthropicTool(descriptor));
-      expect(openAi, descriptor.toolId).toEqual(anthropic);
+      const entry = parity.tools.find((item) => item.toolId === descriptor.toolId)!;
+      if (!entry.wireCompatible) {
+        // Rendering fails closed instead of forwarding unsupported keywords.
+        expect(() => renderOpenAiTool(descriptor), descriptor.toolId).toThrow(/STRICT_SCHEMA_UNSUPPORTED/);
+        continue;
+      }
+      const openAi = renderOpenAiTool(descriptor);
+      const anthropic = renderAnthropicTool(descriptor);
+      // Current shapes: FLAT Responses function tool + strict Anthropic tool.
+      expect(openAi.type).toBe("function");
+      expect((openAi as unknown as Record<string, unknown>).function).toBeUndefined();
+      expect(openAi.strict).toBe(true);
+      expect(anthropic.strict).toBe(true);
+      expect(openAiSemanticCore(openAi), descriptor.toolId).toEqual(anthropicSemanticCore(anthropic));
       expect(openAi.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
     }
-    const parity = renderProviderParityReport(registry.list());
-    expect(parity.tools.every((entry) => entry.semanticallyEquivalent)).toBe(true);
   });
 
   it("26+28. adapters and all B04 production modules contain no execution or provider-SDK imports", () => {

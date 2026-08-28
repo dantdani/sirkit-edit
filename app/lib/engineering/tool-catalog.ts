@@ -8,11 +8,16 @@
  *    session (B03) but remain `agentExposed: false`.
  *  - Canonical undo/redo is internal-only and never discoverable.
  *  - Manufacturing release stays API-only under the MFG01 gate.
- *  - Missing capabilities (pcb.dimension) are registered as non-callable so
- *    the gap is visible instead of silently absent.
- *  - NOTHING in this catalog is agent-exposed. Existing route-local AI
- *    surfaces (chat, assist, repair agent) are inventoried by B01 and are
- *    not retroactively blessed as shared tools here.
+ *  - Surfaces without a proven reusable tool adapter are registered as
+ *    non-callable so the gap is visible instead of silently absent
+ *    (pcb.dimension itself is implemented and active since B08 — see its
+ *    descriptor).
+ *  - B09 exposes to the assistant-agent channel ONLY the read tools whose
+ *    allowlisted B05/B05.1 bindings the chat run-context assembler can
+ *    actually satisfy, plus the sealed tier-1 schematic PROPOSAL tool
+ *    (proposal-artifact side effects only — applying stays a human-only
+ *    destructive command). Everything else remains agentExposed: false with
+ *    its exact blocker recorded in the B09 activation audit.
  */
 
 import { ToolRegistry, type JsonSchema, type ToolDescriptor } from "./tool-registry";
@@ -67,6 +72,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   {
     ...readDefaults,
     toolId: "sirkit.project.canonical-revision-inspect", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "project.hydrate",
     title: "Inspect canonical project revision",
     description: "Compute the canonical ProjectRevision (state digest + per-domain revisions) for a canonical project state.",
@@ -79,11 +85,12 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 2_000,
     validationStrategy: "typed canonical state input", verificationStrategy: "deterministic digest recomputation",
     sourceEvidence: ["app/lib/engineering/revision.ts", "artifacts/ai-control-plane-b02/README.md"],
-    versionNotes: "B04 initial registration.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   {
     ...readDefaults,
     toolId: "sirkit.pcb.revision-inspect", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "pcb.sync-durable",
     title: "Inspect semantic board revision",
     description: "Compute the pcb2 semantic content revision of a PCB board (UI and history state excluded by construction).",
@@ -96,35 +103,183 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 2_000,
     validationStrategy: "typed board input", verificationStrategy: "deterministic content-addressed identity",
     sourceEvidence: ["app/lib/pcb/revision.ts"],
-    versionNotes: "B04 initial registration.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   // ── Schematic inspection ──────────────────────────────────────────────────
   {
     ...readDefaults,
-    toolId: "sirkit.schematic.inspect", version: "1.0.0",
+    toolId: "sirkit.schematic.inspect", version: "1.1.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "schematic.review-advisory",
     title: "Inspect schematic state",
-    description: "Read the current schematic components, wires, and net labels.",
+    description: "Read the current schematic: component list (display refs, types, values, positions), wire/net-label counts, and the schematic digest.",
     category: "schematic", operationClass: "read",
     inputSchema: obj(), outputSchema: OUT_REPORT,
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
-    binding: { status: "unbound", notes: "Schematic state lives in page-level React state; no reusable accessor library exists. Route-local review endpoints are not shared tools." },
-    discovery: "discoverable", callability: "not-callable",
+    binding: { status: "bound-read", module: "app/lib/engineering/schematic-read.ts", symbol: "inspectSchematicState", notes: "B09/B09.3: the ONLY invocation path is the registered B05/B05.1 read binding consuming the verified canonical-state resource (whose envelope carries the authoritative schematic snapshot, B07.3); without a complete validated canonical project resource the tool is withheld — no snapshot bypass exists." },
+    discovery: "discoverable", callability: "callable",
     timeoutMs: 2_000,
-    validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["app/page.tsx", "artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv"],
-    versionNotes: "Registered to make the accessor gap visible.",
+    validationStrategy: "structural schematic-shape validation (fails closed on malformed snapshots)",
+    verificationStrategy: "deterministic sorted projection + schematic digest",
+    sourceEvidence: ["app/lib/engineering/schematic-read.ts", "app/lib/engineering/schematic-model.ts"],
+    versionNotes: "1.1.0 (B09): bound to the reusable pure accessor and agent-exposed; output carries the schematic digest. B09.3: canonical-state binding is the only path (the B09.2 boardless gateway bypass was removed).",
+  },
+  {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-tier1-edit", version: "1.1.0",
+    agentExposed: true, // B09 — sealed proposal artifact only; apply stays human-only
+    owningCommandId: "schematic.edit-tier1-propose",
+    title: "Propose schematic tier-1 edit",
+    description: "Compile 1-20 set-value / rename / delete operations against the CURRENT schematic into a sealed, digest-pinned proposal. Receiving the proposal changes nothing; the user must explicitly apply it in the review UI.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      ops: {
+        type: "array",
+        // 1-20 ops enforced at runtime (parseOps): strict provider modes
+        // reject minItems/maxItems keywords on the wire.
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            op: { type: "string", enum: ["set-value", "rename", "delete"] },
+            target: { type: "string", description: "The component display reference (Build refDes or Theory id) as shown in the schematic." },
+            value: { type: "string", description: "New value for set-value." },
+            refDes: { type: "string", description: "New reference designator for rename." },
+          },
+          required: ["op", "target"],
+        },
+      },
+    }, ["ops"]),
+    outputSchema: obj({ result: { type: "object" } }, ["result"]),
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
+    requiresExpectedRevision: true,
+    // [B09.3] the sealed artifact is lineage-sealed (the head mark's
+    // lineageId participates in the identity digest), so discovery
+    // truthfully requires an open lineage anchor.
+    requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/engineering/schematic-plans.ts", symbol: "compileTier1Proposal", notes: "B09: compiles all-or-nothing and seals via sealTier1Proposal; the sealed artifact only enters the existing Apply-exact-proposal review boundary." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 5_000,
+    validationStrategy: "strict op schema; deterministic all-or-nothing tier-1 compiler (unknown target, theory rename, or missing pin data blocks the WHOLE proposal)",
+    verificationStrategy: "sealed base/operations/identity digests re-verified at explicit apply time (verifySealedTier1Proposal)",
+    sourceEvidence: ["app/lib/engineering/schematic-plans.ts", "app/lib/engineering/schematic-proposals.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.1.0 (B09.1/B09.2): the sealed artifact is the V2 SCOPE/HEAD contract (sirkit.schematic-tier1-proposal.v2) — tenant/project/branch + canonical head mark participate in the identity digest; sealing requires a validated canonical mark and the effective actor to hold the required capability.",
+  },
+  {
+    ...readDefaults,
+    toolId: "sirkit.schematic.propose-component-replacement", version: "1.0.0",
+    agentExposed: true, // B14 — sealed replacement proposal ONLY; apply stays human-only and is never provider-callable
+    owningCommandId: "schematic.replace-component-propose",
+    title: "Propose exact component replacement",
+    description: "Propose replacing ONE KiCad component instance with its server-verified exact target (from durable component authority). The input identifies intent only — the target identity, pins, and mapping are derived server-side. Receiving the sealed proposal changes NOTHING; a human must review and explicitly apply it.",
+    category: "schematic", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    inputSchema: obj({
+      componentId: { type: "string", description: "The stable KiCad component instance id (NOT the display refDes) of the component to replace." },
+      expectedMpn: { type: "string", description: "Optional expected exact MPN. An assertion only — it must equal the server-owned verified target and never chooses it." },
+    }, ["componentId"]),
+    outputSchema: obj({ result: { type: "object" } }, ["result"]),
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["schematic-present"], requiredAuthority: ["durable-server-board", "local-working-copy"],
+    requiresExpectedRevision: true,
+    requiresLineage: true,
+    binding: { status: "bound-proposal", module: "app/lib/engineering/replacement-proposal-assembler.ts", symbol: "assembleReplacementProposal", notes: "B14: server-owned authority + published pin facts + the ONE planSchematicReplacement algorithm; exact-pin-identity mapping corroborated by the approved mapping certificate; zero dropped connected pins; the sealed artifact only enters the B14 replacement review boundary. The proposal-time runtime grant is retired before the artifact leaves the server." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "strict {componentId, expectedMpn?} input (never asset identities, pins, authority, approvals, or dropped-pin acknowledgements); verified-exact server authority + published current/target pin facts required; structured blockers otherwise",
+    verificationStrategy: "sealed operation/impact/identity digests re-verified at explicit apply time (verifySealedReplacementProposal) with fresh server authority, recompiled-plan byte-match, and a fresh runtime grant",
+    sourceEvidence: ["app/lib/engineering/replacement-proposal-assembler.ts", "app/lib/engineering/replacement-proposals.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (B14): first agent-assisted exact-replacement proposal; per-run availability requires the canonical head mark AND the server-owned component-authority-records resource.",
+  },
+  {
+    ...readDefaults,
+    toolId: "sirkit.pcb.propose-bounded-edit", version: "1.0.0",
+    agentExposed: true, // B15.3 — sealed bounded PCB proposal ONLY; apply stays human-only inside PcbEditor and is never provider-callable
+    owningCommandId: "pcb.bounded-edit-propose",
+    title: "Propose bounded PCB edits",
+    description: "Compile 1-16 bounded PCB operations (move/rotate footprint, add/update track or via, routing preference, net-class rule, dimension, routing keepout) against the CURRENT board into a sealed, digest-pinned proposal. Deletions and destructive operations are excluded. The input carries intent and operations ONLY — the board, rules, scope, and every digest are server-derived. Receiving the sealed proposal changes NOTHING; a human must review and explicitly approve it in the PCB editor, and manufacturing readiness stays unavailable.",
+    category: "pcb", operationClass: "propose",
+    sideEffects: "proposal-artifact",
+    // Wire-level shape guidance ONLY. The runtime authority is the canonical
+    // `parseBoundedEditRequest` (closed per-kind key sets, exact bounds,
+    // 32,768-byte payload ceiling); runtime bounds live server-side because
+    // strict provider modes reject minItems/maxItems/maxLength keywords.
+    inputSchema: obj({
+      intent: { type: "string", description: "One-line engineering intent for the whole bounded proposal (max 240 chars)." },
+      operations: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            kind: { type: "string", enum: ["move_footprint", "rotate_footprint", "add_track", "update_track", "add_via", "update_via", "set_routing_preference", "set_net_class_rule", "add_dimension", "update_dimension", "remove_dimension", "add_keepout", "update_keepout"] },
+            footprintId: { type: "string" }, trackId: { type: "string" }, viaId: { type: "string" },
+            dimensionId: { type: "string" }, keepoutId: { type: "string" }, padstackId: { type: "string" },
+            viaPadstackId: { type: "string" }, name: { type: "string" }, layer: { type: "string" },
+            layers: { type: "array", items: { type: "string" } },
+            netId: { type: "number" }, netIds: { type: "array", items: { type: "number" } },
+            widthNm: { type: "number" }, sizeNm: { type: "number" }, drillNm: { type: "number" },
+            rotationDeg: { type: "number" }, offsetNm: { type: "number" }, textHeightNm: { type: "number" },
+            strokeWidthNm: { type: "number" }, trackWidthNm: { type: "number" }, clearanceNm: { type: "number" },
+            viaSizeNm: { type: "number" }, viaDrillNm: { type: "number" }, customTrackWidthNm: { type: "number" },
+            precision: { type: "number" },
+            dimensionKind: { type: "string", enum: ["aligned", "horizontal", "vertical"] },
+            unit: { type: "string", enum: ["mm", "in"] },
+            routeMode: { type: "string", enum: ["highlight_stop", "walk_around", "shove"] },
+            posture: { type: "string", enum: ["orthogonal", "octilinear_a", "octilinear_b", "arbitrary"] },
+            to: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            at: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            start: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            end: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            a: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            b: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+            polygon: { type: "array", items: { type: "object", additionalProperties: false, properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] } },
+            forbidTracks: { type: "boolean" }, forbidVias: { type: "boolean" },
+          },
+          required: ["kind"],
+        },
+      },
+    }, ["intent", "operations"]),
+    outputSchema: obj({ result: { type: "object" } }, ["result"]),
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "reviewer", "project_admin"],
+    // approvalTier stays "none" (readDefaults), exactly like both schematic
+    // propose tools: SEALING requires no approval — it mints a display-only
+    // artifact. The topology-or-geometry tier lives on the sealed ARTIFACT
+    // and on the pcb.bounded-edit-apply action, enforced by the human-gated
+    // apply boundary.
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiresExpectedRevision: true,
+    // The discovery lineage anchor is the SCHEMATIC session lineage (B09.3
+    // digest-domain separation) — the PCB proposal's lineage binding is the
+    // PCB canonical session lineage, enforced by its own `pcbProposalBasis`
+    // prerequisite (loop + gateway fail closed without it), sealed into
+    // `base.lineageId`, and re-verified at the human-approved apply. So this
+    // stays false: a schematic lineage is truthfully NOT required.
+    requiresLineage: false,
+    binding: { status: "bound-proposal", module: "app/lib/pcb/proposal/pcb-propose-tool-handler.ts", symbol: "handlePcbProposeTool", notes: "B15.3: strict {intent, operations} only; board/scope/resource/history-basis/validation-policy are derived from the verified run context; compiles through the ONE B15 bounded compiler and seals via createSealedPcbEditProposal (never the raw sealer); the sealed artifact only enters the human-gated PCB review boundary inside PcbEditor." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "canonical parseBoundedEditRequest (closed per-kind schemas, <=16 ops, exact 32,768-byte ceiling, excluded destructive intents) + full bounded compile: structure, geometry (exact BigInt outline), locks, rules floors, DRC no-regression, connectivity no-regression, canonical expressibility",
+    verificationStrategy: "sealed operations/candidate/impact/policy digests re-verified structurally on receipt (verifySealedPcbEditProposalIntegrity) and re-verified against LIVE state with full recompile + byte-match at the human-approved apply position",
+    sourceEvidence: ["app/lib/pcb/proposal/pcb-propose-tool-handler.ts", "app/lib/pcb/proposal/pcb-edit-proposal-service.ts", "app/lib/pcb/proposal/bounded-edit-compiler.ts", "app/lib/agent/gateway.ts"],
+    versionNotes: "1.0.0 (B15.3): first exposure. The B15-B15.2.3 core (bounded operations, compiler, sealed proposal, closed impact certificate, sealed validation policy) predates exposure; no wire compatibility is owed to any pre-exposure shape.",
   },
   // ── PCB inspection (PCBToolService — proven reusable implementation) ──────
   {
     ...readDefaults,
     toolId: "sirkit.pcb.board-inspect", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "pcb.board-repair",
     title: "Inspect board snapshot",
     description: "Build the versioned exact AI PCB snapshot (millimeters) for the current board.",
     category: "pcb", operationClass: "read",
-    inputSchema: obj({ projectId: { type: "string", maxLength: 256 } }), outputSchema: obj({ snapshot: { type: "object" } }, ["snapshot"]),
+    // [B09.1] length bounds live in server-side input validation (B05
+    // DEFAULT_INPUT_LIMITS), never in wire schemas (strict provider modes
+    // reject maxLength/maxItems keywords).
+    inputSchema: obj({ projectId: { type: "string" } }), outputSchema: obj({ snapshot: { type: "object" } }, ["snapshot"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
     binding: { status: "bound-read", module: "app/lib/pcb/ai/snapshot.ts", symbol: "buildAIPcbSnapshot", notes: "B05 audit: bound to the pure snapshot builder directly; PCBToolService wraps it with session state the read layer does not need." },
@@ -132,16 +287,17 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 10_000,
     validationStrategy: "snapshot options schema", verificationStrategy: "snapshot pinned to the source revision; wall-clock generatedInMs normalized to 0",
     sourceEvidence: ["app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "B05: activated read binding.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   {
     ...readDefaults,
     toolId: "sirkit.validation.drc-run", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "validation.erc-drc",
     title: "Run design-rule check",
     description: "Run the native DRC engine against the current board without changing it.",
     category: "validation", operationClass: "read",
-    inputSchema: obj(), outputSchema: OUT_REPORT,
+    inputSchema: obj(), outputSchema: obj({ report: { type: "object" }, pinned: { type: "object" } }, ["report", "pinned"]),
     sideEffects: "derived-cache",
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
@@ -150,11 +306,12 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 30_000, budgetClass: "batch",
     validationStrategy: "board + rule-set inputs", verificationStrategy: "report interpreted against the source board revision",
     sourceEvidence: ["app/lib/pcb/drc/run-drc.ts", "app/components/pcb/DrcPanel.tsx"],
-    versionNotes: "B04 initial registration.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   {
     ...readDefaults,
     toolId: "sirkit.validation.connectivity-verify", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "validation.erc-drc",
     title: "Verify connectivity",
     description: "Reconstruct exact pad/track/via/zone connectivity and report incomplete nets, airwires, and shorts.",
@@ -167,26 +324,30 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 10_000,
     validationStrategy: "typed board input", verificationStrategy: "not fabrication readiness by itself (explicit); nets sorted deterministically",
     sourceEvidence: ["app/lib/pcb/connectivity-board.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "B05: activated read binding.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   // ── Selection inspection ──────────────────────────────────────────────────
   {
     ...readDefaults,
-    toolId: "sirkit.selection.inspect", version: "1.0.0",
+    toolId: "sirkit.selection.inspect", version: "1.1.0",
+    agentExposed: true, // B10 — statically exposed; per-run availability requires the sealed selection-snapshot resource
     owningCommandId: "view.canvas-navigation",
-    title: "Resolve selection references",
-    description: "Resolve selection references against a board into typed items (footprints, tracks, vias, zones, texts, pads).",
+    title: "Inspect the current selection",
+    description: "Resolve the CURRENT sealed PCB selection (captured atomically with the board) into typed items (footprints, tracks, vias, zones, texts, pads, dimensions). An empty current selection returns a truthful empty result.",
     category: "selection", operationClass: "read",
-    inputSchema: obj({ refs: { type: "array", items: { type: "object" }, maxItems: 2000 } }, ["refs"]),
-    outputSchema: obj({ items: { type: "array", items: { type: "object" } }, droppedRefs: { type: "array", items: { type: "string" } } }, ["items", "droppedRefs"]),
+    // [B10] EMPTY input: the tool inspects the sealed current selection —
+    // it never accepts model-invented selection references. Size bounds are
+    // enforced server-side at resource sealing (never wire keywords).
+    inputSchema: obj(),
+    outputSchema: obj({ items: { type: "array", items: { type: "object" } }, droppedRefs: { type: "array", items: { type: "string" } }, pinned: { type: "object" } }, ["items", "droppedRefs", "pinned"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
-    binding: { status: "bound-read", module: "app/lib/pcb/selection-queries.ts", symbol: "getItems" },
+    binding: { status: "bound-read", module: "app/lib/pcb/selection-queries.ts", symbol: "getItems", notes: "B10: consumes the sealed selection-snapshot resource (exact live selectionStore refs, deduped and resolved against the exact captured board, pinned to the server-computed canonical revision)." },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 2_000,
-    validationStrategy: "selection-ref schema", verificationStrategy: "pure resolution; dead refs dropped",
-    sourceEvidence: ["app/lib/pcb/selection-queries.ts"],
-    versionNotes: "Selection STATE stays session-owned; callers supply refs explicitly.",
+    validationStrategy: "empty strict input; selection refs validated/resolved at resource sealing (oversized selections rejected, never truncated)", verificationStrategy: "pure resolution against the pinned canonical board; dead refs dropped deterministically",
+    sourceEvidence: ["app/lib/pcb/selection-queries.ts", "app/lib/agent/context.ts"],
+    versionNotes: "1.1.0 (B10): agent-exposed over the sealed selection-snapshot resource; maxItems removed from the wire schema (outside the proven strict provider subset); input is empty — the current selection is the subject.",
   },
   // ── Parts / component authority ───────────────────────────────────────────
   {
@@ -209,12 +370,16 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   {
     ...readDefaults,
     toolId: "sirkit.component-authority.inspect", version: "1.0.0",
+    agentExposed: true, // B13 — statically exposed; per-run availability requires the server-owned component-authority-records resource (durable-server-board authority), so the tool is withheld whenever the durable source is unavailable
     owningCommandId: "pcb.physical-binding",
     title: "Inspect physical-binding authority",
     description: "Read durable physical-binding aggregates and their immutable revisions for component instances.",
     category: "parts", operationClass: "read",
-    inputSchema: obj({ componentIds: { type: "array", items: { type: "string", maxLength: 256 }, maxItems: 500 } }),
-    outputSchema: obj({ components: { type: "array", items: { type: "object" } } }, ["components"]),
+    // [B09.1] size bounds live in server-side input validation (B05
+    // DEFAULT_INPUT_LIMITS: 2000 array items / 10k chars), never in wire
+    // schemas (strict provider modes reject maxItems/maxLength).
+    inputSchema: obj({ componentIds: { type: "array", items: { type: "string" } } }),
+    outputSchema: obj({ components: { type: "array", items: { type: "object" } }, pinned: { type: "object" } }, ["components", "pinned"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: [], requiredAuthority: ["durable-server-board", "local-working-copy"],
     binding: { status: "bound-read", module: "app/lib/engineering/component-authority.ts", symbol: "inspectComponentAuthority", notes: "B05 audit: PhysicalBindingService performs durable I/O; the activated read is a pure inspector over explicitly supplied binding records (facet states from app/lib/physical-binding/types.ts)." },
@@ -228,11 +393,12 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   {
     ...readDefaults,
     toolId: "sirkit.manufacturing.readiness-inspect", version: "1.0.0",
+    agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "manufacturing.export-engineering",
     title: "Inspect fabrication readiness",
     description: "Recompute the PCB fabrication readiness report; never authorizes a release.",
     category: "manufacturing", operationClass: "read",
-    inputSchema: obj(), outputSchema: OUT_REPORT,
+    inputSchema: obj(), outputSchema: obj({ report: { type: "object" }, pinned: { type: "object" } }, ["report", "pinned"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "pcb_editor", "reviewer", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/readiness/evaluate.ts", symbol: "evaluatePcbFabricationReadiness" },
@@ -240,7 +406,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 30_000, budgetClass: "batch",
     validationStrategy: "readiness inputs schema", verificationStrategy: "live recompute; historical manifests never authorize",
     sourceEvidence: ["app/lib/pcb/readiness/evaluate.ts"],
-    versionNotes: "B04 initial registration.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
   },
   // ── Proposals (real engines; propose-class, never auto-apply) ─────────────
   {
@@ -457,10 +623,10 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Schema-only / partial / UI-only / missing — registered, NOT callable ──
   {
     ...readDefaults,
-    toolId: "sirkit.pcb.create-via", version: "1.0.0",
+    toolId: "sirkit.pcb.create-via", version: "1.1.0",
     owningCommandId: "pcb.create-via",
-    title: "Create via (schema-only)",
-    description: "General via creation. B01 coverage is partial/schema-only; the routing interaction owns via creation today.",
+    title: "Create via (canonical interactive path; no tool adapter)",
+    description: "B08: via creation/editing is a CANONICAL operation family (add_via/update_via/remove_via with exact kernel inverses) executed through the interactive route tool and inspector via the ONE PCB commit gateway. No dedicated reusable agent/tool adapter exists — interactive canonical execution only.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({ x: { type: "number" }, y: { type: "number" }, netId: { type: "number" } }, ["x", "y", "netId"]), outputSchema: OUT_RESULT,
     sideEffects: "engineering-state",
@@ -468,19 +634,20 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     approvalTier: "topology-or-geometry",
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
     requiresExpectedRevision: true, idempotency: "required-key", requiresLineage: true,
-    binding: { status: "unbound", notes: "Schema-only B01 declaration; no shared implementation. The kernel binding exists but the command's coverage is partial, so the executor refuses it (fail-closed)." },
+    binding: { status: "unbound", notes: "[B09.1] B08 implemented the canonical operations + interactive path (commitPcbCandidate/applyEditsCanonical → CanonicalExecutor; one transaction, exact inverses, change-set audit). 'Canonical human/editor implementation exists' ≠ 'agent tool binding exists': no reusable tool adapter is registered, so callability stays closed." },
     discovery: "discoverable", callability: "not-callable",
     timeoutMs: 5_000, audit: "change-set",
-    validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["app/lib/pcb/route-tool.commands.ts", "artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv"],
-    versionNotes: "Schema declarations are not implementations.",
+    validationStrategy: "canonical operation validation (interactive path): locks, existence, integer nm, whole-board structure",
+    verificationStrategy: "canonical change-set digests + verified-replay undo (interactive path)",
+    sourceEvidence: ["app/lib/pcb/route-tool.commands.ts", "app/lib/engineering/operations.ts", "app/lib/engineering/pcb-commit-gateway.ts", "artifacts/ai-control-plane-b08/README.md"],
+    versionNotes: "1.1.0 (B09.1): reconciled with B08 truth — canonical interactive implementation exists; still no tool adapter, never agent-exposed.",
   },
   {
     ...readDefaults,
-    toolId: "sirkit.pcb.zone-edit", version: "1.0.0",
+    toolId: "sirkit.pcb.zone-edit", version: "1.1.0",
     owningCommandId: "pcb.zone",
-    title: "Zone edit (partial coverage)",
-    description: "Copper-zone creation/edit. B01 coverage is partial; the zone tool and inspector own this today.",
+    title: "Zone edit (canonical interactive path; no tool adapter)",
+    description: "B08: zone/plane creation and editing execute CANONICALLY — the zone tool, plane dialog, and inspector build candidate boards that the ONE PCB commit gateway delta-compiles into exact operations (one transaction, exact inverses). No dedicated reusable agent/tool adapter exists — interactive canonical execution only.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({ zoneId: { type: "string" } }), outputSchema: OUT_RESULT,
     sideEffects: "engineering-state",
@@ -488,19 +655,20 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     approvalTier: "topology-or-geometry",
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
     requiresExpectedRevision: true, idempotency: "required-key", requiresLineage: true,
-    binding: { status: "unbound", notes: "Partial B01 coverage; not migrated in B03 and no shared implementation." },
+    binding: { status: "unbound", notes: "[B09.1] B08 migrated every zone surface onto commitPcbCandidate (\"pcb.zone\") → board-delta compiler → CanonicalExecutor. 'Canonical human/editor implementation exists' ≠ 'agent tool binding exists': no reusable tool adapter is registered, so callability stays closed." },
     discovery: "discoverable", callability: "not-callable",
     timeoutMs: 5_000, audit: "change-set",
-    validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv"],
-    versionNotes: "Awaits a future migration stage.",
+    validationStrategy: "canonical operation validation + whole-board structural validation (interactive path)",
+    verificationStrategy: "canonical change-set digests + verified-replay undo (interactive path)",
+    sourceEvidence: ["app/lib/pcb/zones/command.ts", "app/lib/engineering/pcb-commit-gateway.ts", "app/lib/engineering/pcb-delta.ts", "artifacts/ai-control-plane-b08/README.md"],
+    versionNotes: "1.1.0 (B09.1): reconciled with B08 truth — canonical interactive implementation exists; still no tool adapter, never agent-exposed.",
   },
   {
     ...readDefaults,
     toolId: "sirkit.schematic.add-component", version: "1.0.0",
     owningCommandId: "schematic.add-component",
-    title: "Add schematic component (UI-only)",
-    description: "Component placement is UI-only today (direct schematic state in page handlers).",
+    title: "Add schematic component (human-only canonical command)",
+    description: "B07: placement is a canonical human command through the trusted interactive schematic session. Deliberately NOT bound as a tool — no agent, provider, chat, or MCP surface may invoke it.",
     category: "schematic", operationClass: "mutate",
     inputSchema: obj({ partId: { type: "string" } }, ["partId"]), outputSchema: OUT_RESULT,
     sideEffects: "engineering-state",
@@ -508,33 +676,33 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     approvalTier: "topology-or-geometry",
     requiredProjectState: ["schematic-present"], requiredAuthority: ["local-working-copy"],
     requiresExpectedRevision: false, idempotency: "not-applicable", requiresLineage: false,
-    binding: { status: "unbound", notes: "UI-only B01 coverage; no shared implementation and no canonical operation vocabulary for schematic topology." },
+    binding: { status: "unbound", notes: "B07: the canonical implementation exists (the add-component operation via SchematicEditorSession), but tool activation is withheld — human interactive execution only." },
     discovery: "internal-only", callability: "not-callable",
     timeoutMs: 5_000, audit: "event-log",
     validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv"],
-    versionNotes: "UI-only actions are not tools.",
+    sourceEvidence: ["artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv", "artifacts/ai-control-plane-b07/schematic-graph-command-contract.md"],
+    versionNotes: "B07: canonical human command; deliberately never a tool.",
   },
   {
     ...readDefaults,
-    toolId: "sirkit.pcb.dimension", version: "1.0.0",
+    toolId: "sirkit.pcb.dimension", version: "1.1.0",
     owningCommandId: "pcb.dimension",
-    title: "Dimension annotation (missing)",
-    description: "Dimension annotations do not exist in the product yet. Registered so the gap is visible, never callable.",
+    title: "Dimension annotation (canonical interactive path; no tool adapter)",
+    description: "B08: dimension annotations are fully implemented — native BoardDimension model, canonical add/update/remove operations with exact inverses, whole-board validation, three-click creation tool, inspector editing, persistence, and conditional revision/digest participation. No dedicated reusable agent/tool adapter exists — interactive canonical execution only.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({}), outputSchema: OUT_RESULT,
     sideEffects: "engineering-state",
     requiredCapability: "edit_placement", requiredRoles: ["pcb_editor", "project_admin"],
     approvalTier: "topology-or-geometry",
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
-    requiresExpectedRevision: false, idempotency: "not-applicable", requiresLineage: false,
-    lifecycle: "draft",
-    binding: { status: "unbound", notes: "B01 status: missing. There is no handler, no schema, no operation kind." },
-    discovery: "internal-only", callability: "not-callable",
+    requiresExpectedRevision: true, idempotency: "required-key", requiresLineage: true,
+    binding: { status: "unbound", notes: "[B09.1] the B01-era 'missing' claim is obsolete: B08 shipped canonical dimension operations + useDimensionTool/DimensionInspector via applyEditsCanonical (\"pcb.dimension\"). 'Canonical human/editor implementation exists' ≠ 'agent tool binding exists': no reusable tool adapter is registered, so callability stays closed." },
+    discovery: "discoverable", callability: "not-callable",
     timeoutMs: 5_000, audit: "change-set",
-    validationStrategy: "n/a (missing)", verificationStrategy: "n/a (missing)",
-    sourceEvidence: ["artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv"],
-    versionNotes: "Known missing capability.",
+    validationStrategy: "canonical dimension validation (INVALID_DIMENSION) + whole-board structural validation (interactive path)",
+    verificationStrategy: "canonical change-set digests + verified-replay undo (interactive path)",
+    sourceEvidence: ["app/lib/pcb/dimensions/geometry.ts", "app/components/pcb/hooks/useDimensionTool.ts", "app/lib/engineering/operations.ts", "artifacts/ai-control-plane-b08/README.md"],
+    versionNotes: "1.1.0 (B09.1): reconciled with B08 truth — implemented and active (was draft/'missing'); still no tool adapter, never agent-exposed.",
   },
 ] satisfies readonly ToolDescriptor[]);
 

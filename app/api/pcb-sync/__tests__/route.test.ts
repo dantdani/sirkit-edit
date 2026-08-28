@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 
 vi.mock("@/app/lib/footprint-resolver/__tests__/fixtures", async () => {
   const { InMemoryPhysicalBindingRepository, PhysicalBindingService } = await import("@/app/lib/physical-binding/repository");
@@ -30,6 +31,13 @@ import { PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, type PcbSyncDemoSnapshotPubl
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
 
 const APPLY_AT = "2026-07-19T12:01:00.000Z";
+
+// B16.0: identity/role are SERVER-DERIVED. Inject a deterministic authorized
+// principal (userId "human-1", project admin on tenant-1/project-1) so the
+// happy-path tests observe a known actorId; individual tests override this to
+// exercise unauthenticated / insufficient-role paths.
+beforeEach(() => { injectAuthorizedPrincipal({ userId: "human-1", tenantId: "tenant-1", projectId: "project-1", role: "admin" }); });
+afterEach(() => { resetInjectedIdentity(); });
 
 async function readyHarness(applyAt = APPLY_AT) {
   const harness = await baseReadyHarness();
@@ -127,20 +135,34 @@ describe("Stage 3 PCB synchronization API", () => {
     for (const injected of [{ snapshot: {} }, { board: {} }, { path: "C:\\secret" }]) {
       const response = await handler(post({ operation: "preflight", request: preflightRequest(), ...injected }));
       expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({ code: "PS_API_AUTHORITATIVE_INPUT_FORBIDDEN" });
+      // B16.0.1: the forbidden-authoritative-field refusal moved into the ONE
+      // shared authorization adapter (scopedTrustedJson), which names it
+      // AUTH_AUTHORITATIVE_INPUT_FORBIDDEN — same 400 refusal, shared code.
+      expect(await response.json()).toMatchObject({ code: "AUTH_AUTHORITATIVE_INPUT_FORBIDDEN" });
     }
   });
 
-  it("rejects unauthenticated requests and AI apply authority", async () => {
+  it("rejects unauthenticated requests and refuses apply for an insufficient membership role", async () => {
     const harness = await readyHarness();
     const handler = createPcbSyncPostHandler(harness.service, () => "opt_in");
-    const unauthenticated = await handler(new Request("http://localhost/api/pcb-sync", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+    // B16.0: an unauthenticated request (no verified session) → 401. Identity
+    // is server-derived, so this cannot be forged with headers.
+    injectIdentity(null);
+    const unauthenticated = await handler(post({ operation: "preflight", request: preflightRequest() }));
     expect(unauthenticated.status).toBe(401);
 
+    // B16.0: a viewer's ROLE comes from membership, never from a header. A
+    // viewer is refused apply with 403 — an AI actor kind can no longer be
+    // asserted via a header at all (a strictly stronger guarantee).
+    injectAuthorizedPrincipal({ userId: "viewer-1", tenantId: "tenant-1", projectId: "project-1", role: "viewer" });
     const prepared = await harness.service.preflight(preflightRequest());
-    const ai = await handler(post({ operation: "apply", request: applyRequest(prepared.plan!) }, { "x-sirkit-pcb-sync-opt-in": "true", "x-sirkit-actor-kind": "ai" }));
-    expect(ai.status).toBe(403);
-    expect(await ai.json()).toMatchObject({ code: "PS_APPLY_AUTHORIZATION_DENIED" });
+    const denied = await handler(post({ operation: "apply", request: applyRequest(prepared.plan!) }, { "x-sirkit-pcb-sync-opt-in": "true" }));
+    expect(denied.status).toBe(403);
+    // B16.0.1: the viewer is now refused by the route-policy chokepoint
+    // (POST /api/pcb-sync permits only pcb_editor/project_admin/automation)
+    // with AUTH_ROLE_DENIED, BEFORE the handler's PS_APPLY_AUTHORIZATION_DENIED
+    // service check can even run — a strictly earlier, stronger refusal.
+    expect(await denied.json()).toMatchObject({ code: "AUTH_ROLE_DENIED" });
   });
 
   it("ignores caller apply time and evaluates expiry with the server-controlled clock", async () => {
@@ -180,7 +202,8 @@ describe("Stage 3 PCB synchronization API", () => {
 
     const changed = structuredClone(request); changed.components[0]!.value = "changed";
     expect(await (await harness.postHandler(post({ operation: "publish_demo_snapshot", request: changed }))).json()).toMatchObject({ code: "PS_SNAPSHOT_IDEMPOTENCY_CONFLICT" });
-    expect(await (await harness.postHandler(post({ operation: "publish_demo_snapshot", request }, { "x-sirkit-actor-id": "other-actor" }))).json()).toMatchObject({ code: "PS_SNAPSHOT_IDEMPOTENCY_CONFLICT" });
+    // B16.0: a "different actor, same digest" case no longer exists — the
+    // actor id is server-derived and can never be varied by a client header.
     const stale = { ...structuredClone(request), requestId: "publish-stale", idempotencyKey: "publish-stale-key", schematicRevision: "schematic-r2" };
     expect(await (await harness.postHandler(post({ operation: "publish_demo_snapshot", request: stale }))).json()).toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT" });
     expect(await harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" })).toBeNull();
@@ -206,7 +229,10 @@ describe("Stage 3 PCB synchronization API", () => {
     const beforeRead = await workflow.listOutbox(), conditional = await result.harness.getHandler(get("board-1", {}, `&knownRevision=${encodeURIComponent(result.loaded.revision)}&knownDigest=${encodeURIComponent(result.loaded.digest)}`));
     expect(await conditional.json()).toMatchObject({ ok: true, result: { status: "not_modified" } });
     expect(await workflow.listOutbox()).toEqual(beforeRead);
-    expect((await result.harness.getHandler(get("board-1", { "x-sirkit-project-id": "project-other" }))).status).toBe(404);
+    // B16.0: a cross-project selector is refused at 403 (no active membership
+    // for project-other) BEFORE board existence is even considered — a
+    // stronger isolation than the previous 404.
+    expect((await result.harness.getHandler(get("board-1", { "x-sirkit-project-id": "project-other" }))).status).toBe(403);
     expect((await result.harness.getHandler(get("missing-board"))).status).toBe(404);
 
     const blockedRequest = publicationRequest(result.harness.source, { requestId: "publish-blocked", designId: "design-blocked", boardId: "board-blocked", schematicRevision: "schematic-blocked-r1", idempotencyKey: "publish-blocked-key" });

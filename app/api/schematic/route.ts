@@ -3,9 +3,13 @@ import { llmRouter } from "@/app/lib/llm/router";
 import { providerErrorResponse } from "@/app/lib/llm/errors";
 import { requestedProvider } from "@/app/lib/llm/request";
 import { THEORY_SYSTEM_PROMPT, THEORY_SUBMIT_SCHEMATIC_TOOL } from "@/app/lib/prompts";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
-export async function POST(req: Request) {
-  const { prompt, provider: requested } = await req.json();
+// [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }) => {
+  const { prompt, provider: requested } = rawBody as { prompt?: unknown; provider?: unknown };
   const provider = requestedProvider(requested);
   if (!prompt || typeof prompt !== "string") {
     return Response.json({ error: "prompt is required" }, { status: 400 });
@@ -32,4 +36,4 @@ export async function POST(req: Request) {
 
   const netlist = toolUse.input as unknown as LogicalNetlist;
   return Response.json(netlist);
-}
+});

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { POST as compilePost } from "@/app/api/requirements/compile/route";
 import { GET as capabilitiesGet } from "@/app/api/requirements/capabilities/route";
 import { POST as sourcePost } from "@/app/api/requirements/sources/route";
@@ -11,9 +12,18 @@ import { candidate, compileInput, NOW, source } from "./fixtures";
 const HEADERS = { "content-type": "application/json", "x-sirkit-tenant-id": "tenant:test", "x-sirkit-project-id": "project:test", "x-sirkit-actor-id": "owner" };
 
 describe("CD-1 scoped API and persistence boundaries", () => {
+  afterEach(() => { resetInjectedIdentity(); });
+
   it("requires tenant/project/actor scope for source ingestion", async () => {
-    const response = await sourcePost(new Request("http://test/api/requirements/sources", { method: "POST", body: "{}" }));
-    expect(response.status).toBe(401);
+    // B16.0.1: identity is SERVER-derived. A genuinely unauthenticated caller
+    // is refused 401 (headers grant nothing); a selector-less but locally
+    // authenticated request is refused 400 (missing project selector).
+    injectIdentity(null);
+    const unauthenticated = await sourcePost(new Request("http://test/api/requirements/sources", { method: "POST", headers: HEADERS, body: "{}" }));
+    expect(unauthenticated.status).toBe(401);
+    resetInjectedIdentity();
+    const unscoped = await sourcePost(new Request("http://test/api/requirements/sources", { method: "POST", body: "{}" }));
+    expect(unscoped.status).toBe(400);
   });
 
   it("ingests a bounded source through the scoped API", async () => {
@@ -40,7 +50,7 @@ describe("CD-1 scoped API and persistence boundaries", () => {
   });
 
   it("publishes only versioned capability metadata without secrets", async () => {
-    const response = await capabilitiesGet(); const text = await response.text();
+    const response = await capabilitiesGet(new Request("http://test/api/requirements/capabilities")); const text = await response.text();
     expect(response.status).toBe(200);
     expect(text).toContain("embedded-low-voltage-v1");
     expect(text).not.toMatch(/api[_-]?key|sk-proj/i);

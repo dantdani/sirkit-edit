@@ -35,13 +35,17 @@ declared module+symbol exactly, and is pure over caller-supplied resources:
 
 ## The invocation layer
 
-`ReadToolInvocationService.invoke(request, context, resources)` — a 17-step
+`ReadToolInvocationService.invoke(request, context, bundle)` — a
 deny-by-default pipeline (see `invocation-security-policy.md`): fresh
-discovery rerun + independent policy recheck, allowlisted binding
-resolution, repository-owned input/output validation
-(`tool-io-validation.ts`), deadline/cancellation, revision pinning verified
-before AND after execution, redacted provider-neutral traces, and
-model-free replay (`read-replay-fixtures.json`, digest-compared in CI).
+discovery rerun + independent policy recheck, B05.1 resource-bundle
+integrity validation (every envelope digest, scope, freshness, dependency
+and manifest digests), allowlisted binding resolution with declared-resource
+scoping, repository-owned input/output validation (`tool-io-validation.ts`),
+deadline/cancellation, EVERY consumed resource verified before AND after
+execution, redacted provider-neutral traces naming consumed resources, and
+model-free bundle-pinned replay (`read-replay-fixtures.json` v2,
+digest-compared in CI). Composite verification semantics:
+`../ai-control-plane-b05-1/composite-verification-policy.md`.
 
 ## Contracts
 

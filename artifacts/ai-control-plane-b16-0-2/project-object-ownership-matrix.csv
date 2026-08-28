@@ -1,0 +1,16 @@
+surface,object,ownership_key,anonymous,foreign_scope,owner,enforcement
+/api/spice/runs GET,run list,"server {tenant,project,branch}",401,empty list,own runs,spiceRunScope + getRuns(scope)
+/api/spice/runs POST,run start,"server {tenant,project,branch}",401,n/a (own scope),202,startRunPlan requires scope; body project.id display-only
+/api/spice/runs/[id] GET,run,server scope,401,404 uniform,run,"getRun(id,scope)"
+/api/spice/runs/[id] DELETE,run cancel,server scope,401,404 (not cancelled),cancel,"cancelRun(id,scope)"
+/api/spice/runs/[id]/bundle GET,reproducibility bundle,server scope,401,404,zip/409,"getRun(id,scope) before artifact read"
+/api/spice/runs/[id]/events GET,SSE stream,server scope (query selector),401,404 (no listener),stream,"authorize before subscribeRun(id,scope)"
+/api/spice/runs/[id]/waveforms GET,waveforms,server scope,401,404,waveforms,"getRun(id,scope)"
+/api/bom/snapshot GET,snapshot list,server ownership columns,401,empty,own,listSnapshots(scope)
+/api/bom/snapshot POST,snapshot create,server ownership columns,401,n/a,id,createSnapshot(scope); body carries no ownership
+/api/bom/notifications GET,notif list,server ownership columns,401,empty,own,listNotifications(scope)
+/api/bom/notifications PATCH,notif mark/dismiss,server ownership columns,401,404 (unchanged),ok,"updateNotification(scope,id) full predicate"
+/api/bom/notifications PATCH markAll,bulk read,server ownership columns,401,0 updated,n updated,markAllNotificationsRead(scope)
+/api/bom/notifications DELETE,bulk delete,server ownership columns,401,0 deleted,n deleted,deleteNotifications(scope)
+/api/bom/diff POST,snapshot diff,server ownership columns,401,404 (either id),changes,"getSnapshot(scope,id) x2; bounded JSON body (no URL)"
+/api/pcb/export/gerbers POST,engineering export,server attribution (label),401,403 foreign selector,zip,authorizeRequest; attribution = trusted context

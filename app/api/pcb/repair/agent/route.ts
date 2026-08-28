@@ -10,6 +10,7 @@ import { providerErrorResponse } from "@/app/lib/llm/errors";
 import { assistantResponseMessage, toolResultsMessage, type LLMMessage } from "@/app/lib/llm/types";
 import type { PCBRepairPlan } from "@/app/lib/pcb/repair/types";
 import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -51,13 +52,11 @@ function isNetlist(value: unknown): value is PcbNetlist {
   return typeof value === "object" && value !== null && Array.isArray((value as PcbNetlist).components) && Array.isArray((value as PcbNetlist).nets);
 }
 
-export async function POST(request: Request): Promise<Response> {
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.13] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// run inside the wrapper; the callback receives the trusted context and parsed
+// body only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const raw: unknown = rawBody;
   if (typeof raw !== "object" || raw === null) return Response.json({ ok: false, error: "body must be an object" }, { status: 400 });
   const body = raw as Record<string, unknown>;
   if (!isBoard(body.board)) return Response.json({ ok: false, error: "board must be a PcbBoard" }, { status: 400 });
@@ -67,6 +66,10 @@ export async function POST(request: Request): Promise<Response> {
     : body.board.stackup === 4 ? "jlcpcb-4l" : "jlcpcb-2l";
   const provider = requestedProvider(body.provider);
   const history = createHistory(body.board);
+  // B08.2 — pure planning pass: every ALLOWED_TOOLS entry is read/plan-only
+  // and the board is discarded, so this bare history needs (and holds) NO
+  // mutation authority. Any accidental mutation attempt refuses with
+  // canonical_authority_missing.
   const service = new PCBToolService({
     history,
     rules: getPreset(presetId).rules,
@@ -119,4 +122,4 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     return providerErrorResponse(error, provider);
   }
-}
+});

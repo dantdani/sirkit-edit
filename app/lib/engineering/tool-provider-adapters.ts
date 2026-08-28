@@ -1,62 +1,64 @@
 /**
- * B04 — pure provider schema adapters.
+ * B04 provider schema adapters — **DEPRECATED COMPATIBILITY WRAPPER**
+ * (superseded by B09/B09.1).
  *
- * These functions transform B04 tool descriptors into provider-compatible
- * SHAPES. They are plain-object renderers with NO provider SDK imports, no
- * network calls, no execution, no conversation state, no routing, and no
- * fallback logic. Nothing here is wired to /api/chat.
+ * The ONE provider-rendering truth is `app/lib/agent/provider-tools.ts`:
+ * the FLAT OpenAI Responses-API function-tool shape and the Anthropic tool
+ * shape, both `strict: true`, over the validated common wire subset. This
+ * module no longer contains its own conversion or name-mapping logic — it
+ * delegates, so the obsolete nested Chat-Completions shape and the
+ * "no Anthropic strict support" claim cannot be presented as current
+ * anywhere.
  *
- * Documented representational differences (also rendered into
- * provider-schema-parity.json):
- *  - Tool NAME: both providers restrict names to [a-zA-Z0-9_-]{1,64}; dots in
- *    Sirkit tool ids map to underscores identically for both, so the mapping
- *    is lossless across providers (but not identical to the registry id).
- *  - OUTPUT schema: neither provider tool declaration carries an output
- *    schema; it remains registry-only metadata for both.
- *  - STRICT mode: OpenAI supports `strict: true` function schemas; Anthropic
- *    has no equivalent field. The adapters omit strictness entirely so the
- *    declared contract stays semantically identical on both providers.
- *  - Everything else (description, input JSON Schema) renders byte-equal.
+ * Rendering a descriptor whose schema is outside the proven wire subset
+ * FAILS CLOSED (`STRICT_SCHEMA_UNSUPPORTED`); the parity report records
+ * such descriptors as wire-incompatible instead of rendering them.
  */
 
 import { canonicalJson } from "./stable";
 import type { JsonSchema, ToolDescriptor } from "./tool-registry";
+import {
+  agentProviderName,
+  renderAnthropicAgentTool,
+  renderOpenAiResponsesTool,
+  strictCompatibility,
+  type AnthropicAgentTool,
+  type OpenAiResponsesFunctionTool,
+} from "../agent/provider-tools";
 
-export interface OpenAiToolSchema {
-  type: "function";
-  function: { name: string; description: string; parameters: JsonSchema };
-}
+/** @deprecated superseded by `OpenAiResponsesFunctionTool` (B09.1): the
+ *  current OpenAI shape is the FLAT Responses function tool. */
+export type OpenAiToolSchema = OpenAiResponsesFunctionTool;
 
-export interface AnthropicToolSchema {
-  name: string;
-  description: string;
-  input_schema: JsonSchema;
-}
+/** @deprecated superseded by `AnthropicAgentTool` (B09.1). */
+export type AnthropicToolSchema = AnthropicAgentTool;
 
-/** Provider-safe tool name: [a-zA-Z0-9_-]{1,64}, identical for both providers. */
+/** Provider-safe tool name — delegates to the B09 mapping (identical for
+ *  both providers, collision-checked at declaration time by the agent). */
 export function providerToolName(toolId: string): string {
-  const name = toolId.replaceAll(/[^a-zA-Z0-9_-]/g, "_");
-  if (name.length === 0 || name.length > 64) throw new Error(`TOOL_NAME_UNREPRESENTABLE:${toolId}`);
-  return name;
+  return agentProviderName(toolId);
 }
 
-export function renderOpenAiTool(descriptor: ToolDescriptor): OpenAiToolSchema {
+function declarationFor(descriptor: ToolDescriptor) {
+  const strict = strictCompatibility(descriptor);
+  if (!strict.ok) throw new Error(`STRICT_SCHEMA_UNSUPPORTED:${descriptor.toolId}: ${strict.reason}`);
   return {
-    type: "function",
-    function: {
-      name: providerToolName(descriptor.toolId),
-      description: descriptor.description,
-      parameters: structuredClone(descriptor.inputSchema) as JsonSchema,
-    },
-  };
-}
-
-export function renderAnthropicTool(descriptor: ToolDescriptor): AnthropicToolSchema {
-  return {
-    name: providerToolName(descriptor.toolId),
+    providerName: providerToolName(descriptor.toolId),
+    toolId: descriptor.toolId,
+    version: descriptor.version,
     description: descriptor.description,
-    input_schema: structuredClone(descriptor.inputSchema) as JsonSchema,
+    inputSchema: strict.schema,
   };
+}
+
+/** @deprecated delegates to the B09 renderer (flat Responses shape). */
+export function renderOpenAiTool(descriptor: ToolDescriptor): OpenAiToolSchema {
+  return renderOpenAiResponsesTool(declarationFor(descriptor));
+}
+
+/** @deprecated delegates to the B09 renderer (strict Anthropic shape). */
+export function renderAnthropicTool(descriptor: ToolDescriptor): AnthropicToolSchema {
+  return renderAnthropicAgentTool(declarationFor(descriptor));
 }
 
 /** The provider-independent semantic core of a rendered tool declaration. */
@@ -67,7 +69,7 @@ export interface ProviderSemanticCore {
 }
 
 export function openAiSemanticCore(schema: OpenAiToolSchema): ProviderSemanticCore {
-  return { name: schema.function.name, description: schema.function.description, inputSchema: schema.function.parameters };
+  return { name: schema.name, description: schema.description, inputSchema: schema.parameters };
 }
 
 export function anthropicSemanticCore(schema: AnthropicToolSchema): ProviderSemanticCore {
@@ -78,12 +80,15 @@ export interface ProviderParityEntry {
   toolId: string;
   version: string;
   providerName: string;
+  /** False ⇒ the schema is outside the proven wire subset and is NEVER
+   *  rendered to any provider (fail closed). */
+  wireCompatible: boolean;
   semanticallyEquivalent: boolean;
   differences: string[];
 }
 
 export interface ProviderParityReport {
-  schema: "sirkit.provider-schema-parity.v1";
+  schema: "sirkit.provider-schema-parity.v2";
   notes: string[];
   tools: ProviderParityEntry[];
 }
@@ -93,25 +98,37 @@ export function renderProviderParityReport(descriptors: readonly ToolDescriptor[
   const tools = [...descriptors]
     .sort((a, b) => a.toolId.localeCompare(b.toolId) || a.version.localeCompare(b.version))
     .map((descriptor): ProviderParityEntry => {
+      const strict = strictCompatibility(descriptor);
+      if (!strict.ok) {
+        return {
+          toolId: descriptor.toolId,
+          version: descriptor.version,
+          providerName: providerToolName(descriptor.toolId),
+          wireCompatible: false,
+          semanticallyEquivalent: false,
+          differences: [`not rendered: ${strict.reason.slice(0, 200)}`],
+        };
+      }
       const openAi = openAiSemanticCore(renderOpenAiTool(descriptor));
       const anthropic = anthropicSemanticCore(renderAnthropicTool(descriptor));
       const equivalent = canonicalJson(openAi) === canonicalJson(anthropic);
       const differences: string[] = [];
       if (openAi.name !== descriptor.toolId) differences.push("provider name maps '.' to '_' (both providers identically)");
       differences.push("output schema is registry-only metadata (neither provider declares it)");
-      differences.push("OpenAI strict mode is omitted (no Anthropic equivalent)");
       return {
         toolId: descriptor.toolId,
         version: descriptor.version,
         providerName: openAi.name,
+        wireCompatible: true,
         semanticallyEquivalent: equivalent,
         differences,
       };
     });
   return {
-    schema: "sirkit.provider-schema-parity.v1",
+    schema: "sirkit.provider-schema-parity.v2",
     notes: [
-      "Adapters are pure schema transforms: no provider calls, no execution, no conversation state, no routing, no chat wiring.",
+      "[B09.1 SUPERSESSION] v2 replaces the B04 v1 report: OpenAI renders the FLAT Responses-API function-tool shape (never the nested Chat Completions shape) and BOTH providers receive strict:true declarations over the validated common wire subset (app/lib/agent/provider-tools.ts is the single rendering truth).",
+      "Descriptors whose schemas fall outside the wire subset are recorded wireCompatible:false and are never rendered to any provider.",
       "Semantic equivalence compares {name, description, inputSchema} across both renderers via canonical JSON.",
     ],
     tools,

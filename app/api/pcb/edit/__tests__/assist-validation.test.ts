@@ -7,7 +7,12 @@
  * stays untouched.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  injectAuthorizedPrincipal,
+  injectIdentity,
+  resetInjectedIdentity,
+} from "@/app/lib/auth/test-support";
 
 const createMock = vi.hoisted(() => vi.fn());
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -33,11 +38,19 @@ function toolUse(name: string, input: unknown, id = "tu_1") {
   };
 }
 
+// B16.0.1: identity is SERVER-DERIVED via authorizeRequest — the request must
+// carry a same-origin Origin header (automatic CSRF for non-GET methods) and a
+// project SELECTOR header (never authority; membership is looked up
+// server-side against the injected principal).
 function post(body: unknown): Promise<Response> {
   return POST(
     new Request("http://localhost/api/pcb/edit/assist", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        origin: "http://localhost",
+        "x-sirkit-project-id": "project-1",
+      },
       body: JSON.stringify(body),
     }),
   );
@@ -54,7 +67,15 @@ const BODY = {
   items: buildItemIndex(board),
 };
 
-beforeEach(() => createMock.mockReset());
+// B16.0.1: inject an authenticated project member with an EDITORS role
+// (membership "editor" → pcb_editor) so the happy-path tests pass the
+// server-derived policy for POST /api/pcb/edit/assist; individual tests
+// override this to exercise the unauthenticated / role-denied refusals.
+beforeEach(() => {
+  createMock.mockReset();
+  injectAuthorizedPrincipal({ userId: "assist-tester", projectId: "project-1", role: "editor" });
+});
+afterEach(() => resetInjectedIdentity());
 
 describe("POST /api/pcb/edit/assist", () => {
   it("valid emission → { commands, explanation }", async () => {
@@ -136,8 +157,41 @@ describe("POST /api/pcb/edit/assist", () => {
   });
 
   it("400 on a malformed body", async () => {
-    expect((await post({ digest: {} })).status).toBe(400);
-    expect((await post({ instruction: "x" })).status).toBe(400);
+    // B16.0.1: assert the ERROR TEXT too, so this 400 is proven to come from
+    // the route's body validator and not from an authorization refusal.
+    const missingInstruction = await post({ digest: {} });
+    expect(missingInstruction.status).toBe(400);
+    expect((await missingInstruction.json()).error).toContain("instruction");
+    const missingDigest = await post({ instruction: "x" });
+    expect(missingDigest.status).toBe(400);
+    expect((await missingDigest.json()).error).toContain("digest");
+  });
+
+  // B16.0.1: the assist endpoint is a provider-credit route behind the
+  // server-derived authorization perimeter — unauthenticated callers get 401
+  // and non-editor members get 403 BEFORE any provider call is made.
+  it("401 for an unauthenticated caller — no provider credit spent", async () => {
+    injectIdentity(null);
+    const res = await post(BODY);
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("AUTH_UNAUTHENTICATED");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("403 for a viewer-role member — no provider credit spent", async () => {
+    injectAuthorizedPrincipal({ userId: "assist-viewer", projectId: "project-1", role: "viewer" });
+    const res = await post(BODY);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("AUTH_ROLE_DENIED");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("403 for a member of a DIFFERENT project — membership is checked against the selector", async () => {
+    injectAuthorizedPrincipal({ userId: "assist-foreign", projectId: "other-project", role: "editor" });
+    const res = await post(BODY); // selector requests project-1
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("AUTH_NO_ACTIVE_MEMBERSHIP");
+    expect(createMock).not.toHaveBeenCalled();
   });
 
   it("client gate: a hallucinated id passes the server but is discarded by compileEdits — board untouched", async () => {

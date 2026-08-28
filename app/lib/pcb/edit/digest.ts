@@ -147,6 +147,12 @@ export function buildDigest(
           strokeMm: mm(item.text.strokeWidthNm),
           atMm: [mm(item.text.position.x), mm(item.text.position.y)],
         };
+      case "dimension":
+        return {
+          kind: "dimension",
+          id: item.dimension.id,
+          layer: item.dimension.layer,
+        };
       case "pad":
         return {
           kind: "pad",

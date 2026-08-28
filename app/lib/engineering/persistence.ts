@@ -7,6 +7,13 @@ export interface AtomicProjectStore {
   commit(input: { expectedHeadSequence: number; project: CanonicalProjectState; revision: ProjectRevision; record: DurableTransactionRecord; buildId: string }): Promise<ProjectPersistenceEnvelope>;
   backup(projectId: string, branchId: string): Promise<ProjectPersistenceEnvelope>;
   restore(envelope: ProjectPersistenceEnvelope): Promise<ProjectPersistenceEnvelope>;
+  /**
+   * B06.2 — copy whatever RAW value sits at the project/branch key (valid or
+   * corrupt, WITHOUT validation) to a quarantine key so it stays recoverable
+   * before a replacement lineage overwrites the primary. Returns true when
+   * something was preserved. Quarantine keys are never returned by `load`.
+   */
+  preserveEnvelope?(projectId: string, branchId: string, label: string): Promise<boolean>;
 }
 
 function envelopeKey(projectId: string, branchId: string): string { return `${projectId}\0${branchId}`; }
@@ -27,6 +34,9 @@ export function validatePersistenceEnvelope(envelope: ProjectPersistenceEnvelope
   const { integrityManifest, ...base } = envelope; const integrityBase = { snapshotDigest: integrityManifest.snapshotDigest, logDigest: integrityManifest.logDigest, ...(integrityManifest.lastRecordDigest ? { lastRecordDigest: integrityManifest.lastRecordDigest } : {}) };
   if (engineeringDigest({ ...base, integrityManifest: integrityBase }) !== integrityManifest.envelopeDigest) errors.push("ENVELOPE_DIGEST_MISMATCH");
   if (envelope.snapshotRevision.projectId !== envelope.projectId || envelope.canonicalSnapshot.projectId !== envelope.projectId || envelope.snapshotRevision.branchId !== envelope.branchId || envelope.canonicalSnapshot.branchId !== envelope.branchId) errors.push("PROJECT_BRANCH_MISMATCH");
+  // B06.3: when present, the lineage id must be well-formed (it is also
+  // covered by the envelope digest, so tampering fails ENVELOPE_DIGEST_MISMATCH).
+  if (envelope.lineageId !== undefined && !/^lin1-[0-9a-f]{8,}$/.test(envelope.lineageId)) errors.push("INVALID_LINEAGE_ID");
   if (envelope.snapshotRevision.headSequence !== envelope.transactionLog.length) errors.push("HEAD_SEQUENCE_LOG_MISMATCH");
   return [...new Set(errors)].sort();
 }
@@ -40,10 +50,28 @@ export class InMemoryAtomicProjectStore implements AtomicProjectStore {
     this.fault?.("before_commit"); const key = envelopeKey(input.project.projectId, input.project.branchId); const current = this.envelopes.get(key); if (!current) throw new Error("PROJECT_NOT_INITIALIZED");
     const duplicate = current.transactionLog.find((record) => record.transaction.clientOperationId === input.record.transaction.clientOperationId); if (duplicate) return structuredClone(current);
     if (current.snapshotRevision.headSequence !== input.expectedHeadSequence) throw new Error(`STORE_HEAD_MISMATCH:${current.snapshotRevision.headSequence}`);
-    const envelope = createPersistenceEnvelope({ project: input.project, revision: input.revision, transactionLog: [...current.transactionLog, input.record], buildId: input.buildId, migrationHistory: current.migrationHistory }); this.envelopes.set(key, envelope); this.fault?.("after_commit_before_ack"); return structuredClone(envelope);
+    // B06.3: the envelope is the EXCLUSIVE lineage authority — commits carry
+    // the lineage forward so it survives every head advancement.
+    const envelope = createPersistenceEnvelope({ project: input.project, revision: input.revision, transactionLog: [...current.transactionLog, input.record], buildId: input.buildId, migrationHistory: current.migrationHistory, ...(current.lineageId ? { lineageId: current.lineageId } : {}) }); this.envelopes.set(key, envelope); this.fault?.("after_commit_before_ack"); return structuredClone(envelope);
   }
   async backup(projectId: string, branchId: string): Promise<ProjectPersistenceEnvelope> { const envelope = await this.load(projectId, branchId); if (!envelope) throw new Error("PROJECT_NOT_FOUND"); return envelope; }
   async restore(envelope: ProjectPersistenceEnvelope): Promise<ProjectPersistenceEnvelope> { const errors = validatePersistenceEnvelope(envelope); if (errors.length) throw new Error(`RESTORE_INTEGRITY_FAILED:${errors.join(",")}`); const clone = structuredClone(envelope); this.envelopes.set(envelopeKey(envelope.projectId, envelope.branchId), clone); return structuredClone(clone); }
+  /** B06.2 quarantine — raw copy, no validation, never visible to load(). */
+  async preserveEnvelope(projectId: string, branchId: string, label: string): Promise<boolean> {
+    const value = this.envelopes.get(envelopeKey(projectId, branchId));
+    if (value === undefined) return false;
+    this.envelopes.set(`${envelopeKey(projectId, branchId)}\0quarantine\0${label}`, structuredClone(value));
+    return true;
+  }
+  /** Test-only inspection of quarantined raw values. */
+  quarantined(projectId: string, branchId: string): ProjectPersistenceEnvelope[] {
+    const prefix = `${envelopeKey(projectId, branchId)}\0quarantine\0`;
+    return [...this.envelopes.entries()].filter(([key]) => key.startsWith(prefix)).map(([, value]) => structuredClone(value));
+  }
+  /** Test-only backdoor to plant a raw (possibly corrupt) value. */
+  unsafeSetRaw(projectId: string, branchId: string, value: ProjectPersistenceEnvelope): void {
+    this.envelopes.set(envelopeKey(projectId, branchId), structuredClone(value));
+  }
 }
 
 export function nextDurableRecord(input: Omit<DurableTransactionRecord, "integrityDigest" | "persistenceCommitId">): DurableTransactionRecord {

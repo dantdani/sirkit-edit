@@ -1,6 +1,8 @@
 import type { BBox, Vec2 } from "../pcb/geometry";
 import type { LayerId } from "../pcb/layers";
-import type { PcbBoard, PcbNet, RoutingPreferences, Track, Via, Zone } from "../pcb/types";
+import type { BoardDimension, BoardText, PcbBoard, PcbNet, RoutingHistoryEvent, RoutingKeepout, RoutingPreferences, Track, Via, Zone } from "../pcb/types";
+import type { SilkItem } from "../pcb/silk/types";
+import type { Padstack } from "../pcb/padstack/types";
 
 export const STAGE10_SCHEMA_VERSION = "sirkit.engineering.v1" as const;
 export const PROJECT_REVISION_SCHEMA = "sirkit.project-revision.v1" as const;
@@ -68,27 +70,148 @@ export type ConflictClass =
 interface OperationBase {
   operationId: string;
   schemaVersion: 1;
-  units: "nm";
+  /** Geometry unit contract: board operations are integer nanometres;
+   *  schematic operations (B06) are integer canvas pixels (10px grid). */
+  units: "nm" | "px";
   expectedObjectVersion?: string;
 }
 
 export type EngineeringOperation =
   | (OperationBase & { kind: "move_footprint"; footprintId: string; at: Vec2; rotationDeg?: number; side?: "top" | "bottom" })
   | (OperationBase & { kind: "set_footprint_protection"; footprintId: string; locked: boolean })
-  | (OperationBase & { kind: "add_track"; track: Track })
-  | (OperationBase & { kind: "update_track"; trackId: string; patch: Partial<Pick<Track, "start" | "end" | "width" | "layer" | "netId" | "locked">> })
+  // ── B08 — exact-inverse PCB collection operations ──────────────────────────
+  // Adds carry an optional exact insertion index (`atIndex`, default append)
+  // so a remove's inverse restores the EXACT array position — deleting the
+  // middle track from [a,b,c] and undoing yields [a,b,c] again, digest-exact.
+  // Updates carry EITHER a `patch` (forward UI merges; `locked` is protection
+  // state and structurally excluded — see set_copper_protection) OR an exact
+  // `replace` snapshot (full mutable object, same id) — kernel-minted
+  // inverses are ALWAYS `replace` snapshots so field ABSENCE round-trips
+  // (a patch that added `padstackId` undoes to a via without the property).
+  // Kernel-minted remove inverses may set `pruneEmptyCollection` on removes
+  // of OPTIONAL collections so `undo(add-first-item)` restores collection
+  // absence exactly (forward UI removes never set it).
+  | (OperationBase & { kind: "add_track"; track: Track; atIndex?: number })
+  | (OperationBase & { kind: "update_track"; trackId: string; patch?: Partial<Pick<Track, "start" | "end" | "width" | "layer" | "netId">>; replace?: Track })
   | (OperationBase & { kind: "remove_track"; trackId: string })
-  | (OperationBase & { kind: "add_via"; via: Via })
-  | (OperationBase & { kind: "update_via"; viaId: string; patch: Partial<Pick<Via, "at" | "size" | "drill" | "layers" | "netId" | "locked" | "padstackId">> })
+  | (OperationBase & { kind: "add_via"; via: Via; atIndex?: number })
+  | (OperationBase & { kind: "update_via"; viaId: string; patch?: Partial<Pick<Via, "at" | "size" | "drill" | "layers" | "netId" | "padstackId">>; replace?: Via })
   | (OperationBase & { kind: "remove_via"; viaId: string })
-  | (OperationBase & { kind: "add_zone"; zone: Zone })
-  | (OperationBase & { kind: "update_zone"; zoneId: string; patch: Partial<Pick<Zone, "polygon" | "netId" | "layer" | "priority" | "connection" | "clearanceOverrideNm" | "locked">> })
+  | (OperationBase & { kind: "add_zone"; zone: Zone; atIndex?: number })
+  | (OperationBase & { kind: "update_zone"; zoneId: string; patch?: Partial<Pick<Zone, "polygon" | "netId" | "layer" | "priority" | "connection" | "clearanceOverrideNm">>; replace?: Zone })
   | (OperationBase & { kind: "remove_zone"; zoneId: string })
+  // B08 — copper/zone protection is its OWN authorized operation
+  // (manage_protection), exactly invertible, and exempt from the
+  // locked-object mutation guard so its inverse can never self-block.
+  | (OperationBase & { kind: "set_copper_protection"; target: "track" | "via" | "zone"; id: string; locked: boolean })
+  // B08 — board text annotations.
+  | (OperationBase & { kind: "add_text"; text: BoardText; atIndex?: number })
+  | (OperationBase & { kind: "update_text"; textId: string; replace: BoardText })
+  | (OperationBase & { kind: "remove_text"; textId: string })
+  // B08 — silkscreen items (optional collection).
+  | (OperationBase & { kind: "add_silk"; item: SilkItem; atIndex?: number })
+  | (OperationBase & { kind: "update_silk"; silkId: string; replace: SilkItem })
+  | (OperationBase & { kind: "remove_silk"; silkId: string; pruneEmptyCollection?: boolean })
+  // B08 — via padstacks (optional collection; deletion validates no via
+  // still references the padstack — referential integrity, atomic).
+  | (OperationBase & { kind: "add_padstack"; padstack: Padstack; atIndex?: number })
+  | (OperationBase & { kind: "update_padstack"; padstackId: string; replace: Padstack })
+  | (OperationBase & { kind: "remove_padstack"; padstackId: string; pruneEmptyCollection?: boolean })
+  // B08 — routing keepouts (optional collection).
+  | (OperationBase & { kind: "add_keepout"; keepout: RoutingKeepout; atIndex?: number })
+  | (OperationBase & { kind: "update_keepout"; keepoutId: string; replace: RoutingKeepout })
+  | (OperationBase & { kind: "remove_keepout"; keepoutId: string; pruneEmptyCollection?: boolean })
+  // B08 — dimension annotations (optional collection).
+  | (OperationBase & { kind: "add_dimension"; dimension: BoardDimension; atIndex?: number })
+  | (OperationBase & { kind: "update_dimension"; dimensionId: string; replace: BoardDimension })
+  | (OperationBase & { kind: "remove_dimension"; dimensionId: string; pruneEmptyCollection?: boolean })
+  // B08 — exact-snapshot board settings (null = the field is ABSENT; the op
+  // always carries the complete target value, so inverses are trivially
+  // digest-exact). These are settings payloads, not geometry — the integer-nm
+  // walker does not apply (they may carry floats like envelopeScale or
+  // boardThicknessMm).
+  | (OperationBase & { kind: "update_stackup"; stackup: PcbBoard["stackup"]; stackupConfig: NonNullable<PcbBoard["stackupConfig"]> | null })
+  | (OperationBase & { kind: "update_net_classing"; netClassing: NonNullable<PcbBoard["netClassing"]> | null })
+  | (OperationBase & { kind: "update_constraint_state"; constraintState: NonNullable<PcbBoard["constraintState"]> | null })
+  | (OperationBase & { kind: "update_placement_settings"; placementPreferences: NonNullable<PcbBoard["placementPreferences"]> | null; placementPolicy: NonNullable<PcbBoard["placementPolicy"]> | null })
+  | (OperationBase & { kind: "update_routing_history"; events: RoutingHistoryEvent[] | null })
   | (OperationBase & { kind: "update_board_outline"; outline: PcbBoard["outline"] })
-  | (OperationBase & { kind: "update_routing_preferences"; preferences: RoutingPreferences })
+  | (OperationBase & { kind: "update_routing_preferences"; preferences: RoutingPreferences | null })
   | (OperationBase & { kind: "update_net"; netId: number; patch: Partial<Pick<PcbNet, "name" | "endpointKeys">> })
   | (OperationBase & { kind: "pin_asset"; asset: CanonicalProjectState["pinnedAssets"][number] })
-  | (OperationBase & { kind: "remove_pinned_asset"; assetId: string });
+  | (OperationBase & { kind: "remove_pinned_asset"; assetId: string })
+  // ── B06 — canonical schematic operations (units: "px") ─────────────────────
+  // Deterministic delete: the component plus its PRE-PLANNED incident cleanup
+  // (wires whose first/last vertex sits on a deleted pin coordinate; labels
+  // positioned exactly at a deleted pin coordinate — the audited tier-1
+  // policy applied uniformly). The plan is part of the operation, so it is
+  // validated, replayable, and visible in the durable record.
+  | (OperationBase & { kind: "schematic_delete_component"; family: "theory" | "kicad"; componentId: string; removeWireIds: string[]; removeNetLabelIds: string[] })
+  // Exact inverse of delete: insert-only, and ORDER-EXACT — every entity
+  // carries the array index it was removed from, so replaying the inverse
+  // reproduces the exact base state (digest-identical, not merely
+  // set-identical). Any id collision rejects the whole operation.
+  | (OperationBase & { kind: "schematic_restore_entities"; components: Array<RestoreEntry<SchematicComponentSnapshot>>; kicadComponents: Array<RestoreEntry<SchematicKicadSnapshot>>; wires: Array<RestoreEntry<SchematicWireSnapshot>>; netLabels: Array<RestoreEntry<SchematicNetLabelSnapshot>> })
+  // Atomic replacement of ONE kicad component instance: identity fields are
+  // replaced TOGETHER (partId + every authority field — stale authority can
+  // never be silently retained), and wire endpoints AND net labels move per
+  // the validated pin mapping. `expectedCurrentPartId` is a hard
+  // precondition; label moves validate the label's exact current coordinate.
+  | (OperationBase & {
+      kind: "schematic_replace_component";
+      componentId: string;
+      expectedCurrentPartId: string;
+      replacement: { partId: string; value?: string; atomicPartRevisionId?: string; symbolAssetVersionId?: string; footprintAssetVersionId?: string; mappingCertificateId?: string; selectionRecordId?: string };
+      /** Validated old-pin → new-pin identity mapping (audit record). */
+      pinMapping: Array<{ fromPin: string; toPin: string }>;
+      /** Wire endpoint moves required to preserve mapped connectivity. */
+      wireEndpointMoves: Array<{ wireId: string; end: "start" | "end"; to: { x: number; y: number } }>;
+      /** B06.1: net-label moves that preserve label-attached connectivity.
+       *  `from` is a hard precondition on the label's current position. */
+      netLabelMoves: Array<{ labelId: string; from: { x: number; y: number }; to: { x: number; y: number } }>;
+      /** B06.1: authority resources consumed to authorize a verified-atomic
+       *  replacement (ids + content digests) — durable audit provenance.
+       *  Absent for catalog-unverified replacements. B06.2: recorded in the
+       *  durable record only after the runtime grant validated; NEVER proof
+       *  by itself. */
+      consumedAuthorityResources?: Array<{ resourceId: string; contentDigest: string }>;
+      /** B06.2: registry handle of the runtime authority grant. Worthless
+       *  without the registered branded grant — the executor verifies the
+       *  grant itself, never this string. Absent for catalog-unverified. */
+      authorityGrantId?: string;
+    })
+  // B07: theory `refDes` accepts `null` = clear the display override (display
+  // falls back to the stable id) — required so the inverse of a FIRST rename
+  // restores field-absence digest-exactly. Kicad refDes never accepts null.
+  | (OperationBase & { kind: "schematic_set_component_properties"; family: "theory" | "kicad"; componentId: string; patch: { value?: string; refDes?: string | null } })
+  | (OperationBase & { kind: "schematic_transform_component"; family: "theory" | "kicad"; componentId: string; x: number; y: number; rotation: 0 | 90 | 180 | 270 })
+  // ── B07 — canonical schematic graph operations (units: "px") ───────────────
+  // Wires and net labels are order-preserving collections: adds carry the
+  // exact insertion index so delete/undo/redo reproduce array order, and
+  // every delete's inverse is an indexed add. Geometry updates capture their
+  // exact inverse from the pre-apply state. Components never appear or
+  // disappear through these ops except via schematic_add_component (whose
+  // inverse is a plain delete — a fresh add has no incident cleanup).
+  | (OperationBase & { kind: "schematic_add_wire"; wire: SchematicWireSnapshot; atIndex: number })
+  | (OperationBase & { kind: "schematic_delete_wire"; wireId: string })
+  | (OperationBase & { kind: "schematic_update_wire_geometry"; wireId: string; vertices: Array<{ x: number; y: number }> })
+  | (OperationBase & { kind: "schematic_add_net_label"; label: SchematicNetLabelSnapshot; atIndex: number })
+  | (OperationBase & { kind: "schematic_delete_net_label"; labelId: string })
+  | (OperationBase & { kind: "schematic_update_net_label"; labelId: string; patch: { position?: { x: number; y: number }; name?: string; orientation?: 0 | 90 | 180 | 270 } })
+  | (OperationBase & { kind: "schematic_add_component"; family: "theory"; component: SchematicComponentSnapshot; atIndex: number })
+  | (OperationBase & { kind: "schematic_add_component"; family: "kicad"; component: SchematicKicadSnapshot; atIndex: number });
+
+/** An entity snapshot plus the array index it is restored at (order-exact inverse). */
+export interface RestoreEntry<T> { at: number; entity: T }
+
+/** Snapshot shapes for schematic_restore_entities (structural, versioned via the operation schema).
+ *  B07: theory components carry an optional editable display reference
+ *  (`refDes`); the immutable stable identity is `id`, and display falls back
+ *  to `id` when `refDes` is absent (the deterministic legacy rule). */
+export interface SchematicComponentSnapshot { id: string; type: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; value: string; refDes?: string }
+export interface SchematicKicadSnapshot { id: string; partId: string; x: number; y: number; rotation: 0 | 90 | 180 | 270; refDes: string; value: string; atomicPartRevisionId?: string; symbolAssetVersionId?: string; footprintAssetVersionId?: string; mappingCertificateId?: string; selectionRecordId?: string }
+export interface SchematicWireSnapshot { id: string; vertices: Array<{ x: number; y: number }> }
+export interface SchematicNetLabelSnapshot { id: string; position: { x: number; y: number }; name: string; kind: string; orientation: 0 | 90 | 180 | 270 }
 
 export interface DeclaredMutationScope {
   objectIds: string[];

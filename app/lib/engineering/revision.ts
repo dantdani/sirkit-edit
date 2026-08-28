@@ -7,7 +7,9 @@ function parts(board: PcbBoard) {
   return {
     electricalIntent: board.nets.map((net) => ({ id: net.id, stableId: net.stableId, name: net.name, endpointKeys: [...(net.endpointKeys ?? [])].sort() })).sort((a, b) => a.id - b.id),
     componentBindings: board.footprints.map((item) => ({ id: item.id, footprintId: item.footprintId, ref: item.ref, padNets: item.padNets, pinPadMappings: item.pinPadMappings, def: item.def })).sort((a, b) => a.id.localeCompare(b.id)),
-    boardGeometry: { outline: board.outline, footprints: board.footprints.map((item) => ({ id: item.id, at: item.at, rotationDeg: item.rotationDeg, side: item.side, bodyMayOverhang: item.bodyMayOverhang })).sort((a, b) => a.id.localeCompare(b.id)), texts: [...board.texts].sort((a, b) => a.id.localeCompare(b.id)), silk: [...(board.silkItems ?? [])].sort((a, b) => a.id.localeCompare(b.id)) },
+    // B08: dimensions join board geometry conditionally so pre-B08 boards
+    // keep their exact domain revisions (existing envelopes stay verifiable).
+    boardGeometry: { outline: board.outline, footprints: board.footprints.map((item) => ({ id: item.id, at: item.at, rotationDeg: item.rotationDeg, side: item.side, bodyMayOverhang: item.bodyMayOverhang })).sort((a, b) => a.id.localeCompare(b.id)), texts: [...board.texts].sort((a, b) => a.id.localeCompare(b.id)), silk: [...(board.silkItems ?? [])].sort((a, b) => a.id.localeCompare(b.id)), ...(board.dimensions?.length ? { dimensions: [...board.dimensions].sort((a, b) => a.id.localeCompare(b.id)) } : {}) },
     copperTopology: { tracks: [...board.tracks].sort((a, b) => a.id.localeCompare(b.id)), vias: [...board.vias].sort((a, b) => a.id.localeCompare(b.id)), routingKeepouts: [...(board.routingKeepouts ?? [])].sort((a, b) => a.id.localeCompare(b.id)), routingPreferences: board.routingPreferences },
     zonesAndFill: board.zones.map((zone) => ({ ...zone, fill: [...zone.fill] })).sort((a, b) => a.id.localeCompare(b.id)),
     stackup: { stackup: board.stackup, stackupConfig: board.stackupConfig },

@@ -1,12 +1,31 @@
+/**
+ * B16.0.1 §A — calculation request scope, SERVER-DERIVED through the shared
+ * authorization adapter. Identity/actor/role come from `TrustedRequestContext`
+ * (never `x-sirkit-*` headers); the exact route policy enforces membership,
+ * role, and same-origin CSRF automatically per method.
+ */
+import type { ActorKind, ProjectRole } from "@/app/lib/engineering/types";
+import type { TrustedRequestContext } from "@/app/lib/auth/types";
+import { scopedTrustedJson, flatScopeOf } from "@/app/lib/auth/authorize";
+
 export const CALCULATION_API_MAX_BYTES = 12_000_000;
-export interface CalculationApiScope { tenantId: string; projectId: string; branchId: string; actorId: string; actorKind: "human" | "ai"; role: "project_admin" | "reviewer" | "pcb_editor" | "automation"; sessionId: string; }
+/** [B16.0.16] the deadline `scopedTrustedJson` has always used for this family —
+ *  it passes no `deadlineMs`, so the bounded reader's 30 s default applies.
+ *  Canonical-wrapper adopters pass this explicitly to preserve the contract. */
+export const CALCULATION_API_DEADLINE_MS = 30_000;
+export interface CalculationApiScope { tenantId: string; projectId: string; branchId: string; actorId: string; actorKind: ActorKind; role: ProjectRole; sessionId: string; }
 export function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+
+/** Request-free projection of the trusted context into the exact
+ *  `CalculationApiScope` shape — delegates to the shared `flatScopeOf`, the
+ *  same projection `scopedJson` used. The canonical-wrapper equivalent of the
+ *  scope `scopedJson` returned. */
+export function calculationScopeFromContext(context: TrustedRequestContext): CalculationApiScope {
+  return flatScopeOf(context);
+}
+
 export async function scopedJson(request: Request): Promise<{ ok: true; body: Record<string, unknown>; scope: CalculationApiScope } | { ok: false; response: Response }> {
-  const raw = await request.text(); if (new TextEncoder().encode(raw).byteLength > CALCULATION_API_MAX_BYTES) return { ok: false, response: Response.json({ ok: false, error: "calculation request is too large" }, { status: 413 }) };
-  let parsed: unknown; try { parsed = JSON.parse(raw); } catch { return { ok: false, response: Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }) }; }
-  if (!object(parsed)) return { ok: false, response: Response.json({ ok: false, error: "JSON object body required" }, { status: 400 }) };
-  const tenantId = request.headers.get("x-sirkit-tenant-id"), projectId = request.headers.get("x-sirkit-project-id"), branchId = request.headers.get("x-sirkit-branch-id"), actorId = request.headers.get("x-sirkit-actor-id");
-  if (!tenantId || !projectId || !branchId || !actorId) return { ok: false, response: Response.json({ ok: false, error: "tenant, project, branch, and actor scope headers are required" }, { status: 401 }) };
-  const roleHeader = request.headers.get("x-sirkit-role"); const role: CalculationApiScope["role"] = roleHeader === "project_admin" || roleHeader === "reviewer" || roleHeader === "automation" ? roleHeader : "pcb_editor";
-  return { ok: true, body: parsed, scope: { tenantId, projectId, branchId, actorId, actorKind: request.headers.get("x-sirkit-actor-kind") === "ai" ? "ai" : "human", role, sessionId: request.headers.get("x-sirkit-session-id") ?? "calculation-api" } };
+  const scoped = await scopedTrustedJson(request, { maxBytes: CALCULATION_API_MAX_BYTES });
+  if (!scoped.ok) return scoped;
+  return { ok: true, body: scoped.body, scope: flatScopeOf(scoped.context) };
 }

@@ -4,7 +4,16 @@ import { useEffect, useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo";
-import { createHistory } from "@/app/lib/pcb/history";
+import { createHistory as createHistoryRaw } from "@/app/lib/pcb/history";
+import { authorizeBarePcbHistory } from "@/app/lib/engineering/pcb-bare-authority.internal";
+
+// B08.1 — component tests use EXPLICITLY authorized bare histories (the
+// sanctioned planner/test composition); product histories are session-bound.
+const createHistory = (board: PcbBoard) => {
+  const history = createHistoryRaw(board);
+  authorizeBarePcbHistory(history);
+  return history;
+};
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import { useNetClass } from "../hooks/useNetClass";
 import { RoutingRulesPanel } from "../RoutingRulesPanel";

@@ -1,0 +1,9 @@
+route,unauth_401,foreign_403,revoked_403,viewer_403,csrf_403_zero_pulls,media_415,invalid_json_400,over_64MB_413,at_64MB_under_ceiling,pre_abort_400,empty_body_refusal,actor_gate,verdict_mapping,proposedBy_trusted_only
+/api/firmware-bringup/problem,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,409-compile-refusal,non-human 403 (compile zero),ok200/else409,n/a
+/api/firmware-bringup/propose,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,none,n/a,PASS (attacker ignored)
+/api/firmware-bringup/resources,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,none,valid200/invalid422,n/a (internal automated_engine label)
+/api/full-flow/propose,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,none,n/a,PASS
+/api/full-flow/run,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact + tier bounds,non-human 403,201 created (no artifacts),n/a
+/api/full-flow/transition,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,ai 403 pre / ALL non-human 403 post (§D),shape409/machine409,n/a
+/api/release-engineering/problem,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,non-human 403 (compile zero),ok200/else409,n/a
+/api/release-engineering/propose,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,PASS,400 exact,none,n/a,PASS

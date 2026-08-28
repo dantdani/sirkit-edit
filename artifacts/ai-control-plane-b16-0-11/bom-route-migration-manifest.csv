@@ -1,0 +1,13 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/bom/cart/digikey,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom/cart/lcsc,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom/cart/mouser,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom/diff,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/bom/export-csv,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+GET,/api/bom/notifications,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+PATCH,/api/bom/notifications,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+DELETE,/api/bom/notifications,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/bom/procurement-packet,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom/snapshot,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+GET,/api/bom/snapshot,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted

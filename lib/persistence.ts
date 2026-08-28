@@ -106,6 +106,18 @@ export type SavedProject = {
   designPrompt?: string;
   /** The workspace tab the user was in (R06 workflow-stage persistence). */
   workflowView?: string;
+  /**
+   * B06.1 — canonical schematic head marker. Written atomically WITH `state`
+   * on every save, it records the durable canonical head this projection has
+   * seen ({lineageId, headSequence, canonicalStateDigest}). On reload the
+   * schematic session orders the projection against the durable envelope by
+   * this mark: a projection whose mark lags the envelope head is STALE and
+   * can never overwrite it. `state` remains a projection, not an authority.
+   */
+  schematicCanonicalMark?: { lineageId: string; headSequence: number; canonicalStateDigest: string };
+  /** B06.2 — a projection preserved during canonical-recovery/conflict
+   *  resolution instead of being silently discarded or applied. */
+  schematicProjectionConflict?: { state: SchematicState; reason: string; at: number };
   /** Local working PCB copy — editor work not yet in a durable apply (R06). */
   pcbWorking?: PcbWorkingCopy;
   /** Diverged working copy preserved instead of silently overwritten (R06). */
@@ -260,10 +272,14 @@ export function loadProject(id: string): SavedProject | null {
     if (project.releaseEngineeringProgramHistory?.some((item) => validateReleaseEngineeringProject(item).length || item.projectId !== project.id)) return null;
     if (project.fullFlowProgram && (validateFullFlowProject(project.fullFlowProgram).length || project.fullFlowProgram.projectId !== project.id)) return null;
     if (project.fullFlowProgramHistory?.some((item) => validateFullFlowProject(item).length || item.projectId !== project.id)) return null;
-    if (!project.pcb) return project;
-    const identityMigration = migrateBoardElectricalIdentities(project.pcb, id);
+    // B06.3: the strict loader applies the SAME schematic-metadata
+    // sanitization as the salvage loader — arbitrary JSON never becomes a
+    // trusted mark or recovery record on either path.
+    const sanitized = sanitizeSchematicMetadata(project);
+    if (!sanitized.pcb) return sanitized;
+    const identityMigration = migrateBoardElectricalIdentities(sanitized.pcb, id);
     const constraintMigration = migrateBoardConstraintState(identityMigration.board, id);
-    return { ...project, pcb: constraintMigration.board };
+    return { ...sanitized, pcb: constraintMigration.board };
   } catch {
     return null;
   }
@@ -300,6 +316,8 @@ export function loadProjectSalvaged(id: string): { project: SavedProject; droppe
     ...(Array.isArray(record.chat) ? { chat: record.chat as StoredChatMessage[] } : {}),
     ...(typeof record.designPrompt === "string" ? { designPrompt: record.designPrompt } : {}),
     ...(typeof record.workflowView === "string" ? { workflowView: record.workflowView } : {}),
+    ...(isValidSchematicCanonicalMark(record.schematicCanonicalMark) ? { schematicCanonicalMark: record.schematicCanonicalMark as SavedProject["schematicCanonicalMark"] } : {}),
+    ...(isValidSchematicProjectionConflict(record.schematicProjectionConflict) ? { schematicProjectionConflict: record.schematicProjectionConflict as SavedProject["schematicProjectionConflict"] } : {}),
     ...(record.pcbWorking && typeof record.pcbWorking === "object" ? { pcbWorking: record.pcbWorking as PcbWorkingCopy } : {}),
     ...(record.pcbWorkingConflict && typeof record.pcbWorkingConflict === "object" ? { pcbWorkingConflict: record.pcbWorkingConflict as PcbWorkingCopy & { reason: string } } : {}),
     ...(record.pcbStages && typeof record.pcbStages === "object" ? { pcbStages: record.pcbStages as PcbStageEvidence } : {}),
@@ -311,12 +329,58 @@ export function loadProjectSalvaged(id: string): { project: SavedProject; droppe
 }
 
 /**
+ * B06.2/B06.3 — structural validation of an untrusted canonical-head mark
+ * loaded from localStorage. SCHEMA-EXACT (the three documented fields and
+ * nothing else); malformed marks are DROPPED (downgraded to untrusted
+ * projection data), never cast to the trusted type. Mirrors
+ * `validateSchematicCanonicalMark` in app/lib/engineering/schematic-projection.ts
+ * (duplicated structurally to keep this storage module engineering-free).
+ */
+function isValidSchematicCanonicalMark(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const mark = value as Record<string, unknown>;
+  const keys = Object.keys(mark);
+  if (keys.length !== 3 || !keys.every((key) => key === "lineageId" || key === "headSequence" || key === "canonicalStateDigest")) return false;
+  return typeof mark.lineageId === "string" && /^lin1-[0-9a-f]{8,}$/.test(mark.lineageId)
+    && typeof mark.headSequence === "number" && Number.isSafeInteger(mark.headSequence) && mark.headSequence >= 0
+    && typeof mark.canonicalStateDigest === "string" && /^eng1-[0-9a-f]{8,}$/.test(mark.canonicalStateDigest);
+}
+
+/**
+ * B06.3 — structural validation of a preserved projection-conflict record.
+ * Arbitrary JSON is never cast into recovery authority: the record must be
+ * schema-exact ({state, reason, at}) with a structurally plausible
+ * SchematicState (component/wire arrays). Invalid records are dropped.
+ */
+function isValidSchematicProjectionConflict(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 3 || !keys.every((key) => key === "state" || key === "reason" || key === "at")) return false;
+  if (typeof record.reason !== "string" || record.reason.length === 0) return false;
+  if (typeof record.at !== "number" || !Number.isFinite(record.at)) return false;
+  const state = record.state as Record<string, unknown> | null;
+  if (typeof state !== "object" || state === null) return false;
+  return Array.isArray(state.components) && Array.isArray(state.wires)
+    && (state.kicadComponents === undefined || Array.isArray(state.kicadComponents))
+    && (state.netLabels === undefined || Array.isArray(state.netLabels));
+}
+
+/** B06.3 — shared sanitizer applied by BOTH loaders (strict and salvage). */
+function sanitizeSchematicMetadata<T extends { schematicCanonicalMark?: unknown; schematicProjectionConflict?: unknown }>(project: T): T {
+  const sanitized = { ...project };
+  if (sanitized.schematicCanonicalMark !== undefined && !isValidSchematicCanonicalMark(sanitized.schematicCanonicalMark)) delete sanitized.schematicCanonicalMark;
+  if (sanitized.schematicProjectionConflict !== undefined && !isValidSchematicProjectionConflict(sanitized.schematicProjectionConflict)) delete sanitized.schematicProjectionConflict;
+  return sanitized;
+}
+
+/**
  * R06 field patcher: update a subset of a project's R06 fields in one durable
  * write. REPORTS failure (quota/serialization) — callers surface it visibly.
  */
 export function saveProjectFields(
   id: string,
-  patch: Partial<Pick<SavedProject, "name" | "state" | "chat" | "designPrompt" | "workflowView" | "pcbWorking" | "pcbWorkingConflict" | "pcbStages" | "ai">>,
+  patch: Partial<Pick<SavedProject, "name" | "state" | "chat" | "designPrompt" | "workflowView" | "schematicCanonicalMark" | "schematicProjectionConflict" | "pcbWorking" | "pcbWorkingConflict" | "pcbStages" | "ai">>,
 ): boolean {
   const salvaged = loadProjectSalvaged(id);
   if (!salvaged) return false;

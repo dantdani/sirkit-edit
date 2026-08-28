@@ -1,7 +1,14 @@
 // AI rule endpoint (Stage 10): valid brief, retry-on-invalid, 422 on double
 // failure, mm→nm conversion, explanation length. Claude is mocked.
+//
+// B16.0.1: the route is now authenticated via authorizeRequest (server-derived
+// identity + active project membership + same-origin CSRF). Requests carry the
+// x-sirkit-* project SELECTOR headers (never authority) and a same-origin
+// Origin header; identity itself resolves server-side (local_dev principal by
+// default, or the injected test principal).
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 
 const createMock = vi.hoisted(() => vi.fn());
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -29,7 +36,15 @@ function post(body: unknown): Promise<Response> {
   return POST(
     new Request("http://localhost/api/pcb/ai-rules/from-brief", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        // B16.0.1: same-origin CSRF — Origin must match the request URL host.
+        origin: "http://localhost",
+        // B16.0.1: project/branch SELECTOR headers (never identity/authority).
+        "x-sirkit-tenant-id": "local",
+        "x-sirkit-project-id": "project-1",
+        "x-sirkit-branch-id": "main",
+      },
       body: JSON.stringify(body),
     }),
   );
@@ -42,6 +57,7 @@ const BRIEF = {
 };
 
 beforeEach(() => createMock.mockReset());
+afterEach(() => resetInjectedIdentity());
 
 describe("POST /api/pcb/ai-rules/from-brief", () => {
   it("valid brief → { ok: true, delta } with a well-formed RuleDelta", async () => {
@@ -154,6 +170,27 @@ describe("POST /api/pcb/ai-rules/from-brief", () => {
   it("rejects a malformed request body with 400 (no model call)", async () => {
     const res = await post({ brief: "", board: { netNames: [], hasIcs: true } });
     expect(res.status).toBe(400);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  // B16.0.1: identity is server-derived (never from x-sirkit-* headers). An
+  // unauthenticated request is refused with 401 BEFORE any provider credit is
+  // spent — a strictly stronger guarantee than the old header-asserted model.
+  it("rejects an unauthenticated request with 401 (no model call)", async () => {
+    injectIdentity(null);
+    const res = await post(BRIEF);
+    expect(res.status).toBe(401);
+    expect((await res.json()).code).toBe("AUTH_UNAUTHENTICATED");
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  // B16.0.1: the role comes from active project MEMBERSHIP, not a header. A
+  // viewer is not in the propose-route EDITORS set → 403 before the model call.
+  it("refuses a viewer membership with 403 AUTH_ROLE_DENIED (no model call)", async () => {
+    injectAuthorizedPrincipal({ userId: "viewer-1", tenantId: "local", projectId: "project-1", role: "viewer" });
+    const res = await post(BRIEF);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe("AUTH_ROLE_DENIED");
     expect(createMock).not.toHaveBeenCalled();
   });
 });

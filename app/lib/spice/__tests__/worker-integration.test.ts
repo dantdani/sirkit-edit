@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import JSZip from "jszip";
 import { createSimulationProject } from "../project";
 import { estimateRunPlan } from "../run-plan";
@@ -12,7 +13,15 @@ import { POST as smokeModel } from "@/app/api/spice/models/smoke-test/route";
 
 const LIVE = process.env.SPICE_WORKER_LIVE === "1";
 
+// [B16.0.2 §B] every run is bound to a TRUSTED scope and every route is
+// authenticated + project-scoped: the test acts as an editor of this project.
+const SCOPE = { tenantId: "local", projectId: "spice-worker-project", branchId: "main" };
+const SELECTOR = { "x-sirkit-tenant-id": SCOPE.tenantId, "x-sirkit-project-id": SCOPE.projectId, "x-sirkit-branch-id": SCOPE.branchId };
+
 describe.runIf(LIVE)("isolated ngspice worker", () => {
+  beforeEach(() => { injectAuthorizedPrincipal({ userId: "spice-worker-editor", tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, role: "editor" }); });
+  afterEach(() => { resetInjectedIdentity(); });
+
   it("creates a manifest, executes, parses waveforms, and retains artifacts", async () => {
     const project = createSimulationProject(dividerSchematic());
     const test = project.tests[0];
@@ -43,24 +52,24 @@ describe.runIf(LIVE)("isolated ngspice worker", () => {
     const test = project.tests[0];
     test.analyses = [{ id: "op", name: "Operating point", type: "op", enabled: true }];
     test.outputs = [{ id: "vin", label: "VIN", expression: "v(VIN)", unit: "V", enabled: true }];
-    const batch = startRunPlan({ project, runPlanId: project.runPlans[0].id, maxRuns: 10 });
-    let run = getRun(batch.runIds[0]);
+    const batch = startRunPlan({ scope: SCOPE, project, runPlanId: project.runPlans[0].id, maxRuns: 10 });
+    let run = getRun(batch.runIds[0], SCOPE);
     const deadline = Date.now() + 10_000;
     while (run && !["completed", "failed", "cancelled"].includes(run.status) && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 20));
-      run = getRun(batch.runIds[0]);
+      run = getRun(batch.runIds[0], SCOPE);
     }
     expect(run?.status).toBe("completed");
     expect(run?.events.map((event) => event.status)).toContain("running");
     expect(run?.manifest?.simulator.name).toBe("ngspice");
-    expect(getBatch(batch.id)?.completed).toBe(1);
-    const bundleResponse = await getBundle(new Request(`http://localhost/api/spice/runs/${run!.id}/bundle`), { params: Promise.resolve({ id: run!.id }) });
+    expect(getBatch(batch.id, SCOPE)?.completed).toBe(1);
+    const bundleResponse = await getBundle(new Request(`http://localhost/api/spice/runs/${run!.id}/bundle`, { headers: SELECTOR }), { params: Promise.resolve({ id: run!.id }) });
     expect(bundleResponse.status).toBe(200);
     const zip = await JSZip.loadAsync(await bundleResponse.arrayBuffer());
     expect(Object.keys(zip.files)).toContain("manifest.json");
     expect(Object.keys(zip.files)).toContain("netlist/executed.cir");
     const signal = run!.waveforms[0].name;
-    const waveformResponse = await getWaveform(new Request(`http://localhost/api/spice/runs/${run!.id}/waveforms?signal=${encodeURIComponent(signal)}&points=64`), { params: Promise.resolve({ id: run!.id }) });
+    const waveformResponse = await getWaveform(new Request(`http://localhost/api/spice/runs/${run!.id}/waveforms?signal=${encodeURIComponent(signal)}&points=64`, { headers: SELECTOR }), { params: Promise.resolve({ id: run!.id }) });
     const waveformBody = await waveformResponse.json() as { waveform: { x: number[]; rawPoints: number } };
     expect(waveformBody.waveform.x.length).toBeLessThanOrEqual(66);
     expect(waveformBody.waveform.rawPoints).toBeGreaterThan(0);
@@ -70,7 +79,7 @@ describe.runIf(LIVE)("isolated ngspice worker", () => {
     const imported = importModelText("diode.mod", ".model DTEST D(IS=1e-9 N=1.5)\n");
     const response = await smokeModel(new Request("http://localhost/api/spice/models/smoke-test", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", origin: "http://localhost", ...SELECTOR },
       body: JSON.stringify({ model: imported.candidate }),
     }));
     const body = await response.json() as { ok: boolean; model: { validationStatus: string }; check: { status: string } };

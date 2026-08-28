@@ -57,6 +57,24 @@ export function isCheckpointLike(value: unknown): value is ProjectCheckpoint {
     && typeof record.schematic === "object" && record.schematic !== null;
 }
 
+/**
+ * B07.5 — the FINAL identity boundary for checkpoint restoration: a
+ * checkpoint may only ever be restored into the exact project that owns
+ * it. Evaluated at the restore entry point AND again inside the adoption
+ * `stillCurrent` check, so a mismatched checkpoint object is rejected even
+ * if it somehow reaches the restore path (a stale list render, a late
+ * callback, a forged object) — no schematic, PCB, chat, dialog, history,
+ * or storage mutation may occur on mismatch.
+ */
+export function checkpointBelongsToProject(
+  checkpoint: Pick<ProjectCheckpoint, "projectId">,
+  activeProjectId: string | null | undefined,
+): boolean {
+  return typeof checkpoint.projectId === "string"
+    && checkpoint.projectId.length > 0
+    && checkpoint.projectId === activeProjectId;
+}
+
 // ─── In-memory implementation (tests, SSR safety) ────────────────────────────
 
 export class MemoryCheckpointStore implements CheckpointStore {

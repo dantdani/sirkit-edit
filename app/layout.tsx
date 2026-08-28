@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { LocalDevIdentityBanner } from "./components/auth/LocalDevIdentityBanner";
+import { resolveAuthMode } from "./lib/auth/mode";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +29,13 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {/* B16.0: visible whenever the app is NOT running production auth.
+            [B16.0.2 §H] the mode comes from the SERVER resolver (this is a
+            server component), never from NEXT_PUBLIC_SIRKIT_AUTH_MODE. */}
+        <LocalDevIdentityBanner authMode={resolveAuthMode(process.env)} />
+        {children}
+      </body>
     </html>
   );
 }

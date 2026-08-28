@@ -1,0 +1,14 @@
+method,path,auth_class,requires_auth,roles,csrf,provider_credit,identity_source
+POST,/api/spice/ai,authenticated-propose,true,"pcb_editor|reviewer|project_admin|automation",true,true,body-scope-server-actor
+POST,/api/spice/compile,public,false,,false,false,none
+POST,/api/spice/models/import,authenticated-mutation,true,"pcb_editor|project_admin|automation",true,false,trusted-context
+POST,/api/spice/models/smoke-test,authenticated-read,true,"pcb_editor|reviewer|project_admin|automation",true,false,trusted-context
+POST,/api/spice/reports,public,false,,false,false,none
+POST,/api/spice/run-plans/estimate,public,false,,false,false,none
+GET,/api/spice/runs,authenticated-read,true,ALL_MEMBERS,false,false,trusted-context
+POST,/api/spice/runs,authenticated-mutation,true,"pcb_editor|project_admin|automation",true,false,trusted-context
+GET,/api/spice/runs/[id],authenticated-read,true,ALL_MEMBERS,false,false,trusted-context
+DELETE,/api/spice/runs/[id],authenticated-mutation,true,"pcb_editor|project_admin|automation",true,false,trusted-context
+GET,/api/spice/runs/[id]/bundle,authenticated-read,true,ALL_MEMBERS,false,false,trusted-context
+GET,/api/spice/runs/[id]/events,authenticated-read,true,ALL_MEMBERS,false,false,trusted-context
+GET,/api/spice/runs/[id]/waveforms,authenticated-read,true,ALL_MEMBERS,false,false,trusted-context

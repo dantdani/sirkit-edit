@@ -104,7 +104,60 @@ export class AiProviderUnavailableError extends Error {
   }
 }
 
-export async function throwAiResponseError(response: Response, retry?: () => void): Promise<never> {
+/**
+ * B07.5 — ownership contract for provider-failure notification. The
+ * `sirkit:ai-provider-failure` event is GLOBAL, so every dispatch must
+ * carry its owner: `isCurrent` is evaluated immediately before dispatch
+ * (after the body-parse await — the race window) and again by the page
+ * listener; the retry callback is wrapped so it refuses once its owner is
+ * stale. A request whose owner already ended dispatches NOTHING — an old
+ * project's quota failure can never repopulate the new project's failure
+ * banner, retry, or chat state.
+ */
+export interface AiRequestOwnership {
+  /** True while the originating project/session generation (page requests)
+   *  or component lifetime (editor components) is still active. */
+  isCurrent(): boolean;
+}
+
+export interface AiProviderFailureDetail {
+  provider: LLMProviderId;
+  retry?: () => void;
+  /** Listener-side re-check: an event whose owner went stale between
+   *  dispatch and delivery must be ignored. */
+  stillCurrent?: () => boolean;
+}
+
+/**
+ * [B09.1] the ONE owned dispatch path for the global provider-failure
+ * event — used by the legacy JSON-error flow below AND the NDJSON
+ * `run_failed provider_*` flow. Ownership is re-checked immediately before
+ * dispatch; the retry closure is wrapped so it refuses once its owner is
+ * stale (B07.5 guarantees preserved). A stale owner dispatches NOTHING.
+ */
+export function dispatchAiProviderFailure(input: {
+  provider: LLMProviderId;
+  retry?: () => void;
+  ownership?: AiRequestOwnership;
+}): void {
+  if (input.ownership && !input.ownership.isCurrent()) return;
+  const ownership = input.ownership;
+  const ownedRetry = input.retry && ownership
+    ? () => { if (ownership.isCurrent()) input.retry!(); }
+    : input.retry;
+  const detail: AiProviderFailureDetail = {
+    provider: input.provider,
+    retry: ownedRetry,
+    ...(ownership ? { stillCurrent: () => ownership.isCurrent() } : {}),
+  };
+  window.dispatchEvent(new CustomEvent("sirkit:ai-provider-failure", { detail }));
+}
+
+export async function throwAiResponseError(
+  response: Response,
+  retry?: () => void,
+  ownership?: AiRequestOwnership,
+): Promise<never> {
   let data: { code?: unknown; provider?: unknown; error?: unknown } = {};
   try {
     data = (await response.json()) as typeof data;
@@ -116,9 +169,11 @@ export async function throwAiResponseError(response: Response, retry?: () => voi
       typeof data.error === "string"
         ? data.error
         : `${data.provider === "openai" ? "OpenAI" : "Anthropic"} is currently unavailable.`;
-    window.dispatchEvent(
-      new CustomEvent("sirkit:ai-provider-failure", { detail: { provider: data.provider, retry } }),
-    );
+    // Re-check ownership AFTER the body-parse await; a stale owner
+    // dispatches no global event (the throw below still lets the
+    // originating handler's scoped catch settle its own state).
+    // [B09.1] shared owned dispatch path.
+    dispatchAiProviderFailure({ provider: data.provider, retry, ownership });
     throw new AiProviderUnavailableError(data.provider, message);
   }
   throw new Error(

@@ -344,34 +344,48 @@ describe("B03 hydration + persistence compatibility", () => {
     expect(bound.session.headMetadataFor(bound.history.present)).toBeNull();
     // R06 editor guards this metadata rides on are still present at the source level.
     const editorSource = readFileSync(join(process.cwd(), "app/components/pcb/PcbEditor.tsx"), "utf8");
-    expect(editorSource).toContain("if (cancelled) return;"); // late hydration never overwrites newer in-memory state
+    // [B08.1/B08.2] the hydration guard is STRONGER than the original R06
+    // `if (cancelled) return;`: it also verifies the lifecycle generation.
+    expect(editorSource).toContain("if (cancelled || !scope.isCurrent()) return;"); // late hydration never overwrites newer in-memory state
     expect(editorSource).toContain("if (init.demo || !syncIdentity || !state.board) return;"); // autosave never runs before hydration
     expect(editorSource).toContain("headMetadataFor(board)"); // metadata saved only via the guarded autosave
   });
 });
 
-describe("B03 unmigrated paths stay byte-identical", () => {
-  it("17. non-slice batches fall back to the legacy path with NO canonical transaction", async () => {
+describe("B08 total canonical coverage of the edit funnel", () => {
+  it("17. previously-unmigrated batches now execute CANONICALLY (zone props), and mixed batches refuse without mutation instead of silently escaping", async () => {
     const bound = await openBound();
-    const legacyBoard = structuredClone(bound.history.present);
-    const legacyHistory = createHistory(legacyBoard); // unbound control
     const cmds = [{ op: "set-zone-props" as const, id: "z1", patch: { clearanceNm: 250_000 } }];
     const viaAdapter = await applyEditsCanonical(bound.history, structuredClone(cmds));
-    const viaLegacy = applyEdits(legacyHistory, structuredClone(cmds));
     expect(viaAdapter.ok).toBe(true);
-    expect(viaLegacy.ok).toBe(true);
     expect(bound.history.present.zones[0].clearanceOverrideNm).toBe(250_000);
-    expect(bound.history.present.zones[0]).toEqual(legacyHistory.present.zones[0]);
-    // No canonical transaction was created for the unmigrated shape.
+    // B08: ONE canonical transaction backs the edit.
     await bound.session.whenIdle();
-    expect(bound.session.events.filter((e) => e.kind === "executed")).toHaveLength(0);
-    expect(bound.history.entries[0].metadata.details?.b03).toBeUndefined();
-    // Silk-text delete (no operation contract) also stays legacy.
-    expect(planCanonicalEdits([{ op: "delete-items", refs: [{ kind: "text", id: "s1" }] }])).toBeNull();
-    // Mixed-kind arrange stays legacy.
+    expect(bound.session.events.filter((e) => e.kind === "executed")).toHaveLength(1);
+    expect(bound.history.entries[0].metadata.details?.b03).toBeDefined();
+    // B08 classification: silk-text delete and locked patches are canonical
+    // commands now; a mixed-kind arrange still classifies to nothing.
+    expect(planCanonicalEdits([{ op: "delete-items", refs: [{ kind: "text", id: "s1" }] }])).toEqual({ commandId: "pcb.delete-item" });
+    expect(planCanonicalEdits([{ op: "set-footprint-props", id: "u1", patch: { locked: true } }])).toEqual({ commandId: "pcb.protection" });
     expect(planCanonicalEdits([{ op: "align", refs: [{ kind: "footprint", id: "u1" }, { kind: "via", id: "v1" }], mode: "left" }])).toBeNull();
-    // Locked-flag patches stay legacy (protection capability).
-    expect(planCanonicalEdits([{ op: "set-footprint-props", id: "u1", patch: { locked: true } }])).toBeNull();
+    // An unclassifiable batch REFUSES without mutation (no legacy fallback).
+    const before = structuredClone(bound.history.present);
+    const refused = await applyEditsCanonical(bound.history, [
+      { op: "set-track-width", ids: ["t1"], widthNm: 300_000 },
+      { op: "set-footprint-props", id: "u1", patch: { locked: true } },
+    ]);
+    expect(refused.ok).toBe(false);
+    expect(refused.errors[0]).toContain("refused without mutation");
+    expect(bound.history.present).toEqual(before);
+    // The SAME mixed batch executes atomically under a DECLARED compound
+    // command (the assist-edit contract).
+    const declared = await applyEditsCanonical(bound.history, [
+      { op: "set-track-width", ids: ["t1"], widthNm: 300_000 },
+      { op: "set-footprint-props", id: "u1", patch: { locked: true } },
+    ], undefined, { declaredCommandId: "pcb.assist-edit" });
+    expect(declared.ok).toBe(true);
+    expect(bound.history.present.tracks.find((t) => t.id === "t1")!.width).toBe(300_000);
+    expect(bound.history.present.footprints.find((f) => f.id === "u1")!.locked).toBe(true);
   });
 
   it("18. legacy-path mutations under a bound session rebase the lineage on the next canonical action", async () => {

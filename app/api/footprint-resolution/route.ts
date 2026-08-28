@@ -4,7 +4,8 @@ import { compareLegacyResolution, type LegacyResolutionObservation } from "@/app
 import { DEFAULT_FOOTPRINT_RESOLUTION_POLICY } from "@/app/lib/footprint-resolver/policy";
 import type { FootprintResolutionBatchRequest, FootprintResolutionRequest } from "@/app/lib/footprint-resolver/types";
 import { FOOTPRINT_RESOLVER_NORMALIZATION_VERSION, FOOTPRINT_RESOLUTION_REQUEST_VERSION, FOOTPRINT_RESOLUTION_RESULT_VERSION, FOOTPRINT_RESOLVER_VERSION } from "@/app/lib/footprint-resolver/types";
-import { object, resolutionScope, scopedResolutionJson, type ResolutionApiScope } from "./_scope";
+import { FOOTPRINT_RESOLUTION_API_DEADLINE_MS, FOOTPRINT_RESOLUTION_API_MAX_BYTES, object, resolutionScopeFromContext, type ResolutionApiScope } from "./_scope";
+import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 const service = new FootprintResolutionService(new PostgresPhysicalBindingRepository());
@@ -20,39 +21,43 @@ function scopedRequest(value: Record<string, unknown>, scope: ResolutionApiScope
   return { ...(value as unknown as FootprintResolutionRequest), schemaVersion: FOOTPRINT_RESOLUTION_REQUEST_VERSION, tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, actorContext: scope.actor };
 }
 
-export async function GET(request: Request): Promise<Response> {
-  const authorized = resolutionScope(request);
-  if (!authorized.ok) return authorized.response;
-  return Response.json({ ok: true, readOnly: true, requestSchemaVersion: FOOTPRINT_RESOLUTION_REQUEST_VERSION, resultSchemaVersion: FOOTPRINT_RESOLUTION_RESULT_VERSION, resolverVersion: FOOTPRINT_RESOLVER_VERSION, normalizationVersion: FOOTPRINT_RESOLVER_NORMALIZATION_VERSION, policy: DEFAULT_FOOTPRINT_RESOLUTION_POLICY, productionPcbSyncAuthority: "legacy_until_stage3", cache: { mode: "disabled", reason: "Measured pure evaluation is fast; avoiding cache invalidation risk in Stage 2." } }, { headers: { "Cache-Control": "no-store" } });
-}
+// [B16.0.8] canonical wrapper — authorization inside the wrapper; the callback
+// returns the static capability document and receives no Request.
+export const GET = authenticatedRoute(undefined, () =>
+  Response.json({ ok: true, readOnly: true, requestSchemaVersion: FOOTPRINT_RESOLUTION_REQUEST_VERSION, resultSchemaVersion: FOOTPRINT_RESOLUTION_RESULT_VERSION, resolverVersion: FOOTPRINT_RESOLVER_VERSION, normalizationVersion: FOOTPRINT_RESOLVER_NORMALIZATION_VERSION, policy: DEFAULT_FOOTPRINT_RESOLUTION_POLICY, productionPcbSyncAuthority: "legacy_until_stage3", cache: { mode: "disabled", reason: "Measured pure evaluation is fast; avoiding cache invalidation risk in Stage 2." } }, { headers: { "Cache-Control": "no-store" } }));
 
-export async function POST(request: Request): Promise<Response> {
-  const parsed = await scopedResolutionJson(request);
-  if (!parsed.ok) return parsed.response;
-  const { body, scope } = parsed;
-  const operation = typeof body.operation === "string" ? body.operation : "resolve";
-  try {
-    if (operation === "resolve" || operation === "explain") {
-      if (!object(body.request)) return Response.json({ ok: false, code: "FR_API_REQUEST_REQUIRED", error: "request object is required." }, { status: 400 });
-      const result = operation === "explain" ? await service.explain(scopedRequest(body.request, scope), request.signal) : await service.resolve(scopedRequest(body.request, scope), request.signal);
-      return Response.json({ ok: true, readOnly: true, result }, { headers: { "Cache-Control": "no-store" } });
-    }
-    if (operation === "batch") {
-      if (!object(body.batch) || !Array.isArray(body.batch.requests)) return Response.json({ ok: false, code: "FR_API_BATCH_REQUIRED", error: "batch with requests[] is required." }, { status: 400 });
-      const batch: FootprintResolutionBatchRequest = { ...(body.batch as unknown as FootprintResolutionBatchRequest), schemaVersion: "sirkit.footprint-resolution-batch-request.v1", requests: body.batch.requests.map((item) => {
-        if (!object(item)) throw new Error("FR_BATCH_REQUEST_INVALID");
-        return scopedRequest(item, scope);
-      }) };
-      const result = await service.resolveBatch(batch, request.signal);
-      return Response.json({ ok: true, readOnly: true, result }, { headers: { "Cache-Control": "no-store" } });
-    }
-    if (operation === "compare") {
-      if (!object(body.request) || !object(body.legacy)) return Response.json({ ok: false, code: "FR_API_COMPARISON_REQUIRED", error: "request and legacy observation are required." }, { status: 400 });
-      const legacy = body.legacy as unknown as LegacyResolutionObservation;
-      if (!["resolved", "unresolved", "error"].includes(legacy.status) || !["atomic-approved", "hint", "heuristic", "default", "manual", "none", "error"].includes(legacy.source) || (legacy.footprint !== null && typeof legacy.footprint !== "string") || typeof legacy.guessedOrDefaulted !== "boolean") throw new Error("FR_LEGACY_OBSERVATION_INVALID");
-      const result = await service.resolve(scopedRequest(body.request, scope), request.signal);
-      return Response.json({ ok: true, readOnly: true, result, comparison: compareLegacyResolution(legacy, result) }, { headers: { "Cache-Control": "no-store" } });
-    }
-    return Response.json({ ok: false, code: "FR_API_OPERATION_UNSUPPORTED", error: "Unsupported resolution operation." }, { status: 400 });
-  } catch (error) { return errorResponse(error); }
-}
+// [B16.0.22] canonical wrapper — authorization + exact-origin CSRF + the
+// bounded 4 MB / 30 s JSON read inside the wrapper. The request abort signal
+// reaches the pure evaluation service ONLY through the declared
+// `exposeAbortSignal` input; the schema version, tenant/project/branch, and
+// actor are forced from the trusted scope exactly as before.
+export const POST = authenticatedJsonRoute(
+  { maxBytes: FOOTPRINT_RESOLUTION_API_MAX_BYTES, deadlineMs: FOOTPRINT_RESOLUTION_API_DEADLINE_MS, exposeAbortSignal: true },
+  async ({ context, body, signal }) => {
+    const scope = resolutionScopeFromContext(context);
+    const operation = typeof body.operation === "string" ? body.operation : "resolve";
+    try {
+      if (operation === "resolve" || operation === "explain") {
+        if (!object(body.request)) return Response.json({ ok: false, code: "FR_API_REQUEST_REQUIRED", error: "request object is required." }, { status: 400 });
+        const result = operation === "explain" ? await service.explain(scopedRequest(body.request, scope), signal) : await service.resolve(scopedRequest(body.request, scope), signal);
+        return Response.json({ ok: true, readOnly: true, result }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (operation === "batch") {
+        if (!object(body.batch) || !Array.isArray(body.batch.requests)) return Response.json({ ok: false, code: "FR_API_BATCH_REQUIRED", error: "batch with requests[] is required." }, { status: 400 });
+        const batch: FootprintResolutionBatchRequest = { ...(body.batch as unknown as FootprintResolutionBatchRequest), schemaVersion: "sirkit.footprint-resolution-batch-request.v1", requests: body.batch.requests.map((item) => {
+          if (!object(item)) throw new Error("FR_BATCH_REQUEST_INVALID");
+          return scopedRequest(item, scope);
+        }) };
+        const result = await service.resolveBatch(batch, signal);
+        return Response.json({ ok: true, readOnly: true, result }, { headers: { "Cache-Control": "no-store" } });
+      }
+      if (operation === "compare") {
+        if (!object(body.request) || !object(body.legacy)) return Response.json({ ok: false, code: "FR_API_COMPARISON_REQUIRED", error: "request and legacy observation are required." }, { status: 400 });
+        const legacy = body.legacy as unknown as LegacyResolutionObservation;
+        if (!["resolved", "unresolved", "error"].includes(legacy.status) || !["atomic-approved", "hint", "heuristic", "default", "manual", "none", "error"].includes(legacy.source) || (legacy.footprint !== null && typeof legacy.footprint !== "string") || typeof legacy.guessedOrDefaulted !== "boolean") throw new Error("FR_LEGACY_OBSERVATION_INVALID");
+        const result = await service.resolve(scopedRequest(body.request, scope), signal);
+        return Response.json({ ok: true, readOnly: true, result, comparison: compareLegacyResolution(legacy, result) }, { headers: { "Cache-Control": "no-store" } });
+      }
+      return Response.json({ ok: false, code: "FR_API_OPERATION_UNSUPPORTED", error: "Unsupported resolution operation." }, { status: 400 });
+    } catch (error) { return errorResponse(error); }
+  });

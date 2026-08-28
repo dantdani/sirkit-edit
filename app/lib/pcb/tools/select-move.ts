@@ -41,7 +41,8 @@ import { applyEdits } from "../edit/apply";
 import { selectNet } from "../selection-queries";
 // B03: gesture commits route through the canonical executor when the host
 // bound a session to this history; without one, behavior is unchanged.
-import { applyEditsCanonical, canonicalSessionFor } from "../../engineering/editor-adapter";
+import { applyEditsCanonical, canonicalSessionFor, historyBindingState } from "../../engineering/editor-adapter";
+import { isBareHistoryAuthorized } from "../../engineering/pcb-bare-authority.internal";
 import type { EngineeringOperation } from "../../engineering/types";
 
 const GRID_NM = mmToNm(0.5);
@@ -202,6 +203,15 @@ function isEditableTarget(t: EventTarget | null): boolean {
 
 export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
   const { scene, history, selection: store } = deps;
+
+  // B08.1 — legacy gesture commits are allowed ONLY for explicitly
+  // authorized bare histories (planner/test compositions). A retired
+  // (formerly canonical) history refuses with zero mutation.
+  const legacyMutationAllowed = (): boolean => {
+    if (historyBindingState(history) === "unbound" && isBareHistoryAuthorized(history)) return true;
+    deps.toast("This board's editing session was replaced — the action was refused. Nothing was changed.");
+    return false;
+  };
 
   let gesture: Gesture = { kind: "idle" };
   /** Double-click detection (selectNet on tracks). */
@@ -460,6 +470,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
         });
       return;
     }
+    if (!legacyMutationAllowed()) { history.cancelTransient(); return; }
     history.execute(label, (draft) => {
       for (const fp of draft.footprints) {
         const origin = g.origins.get(fp.id);
@@ -564,6 +575,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
         });
       return;
     }
+    if (!legacyMutationAllowed()) { history.cancelTransient(); return; }
     history.execute(gestureLabel("Rotate", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -614,6 +626,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
         });
       return;
     }
+    if (!legacyMutationAllowed()) { history.cancelTransient(); return; }
     history.execute(gestureLabel("Flip", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -657,6 +670,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
         });
       return;
     }
+    if (!legacyMutationAllowed()) { history.cancelTransient(); return; }
     history.execute(gestureLabel("Nudge", insts), (draft) => {
       for (const fp of draft.footprints) {
         if (!idSet.has(fp.id)) continue;
@@ -856,7 +870,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
       // Stage 17: copper/zones/silk text delete through the command layer —
       // one undo step. Footprints stay (schematic is the source of truth).
       const deletable = refs.filter(
-        (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+        (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text" || r.kind === "dimension",
       );
       if (deletable.length > 0) {
         if (canonicalSessionFor(history)) {
@@ -867,7 +881,7 @@ export function createSelectMoveTool(deps: SelectMoveToolDeps): SelectMoveTool {
             if (result.ok) store.remove(deletable);
             else deps.toast(result.errors[0]);
           });
-        } else {
+        } else if (legacyMutationAllowed()) {
           const result = applyEdits(history, [{ op: "delete-items", refs: deletable }]);
           if (result.ok) store.remove(deletable);
           else deps.toast(result.errors[0]);

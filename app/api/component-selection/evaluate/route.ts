@@ -2,11 +2,11 @@ import { EMBEDDED_COMPONENT_SELECTION_PROFILE_V1 } from "@/app/lib/component-sel
 import { validateEngineeringCatalogSnapshot } from "@/app/lib/component-selection/catalog";
 import { evaluatePartCompatibility } from "@/app/lib/component-selection/gates";
 import type { ComponentRoleRequirement, EngineeringCatalogSnapshot, ReconciliationCertificate, SupplierOfferObservation } from "@/app/lib/component-selection/types";
-import { object, scopedJson } from "../_scope";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { object, COMPONENT_SELECTION_API_MAX_BYTES, COMPONENT_SELECTION_API_DEADLINE_MS } from "../_scope";
 export const runtime = "nodejs";
-export async function POST(request: Request): Promise<Response> {
-  const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response; const { body } = parsed; if (!object(body.catalog) || !object(body.requirement) || typeof body.problemId !== "string") return Response.json({ ok: false, error: "problemId, requirement, and catalog are required" }, { status: 400 });
+export const POST = authenticatedJsonRoute({ maxBytes: COMPONENT_SELECTION_API_MAX_BYTES, deadlineMs: COMPONENT_SELECTION_API_DEADLINE_MS }, async ({ body }): Promise<Response> => { if (!object(body.catalog) || !object(body.requirement) || typeof body.problemId !== "string") return Response.json({ ok: false, error: "problemId, requirement, and catalog are required" }, { status: 400 });
   const catalog = body.catalog as unknown as EngineeringCatalogSnapshot; const errors = validateEngineeringCatalogSnapshot(catalog); if (errors.length) return Response.json({ ok: false, error: "catalog integrity failed", diagnostics: errors }, { status: 422 }); const ids = Array.isArray(body.atomicPartRevisionIds) ? body.atomicPartRevisionIds.filter((id): id is string => typeof id === "string") : typeof body.atomicPartRevisionId === "string" ? [body.atomicPartRevisionId] : [];
   if (!ids.length || ids.length > EMBEDDED_COMPONENT_SELECTION_PROFILE_V1.limits.maximumCandidatePoolPerRole) return Response.json({ ok: false, error: "one bounded exact atomic revision pool is required" }, { status: 400 });
   try { const evaluations = ids.sort().map((atomicPartRevisionId) => evaluatePartCompatibility({ problemId: body.problemId as string, requirement: body.requirement as unknown as ComponentRoleRequirement, catalog, atomicPartRevisionId, reconciliations: Array.isArray(body.reconciliations) ? body.reconciliations as ReconciliationCertificate[] : [], offers: Array.isArray(body.offers) ? body.offers as SupplierOfferObservation[] : [], capabilityProfile: EMBEDDED_COMPONENT_SELECTION_PROFILE_V1, now: typeof body.now === "string" ? body.now : new Date().toISOString() })); return Response.json({ ok: true, evaluations }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 422 }); }
-}
+});

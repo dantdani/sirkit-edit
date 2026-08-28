@@ -3,15 +3,22 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import JSZip from "jszip";
 import { getRun } from "@/app/lib/spice/server/job-store";
+import { authenticatedRoute } from "@/app/lib/auth/route-handlers";
+import { runNotFound, spiceRunScopeFromContext } from "../../_scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }): Promise<Response> {
-  const { id } = await ctx.params;
-  const run = getRun(id);
-  if (!run) return Response.json({ ok: false, error: "Run not found" }, { status: 404 });
-  if (!run.manifest || !run.netlist) return Response.json({ ok: false, error: "Run has no reproducibility artifacts" }, { status: 409 });
+// [B16.0.2 §B] authorize BEFORE any artifact read; the run is resolved
+// ONLY inside the trusted scope (uniform 404 otherwise). The anchor-download
+// surface carries the project selector in the query string.
+// [B16.0.23] canonical wrapper — selector parsing in the wrapper; the bundle
+// includes ONLY this run's recorded artifacts, and the raw-vector read stays
+// confined under the server-owned artifact root (path-prefix check below).
+export const GET = authenticatedRoute({ querySelector: true, routeParams: ["id"] }, async ({ context, params }) => {
+  const run = getRun(params!.id, spiceRunScopeFromContext(context));
+  if (!run) return runNotFound();
+  if (!run.manifest || !run.netlist) return Response.json({ ok: false, error: "Run has no reproducibility artifacts" }, { status: 409, headers: { "Cache-Control": "no-store" } });
   const zip = new JSZip();
   zip.file("manifest.json", JSON.stringify(run.manifest, null, 2));
   zip.file("netlist/generated.cir", run.netlist.generated);
@@ -40,6 +47,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="sirkit-spice-${run.id}.zip"`,
       "Content-Length": String(bytes.byteLength),
+      "Cache-Control": "no-store",
     },
   });
-}
+});

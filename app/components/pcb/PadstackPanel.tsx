@@ -13,7 +13,7 @@ import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
 import type { EditCommand } from "@/app/lib/pcb/edit/commands";
-import { applyEdits } from "@/app/lib/pcb/edit/apply";
+import { applyEditsCanonical } from "@/app/lib/engineering/editor-adapter";
 import { usageCount, nextPadstackId } from "@/app/lib/pcb/padstack/registry";
 import { formatMm } from "@/app/lib/pcb/units";
 import { PadstackPreviewSvg } from "./padstack/PadstackPreviewSvg";
@@ -39,8 +39,10 @@ export function PadstackPanel({
   const commit = (cmds: EditCommand[]): void => {
     const h = getHistory();
     if (!h) return;
-    const result = applyEdits(h, cmds);
-    if (!result.ok && result.errors[0]) toast(result.errors[0]);
+    // B08 — padstack edits are canonical transactions (pcb.padstack).
+    void applyEditsCanonical(h, cmds).then((result) => {
+      if (!result.ok && result.errors[0]) toast(result.errors[0]);
+    });
   };
 
   const addNew = (): void => {

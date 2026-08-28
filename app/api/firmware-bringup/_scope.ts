@@ -1,2 +1,26 @@
+/**
+ * B16.0.1 §A — firmware-bringup request scope, SERVER-DERIVED through the shared
+ * authorization adapter (no `x-sirkit-*` identity headers).
+ */
+import type { TrustedRequestContext } from "@/app/lib/auth/types";
+import { scopedTrustedJson, flatScopeOf } from "@/app/lib/auth/authorize";
+
+/** [B16.0.21] the family's historical body contract, now named for canonical
+ *  adopters: 64 MB ceiling; the deadline is the bounded reader's 30 s default
+ *  (`scopedTrustedJson` passes no deadlineMs). */
+export const FIRMWARE_BRINGUP_API_MAX_BYTES = 64_000_000;
+export const FIRMWARE_BRINGUP_API_DEADLINE_MS = 30_000;
+
+/** Request-free projection of the trusted context into the exact family scope
+ *  shape — delegates to the shared `flatScopeOf`. */
+export function firmwareBringupScopeFromContext(context: TrustedRequestContext): ReturnType<typeof flatScopeOf> {
+  return flatScopeOf(context);
+}
+
 export function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-export async function scopedCd11Json(request: Request) { const raw = await request.text(); if (new TextEncoder().encode(raw).byteLength > 64_000_000) return { ok: false as const, response: Response.json({ ok: false, error: "CD-11 request too large" }, { status: 413 }) }; let body: unknown; try { body = JSON.parse(raw); } catch { return { ok: false as const, response: Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }) }; } const tenantId = request.headers.get("x-sirkit-tenant-id"), projectId = request.headers.get("x-sirkit-project-id"), branchId = request.headers.get("x-sirkit-branch-id"), actorId = request.headers.get("x-sirkit-actor-id"); if (!object(body)) return { ok: false as const, response: Response.json({ ok: false, error: "JSON object required" }, { status: 400 }) }; if (!tenantId || !projectId || !branchId || !actorId) return { ok: false as const, response: Response.json({ ok: false, error: "tenant, project, branch, and actor headers required" }, { status: 401 }) }; const roleValue = request.headers.get("x-sirkit-role"); const role: "project_admin" | "reviewer" | "automation" | "pcb_editor" = roleValue === "project_admin" || roleValue === "reviewer" || roleValue === "automation" ? roleValue : "pcb_editor"; return { ok: true as const, body, scope: { tenantId, projectId, branchId, actorId, actorKind: request.headers.get("x-sirkit-actor-kind") === "ai" ? "ai" as const : "human" as const, role, sessionId: request.headers.get("x-sirkit-session-id") ?? "cd11-api" } }; }
+
+export async function scopedCd11Json(request: Request) {
+  const scoped = await scopedTrustedJson(request, { maxBytes: FIRMWARE_BRINGUP_API_MAX_BYTES });
+  if (!scoped.ok) return { ok: false as const, response: scoped.response };
+  return { ok: true as const, body: scoped.body, scope: flatScopeOf(scoped.context) };
+}

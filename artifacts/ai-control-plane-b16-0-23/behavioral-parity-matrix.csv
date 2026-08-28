@@ -1,0 +1,14 @@
+method,auth_pins,body_pins,domain_pins,supersessions
+POST /api/spice/ai,"401/foreign/revoked/viewer/commenter 403; reviewer past-auth; cross-origin zero-pull","415/413@8000001/invalid-json/pre-abort","required-field 400 exact; provider called once w/ pinned params; provider routing incl. openai fallback; tool loop threading; ask_user; 18-iteration limit exact; proposal envelope; run_simulation proposal-only; store empty","local 503→422 codes (§G split, documented)"
+POST /api/spice/compile,"public row pinned; anonymous served","415/413/invalid-json","required 400 exact; deterministic modulo checkedAt; no run/status field; store untouched; unknown testId 422",none
+POST /api/spice/models/import,"401/foreign/revoked/viewer/commenter/reviewer 403; zero-pull","415/413@4000001/invalid-json/pre-abort","required 400 exact; bad extension/NUL 422; sha256 checksum; status stays unverified/syntax-checked; stateless",none
+POST /api/spice/models/smoke-test,"401/foreign/revoked/viewer/commenter 403; reviewer past-auth; zero-pull","415/413@2000001/invalid-json/pre-abort","required 400 exact; .control + dependency refusals w/ ZERO spawns; one shell-less server-owned spawn; smoke-tested never trusted; trusted stays trusted; rich 422 failure envelope",none
+POST /api/spice/reports,"public row pinned; anonymous served","415/413/invalid-json","required 400 exact; JSON/HTML attachment headers exact",none
+POST /api/spice/run-plans/estimate,"public row pinned; anonymous served","415/413/invalid-json","required 400 exact; totalRuns>=1; unknown plan 422",none
+GET /api/spice/runs,"401/foreign 403; viewer served; header-less query selector 200; foreign selector 403",n/a,"list envelope exact; ids filter; batchId lookup",none
+POST /api/spice/runs,"role floor WRITE_EDITORS; zero-pull","415/413@8000001/invalid-json/pre-abort","202 batch trusted-scope; 400 exact; zero-run plan 422 raw message",none
+GET /api/spice/runs/[id],"401; foreign → uniform 404",n/a,"byte-exact SPICE_RUN_NOT_FOUND for missing AND foreign",none
+DELETE /api/spice/runs/[id],"WRITE_EDITORS; foreign 404 never cancels",n/a,"owner cancel 200→cancelled; second 409 exact","late-completion overwrite corrected (§E/§F, documented)"
+GET /api/spice/runs/[id]/bundle,"selector auth; foreign 404",n/a,"artifact-less 409 exact; zip attachment named by run id",none
+GET /api/spice/runs/[id]/events,"authorize before ANY listener",n/a,"SSE content-type; first frame run snapshot; terminal closes stream",none
+GET /api/spice/runs/[id]/waveforms,"selector auth; foreign 404",n/a,"metadata list exact; 32..20000 clamp; rawPoints agrees; unknown signal 404 exact",none

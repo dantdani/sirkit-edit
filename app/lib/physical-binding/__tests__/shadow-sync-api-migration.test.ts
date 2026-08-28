@@ -37,10 +37,16 @@ describe("release-critical shadow equivalence, API scope, and SQL migration", ()
   });
 
   it("requires explicit authenticated project scope and rejects oversized API input", async () => {
-    expect(bindingScope(new Request("http://localhost/api/physical-bindings"))).toMatchObject({ ok: false });
-    const headers = { "x-sirkit-tenant-id": "tenant-1", "x-sirkit-project-id": "project-1", "x-sirkit-branch-id": "main", "x-sirkit-actor-id": "user-1", "x-sirkit-role": "viewer" };
-    expect(bindingScope(new Request("http://localhost/api/physical-bindings", { headers }))).toMatchObject({ ok: true, scope: { tenantId: "tenant-1", projectId: "project-1" } });
-    const oversized = await scopedBindingJson(new Request("http://localhost/api/physical-bindings", { method: "POST", headers, body: JSON.stringify({ payload: "x".repeat(2_000_001) }) }));
+    // B16.0: identity/role are SERVER-DERIVED. A missing project selector is
+    // refused; the tenant/project SELECTOR is honored; role no longer comes
+    // from a header.
+    expect(await bindingScope(new Request("http://localhost/api/physical-bindings"))).toMatchObject({ ok: false });
+    const headers = { "x-sirkit-tenant-id": "tenant-1", "x-sirkit-project-id": "project-1", "x-sirkit-branch-id": "main" };
+    expect(await bindingScope(new Request("http://localhost/api/physical-bindings", { headers }))).toMatchObject({ ok: true, scope: { tenantId: "tenant-1", projectId: "project-1" } });
+    // B16.0.1: the shared adapter validates the media type BEFORE the size
+    // bound, so the oversized probe must declare application/json to reach
+    // the 413 byte-ceiling refusal.
+    const oversized = await scopedBindingJson(new Request("http://localhost/api/physical-bindings", { method: "POST", headers: { ...headers, origin: "http://localhost", "content-type": "application/json" }, body: JSON.stringify({ payload: "x".repeat(2_000_001) }) }));
     expect(oversized).toMatchObject({ ok: false, response: { status: 413 } });
   });
 

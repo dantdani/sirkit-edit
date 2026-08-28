@@ -1,0 +1,9 @@
+method,path,wrapper,max_bytes,deadline_ms,options,roles,csrf,notes
+GET,/api/assignment-queue,authenticatedRoute,,,query:true,ALL_MEMBERS,false,first-value-wins query; limit clamp 1..200 preserved
+POST,/api/assignment-queue,authenticatedJsonRoute,1000000,30000,"safeHeaders:[x-sirkit-assignment-commit]","pcb_editor|reviewer|project_admin",true,forbidden-key screen in-callback (exact generic envelope); commit opt-in header via meta.headers
+POST,/api/footprint-resolution,authenticatedJsonRoute,4000000,30000,exposeAbortSignal:true,"pcb_editor|reviewer|project_admin",true,abort signal threaded into every service call; schema+scope+actor forced
+GET,/api/passive-policy,authenticatedRoute,,,none,ALL_MEMBERS,false,static feature-gated capability doc
+GET,/api/pcb-sync,authenticatedRoute,,,query:true,ALL_MEMBERS,false,boardId dispatch via meta.query into Request-free createPcbSyncBoardGetCore
+GET,/api/physical-bindings,authenticatedRoute,,,query:true,ALL_MEMBERS,false,setId+includeLegacyRaw via meta.query; role-gated raw reveal preserved
+POST,/api/physical-bindings,authenticatedJsonRoute,2000000,30000,none,"pcb_editor|reviewer|project_admin",true,six-operation dispatch unchanged; per-op role gates + scope byte-match preserved
+POST,/api/replacement-authority,authenticatedJsonRoute,16384,10000,"legacyReaderRefusals:replacement-authority-v1; exposeAbortSignal:true","pcb_editor|reviewer|project_admin|automation",true,EXACT B14.2/B14.3 refusal envelopes preserved; nonce/scope-cross-check/id validation unchanged in callback

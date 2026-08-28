@@ -11,6 +11,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, alternates } from "@/app/lib/db/schema";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
+import { schDisplayRef } from "@/lib/schematic-types";
 import {
   getPricingFor,
   missingCredentials,
@@ -141,7 +142,8 @@ export async function buildBom(
       g = { partId: null, type: c.type, value: c.value, refs: [], componentInstanceIds: [], atomicRevisionId: null };
       groups.set(key, g);
     }
-    g.refs.push(c.id);
+    // B07.1 — the BOM line shows the DISPLAYED reference (refDes ?? id).
+    g.refs.push(schDisplayRef(c));
   }
 
   // ── Enrich KiCad groups with catalog metadata (one DB round-trip) ────────────

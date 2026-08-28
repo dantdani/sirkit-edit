@@ -2,15 +2,17 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { atomicPartRevisions } from "@/app/lib/db/schema";
 import { semanticHash } from "@/app/lib/atomic/stable";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
 /** Read-only, stable-id paginated catalog view for approved clients/KiCad glue. */
-export async function GET(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const requested = Number(url.searchParams.get("limit") ?? "50");
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute({ query: true }, async ({ meta }): Promise<Response> => {
+  const requested = Number(meta.query?.limit ?? "50");
   const limit = Number.isFinite(requested) ? Math.max(1, Math.min(100, Math.floor(requested))) : 50;
-  const after = url.searchParams.get("after");
+  const after = meta.query?.after ?? null;
   try {
     const rows = await getDb()
       .select({ id: atomicPartRevisions.id, semanticHash: atomicPartRevisions.semanticHash, revision: atomicPartRevisions.revisionData })
@@ -41,4 +43,4 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : "Atomic catalog unavailable" }, { status: 500 });
   }
-}
+});
