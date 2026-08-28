@@ -28,7 +28,7 @@ import { GRID, snap, pointEquals, pointKey, closestPointOnSegment, distance, pin
 import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinSite } from "./lib/connectivity";
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
-import type { SchComponent, Wire, Point, SchComponentType, SchematicState, KicadComponentInstance, BuildLogicalNetlist, NetLabel, NetLabelKind, Rotation, SchematicEditOp, PageSize } from "@/lib/schematic-types";
+import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize } from "@/lib/schematic-types";
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
@@ -44,13 +44,45 @@ import {
   loadAiBrainPreference,
   saveAiBrainPreference,
   throwAiResponseError,
+  type AiRequestOwnership,
 } from "@/app/lib/ai-preferences";
 import type { LLMProviderId } from "@/app/lib/llm/types";
+import { performProviderSwitch, settleAgentRunFailure } from "@/app/lib/agent/run-consumer";
+import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
-import { bootstrapCurrentProject, openProject, startNewProject } from "@/app/lib/project/current";
-import { createAutosaver, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
+import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
+import { createAutosaver, settleAutosaveForTransition, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
 import { SchematicHistory, type SchematicHistoryView } from "@/app/lib/project/schematic-history";
-import { checkpointStore, type ProjectCheckpoint } from "@/app/lib/project/checkpoints";
+import { checkpointBelongsToProject, checkpointStore, type ProjectCheckpoint } from "@/app/lib/project/checkpoints";
+// B06: canonical schematic semantic mutations — the migrated handlers issue
+// shared domain commands through the trusted schematic editor session.
+import { SchematicEditorSession } from "@/app/lib/engineering/schematic-session";
+import type { SchematicCanonicalMark } from "@/app/lib/engineering/schematic-projection";
+import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } from "@/app/lib/engineering/schematic-plans";
+import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
+import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
+import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
+import { createMembershipReauthorizer } from "@/app/lib/project/membership-reauthorization";
+import { applyApprovedTier1Proposal, approvedMutationAudit, type ApprovedMutationReceipt } from "@/app/lib/engineering/approved-agent-mutations";
+import { type ReplacementMutationReceipt } from "@/app/lib/engineering/approved-replacement-mutations";
+import { type SealedReplacementProposal } from "@/app/lib/engineering/replacement-proposals";
+import { approveAndApplyReplacement } from "@/app/lib/project/replacement-approval-controller.internal";
+import { receiveReplacementProposalEvent } from "@/app/lib/project/replacement-proposal-events";
+import { receivePcbProposalReadyEvent } from "@/app/lib/project/pcb-proposal-events";
+import { type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
+import { ReplacementReviewDialog } from "@/app/components/schematic/ReplacementReviewDialog";
+import { fromCanonicalSchematic, schematicStateDigest, validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
+import { schematicMarkPatch } from "@/app/lib/engineering/schematic-projection";
+import { diffSchematicGraphOps, nextTheoryDisplayRef, type SchematicGraphAfter } from "@/app/lib/engineering/schematic-graph";
+import { SchematicGestureCoordinator } from "@/app/lib/engineering/schematic-gesture-coordinator";
+import { ProjectTransitionCoordinator, type ProjectInstallResult } from "@/app/lib/engineering/project-transition-coordinator";
+import { ApprovedMutationJournal } from "@/app/lib/engineering/approved-mutation-journal";
+import { IndexedDbApprovedMutationJournalStore } from "@/app/lib/engineering/approved-mutation-journal-idb";
+import { adoptCanonicalResult } from "@/app/lib/project/canonical-adoption";
+import { evaluateSchematicConsumerGate } from "@/app/lib/engineering/schematic-consumer-gate";
+import { LatestRequestGate, OwnedRecoveryDecisionAdapter, OwnedSimulationRunner, ProjectAsyncScopeRegistry, evaluateSuggestionBatch, type ProjectAsyncScope, type ScopedSuggestionBatch } from "@/app/lib/engineering/project-async-scope";
+import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
+import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION } from "@/app/lib/project/file";
 import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
 import { Undo2, Redo2, History, Save, FolderInput } from "lucide-react";
@@ -90,13 +122,24 @@ type AiRuntimeInfo = {
   providers: Record<LLMProviderId, AiRuntimeProviderInfo>;
   embeddings: { provider: "openai"; model: string };
 };
-type PendingSuggestion = {
-  title: string;
+// B07.4 — suggestion items live inside a project/session/base-scoped batch
+// (ScopedSuggestionBatch from project-async-scope); the shape matches
+// ScopedSuggestionItem.
+// B06.2/B07.2/B07.5 — the pending schematic-history recovery decision. The
+// record carries its owning PROJECT ID; every recovery decision submission
+// re-checks it (and the captured session) against a captured
+// ProjectAsyncScope, so a decision begun in one project can never resolve
+// into another.
+type ActiveSchematicRecovery = {
+  kind: "projection-conflict" | "corrupt-history" | "invalid-projection";
   detail: string;
-  category?: string;
-  severity?: string;
-  refs?: string[];
-  source: "review" | "second-opinion";
+  /** projection-conflict reason (B07.2: "invalid-projection-identity" hides keep-local). */
+  reason?: string;
+  /** Sanitized validation issues (invalid-projection). */
+  issues?: string[];
+  canonicalState?: SchematicState;
+  projection: SchematicState;
+  projectId: string;
 };
 // "kicad-place" carries no partId itself — the part to place lives in separate
 // state (placementPartId), so Tool stays a simple string union. Likewise
@@ -263,12 +306,6 @@ const SCH_TYPE_LABEL: Record<SchComponentType, string> = {
   diode: "Diode", ground: "Ground",
 };
 
-const SCH_REF_PREFIX: Record<SchComponentType, string> = {
-  resistor: "R?", capacitor: "C?", inductor: "L?",
-  "voltage-source": "V?", "current-source": "I?",
-  diode: "D?", ground: "GND",
-};
-
 const SPICE_PREFIX: Record<SchComponentType, string> = {
   resistor: "R", capacitor: "C", inductor: "L", diode: "D",
   "voltage-source": "V", "current-source": "I", ground: "G",
@@ -291,10 +328,12 @@ const PROBE_PIN_OFFSETS: Record<SchComponentType, Record<string, Point>> = {
   ground:           { pin: { x: 0, y: -20 } },
 };
 
+// B07.1 — mirrors spiceName in app/lib/netlist.ts EXACTLY (display-reference
+// derived); probe keys must keep matching the emitted element names.
 function frontendSpiceName(comp: SchComponent): string {
   const prefix = SPICE_PREFIX[comp.type];
-  const id = comp.id.toUpperCase();
-  return id.startsWith(prefix) ? id : prefix + id;
+  const display = schDisplayRef(comp).trim().toUpperCase();
+  return display.startsWith(prefix) ? display : prefix + display;
 }
 
 function compProbeKey(comp: SchComponent): string | null {
@@ -733,14 +772,14 @@ function ComponentSymbol({
           fill="#ef4444" fillOpacity={0.15} stroke="#ef4444" strokeWidth={0.75} rx={2}
         />
       )}
-      {rl && comp.id && (
+      {rl && schDisplayRef(comp) && (
         <text
           x={rl.x} y={rl.y}
           textAnchor={rl.anchor as "middle" | "start"}
           fontSize={10} fontFamily="monospace" fill="#d4d4d8"
           style={{ pointerEvents: "none", userSelect: "none" }}
         >
-          {comp.id}
+          {schDisplayRef(comp)}
         </text>
       )}
       {vl && comp.value && (
@@ -1129,40 +1168,52 @@ function KicadInstanceView({
 
 function SchematicEditor({
   tool, setTool,
-  components, setComponents,
-  wires, setWires,
+  components,
+  wires,
   selectedId, setSelectedId,
   wireDraftStart, setWireDraftStart,
   placementRotation,
-  kicadComponents, setKicadComponents,
+  kicadComponents,
   selectedKicadId, setSelectedKicadId,
   placementPartId,
-  netLabels, setNetLabels,
+  netLabels,
   pendingNetLabel, setPendingNetLabel,
   pageSize, setPageSize,
+  onDeleteComponent,
+  graph,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
   components: SchComponent[];
-  setComponents: Dispatch<SetStateAction<SchComponent[]>>;
   wires: Wire[];
-  setWires: Dispatch<SetStateAction<Wire[]>>;
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   wireDraftStart: Point | null;
   setWireDraftStart: Dispatch<SetStateAction<Point | null>>;
   placementRotation: 0 | 90 | 180 | 270;
   kicadComponents: KicadComponentInstance[];
-  setKicadComponents: Dispatch<SetStateAction<KicadComponentInstance[]>>;
   selectedKicadId: string | null;
   setSelectedKicadId: (id: string | null) => void;
   placementPartId: string | null;
   netLabels: NetLabel[];
-  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
   pageSize: PageSize;
   setPageSize: (p: PageSize) => void;
+  /** B06: canonical deletion — the editor never filters state directly. */
+  onDeleteComponent: (family: "theory" | "kicad", componentId: string) => void;
+  /** B07/B07.1: canonical graph commands + the gesture transaction contract.
+   *  The editor computes geometry; authority always flows through these —
+   *  the canvas holds NO schematic state setters (structurally enforced by
+   *  the B07.1 setter gate). `begin` returns false when another gesture owns
+   *  the preview; `preview` renders a frame only for the owning gesture. */
+  graph: {
+    run(label: string, commandId: string, buildAfter: (state: SchematicState) => SchematicGraphAfter | null): void;
+    begin(): boolean;
+    preview(frame: SchematicGraphAfter): void;
+    cancel(): void;
+    commit(label: string, finalGraph: SchematicGraphAfter): void;
+  };
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -1262,6 +1313,10 @@ function SchematicEditor({
     stretchInitPos?: Point;
     stretchPinKeys?: Set<string>;
     stretchBaseWires?: Wire[];
+    /** B07: the latest computed preview arrays — pointer frames render these
+     *  non-authoritatively; pointer-up commits them as ONE gesture
+     *  transaction (the setters below never become authority). */
+    preview?: SchematicGraphAfter;
   } | null>(null);
 
   // Visual feedback for an in-progress drag: rigid mode outlines the whole
@@ -1302,36 +1357,40 @@ function SchematicEditor({
         const initW = dragRef.current.initWires!;
         const gC    = dragRef.current.groupCompIds!;
         const gW    = dragRef.current.groupWireIds!;
-        setComponents(componentsRef.current.map((c) => {
+        // B07: compute the full preview once, render it non-authoritatively,
+        // and remember it — pointer-up commits it as ONE gesture transaction.
+        const nextComponents = componentsRef.current.map((c) => {
           if (!gC.has(c.id)) return c;
           const init = initC.get(c.id);
           return init ? { ...c, x: init.x + dx, y: init.y + dy } : c;
-        }));
-        setWires(wiresRef.current.map((w) => {
+        });
+        const nextWires = wiresRef.current.map((w) => {
           if (!gW.has(w.id)) return w;
           const init = initW.get(w.id);
           return init
             ? { ...w, vertices: init.map(v => ({ x: v.x + dx, y: v.y + dy })) }
             : w;
-        }));
+        });
         const gK = dragRef.current.groupKicadIds;
         const initK = dragRef.current.initKicad;
-        if (gK && initK) {
-          setKicadComponents(kicadComponentsRef.current.map((k) => {
-            if (!gK.has(k.id)) return k;
-            const init = initK.get(k.id);
-            return init ? { ...k, x: init.x + dx, y: init.y + dy } : k;
-          }));
-        }
+        const nextKicad = gK && initK
+          ? kicadComponentsRef.current.map((k) => {
+              if (!gK.has(k.id)) return k;
+              const init = initK.get(k.id);
+              return init ? { ...k, x: init.x + dx, y: init.y + dy } : k;
+            })
+          : kicadComponentsRef.current;
         const gL = dragRef.current.groupLabelIds;
         const initL = dragRef.current.initLabels;
-        if (gL && initL) {
-          setNetLabels(netLabelsRef.current.map((l) => {
-            if (!gL.has(l.id)) return l;
-            const init = initL.get(l.id);
-            return init ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
-          }));
-        }
+        const nextLabels = gL && initL
+          ? netLabelsRef.current.map((l) => {
+              if (!gL.has(l.id)) return l;
+              const init = initL.get(l.id);
+              return init ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
+            })
+          : netLabelsRef.current;
+        dragRef.current.preview = { components: nextComponents, wires: nextWires, kicadComponents: nextKicad, netLabels: nextLabels };
+        graph.preview(dragRef.current.preview);
       } else if (dragRef.current.type === "stretch") {
         const rect = svgRef.current.getBoundingClientRect();
         const wx = snap((e.clientX - rect.left - panRef.current.x) / zoomRef.current);
@@ -1341,33 +1400,57 @@ function SchematicEditor({
         const dy = wy - sw.y;
         const d = dragRef.current;
         const init = d.stretchInitPos!;
-        if (d.stretchKind === "component") {
-          setComponents(componentsRef.current.map((c) =>
-            c.id === d.stretchId ? { ...c, x: init.x + dx, y: init.y + dy } : c));
-        } else {
-          setKicadComponents(kicadComponentsRef.current.map((k) =>
-            k.id === d.stretchId ? { ...k, x: init.x + dx, y: init.y + dy } : k));
-        }
+        const nextComponents = d.stretchKind === "component"
+          ? componentsRef.current.map((c) => (c.id === d.stretchId ? { ...c, x: init.x + dx, y: init.y + dy } : c))
+          : componentsRef.current;
+        const nextKicad = d.stretchKind === "kicad"
+          ? kicadComponentsRef.current.map((k) => (k.id === d.stretchId ? { ...k, x: init.x + dx, y: init.y + dy } : k))
+          : kicadComponentsRef.current;
         // Recompute every attached wire from the drag-start snapshot so
         // L-bend corners don't accumulate across mousemoves.
         const pinKeys = d.stretchPinKeys!;
-        setWires(d.stretchBaseWires!.map((w) => stretchWire(w, pinKeys, dx, dy)));
+        const nextWires = d.stretchBaseWires!.map((w) => stretchWire(w, pinKeys, dx, dy));
+        d.preview = { components: nextComponents, kicadComponents: nextKicad, wires: nextWires };
+        graph.preview(d.preview);
       }
     }
     function onMouseUp() {
-      if (dragRef.current?.type === "stretch") {
-        setWires((ws) => consolidateWires(ws));
-      }
-      if (dragRef.current && dragRef.current.type !== "pan") setActiveDrag(null);
+      const drag = dragRef.current;
       dragRef.current = null;
+      if (!drag || drag.type === "pan") return;
+      setActiveDrag(null);
+      // B07: the completed gesture commits ONE canonical transaction (the
+      // stretch result is consolidated exactly like the legacy mouseup did).
+      if (!drag.preview) { graph.cancel(); return; } // no movement — nothing to commit
+      const finalGraph: SchematicGraphAfter = drag.type === "stretch"
+        ? { ...drag.preview, wires: consolidateWires(drag.preview.wires ?? []) }
+        : drag.preview;
+      const label = drag.type === "stretch"
+        ? "Moved component"
+        : drag.groupLabelIds && drag.groupLabelIds.size > 0 && (drag.groupCompIds?.size ?? 0) === 0 && (drag.groupKicadIds?.size ?? 0) === 0
+          ? "Moved net label"
+          : "Moved components";
+      graph.commit(label, finalGraph);
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      // B07: Escape cancels an in-flight gesture — the exact pre-gesture
+      // projection is restored and nothing commits.
+      if (e.key !== "Escape") return;
+      const drag = dragRef.current;
+      if (!drag || drag.type === "pan") return;
+      dragRef.current = null;
+      setActiveDrag(null);
+      graph.cancel();
     }
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup",   onMouseUp);
+    window.addEventListener("keydown",   onKeyDown);
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup",   onMouseUp);
+      window.removeEventListener("keydown",   onKeyDown);
     };
-  }, [setComponents, setWires, setKicadComponents, setNetLabels]);
+  }, [graph]);
 
   // Non-passive wheel zoom
   useEffect(() => {
@@ -1433,80 +1516,95 @@ function SchematicEditor({
       };
     } else if (tool === "kicad-place") {
       if (!placementPartId) return;
+      // B07: placement is a canonical graph command — the snapshot is minted
+      // at click time, the insert executes against the serialized head.
       const part = getCachedPart(placementPartId);
-      const refDes = nextKicadRefDes(part, kicadComponentsRef.current);
-      setKicadComponents((ks) => [...ks, {
-        id: crypto.randomUUID(),
-        partId: placementPartId,
-        x: w.x, y: w.y,
-        rotation: placementRotation,
-        refDes,
-        value: kicadDefaultValue(part),
-      }]);
+      const newId = crypto.randomUUID();
+      graph.run("Placed part", "schematic.add-component", (state) => ({
+        kicadComponents: [...(state.kicadComponents ?? []), {
+          id: newId,
+          partId: placementPartId,
+          x: w.x, y: w.y,
+          rotation: placementRotation,
+          refDes: nextKicadRefDes(part, state.kicadComponents ?? []),
+          value: kicadDefaultValue(part),
+        }],
+      }));
       // Stay in kicad-place for LTspice-style repeated placement.
     } else if (tool === "wire") {
       if (!wireDraftStart) {
-        // Split any wire whose interior contains the start click point.
-        const splitWs = consolidateWires(splitWiresAtPoint(wires, w));
+        // Split any wire whose interior contains the start click point —
+        // canonically; a click on empty space is a no-op transaction-wise.
+        const localSplit = consolidateWires(splitWiresAtPoint(wires, w));
         if (selectedId !== null &&
-            !splitWs.some((sw) => sw.id === selectedId) &&
+            !localSplit.some((sw) => sw.id === selectedId) &&
             !components.some((c) => c.id === selectedId)) {
           setSelectedId(null);
         }
-        setWires(splitWs);
+        graph.run("Started wire", "schematic.connect", (state) => ({
+          wires: consolidateWires(splitWiresAtPoint(state.wires, w)),
+        }));
         setWireDraftStart(w);
       } else {
         const corner = lbend(wireDraftStart, w);
-        const segs: Wire[] = [];
-        if (!pointEquals(corner, wireDraftStart))
-          segs.push({ id: crypto.randomUUID(), vertices: [wireDraftStart, corner] });
-        if (!pointEquals(corner, w))
-          segs.push({ id: crypto.randomUUID(), vertices: [corner, w] });
-        // Split existing wires at the corner and the endpoint, then append new segments.
-        let newWires = splitWiresAtPoint(wires, corner);
-        newWires = splitWiresAtPoint(newWires, w);
-        newWires = consolidateWires([...newWires, ...segs]);
+        const draftStart = wireDraftStart;
+        const segIds = [crypto.randomUUID(), crypto.randomUUID()];
+        const localResult = (base: Wire[]): Wire[] => {
+          const segs: Wire[] = [];
+          if (!pointEquals(corner, draftStart)) segs.push({ id: segIds[0], vertices: [draftStart, corner] });
+          if (!pointEquals(corner, w)) segs.push({ id: segIds[1], vertices: [corner, w] });
+          let newWires = splitWiresAtPoint(base, corner);
+          newWires = splitWiresAtPoint(newWires, w);
+          return consolidateWires([...newWires, ...segs]);
+        };
+        const localWires = localResult(wires);
         if (selectedId !== null &&
-            !newWires.some((sw) => sw.id === selectedId) &&
+            !localWires.some((sw) => sw.id === selectedId) &&
             !components.some((c) => c.id === selectedId)) {
           setSelectedId(null);
         }
-        setWires(newWires);
+        graph.run("Drew wire", "schematic.connect", (state) => ({ wires: localResult(state.wires) }));
         setWireDraftStart(w);
       }
     } else if (tool === "junction") {
       // Commit at the hovered crossing if there is one (matches the preview
-      // dot), else at the grid-snapped click point.
+      // dot), else at the grid-snapped click point. Junctions are DERIVED:
+      // the tool only SPLITS wires at the crossing (pinned B07 contract).
       const p = junctionHover ?? raw;
-      const crossing = wires.filter((wire) => pointStrictlyOnWireInterior(p, wire));
-      // A 1-wire "junction" is pointless — require an actual crossing.
-      if (crossing.length >= 2) {
-        setWires((ws) => consolidateWires(splitWiresAtPoint(ws, p)));
-        setJunctionHover(null);
-      }
+      graph.run("Marked junction", "schematic.connect", (state) => {
+        const crossing = state.wires.filter((wire) => pointStrictlyOnWireInterior(p, wire));
+        // A 1-wire "junction" is pointless — require an actual crossing.
+        if (crossing.length < 2) return null;
+        return { wires: consolidateWires(splitWiresAtPoint(state.wires, p)) };
+      });
+      setJunctionHover(null);
       // Stay in junction mode so the user can mark another crossing.
     } else if (tool === "label") {
       // Open the floating name input at the clicked (snapped) position.
       setLabelDraft({ pos: w, text: "" });
     } else if (tool === "netlabel-place") {
       if (!pendingNetLabel) return;
-      setNetLabels((ls) => [...ls, {
-        id: crypto.randomUUID(),
-        position: w,
-        name: pendingNetLabel.name,
-        kind: pendingNetLabel.kind,
-        orientation: 0,
-      }]);
+      const pending = pendingNetLabel;
+      const newId = crypto.randomUUID();
+      graph.run(`Placed ${pending.name} label`, "schematic.connect", (state) => ({
+        netLabels: [...(state.netLabels ?? []), { id: newId, position: w, name: pending.name, kind: pending.kind, orientation: 0 as const }],
+      }));
       // Stay in placement mode for repeated drops; Esc exits.
     } else if (tool === "delete") {
       // wire/component clicks handled by their own handlers
     } else {
       const type = tool as SchComponentType;
-      setComponents((cs) => [...cs, {
-        id: crypto.randomUUID(), type,
-        x: w.x, y: w.y, rotation: placementRotation,
-        value: COMP_DEFAULTS[type],
-      }]);
+      // B07: theory components mint an immutable stable id plus an editable
+      // display reference ("R1"…), assigned against the serialized head.
+      const newId = crypto.randomUUID();
+      graph.run("Placed component", "schematic.add-component", (state) => ({
+        components: [...state.components, {
+          id: newId, type,
+          x: w.x, y: w.y, rotation: placementRotation,
+          value: COMP_DEFAULTS[type],
+          refDes: nextTheoryDisplayRef(type, state.components),
+        }],
+      }));
     }
   }
 
@@ -1515,9 +1613,9 @@ function SchematicEditor({
 
     if (tool === "delete") {
       e.stopPropagation();
-      setComponents((cs) => cs.filter((c) => c.id !== comp.id));
+      // B06: canonical delete with a deterministic impact plan.
+      onDeleteComponent("theory", comp.id);
       setDeleteHoveredId(null);
-      if (selectedId === comp.id) setSelectedId(null);
       return;
     }
 
@@ -1536,9 +1634,9 @@ function SchematicEditor({
     if (e.button !== 0) return;
     if (tool === "delete") {
       e.stopPropagation();
-      setKicadComponents((ks) => ks.filter((k) => k.id !== kicad.id));
+      // B06: canonical delete with a deterministic impact plan.
+      onDeleteComponent("kicad", kicad.id);
       setDeleteHoveredId(null);
-      if (selectedKicadId === kicad.id) setSelectedKicadId(null);
       return;
     }
     if (tool === "select") {
@@ -1555,6 +1653,9 @@ function SchematicEditor({
     seed: { kind: "component"; id: string } | { kind: "kicad"; id: string },
     e: React.MouseEvent,
   ) {
+    // B07.1: gesture start — refused while another gesture owns the preview
+    // or a commit is in flight (no silent overwrite of an active gesture).
+    if (!graph.begin()) return;
     const group = findConnectedGroup(
       seed,
       componentsRef.current,
@@ -1614,16 +1715,19 @@ function SchematicEditor({
     seed: { kind: "component"; id: string } | { kind: "kicad"; id: string },
     e: React.MouseEvent,
   ) {
+    // B07.1: gesture start — refused while another gesture owns the preview
+    // or a commit is in flight (no silent overwrite of an active gesture).
+    if (!graph.begin()) return;
     let origPins: Point[];
     let initPos: Point;
     if (seed.kind === "component") {
       const c = componentsRef.current.find((c) => c.id === seed.id);
-      if (!c) return;
+      if (!c) { graph.cancel(); return; } // release gesture ownership
       origPins = (PIN_NAMES[c.type] ?? []).map((pin) => pinWorldPos(c, pin));
       initPos = { x: c.x, y: c.y };
     } else {
       const k = kicadComponentsRef.current.find((k) => k.id === seed.id);
-      if (!k) return;
+      if (!k) { graph.cancel(); return; } // release gesture ownership
       origPins = kicadPinSitesRef.current.find((s) => s.id === seed.id)?.pins ?? [];
       initPos = { x: k.x, y: k.y };
     }
@@ -1664,7 +1768,7 @@ function SchematicEditor({
   function onWireMouseDown(e: React.MouseEvent, wire: Wire) {
     e.stopPropagation();
     if (tool === "delete") {
-      setWires((ws) => ws.filter((w) => w.id !== wire.id));
+      graph.run("Deleted wire", "schematic.connect", (state) => ({ wires: state.wires.filter((w) => w.id !== wire.id) }));
       setDeleteHoveredId(null);
     }
   }
@@ -1675,12 +1779,14 @@ function SchematicEditor({
     if (e.button !== 0) return;
     if (tool === "delete") {
       e.stopPropagation();
-      setNetLabels((ls) => ls.filter((l) => l.id !== label.id));
+      graph.run("Deleted net label", "schematic.connect", (state) => ({ netLabels: (state.netLabels ?? []).filter((l) => l.id !== label.id) }));
       setDeleteHoveredId(null);
       return;
     }
     if (tool === "select") {
       e.stopPropagation();
+      // B07.1: label drag is a gesture — refused while another owns the preview.
+      if (!graph.begin()) return;
       const rect = svgRef.current!.getBoundingClientRect();
       const wx = snap((e.clientX - rect.left - pan.x) / zoom);
       const wy = snap((e.clientY - rect.top  - pan.y) / zoom);
@@ -1707,13 +1813,11 @@ function SchematicEditor({
     if (!labelDraft) return;
     const name = labelDraft.text.trim().toUpperCase();
     if (name !== "") {
-      setNetLabels((ls) => [...ls, {
-        id: crypto.randomUUID(),
-        position: labelDraft.pos,
-        name,
-        kind: "label",
-        orientation: 0,
-      }]);
+      const pos = labelDraft.pos;
+      const newId = crypto.randomUUID();
+      graph.run(`Added net label ${name}`, "schematic.connect", (state) => ({
+        netLabels: [...(state.netLabels ?? []), { id: newId, position: pos, name, kind: "label" as const, orientation: 0 as const }],
+      }));
     }
     setLabelDraft(null);
   }
@@ -2196,27 +2300,65 @@ function SchematicEditor({
 
 // ─── Properties panel ────────────────────────────────────────────────────────
 
+/**
+ * B06: property inputs commit on blur/Enter (Escape reverts) so one edit is
+ * ONE discrete canonical transaction — per-keystroke commits would mint a
+ * transaction and history entry per character.
+ */
+function CommitInput({ value, onCommit, className }: { value: string; onCommit: (v: string) => void; className?: string }) {
+  const [draft, setDraft] = useState(value);
+  const [lastValue, setLastValue] = useState(value);
+  // Render-phase derived-state reset (the React-endorsed pattern): when the
+  // committed value changes externally, the draft resyncs without an effect.
+  if (value !== lastValue) {
+    setLastValue(value);
+    setDraft(value);
+  }
+  const commit = () => { if (draft !== value) onCommit(draft); };
+  return (
+    <Input
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(); }
+        else if (e.key === "Escape") { e.preventDefault(); setDraft(value); }
+      }}
+      className={className}
+    />
+  );
+}
+
 function PropertiesPanel({
-  comp, onValueChange, onRotationChange, onDelete,
+  comp, onValueChange, onRotationChange, onDelete, onReferenceChange,
 }: {
   comp: SchComponent;
   onValueChange: (v: string) => void;
   onRotationChange: (r: 0 | 90 | 180 | 270) => void;
   onDelete: () => void;
+  /** B07: canonical display rename — never rewrites the stable id. */
+  onReferenceChange: (v: string) => void;
 }) {
   return (
     <div className="absolute top-4 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
       <div className="text-xs uppercase text-zinc-500 mb-0.5 tracking-wide">
         {SCH_TYPE_LABEL[comp.type]}
       </div>
-      <div className="text-[10px] text-zinc-600 mb-3">{SCH_REF_PREFIX[comp.type]}</div>
+      <div className="mb-2 mt-1">
+        <div className="text-[10px] text-zinc-500 mb-1">Reference</div>
+        <CommitInput
+          value={schDisplayRef(comp)}
+          onCommit={onReferenceChange}
+          className="h-7 text-xs border-zinc-700 bg-zinc-800"
+        />
+      </div>
 
       {comp.type !== "ground" && (
         <div className="mb-3">
           <div className="text-[10px] text-zinc-500 mb-1">Value</div>
-          <Input
+          <CommitInput
             value={comp.value}
-            onChange={(e) => onValueChange(e.target.value)}
+            onCommit={onValueChange}
             className="h-7 text-xs border-zinc-700 bg-zinc-800"
           />
         </div>
@@ -2276,12 +2418,12 @@ function KicadPropertiesPanel({
 
       <div className="mb-2">
         <div className="text-[10px] text-zinc-500 mb-1">Reference designator</div>
-        <Input value={instance.refDes} onChange={(e) => onRefDesChange(e.target.value)}
+        <CommitInput value={instance.refDes} onCommit={onRefDesChange}
           className="h-7 text-xs border-zinc-700 bg-zinc-800" />
       </div>
       <div className="mb-3">
         <div className="text-[10px] text-zinc-500 mb-1">Value</div>
-        <Input value={instance.value} onChange={(e) => onValueChange(e.target.value)}
+        <CommitInput value={instance.value} onCommit={onValueChange}
           className="h-7 text-xs border-zinc-700 bg-zinc-800" />
       </div>
 
@@ -2376,12 +2518,23 @@ export default function Home() {
     void ensurePartLoaded(partId).catch(() => {});
   }
 
-  // AI generation state
+  // AI generation state.
+  // B07.4 — every busy flag is REQUEST-OWNED: the handler that set it
+  // records its scope requestId in the matching ref, and only the SAME
+  // request's finally block may clear it (a stale completion can never
+  // clear a newer request's busy state). The project-transition reset
+  // clears all of them explicitly.
   const [isGenerating, setIsGenerating] = useState(false);
   const [isEditing, setIsEditing]       = useState(false);
   const [isReviewing, setIsReviewing]   = useState(false);
   const [isTidying, setIsTidying]       = useState(false);
   const [isSecondOpinion, setIsSecondOpinion] = useState(false);
+  const activeGenerationRef = useRef<string | null>(null);
+  const activeEditRef = useRef<string | null>(null);
+  const activeReviewRef = useRef<string | null>(null);
+  const activeTidyRef = useRef<string | null>(null);
+  const activeSecondOpinionRef = useRef<string | null>(null);
+  const activeChatRef = useRef<string | null>(null);
   const [lastDesignPrompt, setLastDesignPrompt] = useState("");
   // Post-apply auto pipeline: bumped whenever a machine-generated schematic
   // lands (generate / Tier-2 edit / apply-suggestions). The debounced effect
@@ -2390,7 +2543,11 @@ export default function Home() {
   const [autoRunToken, setAutoRunToken] = useState(0);
   const autoRunIncludesTidy = useRef(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [pendingSuggestions, setPendingSuggestions] = useState<PendingSuggestion[]>([]);
+  // B07.4 — suggestions are a SCOPED BATCH (project/session/base ownership),
+  // never a bare array: they clear on project transition, go stale when the
+  // authoritative base moves, and can only be applied while project,
+  // session generation, and exact base digest all still match.
+  const [pendingSuggestions, setPendingSuggestions] = useState<ScopedSuggestionBatch | null>(null);
   const [suggestionsMinimized, setSuggestionsMinimized] = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
   const [pendingReplace, setPendingReplace] = useState<{
@@ -2399,9 +2556,54 @@ export default function Home() {
     prompt: string;
     logId?: string;
     promptAlreadyLogged?: boolean;
+    /** B07.3/B07.4 — exact-base invocation pin captured before generation
+     *  (with its async scope for project/session-generation currency). */
+    pin?: { projectId: string | null; session: SchematicEditorSession | null; baseDigest: string; scope: ProjectAsyncScope };
   } | null>(null);
 
+  // B06.1: the ONE pending sealed tier-1 proposal. Provider output only ever
+  // lands here; nothing mutates until the explicit human apply.
+  const [pendingTier1, setPendingTier1] = useState<SealedTier1Proposal | null>(null);
+  // B12: the originating agent run id for the pending proposal (audit metadata
+  // only — never authority), the in-flight guard that disables Apply, and the
+  // verified receipt of the last committed approval.
+  const [pendingTier1RunId, setPendingTier1RunId] = useState<string | null>(null);
+  const [tier1ApplyBusy, setTier1ApplyBusy] = useState(false);
+  const [tier1Receipt, setTier1Receipt] = useState<ApprovedMutationReceipt | null>(null);
+  // B14: the ONE pending sealed replacement proposal — same discipline: the
+  // provider only ever lands an artifact here; nothing mutates until the
+  // explicit human apply revalidates fresh server authority.
+  const [pendingReplacement, setPendingReplacement] = useState<SealedReplacementProposal | null>(null);
+  const [pendingReplacementRunId, setPendingReplacementRunId] = useState<string | null>(null);
+  const [replacementApplyBusy, setReplacementApplyBusy] = useState(false);
+  const [replacementReceipt, setReplacementReceipt] = useState<ReplacementMutationReceipt | null>(null);
+  // [B15.3] the ONE pending sealed bounded PCB edit proposal — narrowed by
+  // the SAFE discriminator only; display grants nothing. Apply authority
+  // lives inside PcbEditor (the PCB composition root), never here.
+  const [pendingPcbProposal, setPendingPcbProposal] = useState<{ proposal: SealedPcbEditProposal; originRunId: string | null } | null>(null);
+
+  // B06.2/B07.2: pending schematic-history recovery decision (projection
+  // conflict, corrupt durable history, or an identity-invalid projection
+  // with no valid canonical fallback). While set, the session is
+  // `conflicted`, canonical mutations are structurally rejected, and every
+  // authoritative consumer (export, simulation, PCB sync, autosave,
+  // checkpoints) is gated off through evaluateSchematicConsumerGate.
+  const [schematicRecovery, setSchematicRecovery] = useState<ActiveSchematicRecovery | null>(null);
+  // [B12.5 §C] Blocking activation recovery: a project activation failed in
+  // its COMMIT phase (or current-project storage is unavailable at
+  // bootstrap). The workspace can no longer claim a consistent installed
+  // project, so a non-dismissible modal blocks until reload — neither the
+  // target nor the survivor is reported installed.
+  const [activationRecovery, setActivationRecovery] = useState<string | null>(null);
+  const schematicRecoveryRef = useRef<typeof schematicRecovery>(null);
+  useEffect(() => { schematicRecoveryRef.current = schematicRecovery; }, [schematicRecovery]);
+
   // Simulation state
+  // B07.5 (failure E) — every run is request-owned through this runner:
+  // scope + request id + base digest captured at invocation, abort on
+  // project switch, stale results/errors/finally ignored. Reset (with all
+  // the state below) by resetTransientProjectState on project transition.
+  const simulationRunnerRef = useRef(new OwnedSimulationRunner());
   const [simResult, setSimResult]       = useState<SimResult | null>(null);
   const [simLoading, setSimLoading]     = useState(false);
   const [simError, setSimError]         = useState<string | null>(null);
@@ -2441,7 +2643,11 @@ export default function Home() {
       }
     };
     const onProviderFailure = (event: Event) => {
-      const detail = (event as CustomEvent<{ provider?: LLMProviderId; retry?: () => void }>).detail;
+      const detail = (event as CustomEvent<{ provider?: LLMProviderId; retry?: () => void; stillCurrent?: () => boolean }>).detail;
+      // B07.5 — the listener re-checks the event's OWNER: a failure whose
+      // originating project/session generation (or component lifetime) has
+      // ended must never repopulate the active project's failure state.
+      if (detail?.stillCurrent?.() === false) return;
       if (detail?.provider === "openai" || detail?.provider === "anthropic") {
         lastAiRetryRef.current = detail.retry ?? null;
         setAiProviderFailure({ provider: detail.provider });
@@ -2503,6 +2709,102 @@ export default function Home() {
     if (project && pendingHydrationForRef.current === project.id) pendingHydrationForRef.current = null;
   }, [project, components, wires, kicadComponents, netLabels, messages, view]);
 
+  /** Commit any debounce-pending history record immediately (before undo/redo). */
+  const flushPendingRecord = useCallback(() => {
+    const pending = pendingRecordRef.current;
+    if (!pending || !schHistoryRef.current) return;
+    clearTimeout(pending.timer);
+    pendingRecordRef.current = null;
+    schHistoryRef.current.record(pending.label, pending.snap);
+  }, []);
+
+  // ── B07.1/B07.2: the ONLY three functions allowed to write schematic
+  // projection state. The structural CI gate (schematic-setter-gate.ts + its
+  // test) rejects any raw setComponents/setWires/setKicadComponents/
+  // setNetLabels/setAuthoritativeSchematic reference outside these bodies —
+  // comments cannot exempt a call site. Every AUTHORITATIVE application
+  // notifies the gesture coordinator WITH the applied state, which both
+  // orphans stale in-flight results and records the authoritative snapshot
+  // that commands and consumers use (B07.2 — never the visible projection,
+  // which may be showing an uncommitted preview). Preview frames update the
+  // visible projection only.
+
+  const gestureCoordinatorRef = useRef<SchematicGestureCoordinator | null>(null);
+
+  // B07.2 — reactive mirror of the authoritative schematic arrays for
+  // rendering-level consumers (PCB editor, SPICE studio, BOM). Updated ONLY
+  // inside the two authoritative appliers below (gate-enforced), so a
+  // gesture preview can never reach those consumers.
+  const [authoritativeSchematic, setAuthoritativeSchematic] = useState<SchematicState>({ components: [], wires: [], kicadComponents: [], netLabels: [] });
+
+  /** Non-authoritative gesture preview frame (never recorded or persisted). */
+  const applyGesturePreviewFrame = useCallback((frame: SchematicGraphAfter) => {
+    if (frame.components) setComponents(frame.components);
+    if (frame.wires) setWires(frame.wires);
+    if (frame.kicadComponents) setKicadComponents(frame.kicadComponents);
+    if (frame.netLabels) setNetLabels(frame.netLabels);
+  }, []);
+
+  /** Adopt a committed canonical result as ONE undoable history entry.
+   *  B12.2 §C — the sequencing lives in the SHARED synchronous production
+   *  primitive in lib/project/canonical-adoption.ts (also driven directly
+   *  by tests): the authoritative projection AND the real SchematicHistory
+   *  entry exist before this returns (hence before any approved-mutation
+   *  receipt is consumed or commit lease released), the debounce watcher is
+   *  suppressed from double-recording, and undo is available immediately. A
+   *  failed adoption THROWS so the coordinator reports the job failed — an
+   *  approved apply then poisons its proposal identity (recovery path)
+   *  instead of displaying success. */
+  const applyCanonicalSchematicProjection = useCallback((label: string, state: SchematicState) => {
+    const outcome = adoptCanonicalResult<SchematicSnapshot>({
+      flushPendingRecord: () => flushPendingRecord(),
+      history: () => schHistoryRef.current,
+      applyProjection: (authoritative) => {
+        // The authoritative snapshot carries pageSize exactly as the
+        // canonical state does (present iff canonical); the four arrays are
+        // normalized to present-and-owned by the primitive.
+        setComponents(authoritative.components);
+        setWires(authoritative.wires);
+        setKicadComponents(authoritative.kicadComponents!);
+        setNetLabels(authoritative.netLabels!);
+        setAuthoritativeSchematic(authoritative);
+        gestureCoordinatorRef.current?.notifyAuthoritativeProjection(authoritative);
+      },
+      snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels! }),
+      historyRecorded: () => { if (schHistoryRef.current) setSchHistoryView(schHistoryRef.current.view()); },
+      // The design-state watcher's existing applying-history guard: it
+      // clears the flag, schedules autosave, and records NOTHING for this
+      // change — the canonical entry above stays the only one.
+      suppressEffectRecord: () => { applyingHistoryRef.current = true; },
+      scheduleAutosave: () => autosaverRef.current?.schedule(),
+    }, label, state);
+    if (!outcome.ok) throw new Error(`canonical adoption failed: ${outcome.detail}`);
+  }, [flushPendingRecord]);
+
+  /** Lifecycle replacement (hydration, undo/redo, canonical recovery
+   *  adoption, gesture rollback) — applied without recording history. */
+  const applyLifecycleSchematicProjection = useCallback((state: SchematicState) => {
+    applyingHistoryRef.current = true;
+    const authoritative: SchematicState = { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], ...(state.pageSize ? { pageSize: state.pageSize } : {}) };
+    setComponents(authoritative.components);
+    setWires(authoritative.wires);
+    setKicadComponents(authoritative.kicadComponents!);
+    setNetLabels(authoritative.netLabels!);
+    setAuthoritativeSchematic(authoritative);
+    gestureCoordinatorRef.current?.notifyAuthoritativeProjection(authoritative);
+  }, []);
+
+  // B07.4 — a suggestion batch goes STALE the moment any authoritative
+  // mutation supersedes the base it was produced against: it is cleared,
+  // never silently rebased onto the newer schematic.
+  useEffect(() => {
+    if (!pendingSuggestions) return;
+    if (!pendingSuggestions.scope.isCurrent()
+      || schematicStateDigest(authoritativeSchematic) !== pendingSuggestions.baseSchematicDigest) {
+      setPendingSuggestions(null);
+    }
+  }, [authoritativeSchematic, pendingSuggestions]);
+
   /** User prompts + user-visible responses only — no secrets, no hidden reasoning. */
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
@@ -2532,73 +2834,377 @@ export default function Home() {
       // exactly the "preserve the last complete valid revision" contract.
       return { ok: false, reason: "Project hydration has not committed yet; nothing was written" };
     }
+    // B07.2 — autosave persists the AUTHORITATIVE schematic (never a gesture
+    // preview) and refuses while the canonical history is conflicted: a
+    // projection awaiting a recovery decision must not be re-persisted as if
+    // it were settled (the stored record stays exactly as it was).
+    const autosaveGate = evaluateSchematicConsumerGate({
+      lifecycle: schematicSessionRef.current?.lifecycle ?? null,
+      recoveryPending: schematicRecoveryRef.current !== null,
+      consumer: "autosave",
+    });
+    if (!autosaveGate.allowed) return { ok: false, reason: autosaveGate.reason };
     const live = liveStateRef.current;
+    const authoritative = gestureCoordinatorRef.current!.authoritativeState();
+    // B06.3: the projection's canonical-head mark follows the session
+    // LIFECYCLE. Ready → the exact state and exact head mark save together.
+    // Hydrating/conflicted/unavailable → the active mark is explicitly
+    // CLEARED (patches merge, so omission would silently keep a stale mark
+    // that this state never adopted). Unopened → untouched.
+    const session = schematicSessionRef.current;
     const ok = saveProjectFields(meta.id, {
-      state: { components: live.components, wires: live.wires, kicadComponents: live.kicadComponents, netLabels: live.netLabels, pageSize: live.pageSize },
+      state: { components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents ?? [], netLabels: authoritative.netLabels ?? [], pageSize: authoritative.pageSize ?? live.pageSize },
       chat: toStoredChat(live.messages),
       designPrompt: live.lastDesignPrompt,
       workflowView: live.view,
+      ...schematicMarkPatch(session?.lifecycle ?? "unopened", session?.headMark() ?? null),
     });
     return ok ? { ok: true } : { ok: false, reason: "Browser storage write failed (quota exceeded or storage unavailable)" };
   }, []);
 
+  // B07.5 (failure B) — checkpoint LISTS are owned reads: every load
+  // captures a ProjectAsyncScope (project id + session generation +
+  // request id) and passes the latest-request gate, so a slower project-A
+  // list can never replace project B's list, an older same-generation
+  // request can never overwrite a newer refresh, and load ERRORS are
+  // scoped the same way. Rows are additionally filtered to the exact
+  // project id — a store that somehow returned foreign rows still cannot
+  // surface another project's checkpoint in this history dialog.
+  const checkpointListGateRef = useRef(new LatestRequestGate());
   const refreshCheckpoints = useCallback(() => {
     const id = projectRef.current?.id;
     if (!id) { setCheckpoints([]); return; }
-    void checkpointStore().list(id).then(setCheckpoints).catch(() => setCheckpoints([]));
+    const scope = projectScopeRegistryRef.current!.capture();
+    if (scope.projectId !== id) return; // registry not yet on this project — the hydration path reloads
+    void checkpointListGateRef.current.run(scope, () => checkpointStore().list(id)).then((outcome) => {
+      if (outcome.status === "applied") setCheckpoints(outcome.value.filter((row) => checkpointBelongsToProject(row, id)));
+      else if (outcome.status === "failed") setCheckpoints([]); // scoped: still current AND newest
+      // stale-project / superseded results and errors are ignored entirely.
+    });
   }, []);
 
-  const addCheckpoint = useCallback((label: string) => {
-    const meta = projectRef.current;
-    if (!meta) return;
-    const live = liveStateRef.current;
-    void checkpointStore().add({
-      projectId: meta.id, label, at: Date.now(),
-      schematic: { components: live.components, wires: live.wires, kicadComponents: live.kicadComponents, netLabels: live.netLabels, pageSize: live.pageSize },
-      chat: toStoredChat(live.messages),
-      workflowView: live.view,
-    }).then(refreshCheckpoints).catch((error: unknown) => {
-      showToast(`Checkpoint could not be saved: ${error instanceof Error ? error.message : String(error)}`);
-    });
-  }, [refreshCheckpoints]);
+  // B07.4 — the ambient addCheckpoint helper is GONE: the only checkpoint
+  // producer (successful machine adoption) writes immediately inside
+  // applySchematic's onAdopted, from the exact adopted candidate to the
+  // captured project. No delayed/ambient checkpoint path remains.
 
-  /** Apply a loaded project record to the live editor state. */
-  const hydrateProject = useCallback((record: SavedProject, opts?: { announce?: string }) => {
-    applyingHistoryRef.current = true; // hydration is not an undoable edit
+  /**
+   * B06.2 — adopt a canonical schematic state into the UI and prove adoption
+   * to the session (the readiness handshake). History resets to the adopted
+   * state so undo cannot resurrect a superseded projection.
+   */
+  const adoptCanonicalSchematic = useCallback((session: SchematicEditorSession, adopted: SchematicState, label: string) => {
+    // B07.5 (failure D) — final mutation boundary: only the ACTIVE mounted
+    // session may adopt canonical state into the UI. A late callback holding
+    // a superseded captured session must not invalidate the current
+    // project's gesture coordinator, replace its projection, or reset its
+    // history — even if every upstream scope check were bypassed.
+    if (schematicSessionRef.current !== session) return;
+    // B07.1: canonical recovery invalidates any pending gesture completion.
+    gestureCoordinatorRef.current?.invalidate();
+    applyLifecycleSchematicProjection(adopted);
+    setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
+    schHistoryRef.current = new SchematicHistory<SchematicSnapshot>({
+      components: adopted.components, wires: adopted.wires,
+      kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [],
+    }, { label });
+    setSchHistoryView(schHistoryRef.current.view());
+    session.confirmAdoption(adopted);
+  }, [applyLifecycleSchematicProjection]);
+
+  /**
+   * B07.4 — THE project-transition reset: every project-owned transient
+   * field is intentionally reset or hydrated here (tested by the
+   * transition-reset matrix). Late callbacks from the previous generation
+   * cannot repopulate anything: the scope registry generation has already
+   * advanced (fetches aborted, timers canceled) before these run.
+   */
+  const resetTransientProjectState = useCallback((record: SavedProject) => {
+    setPendingReplace(null);            // no stale replacement dialog crosses projects
+    setPendingTier1(null);              // no stale sealed proposal
+    setPendingTier1RunId(null);         // B12: clear pending approval origin
+    setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
+    setTier1Receipt(null);              // B12: a receipt belongs to its project
+    setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
+    setSchematicRecovery(null);         // recovery re-evaluated by the new open
+    // B07.5 (failure A) — release recovery-decision ownership: the previous
+    // project's in-flight decision (if any) is already scope-stale; the new
+    // project starts with the gate free and the buttons enabled.
+    recoveryDecisionAdapterRef.current.reset();
+    setRecoveryDecisionBusy(false);
+    // B07.5 (failure B/D) — checkpoint list and selection never cross
+    // projects: intentional empty state while the new project's scoped
+    // loader runs; the history dialog closes so no stale row can be clicked.
+    setCheckpoints([]);
+    setHistoryOpen(false);
+    // B07.5 (failure E) — simulation state is project-owned: results,
+    // errors, panes/probes, active pane, and the loading flag all reset;
+    // the runner's active-request ownership releases so an old finally
+    // cannot clear a newer request's loading state. (simMode and
+    // chartPanelOpen are app-level view preferences and intentionally
+    // survive — they carry no project data.)
+    simulationRunnerRef.current.reset();
+    setSimResult(null);
+    setSimError(null);
+    setSimLoading(false);
+    setPanes([]);
+    setActivePaneId(null);
+    setPendingSuggestions(null);        // suggestion batches are project-scoped
+    setSuggestionsMinimized(false);
+    setGenError(null);                  // provider errors never cross projects
+    setAiProviderFailure(null);
+    lastAiRetryRef.current = null;      // retries never replay across projects
+    setIsGenerating(false); activeGenerationRef.current = null;
+    setIsEditing(false); activeEditRef.current = null;
+    setIsReviewing(false); activeReviewRef.current = null;
+    setIsTidying(false); activeTidyRef.current = null;
+    setIsSecondOpinion(false); activeSecondOpinionRef.current = null;
+    setLoading(false); activeChatRef.current = null;
+    // Hydrated (not leaked): the loaded value or an explicit default.
+    setLastDesignPrompt(record.designPrompt ?? "");
+  }, []);
+
+  // B12.2 §A — the ONE serialized project-transition coordinator: every
+  // bootstrap/switch/create/import hydration flows through `request()`.
+  // Requests during a pending retirement JOIN the barrier (never bypass);
+  // the LATEST target wins; earlier deferred requests are inert; the
+  // retiring interlock stays reachable via `currentInterlock()` (no
+  // null-interlock window); and no project is disposed while its approved
+  // commit lease is held. `beforeInstall` flushes the retiring project's
+  // persisted projection so a committed approved edit is durable before the
+  // winning target installs.
+  const projectTransitionRef = useRef<ProjectTransitionCoordinator | null>(null);
+  if (projectTransitionRef.current === null) {
+    projectTransitionRef.current = new ProjectTransitionCoordinator({
+      // B12.3 §F / B12.6 — the required persistence flush reports a TYPED
+      // outcome through the shared production settlement helper. The old
+      // inline try/catch was aspirational: Autosaver.flush() reports
+      // failure by RETURN VALUE (false, save kept pending), never by
+      // throwing, so a failed retiring-project save silently installed
+      // the replacement (reproduced pre-edit). The helper treats false
+      // AND thrown flushes as transition failure with bounded, redacted
+      // detail — the replacement never installs over unpersisted state.
+      beforeInstall: () => settleAutosaveForTransition(autosaverRef.current),
+    });
+  }
+  // B12.3 §A / B12.5 §A — the durable approved-mutation replay journal's
+  // production store: IndexedDB, whose `saveIf` is a REAL cross-context
+  // compare-and-swap (one readwrite transaction) with collision-free
+  // [tenant, project, branch] array keys and fail-closed one-shot legacy
+  // localStorage migration. One store for the page; a per-apply journal is
+  // scoped to the captured tenant/project/branch.
+  const approvedJournalStoreRef = useRef<IndexedDbApprovedMutationJournalStore | null>(null);
+  if (approvedJournalStoreRef.current === null) approvedJournalStoreRef.current = new IndexedDbApprovedMutationJournalStore();
+  // Teardown: pending continuations become inert (StrictMode-remount safe).
+  useEffect(() => () => projectTransitionRef.current?.cancelPending(), []);
+
+  /** Apply a loaded project record to the live editor state (the WINNING
+   *  transition's install body — runs only after the prior incarnation's
+   *  retirement barrier settles).
+   *
+   *  [B12.5 §C] TRANSACTIONAL ACTIVATION — three explicit phases:
+   *   1. PREPARE: pure construction (session, history, projections);
+   *      nothing live changes; a throw here is a typed PRE-COMMIT failure
+   *      and the survivor stays visible, current and operational.
+   *   2. POINTER COMMIT: the typed persistent `markProjectCurrent` write,
+   *      still before ANY visible change; a refused write is a PRE-COMMIT
+   *      failure (never an installed claim, never visible-B/persisted-A).
+   *   3. COMMIT: live adoption composed of setState/ref assignments that
+   *      do not throw. Guarded regardless — an unexpected throw here
+   *      returns `recovery: true`: the coordinator retires the target's
+   *      interlock and the page enters explicit blocking recovery rather
+   *      than claiming either project installed. */
+  const installProject = useCallback((record: SavedProject, opts?: { announce?: string }): ProjectInstallResult => {
+    // ── Phase 1: PREPARE (no live-editor mutation) ──────────────────────
+    let prepared: {
+      state: SchematicState;
+      messages: ReturnType<typeof fromStoredChat>;
+      storedView: "schematic" | "pcb" | "3d" | "bom" | "sim" | null;
+      history: SchematicHistory<SchematicSnapshot>;
+      session: SchematicEditorSession;
+      projectionForOpen: SchematicState;
+    };
+    try {
+      const state = record.state;
+      const viewCandidate = record.workflowView;
+      prepared = {
+        state,
+        messages: record.chat ? fromStoredChat(record.chat) : [],
+        storedView: viewCandidate === "schematic" || viewCandidate === "pcb" || viewCandidate === "3d" || viewCandidate === "bom" || viewCandidate === "sim" ? viewCandidate : null,
+        history: new SchematicHistory<SchematicSnapshot>({
+          components: state.components ?? [], wires: state.wires ?? [],
+          kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
+        }, { label: "Opened project" }),
+        // B06: a fresh canonical schematic session per hydrated project — no
+        // phantom history entries, no lineage carry-over across projects.
+        session: new SchematicEditorSession({ tenantId: "local", projectId: record.id, branchId: "main" }),
+        projectionForOpen: { components: state.components ?? [], wires: state.wires ?? [], kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [], pageSize: state.pageSize },
+      };
+    } catch (error) {
+      return { ok: false, detail: `activation prepare failed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+    // ── Phase 2: POINTER COMMIT (typed; before any visible change) ──────
+    // [B12.4 §E / B12.5 §C] The persisted current-project pointer commits
+    // EXACTLY once per successful activation, HERE. Failed or superseded
+    // transitions never reach the commit phase, so the pointer can never
+    // disagree with the visibly installed project in either direction.
+    const marked = markProjectCurrent(record.id);
+    if (!marked.ok) {
+      prepared.session.dispose();
+      return { ok: false, detail: `current-project pointer persistence failed: ${marked.detail}` };
+    }
+    // ── Phase 3: COMMIT (no-throw by construction; guarded anyway) ──────
+    try {
+    // B07.1: project switch — any pending gesture completion from the
+    // previous project is permanently orphaned before the new state lands.
+    gestureCoordinatorRef.current?.invalidate();
     pendingHydrationForRef.current = record.id; // block persists until the hydrated commit lands
     if (pendingRecordRef.current) { clearTimeout(pendingRecordRef.current.timer); pendingRecordRef.current = null; }
-    const state = record.state;
-    setComponents(state.components ?? []);
-    setWires(state.wires ?? []);
-    setKicadComponents(state.kicadComponents ?? []);
-    setNetLabels(state.netLabels ?? []);
+    const state = prepared.state;
+    applyLifecycleSchematicProjection(state); // hydration is not an undoable edit
     if (state.pageSize) setPageSize(state.pageSize);
-    setMessages(record.chat ? fromStoredChat(record.chat) : []);
-    if (record.designPrompt) setLastDesignPrompt(record.designPrompt);
-    const storedView = record.workflowView;
-    if (storedView === "schematic" || storedView === "pcb" || storedView === "3d" || storedView === "bom" || storedView === "sim") {
-      setView(storedView);
-      if (storedView === "pcb") setPcbMounted(true);
+    setMessages(prepared.messages);
+    if (prepared.storedView !== null) {
+      setView(prepared.storedView);
+      if (prepared.storedView === "pcb") setPcbMounted(true);
     } else {
       setView("schematic");
     }
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
     setProject({ id: record.id, name: record.name });
     projectRef.current = { id: record.id, name: record.name };
-    schHistoryRef.current = new SchematicHistory<SchematicSnapshot>({
-      components: state.components ?? [], wires: state.wires ?? [],
-      kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
-    }, { label: "Opened project" });
+    schHistoryRef.current = prepared.history;
     setSchHistoryView(schHistoryRef.current.view());
+    // B06.1: the session opens the DURABLE canonical head and reconciles the
+    // SavedProject projection against it. A stale projection cannot
+    // overwrite a newer canonical head — the head is projected back out.
+    schematicSessionRef.current?.dispose();
+    const session = prepared.session;
+    schematicSessionRef.current = session;
+    // B12.2 §A — the incarnation's commit interlock was created by the
+    // transition coordinator immediately before this install ran; approved
+    // applies read it via projectTransitionRef.current.currentInterlock().
+    // B07.4 — begin the new project GENERATION (aborts the previous
+    // generation's fetches, cancels its timers, stales its scopes) and then
+    // run the explicit transient-state reset.
+    projectScopeRegistryRef.current!.beginProject({ projectId: record.id, branchId: "main", session });
+    // B10 — the editor-context bridge follows the SAME project generation:
+    // hydration retires the previous project's publisher, so a captured
+    // chat context can never carry project A's board into project B.
+    editorContextBridgeRef.current!.beginProject({ tenantId: "local", projectId: record.id, branchId: "main" });
+    resetTransientProjectState(record);
+    // B07.5 (failure C) — the hydration scope is captured IN the new
+    // generation, tied to the exact new session: BOTH the outcome handler
+    // and the error handler below are gated on it, so a slow project-A
+    // open that settles (or fails) after a switch to B can neither surface
+    // a toast nor change readiness/recovery state in B.
+    const hydrationScope = projectScopeRegistryRef.current!.capture();
+    const projectionForOpen = prepared.projectionForOpen;
+    void session.openForProject(projectionForOpen, record.schematicCanonicalMark ?? null).then((outcome) => {
+      if (schematicSessionRef.current !== session || !hydrationScope.isCurrent()) return; // superseded by a later hydrate
+      // B07.2 — EXHAUSTIVE outcome handling: every SchematicHydrationOutcome
+      // has explicit UI behavior; a future outcome variant fails the
+      // compile-time never-check below instead of silently falling through.
+      switch (outcome.status) {
+        case "fresh":
+        case "resumed":
+        case "rebased-local-newer":
+          break; // session ready; nothing to surface
+        case "recovered-canonical":
+          // B06.2: preserve the superseded projection BEFORE adopting, then
+          // adopt the canonical state and prove adoption to the session.
+          saveProjectFields(record.id, { schematicProjectionConflict: { state: projectionForOpen, reason: `superseded by canonical recovery (${outcome.reason})`, at: Date.now() } });
+          adoptCanonicalSchematic(session, outcome.state, "Recovered canonical schematic");
+          showToast(outcome.detail);
+          break;
+        case "projection-conflict":
+          // Editing is disabled by the session until an explicit choice is
+          // made. B07.2: an identity-INVALID local projection may only adopt
+          // the canonical side — keep-local is not offered for it.
+          setSchematicRecovery({ kind: outcome.status, reason: outcome.reason, detail: outcome.detail, canonicalState: outcome.canonicalState, projection: projectionForOpen, projectId: record.id });
+          break;
+        case "corrupt-history":
+          setSchematicRecovery({ kind: outcome.status, detail: outcome.detail, projection: projectionForOpen, projectId: record.id });
+          break;
+        case "invalid-projection":
+          // B07.2 — the projection itself failed identity/geometry
+          // validation and NO valid canonical fallback exists: persistent
+          // blocking recovery state. Nothing is edited, exported, simulated,
+          // synchronized, autosaved, or checkpointed until repaired.
+          setSchematicRecovery({ kind: outcome.status, detail: outcome.detail, issues: outcome.issues, projection: projectionForOpen, projectId: record.id });
+          break;
+        case "unavailable":
+          showToast(outcome.detail);
+          break;
+        default: {
+          const unhandled: never = outcome;
+          throw new Error(`Unhandled schematic hydration outcome: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    }).catch((error: unknown) => {
+      // B07.5 (failure C) — the CATCH path shares the exact ownership gate
+      // of the success path: an old project's open failure never shows a
+      // toast (or implies anything about readiness) in the new project.
+      // The current project's own hydration failures still surface
+      // truthfully; the session's lifecycle remains the structural
+      // authority that keeps consumers gated off.
+      if (schematicSessionRef.current !== session || !hydrationScope.isCurrent()) return;
+      showToast(`Canonical schematic history could not be opened: ${error instanceof Error ? error.message : String(error)}. Canonical schematic editing is disabled.`);
+    });
     setPcbHydrateToken((token) => token + 1);
+    // B07.5 (failure B) — checkpoints were reset to the intentional empty
+    // state inside resetTransientProjectState; the reload goes through the
+    // scoped latest-request loader (never an ambient .then(setCheckpoints)).
+    refreshCheckpoints();
+    // [B12.5 §C] Success is announced as the commit phase's FINAL act —
+    // no statement can fail after the toast and contradict it.
     if (opts?.announce) showToast(opts.announce);
-    void checkpointStore().list(record.id).then(setCheckpoints).catch(() => setCheckpoints([]));
-  }, []);
+    return { ok: true };
+    } catch (error) {
+      // [B12.5 §C] Commit-phase failure: visible state may be partially
+      // adopted — blocking recovery, never a survivor-installed claim.
+      return { ok: false, detail: `activation commit failed: ${error instanceof Error ? error.message : String(error)}`, recovery: true };
+    }
+  }, [adoptCanonicalSchematic, applyLifecycleSchematicProjection, resetTransientProjectState, refreshCheckpoints]);
+
+  /** B12.2 §A — every hydration entry point routes through the serialized
+   *  transition coordinator; only the LATEST requested target installs, and
+   *  never while an approved commit lease is still held. */
+  const hydrateProject = useCallback((record: SavedProject, opts?: { announce?: string }) => {
+    projectTransitionRef.current!.request(
+      () => installProject(record, opts),
+      // B12.3 §F / B12.5 §C — truthful transition outcomes: a PRE-COMMIT
+      // failure toasts "unchanged" (which is now literally guaranteed by
+      // the activation protocol); a COMMIT-PHASE failure is BLOCKING
+      // recovery — neither project may be claimed installed, so no
+      // "unchanged" toast is ever shown for it. The winning install
+      // announces itself; superseded requests stay silent.
+      (outcome) => {
+        if (outcome.status !== "transition-failed") return;
+        if (outcome.recovery) {
+          setActivationRecovery(outcome.detail);
+          return;
+        }
+        showToast(`Project switch failed: ${outcome.detail}. The current project is unchanged.`);
+      },
+    );
+  }, [installProject]);
 
   // Mount bootstrap: resolve or create the current project, hydrate, then arm
   // autosave. Runs post-mount because localStorage is browser-only.
   useEffect(() => {
-    const boot = bootstrapCurrentProject();
+    // [B12.5 §C] Truthful bootstrap: unavailable current-project storage
+    // surfaces as explicit blocking recovery (never a phantom workspace
+    // that persists nothing), and a resolved-but-unpersisted pointer is
+    // REPORTED, not ignored.
+    let boot: ProjectBootstrap;
+    try {
+      boot = bootstrapCurrentProject();
+    } catch (error) {
+      setActivationRecovery(`Project storage is unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
+    if (!boot.pointerPersisted) showToast("The current-project pointer could not be persisted — after a reload the browser may open a different project.");
     hydrateProject(boot.project);
     if (boot.dropped.length) showToast(`Recovered project "${boot.project.name}" — ${boot.dropped.length} corrupt optional record(s) were set aside: ${boot.dropped.join(", ")}`);
     setProjectList(listProjects());
@@ -2623,6 +3229,11 @@ export default function Home() {
   // guard so they never re-record themselves.
   useEffect(() => {
     if (!hydratedRef.current || !schHistoryRef.current) return;
+    // B07: intermediate pointer frames are non-authoritative previews — they
+    // create no history entries and are never persisted. The completed
+    // gesture commits canonically (which flows through here after preview
+    // ownership clears at pointer-up).
+    if (gestureCoordinatorRef.current?.previewActive) return;
     const snap: SchematicSnapshot = { components, wires, kicadComponents, netLabels };
     if (applyingHistoryRef.current) {
       applyingHistoryRef.current = false;
@@ -2656,39 +3267,592 @@ export default function Home() {
     autosaverRef.current?.schedule();
   }, [messages, view, lastDesignPrompt, pageSize]);
 
-  /** Commit any debounce-pending history record immediately (before undo/redo). */
-  const flushPendingRecord = useCallback(() => {
-    const pending = pendingRecordRef.current;
-    if (!pending || !schHistoryRef.current) return;
-    clearTimeout(pending.timer);
-    pendingRecordRef.current = null;
-    schHistoryRef.current.record(pending.label, pending.snap);
-  }, []);
-
   const applySchematicSnapshot = useCallback((snap: SchematicSnapshot) => {
-    applyingHistoryRef.current = true;
-    setComponents(snap.components);
-    setWires(snap.wires);
-    setKicadComponents(snap.kicadComponents);
-    setNetLabels(snap.netLabels);
+    // B07.1: undo/redo replacement also orphans pending gesture completions
+    // (the epoch bump inside the lifecycle applier).
+    applyLifecycleSchematicProjection({ components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels });
     setSelectedId(null); setSelectedKicadId(null); setWireDraftStart(null);
+  }, [applyLifecycleSchematicProjection]);
+
+  /** B07.3 — TRANSACTIONAL undo/redo: the target is peeked without moving
+   *  the cursor, canonical reconciliation (verified replay or documented
+   *  rebase) runs first as a FIFO queue job (blocking gestures and
+   *  commands), and only on success does the cursor move and the
+   *  projection apply. A failure keeps cursor, projection, authoritative
+   *  state, and canonical head unchanged and reports a structured message. */
+  const runHistoryStep = useCallback((direction: "undo" | "redo") => {
+    const session = schematicSessionRef.current;
+    void gestureCoordinatorRef.current!.runHistoryStep({
+      direction,
+      peek: () => {
+        flushPendingRecord();
+        const history = schHistoryRef.current;
+        if (!history) return null;
+        const snap = direction === "undo" ? history.peekUndo() : history.peekRedo();
+        return snap ? { components: snap.components, wires: snap.wires, kicadComponents: snap.kicadComponents, netLabels: snap.netLabels } : null;
+      },
+      reconcile: (target) => session
+        ? session.reconcileHistoryStep(direction, target)
+        : Promise.resolve({ ok: false, detail: "Schematic session unavailable." }),
+      commitCursor: () => {
+        const history = schHistoryRef.current;
+        if (!history) return;
+        if (direction === "undo") history.undo(); else history.redo();
+        setSchHistoryView(history.view());
+      },
+      applyUi: () => {
+        const history = schHistoryRef.current;
+        if (!history) return;
+        applySchematicSnapshot(history.present);
+      },
+    }).then((outcome) => {
+      if (outcome.status === "refused-busy") showToast(outcome.detail);
+      else if (outcome.status === "failed") showToast(`${direction === "undo" ? "Undo" : "Redo"} was not applied: ${outcome.detail}`);
+    });
+  }, [applySchematicSnapshot, flushPendingRecord]);
+
+  const undoSchematic = useCallback(() => { runHistoryStep("undo"); }, [runHistoryStep]);
+  const redoSchematic = useCallback(() => { runHistoryStep("redo"); }, [runHistoryStep]);
+
+  // ── B06: canonical schematic command execution ─────────────────────────────
+  // One migrated user action → one canonical transaction → one history entry.
+  // Structured outcomes surface as toasts; there is NO direct-state fallback
+  // for migrated actions — a rejected command changes nothing.
+  const schematicSessionRef = useRef<SchematicEditorSession | null>(null);
+
+  /** B07.2 — the authoritative schematic base for commands and consumers.
+   *  NEVER the visible React projection (which may be an uncommitted
+   *  gesture preview): the coordinator records the last authoritatively
+   *  applied state. */
+  const currentSchematicState = useCallback((): SchematicState => {
+    return gestureCoordinatorRef.current!.authoritativeState();
   }, []);
 
-  const undoSchematic = useCallback(() => {
-    flushPendingRecord();
-    const history = schHistoryRef.current;
-    if (!history) return;
-    const snap = history.undo();
-    if (snap) { applySchematicSnapshot(snap); setSchHistoryView(history.view()); }
-  }, [applySchematicSnapshot, flushPendingRecord]);
+  /** B07.2 — one shared readiness gate for authoritative consumers (export,
+   *  simulation, PCB sync, autosave, checkpoints). Reads refs at CALL time
+   *  so the decision is always current. */
+  const schematicConsumerGate = useCallback((consumer: "export" | "simulation" | "pcb-sync" | "autosave" | "checkpoint" | "edit") =>
+    evaluateSchematicConsumerGate({
+      lifecycle: schematicSessionRef.current?.lifecycle ?? null,
+      recoveryPending: schematicRecoveryRef.current !== null,
+      consumer,
+    }), []);
 
-  const redoSchematic = useCallback(() => {
-    flushPendingRecord();
-    const history = schHistoryRef.current;
-    if (!history) return;
-    const snap = history.redo();
-    if (snap) { applySchematicSnapshot(snap); setSchHistoryView(history.view()); }
-  }, [applySchematicSnapshot, flushPendingRecord]);
+  /** B07.3 — sheet-size changes are TRANSACTIONAL lifecycle adoptions on
+   *  the interaction queue: the controlled UI value, the authoritative
+   *  mirror, and persistence change only AFTER canonical adoption succeeds
+   *  (quarantine-first, on the captured session); a failed adoption leaves
+   *  the sheet at its previous size with a structured refusal. */
+  const changeSheetSize = useCallback((next: PageSize) => {
+    const session = schematicSessionRef.current;
+    const sheetForProject = projectRef.current?.id ?? null;
+    const nextState: SchematicState = { ...gestureCoordinatorRef.current!.authoritativeState(), pageSize: next };
+    void gestureCoordinatorRef.current!.adoptLifecycle({
+      state: nextState,
+      reason: `sheet size changed to ${next}`,
+      stillCurrent: () => sheetForProject === null || projectRef.current?.id === sheetForProject,
+      adopt: (candidate) => session
+        ? session.adoptLifecycleProjection(candidate, `sheet size changed to ${next}`)
+        : Promise.resolve({ ok: false as const, code: "no-service" as const, detail: "Schematic session unavailable — the sheet size was not changed." }),
+      // Not an undoable operation: route through the lifecycle applier.
+      applyUi: (candidate) => applyLifecycleSchematicProjection(candidate),
+      onAdopted: () => setPageSize(next),
+    }).then((outcome) => {
+      if (outcome.status === "adopted" || outcome.status === "canceled-stale-project") return;
+      showToast("detail" in outcome ? outcome.detail : "The sheet size was not changed.");
+    });
+  }, [applyLifecycleSchematicProjection]);
+
+  /**
+   * B07.3 — EVERY ordinary canonical command is a FIFO job on the
+   * interaction queue: refused while a gesture owns the preview, executed
+   * against the LATEST authoritative base at its execution position, and
+   * its result adopted into the UI INSIDE the job (before the next job
+   * runs) — so no committed result can be silently discarded and the
+   * visible authoritative state always equals the durable head after queue
+   * settlement. Only a project/session switch cancels a queued command.
+   */
+  const runSchematicCommand = useCallback(async (
+    label: string,
+    commandId: string,
+    buildOperations: (schematic: CanonicalSchematic) => EngineeringOperation[],
+    options?: {
+      expectedBaseDigest?: string;
+      /** B09.1 — sealed-proposal head-mark precondition, rechecked INSIDE
+       *  the session's serialized queue immediately before execution. */
+      expectedHeadMark?: SchematicCanonicalMark;
+      /** B07.4 — invocation scope captured BEFORE any asynchronous
+       *  preflight: the command submits to the CAPTURED session (never the
+       *  current ref, which a project switch may have replaced) and is
+       *  canceled at execution position when the scope went stale. */
+      scope?: ProjectAsyncScope;
+    },
+  ): Promise<{ ok: boolean; state?: SchematicState }> => {
+    const session = options?.scope
+      ? (options.scope.session as SchematicEditorSession | null)
+      : schematicSessionRef.current;
+    if (!session) {
+      showToast("Schematic session unavailable — reload the project.");
+      return { ok: false };
+    }
+    const gate = await gestureCoordinatorRef.current!.runCanonicalCommand({
+      label,
+      ...(options?.scope ? { stillCurrent: () => options.scope!.isCurrent() } : {}),
+      execute: (authoritativeBase) =>
+        session.execute(authoritativeBase, {
+          commandId,
+          label,
+          buildOperations,
+          ...(options?.expectedBaseDigest !== undefined ? { expectedBaseDigest: options.expectedBaseDigest } : {}),
+          ...(options?.expectedHeadMark !== undefined ? { expectedHeadMark: options.expectedHeadMark } : {}),
+        }),
+    });
+    switch (gate.status) {
+      case "applied":
+      case "noop":
+        return { ok: true, state: gate.result.ok ? gate.result.state : undefined };
+      case "rejected":
+        if (!gate.result.ok) showToast(gate.result.message);
+        return { ok: false };
+      case "refused-gesture-active":
+        showToast(`"${label}" was not applied: finish or cancel the current move first. Nothing was changed.`);
+        return { ok: false };
+      case "canceled-stale":
+        // Project/session changed — the old project's durable state (if the
+        // command committed there) stands; the new project is untouched.
+        return { ok: false };
+      case "failed":
+        showToast(`"${label}" was not applied: ${gate.error instanceof Error ? gate.error.message : String(gate.error)}. Nothing was changed.`);
+        return { ok: false };
+    }
+  }, []);
+
+  /**
+   * Canonical delete. B06.2: the deterministic impact plan is computed
+   * INSIDE the serialized session queue against the canonical head at
+   * execution position — only static catalog pin data is fetched up front,
+   * so a queued delete can never execute a plan built on a stale snapshot.
+   */
+  const deleteComponentCanonical = useCallback(async (family: "theory" | "kicad", componentId: string) => {
+    // B07.4 (failure D) — the invocation scope is captured BEFORE the
+    // catalog preflight: after part data resolves, the command may only
+    // submit to the CAPTURED project/session; a switch during the await
+    // cancels it (part ids and even component ids repeat across projects —
+    // a same-id component in another project must never be deleted). The
+    // deterministic impact plan is still computed inside the serialized
+    // session queue against the latest canonical head of that SAME project.
+    const scope = projectScopeRegistryRef.current!.capture();
+    let pins: CachedPart["pins"] | undefined;
+    let label = "Deleted component";
+    if (family === "kicad") {
+      const instance = liveStateRef.current.kicadComponents.find((item) => item.id === componentId);
+      if (!instance) return;
+      const part = getCachedPart(instance.partId) ?? (await ensurePartLoaded(instance.partId));
+      if (!scope.isCurrent()) return; // project changed during preflight — cancel silently
+      if (!part?.pins) {
+        showToast("Part data is unavailable — a safe delete plan cannot be computed.");
+        return;
+      }
+      pins = part.pins;
+      label = `Deleted ${instance.refDes}`;
+    }
+    let refusal: string | null = null;
+    const outcome = await runSchematicCommand(label, "schematic.delete-component", (canonical) => {
+      const planned = planSchematicDelete(fromCanonicalSchematic(canonical), { family, componentId }, pins);
+      if (!planned.ok) {
+        // Component already gone at execution position → silent no-op; other
+        // refusals surface after the command resolves.
+        if (planned.refusal !== "component-not-found") refusal = planned.detail;
+        return [];
+      }
+      return [planned.operation];
+    }, { scope });
+    if (refusal) {
+      scope.ifCurrent(() => showToast(refusal!));
+      return;
+    }
+    if (outcome.ok) {
+      scope.ifCurrent(() => {
+        setSelectedId(null);
+        setSelectedKicadId(null);
+      });
+    }
+  }, [runSchematicCommand]);
+
+  /** Canonical discrete rotate (+90°) for the selected component. */
+  const rotateComponentCanonical = useCallback((family: "theory" | "kicad", componentId: string, label: string, absoluteRotation?: Rotation) => {
+    void runSchematicCommand(label, "schematic.move-rotate", (schematic) => {
+      const array = family === "theory" ? schematic.components : schematic.kicadComponents;
+      const component = array.find((item) => item.id === componentId);
+      if (!component) return [];
+      const rotation = absoluteRotation ?? (((component.rotation + 90) % 360) as Rotation);
+      return [{ operationId: `op:sch-rotate:${componentId}`, schemaVersion: 1, units: "px", kind: "schematic_transform_component", family, componentId, x: component.x, y: component.y, rotation }];
+    });
+  }, [runSchematicCommand]);
+
+  /** Canonical property edit (value / refDes) for one component. */
+  const setComponentPropertiesCanonical = useCallback((family: "theory" | "kicad", componentId: string, patch: { value?: string; refDes?: string }, label: string) => {
+    void runSchematicCommand(label, "schematic.set-property", () => [
+      { operationId: `op:sch-props:${componentId}`, schemaVersion: 1, units: "px", kind: "schematic_set_component_properties", family, componentId, patch },
+    ]);
+  }, [runSchematicCommand]);
+
+  // ── B07: canonical graph commands + the gesture transaction contract ───────
+  // Click-driven graph edits recompute their result from the canonical head
+  // INSIDE the serialized queue and compile it to primitive operations via
+  // the deterministic graph diff. Pointer gestures (drag/stretch/label/SPICE
+  // move) render non-authoritative preview frames only; pointer-up commits
+  // ONE atomic transaction pinned to the pre-gesture base digest. B07.1: the
+  // gesture LIFECYCLE (ownership, cancellation, late-completion gating,
+  // project-switch invalidation) lives in the extracted, individually tested
+  // SchematicGestureCoordinator — a late success or failure can only touch
+  // the projection while its captured epoch is still current, so it can
+  // never overwrite a newer command result, hydration, recovery, undo/redo,
+  // or another project's state. Intermediate frames are never recorded or
+  // persisted (the design-state watcher is suppressed while a gesture owns
+  // the preview).
+
+  const applyGesturePreviewFrameRef = useRef(applyGesturePreviewFrame);
+  applyGesturePreviewFrameRef.current = applyGesturePreviewFrame;
+  const applyCanonicalSchematicProjectionRef = useRef(applyCanonicalSchematicProjection);
+  applyCanonicalSchematicProjectionRef.current = applyCanonicalSchematicProjection;
+  const applyLifecycleSchematicProjectionRef = useRef(applyLifecycleSchematicProjection);
+  applyLifecycleSchematicProjectionRef.current = applyLifecycleSchematicProjection;
+  if (gestureCoordinatorRef.current === null) {
+    gestureCoordinatorRef.current = new SchematicGestureCoordinator({
+      currentState: () => {
+        const live = liveStateRef.current;
+        return { components: live.components, wires: live.wires, kicadComponents: live.kicadComponents, netLabels: live.netLabels, pageSize: live.pageSize };
+      },
+      applyPreviewFrame: (frame) => applyGesturePreviewFrameRef.current(frame),
+      applyCanonicalProjection: (label, state) => applyCanonicalSchematicProjectionRef.current(label, state),
+      applyRollbackProjection: (state) => applyLifecycleSchematicProjectionRef.current(state),
+      execute: (base, request) => {
+        const session = schematicSessionRef.current;
+        return session ? session.execute(base, request) : Promise.resolve(null);
+      },
+      notify: (message) => { if (message) showToast(message); },
+    });
+  }
+  const gestureCoordinator = gestureCoordinatorRef.current;
+  // Unmount: orphan any pending completion so a late result can never write
+  // into a dead (or remounted) tree. `invalidate` (not `dispose`) keeps the
+  // coordinator usable across a StrictMode dev remount.
+  useEffect(() => () => gestureCoordinator.invalidate(), [gestureCoordinator]);
+
+  const graphCommand = useCallback(async (
+    label: string,
+    commandId: string,
+    buildAfter: (state: SchematicState) => SchematicGraphAfter | null,
+  ): Promise<{ ok: boolean }> => {
+    let failure: string | null = null;
+    const outcome = await runSchematicCommand(label, commandId, (canonical) => {
+      try {
+        const after = buildAfter(fromCanonicalSchematic(canonical));
+        return after ? diffSchematicGraphOps(canonical, after) : [];
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+        return [];
+      }
+    });
+    if (failure) {
+      showToast(`"${label}" was not applied: ${failure}. Nothing was changed.`);
+      return { ok: false };
+    }
+    return { ok: outcome.ok };
+  }, [runSchematicCommand]);
+
+  /** The single graph-mutation authority handed to the canvas (stable).
+   *  B07.1: the gesture lifecycle delegates to the race-safe coordinator —
+   *  `begin` reports ownership (false while another gesture is active or a
+   *  commit is in flight), `preview` renders frames only for the owner. */
+  const schematicGraphApi = useMemo(() => ({
+    run: (label: string, commandId: string, buildAfter: (state: SchematicState) => SchematicGraphAfter | null) => { void graphCommand(label, commandId, buildAfter); },
+    begin: () => gestureCoordinator.begin(),
+    preview: (frame: SchematicGraphAfter) => gestureCoordinator.preview(frame),
+    cancel: () => gestureCoordinator.cancel(),
+    commit: (label: string, finalGraph: SchematicGraphAfter) => { void gestureCoordinator.commit(label, finalGraph); },
+  }), [graphCommand, gestureCoordinator]);
+
+  // ── B06.1: sealed tier-1 proposal apply/cancel ─────────────────────────────
+  // Apply re-verifies the sealed proposal (identity digest, operations
+  // digest, expiry, exact base-schematic digest) and executes the EXACT
+  // sealed operations as one atomic canonical transaction with the base
+  // digest re-checked inside the serialized session queue. Cancel discards
+  // without any mutation. Stale or altered proposals are rejected.
+  // B12.1 — the explicit "Apply exact proposal" click runs the SHARED
+  // approved-execution service (`applyApprovedTier1Proposal`) THROUGH the
+  // page's own SchematicGestureCoordinator (§A): the apply serializes with
+  // gestures, hand edits, undo/redo, and lifecycle jobs; verification runs
+  // against the authoritative head at the serialized execution position; a
+  // committed result is adopted by `applyCanonicalSchematicProjection` —
+  // one canonical projection update and one SchematicHistory entry — before
+  // the service consumes the receipt. The commit interlock (§B) orders the
+  // apply's critical section against project transition/retirement.
+  const applyTier1Proposal = useCallback(async () => {
+    const proposal = pendingTier1;
+    if (!proposal || tier1ApplyBusy) return;
+    const originRunId = pendingTier1RunId;
+    // B07.4 — scope captured BEFORE any async work; the command submits to the
+    // captured session and all post-apply UI is project-guarded.
+    const scope = projectScopeRegistryRef.current!.capture();
+    const applySession = schematicSessionRef.current;
+    // B12.2 §A — the interlock comes from the transition coordinator and is
+    // NEVER null while a project exists; during a pending transition this is
+    // the RETIRING interlock, whose lease acquisition refuses the apply. An
+    // apply can never proceed without an interlock.
+    const applyInterlock = projectTransitionRef.current!.currentInterlock();
+    const currentProjectId = scope.projectId ?? projectRef.current?.id ?? null;
+    if (!applySession || !currentProjectId || !applyInterlock) {
+      setPendingTier1(null);
+      setPendingTier1RunId(null);
+      showToast("Proposal rejected: the schematic session is not ready to verify the proposal's scope. Nothing was changed.");
+      return;
+    }
+    setTier1ApplyBusy(true);
+    try {
+      const outcome = await applyApprovedTier1Proposal({
+        proposal,
+        session: applySession,
+        gateway: gestureCoordinatorRef.current!,
+        interlock: applyInterlock,
+        // B12.3 §A — durable replay journal scoped to the CAPTURED project.
+        journal: new ApprovedMutationJournal(approvedJournalStoreRef.current!, { tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }),
+        // [B16.0.1 §F] apply-time membership reauthorization through the ONE
+        // narrow same-origin endpoint — the live membership must still match
+        // the proposal's sealed authorization binding or the apply refuses.
+        reauthorize: createMembershipReauthorizer(),
+        stillCurrent: () => scope.isCurrent(),
+        currentProjectId,
+        currentBranchId: scope.branchId,
+        originRunId,
+      });
+      // Late completions must never write UI state into a replacement project.
+      scope.ifCurrent(() => {
+        if (outcome.ok) {
+          setPendingTier1(null);
+          setPendingTier1RunId(null);
+          setTier1Receipt(outcome.receipt);
+          setSelectedId(null);
+          setSelectedKicadId(null);
+          const verb = outcome.status === "already-applied" ? "was already applied" : "applied";
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), role: "assistant", content: `Proposal ${verb} — canonical transaction ${outcome.receipt.transactionId.slice(0, 12)}… (${outcome.receipt.operationCount} operation(s), verified).` },
+          ]);
+          autoRunIncludesTidy.current = false;
+          setAutoRunToken((t) => t + 1);
+        } else {
+          // A stale/foreign/verification refusal dismisses the dialog (the
+          // proposal can never apply now); a retryable refusal (another
+          // apply in flight, or a gesture owning the preview) keeps it.
+          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") { setPendingTier1(null); setPendingTier1RunId(null); }
+          showToast(outcome.message);
+        }
+      });
+    } finally {
+      scope.ifCurrent(() => setTier1ApplyBusy(false));
+    }
+  }, [pendingTier1, pendingTier1RunId, tier1ApplyBusy]);
+
+  const cancelTier1Proposal = useCallback(() => {
+    // Cancel must not race into a successful apply: a busy dialog ignores it.
+    if (tier1ApplyBusy) return;
+    if (pendingTier1) approvedMutationAudit.record({ at: Date.now(), proposalId: pendingTier1.proposalId, originRunId: pendingTier1RunId, event: "canceled", code: null });
+    setPendingTier1(null);
+    setPendingTier1RunId(null);
+    showToast("Proposal discarded — nothing was changed.");
+  }, [tier1ApplyBusy, pendingTier1, pendingTier1RunId]);
+
+  // ── B14: approved exact component replacement (explicit human apply) ───────
+  // Same B12 discipline as the Tier-1 apply above: scope captured before any
+  // async work; the interlock comes from the transition coordinator; the
+  // durable journal is scoped to the CAPTURED project; the apply revalidates
+  // fresh server authority through the trusted reauthorization adapter and
+  // executes exactly ONE canonical schematic.replace-component transaction.
+  const applyReplacementProposal = useCallback(async () => {
+    const proposal = pendingReplacement;
+    if (!proposal || replacementApplyBusy) return;
+    const originRunId = pendingReplacementRunId;
+    const scope = projectScopeRegistryRef.current!.capture();
+    const applySession = schematicSessionRef.current;
+    const applyInterlock = projectTransitionRef.current!.currentInterlock();
+    const currentProjectId = scope.projectId ?? projectRef.current?.id ?? null;
+    if (!applySession || !currentProjectId || !applyInterlock) {
+      setPendingReplacement(null);
+      setPendingReplacementRunId(null);
+      showToast("Replacement rejected: the schematic session is not ready to verify the proposal's scope. Nothing was changed.");
+      return;
+    }
+    setReplacementApplyBusy(true);
+    try {
+      // [B14.1 §A] the explicit click flows through the PRODUCTION approval
+      // controller, which issues the one-shot interactive approval intent and
+      // the authentic reauthorization channel — the service refuses without
+      // both, so no other invoker can commit a replacement.
+      const outcome = await approveAndApplyReplacement({
+        proposal,
+        session: applySession,
+        gateway: gestureCoordinatorRef.current!,
+        interlock: applyInterlock,
+        journal: new ApprovedMutationJournal(approvedJournalStoreRef.current!, { tenantId: "local", projectId: currentProjectId, branchId: scope.branchId }),
+        stillCurrent: () => scope.isCurrent(),
+        currentProjectId,
+        currentBranchId: scope.branchId,
+        originRunId,
+      });
+      scope.ifCurrent(() => {
+        if (outcome.ok) {
+          setPendingReplacement(null);
+          setPendingReplacementRunId(null);
+          setReplacementReceipt(outcome.receipt);
+          setSelectedId(null);
+          setSelectedKicadId(null);
+          const verb = outcome.status === "already-applied" ? "was already applied" : "applied";
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: `Replacement ${verb} — ${outcome.receipt.sourcePartId} → ${outcome.receipt.target.partId}, canonical transaction ${outcome.receipt.transactionId.slice(0, 12)}… (verified, undoable).` }]);
+          autoRunIncludesTidy.current = false;
+          setAutoRunToken((t) => t + 1);
+        } else {
+          if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") { setPendingReplacement(null); setPendingReplacementRunId(null); }
+          showToast(outcome.message);
+        }
+      });
+    } finally {
+      scope.ifCurrent(() => setReplacementApplyBusy(false));
+    }
+  }, [pendingReplacement, pendingReplacementRunId, replacementApplyBusy]);
+
+  const cancelReplacementProposal = useCallback(() => {
+    if (replacementApplyBusy) return;
+    if (pendingReplacement) approvedMutationAudit.record({ at: Date.now(), proposalId: pendingReplacement.proposalId, originRunId: pendingReplacementRunId, event: "canceled", code: null });
+    setPendingReplacement(null);
+    setPendingReplacementRunId(null);
+    showToast("Replacement proposal discarded — nothing was changed.");
+  }, [replacementApplyBusy, pendingReplacement, pendingReplacementRunId]);
+
+  // ── B06.2: explicit schematic-history recovery choices ─────────────────────
+  // While a recovery is pending the session is `conflicted` and every
+  // canonical mutation is structurally rejected with a truthful message.
+  // B06.3: a recovery choice only dismisses the dialog when it SUCCEEDS. A
+  // failed quarantine (or any failure outcome) keeps/refreshes the dialog so
+  // retry or another choice stays available — preservation is never claimed
+  // unless it occurred.
+  //
+  // B07.5 (failure A) — every recovery decision is an OWNED submission
+  // through one shared adapter: a ProjectAsyncScope is captured before
+  // submitting, the recovery record's project id and the captured session
+  // must match that scope, duplicate clicks are refused while a decision is
+  // in flight (the buttons are also disabled), and a completion whose
+  // project generation ended updates NOTHING in the new project — no
+  // dialog, projection, history, selection, toast, or persistence. An
+  // old-session durable recovery may still stand on its own captured
+  // session; reopening that project surfaces the resulting canonical state
+  // through normal hydration/reconciliation. Quarantine-first semantics
+  // live in the session methods and are unchanged.
+  const recoveryDecisionAdapterRef = useRef(new OwnedRecoveryDecisionAdapter());
+  const [recoveryDecisionBusy, setRecoveryDecisionBusy] = useState(false);
+  const submitRecoveryDecision = useCallback(<T,>(
+    decide: (session: SchematicEditorSession, recovery: ActiveSchematicRecovery) => Promise<T>,
+    applyOutcome: (outcome: T, context: { recovery: ActiveSchematicRecovery; session: SchematicEditorSession }) => void,
+  ) => {
+    const recovery = schematicRecoveryRef.current;
+    const session = schematicSessionRef.current;
+    if (!recovery || !session) return;
+    const scope = projectScopeRegistryRef.current!.capture();
+    setRecoveryDecisionBusy(true);
+    void recoveryDecisionAdapterRef.current.submit({
+      scope,
+      recoveryProjectId: recovery.projectId,
+      session,
+      decide: (owned) => decide(owned, recovery),
+    }).then((result) => {
+      // A duplicate click never releases the FIRST decision's busy state.
+      if (result.status === "refused-busy") return;
+      scope.ifCurrent(() => setRecoveryDecisionBusy(false));
+      if (result.status === "applied") {
+        // Final mutation boundary: current generation AND the exact session.
+        scope.ifCurrent(() => {
+          if (schematicSessionRef.current === session) applyOutcome(result.outcome, { recovery, session });
+        });
+      } else if (result.status === "failed") {
+        scope.ifCurrent(() => showToast(`Recovery failed: ${result.error instanceof Error ? result.error.message : String(result.error)}. The recovery dialog stays open — retry or choose another option.`));
+      }
+      // refused-identity / stale-project: nothing may change in this project.
+    });
+  }, []);
+
+  const resolveRecoveryKeepLocal = useCallback(() => {
+    submitRecoveryDecision(
+      (session, recovery) => session.resolveConflictKeepLocal(recovery.projection),
+      (outcome, { recovery }) => {
+        if (outcome.status === "rebased-local-newer") setSchematicRecovery(null);
+        else if (outcome.status === "projection-conflict" || outcome.status === "corrupt-history") {
+          setSchematicRecovery({ ...recovery, kind: outcome.status === "corrupt-history" ? "corrupt-history" : "projection-conflict", detail: outcome.detail });
+        } else if (outcome.status === "invalid-projection") {
+          // B07.2 — keep-local was attempted on an identity-invalid local
+          // projection: the session refused; the recovery stays pending with
+          // the named issues (the dialog hides keep-local for this state).
+          setSchematicRecovery({ ...recovery, kind: "invalid-projection", detail: outcome.detail, issues: outcome.issues });
+        }
+        showToast(outcome.detail);
+      },
+    );
+  }, [submitRecoveryDecision]);
+
+  const resolveRecoveryAdoptCanonical = useCallback(() => {
+    submitRecoveryDecision(
+      (session) => session.resolveConflictAdoptCanonical(),
+      (outcome, { recovery, session }) => {
+        if (outcome.status === "recovered-canonical") {
+          // Preserve the local projection only ON success, then adopt — all
+          // inside the owned-application boundary, so a late project-A
+          // outcome can never persist into or adopt over project B.
+          saveProjectFields(recovery.projectId, { schematicProjectionConflict: { state: recovery.projection, reason: "conflict resolved by adopting canonical history", at: Date.now() } });
+          setSchematicRecovery(null);
+          adoptCanonicalSchematic(session, outcome.state, "Adopted canonical schematic");
+        } else if (outcome.status === "projection-conflict" || outcome.status === "corrupt-history") {
+          setSchematicRecovery({ ...recovery, detail: outcome.detail });
+        }
+        showToast(outcome.detail);
+      },
+    );
+  }, [submitRecoveryDecision, adoptCanonicalSchematic]);
+
+  const resolveRecoveryStartFresh = useCallback(() => {
+    submitRecoveryDecision(
+      (session, recovery) => session.recoverStartFresh(recovery.projection),
+      (outcome, { recovery }) => {
+        if (outcome.status === "fresh") setSchematicRecovery(null);
+        else if (outcome.status === "corrupt-history") setSchematicRecovery({ ...recovery, detail: outcome.detail });
+        else if (outcome.status === "invalid-projection") {
+          // B07.2 — a fresh lineage cannot be minted from an identity-invalid
+          // projection; the blocking recovery state persists with the issues.
+          setSchematicRecovery({ ...recovery, kind: "invalid-projection", detail: outcome.detail, issues: outcome.issues });
+        }
+        showToast(outcome.detail);
+      },
+    );
+  }, [submitRecoveryDecision]);
+
+  /** B07.2 — read-only raw recovery export: downloads the exact stored
+   *  projection as JSON so no data is lost while the project is blocked.
+   *  Nothing is repaired or rewritten. */
+  const downloadRecoveryBackup = useCallback(() => {
+    const recovery = schematicRecovery;
+    if (!recovery) return;
+    const blob = new Blob(
+      [JSON.stringify({ projectId: recovery.projectId, exportedAt: new Date().toISOString(), kind: recovery.kind, issues: recovery.issues ?? [], schematic: recovery.projection }, null, 2)],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `sirkit-recovery-${recovery.projectId}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [schematicRecovery]);
 
   // Ctrl+Z / Ctrl+Y for the schematic editor (the PCB editor owns its own
   // shortcuts and is gated by its `active` prop while hidden).
@@ -2708,36 +3872,87 @@ export default function Home() {
     return () => window.removeEventListener("keydown", onKey);
   }, [view, undoSchematic, redoSchematic]);
 
-  /** Restore a checkpoint as one undoable operation; board (if any) rehydrates the PCB editor. */
+  /**
+   * B07.3 — TRANSACTIONAL checkpoint restore: readiness-gated, validated,
+   * canonically adopted FIRST (quarantine-first, on the captured session),
+   * and only after successful adoption does anything change — schematic
+   * projection/history, page size, chat, the pcbWorking record, PCB
+   * hydration, the "Restored" toast, and the dialog. On any failure or
+   * stale token the prior project stays byte-for-byte unchanged and a
+   * structured refusal is shown. Also NOT a recovery bypass: the readiness
+   * gate refuses while invalid-projection/conflict recovery is pending.
+   */
   const restoreCheckpoint = useCallback((checkpoint: ProjectCheckpoint) => {
     const meta = projectRef.current;
     if (!meta) return;
-    flushPendingRecord();
-    historyLabelRef.current = `Restored checkpoint: ${checkpoint.label}`;
-    setComponents(checkpoint.schematic.components ?? []);
-    setWires(checkpoint.schematic.wires ?? []);
-    setKicadComponents(checkpoint.schematic.kicadComponents ?? []);
-    setNetLabels(checkpoint.schematic.netLabels ?? []);
-    if (checkpoint.schematic.pageSize) setPageSize(checkpoint.schematic.pageSize);
-    if (checkpoint.chat) setMessages(fromStoredChat(checkpoint.chat));
-    if (checkpoint.board) {
-      // Persist first (survives a crash before the editor consumes it), then
-      // hand the exact board to the PCB editor — an explicit restore wins even
-      // when the durable server authority has advanced past this checkpoint.
-      const ok = saveProjectFields(meta.id, { pcbWorking: { board: checkpoint.board, baseRevision: checkpoint.boardBase?.revision ?? null, baseDigest: checkpoint.boardBase?.digest ?? null, updatedAt: Date.now() } });
-      if (!ok) { showToast("Checkpoint board could not be written to browser storage; schematic was restored, PCB was not."); return; }
-      requestBoardRestore(checkpoint.board);
-      setPcbMounted(true);
-      setPcbHydrateToken((token) => token + 1);
+    // B07.5 (failure B/D) — EXACT-project restore: a checkpoint whose
+    // projectId is not the active project is refused before any gate,
+    // adoption, or mutation — even if a stale list render or late callback
+    // put it in front of the user. No schematic, PCB, chat, dialog, or
+    // storage change occurs on mismatch.
+    if (!checkpointBelongsToProject(checkpoint, meta.id)) {
+      showToast("That checkpoint belongs to a different project and was not restored. Nothing was changed. Open its own project to restore it.");
+      return;
     }
-    showToast(`Restored checkpoint: ${checkpoint.label}`);
-    setHistoryOpen(false);
-  }, [flushPendingRecord]);
+    const gate = evaluateSchematicConsumerGate({
+      lifecycle: schematicSessionRef.current?.lifecycle ?? null,
+      recoveryPending: schematicRecoveryRef.current !== null,
+      consumer: "edit",
+    });
+    if (!gate.allowed) { showToast(gate.reason); return; }
+    const restoredState: SchematicState = {
+      components: checkpoint.schematic.components ?? [],
+      wires: checkpoint.schematic.wires ?? [],
+      kicadComponents: checkpoint.schematic.kicadComponents ?? [],
+      netLabels: checkpoint.schematic.netLabels ?? [],
+      ...(checkpoint.schematic.pageSize ? { pageSize: checkpoint.schematic.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
+    };
+    const session = schematicSessionRef.current;
+    const restoredForProject = meta.id;
+    // B07.5 — scope of record for the restore: generation-current AND the
+    // active project still the checkpoint's owner at the adoption boundary
+    // (the identity predicate runs AGAIN here — defense in depth beyond the
+    // entry check and beyond React state having been cleared).
+    const restoreScope = projectScopeRegistryRef.current!.capture();
+    void gestureCoordinator.adoptLifecycle({
+      state: restoredState,
+      reason: `checkpoint restored: ${checkpoint.label}`,
+      stillCurrent: () => restoreScope.isCurrent()
+        && projectRef.current?.id === restoredForProject
+        && checkpointBelongsToProject(checkpoint, projectRef.current?.id ?? null),
+      adopt: (candidate) => session
+        ? session.adoptLifecycleProjection(candidate, `checkpoint restored: ${checkpoint.label}`)
+        : Promise.resolve({ ok: false as const, code: "no-service" as const, detail: "Schematic session unavailable — reload the project." }),
+      applyUi: (candidate) => applyCanonicalSchematicProjection(`Restored checkpoint: ${checkpoint.label}`, candidate),
+      onAdopted: () => {
+        if (checkpoint.schematic.pageSize) setPageSize(checkpoint.schematic.pageSize);
+        if (checkpoint.chat) setMessages(fromStoredChat(checkpoint.chat));
+        if (checkpoint.board) {
+          // Persist first (survives a crash before the editor consumes it),
+          // then hand the exact board to the PCB editor — an explicit restore
+          // wins even when the durable server authority has advanced.
+          const ok = saveProjectFields(restoredForProject, { pcbWorking: { board: checkpoint.board, baseRevision: checkpoint.boardBase?.revision ?? null, baseDigest: checkpoint.boardBase?.digest ?? null, updatedAt: Date.now() } });
+          if (!ok) { showToast("Checkpoint board could not be written to browser storage; schematic was restored, PCB was not."); return; }
+          requestBoardRestore(checkpoint.board);
+          setPcbMounted(true);
+          setPcbHydrateToken((token) => token + 1);
+        }
+        showToast(`Restored checkpoint: ${checkpoint.label}`);
+        setHistoryOpen(false);
+      },
+    }).then((outcome) => {
+      if (outcome.status === "adopted" || outcome.status === "canceled-stale-project") return;
+      showToast("detail" in outcome ? outcome.detail : "Checkpoint restore was not applied.");
+    });
+  }, [applyCanonicalSchematicProjection, gestureCoordinator]);
 
   const switchProject = useCallback((id: string) => {
     if (projectRef.current?.id === id) return;
-    autosaverRef.current?.flush();
-    const opened = openProject(id);
+    // B12.4 §E — loading a switch target does NOT activate it; the
+    // persisted current-project pointer commits only inside the winning
+    // install. The one required flush is the transition coordinator's
+    // typed beforeInstall hook (no raw autosaver call in a click handler).
+    const opened = loadProjectRecord(id);
     if (!opened) { showToast("That project could not be loaded — its record is missing or unreadable. It was not opened and nothing was lost."); return; }
     hydrateProject(opened.project, { announce: `Opened "${opened.project.name}"` });
     if (opened.dropped.length) showToast(`Opened with ${opened.dropped.length} corrupt optional record(s) set aside: ${opened.dropped.join(", ")}`);
@@ -2745,8 +3960,9 @@ export default function Home() {
   }, [hydrateProject]);
 
   const createNewProject = useCallback(() => {
-    autosaverRef.current?.flush();
-    const created = startNewProject();
+    // B12.4 §E — the record is persisted, but it becomes CURRENT only when
+    // its installation wins (markProjectCurrent inside installProject).
+    const created = createProjectRecord();
     hydrateProject(created, { announce: `Created "${created.name}"` });
     setProjectList(listProjects());
   }, [hydrateProject]);
@@ -2773,7 +3989,8 @@ export default function Home() {
     const content = await file.text();
     const result = await importProjectFile(content);
     if (!result.ok) { showToast(`Open project failed: ${result.reason}`); return; }
-    openProject(result.project.id);
+    // B12.4 §E — the imported record/checkpoints are persisted; activation
+    // (the pointer) belongs to the winning install.
     hydrateProject(result.project, { announce: `Opened "${result.project.name}" from file (${result.checkpointsImported} checkpoint(s) restored)` });
     for (const warning of result.warnings) showToast(warning);
     setProjectList(listProjects());
@@ -2876,32 +4093,21 @@ export default function Home() {
         setTool(binding.tool as Tool);
         setWireDraftStart(null);
       } else if (binding.action === "rotate") {
+        // B06: rotation is a canonical schematic.move-rotate command.
         if (selectedId && tool === "select") {
-          historyLabelRef.current = "Rotated component";
-          setComponents((cs) => cs.map((c) =>
-            c.id === selectedId
-              ? { ...c, rotation: ((c.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
-              : c
-          ));
+          rotateComponentCanonical("theory", selectedId, "Rotated component");
         } else if (selectedKicadId && tool === "select") {
-          historyLabelRef.current = `Rotated ${liveStateRef.current.kicadComponents.find((k) => k.id === selectedKicadId)?.refDes ?? "component"}`;
-          setKicadComponents((ks) => ks.map((k) =>
-            k.id === selectedKicadId
-              ? { ...k, rotation: ((k.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
-              : k
-          ));
+          rotateComponentCanonical("kicad", selectedKicadId, `Rotated ${liveStateRef.current.kicadComponents.find((k) => k.id === selectedKicadId)?.refDes ?? "component"}`);
         } else if (PLACEMENT_TOOLS.has(tool) || tool === "kicad-place") {
           setPlacementRotation((r) => ((r + 90) % 360) as 0 | 90 | 180 | 270);
         }
       } else if (binding.action === "delete-selection") {
+        // B06: deletion is a canonical schematic.delete-component command with
+        // a deterministic impact plan (incident wires + labels removed).
         if (selectedId) {
-          historyLabelRef.current = "Deleted component";
-          setComponents((cs) => cs.filter((c) => c.id !== selectedId));
-          setSelectedId(null);
+          void deleteComponentCanonical("theory", selectedId);
         } else if (selectedKicadId) {
-          historyLabelRef.current = `Deleted ${liveStateRef.current.kicadComponents.find((k) => k.id === selectedKicadId)?.refDes ?? "component"}`;
-          setKicadComponents((ks) => ks.filter((k) => k.id !== selectedKicadId));
-          setSelectedKicadId(null);
+          void deleteComponentCanonical("kicad", selectedKicadId);
         }
       } else if (binding.action === "exit-tool-or-end-wire") {
         if (wireDraftStart !== null) {
@@ -2919,7 +4125,7 @@ export default function Home() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [tool, wireDraftStart, selectedId, selectedKicadId]);
+  }, [tool, wireDraftStart, selectedId, selectedKicadId, rotateComponentCanonical, deleteComponentCanonical]);
 
   // Sim-view keyboard shortcuts + reset to probe on enter
   useEffect(() => {
@@ -3004,11 +4210,26 @@ export default function Home() {
     );
   }
 
+  /** B07.3 — append chat content only while the given project is still the
+   *  active one: a late asynchronous result must never write into another
+   *  project's transcript. (The activity-log update helpers above are
+   *  inherently safe — they map by log id, which no longer exists after a
+   *  project switch replaces the message list.) */
+  function appendChatFor(projectId: string | null, build: (prev: typeof messages) => typeof messages) {
+    if (projectId !== null && projectRef.current?.id !== projectId) return;
+    setMessages(build);
+  }
+
   async function send(retryText?: string) {
     const text = (retryText ?? input).trim();
     if (!text || loading) return;
 
-    const userMsg: ChatMessage  = { id: Date.now().toString(), role: "user", content: text };
+    // B07.4 — the chat request is project-scoped: collision-resistant UUID
+    // message ids, an abortable fetch, stream chunks/errors gated on the
+    // captured scope, and request-owned busy state.
+    const scope = projectScopeRegistryRef.current!.capture();
+    const runProvider = aiBrainRef.current; // the run's provider, pinned at submission
+    const userMsg: ChatMessage  = { id: crypto.randomUUID(), role: "user", content: text };
     const logId                 = crypto.randomUUID();
     const logMsg: ActivityLogMessage = {
       id: logId,
@@ -3017,11 +4238,12 @@ export default function Home() {
       status: "running",
       entries: [{ id: crypto.randomUUID(), text: "Submitting message", status: "running" }],
     };
-    const assistantId           = (Date.now() + 1).toString();
+    const assistantId           = crypto.randomUUID();
     const assistantMsg: ChatMessage = { id: assistantId, role: "assistant", content: "" };
 
     setMessages((prev) => [...prev, userMsg, logMsg, assistantMsg]);
     setInput("");
+    activeChatRef.current = scope.requestId;
     setLoading(true);
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void send(text);
@@ -3031,31 +4253,178 @@ export default function Home() {
       const apiMessages = [...messages, userMsg]
         .filter((message): message is ChatMessage => message.role === "user" || message.role === "assistant")
         .map(({ role, content }) => ({ role, content }));
+      // B07.3 — chat context is ONE immutable authoritative snapshot (never
+      // the visible arrays, which may be showing a gesture preview), and it
+      // is validated before it leaves the client: an invalid projection
+      // (pending recovery) is simply omitted rather than presented as a
+      // trustworthy schematic. schematicState is optional server-side.
+      const chatSnapshot = currentSchematicState();
+      const chatSnapshotValid = validateSchematicStateIntegrity(chatSnapshot).length === 0;
+      // B10 — ONE atomic immutable editor-context snapshot captured for the
+      // SAME project/branch generation as this request's scope: the exact
+      // PcbEditor working copy (unsaved edits included), live selection,
+      // and live netlist. null (unavailable) when no current-generation
+      // publisher matches — the run then simply has no PCB resources.
+      const chatEditorContext = editorContextBridgeRef.current!.capture({
+        tenantId: "local",
+        projectId: scope.projectId ?? projectRef.current?.id ?? "local",
+        branchId: scope.branchId ?? "main",
+      });
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: aiBrainRef.current,
           messages: apiMessages,
-          schematicState: { components, wires, kicadComponents, netLabels, pageSize },
+          // B09 — project identity for the run context: identifiers ONLY.
+          // Actor/role/capabilities are minted server-side (LOCAL_ONLY
+          // factory); nothing in this body carries authority claims.
+          scope: {
+            tenantId: "local",
+            projectId: projectScopeRegistryRef.current?.current.projectId ?? "local",
+            branchId: projectScopeRegistryRef.current?.current.branchId ?? "local",
+          },
+          ...(chatSnapshotValid ? { schematicState: { ...chatSnapshot, pageSize: chatSnapshot.pageSize ?? pageSize } } : {}),
+          // B10 — the versioned atomic editor context (schema
+          // sirkit.editor-context.v1). The server revalidates the board and
+          // recomputes every revision/digest; nothing here is authority.
+          ...(chatEditorContext ? { editorContext: chatEditorContext } : {}),
+          // B09.1 — the ready session's head mark is a scope LABEL for
+          // proposal sealing (verified at apply against the CURRENT
+          // session); absent ⇒ the proposal tool is unavailable server-side.
+          ...(schematicSessionRef.current?.headMark() ? { schematicHeadMark: schematicSessionRef.current.headMark() } : {}),
         }),
+        signal: scope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
       const dec    = new TextDecoder();
       appendActivityStep(logId, "Streaming response");
+      // B09 — versioned NDJSON agent-event protocol: every event is applied
+      // ONLY while the capturing project generation is current; late chunks
+      // (text, tool status, proposals, failures) write nothing into a
+      // replacement project. Raw provider bodies never reach this client —
+      // the route emits only the typed event protocol.
+      let ndjsonBuffer = "";
+      let runFailure: { reason: string; message: string } | null = null;
+      const applyAgentEvent = (event: Record<string, unknown>): void => {
+        if (!scope.isCurrent()) return;
+        switch (event.type) {
+          case "text_delta": {
+            const text = typeof event.text === "string" ? event.text : "";
+            if (text) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content + text } : m)));
+            return;
+          }
+          case "tool_started": {
+            appendActivityStep(logId, `Running Sirkit tool: ${typeof event.title === "string" ? event.title : "tool"}`);
+            return;
+          }
+          case "tool_finished": {
+            const title = typeof event.title === "string" ? event.title : "tool";
+            appendActivityStep(logId, event.ok === true ? `${title} — succeeded` : `${title} — refused (${typeof event.status === "string" ? event.status : "error"})`, event.ok === true ? "done" : "error");
+            return;
+          }
+          case "proposal_ready": {
+            // The sealed proposal enters the EXISTING exact-proposal review
+            // boundary; apply re-verifies identity/operations/base digests
+            // and expiry, so a stale or altered artifact can never execute.
+            const proposal = event.proposal as SealedTier1Proposal | SealedReplacementProposal | undefined;
+            // [B14/B14.1] discriminated union: a sealed REPLACEMENT proposal
+            // enters its own review boundary through the PRODUCTION consumer
+            // (the same module the integration test drives); receiving it
+            // mutates nothing.
+            const replacement = receiveReplacementProposalEvent(event);
+            if (replacement) {
+              setPendingReplacement(replacement.proposal);
+              setPendingReplacementRunId(replacement.runId);
+              approvedMutationAudit.record({ at: Date.now(), proposalId: replacement.proposal.proposalId, originRunId: replacement.runId, event: "approval-displayed", code: null });
+              appendActivityStep(logId, `Replacement proposal ready — ${replacement.proposal.target.partId} awaiting your explicit review`, "done");
+              return;
+            }
+            if (proposal && proposal.schema === TIER1_PROPOSAL_SCHEMA && Array.isArray(proposal.operations)) {
+              setPendingTier1(proposal);
+              // B12: the originating run id is audit metadata only (never
+              // authority); the sealed scope/head/digest fields remain the
+              // sole basis for apply-time verification.
+              setPendingTier1RunId(typeof event.runId === "string" ? event.runId : null);
+              approvedMutationAudit.record({ at: Date.now(), proposalId: proposal.proposalId, originRunId: typeof event.runId === "string" ? event.runId : null, event: "approval-displayed", code: null });
+              appendActivityStep(logId, `Proposal ready — ${proposal.operations.length} operation(s) awaiting your explicit review`, "done");
+            }
+            return;
+          }
+          case "pcb_proposal_ready": {
+            // [B15.3] the DISTINCT PCB proposal event. The PRODUCTION safe
+            // discriminator narrows + structurally verifies; a fabricated or
+            // malformed event is dropped. Receiving/displaying mutates
+            // NOTHING — the review + one-shot approval live inside PcbEditor.
+            const pcbProposal = receivePcbProposalReadyEvent(event);
+            if (pcbProposal) {
+              setPendingPcbProposal({ proposal: pcbProposal.proposal, originRunId: pcbProposal.runId });
+              appendActivityStep(logId, `PCB proposal ready — ${pcbProposal.proposal.operations.length} bounded operation(s) awaiting your explicit review in the PCB editor`, "done");
+            }
+            return;
+          }
+          case "warning": {
+            if (typeof event.message === "string") appendActivityStep(logId, event.message, "done");
+            return;
+          }
+          case "run_failed": {
+            runFailure = {
+              reason: typeof event.reason === "string" ? event.reason : "unknown",
+              message: typeof event.message === "string" ? event.message : "The assistant run failed.",
+            };
+            return;
+          }
+          default:
+            return; // run_started / run_completed need no extra UI writes
+        }
+      };
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = dec.decode(value, { stream: true });
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content + chunk } : m,
-          )
-        );
+        if (!scope.isCurrent()) {
+          // Project changed mid-stream: stop consuming; write nothing more
+          // (the id-keyed map below is already a no-op after hydration
+          // replaced the message list — this stops the network work too).
+          try { await reader.cancel(); } catch { /* already closed */ }
+          break;
+        }
+        ndjsonBuffer += dec.decode(value, { stream: true });
+        for (let newline = ndjsonBuffer.indexOf("\n"); newline >= 0; newline = ndjsonBuffer.indexOf("\n")) {
+          const line = ndjsonBuffer.slice(0, newline).trim();
+          ndjsonBuffer = ndjsonBuffer.slice(newline + 1);
+          if (!line) continue;
+          try {
+            const event = JSON.parse(line) as Record<string, unknown>;
+            applyAgentEvent(event);
+          } catch { /* malformed line: skipped, never rendered raw */ }
+        }
+      }
+      if (runFailure !== null && scope.isCurrent()) {
+        const failure = runFailure as { reason: string; message: string };
+        failActivityLog(logId, failure.message);
+        setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId && m.content === ""
+          ? { ...m, content: failure.reason.startsWith("provider_") ? `${failure.message} Choose an action below.` : failure.message }
+          : m)));
+        // B09.2 — the settlement is PRODUCTION-owned (run-consumer.ts):
+        // recoverable provider_* failures on the CURRENT generation dispatch
+        // the owned Retry / Use-other-provider event; retry starts a NEW
+        // send() run (fresh scope + fresh AbortController); stale/cancelled/
+        // deadline runs recover nothing.
+        settleAgentRunFailure({
+          reason: failure.reason,
+          provider: runProvider,
+          ownership: { isCurrent: () => scope.isCurrent() },
+          startNewRun: () => void send(text),
+        });
       }
     } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) {
+        // Cancellation (project switch/unmount) — not a provider failure;
+        // no error text is written into the now-active project.
+        return;
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.role === "assistant" && m.id === assistantId
@@ -3086,56 +4455,205 @@ export default function Home() {
           };
         });
       });
-      setLoading(false);
+      // Only THIS request may clear the busy flag it set.
+      if (activeChatRef.current === scope.requestId) {
+        activeChatRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
-  function applySchematic(
+  // B07.4 — ONE project async-scope registry for the page's lifetime.
+  // hydrateProject begins a new project GENERATION (aborting the previous
+  // generation's fetches and canceling its timers); handlers capture scopes
+  // at invocation and check them after every await.
+  const projectScopeRegistryRef = useRef<ProjectAsyncScopeRegistry | null>(null);
+  if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry();
+  useEffect(() => () => projectScopeRegistryRef.current?.dispose(), []);
+
+  // B10 — ONE page-owned editor-context bridge: PcbEditor publishes the
+  // exact working-copy read source into it; send() captures one atomic
+  // immutable snapshot per chat request. Its generation advances with
+  // every project hydration (see hydrateProject) and it is invalidated on
+  // page teardown.
+  const editorContextBridgeRef = useRef<EditorContextBridge | null>(null);
+  if (editorContextBridgeRef.current === null) editorContextBridgeRef.current = new EditorContextBridge();
+  // [B10.1] no unmount-invalidate effect: under React Strict Mode the
+  // setup→cleanup→setup replay would run that cleanup while the page keeps
+  // living, and nothing outside hydration re-establishes the generation.
+  // The bridge is owned by this ref alone — at REAL unmount its owner
+  // becomes unreachable, so the teardown was redundant; publisher-side
+  // liveness (effect-local + lifecycle scope) already retires publications.
+
+  /** B07.3/B07.4 — immutable invocation context captured BEFORE any
+   *  asynchronous schematic-producing request (generation, topology edit,
+   *  tidy). The response may only apply against this exact project, session
+   *  GENERATION, and authoritative base — anything else is truthfully
+   *  surfaced as stale. */
+  const captureLifecycleInvocationContext = useCallback(() => {
+    const baseDigest = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
+    return {
+      projectId: projectRef.current?.id ?? null,
+      session: schematicSessionRef.current,
+      baseDigest,
+      scope: projectScopeRegistryRef.current!.capture({ baseDigest }),
+    };
+  }, []);
+
+  /** B07.5 (failure F) — project-generation ownership for AI requests made
+   *  by mounted editor COMPONENTS (SpiceStudio, PCB AssistBox, net-class):
+   *  each request captures a scope at submission, so its provider-failure
+   *  dispatch and retry callback die with the owning project generation
+   *  even though the component itself may stay mounted across a switch. */
+  const captureAiRequestOwnership = useCallback((): AiRequestOwnership => {
+    const scope = projectScopeRegistryRef.current!.capture();
+    return { isCurrent: () => scope.isCurrent() };
+  }, []);
+
+  /**
+   * B07.3 — TRANSACTIONAL machine-schematic application through the
+   * lifecycle gateway: validate → canonical adoption (quarantine-first, on
+   * the CAPTURED session) → and only then projection/history/chat/
+   * checkpoint/page-size/auto-run. On any failure or stale token the prior
+   * projection, mirror, history, chat, and persistence stay unchanged, and
+   * the structured reason is surfaced. Returns true only when adopted.
+   */
+  async function applySchematic(
     state: SchematicState,
     explanation: string,
     prompt: string,
-    opts?: { skipAutoRun?: boolean; promptAlreadyLogged?: boolean; suppressChat?: boolean },
-  ) {
-    // One AI application = one undoable transaction (R06 Section 7).
-    flushPendingRecord();
-    historyLabelRef.current = opts?.skipAutoRun ? "Applied AI edit" : `Generated schematic: ${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}`;
-    setComponents(state.components);
-    setWires(state.wires);
-    setKicadComponents(state.kicadComponents ?? []);
-    setNetLabels(state.netLabels ?? []);
-    // Machine-generated layout → safe to auto-tidy, then auto-review. Tidy's own
-    // apply passes skipAutoRun so the pipeline can't re-trigger itself.
-    if (!opts?.skipAutoRun) {
-      autoRunIncludesTidy.current = (state.kicadComponents?.length ?? 0) > 0;
-      setAutoRunToken((t) => t + 1);
+    opts?: {
+      skipAutoRun?: boolean;
+      promptAlreadyLogged?: boolean;
+      suppressChat?: boolean;
+      /** Exact-base invocation pin (captured before the producing request). */
+      pin?: { projectId: string | null; session: SchematicEditorSession | null; baseDigest: string; scope: ProjectAsyncScope };
+    },
+  ): Promise<boolean> {
+    // B07.4 — the scope of record: the invocation pin's when present, else a
+    // fresh capture for this explicit user action.
+    const scope = opts?.pin?.scope ?? projectScopeRegistryRef.current!.capture();
+    const session = opts?.pin ? opts.pin.session : schematicSessionRef.current;
+    const label = opts?.skipAutoRun ? "Applied AI edit" : `Generated schematic: ${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}`;
+    const appliedState: SchematicState = {
+      components: state.components, wires: state.wires,
+      kicadComponents: state.kicadComponents ?? [], netLabels: state.netLabels ?? [],
+      ...(state.pageSize ? { pageSize: state.pageSize } : { ...(liveStateRef.current.pageSize ? { pageSize: liveStateRef.current.pageSize } : {}) }),
+    };
+    const applyForProject = opts?.pin ? opts.pin.projectId : (projectRef.current?.id ?? null);
+    const outcome = await gestureCoordinator.adoptLifecycle({
+      state: appliedState,
+      reason: "AI-generated schematic applied",
+      ...(opts?.pin ? { expectedBaseDigest: opts.pin.baseDigest } : {}),
+      // Project id AND session generation must both be current (the same
+      // project can be rehydrated into a new session).
+      stillCurrent: () => scope.isCurrent() && (applyForProject === null || projectRef.current?.id === applyForProject),
+      adopt: (candidate) => session
+        ? session.adoptLifecycleProjection(candidate, "AI-generated schematic applied")
+        : Promise.resolve({ ok: false as const, code: "no-service" as const, detail: "Schematic session unavailable — reload the project." }),
+      applyUi: (candidate) => applyCanonicalSchematicProjection(label, candidate),
+      onAdopted: () => {
+        // Machine-generated layout → safe to auto-tidy, then auto-review.
+        // Tidy's own apply passes skipAutoRun so the pipeline can't loop.
+        if (!opts?.skipAutoRun) {
+          autoRunIncludesTidy.current = (state.kicadComponents?.length ?? 0) > 0;
+          setAutoRunToken((t) => t + 1);
+        }
+        if (state.pageSize) setPageSize(state.pageSize);
+        setSelectedId(null);
+        setSelectedKicadId(null);
+        setWireDraftStart(null);
+        setTool("select");
+        const appendedMessages = opts?.suppressChat ? [] : [
+          ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
+          { id: crypto.randomUUID(), role: "assistant" as const, content: explanation },
+        ];
+        if (appendedMessages.length > 0) setMessages((prev) => [...prev, ...appendedMessages]);
+        // B07.4 (failure C) — the generation checkpoint is written
+        // IMMEDIATELY from the exact adopted candidate and the CAPTURED
+        // project: no ambient delayed effect, no re-read of projectRef or
+        // authoritative state after a delay, and a failure is reported only
+        // while the owning project is still active. A checkpoint failure
+        // never rolls back the already-successful adoption.
+        //
+        // B07.5 — checkpoint READINESS is re-evaluated immediately before
+        // the write, on the CAPTURED session (never an ambient ref):
+        // adoption just succeeded on that session, but defense in depth
+        // requires the canonical session to still be ready, no recovery to
+        // be pending, and the owning scope to still be current. If any of
+        // those no longer hold, the checkpoint is silently not written —
+        // the adoption itself stands.
+        if (!opts?.skipAutoRun && applyForProject !== null) {
+          const checkpointGate = evaluateSchematicConsumerGate({
+            lifecycle: session?.lifecycle ?? null,
+            recoveryPending: schematicRecoveryRef.current !== null,
+            consumer: "checkpoint",
+          });
+          if (checkpointGate.allowed && scope.isCurrent()) {
+            const checkpointProject = applyForProject;
+            const checkpointChat = toStoredChat([...liveStateRef.current.messages, ...appendedMessages]);
+            void checkpointStore().add({
+              projectId: checkpointProject,
+              label,
+              at: Date.now(),
+              schematic: structuredClone(appliedState),
+              chat: checkpointChat,
+              workflowView: liveStateRef.current.view,
+            }).then(() => {
+              scope.ifCurrent(() => refreshCheckpoints());
+            }).catch((error: unknown) => {
+              scope.ifCurrent(() => showToast(`Checkpoint could not be saved: ${error instanceof Error ? error.message : String(error)}`));
+            });
+          }
+        }
+      },
+    });
+    if (outcome.status === "adopted") return true;
+    if (outcome.status !== "canceled-stale-project") {
+      const detail = "detail" in outcome ? outcome.detail : "The project changed while the result was being prepared.";
+      const errorScope = opts?.pin?.scope ?? projectScopeRegistryRef.current!.capture();
+      errorScope.ifCurrent(() => {
+        setGenError(detail);
+        errorScope.setTimeout(() => setGenError(null), 8000);
+      });
     }
-    // Adopt the page size auto-layout picked for this circuit (absent only on
-    // older/hand-built states — leave the current choice untouched then).
-    if (state.pageSize) setPageSize(state.pageSize);
-    setSelectedId(null);
-    setSelectedKicadId(null);
-    setWireDraftStart(null);
-    setTool("select");
-    if (!opts?.suppressChat) {
-      setMessages((prev) => [
-        ...prev,
-        ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
-        { id: crypto.randomUUID(), role: "assistant", content: explanation },
-      ]);
-    }
-    // Durable revision checkpoint for the applied generation (after React
-    // commits the new state into liveStateRef).
-    if (!opts?.skipAutoRun) {
-      setTimeout(() => addCheckpoint(`Generated schematic: ${prompt.slice(0, 60)}${prompt.length > 60 ? "…" : ""}`), 600);
-    }
+    return false;
   }
+
+  /** B07.4 — project-scoped transient error: written and auto-cleared only
+   *  while the owning scope is current; never appears in another project. */
+  const setScopedGenError = useCallback((scope: ProjectAsyncScope, message: string, ms = 6000) => {
+    scope.ifCurrent(() => {
+      setGenError(message);
+      scope.setTimeout(() => setGenError(null), ms);
+    });
+  }, []);
+
+  /** An aborted fetch is a CANCELLATION (project switch/unmount), never a
+   *  provider failure. */
+  const isAbortError = (error: unknown): boolean =>
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError");
 
   async function handleGenerateSchematic(prompt: string) {
     if (!prompt.trim() || isGenerating) return;
+    // B07.3 — generation cannot bypass a conflicted/invalid/loading session,
+    // and the result is pinned to the exact project + authoritative base
+    // captured NOW: an intervening edit or project switch makes it stale.
+    const entryGate = schematicConsumerGate("edit");
+    if (!entryGate.allowed) {
+      setScopedGenError(projectScopeRegistryRef.current!.capture(), entryGate.reason);
+      return;
+    }
+    const pin = captureLifecycleInvocationContext();
+    const scope = pin.scope;
     const logId = startActivityLog("Generating schematic", "Preparing request", prompt);
     setLastDesignPrompt(prompt); // remembered for the SchGen cross-verify second opinion
-    setPendingSuggestions([]);   // any prior second-opinion suggestions are now stale
+    setPendingSuggestions(null); // any prior suggestions are now stale
     setSuggestionsMinimized(false);
+    // B07.4 — request-owned busy state: only THIS request's finally may
+    // clear it, and errors/retries are scope-guarded.
+    activeGenerationRef.current = scope.requestId;
     setIsGenerating(true);
     setGenError(null);
     setAiProviderFailure(null);
@@ -3150,8 +4668,9 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt, provider: aiBrainRef.current }),
+          signal: scope.signal,
         });
-        if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
+        if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
         const data = (await res.json()) as
           | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
           | { ok: false; error: string };
@@ -3174,8 +4693,7 @@ export default function Home() {
 
         if ((state.kicadComponents?.length ?? 0) === 0) {
           failActivityLog(logId, "No parts produced");
-          setGenError("No parts produced — try a more specific prompt.");
-          setTimeout(() => setGenError(null), 6000);
+          setScopedGenError(scope, "No parts produced — try a more specific prompt.");
           return;
         }
 
@@ -3183,21 +4701,17 @@ export default function Home() {
         // is electrically wrong by netlist after reroute attempts.
         if (!built.validation.ok) {
           const v = built.validation.violations;
-          setGenError(
-            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
-          );
+          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
           appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          setTimeout(() => setGenError(null), 12000);
         }
       } else {
         appendActivityStep(logId, "Synthesizing theory schematic");
-        const result = await generateSchematic(prompt, lastAiRetryRef.current ?? undefined);
+        const result = await generateSchematic(prompt, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
         state = result.state;
         explanation = result.netlist.explanation;
         if (state.components.length === 0) {
           failActivityLog(logId, "No components produced");
-          setGenError("No components produced — try a more specific prompt.");
-          setTimeout(() => setGenError(null), 6000);
+          setScopedGenError(scope, "No components produced — try a more specific prompt.");
           return;
         }
 
@@ -3205,27 +4719,58 @@ export default function Home() {
         if (!result.validation.ok) {
           const v = result.validation.violations;
           appendActivityStep(logId, `Electrical check found ${v.length} issue${v.length === 1 ? "" : "s"}`, "done");
-          setGenError(
-            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
-          );
-          setTimeout(() => setGenError(null), 12000);
+          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
         }
       }
 
+      // B07.4 (failure B) — the replacement dialog may only open while the
+      // ORIGINATING project/session generation is still active, the
+      // authoritative base still equals the invocation pin, and the result
+      // validates. A stale response marks only its own activity log (id-
+      // keyed, so it is a no-op after a switch) and touches NOTHING else in
+      // the now-active project.
+      const resultIssues = validateSchematicStateIntegrity(state);
+      if (!scope.isCurrent()) {
+        failActivityLog(logId, "Result discarded — the project changed while generating");
+        return;
+      }
+      if (resultIssues.length > 0) {
+        failActivityLog(logId, "Generated schematic failed validation — nothing applied");
+        setScopedGenError(scope, `The generated schematic failed validation (${resultIssues[0]}). Nothing was changed.`);
+        return;
+      }
+      const authoritativeDigestNow = schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState());
+      if (authoritativeDigestNow !== pin.baseDigest) {
+        failActivityLog(logId, "Result is stale — the schematic changed while generating. Nothing was applied.");
+        setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
+        return;
+      }
       if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0) {
         finishActivityLog(logId, "Generated replacement; waiting for confirmation");
-        setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true });
+        // The pin travels with the pending replacement: confirming later
+        // still rejects as stale if the schematic or project moved on.
+        setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin });
       } else {
-        finishActivityLog(logId, "Applied schematic to canvas");
-        applySchematic(state, explanation, prompt, { promptAlreadyLogged: true });
+        const adopted = await applySchematic(state, explanation, prompt, { promptAlreadyLogged: true, pin });
+        if (adopted) finishActivityLog(logId, "Applied schematic to canvas");
+        else failActivityLog(logId, "Result not applied (stale or rejected)");
       }
     } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) {
+        // Cancellation (project switch/unmount) — not a provider failure;
+        // nothing is written into the now-active project.
+        failActivityLog(logId, "Canceled — the project changed");
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Generation failed";
       failActivityLog(logId, msg);
-      setGenError(msg);
-      setTimeout(() => setGenError(null), 6000);
+      setScopedGenError(scope, msg);
     } finally {
-      setIsGenerating(false);
+      // Only THIS request may clear the busy flag it set.
+      if (activeGenerationRef.current === scope.requestId) {
+        activeGenerationRef.current = null;
+        setIsGenerating(false);
+      }
     }
   }
 
@@ -3235,19 +4780,34 @@ export default function Home() {
   // changes on delete, which is the user's explicit intent).
   async function handleEditSchematic(prompt: string, opts?: { displayPrompt?: string }) {
     if (!prompt.trim() || isEditing) return;
-    const hasSchematic = components.length > 0 || kicadComponents.length > 0;
+    // B07.3 — the edit pipeline reads ONE immutable authoritative snapshot
+    // captured now (never the visible arrays, which may show a gesture
+    // preview), is gated on session readiness, and pins its eventual
+    // topology application to this exact project + base digest.
+    const entryGate = schematicConsumerGate("edit");
+    if (!entryGate.allowed) {
+      setScopedGenError(projectScopeRegistryRef.current!.capture(), entryGate.reason);
+      return;
+    }
+    const pin = captureLifecycleInvocationContext();
+    const scope = pin.scope;
+    const snapshot = currentSchematicState();
+    const hasSchematic = snapshot.components.length > 0 || (snapshot.kicadComponents ?? []).length > 0;
     if (!hasSchematic) return;
 
     const logId = startActivityLog("Editing schematic", "Interpreting edit request", opts?.displayPrompt ?? prompt);
     const isApplyingSuggestions = isGuardedSupportApplyInstruction(prompt);
+    activeEditRef.current = scope.requestId;
     setIsEditing(true);
     setGenError(null);
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void handleEditSchematic(prompt, opts);
     try {
       const summary = [
-        ...components.map((c) => ({ refDes: c.id, kind: c.type, value: c.value || "" })),
-        ...kicadComponents.map((k) => ({
+        // B07: tier-1 targets address theory components by DISPLAY reference
+        // (refDes ?? id) — the stable id never leaves the client.
+        ...snapshot.components.map((c) => ({ refDes: schDisplayRef(c), kind: c.type, value: c.value || "" })),
+        ...(snapshot.kicadComponents ?? []).map((k) => ({
           refDes: k.refDes,
           kind: getCachedPart(k.partId)?.name ?? "part",
           value: k.value || "",
@@ -3258,8 +4818,9 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ instruction: prompt, components: summary, provider: aiBrainRef.current }),
+        signal: scope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
       const data = (await res.json()) as
         | { ok: true; ops: SchematicEditOp[]; note: string; needsTopology: boolean }
         | { ok: false; error: string };
@@ -3271,7 +4832,7 @@ export default function Home() {
         appendActivityStep(logId, "Routing through topology editor");
         if (mode !== "build") {
           finishActivityLog(logId, "Topology edit not available in Theory mode");
-          setMessages((prev) => [
+          appendChatFor(pin.projectId, (prev) => [
             ...prev,
             {
               id: crypto.randomUUID(),
@@ -3284,22 +4845,22 @@ export default function Home() {
         }
 
         const partsMap = new Map<string, CachedPart>();
-        for (const k of kicadComponents) {
+        for (const k of snapshot.kicadComponents ?? []) {
           const p = getCachedPart(k.partId);
           if (p) partsMap.set(k.partId, p);
         }
-        const currentNetlist = schematicToBuildNetlist(
-          { components, wires, kicadComponents, netLabels },
-          partsMap,
-        );
+        // B07.3 — the topology round-trip serializes the SAME authoritative
+        // snapshot the summary came from, never the visible arrays.
+        const currentNetlist = schematicToBuildNetlist(snapshot, partsMap);
 
         appendActivityStep(logId, "Applying netlist edit");
         const res2 = await fetch("/api/schematic/edit-build", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ instruction: prompt, netlist: currentNetlist, provider: aiBrainRef.current }),
+          signal: scope.signal,
         });
-        if (!res2.ok) await throwAiResponseError(res2, lastAiRetryRef.current ?? undefined);
+        if (!res2.ok) await throwAiResponseError(res2, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
         const data2 = (await res2.json()) as
           | { ok: true; netlist: BuildLogicalNetlist; explanation: string }
           | { ok: false; error: string };
@@ -3334,104 +4895,149 @@ export default function Home() {
         appendActivityStep(logId, "Laying out and validating edit");
         const built = autoLayoutBuildValidated(nl, loaded);
         // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
-        // instruction + explanation into the chat transcript.
-        finishActivityLog(logId, isApplyingSuggestions ? "Applied suggestions to canvas" : "Applied edit to canvas");
-        applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt, {
+        // instruction + explanation into the chat transcript — but only AFTER
+        // canonical adoption succeeds (B07.3 transactional gateway, pinned to
+        // the base captured before the request).
+        const adopted = await applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt, {
           promptAlreadyLogged: true,
           skipAutoRun: isApplyingSuggestions,
+          pin,
         });
+        if (adopted) finishActivityLog(logId, isApplyingSuggestions ? "Applied suggestions to canvas" : "Applied edit to canvas");
+        else failActivityLog(logId, "Edit result not applied (stale or rejected)");
         if (!built.validation.ok) {
           const v = built.validation.violations;
-          setGenError(
-            `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`,
-          );
-          setTimeout(() => setGenError(null), 12000);
+          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
         }
         return;
       }
 
-      let comps = components;
-      let kis = kicadComponents;
-      let wrs = wires;
-      let lbls = netLabels;
-      const deletedPinKeys = new Set<string>();
-      let applied = 0;
-
+      // B06.1: receiving provider output MUTATES NOTHING. The ops are
+      // compiled (deterministically, strictly all-or-nothing) into canonical
+      // operations and sealed into a digest-pinned pending proposal. Any
+      // unknown target, unsupported operation (theory id-rename), or missing
+      // pin data BLOCKS the complete proposal — no valid subset ever
+      // executes, and there is no legacy setComponents side channel. Only
+      // the explicit "Apply exact proposal" button executes the sealed
+      // operations through the trusted interactive session.
+      //
+      // B07.4 (failure E) — the provider output stays PINNED to the exact
+      // INVOCATION snapshot: compilation and sealing use `snapshot` (never a
+      // fresh read of response-time state, which would silently grant the
+      // output an unreviewed rebase), the pin is re-verified before
+      // compilation AND after the catalog preflight awaits, and the sealed
+      // digest must equal the invocation digest.
+      const tier1StillPinned = (): boolean =>
+        scope.isCurrent() && schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()) === pin.baseDigest;
+      if (!tier1StillPinned()) {
+        failActivityLog(logId, "Edit result is stale — the schematic or project changed while it was being prepared. No proposal was created.");
+        return;
+      }
+      const kicadByRefDes = new Map((snapshot.kicadComponents ?? []).map((k) => [k.refDes, k] as const));
+      const deletePartIds = new Set<string>();
       for (const op of data.ops) {
-        const tgt = op.target;
-        const isTheory = comps.some((c) => c.id === tgt);
-        const isKicad = kis.some((k) => k.refDes === tgt);
-        if (!isTheory && !isKicad) continue;
+        if (op.op !== "delete") continue;
+        const instance = kicadByRefDes.get(op.target);
+        if (instance) deletePartIds.add(instance.partId);
+      }
+      const pinsByPartId = new Map<string, CachedPart["pins"]>();
+      await Promise.all([...deletePartIds].map(async (partId) => {
+        try {
+          const part = getCachedPart(partId) ?? (await ensurePartLoaded(partId));
+          if (part?.pins) pinsByPartId.set(partId, part.pins);
+        } catch { /* missing pin data → the compiler blocks that delete */ }
+      }));
+      // Catalog preflight awaited above — re-verify the pin before compiling.
+      if (!tier1StillPinned()) {
+        failActivityLog(logId, "Edit result is stale — the schematic or project changed during catalog loading. No proposal was created.");
+        return;
+      }
+      const sealScope = { tenantId: "local", projectId: pin.projectId ?? "", branchId: scope.branchId };
+      // [B16.0.2 §E] REQUEST-OWNED, ASYNC, TYPED live identity for EXACTLY this
+      // scope, bound to the captured ProjectAsyncScope (its signal aborts the
+      // load on project switch / logout / unmount). There is NO fallback
+      // identity: when it cannot be loaded, NO proposal is created and the
+      // user is told to sign in / retry. Local development obtains its
+      // deterministic identity through the SAME server boundary.
+      const sessionIdentity = await loadSessionIdentity(sealScope, { signal: scope.signal });
+      if (!tier1StillPinned()) {
+        failActivityLog(logId, "Edit result is stale — the schematic or project changed while your sign-in was being verified. No proposal was created.");
+        return;
+      }
+      if (!sessionIdentity.ok) {
+        failActivityLog(logId, SESSION_IDENTITY_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      // B09.1 — the proposal is sealed WITH the current session's scope/
+      // head identity; a not-ready session fails closed (no proposal). The
+      // head mark is read AFTER the identity await so it is the live head.
+      const sealSession = schematicSessionRef.current;
+      const sealHeadMark = sealSession?.headMark() ?? null;
+      if (!sealHeadMark) {
+        failActivityLog(logId, "The schematic session is not ready — no scope-sealed proposal can be created. Nothing was changed.");
+        return;
+      }
+      const compilation = compileTier1Proposal(snapshot, { ops: data.ops, pinsByPartId });
+      const sealed = sealTier1Proposal({
+        state: snapshot,
+        compilation,
+        provenance: { provider: aiBrainRef.current, note: data.note ?? "", instruction: prompt },
+        now: Date.now(),
+        scope: { ...sealScope, headMark: sealHeadMark },
+        // [B16.0.2 §E] the LIVE server-derived principal + membership revision
+        // for exactly this scope — never a local-dev or cached fallback.
+        // Apply-time reauthorization compares the LIVE membership against it.
+        authorization: sessionAuthorizationBindingFrom(sessionIdentity, sealScope),
+      });
 
-        if (op.op === "set-value") {
-          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, value: op.value } : c));
-          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, value: op.value } : k));
-          applied++;
-        } else if (op.op === "rename") {
-          if (isTheory) comps = comps.map((c) => (c.id === tgt ? { ...c, id: op.refDes } : c));
-          else kis = kis.map((k) => (k.refDes === tgt ? { ...k, refDes: op.refDes } : k));
-          applied++;
-        } else if (op.op === "delete") {
-          if (isTheory) {
-            const c = comps.find((x) => x.id === tgt)!;
-            for (const name of PIN_NAMES[c.type] ?? []) {
-              const p = pinWorldPos(c, name);
-              deletedPinKeys.add(`${p.x},${p.y}`);
-            }
-            comps = comps.filter((x) => x.id !== tgt);
-          } else {
-            const k = kis.find((x) => x.refDes === tgt)!;
-            const part = getCachedPart(k.partId);
-            if (part) for (const pin of part.pins) {
-              const p = kicadPinWorldPos(k, pin);
-              deletedPinKeys.add(`${p.x},${p.y}`);
-            }
-            kis = kis.filter((x) => x.refDes !== tgt);
-          }
-          applied++;
-        }
+      if (sealed.kind === "blocked") {
+        finishActivityLog(logId, "Proposal blocked — nothing applied");
+        appendChatFor(pin.projectId, (prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: `The proposed edit was refused in full (all-or-nothing): ${sealed.blockers.map((blocker) => blocker.detail).join(" ")} Nothing was changed.`,
+          },
+        ]);
+        return;
       }
 
-      // A deleted component's wires/labels would otherwise dangle — drop the ones
-      // anchored to its pins.
-      if (deletedPinKeys.size > 0) {
-        wrs = wrs.filter((w) => {
-          const a = w.vertices[0];
-          const b = w.vertices[w.vertices.length - 1];
-          return !(deletedPinKeys.has(`${a.x},${a.y}`) || deletedPinKeys.has(`${b.x},${b.y}`));
-        });
-        lbls = lbls.filter((l) => !deletedPinKeys.has(`${l.position.x},${l.position.y}`));
+      // The sealed base digest MUST equal the invocation pin — anything else
+      // means an unreviewed rebase and the proposal is discarded.
+      if (sealed.proposal.baseSchematicDigest !== pin.baseDigest) {
+        failActivityLog(logId, "Proposal discarded — sealed base digest did not match the invocation pin");
+        return;
       }
-
-      setComponents(comps);
-      setKicadComponents(kis);
-      setWires(wrs);
-      setNetLabels(lbls);
-      setSelectedId(null);
-      setSelectedKicadId(null);
-
-      finishActivityLog(logId, applied > 0 ? `Applied ${applied} edit${applied === 1 ? "" : "s"}` : "No edits applied");
-      setMessages((prev) => [
+      // B07.3/B07.4 — a proposal prepared for another project/session
+      // generation must never surface in the currently selected one.
+      if (!tier1StillPinned()) {
+        finishActivityLog(logId, "Proposal discarded — the project or schematic changed while it was being prepared");
+        return;
+      }
+      setPendingTier1(sealed.proposal);
+      finishActivityLog(logId, `Proposal ready — ${sealed.proposal.operations.length} operation(s) awaiting your review`);
+      appendChatFor(pin.projectId, (prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: data.note || (applied > 0 ? `Applied ${applied} edit(s).` : "No edits applied."),
+          content: `${data.note || "Edit proposal prepared."} Review the exact operations and choose "Apply exact proposal" — nothing has been changed yet.`,
         },
       ]);
-
-      // Attribute edits keep the user's placement — re-review, but never re-tidy.
-      if (applied > 0 && !isApplyingSuggestions) {
-        autoRunIncludesTidy.current = false;
-        setAutoRunToken((t) => t + 1);
-      }
     } catch (err) {
+      if (isAbortError(err) || !scope.isCurrent()) {
+        failActivityLog(logId, "Canceled — the project changed");
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Edit failed";
       failActivityLog(logId, msg);
-      setGenError(msg);
-      setTimeout(() => setGenError(null), 6000);
+      setScopedGenError(scope, msg);
     } finally {
-      setIsEditing(false);
+      if (activeEditRef.current === scope.requestId) {
+        activeEditRef.current = null;
+        setIsEditing(false);
+      }
     }
   }
 
@@ -3440,25 +5046,38 @@ export default function Home() {
   // posts them to the chat. Contradicted "floating" claims are dropped server-side.
   async function handleReview(auto = false) {
     if (isReviewing) return;
-    if (components.length === 0 && kicadComponents.length === 0) return;
+    // B07.3 — review reads ONE immutable authoritative snapshot (never a
+    // gesture preview), is gated on session readiness (its findings become
+    // applicable suggestions), and its results are pinned to this project.
+    const reviewGate = schematicConsumerGate("edit");
+    if (!reviewGate.allowed) {
+      if (!auto) setScopedGenError(projectScopeRegistryRef.current!.capture(), reviewGate.reason);
+      return;
+    }
+    const reviewPin = captureLifecycleInvocationContext();
+    const reviewScope = reviewPin.scope;
+    const reviewSnapshot = currentSchematicState();
+    if (reviewSnapshot.components.length === 0 && (reviewSnapshot.kicadComponents ?? []).length === 0) return;
+    activeReviewRef.current = reviewScope.requestId;
     setIsReviewing(true);
     setGenError(null);
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void handleReview(auto);
     try {
       const partsMap = new Map<string, CachedPart>();
-      for (const k of kicadComponents) {
+      for (const k of reviewSnapshot.kicadComponents ?? []) {
         const p = getCachedPart(k.partId);
         if (p) partsMap.set(k.partId, p);
       }
-      const reviewInput = buildReviewInput({ components, wires, kicadComponents, netLabels }, partsMap);
+      const reviewInput = buildReviewInput(reviewSnapshot, partsMap);
 
       const res = await fetch("/api/schematic/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...reviewInput, provider: aiBrainRef.current }),
+        signal: reviewScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => reviewScope.isCurrent() });
       const data = (await res.json()) as
         | { ok: true; findings: { severity: string; category?: string; title: string; detail: string; refs: string[] }[]; summary: string; dropped: number }
         | { ok: false; error: string };
@@ -3478,8 +5097,16 @@ export default function Home() {
           refs: f.refs ?? [],
           source: "review" as const,
         }));
-      setPendingSuggestions(actionable);
-      if (actionable.length > 0) setSuggestionsMinimized(false);
+      // B07.3/B07.4 — findings prepared for another project GENERATION or a
+      // superseded schematic never surface as current suggestions. When
+      // current, they are stored as a SCOPED BATCH carrying exact
+      // project/session/base ownership.
+      const reviewStillCurrent = reviewScope.isCurrent()
+        && schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()) === reviewPin.baseDigest;
+      if (reviewStillCurrent && actionable.length > 0) {
+        setPendingSuggestions({ items: actionable, scope: reviewScope, baseSchematicDigest: reviewPin.baseDigest, createdAt: Date.now() });
+        setSuggestionsMinimized(false);
+      }
 
       const md =
         data.findings.length === 0
@@ -3489,23 +5116,27 @@ export default function Home() {
               .map((f) => `- ${icon(f.severity)} **${f.title}**${f.refs?.length ? ` (${f.refs.join(", ")})` : ""} — ${f.detail}`)
               .join("\n") +
             (data.summary ? `\n\n_${data.summary}_` : "") +
-            (actionable.length > 0 ? "\n\n_Click **Apply suggestions** to address these via a validated edit._" : "") +
+            (reviewStillCurrent && actionable.length > 0 ? "\n\n_Click **Apply suggestions** to address these via a validated edit._" : "") +
+            (reviewStillCurrent ? "" : "\n\n_The schematic changed while this review ran — treat these findings as a snapshot review, not current suggestions._") +
             "\n\n_Advisory — design suggestions, not hard errors; verify before acting._";
 
-      setMessages((prev) => [
+      appendChatFor(reviewPin.projectId, (prev) => [
         ...prev,
         // Auto-runs post only the result; a fake user turn would read as noise.
         ...(auto ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: "Review the circuit" }]),
         { id: crypto.randomUUID(), role: "assistant", content: md },
       ]);
     } catch (err) {
+      if (isAbortError(err) || !reviewScope.isCurrent()) return; // cancellation, not a failure
       if (!auto) {
         const msg = err instanceof Error ? err.message : "Review failed";
-        setGenError(msg);
-        setTimeout(() => setGenError(null), 6000);
+        setScopedGenError(reviewScope, msg);
       }
     } finally {
-      setIsReviewing(false);
+      if (activeReviewRef.current === reviewScope.requestId) {
+        activeReviewRef.current = null;
+        setIsReviewing(false);
+      }
     }
   }
 
@@ -3577,18 +5208,34 @@ export default function Home() {
   // spacing on those groups. Only applies a result that stays electrically valid.
   async function handleTidyLayout(auto = false) {
     if (isTidying) return;
-    if (kicadComponents.length === 0) {
-      if (!auto) {
-        setGenError("Tidy is available for Build-mode schematics with catalog parts.");
-        setTimeout(() => setGenError(null), 5000);
-      }
+    // B07.3 — tidy is gated on readiness, REFUSED while a gesture owns the
+    // preview (the screenshot captures the LIVE canvas, which would show
+    // uncommitted preview geometry), reads one authoritative snapshot, and
+    // pins its eventual application to the base captured now.
+    const tidyGate = schematicConsumerGate("edit");
+    if (!tidyGate.allowed) {
+      if (!auto) setScopedGenError(projectScopeRegistryRef.current!.capture(), tidyGate.reason, 5000);
       return;
     }
+    if (gestureCoordinatorRef.current!.previewActive || gestureCoordinatorRef.current!.busy) {
+      if (!auto) setScopedGenError(projectScopeRegistryRef.current!.capture(), "Tidy was not started: finish or cancel the current move first.", 5000);
+      return;
+    }
+    const tidyPin = captureLifecycleInvocationContext();
+    const tidyScope = tidyPin.scope;
+    const tidySnapshot = currentSchematicState();
+    if ((tidySnapshot.kicadComponents ?? []).length === 0) {
+      if (!auto) setScopedGenError(tidyScope, "Tidy is available for Build-mode schematics with catalog parts.", 5000);
+      return;
+    }
+    activeTidyRef.current = tidyScope.requestId;
     setIsTidying(true);
     setGenError(null);
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void handleTidyLayout(auto);
     try {
+      // The screenshot is taken while no preview is active (checked above),
+      // so the rendered SVG equals the authoritative snapshot sent below.
       const image = await captureSchematicPng();
       if (!image) throw new Error("Could not capture the schematic image");
 
@@ -3597,11 +5244,12 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: aiBrainRef.current,
-          state: { components, wires, kicadComponents, netLabels, pageSize },
+          state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize },
           image,
         }),
+        signal: tidyScope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined);
+      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => tidyScope.isCurrent() });
       const data = (await res.json()) as
         | {
             ok: true;
@@ -3634,7 +5282,10 @@ export default function Home() {
         // so it updates the canvas silently; manual tidy still reports to chat.
         // skipAutoRun: the auto pipeline drives tidy → review itself; letting
         // this apply re-bump the token would loop tidy on its own output.
-        applySchematic(data.state, note, "Tidy the schematic layout", { skipAutoRun: true, suppressChat: auto });
+        // B07.3 — pinned to the pre-request base: a manual edit or project
+        // switch during the critic call makes this result stale (surfaced by
+        // the gateway), so a late tidy can never overwrite newer work.
+        await applySchematic(data.state, note, "Tidy the schematic layout", { skipAutoRun: true, suppressChat: auto, pin: tidyPin });
       } else if (!auto) {
         // Auto runs stay silent when nothing changed; manual runs explain why.
         const reason =
@@ -3647,7 +5298,7 @@ export default function Home() {
                 : !data.improved
                   ? "Re-spacing wouldn't have given the crowded parts more room, so the original was kept."
                   : "No safe improvement applied.";
-        setMessages((prev) => [
+        appendChatFor(tidyPin.projectId, (prev) => [
           ...prev,
           { id: crypto.randomUUID(), role: "user", content: "Tidy the schematic layout" },
           {
@@ -3658,13 +5309,16 @@ export default function Home() {
         ]);
       }
     } catch (err) {
+      if (isAbortError(err) || !tidyScope.isCurrent()) return; // cancellation, not a failure
       if (!auto) {
         const msg = err instanceof Error ? err.message : "Layout critic failed";
-        setGenError(msg);
-        setTimeout(() => setGenError(null), 6000);
+        setScopedGenError(tidyScope, msg);
       }
     } finally {
-      setIsTidying(false);
+      if (activeTidyRef.current === tidyScope.requestId) {
+        activeTidyRef.current = null;
+        setIsTidying(false);
+      }
     }
   }
 
@@ -3676,11 +5330,20 @@ export default function Home() {
   useEffect(() => {
     if (autoRunToken === 0) return;
     const wantTidy = autoRunIncludesTidy.current;
-    const timer = setTimeout(async () => {
-      if (wantTidy) await handleTidyLayout(true);
-      await handleReview(true);
+    // B07.4 — the pending auto pipeline runs on a PROJECT-OWNED timer: a
+    // project transition cancels it at the registry (and stales its guard),
+    // so a stage scheduled by project A can never run in project B. The
+    // effect cleanup also cancels on token change/unmount.
+    const pipelineScope = projectScopeRegistryRef.current!.capture();
+    const cancel = pipelineScope.setTimeout(() => {
+      void (async () => {
+        if (!pipelineScope.isCurrent()) return;
+        if (wantTidy) await handleTidyLayout(true);
+        if (!pipelineScope.isCurrent()) return;
+        await handleReview(true);
+      })();
     }, 1200);
-    return () => clearTimeout(timer);
+    return cancel;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoRunToken]);
 
@@ -3691,23 +5354,28 @@ export default function Home() {
   async function handleSecondOpinion() {
     if (isSecondOpinion) return;
     if (kicadComponents.length === 0) {
-      setGenError("Second opinion needs a Build-mode schematic.");
-      setTimeout(() => setGenError(null), 5000);
+      setScopedGenError(projectScopeRegistryRef.current!.capture(), "Second opinion needs a Build-mode schematic.", 5000);
       return;
     }
     const prompt = (lastDesignPrompt || input).trim();
     if (!prompt) {
-      setGenError("No design prompt to compare against — generate from a prompt first.");
-      setTimeout(() => setGenError(null), 5000);
+      setScopedGenError(projectScopeRegistryRef.current!.capture(), "No design prompt to compare against — generate from a prompt first.", 5000);
       return;
     }
+    // B07.3/B07.4 — cross-verification reads one authoritative snapshot and
+    // pins its results to this project generation + base.
+    const opinionPin = captureLifecycleInvocationContext();
+    const opinionScope = opinionPin.scope;
+    const opinionSnapshot = currentSchematicState();
+    activeSecondOpinionRef.current = opinionScope.requestId;
     setIsSecondOpinion(true);
     setGenError(null);
     try {
       const res = await fetch("/api/schematic/cross-verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, state: { components, wires, kicadComponents, netLabels, pageSize } }),
+        body: JSON.stringify({ prompt, state: { ...opinionSnapshot, pageSize: opinionSnapshot.pageSize ?? pageSize } }),
+        signal: opinionScope.signal,
       });
       const data = (await res.json()) as
         | {
@@ -3735,8 +5403,15 @@ export default function Home() {
               source: "second-opinion" as const,
             }))
         : [];
-      setPendingSuggestions(actionable);
-      if (actionable.length > 0) setSuggestionsMinimized(false);
+      // B07.3/B07.4 — suggestions prepared against a superseded schematic or
+      // another project generation never surface as current; current ones
+      // are stored as a SCOPED BATCH.
+      const opinionStillCurrent = opinionScope.isCurrent()
+        && schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()) === opinionPin.baseDigest;
+      if (opinionStillCurrent && actionable.length > 0) {
+        setPendingSuggestions({ items: actionable, scope: opinionScope, baseSchematicDigest: opinionPin.baseDigest, createdAt: Date.now() });
+        setSuggestionsMinimized(false);
+      }
 
       let md: string;
       if (!data.available) {
@@ -3757,17 +5432,20 @@ export default function Home() {
             : "") +
           "\n\n_Advisory — an independent model's take, not ground truth; verify before acting._";
       }
-      setMessages((prev) => [
+      appendChatFor(opinionPin.projectId, (prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "user", content: "Get a second opinion" },
-        { id: crypto.randomUUID(), role: "assistant", content: md },
+        { id: crypto.randomUUID(), role: "assistant", content: opinionStillCurrent ? md : `${md}\n\n_The schematic changed while this ran — treat as a snapshot comparison, not current suggestions._` },
       ]);
     } catch (err) {
+      if (isAbortError(err) || !opinionScope.isCurrent()) return; // cancellation, not a failure
       const msg = err instanceof Error ? err.message : "Second opinion failed";
-      setGenError(msg);
-      setTimeout(() => setGenError(null), 6000);
+      setScopedGenError(opinionScope, msg);
     } finally {
-      setIsSecondOpinion(false);
+      if (activeSecondOpinionRef.current === opinionScope.requestId) {
+        activeSecondOpinionRef.current = null;
+        setIsSecondOpinion(false);
+      }
     }
   }
 
@@ -3775,15 +5453,28 @@ export default function Home() {
   // VALIDATED edit pipeline: a frontier model adds the actual parts/connections
   // and autoLayoutBuildValidated checks them. We never graft SchGen's netlist raw.
   async function handleApplySuggestions() {
-    if (pendingSuggestions.length === 0 || isEditing || isGenerating) return;
-    const existingProcessors = kicadComponents
+    const batch = pendingSuggestions;
+    if (!batch || batch.items.length === 0 || isEditing || isGenerating) return;
+    // B07.4 (failure A) — a suggestion batch is applicable ONLY while its
+    // exact project/session generation AND authoritative base digest still
+    // match. Anything else is refused truthfully BEFORE any request is
+    // built, and old findings are never silently rebased onto a newer
+    // schematic.
+    const evaluation = evaluateSuggestionBatch(batch, schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()));
+    if (!evaluation.applicable) {
+      setPendingSuggestions(null);
+      showToast(evaluation.reason);
+      return;
+    }
+    const applyBase = currentSchematicState();
+    const existingProcessors = (applyBase.kicadComponents ?? [])
       .map((k) => {
         const part = getCachedPart(k.partId);
         const role = normalizeComponentRole(undefined, k.refDes, part?.pins.length ?? 0);
         return role === "processor" ? `${k.refDes} (${k.value || part?.name || "processor"})` : null;
       })
       .filter((p): p is string => p !== null);
-    const suggestionLines = pendingSuggestions.map((s) => {
+    const suggestionLines = batch.items.map((s) => {
       const refs = s.refs && s.refs.length > 0 ? ` [refs: ${s.refs.join(", ")}]` : "";
       const category = s.category ? `${s.category}: ` : "";
       return `- ${category}${s.title}${refs}: ${s.detail}`;
@@ -3802,7 +5493,7 @@ export default function Home() {
         : "\n") +
       "\nSupport suggestions to apply where genuinely appropriate:\n" +
       suggestionLines.join("\n");
-    setPendingSuggestions([]);
+    setPendingSuggestions(null);
     setSuggestionsMinimized(false);
     await handleEditSchematic(guardedInstruction, { displayPrompt: "Apply suggestions" });
   }
@@ -3832,55 +5523,88 @@ export default function Home() {
         ? "Generate"
         : "Edit";
 
+  /** B07.5 (failure E) — simulation runs are OWNED requests: scope +
+   *  request id + captured session generation + authoritative base digest
+   *  at invocation, `scope.signal` on the fetch (a project switch aborts
+   *  it — a cancellation, never a simulation failure), and only a
+   *  current-scope, current-base completion may touch simResult/simError/
+   *  panes/activePaneId/chart/loading. A simulation begun in project A can
+   *  never present its waveforms, set its error, or clear the loading flag
+   *  in project B (the transition reset owns B's simulation state), and a
+   *  same-project result whose schematic base was superseded mid-run is
+   *  DISCARDED with a truthful notice (no versioned result model exists
+   *  yet, so a stale-base result is never presented as current). Server
+   *  results remain advisory — nothing here mutates schematic state. */
   async function handleRunSim() {
     if (simLoading) return;
-    setSimLoading(true);
-    setSimError(null);
-    try {
-      const res = await fetch("/api/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ state: { components, wires, netLabels }, analysis: analysisConfig }),
-      });
-      const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
-      if (!res.ok || data.error) {
-        setSimError(data.error ?? "Simulation failed");
-        return;
-      }
-      setSimResult(data);
-      // Only auto-create a pane when the user has none yet; otherwise keep
-      // their pane layout intact across re-runs.
-      if (panes.length === 0) {
-        const defaultProbe = pickDefaultSignal(data.variables, data.analysisType);
-        const pane: Pane = {
-          id: crypto.randomUUID(),
-          signals: new Set(defaultProbe ? [defaultProbe] : []),
-        };
-        console.log("[sim] received", data.variables.length, "variables; auto-probing:", defaultProbe ?? "(none)");
-        setPanes([pane]);
-        setActivePaneId(pane.id);
-      }
-      setChartPanelOpen(true);
-    } catch (e) {
-      setSimError(e instanceof Error ? e.message : "Simulation failed");
-    } finally {
-      setSimLoading(false);
+    // B07.2 — simulation consumes the AUTHORITATIVE schematic (never a
+    // gesture preview) and is blocked while the session is not ready.
+    const simGate = schematicConsumerGate("simulation");
+    if (!simGate.allowed) {
+      setSimError(simGate.reason);
+      return;
     }
+    const authoritative = currentSchematicState();
+    const scope = projectScopeRegistryRef.current!.capture({ baseDigest: schematicStateDigest(authoritative) });
+    const hadPanes = panes.length > 0;
+    await simulationRunnerRef.current.run(scope, {
+      execute: async (signal) => {
+        const res = await fetch("/api/simulate", {
+          method: "POST",
+          // [B16.0.2 §A] ngspice execution is authenticated + project-scoped:
+          // the active project identity travels as a SELECTOR only.
+          headers: { "Content-Type": "application/json", ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null) },
+          body: JSON.stringify({ state: { components: authoritative.components, wires: authoritative.wires, netLabels: authoritative.netLabels ?? [] }, analysis: analysisConfig }),
+          signal,
+        });
+        const data = await res.json() as SimResult & { ok?: boolean; error?: string; details?: string };
+        if (!res.ok || data.error) throw new Error(data.error ?? "Simulation failed");
+        return data;
+      },
+      currentBaseDigest: () => schematicStateDigest(gestureCoordinatorRef.current!.authoritativeState()),
+      setLoading: (loading) => { setSimLoading(loading); if (loading) setSimError(null); },
+      apply: (data) => {
+        setSimResult(data);
+        // Only auto-create a pane when the user has none yet; otherwise keep
+        // their pane layout intact across re-runs.
+        if (!hadPanes) {
+          const defaultProbe = pickDefaultSignal(data.variables, data.analysisType);
+          const pane: Pane = {
+            id: crypto.randomUUID(),
+            signals: new Set(defaultProbe ? [defaultProbe] : []),
+          };
+          console.log("[sim] received", data.variables.length, "variables; auto-probing:", defaultProbe ?? "(none)");
+          setPanes([pane]);
+          setActivePaneId(pane.id);
+        }
+        setChartPanelOpen(true);
+      },
+      onError: (error) => setSimError(error instanceof Error ? error.message : "Simulation failed"),
+      onStaleBase: () => showToast("The schematic changed while the simulation ran — the stale result was discarded. Re-run to simulate the current schematic."),
+    });
   }
 
   async function handleExportKicad() {
+    // B07.2 — export consumes the AUTHORITATIVE schematic (never a gesture
+    // preview) and is blocked while the session is conflicted or not ready.
+    const exportGate = schematicConsumerGate("export");
+    if (!exportGate.allowed) {
+      showToast(exportGate.reason);
+      return;
+    }
+    const authoritative = currentSchematicState();
     try {
       const res = await fetch("/api/export/kicad", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          state: { components, kicadComponents, wires, netLabels, pageSize },
+          state: { ...authoritative, pageSize: authoritative.pageSize ?? pageSize },
           title: "sirkit-export",
         }),
       });
       if (!res.ok) {
         const err = await res.text();
-        alert(`Export failed: ${err.slice(0, 200)}`);
+        alert(`Export failed: ${err.slice(0, 300)}`);
         return;
       }
       const blob = await res.blob();
@@ -3902,19 +5626,70 @@ export default function Home() {
   // alternate is assumed form-fit-function compatible. If the new part's pin
   // layout differs, attached wires keep their old endpoints and may hang; the
   // toast tells the user to verify visually rather than blocking on a check.
+  // B06: BOM part swap is a canonical fail-closed replacement. One user action
+  // replaces every instance of the source part in ONE atomic transaction:
+  // identity and ALL authority fields are replaced together (stale Stage-5
+  // authority ids can never survive a partId change), and wire endpoints move
+  // per the validated pin mapping. Any instance without a safe identity pin
+  // mapping refuses the WHOLE swap with a structured message — nothing is
+  // applied and there is no direct-state fallback.
+  // B06.2: replacement plans are built INSIDE the serialized session queue
+  // against the canonical head at execution position — a queued swap can
+  // never rebase onto, or execute a plan from, a stale snapshot. Only static
+  // catalog part data is fetched up front. Fail-closed all-or-nothing is
+  // unchanged: any unmappable instance refuses the whole swap.
   async function handleSwapPart(sourcePartId: string, newPartId: string) {
+    if (!liveStateRef.current.kicadComponents.some((k) => k.partId === sourcePartId)) return;
+    // B07.4 (failure D) — scope captured BEFORE the catalog preflight: part
+    // IDs commonly repeat across projects, so after the awaits the swap may
+    // only submit to the CAPTURED project/session; a switch cancels it. The
+    // replacement plan is still built inside the serialized queue against
+    // the latest canonical head of that SAME project.
+    const scope = projectScopeRegistryRef.current!.capture();
+    let oldPart: CachedPart;
+    let newPart: CachedPart;
     try {
-      // Warm the cache so the renderer has the new symbol/pin data on re-render.
-      const newPart = await ensurePartLoaded(newPartId);
-      setKicadComponents((prev) =>
-        prev.map((kic) =>
-          kic.partId === sourcePartId ? { ...kic, partId: newPartId } : kic,
-        ),
-      );
-      const label = newPart.mpn ?? newPart.name;
-      showToast(`Swapped to ${label}. Verify wire connections — pin positions may differ.`);
+      [oldPart, newPart] = await Promise.all([ensurePartLoaded(sourcePartId), ensurePartLoaded(newPartId)]);
     } catch {
-      showToast("Swap failed: could not load the replacement part.");
+      scope.ifCurrent(() => showToast("Swap failed: part data could not be loaded, so a safe replacement plan cannot be computed. Nothing was changed."));
+      return;
+    }
+    if (!scope.isCurrent()) return; // project changed during preflight — cancel silently
+    let refusalMessage: string | null = null;
+    let swapCount = 0;
+    const planWarnings = new Set<string>();
+    const outcome = await runSchematicCommand(`Swapped to ${newPart.mpn ?? newPart.name}`, "schematic.replace-component", (canonical) => {
+      const state = fromCanonicalSchematic(canonical);
+      const instances = (state.kicadComponents ?? []).filter((k) => k.partId === sourcePartId);
+      if (instances.length === 0) return [];
+      const operations: EngineeringOperation[] = [];
+      for (const instance of instances) {
+        const planned = planSchematicReplacement(state, {
+          componentId: instance.id,
+          // Catalog swap carries catalog identity only — atomic authority is
+          // never inferred; re-binding it is an explicit later step.
+          target: { partId: newPartId, pins: newPart.pins, authority: { status: "catalog-unverified" } },
+          currentPins: oldPart.pins,
+        });
+        if (!planned.ok) {
+          refusalMessage = `Swap refused for ${instance.refDes}: ${planned.detail} Nothing was changed.`;
+          return [];
+        }
+        for (const warning of planned.plan.warnings) planWarnings.add(warning);
+        operations.push(planned.operation);
+      }
+      swapCount = instances.length;
+      return operations;
+    }, { scope });
+    if (refusalMessage) {
+      scope.ifCurrent(() => showToast(refusalMessage!));
+      return;
+    }
+    if (outcome.ok && swapCount > 0) {
+      scope.ifCurrent(() => {
+        showToast(`Swapped ${swapCount === 1 ? "1 component" : `${swapCount} components`} to ${newPart.mpn ?? newPart.name}. Mapped wire connections were preserved; ERC, BOM, physical binding, and PCB sync will recompute from the new identity.`);
+        for (const warning of planWarnings) showToast(warning);
+      });
     }
   }
 
@@ -4195,17 +5970,19 @@ export default function Home() {
                 <>
                   <SchematicEditor
                     tool={tool} setTool={setTool}
-                    components={components} setComponents={setComponents}
-                    wires={wires} setWires={setWires}
+                    components={components}
+                    wires={wires}
                     selectedId={selectedId} setSelectedId={setSelectedId}
                     wireDraftStart={wireDraftStart} setWireDraftStart={setWireDraftStart}
                     placementRotation={placementRotation}
-                    kicadComponents={kicadComponents} setKicadComponents={setKicadComponents}
+                    kicadComponents={kicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
-                    netLabels={netLabels} setNetLabels={setNetLabels}
+                    netLabels={netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
-                    pageSize={pageSize} setPageSize={setPageSize}
+                    pageSize={pageSize} setPageSize={changeSheetSize}
+                    onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
+                    graph={schematicGraphApi}
                   />
                   {/* Empty state overlay */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
@@ -4217,61 +5994,52 @@ export default function Home() {
                       </p>
                     </div>
                   )}
+                  {/* B06: panel edits are canonical schematic commands — no
+                      direct-state fallback. Rejections surface as toasts and
+                      change nothing. */}
                   {selectedComp && (
                     <PropertiesPanel
                       comp={selectedComp}
                       onValueChange={(v) =>
-                        setComponents((cs) =>
-                          cs.map((c) => c.id === selectedId ? { ...c, value: v } : c)
-                        )
+                        setComponentPropertiesCanonical("theory", selectedComp.id, { value: v }, `Changed ${schDisplayRef(selectedComp)} value to ${v}`)
                       }
                       onRotationChange={(r) =>
-                        setComponents((cs) =>
-                          cs.map((c) => c.id === selectedId ? { ...c, rotation: r } : c)
-                        )
+                        rotateComponentCanonical("theory", selectedComp.id, `Rotated ${schDisplayRef(selectedComp)}`, r)
                       }
-                      onDelete={() => {
-                        setComponents((cs) => cs.filter((c) => c.id !== selectedId));
-                        setSelectedId(null);
-                      }}
+                      onDelete={() => void deleteComponentCanonical("theory", selectedComp.id)}
+                      onReferenceChange={(v) =>
+                        setComponentPropertiesCanonical("theory", selectedComp.id, { refDes: v }, `Renamed ${schDisplayRef(selectedComp)} to ${v}`)
+                      }
                     />
                   )}
                   {selectedKicad && (
                     <KicadPropertiesPanel
                       instance={selectedKicad}
-                      onRefDesChange={(v) => {
-                        historyLabelRef.current = `Renamed ${selectedKicad.refDes} to ${v}`;
-                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, refDes: v } : k));
-                      }}
-                      onValueChange={(v) => {
-                        historyLabelRef.current = `Changed ${selectedKicad.refDes} value to ${v}`;
-                        setKicadComponents((ks) => ks.map((k) => k.id === selectedKicadId ? { ...k, value: v } : k));
-                      }}
-                      onRotate={() => {
-                        historyLabelRef.current = `Rotated ${selectedKicad.refDes}`;
-                        setKicadComponents((ks) => ks.map((k) =>
-                          k.id === selectedKicadId
-                            ? { ...k, rotation: ((k.rotation + 90) % 360) as 0 | 90 | 180 | 270 }
-                            : k));
-                      }}
-                      onDelete={() => {
-                        historyLabelRef.current = `Deleted ${selectedKicad.refDes}`;
-                        setKicadComponents((ks) => ks.filter((k) => k.id !== selectedKicadId));
-                        setSelectedKicadId(null);
-                      }}
+                      onRefDesChange={(v) =>
+                        setComponentPropertiesCanonical("kicad", selectedKicad.id, { refDes: v }, `Renamed ${selectedKicad.refDes} to ${v}`)
+                      }
+                      onValueChange={(v) =>
+                        setComponentPropertiesCanonical("kicad", selectedKicad.id, { value: v }, `Changed ${selectedKicad.refDes} value to ${v}`)
+                      }
+                      onRotate={() =>
+                        rotateComponentCanonical("kicad", selectedKicad.id, `Rotated ${selectedKicad.refDes}`)
+                      }
+                      onDelete={() => void deleteComponentCanonical("kicad", selectedKicad.id)}
                       onReplace={() => { setMode("build"); setLeftPanel("library"); }}
                     />
                   )}
                 </>
               ) : view === "sim" ? (
                 <SpiceStudio
-                  schematic={{ components, kicadComponents, wires, netLabels, pageSize }}
+                  key={project?.id ?? "unloaded"}
+                  schematic={{ ...authoritativeSchematic, pageSize: authoritativeSchematic.pageSize ?? pageSize }}
+                  aiOwnership={captureAiRequestOwnership}
+                  projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only)
                   legacyPanel={(
                     <SimView
                       components={components}
                       wires={wires}
                       netLabels={netLabels}
-                      setNetLabels={setNetLabels}
                       simResult={simResult}
                       simLoading={simLoading}
                       simError={simError}
@@ -4282,8 +6050,7 @@ export default function Home() {
                       onRunSim={handleRunSim}
                       simMode={simMode}
                       setSimMode={setSimMode}
-                      setComponents={setComponents}
-                      setWires={setWires}
+                      gesture={schematicGraphApi}
                       chartPanelOpen={chartPanelOpen}
                       setChartPanelOpen={setChartPanelOpen}
                       analysisConfig={analysisConfig}
@@ -4293,7 +6060,9 @@ export default function Home() {
                 />
               ) : view === "bom" ? (
                 <BomView
-                  state={{ components, kicadComponents, wires, netLabels }}
+                  key={project?.id ?? "unloaded"}
+                  state={authoritativeSchematic}
+                  projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only — never a content hash)
                   onSwapPart={handleSwapPart}
                 />
               ) : view !== "pcb" ? (
@@ -4304,13 +6073,27 @@ export default function Home() {
               {/* R06: the PCB editor stays MOUNTED once opened — unmounting on
                   tab switch destroyed the board state and its undo history.
                   While hidden it is display:none and its shortcuts are gated
-                  by `active`. */}
+                  by `active`.
+                  B07.5 (audit) — keyed by PROJECT: the editor captures its
+                  project scope, sync identity, and checkpoint target once at
+                  mount (init.scope), so surviving a project switch left it
+                  writing board checkpoints and working copies under the OLD
+                  project id. A switch now remounts it with the new project's
+                  identity (tab switches within a project keep the mount, so
+                  board state and undo history still survive tab changes). */}
               {(pcbMounted || view === "pcb") && (
                 <div className={view === "pcb" ? "absolute inset-0" : "hidden"}>
                   <PcbEditor
-                    schematic={{ components, kicadComponents, wires, netLabels }}
+                    key={project?.id ?? "unloaded"}
+                    schematic={authoritativeSchematic}
                     active={view === "pcb"}
                     hydrateToken={pcbHydrateToken}
+                    gateSchematicSync={() => schematicConsumerGate("pcb-sync")}
+                    aiOwnership={captureAiRequestOwnership}
+                    editorContextBridge={editorContextBridgeRef.current!} // B10
+                    pcbProposalIntake={pendingPcbProposal} // B15.3 — display only; approval lives inside PcbEditor
+                    onPcbProposalSettled={() => setPendingPcbProposal(null)}
+                    currentInterlock={() => projectTransitionRef.current?.currentInterlock() ?? null}
                   />
                 </div>
               )}
@@ -4358,13 +6141,211 @@ export default function Home() {
               </Button>
               <Button onClick={() => {
                 if (pendingReplace) {
-                  if (pendingReplace.logId) finishActivityLog(pendingReplace.logId, "Applied replacement to canvas");
-                  applySchematic(pendingReplace.state, pendingReplace.explanation, pendingReplace.prompt, {
-                    promptAlreadyLogged: pendingReplace.promptAlreadyLogged,
-                  });
+                  const pending = pendingReplace;
                   setPendingReplace(null);
+                  void applySchematic(pending.state, pending.explanation, pending.prompt, {
+                    promptAlreadyLogged: pending.promptAlreadyLogged,
+                    pin: pending.pin,
+                  }).then((adopted) => {
+                    if (pending.logId) {
+                      if (adopted) finishActivityLog(pending.logId, "Applied replacement to canvas");
+                      else failActivityLog(pending.logId, "Replacement not applied (stale or rejected)");
+                    }
+                  });
                 }
               }}>Replace</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <ReplacementReviewDialog
+          proposal={pendingReplacement}
+          busy={replacementApplyBusy}
+          componentLabel={pendingReplacement ? (kicadComponents.find((instance) => instance.id === pendingReplacement.componentInstanceId)?.refDes ?? null) : null}
+          currentPartLabel={pendingReplacement?.expectedCurrentPartId ?? null}
+          onApply={() => void applyReplacementProposal()}
+          onCancel={cancelReplacementProposal}
+        />
+        {replacementReceipt && (
+          <div className="fixed bottom-28 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+            <div className="font-medium text-teal-200">Exact replacement applied &amp; verified</div>
+            <div className="mt-0.5 text-zinc-400">
+              {replacementReceipt.sourcePartId} → {replacementReceipt.target.partId} · transaction {replacementReceipt.transactionId.slice(0, 12)}… · undoable
+            </div>
+            <button className="mt-1 text-zinc-500 hover:text-zinc-300" onClick={() => setReplacementReceipt(null)}>Dismiss</button>
+          </div>
+        )}
+
+        {/* B06.1: sealed tier-1 proposal review — the ONLY path from provider
+            output to schematic mutation. Shows the exact operations and
+            destructive impacts; nothing executes without the explicit apply. */}
+        {/* B12: verified-commit confirmation, driven by the receipt — success
+            is truthful because it exists only after postcondition verification. */}
+        {tier1Receipt && (
+          <div className="fixed bottom-16 right-4 z-50 max-w-xs rounded border border-teal-800/60 bg-zinc-900/95 px-3 py-2 text-[11px] text-teal-300 shadow-lg">
+            <div className="font-medium text-teal-200">Approved edit applied &amp; verified</div>
+            <div className="mt-0.5 text-zinc-400">
+              transaction {tier1Receipt.transactionId.slice(0, 12)}… · {tier1Receipt.operationCount} operation(s)
+              {tier1Receipt.destructive ? " · destructive" : ""} · undoable
+            </div>
+            <button className="mt-1 text-zinc-500 hover:text-zinc-300" onClick={() => setTier1Receipt(null)}>Dismiss</button>
+          </div>
+        )}
+        <Dialog
+          open={pendingTier1 !== null}
+          onOpenChange={(open) => { if (!open && !tier1ApplyBusy) cancelTier1Proposal(); }}
+        >
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>AI edit proposal — review before applying</DialogTitle>
+            </DialogHeader>
+            {pendingTier1 && (
+              <div className="space-y-3 text-sm">
+                <p className="text-zinc-400 text-xs">
+                  Proposed by {pendingTier1.provenance.provider} · proposal {pendingTier1.proposalId.slice(0, 18)}… ·
+                  expires {new Date(pendingTier1.expiresAt).toLocaleTimeString()}. Nothing has been changed yet;
+                  applying executes exactly the operations below as one atomic transaction.
+                </p>
+                {pendingTier1.provenance.note && (
+                  <p className="text-zinc-400 text-xs italic">{pendingTier1.provenance.note}</p>
+                )}
+                <div className="max-h-56 overflow-y-auto rounded border border-zinc-800 divide-y divide-zinc-800">
+                  {pendingTier1.impacts.propertyEdits.map((edit, index) => (
+                    <div key={`prop-${index}`} className="px-2 py-1.5 text-[12px] text-zinc-300">
+                      <span className="text-teal-400">Edit</span> {edit.targetLabel}:{" "}
+                      {edit.patch.value !== undefined && <>value → “{edit.patch.value}”</>}
+                      {edit.patch.refDes !== undefined && <>reference designator → “{edit.patch.refDes}”</>}
+                    </div>
+                  ))}
+                  {pendingTier1.impacts.deletes.map((impact, index) => (
+                    <div key={`del-${index}`} className="px-2 py-1.5 text-[12px] text-zinc-300">
+                      <span className="text-red-400">Delete</span> {impact.componentLabel}
+                      {impact.removeWireIds.length > 0 && <> · removes {impact.removeWireIds.length} attached wire{impact.removeWireIds.length === 1 ? "" : "s"}</>}
+                      {impact.removeNetLabelIds.length > 0 && <> · removes label{impact.removeNetLabelIds.length === 1 ? "" : "s"} {impact.removedLabelNames.join(", ")}</>}
+                      <div className="text-zinc-500 text-[11px] mt-0.5">{impact.downstream.pcbSync}</div>
+                    </div>
+                  ))}
+                </div>
+                {pendingTier1.impacts.destructive && (
+                  <p className="text-red-400/90 text-xs">This proposal deletes components — the deletions are undoable, and derived outputs (ERC, BOM, PCB sync) will recompute.</p>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="ghost" onClick={cancelTier1Proposal} disabled={tier1ApplyBusy}>Cancel — change nothing</Button>
+              <Button
+                variant={pendingTier1?.impacts.destructive ? "destructive" : "default"}
+                onClick={() => void applyTier1Proposal()}
+                disabled={tier1ApplyBusy}
+              >
+                {tier1ApplyBusy ? "Applying…" : "Apply exact proposal"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* B12.5 §C: blocking activation recovery. A commit-phase
+            activation failure (or unavailable project storage at
+            bootstrap) means the workspace cannot claim a consistent
+            installed project — this modal is NOT dismissible and neither
+            project is reported installed. Reload recovers from durable
+            state; committed work is preserved. */}
+        <Dialog open={activationRecovery !== null} onOpenChange={() => { /* never dismissible — blocking recovery */ }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Project activation needs recovery</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-zinc-400">{activationRecovery}</p>
+            <p className="text-sm text-zinc-400">
+              The switch stopped before either project could be truthfully reported as installed.
+              Reload the workspace to recover from durable state — committed work is preserved.
+            </p>
+            <DialogFooter>
+              <Button onClick={() => window.location.reload()}>Reload workspace</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* B06.2: explicit schematic-history recovery. While pending, the
+            session is `conflicted` and canonical edits are refused with a
+            truthful message. Neither side is overwritten automatically. */}
+        <Dialog
+          open={schematicRecovery !== null}
+          onOpenChange={(open) => {
+            if (open || !schematicRecovery) return;
+            // B07.2 — an invalid projection with no valid fallback is a
+            // PERSISTENT blocking state: it cannot be dismissed away.
+            if (schematicRecovery.kind === "invalid-projection") {
+              showToast("The schematic failed validation and cannot be edited until repaired — this recovery notice stays until then.");
+              return;
+            }
+            setSchematicRecovery(null);
+            showToast("Recovery postponed — canonical schematic editing stays disabled. Reload the project to choose again.");
+          }}
+        >
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>
+                {schematicRecovery?.kind === "corrupt-history"
+                  ? "Schematic history needs recovery"
+                  : schematicRecovery?.kind === "invalid-projection"
+                    ? "Schematic failed validation"
+                    : "Schematic history conflict"}
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-zinc-400">{schematicRecovery?.detail}</p>
+            {schematicRecovery?.kind === "invalid-projection" ? (
+              <>
+                {(schematicRecovery.issues?.length ?? 0) > 0 && (
+                  <div className="max-h-40 overflow-y-auto rounded border border-red-900/50 bg-red-950/20 px-2 py-1.5">
+                    {schematicRecovery.issues!.slice(0, 12).map((issue, index) => (
+                      <div key={index} className="text-[11px] text-red-300/90 font-mono truncate" title={issue}>{issue}</div>
+                    ))}
+                    {(schematicRecovery.issues!.length > 12) && (
+                      <div className="text-[11px] text-red-400/70">…and {schematicRecovery.issues!.length - 12} more issue(s)</div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-red-400/90">
+                  This schematic cannot be edited, exported, simulated, synchronized to a PCB, autosaved, or released
+                  until the data is repaired. No valid canonical history exists to fall back to. Nothing has been
+                  changed or deleted — the stored project is preserved exactly as it was. You can download a raw
+                  backup below; reopening the project will show this same notice until the data is repaired.
+                </p>
+              </>
+            ) : schematicRecovery?.kind === "corrupt-history" ? (
+              <p className="text-xs text-red-400/90">
+                Starting fresh supersedes the old canonical history. The stored (corrupt) history will be preserved in
+                quarantine for recovery before anything replaces it.
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-500">
+                Whichever side you keep, the other is preserved (quarantined history or a saved local copy) — nothing is
+                silently discarded.
+              </p>
+            )}
+            {schematicRecovery?.kind === "projection-conflict" && schematicRecovery.reason === "invalid-projection-identity" && (
+              <p className="text-xs text-red-400/90">
+                Your locally saved schematic failed identity validation, so it cannot be kept — only the intact
+                canonical history can be adopted. The invalid local copy is preserved and can be downloaded below.
+              </p>
+            )}
+            <DialogFooter>
+              {/* B07.5 — decision buttons are DISABLED while a recovery
+                  decision is in flight: one owned decision at a time (the
+                  adapter also refuses duplicate submissions structurally). */}
+              {schematicRecovery?.kind === "projection-conflict" ? (
+                <>
+                  <Button variant="ghost" onClick={downloadRecoveryBackup}>Download local copy (JSON)</Button>
+                  {schematicRecovery.reason !== "invalid-projection-identity" && (
+                    <Button variant="ghost" disabled={recoveryDecisionBusy} onClick={resolveRecoveryKeepLocal}>Keep my local schematic</Button>
+                  )}
+                  <Button disabled={recoveryDecisionBusy} onClick={resolveRecoveryAdoptCanonical}>Use canonical history</Button>
+                </>
+              ) : schematicRecovery?.kind === "invalid-projection" ? (
+                <Button variant="ghost" onClick={downloadRecoveryBackup}>Download raw backup (JSON)</Button>
+              ) : (
+                <Button variant="destructive" disabled={recoveryDecisionBusy} onClick={resolveRecoveryStartFresh}>Start fresh (old history preserved)</Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -4497,9 +6478,12 @@ export default function Home() {
                     size="sm"
                     variant="ghost"
                     onClick={() => {
-                      const alternative = aiProviderFailure.provider === "anthropic" ? "openai" : "anthropic";
-                      selectAiBrain(alternative);
-                      lastAiRetryRef.current?.();
+                      // B09.2 — production-owned: the alternative provider is
+                      // SELECTED before the new run starts (run-consumer.ts).
+                      performProviderSwitch(aiProviderFailure.provider, {
+                        selectProvider: selectAiBrain,
+                        startNewRun: lastAiRetryRef.current,
+                      });
                     }}
                   >
                     Use {aiProviderFailure.provider === "anthropic" ? "OpenAI" : "Anthropic"} instead
@@ -4508,7 +6492,7 @@ export default function Home() {
               </div>
             )}
             <div className="border-t border-zinc-800 p-3">
-              {pendingSuggestions.length > 0 && (
+              {pendingSuggestions !== null && pendingSuggestions.items.length > 0 && (
                 <div className="mb-3 rounded-lg border border-teal-500/25 bg-teal-500/5 overflow-hidden">
                   <div className="flex items-center gap-2 px-3 py-2">
                     <Sparkles className="size-3.5 text-teal-300 shrink-0" />
@@ -4522,7 +6506,7 @@ export default function Home() {
                         ? <ChevronRight className="size-3.5 text-zinc-500 shrink-0" />
                         : <ChevronDown className="size-3.5 text-zinc-500 shrink-0" />}
                       <span className="text-xs font-medium text-zinc-200 truncate">
-                        {pendingSuggestions.length} suggestion{pendingSuggestions.length === 1 ? "" : "s"} ready
+                        {pendingSuggestions.items.length} suggestion{pendingSuggestions.items.length === 1 ? "" : "s"} ready
                       </span>
                     </button>
                     <Button
@@ -4541,7 +6525,7 @@ export default function Home() {
                       title="Ignore these suggestions"
                       disabled={isEditing}
                       onClick={() => {
-                        setPendingSuggestions([]);
+                        setPendingSuggestions(null);
                         setSuggestionsMinimized(false);
                       }}
                     >
@@ -4555,7 +6539,7 @@ export default function Home() {
                         Bounded support fixes only; controllers and main ICs are preserved.
                       </div>
                       <div className="space-y-1.5">
-                        {pendingSuggestions.slice(0, 3).map((s, idx) => (
+                        {pendingSuggestions.items.slice(0, 3).map((s, idx) => (
                           <div key={`${s.source}-${s.title}-${idx}`} className="text-xs text-zinc-300 leading-relaxed">
                             <span className="text-zinc-500">{s.source === "review" ? "Review" : "Second opinion"} · </span>
                             <span className="font-medium text-zinc-200">{s.title}</span>
@@ -4565,9 +6549,9 @@ export default function Home() {
                             <span className="text-zinc-400"> — {s.detail}</span>
                           </div>
                         ))}
-                        {pendingSuggestions.length > 3 && (
+                        {pendingSuggestions.items.length > 3 && (
                           <div className="text-[11px] text-zinc-500">
-                            +{pendingSuggestions.length - 3} more
+                            +{pendingSuggestions.items.length - 3} more
                           </div>
                         )}
                       </div>
@@ -4950,9 +6934,7 @@ function ProbeSchematic({
   pinNodes,
   onToggleProbe,
   mode,
-  setComponents,
-  setWires,
-  setNetLabels,
+  gesture,
 }: {
   components: SchComponent[];
   wires: Wire[];
@@ -4961,9 +6943,9 @@ function ProbeSchematic({
   pinNodes: Record<string, string>;
   onToggleProbe: (signal: string) => void;
   mode: SimMode;
-  setComponents: Dispatch<SetStateAction<SchComponent[]>>;
-  setWires: Dispatch<SetStateAction<Wire[]>>;
-  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
+  /** B07/B07.1: gesture transaction contract — `preview` frames through the
+   *  coordinator (this canvas holds NO schematic state setters). */
+  gesture: { begin(): boolean; preview(frame: SchematicGraphAfter): void; commit(label: string, finalGraph: SchematicGraphAfter): void };
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]   = useState<Point>({ x: 80, y: 60 });
@@ -4984,13 +6966,6 @@ function ProbeSchematic({
   wiresRef.current       = wires;
   netLabelsRef.current   = netLabels;
 
-  const setComponentsRef = useRef(setComponents);
-  const setWiresRef      = useRef(setWires);
-  const setNetLabelsRef  = useRef(setNetLabels);
-  setComponentsRef.current = setComponents;
-  setWiresRef.current      = setWires;
-  setNetLabelsRef.current  = setNetLabels;
-
   const isPanning = useRef(false);
   const panStart  = useRef<{ mouse: Point; pan: Point }>({ mouse: { x: 0, y: 0 }, pan: { x: 0, y: 0 } });
 
@@ -5002,6 +6977,8 @@ function ProbeSchematic({
     initWires: Map<string, Point[]>;
     initLabels: Map<string, Point>;
     startWorld: Point;
+    /** B07: latest preview arrays; pointer-up commits them as ONE gesture. */
+    preview?: SchematicGraphAfter;
   } | null>(null);
 
   useEffect(() => {
@@ -5040,34 +7017,36 @@ function ProbeSchematic({
         const { groupCompIds, groupWireIds, groupLabelIds, initComps, initWires, initLabels, startWorld } = moveDragRef.current;
         const dx = Math.round((wx - startWorld.x) / 10) * 10;
         const dy = Math.round((wy - startWorld.y) / 10) * 10;
-        setComponentsRef.current((prev) =>
-          prev.map((c) => {
-            const init = initComps.get(c.id);
-            return (groupCompIds.has(c.id) && init) ? { ...c, x: init.x + dx, y: init.y + dy } : c;
-          })
-        );
-        setWiresRef.current((prev) =>
-          prev.map((w) => {
-            const init = initWires.get(w.id);
-            return (groupWireIds.has(w.id) && init) ? { ...w, vertices: init.map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w;
-          })
-        );
-        setNetLabelsRef.current((prev) =>
-          prev.map((l) => {
-            const init = initLabels.get(l.id);
-            return (groupLabelIds.has(l.id) && init) ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
-          })
-        );
+        // B07: compute the preview once, render it non-authoritatively, and
+        // remember it - pointer-up commits ONE gesture transaction.
+        const nextComponents = componentsRef.current.map((c) => {
+          const init = initComps.get(c.id);
+          return (groupCompIds.has(c.id) && init) ? { ...c, x: init.x + dx, y: init.y + dy } : c;
+        });
+        const nextWires = wiresRef.current.map((w) => {
+          const init = initWires.get(w.id);
+          return (groupWireIds.has(w.id) && init) ? { ...w, vertices: init.map((v) => ({ x: v.x + dx, y: v.y + dy })) } : w;
+        });
+        const nextLabels = netLabelsRef.current.map((l) => {
+          const init = initLabels.get(l.id);
+          return (groupLabelIds.has(l.id) && init) ? { ...l, position: { x: init.x + dx, y: init.y + dy } } : l;
+        });
+        moveDragRef.current.preview = { components: nextComponents, wires: nextWires, netLabels: nextLabels };
+        gesture.preview(moveDragRef.current.preview);
       }
     }
     function onUp() {
       isPanning.current = false;
+      const drag = moveDragRef.current;
       moveDragRef.current = null;
+      // B07: the completed move commits ONE canonical gesture transaction.
+      // (`gesture` is memo-stable in the page, so the [] effect closure is safe.)
+      if (drag?.preview) gesture.commit("Moved component", drag.preview);
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup",   onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, []);
+  }, [gesture]);
 
   function onSvgDown(e: React.MouseEvent) {
     if (e.button !== 0 || e.target !== svgRef.current) return;
@@ -5078,6 +7057,8 @@ function ProbeSchematic({
   function onCompMoveStart(e: React.MouseEvent, comp: SchComponent) {
     e.stopPropagation();
     if (!svgRef.current) return;
+    // B07.1: gesture start — refused while another gesture owns the preview.
+    if (!gesture.begin()) return;
     const rect = svgRef.current.getBoundingClientRect();
     const wx = (e.clientX - rect.left - panRef.current.x) / zoomRef.current;
     const wy = (e.clientY - rect.top  - panRef.current.y) / zoomRef.current;
@@ -5509,16 +7490,16 @@ function FloatingPanel({
 // ─── SimView ───────────────────────────────────────────────────────────────────
 
 function SimView({
-  components, wires, netLabels, setNetLabels, simResult, simLoading, simError,
+  components, wires, netLabels, simResult, simLoading, simError,
   panes, setPanes, activePaneId, setActivePaneId,
-  onRunSim, simMode, setSimMode, setComponents, setWires,
+  onRunSim, simMode, setSimMode,
   chartPanelOpen, setChartPanelOpen,
   analysisConfig, setAnalysisConfig,
+  gesture,
 }: {
   components: SchComponent[];
   wires: Wire[];
   netLabels: NetLabel[];
-  setNetLabels: Dispatch<SetStateAction<NetLabel[]>>;
   simResult: SimResult | null;
   simLoading: boolean;
   simError: string | null;
@@ -5529,8 +7510,9 @@ function SimView({
   onRunSim: () => void;
   simMode: SimMode;
   setSimMode: (m: SimMode) => void;
-  setComponents: Dispatch<SetStateAction<SchComponent[]>>;
-  setWires: Dispatch<SetStateAction<Wire[]>>;
+  /** B07/B07.1: gesture transaction contract for SPICE-view moves (no
+   *  schematic state setters reach this view — structurally enforced). */
+  gesture: { begin(): boolean; preview(frame: SchematicGraphAfter): void; commit(label: string, finalGraph: SchematicGraphAfter): void };
   chartPanelOpen: boolean;
   setChartPanelOpen: Dispatch<SetStateAction<boolean>>;
   analysisConfig: AnalysisConfig;
@@ -5590,9 +7572,7 @@ function SimView({
           pinNodes={simResult?.pinNodes ?? {}}
           onToggleProbe={toggleProbe}
           mode={simMode}
-          setComponents={setComponents}
-          setWires={setWires}
-          setNetLabels={setNetLabels}
+          gesture={gesture}
         />
         {components.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
