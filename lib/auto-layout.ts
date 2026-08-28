@@ -16,7 +16,9 @@ import {
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
-export const GRID       = 10;
+// B07.1 — the schematic grid has ONE owner (app/lib/geometry GRID); this
+// module re-exports it instead of duplicating the magic number.
+export { GRID } from "@/app/lib/geometry";
 export const PIN_PITCH  = 80;
 export const STAGGER_Y  = 120;  // vertical row separation; 120 leaves room for shunts
 export const ORIGIN_X   = 240;

@@ -12,13 +12,49 @@ export type Rotation = 0 | 90 | 180 | 270;
 export type Point = { x: number; y: number };
 
 export type SchComponent = {
+  /**
+   * B07 — IMMUTABLE stable instance identity (collection key, canonical
+   * operation target, netlist/pcb-sync/binding scope). Never rewritten by a
+   * rename. New components mint a UUID; AI-generated/imported schematics
+   * keep their generator ids as stable ids.
+   */
   id: string;
   type: SchComponentType;
   x: number;
   y: number;
   rotation: Rotation;
   value: string;
+  /**
+   * B07 — EDITABLE display reference (the user-visible designator). Display
+   * everywhere is `refDes ?? id` — the deterministic legacy rule: records
+   * predating this field display their stable id exactly as before, so no
+   * data migration is required and reload never re-migrates. Renames write
+   * ONLY this field. Normalization policy: trimmed, non-empty, unique among
+   * theory components' display values.
+   */
+  refDes?: string;
 };
+
+/** B07 — the user-visible designator of a theory component. */
+export function schDisplayRef(component: Pick<SchComponent, "id" | "refDes">): string {
+  return component.refDes ?? component.id;
+}
+
+/**
+ * B07.1 — THE reference normalization authority. Display references are
+ * stored trimmed; UNIQUENESS is decided over the case-normalized key across
+ * every component sharing the exported schematic namespace (Theory display
+ * values — refDes ?? id — AND KiCad refDes together): "R1" and "r1" are the
+ * SAME exported reference and must never coexist.
+ */
+export function normalizeRefDes(value: string): string {
+  return value.trim();
+}
+
+/** Case-insensitive uniqueness key for a display reference. */
+export function refDesKey(value: string): string {
+  return normalizeRefDes(value).toUpperCase();
+}
 
 export type Wire = {
   id: string;
