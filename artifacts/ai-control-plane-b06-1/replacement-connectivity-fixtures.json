@@ -1,0 +1,272 @@
+{
+  "schema": "sirkit.b06-1-replacement-connectivity-fixtures.v1",
+  "fixtures": [
+    {
+      "fixtureId": "label-only-connection-moves-safely",
+      "description": "Pin 2's connection is label-only (VOUT/l1). The mapped replacement moves the label with the pin; the connection is reported preserved ONLY because the label move is part of the atomic operation, and undo restores its exact position.",
+      "commandId": "schematic.replace-component",
+      "operations": [
+        {
+          "operationId": "op:sch-replace:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-a",
+          "replacement": {
+            "partId": "lib:part-d"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "3"
+            },
+            {
+              "fromPin": "2",
+              "toPin": "4"
+            }
+          ],
+          "wireEndpointMoves": [
+            {
+              "wireId": "w1",
+              "end": "end",
+              "to": {
+                "x": 260,
+                "y": 100
+              }
+            }
+          ],
+          "netLabelMoves": [
+            {
+              "labelId": "l1",
+              "from": {
+                "x": 320,
+                "y": 100
+              },
+              "to": {
+                "x": 340,
+                "y": 100
+              }
+            }
+          ]
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:sch-replace:u1-id",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-d",
+          "replacement": {
+            "partId": "lib:part-a",
+            "value": "10k",
+            "atomicPartRevisionId": "rev-old",
+            "mappingCertificateId": "cert-old"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "3",
+              "toPin": "1"
+            },
+            {
+              "fromPin": "4",
+              "toPin": "2"
+            }
+          ],
+          "wireEndpointMoves": [
+            {
+              "wireId": "w1",
+              "end": "end",
+              "to": {
+                "x": 280,
+                "y": 100
+              }
+            }
+          ],
+          "netLabelMoves": [
+            {
+              "labelId": "l1",
+              "from": {
+                "x": 340,
+                "y": 100
+              },
+              "to": {
+                "x": 320,
+                "y": 100
+              }
+            }
+          ]
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-3bd450c1776a06b2",
+      "inverseRoundTripExact": true,
+      "plan": {
+        "componentId": "u1-id",
+        "sourcePartId": "lib:part-a",
+        "targetPartId": "lib:part-d",
+        "mode": "mapped-substitution",
+        "authorityStatus": "authority-cleared",
+        "pinMapping": [
+          {
+            "fromPin": "1",
+            "toPin": "3"
+          },
+          {
+            "fromPin": "2",
+            "toPin": "4"
+          }
+        ],
+        "preservedConnections": [
+          "1",
+          "2"
+        ],
+        "droppedConnections": [],
+        "wireEndpointMoves": [
+          {
+            "wireId": "w1",
+            "end": "end",
+            "to": {
+              "x": 260,
+              "y": 100
+            }
+          }
+        ],
+        "netLabelMoves": [
+          {
+            "labelId": "l1",
+            "labelName": "VOUT",
+            "from": {
+              "x": 320,
+              "y": 100
+            },
+            "to": {
+              "x": 340,
+              "y": 100
+            }
+          }
+        ],
+        "consumedAuthorityResources": [],
+        "warnings": [
+          "Existing atomic authority on this instance is CLEARED by the replacement (it belonged to the previous part)."
+        ],
+        "downstream": [
+          "netlist pin set changes under a stable component id; schematic parity + sync dirty flag update",
+          "physical-binding qualification for this componentInstanceId must be re-established for the new identity",
+          "existing pcb-sync plans go stale (fail closed at preflight)",
+          "BOM regroups by the new part identity; SPICE captures a new design revision on next run",
+          "manufacturing readiness recomputes against the new netlist"
+        ]
+      }
+    },
+    {
+      "fixtureId": "acknowledged-drop-strands-label-explicitly",
+      "description": "With pin 2's drop explicitly acknowledged, the replacement proceeds; the stranded VOUT label is surfaced in the plan warnings, never silently preserved.",
+      "commandId": "schematic.replace-component",
+      "operations": [
+        {
+          "operationId": "op:sch-replace:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-a",
+          "replacement": {
+            "partId": "lib:part-f"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "1"
+            }
+          ],
+          "wireEndpointMoves": [],
+          "netLabelMoves": []
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:sch-replace:u1-id",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-f",
+          "replacement": {
+            "partId": "lib:part-a",
+            "value": "10k",
+            "atomicPartRevisionId": "rev-old",
+            "mappingCertificateId": "cert-old"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "1"
+            }
+          ],
+          "wireEndpointMoves": [],
+          "netLabelMoves": []
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-3e4cee2fc5d60218",
+      "inverseRoundTripExact": true,
+      "plan": {
+        "componentId": "u1-id",
+        "sourcePartId": "lib:part-a",
+        "targetPartId": "lib:part-f",
+        "mode": "mapped-substitution",
+        "authorityStatus": "authority-cleared",
+        "pinMapping": [
+          {
+            "fromPin": "1",
+            "toPin": "1"
+          }
+        ],
+        "preservedConnections": [
+          "1"
+        ],
+        "droppedConnections": [
+          "2"
+        ],
+        "wireEndpointMoves": [],
+        "netLabelMoves": [],
+        "consumedAuthorityResources": [],
+        "warnings": [
+          "Existing atomic authority on this instance is CLEARED by the replacement (it belonged to the previous part).",
+          "Acknowledged drop of pin 2 leaves net label(s) VOUT at the old pin position, no longer attached to this component."
+        ],
+        "downstream": [
+          "netlist pin set changes under a stable component id; schematic parity + sync dirty flag update",
+          "physical-binding qualification for this componentInstanceId must be re-established for the new identity",
+          "existing pcb-sync plans go stale (fail closed at preflight)",
+          "BOM regroups by the new part identity; SPICE captures a new design revision on next run",
+          "manufacturing readiness recomputes against the new netlist"
+        ]
+      }
+    }
+  ],
+  "refusals": [
+    {
+      "fixtureId": "refuse-dropped-label-connectivity",
+      "description": "Dropping the label-connected pin 2 without acknowledgement refuses the whole replacement.",
+      "refusal": "unacknowledged-dropped-connections",
+      "detail": "Connected pin(s) 2 would lose their connections; explicit acknowledgement is required."
+    }
+  ],
+  "authorityConsumption": {
+    "consumedResources": [
+      {
+        "resourceId": "res:canonical:fixture",
+        "contentDigest": "eng1-6779fff341dbb21c"
+      },
+      {
+        "resourceId": "res:component-authority:fixture",
+        "contentDigest": "eng1-a7cf99e9b900a688"
+      }
+    ],
+    "manifestDigest": "eng1-bfa1a470ab7211af"
+  }
+}
