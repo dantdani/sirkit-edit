@@ -1,0 +1,10 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/circuit-knowledge/applicability,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-knowledge/compile,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-knowledge/compose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-knowledge/problem,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-knowledge/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-verification/problem,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-verification/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-verification/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/circuit-verification/run,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
