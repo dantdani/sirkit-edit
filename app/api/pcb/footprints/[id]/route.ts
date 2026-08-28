@@ -12,16 +12,16 @@ import { pcbFootprints } from "@/app/lib/db/schema";
 import type { BBox } from "@/app/lib/pcb/geometry";
 import type { Pad, FootprintModelRef } from "@/app/lib/pcb/types";
 import type { FootprintDetail } from "@/app/lib/pcb/footprint-api-types";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-): Promise<Response> {
-  const { id } = await ctx.params;
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Promise<Response> => {
+  const id = params!.id;
   if (!UUID_RE.test(id)) {
     return Response.json({ ok: false, error: "Footprint not found" }, { status: 404 });
   }
@@ -60,4 +60,4 @@ export async function GET(
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

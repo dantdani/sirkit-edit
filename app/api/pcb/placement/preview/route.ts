@@ -1,9 +1,9 @@
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { EngineeringPlacementOptions } from "@/app/lib/pcb/placement/types";
 import { runEngineeringPlacement } from "@/app/lib/pcb/placement/engine";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
-const MAX_BODY_BYTES = 8_000_000;
 
 function isBoard(value: unknown): value is PcbBoard {
   if (!value || typeof value !== "object") return false;
@@ -22,11 +22,10 @@ function options(value: unknown): EngineeringPlacementOptions {
   return result;
 }
 
-export async function POST(request: Request): Promise<Response> {
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) return Response.json({ ok: false, error: "placement preview body is too large" }, { status: 413 });
-  let body: unknown;
-  try { body = JSON.parse(text) as unknown; } catch { return Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }); }
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const POST = publicJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body: unknown = rawBody;
   if (!body || typeof body !== "object") return Response.json({ ok: false, error: "invalid request" }, { status: 400 });
   const input = body as Record<string, unknown>;
   if (!isBoard(input.board)) return Response.json({ ok: false, error: "board is required" }, { status: 400 });
@@ -36,4 +35,4 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : "placement preview failed" }, { status: 422 });
   }
-}
+});

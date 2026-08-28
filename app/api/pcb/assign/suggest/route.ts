@@ -26,6 +26,8 @@ import {
   type LLMToolResultPart,
 } from "@/app/lib/llm/types";
 import type { FootprintSearchHit } from "@/app/lib/pcb/footprint-api-types";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { searchFootprints } from "@/app/lib/pcb/footprint-search-service";
 
 export const runtime = "nodejs";
 
@@ -160,13 +162,13 @@ function validateCandidates(
   return out;
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.14 §H] canonical wrapper — authorization -> CSRF -> media -> bounded
+// body run inside the wrapper; the callback receives the trusted context and
+// parsed body only, never the raw Request / URL / origin. The internal footprint
+// search is a DIRECT call to the shared Request-free service (no HTTP fetch, so
+// no request Host/origin can influence the search destination — SSRF closed).
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body: unknown = rawBody;
   const component = parseComponent((body as Record<string, unknown> | null)?.component);
   const provider = requestedProvider((body as Record<string, unknown> | null)?.provider);
   if (!component) {
@@ -176,7 +178,6 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const origin = new URL(req.url).origin;
   const surfaced = new Map<string, FootprintSearchHit>();
   let searchesUsed = 0;
 
@@ -193,15 +194,14 @@ export async function POST(req: Request): Promise<Response> {
       return JSON.stringify({ error: "search limit reached — call submit_candidates now" });
     }
     searchesUsed++;
-    const params = new URLSearchParams({ q: query, limit: String(SEARCH_LIMIT) });
-    if (typeof padCount === "number" && Number.isInteger(padCount) && padCount >= 0) {
-      params.set("padCount", String(padCount));
+    const typedPadCount = typeof padCount === "number" && Number.isInteger(padCount) && padCount >= 0 ? padCount : null;
+    const typedSmd = typeof smd === "boolean" ? smd : null;
+    let hits: FootprintSearchHit[];
+    try {
+      hits = await searchFootprints({ q: query.trim(), limit: SEARCH_LIMIT, padCount: typedPadCount, smd: typedSmd });
+    } catch (error) {
+      return JSON.stringify({ error: `search failed (${error instanceof Error ? error.message : String(error)})` });
     }
-    if (typeof smd === "boolean") params.set("smd", String(smd));
-    const res = await fetch(`${origin}/api/pcb/footprints/search?${params}`);
-    if (!res.ok) return JSON.stringify({ error: `search failed (${res.status})` });
-    const data = (await res.json()) as { hits?: FootprintSearchHit[] };
-    const hits = data.hits ?? [];
     for (const h of hits) surfaced.set(h.id, h);
     return JSON.stringify(
       hits.map((h) => ({
@@ -278,4 +278,4 @@ export async function POST(req: Request): Promise<Response> {
   } catch (error) {
     return providerErrorResponse(error, provider);
   }
-}
+});

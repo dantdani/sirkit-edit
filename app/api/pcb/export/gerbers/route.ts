@@ -1,15 +1,28 @@
 /**
- * POST /api/pcb/export/gerbers (PCB Stage 14).
+ * POST /api/pcb/export/gerbers (PCB Stage 14; [B16.0.2 §G] protected +
+ * truthfully attributed).
  *
- * Body:  { board, netlist?, fabPresetId, drcPresetId?, releaseMode?, waiverReason?, boardName? }
- * 200:   application/zip — the revision-bound manufacturing package.
- * 409:   { error: 'readiness-gate-failed', readiness } — scoped release gate
- * 400:   { error: 'bad-request', message }    — body shape problems
+ * THIS IS A CLIENT-WORKING-COPY ENGINEERING PROTOTYPE EXPORT — NOT a verified
+ * manufacturing release and unsuitable as deterministic release evidence.
+ * The server-authoritative, admin-only verified release is `/api/pcb/release`
+ * (it reloads its own immutable durable source; a browser board can never be
+ * release authority). This route:
+ *  - requires authenticated project membership + an engineering role
+ *    (pcb_editor | reviewer | project_admin) + same-origin CSRF, through the
+ *    shared authorization boundary BEFORE the body is read or kicad-cli runs;
+ *  - reads its (large) body through the bounded total-settlement reader;
+ *  - derives EVERY human/project attribution label from the trusted request
+ *    context — `body.actor` / `body.projectIdentity` are REFUSED (400), a
+ *    browser can never mint who did it or which project it was;
+ *  - labels the archive, README, manifest, and response headers as an
+ *    unverified engineering export; `releaseMode: "verified"` is refused
+ *    (409) — only `engineering` is producible here.
+ *
+ * Body:  { board, netlist?, fabPresetId, drcPresetId?, releaseMode: "engineering", waiverReason, boardName?, engine?, action? }
+ * 200:   application/zip — the explicitly-labelled engineering package
+ * 409:   { error: 'readiness-gate-failed', readiness } | { error: 'authoritative-release-source-required' }
+ * 400:   { error: 'bad-request', message }
  * 500:   { error: 'kicad-cli-missing' | 'kicad-cli-failed', stderr? }
- *
- * Validation is minimal-shape by hand (no zod in the dep tree — same posture
- * as /api/pcb/autoroute and /api/pcb/export/kicad-pcb). The complete readiness
- * policy is re-evaluated server-side against the immutable release snapshot.
  */
 
 import type { PcbBoard } from "@/app/lib/pcb/types";
@@ -20,17 +33,27 @@ import type { DrcPresetId } from "@/app/lib/pcb/drc/types";
 import { FAB_PRESETS } from "@/app/lib/pcb/fab/presets";
 import { buildFabBundle } from "@/app/lib/pcb/fab/build-bundle";
 import { KicadCliError } from "@/app/lib/pcb/fab/types";
-import {
-  compileNativeFabPackage,
-} from "@/app/lib/pcb/fab/native/compiler";
+import { compileNativeFabPackage } from "@/app/lib/pcb/fab/native/compiler";
 import { NativeFabBlockedError } from "@/app/lib/pcb/fab/native/types";
 import { evaluatePcbFabricationReadiness } from "@/app/lib/pcb/readiness/evaluate";
 import { createReleaseWaiver } from "@/app/lib/pcb/readiness/waiver";
 import { ManufacturingReleaseBlockedError } from "@/app/lib/pcb/readiness/release";
 import type { ReleaseDisposition, ReleaseWaiver } from "@/app/lib/pcb/readiness/types";
+import type { TrustedRequestContext } from "@/app/lib/auth/types";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // three kicad-cli invocations at 60 s each, worst case
+
+/** A whole PcbBoard + netlist travels in the body. */
+const MAX_BODY_BYTES = 16_000_000;
+const BODY_DEADLINE_MS = 60_000;
+
+/** Body keys that would mint attribution/authority — refused outright. */
+export const ENGINEERING_EXPORT_FORBIDDEN_BODY_KEYS = ["actor", "projectIdentity", "actorId", "role", "tenantId", "projectId", "branchId", "principalId"] as const;
+
+export const ENGINEERING_EXPORT_NOTICE =
+  "ENGINEERING PROTOTYPE EXPORT of a client working copy - NOT a verified manufacturing release; unsuitable as deterministic release evidence. Verified release is produced only by the server-authoritative release flow.";
 
 function isBoardLike(x: unknown): x is PcbBoard {
   if (typeof x !== "object" || x === null) return false;
@@ -57,15 +80,22 @@ function bad(message: string): Response {
   return Response.json({ error: "bad-request", message }, { status: 400 });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let raw: unknown;
-  try {
-    raw = await req.json();
-  } catch {
-    return bad("Invalid JSON body");
-  }
-  if (typeof raw !== "object" || raw === null) return bad("body must be an object");
-  const body = raw as {
+/** The ONLY source of human/project attribution: the trusted request context. */
+export function engineeringExportAttribution(context: TrustedRequestContext): { actor: string; projectIdentity: string } {
+  return {
+    actor: `${context.actor.actorKind}:${context.principalId}`,
+    projectIdentity: `${context.tenantId}/${context.projectId}/${context.branchId}`,
+  };
+}
+
+// [B16.0.13] canonical wrapper — authenticated membership + engineering role +
+// CSRF + the bounded read run inside the wrapper BEFORE the callback, so no
+// kicad-cli process can run until every boundary succeeds; attribution is
+// derived from the wrapper's trusted context only.
+export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS }, async ({ context, body: rawBody }): Promise<Response> => {
+  const attribution = engineeringExportAttribution(context);
+
+  const body = rawBody as {
     board?: unknown;
     netlist?: unknown;
     fabPresetId?: unknown;
@@ -76,9 +106,10 @@ export async function POST(req: Request): Promise<Response> {
     action?: unknown;
     releaseMode?: unknown;
     waiverReason?: unknown;
-    actor?: unknown;
-    projectIdentity?: unknown;
   };
+  for (const key of ENGINEERING_EXPORT_FORBIDDEN_BODY_KEYS) {
+    if (key in body) return bad(`body.${key} is not accepted: attribution is derived from the authenticated session, never from the request body`);
+  }
 
   if (!isBoardLike(body.board)) return bad("body.board must be a PcbBoard");
   if (body.netlist !== undefined && !isNetlistLike(body.netlist)) {
@@ -130,12 +161,14 @@ export async function POST(req: Request): Promise<Response> {
     netStableIds: [...initialReadiness.blockers, ...initialReadiness.unknowns].flatMap((item) => item.netStableIds ?? []),
     objectIds: [...initialReadiness.blockers, ...initialReadiness.unknowns].flatMap((item) => item.objectIds ?? []),
     reason: String(body.waiverReason),
-    actor: typeof body.actor === "string" ? body.actor : undefined,
+    // [B16.0.2 §G] the waiver's actor is the VERIFIED session principal.
+    actor: attribution.actor,
     designRevision: initialReadiness.designRevision,
     manufacturingProfileId: fabPreset.id,
     manufacturingProfileVersion: fabPreset.version,
   }));
   if (action === "preflight") return Response.json({
+    engineeringExportNotice: ENGINEERING_EXPORT_NOTICE,
     readiness: evaluatePcbFabricationReadiness({
       board,
       netlist: schematicIntentAvailable ? netlist : undefined,
@@ -144,17 +177,24 @@ export async function POST(req: Request): Promise<Response> {
       exporter,
       waivers,
     }),
-  });
+  }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Engineering-Export": "not-verified-release" } });
 
   // MFG01: a browser-supplied board is never verified release authority. The
   // authoritative release function reloads its immutable server source twice;
   // this legacy endpoint remains available only for explicitly-labelled,
-  // revision-waived engineering artifacts until that server loader is wired.
+  // revision-waived engineering artifacts.
   if (releaseMode === "verified") return Response.json({
     error: "authoritative-release-source-required",
-    message: "Verified release requires the MFG01 server-authoritative source loader; a browser PcbBoard cannot publish manufacturing authority.",
+    message: "Verified release requires the MFG01 server-authoritative source loader (/api/pcb/release); a browser PcbBoard cannot publish manufacturing authority. This route produces only explicitly-labelled engineering prototype exports.",
     readiness: initialReadiness,
-  }, { status: 409 });
+  }, { status: 409, headers: { "Cache-Control": "no-store" } });
+
+  const legacyHeaders = {
+    "Cache-Control": "no-store",
+    "X-Sirkit-Engineering-Export": "not-verified-release",
+    "X-Sirkit-Export-Notice": ENGINEERING_EXPORT_NOTICE,
+    "X-Sirkit-Export-Attribution-Source": "trusted-request-context",
+  } as const;
 
   try {
     if (engine === "native-beta") {
@@ -167,12 +207,13 @@ export async function POST(req: Request): Promise<Response> {
         schematicIntentAvailable,
         releaseDisposition: disposition,
         waivers,
-        projectIdentity: typeof body.projectIdentity === "string" ? body.projectIdentity : boardName,
-        actor: typeof body.actor === "string" ? body.actor : undefined,
+        projectIdentity: attribution.projectIdentity,
+        actor: attribution.actor,
       });
       return new Response(Buffer.from(result.zipBytes), {
         status: 200,
         headers: {
+          ...legacyHeaders,
           "Content-Type": "application/zip",
           "Content-Disposition": `attachment; filename="${result.filename}"`,
           "X-Sirkit-Native-Signoff": result.manifest.signoff,
@@ -198,12 +239,13 @@ export async function POST(req: Request): Promise<Response> {
       schematicIntentAvailable,
       releaseDisposition: disposition,
       waivers,
-      projectIdentity: typeof body.projectIdentity === "string" ? body.projectIdentity : boardName,
-      actor: typeof body.actor === "string" ? body.actor : undefined,
+      projectIdentity: attribution.projectIdentity,
+      actor: attribution.actor,
     });
     return new Response(Buffer.from(result.zipBytes), {
       status: 200,
       headers: {
+        ...legacyHeaders,
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${result.filename}"`,
         "X-Sirkit-Readiness-Report": result.readiness.reportId,
@@ -243,4 +285,4 @@ export async function POST(req: Request): Promise<Response> {
     const message = e instanceof Error ? e.message : String(e);
     return Response.json({ error: "export-failed", message }, { status: 500 });
   }
-}
+});
