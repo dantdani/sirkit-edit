@@ -19,6 +19,7 @@
  */
 
 import { runBuildToolLoop } from "@/app/lib/build-loop";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { llmRouter } from "@/app/lib/llm/router";
 import { LLMProviderError, providerErrorResponse } from "@/app/lib/llm/errors";
 import { requestedProvider } from "@/app/lib/llm/request";
@@ -66,17 +67,11 @@ async function plan(
   return { blocks, rationale: typeof raw.rationale === "string" ? raw.rationale : "" };
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let prompt: unknown;
-  let requested: unknown;
-  try {
-    ({ prompt, provider: requested } = (await req.json()) as {
-      prompt?: unknown;
-      provider?: unknown;
-    });
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const { prompt, provider: requested } = rawBody as { prompt?: unknown; provider?: unknown };
   if (typeof prompt !== "string" || prompt.trim() === "") {
     return Response.json({ ok: false, error: "prompt is required" }, { status: 400 });
   }
@@ -181,4 +176,4 @@ export async function POST(req: Request): Promise<Response> {
     ercNote;
 
   return Response.json({ ok: true, netlist: { ...netlist, explanation }, explanation });
-}
+});

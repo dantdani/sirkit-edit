@@ -1,0 +1,177 @@
+{
+  "schema": "sirkit.b06-2-recovery-fixtures.v1",
+  "scenarios": [
+    {
+      "scenarioId": "resume-exact-head",
+      "description": "Projection state IS the canonical head — resumed regardless of mark.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-ffffffff00000000",
+        "mark": null
+      },
+      "decision": {
+        "action": "resume",
+        "markStatus": "absent"
+      }
+    },
+    {
+      "scenarioId": "rebase-local-newer",
+      "description": "Same-lineage mark exactly matches the current head; differing projection = later legacy edits — documented rebase path.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": {
+          "lineageId": "lin1-1234567890abcdef",
+          "headSequence": 2,
+          "canonicalStateDigest": "eng1-cccccccc22222222"
+        }
+      },
+      "decision": {
+        "action": "rebase-local-newer",
+        "markStatus": "verified"
+      }
+    },
+    {
+      "scenarioId": "recover-verified-older",
+      "description": "Same-lineage mark verifiably names an OLDER log position — canonical head wins.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": {
+          "lineageId": "lin1-1234567890abcdef",
+          "headSequence": 1,
+          "canonicalStateDigest": "eng1-bbbbbbbb11111111"
+        }
+      },
+      "decision": {
+        "action": "recover-canonical",
+        "reason": "verified-older-mark",
+        "markStatus": "verified"
+      }
+    },
+    {
+      "scenarioId": "recover-untrusted-no-mark",
+      "description": "No/malformed mark — untrusted projection; canonical wins, projection preserved as backup.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": null
+      },
+      "decision": {
+        "action": "recover-canonical",
+        "reason": "untrusted-projection",
+        "markStatus": "absent"
+      }
+    },
+    {
+      "scenarioId": "conflict-mark-ahead",
+      "description": "Mark claims a sequence NEWER than durable history — preserve both, explicit recovery required.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": {
+          "lineageId": "lin1-1234567890abcdef",
+          "headSequence": 9,
+          "canonicalStateDigest": "eng1-dddddddd33333333"
+        }
+      },
+      "decision": {
+        "action": "conflict",
+        "reason": "mark-ahead-of-envelope",
+        "markStatus": "verified"
+      }
+    },
+    {
+      "scenarioId": "conflict-same-seq-wrong-digest",
+      "description": "Same lineage and sequence, different canonical digest — divergent history; fail closed.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": {
+          "lineageId": "lin1-1234567890abcdef",
+          "headSequence": 2,
+          "canonicalStateDigest": "eng1-dddddddd33333333"
+        }
+      },
+      "decision": {
+        "action": "conflict",
+        "reason": "mark-digest-mismatch",
+        "markStatus": "verified"
+      }
+    },
+    {
+      "scenarioId": "conflict-unverifiable-position",
+      "description": "Older sequence whose digest matches no recorded log position — fabricated mark; fail closed.",
+      "input": {
+        "envelopeLineageId": "lin1-1234567890abcdef",
+        "headSequence": 2,
+        "headCanonicalDigest": "eng1-cccccccc22222222",
+        "sequenceDigests": [
+          "eng1-aaaaaaaa00000000",
+          "eng1-bbbbbbbb11111111",
+          "eng1-cccccccc22222222"
+        ],
+        "headUiDigest": "eng1-ffffffff00000000",
+        "projectionDigest": "eng1-11ff11ff11ff11ff",
+        "mark": {
+          "lineageId": "lin1-1234567890abcdef",
+          "headSequence": 1,
+          "canonicalStateDigest": "eng1-dddddddd33333333"
+        }
+      },
+      "decision": {
+        "action": "conflict",
+        "reason": "mark-position-unverifiable",
+        "markStatus": "verified"
+      }
+    }
+  ]
+}

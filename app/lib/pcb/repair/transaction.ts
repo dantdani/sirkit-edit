@@ -1,4 +1,5 @@
 import { produce } from "immer";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbBoard } from "../types";
 import type { PcbHistory } from "../history";
 import { compileEdits } from "../edit/apply";
@@ -14,12 +15,6 @@ import type {
   RepairMetrics,
   RepairTransactionPreview,
 } from "./types";
-
-function replaceBoardContents(target: PcbBoard, source: PcbBoard): void {
-  const targetRecord = target as unknown as Record<string, unknown>;
-  for (const key of Object.keys(targetRecord)) if (!(key in source)) delete targetRecord[key];
-  Object.assign(target, source);
-}
 
 export function refillZonesForRepair(board: PcbBoard, requestedIds?: ReadonlySet<string>): PcbBoard {
   let current = board;
@@ -160,12 +155,12 @@ export async function previewRepairTransaction(
   };
 }
 
-export function applyRepairTransaction(
+export async function applyRepairTransaction(
   history: PcbHistory,
   plan: PCBRepairPlan,
   preview: RepairTransactionPreview,
   approvedFixIds: string[],
-): { ok: boolean; error?: string } {
+): Promise<{ ok: boolean; error?: string }> {
   if (preview.status === "rejected" || preview.blockers.length > 0) return { ok: false, error: preview.blockers[0] ?? "Repair preview was rejected." };
   if (pcbRevisionId(history.present) !== preview.baseRevisionId) return { ok: false, error: "Board changed after preview; generate a new repair plan." };
   const lockedMutation = validateLockedCopperUnchanged(history.present, preview.candidateBoard)[0];
@@ -174,15 +169,29 @@ export function applyRepairTransaction(
   const missingApproval = plan.fixes.find((fix) => preview.selectedFixIds.includes(fix.id) && fix.requiresApproval && !approved.has(fix.id));
   if (missingApproval) return { ok: false, error: `${missingApproval.title} requires explicit approval.` };
   if (preview.metrics.newViolationsIntroduced > 0) return { ok: false, error: "Repair introduces new violations." };
-  history.execute("AI PCB repair", (draft) => replaceBoardContents(draft, preview.candidateBoard), {
-    operationType: "pcb_repair",
-    actor: "ai",
-    reason: `Applied ${preview.selectedFixIds.length} validated PCB repair${preview.selectedFixIds.length === 1 ? "" : "s"}.`,
-    sourceViolationIds: preview.sourceViolationIds,
-    transactionId: preview.id,
-    affectedObjects: preview.affectedObjectIds,
-    details: { metrics: preview.metrics, fixIds: preview.selectedFixIds },
+  // B08 — the approved repair applies as ONE canonical transaction: the
+  // preview's base pin is re-verified against the board at serialized
+  // execution time and the candidate is delta-compiled (never a raw
+  // whole-board history write). A rejected/stale preview mutates nothing.
+  const result = await commitPcbCandidate(history, {
+    commandId: "pcb.board-repair",
+    label: "AI PCB repair",
+    idempotencyKey: `repair:${preview.id}`,
+    metadata: {
+      operationType: "pcb_repair",
+      actor: "ai",
+      reason: `Applied ${preview.selectedFixIds.length} validated PCB repair${preview.selectedFixIds.length === 1 ? "" : "s"}.`,
+      sourceViolationIds: preview.sourceViolationIds,
+      transactionId: preview.id,
+      affectedObjects: preview.affectedObjectIds,
+      details: { metrics: preview.metrics, fixIds: preview.selectedFixIds },
+    },
+    buildCandidate: (board) => {
+      if (pcbRevisionId(board) !== preview.baseRevisionId) throw new Error("Board changed after preview; generate a new repair plan.");
+      return structuredClone(preview.candidateBoard);
+    },
   });
+  if (!result.ok) return { ok: false, error: result.message };
   preview.status = "committed";
   return { ok: true };
 }

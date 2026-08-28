@@ -14,11 +14,14 @@ import { getDb } from "@/app/lib/db/client";
 import { pcbFootprints } from "@/app/lib/db/schema";
 import type { BBox } from "@/app/lib/pcb/geometry";
 import type { FootprintResolveResponse } from "@/app/lib/pcb/footprint-api-types";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request): Promise<Response> {
-  const hint = (new URL(req.url).searchParams.get("hint") ?? "").trim();
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute({ query: true }, async ({ meta }): Promise<Response> => {
+  const hint = (meta.query?.hint ?? "").trim();
   const sep = hint.indexOf(":");
   if (hint === "" || sep <= 0 || sep === hint.length - 1) {
     return Response.json(
@@ -74,4 +77,4 @@ export async function GET(req: Request): Promise<Response> {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

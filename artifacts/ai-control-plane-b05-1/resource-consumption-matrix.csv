@@ -1,0 +1,16 @@
+tool_id,binding_id,resource_kind,requirement
+sirkit.component-authority.inspect,read.component-authority,canonical-state,required
+sirkit.component-authority.inspect,read.component-authority,component-authority-records,required
+sirkit.manufacturing.readiness-inspect,read.readiness,canonical-state,required
+sirkit.manufacturing.readiness-inspect,read.readiness,drc-preset,required
+sirkit.manufacturing.readiness-inspect,read.readiness,fab-preset,required
+sirkit.manufacturing.readiness-inspect,read.readiness,netlist,optional
+sirkit.pcb.board-inspect,read.board-snapshot,canonical-state,required
+sirkit.pcb.revision-inspect,read.pcb-revision,canonical-state,required
+sirkit.project.canonical-revision-inspect,read.canonical-revision,canonical-state,required
+sirkit.schematic.inspect,read.schematic-snapshot,canonical-state,required
+sirkit.selection.inspect,read.selection,canonical-state,required
+sirkit.selection.inspect,read.selection,selection-snapshot,required
+sirkit.validation.connectivity-verify,read.connectivity,canonical-state,required
+sirkit.validation.drc-run,read.drc,canonical-state,required
+sirkit.validation.drc-run,read.drc,drc-rules,required

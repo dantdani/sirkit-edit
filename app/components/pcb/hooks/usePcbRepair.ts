@@ -1,8 +1,10 @@
 "use client";
 
+import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { PcbBoard } from "@/app/lib/pcb/types";
+import type { PcbBoardLifecycleScope } from "@/app/lib/pcb/lifecycle/board-lifecycle";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
 import { parseSes } from "@/app/lib/pcb/dsn/read-ses";
 import { PCBToolService } from "@/app/lib/pcb/ai/pcb-tool-service";
@@ -12,11 +14,19 @@ import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 
 export interface PcbRepairEditor {
   getHistory(): PcbHistory | null;
+  /** B08.2 — capture THE board lifecycle scope per operation (plan,
+   *  preview, apply, undo): every post-await side effect (plan/preview
+   *  state, progress, errors, toasts, onApplied) verifies it; the scope's
+   *  signal aborts in-flight fetches on lifecycle replacement. */
+  captureLifecycle?: () => PcbBoardLifecycleScope;
   getRules(): DrcRules;
   getPresetId?(): string;
   getNetlist?(): PcbNetlist | null;
   toast?(message: string): void;
   onApplied?(): Promise<void> | void;
+  /** [B16.0.2 §B] the active project identity — a SELECTOR for the
+   *  authenticated, project-scoped autoroute route. */
+  getScope?(): ProjectSelectorScope | null;
 }
 
 export interface PcbRepairHandle {
@@ -32,6 +42,10 @@ export interface PcbRepairHandle {
   applyPreview(approvedFixIds: string[]): Promise<void>;
   undoLast(): Promise<void>;
   cancel(): void;
+  /** B08.2 — lifecycle replacement: abort in-flight work and discard the
+   *  plan/preview (they were produced against the replaced board). Silent
+   *  (never toasts) — not a user cancellation. */
+  invalidate(): void;
 }
 
 export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
@@ -40,12 +54,28 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     editorRef.current = editor;
   });
   const serviceRef = useRef<PCBToolService | null>(null);
+  // B08 — the service captures ONE history instance at plan time; a
+  // lifecycle board replacement (hydration/sync/checkpoint restore)
+  // recreates the editor history, and every later service call must refuse
+  // rather than commit into the detached, dead history object.
+  const serviceHistoryRef = useRef<PcbHistory | null>(null);
   const [state, setState] = useState<PcbRepairHandle["state"]>("idle");
   const [mode, setMode] = useState<RepairExecutionMode>("safe_fixes_automatically");
   const [plan, setPlan] = useState<PCBRepairPlan>();
   const [preview, setPreview] = useState<RepairTransactionPreview>();
   const [error, setError] = useState<string>();
   const [progress, setProgress] = useState<PcbRepairHandle["progress"]>();
+  const serviceCurrent = useCallback((): PCBToolService | null => {
+    const instance = serviceRef.current;
+    if (!instance) return null;
+    if (serviceHistoryRef.current !== editorRef.current.getHistory()) {
+      editorRef.current.toast?.("The board was reloaded — this repair plan is stale. Create a new plan.");
+      setState("error");
+      setError("The board was reloaded — this repair plan is stale. Create a new plan.");
+      return null;
+    }
+    return instance;
+  }, []);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<number | null>(null);
   const startedAtRef = useRef(0);
@@ -57,7 +87,15 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     abortRef.current = null;
   }, []);
 
-  const startProgress = useCallback((phase: string, percent: number): AbortController => {
+  // B08.2 — capture the operation's lifecycle scope; the progress interval
+  // and its own controller-keyed cleanup stay request-owned.
+  const beginScopedOperation = useCallback((): { scope: PcbBoardLifecycleScope | null; owned: () => boolean } => {
+    const scope = editorRef.current.captureLifecycle?.() ?? null;
+    const owned = (): boolean => scope === null || scope.isCurrent();
+    return { scope, owned };
+  }, []);
+
+  const startProgress = useCallback((phase: string, percent: number, owned?: () => boolean): AbortController => {
     abortRef.current?.abort();
     if (timerRef.current !== null) window.clearInterval(timerRef.current);
     const controller = new AbortController();
@@ -65,6 +103,7 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     startedAtRef.current = Date.now();
     setProgress({ phase, percent, elapsedMs: 0 });
     timerRef.current = window.setInterval(() => {
+      if (owned && !owned()) return;
       setProgress((current) => current ? { ...current, elapsedMs: Date.now() - startedAtRef.current } : current);
     }, 100);
     return controller;
@@ -84,9 +123,22 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     editorRef.current.toast?.("PCB repair job cancelled; board unchanged");
   }, [stopProgress]);
 
+  const invalidate = useCallback((): void => {
+    abortRef.current?.abort();
+    stopProgress();
+    serviceRef.current = null;
+    serviceHistoryRef.current = null;
+    setPlan(undefined);
+    setPreview(undefined);
+    setError(undefined);
+    setProgress(undefined);
+    setState("idle");
+  }, [stopProgress]);
+
   const service = (): PCBToolService => {
     const history = editorRef.current.getHistory();
     if (!history) throw new Error("No PCB board is open.");
+    serviceHistoryRef.current = history;
     const instance = new PCBToolService({
       history,
       rules: editorRef.current.getRules(),
@@ -94,7 +146,7 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
       autoroute: async (board, netIds) => {
         const response = await fetch("/api/pcb/autoroute", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...projectSelectorHeaders(editorRef.current.getScope?.() ?? null) },
           body: JSON.stringify({ board, netIds }),
           signal: abortRef.current?.signal,
         });
@@ -110,7 +162,10 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
   };
 
   const createPlan = useCallback(async (): Promise<void> => {
-    const controller = startProgress("Inspecting board and grouping violations", 10);
+    const { scope, owned } = beginScopedOperation();
+    const controller = startProgress("Inspecting board and grouping violations", 10, owned);
+    const onLifecycleAbort = (): void => controller.abort();
+    scope?.signal.addEventListener("abort", onLifecycleAbort, { once: true });
     setState("planning");
     setError(undefined);
     setPreview(undefined);
@@ -137,86 +192,109 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
           next = data.plan;
         } catch (reason) {
           if (controller.signal.aborted) throw reason;
+          if (!owned()) throw reason; // stale: no fallback planning either
           setProgress({ phase: "Using native deterministic planner", percent: 65, elapsedMs: Date.now() - startedAtRef.current });
           next = await instance.planRepairs(mode);
-          editorRef.current.toast?.(`AI explanation unavailable; native deterministic repair plan prepared (${reason instanceof Error ? reason.message : String(reason)})`);
+          if (owned()) editorRef.current.toast?.(`AI explanation unavailable; native deterministic repair plan prepared (${reason instanceof Error ? reason.message : String(reason)})`);
         }
       } else {
         next = await instance.planRepairs(mode);
       }
+      if (!owned()) return; // stale generation: the plan is discarded
       setPlan(next);
       setProgress({ phase: "Repair plan ready", percent: 100, elapsedMs: Date.now() - startedAtRef.current });
       setState("ready");
     } catch (reason) {
       if (controller.signal.aborted) {
-        setState("cancelled");
+        // A user cancel already surfaced "cancelled"; a lifecycle abort is
+        // silent (invalidate() owns the reset).
+        if (owned()) setState("cancelled");
         return;
       }
+      if (!owned()) return;
       setError(reason instanceof Error ? reason.message : String(reason));
       setState("error");
     } finally {
+      scope?.signal.removeEventListener("abort", onLifecycleAbort);
       stopProgress(controller);
     }
-  }, [mode, startProgress, stopProgress]);
+  }, [mode, beginScopedOperation, startProgress, stopProgress]);
 
   const previewFixes = useCallback(async (fixIds: string[]): Promise<void> => {
-    if (!plan || !serviceRef.current) return;
-    const controller = startProgress("Building repair candidate", 20);
+    const instance = serviceCurrent();
+    if (!plan || !instance) return;
+    const { scope, owned } = beginScopedOperation();
+    const controller = startProgress("Building repair candidate", 20, owned);
+    const onLifecycleAbort = (): void => controller.abort();
+    scope?.signal.addEventListener("abort", onLifecycleAbort, { once: true });
     setState("previewing");
     setError(undefined);
     try {
-      const result = await serviceRef.current.previewChanges({ planId: plan.id, fixIds });
-      if (controller.signal.aborted) return;
+      const result = await instance.previewChanges({ planId: plan.id, fixIds });
+      if (controller.signal.aborted || !owned()) return;
       setPreview(result.preview);
       setProgress({ phase: "DRC and connectivity verified", percent: 100, elapsedMs: Date.now() - startedAtRef.current });
       setState(result.preview.blockers.length > 0 ? "error" : "ready");
       if (result.preview.blockers.length > 0) setError(result.preview.blockers[0]);
     } catch (reason) {
       if (controller.signal.aborted) {
-        setState("cancelled");
+        if (owned()) setState("cancelled");
         return;
       }
+      if (!owned()) return;
       setError(reason instanceof Error ? reason.message : String(reason));
       setState("error");
     } finally {
+      scope?.signal.removeEventListener("abort", onLifecycleAbort);
       stopProgress(controller);
     }
-  }, [plan, startProgress, stopProgress]);
+  }, [plan, serviceCurrent, beginScopedOperation, startProgress, stopProgress]);
 
   const applyPreview = useCallback(async (approvedFixIds: string[]): Promise<void> => {
-    if (!preview || !serviceRef.current) return;
-    const controller = startProgress("Committing verified transaction", 80);
+    const instance = serviceCurrent();
+    if (!preview || !instance) return;
+    const { scope, owned } = beginScopedOperation();
+    const controller = startProgress("Committing verified transaction", 80, owned);
+    const onLifecycleAbort = (): void => controller.abort();
+    scope?.signal.addEventListener("abort", onLifecycleAbort, { once: true });
     setState("applying");
     setError(undefined);
     try {
-    const result = await serviceRef.current.applyTransaction({ previewId: preview.id, approvedFixIds });
-    if (!result.ok) {
-      setError(result.error ?? "Repair could not be applied.");
-      setState("error");
-      stopProgress(controller);
-      return;
-    }
-    setState("done");
-    editorRef.current.toast?.(
-      `PCB repair: ${preview.metrics.errorsBefore} → ${preview.metrics.errorsAfter} errors · ${preview.metrics.unroutedBefore} → ${preview.metrics.unroutedAfter} unrouted`,
-    );
-    await editorRef.current.onApplied?.();
-    setProgress({ phase: "Repair committed", percent: 100, elapsedMs: Date.now() - startedAtRef.current });
-    } catch (reason) {
-      if (controller.signal.aborted) {
-        setState("cancelled");
+      const result = await instance.applyTransaction({ previewId: preview.id, approvedFixIds });
+      if (!owned()) return; // stale: outcome (success OR failure) is discarded
+      if (!result.ok) {
+        setError(result.error ?? "Repair could not be applied.");
+        setState("error");
+        stopProgress(controller);
         return;
       }
+      setState("done");
+      editorRef.current.toast?.(
+        `PCB repair: ${preview.metrics.errorsBefore} → ${preview.metrics.errorsAfter} errors · ${preview.metrics.unroutedBefore} → ${preview.metrics.unroutedAfter} unrouted`,
+      );
+      await editorRef.current.onApplied?.();
+      if (!owned()) return;
+      setProgress({ phase: "Repair committed", percent: 100, elapsedMs: Date.now() - startedAtRef.current });
+    } catch (reason) {
+      if (controller.signal.aborted) {
+        if (owned()) setState("cancelled");
+        return;
+      }
+      if (!owned()) return;
       setError(reason instanceof Error ? reason.message : String(reason));
       setState("error");
     } finally {
+      scope?.signal.removeEventListener("abort", onLifecycleAbort);
       stopProgress(controller);
     }
-  }, [preview, startProgress, stopProgress]);
+  }, [preview, serviceCurrent, beginScopedOperation, startProgress, stopProgress]);
 
   const undoLast = useCallback(async (): Promise<void> => {
-    if (!preview || !serviceRef.current) return;
-    const result = await serviceRef.current.undoTransaction({ transactionId: preview.id });
+    const instance = serviceCurrent();
+    if (!preview || !instance) return;
+    const { owned } = beginScopedOperation();
+    const result = await instance.undoTransaction({ transactionId: preview.id });
+    if (!owned()) return; // stale generation: no state, no toast, no onApplied
     if (!result.ok) {
       setError(result.error ?? "Repair could not be undone.");
       setState("error");
@@ -225,7 +303,7 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
     setState("idle");
     editorRef.current.toast?.("PCB repair undone");
     await editorRef.current.onApplied?.();
-  }, [preview]);
+  }, [preview, serviceCurrent, beginScopedOperation]);
 
-  return { state, mode, setMode, plan, preview, error, progress, createPlan, previewFixes, applyPreview, undoLast, cancel };
+  return { state, mode, setMode, plan, preview, error, progress, createPlan, previewFixes, applyPreview, undoLast, cancel, invalidate };
 }

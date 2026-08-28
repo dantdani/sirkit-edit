@@ -3,7 +3,7 @@ import { autoLayout } from "./auto-layout";
 import { validateTheoryNetlist, type NetlistValidation } from "./validate-netlist";
 import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
 
-export async function generateSchematic(prompt: string, retry?: () => void): Promise<{
+export async function generateSchematic(prompt: string, retry?: () => void, ownership?: import("@/app/lib/ai-preferences").AiRequestOwnership): Promise<{
   state: SchematicState;
   netlist: LogicalNetlist;
   validation: NetlistValidation;
@@ -14,7 +14,7 @@ export async function generateSchematic(prompt: string, retry?: () => void): Pro
     body: JSON.stringify(withAiBrain({ prompt })),
   });
   if (!res.ok) {
-    await throwAiResponseError(res, retry);
+    await throwAiResponseError(res, retry, ownership);
   }
   const netlist = (await res.json()) as LogicalNetlist;
   const state = autoLayout(netlist);

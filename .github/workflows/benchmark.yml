@@ -15,15 +15,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run benchmark:validate
-      - run: npx tsc --noEmit
-      - run: npx vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot
-      - run: npm run stage10:test -- --reporter=dot
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run benchmark:validate
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot
+      - run: pnpm run stage10:test -- --reporter=dot
 
   benchmark-nightly:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -31,14 +34,17 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm run benchmark:validate
-      - run: npx vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot
-      - run: npm run stage10:test -- --reporter=dot
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run benchmark:validate
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot
+      - run: pnpm run stage10:test -- --reporter=dot
       - name: Declare unavailable protected suites
         run: |
           echo "Hidden holdout requires holdout-admin credentials and is not exposed to CI candidates."

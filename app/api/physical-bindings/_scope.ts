@@ -1,6 +1,17 @@
-import type { EngineeringActor, ProjectRole } from "@/app/lib/engineering/types";
+/**
+ * B16.0 — physical-binding request scope, now SERVER-DERIVED (R02-B1-011).
+ * Identity, actor kind, and role come from `resolveTrustedRequestContext`,
+ * never from `x-sirkit-*` headers; client headers only request a selector.
+ */
+import type { EngineeringActor } from "@/app/lib/engineering/types";
+import type { TrustedRequestContext } from "@/app/lib/auth/types";
+import { authorizeRequest, scopedTrustedJson } from "@/app/lib/auth/authorize";
 
 export const PHYSICAL_BINDING_API_MAX_BYTES = 2_000_000;
+/** [B16.0.22] the deadline `scopedTrustedJson` has always used for this family —
+ *  it passes no `deadlineMs`, so the bounded reader's 30 s default applies.
+ *  The canonical-wrapper adopter passes this explicitly to preserve it. */
+export const PHYSICAL_BINDING_API_DEADLINE_MS = 30_000;
 
 export interface PhysicalBindingApiScope {
   tenantId: string;
@@ -11,29 +22,24 @@ export interface PhysicalBindingApiScope {
 
 export function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 
-function role(value: string | null): ProjectRole | null {
-  return value === "viewer" || value === "commenter" || value === "pcb_editor" || value === "automation" || value === "reviewer" || value === "project_admin" || value === "migration_admin" ? value : null;
+/** Request-free projection of the trusted context into the binding scope —
+ *  the canonical-wrapper equivalent of what `bindingScope` /
+ *  `scopedBindingJson` returned. */
+export function bindingScopeFromContext(context: TrustedRequestContext): PhysicalBindingApiScope {
+  return { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor };
 }
 
-export function bindingScope(request: Request): { ok: true; scope: PhysicalBindingApiScope } | { ok: false; response: Response } {
-  const tenantId = request.headers.get("x-sirkit-tenant-id")?.trim();
-  const projectId = request.headers.get("x-sirkit-project-id")?.trim();
-  const branchId = request.headers.get("x-sirkit-branch-id")?.trim();
-  const actorId = request.headers.get("x-sirkit-actor-id")?.trim();
-  const projectRole = role(request.headers.get("x-sirkit-role"));
-  if (!tenantId || !projectId || !branchId || !actorId || !projectRole) return { ok: false, response: Response.json({ ok: false, code: "PB_API_UNAUTHENTICATED", error: "Valid tenant, project, branch, actor, and role headers are required." }, { status: 401 }) };
-  const actorKind = request.headers.get("x-sirkit-actor-kind");
-  const allowedKind = actorKind === "ai" || actorKind === "import_adapter" || actorKind === "system_migration" || actorKind === "automated_engine" ? actorKind : "human";
-  return { ok: true, scope: { tenantId, projectId, branchId, actor: { actorId, actorKind: allowedKind, role: projectRole, sessionId: request.headers.get("x-sirkit-session-id")?.trim() || "physical-binding-api" } } };
+export async function bindingScope(request: Request): Promise<{ ok: true; scope: PhysicalBindingApiScope } | { ok: false; response: Response }> {
+  const authorized = await authorizeRequest(request);
+  if (!authorized.ok) return { ok: false, response: authorized.response };
+  if (authorized.kind !== "authenticated") return { ok: false, response: Response.json({ ok: false, code: "PB_API_UNAUTHENTICATED" }, { status: 401 }) };
+  const { context } = authorized;
+  return { ok: true, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor } };
 }
 
 export async function scopedBindingJson(request: Request): Promise<{ ok: true; body: Record<string, unknown>; scope: PhysicalBindingApiScope } | { ok: false; response: Response }> {
-  const authorized = bindingScope(request);
-  if (!authorized.ok) return authorized;
-  const raw = await request.text();
-  if (new TextEncoder().encode(raw).byteLength > PHYSICAL_BINDING_API_MAX_BYTES) return { ok: false, response: Response.json({ ok: false, code: "PB_API_PAYLOAD_TOO_LARGE", error: "Physical-binding request exceeds 2 MB." }, { status: 413 }) };
-  let value: unknown;
-  try { value = JSON.parse(raw); } catch { return { ok: false, response: Response.json({ ok: false, code: "PB_API_INVALID_JSON", error: "Request body is not valid JSON." }, { status: 400 }) }; }
-  if (!object(value)) return { ok: false, response: Response.json({ ok: false, code: "PB_API_OBJECT_REQUIRED", error: "JSON object body required." }, { status: 400 }) };
-  return { ok: true, body: value, scope: authorized.scope };
+  const scoped = await scopedTrustedJson(request, { maxBytes: PHYSICAL_BINDING_API_MAX_BYTES });
+  if (!scoped.ok) return scoped;
+  const { context } = scoped;
+  return { ok: true, body: scoped.body, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor } };
 }

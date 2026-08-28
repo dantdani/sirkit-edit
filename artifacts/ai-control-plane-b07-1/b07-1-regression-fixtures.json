@@ -1,0 +1,77 @@
+{
+  "schema": "sirkit.b07-1-regression-fixtures.v1",
+  "suite": "app/lib/engineering/__tests__/b07-1-identity-geometry-gestures.test.ts",
+  "fixtures": [
+    {
+      "id": 1,
+      "title": "Off-grid wire (1,1)->(21,1) rejects with no mutation",
+      "input": { "kind": "schematic_add_wire", "wire": { "id": "w-bad", "vertices": [{ "x": 1, "y": 1 }, { "x": 21, "y": 1 }] } },
+      "expected": "atomic rejection, diagnostics match INVALID_PX ... off the 10px schematic grid, head digest unchanged",
+      "test": "C1"
+    },
+    {
+      "id": 2,
+      "title": "Duplicate Theory stable ids do not hydrate as fresh/ready",
+      "input": { "projection": "SchematicState with two components id 'dup'" },
+      "expected": "openForProject -> status invalid-projection (or projection-conflict offering a valid canonical head); lifecycle conflicted; nothing written; mutations structurally rejected",
+      "test": "A1, A5"
+    },
+    {
+      "id": 3,
+      "title": "Ambiguous componentId 'dup' rename cannot mutate either component",
+      "input": { "kind": "schematic_set_component_properties", "componentId": "dup", "patch": { "refDes": "RENAMED" } },
+      "expected": "SCHEMATIC_MODEL_UNAVAILABLE thrown before application; neither duplicate is renamed; source project untouched",
+      "test": "A2"
+    },
+    {
+      "id": 4,
+      "title": "Theory id stable-r / refDes RSENSE emits stable identity + displayed reference",
+      "input": { "theory": { "id": "stable-r", "refDes": "RSENSE" }, "kicad": { "id": "stable-k", "refDes": "R1" } },
+      "expected": [ { "id": "stable-r", "ref": "RSENSE" }, { "id": "stable-k", "ref": "R1" } ],
+      "note": "the exact independent reproduction, corrected — never two R1 references",
+      "test": "B1"
+    },
+    {
+      "id": 5,
+      "title": "Theory RSENSE plus KiCad R1 produces unique correct exported references",
+      "input": "same state through buildPcbSyncPublicationGraph",
+      "expected": "componentInstanceId=stable id, referenceDesignator=display, theory symbolAssetVersionId derived from TYPE, duplicate references fail closed (PS_COMPONENT_IDENTITY_DUPLICATE)",
+      "test": "B2, B3"
+    },
+    {
+      "id": 6,
+      "title": "Theory R1 plus KiCad r1 rejects as a normalized cross-family collision",
+      "input": { "existing_theory_display": "R1", "attempted_kicad_refDes": "r1" },
+      "expected": "canonical executor rejection: 'refDes r1 is already in use' (refDesKey case-normalization); symmetric for theory rename onto kicad refDes",
+      "test": "B4, B6"
+    },
+    {
+      "id": 7,
+      "title": "SPICE rename changes presentation only; saved stable-ID targets still resolve",
+      "input": "rename stable-r from R1 to RSENSE in the bound design revision",
+      "expected": "IrDevice.name and SourceRef.label become RSENSE; IrDevice.id and SourceRef.id stay stable-r; componentPinNodes['stable-r.left'] resolves to the same node",
+      "test": "B5"
+    },
+    {
+      "id": 8,
+      "title": "A late rejected gesture cannot restore an obsolete base over a newer canonical state",
+      "input": "gesture A commit pending; newer canonical command applies; A resolves rejected",
+      "expected": "no rollback application; newer state remains the projection (epoch gate)",
+      "test": "D2 (and D4 for hydration/recovery)"
+    },
+    {
+      "id": 9,
+      "title": "A late result from an old project/session cannot update the new project",
+      "input": "gesture A commit pending; hydrateProject invalidates; new project state visible; A resolves ok",
+      "expected": "result discarded entirely; zero projection writes from the stale completion",
+      "test": "D3, D7"
+    },
+    {
+      "id": 10,
+      "title": "A direct setter with a forged b07: comment still fails the CI tripwire",
+      "input": "inject `setComponents([]); /* b07:lifecycle */` outside the approved appliers (in-memory; no git commands)",
+      "expected": "auditSchematicSetterAuthority reports a violation whose reason states comments cannot exempt; reverting to the original source passes again",
+      "test": "E2 (aliases/prop-threading: E3; applier presence pinning: E4)"
+    }
+  ]
+}

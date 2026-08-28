@@ -1,0 +1,154 @@
+path,method,auth_class,identity_source,requires_auth,permitted_roles,required_capability,provider_credit,requires_csrf,authoritative_write,release_or_qualification,evidence
+/api/ai/runtime,GET,public,none,false,,,false,false,false,false,static runtime config
+/api/architecture/alternatives,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/architecture/candidates,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/architecture/compare,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/architecture/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/architecture/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/assignment-queue,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/assignment-queue
+/api/assignment-queue,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api/assignment-queue
+/api/assignment-queue/materialize,POST,internal-worker,worker-secret,true,,,false,false,true,false,app/api/assignment-queue/materialize
+/api/assignment-queue/revalidate,POST,internal-worker,worker-secret,true,,,false,false,true,false,app/api/assignment-queue/revalidate
+/api/auth/callback,GET,public,none,false,,,false,false,false,false,app/api/auth/callback (PKCE code exchange; safe same-origin redirect)
+/api/auth/signin,POST,public,none,false,,,false,true,false,false,app/api/auth/signin (credential verification is the authentication; in-route CSRF)
+/api/auth/signout,POST,public,none,false,,,false,true,false,false,app/api/auth/signout (clears the caller's own session cookies; in-route CSRF)
+/api/bom,POST,public,none,false,,,false,false,false,false,stateless BOM compute
+/api/bom/cart/digikey,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
+/api/bom/cart/lcsc,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
+/api/bom/cart/mouser,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
+/api/bom/diff,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,"durable BOM snapshot diff (trusted project scope; design state in a bounded JSON body, never a URL)"
+/api/bom/export-csv,POST,public,none,false,,,false,false,false,false,stateless export
+/api/bom/notifications,DELETE,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,durable BOM notifications mutate (trusted project scope)
+/api/bom/notifications,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,durable BOM notifications list (trusted project scope)
+/api/bom/notifications,PATCH,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,durable BOM notifications mutate (trusted project scope)
+/api/bom/procurement-packet,POST,public,none,false,,,false,false,false,false,stateless export
+/api/bom/snapshot,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,durable BOM snapshot list (trusted project scope)
+/api/bom/snapshot,POST,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,durable BOM snapshot create (trusted project scope)
+/api/calculation/corners,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/evaluate,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/export,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/feedback,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/report,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/calculation/transaction,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/chat,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api/chat
+/api/circuit-knowledge/applicability,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-knowledge/compile,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-knowledge/compose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-knowledge/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-knowledge/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-verification/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-verification/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-verification/readiness,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/circuit-verification/run,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/alternative,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/catalog,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/evaluate,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/export,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/feedback,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/solve,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/sourcing,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/component-selection/transaction,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/components/atomic,GET,public,none,false,,,false,false,false,false,catalog read
+/api/components/atomic/search,POST,public,none,false,,,false,false,false,false,catalog read
+/api/constraints/explain,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/constraints/preview,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/engineering-effects,POST,internal-worker,worker-secret,true,,,false,false,true,false,app/api/engineering-effects
+/api/export/kicad,POST,public,none,false,,,false,false,false,false,stateless export
+/api/firmware-bringup/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/firmware-bringup/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/firmware-bringup/resources,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/footprint-resolution,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/footprint-resolution,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/full-flow/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/full-flow/run,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/full-flow/transition,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/allocate,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/alternatives,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/candidates,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/compare,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/interfaces/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/kicad/v1,GET,public,none,false,,,false,false,false,false,public KiCad HTTP library
+/api/kicad/v1/categories.json,GET,public,none,false,,,false,false,false,false,public KiCad HTTP library
+/api/kicad/v1/parts/[id],GET,public,none,false,,,false,false,false,false,public KiCad HTTP library
+/api/kicad/v1/parts/category/[id],GET,public,none,false,,,false,false,false,false,public KiCad HTTP library
+/api/mapping-verification,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/mapping-verification,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/denominator,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/execute,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/measure,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/model-simulation/readiness,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/parts/[id],GET,public,none,false,,,false,false,false,false,catalog read
+/api/parts/[id]/alternates,GET,public,none,false,,,false,false,false,false,catalog read
+/api/parts/categories,GET,public,none,false,,,false,false,false,false,catalog read
+/api/parts/search,POST,public,none,false,,,false,false,false,false,catalog read
+/api/passive-policy,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/passive-policy,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/pcb-sync,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/pcb-sync
+/api/pcb-sync,POST,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,app/api/pcb-sync
+/api/pcb/ai-rules/from-brief,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/pcb/apply-authorization,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api/pcb/apply-authorization
+/api/pcb/assign/suggest,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/pcb/autoroute,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,freerouting (java) process execution on caller-supplied board
+/api/pcb/edit/assist,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/pcb/export/gerbers,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,false,false,kicad-cli process execution — client-working-copy ENGINEERING export only (not verified release); attribution server-derived
+/api/pcb/export/kicad-pcb,POST,public,none,false,,,false,false,false,false,stateless export
+/api/pcb/footprints/[id],GET,public,none,false,,,false,false,false,false,footprint catalog read
+/api/pcb/footprints/resolve,GET,public,none,false,,,false,false,false,false,footprint catalog read
+/api/pcb/footprints/search,GET,public,none,false,,,false,false,false,false,footprint catalog read
+/api/pcb/placement/preview,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/pcb/qualify,POST,authenticated-release,trusted-context,true,pcb_editor;project_admin,,false,true,true,true,app/api/pcb/qualify
+/api/pcb/release,POST,authenticated-release,trusted-context,true,project_admin,,false,true,true,true,app/api/pcb/release
+/api/pcb/repair/agent,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/physical-bindings,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/physical-bindings
+/api/physical-bindings,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api/physical-bindings
+/api/power/alternatives,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/power/candidates,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/power/compare,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/power/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/power/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/power/reconcile,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/release-engineering/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/release-engineering/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/replacement-authority,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api/replacement-authority
+/api/requirements/capabilities,GET,public,none,false,,,false,false,false,false,static capability catalog (embedded constant profile; no project data)
+/api/requirements/compile,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/requirements/sources,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic-compiler/compare,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/diff,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/export,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/graph/validate,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/kicad/inspect,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/layout,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/problem,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/propose,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/transaction,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic-compiler/variants,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
+/api/schematic/build,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/build-multi,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/cross-verify,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/edit,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/edit-build,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/layout-critic,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/schematic/review,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/simulate,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,ngspice process execution on caller-supplied schematic
+/api/spice/ai,POST,authenticated-propose,body-scope-server-actor,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api provider-credit route (B16.0.1: requires trusted auth + membership)
+/api/spice/compile,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/spice/models/import,POST,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,local SPICE model import
+/api/spice/models/smoke-test,POST,authenticated-read,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,ngspice process execution on caller-supplied model
+/api/spice/reports,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/spice/run-plans/estimate,POST,public,none,false,,,false,false,false,false,stateless compute
+/api/spice/runs,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,SPICE run list (trusted project scope)
+/api/spice/runs,POST,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,SPICE run start — ngspice process execution (trusted project scope)
+/api/spice/runs/[id],DELETE,authenticated-mutation,trusted-context,true,pcb_editor;project_admin;automation,,false,true,true,false,SPICE run cancel (trusted project scope)
+/api/spice/runs/[id],GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,SPICE run read (trusted project scope)
+/api/spice/runs/[id]/bundle,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,SPICE run reproducibility bundle (trusted project scope)
+/api/spice/runs/[id]/events,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,SPICE run SSE events (authorized before any listener)
+/api/spice/runs/[id]/waveforms,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,SPICE run waveforms (trusted project scope)

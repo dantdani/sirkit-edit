@@ -15,6 +15,26 @@ function operationObjectIds(operation: EngineeringOperation): string[] {
   if (operation.kind === "add_via") return [`via:${operation.via.id}`]; if (operation.kind === "update_via" || operation.kind === "remove_via") return [`via:${operation.viaId}`];
   if (operation.kind === "add_zone") return [`zone:${operation.zone.id}`]; if (operation.kind === "update_zone" || operation.kind === "remove_zone") return [`zone:${operation.zoneId}`];
   if (operation.kind === "update_net") return [`net:${operation.netId}`]; if (operation.kind === "pin_asset") return [`asset:${operation.asset.assetId}`]; if (operation.kind === "remove_pinned_asset") return [`asset:${operation.assetId}`];
+  // B08 — collection + protection + settings operations declare exact scope.
+  if (operation.kind === "set_copper_protection") return [`${operation.target}:${operation.id}`];
+  if (operation.kind === "add_text") return [`text:${operation.text.id}`]; if (operation.kind === "update_text" || operation.kind === "remove_text") return [`text:${operation.textId}`];
+  if (operation.kind === "add_silk") return [`silk:${operation.item.id}`]; if (operation.kind === "update_silk" || operation.kind === "remove_silk") return [`silk:${operation.silkId}`];
+  if (operation.kind === "add_padstack") return [`padstack:${operation.padstack.id}`]; if (operation.kind === "update_padstack" || operation.kind === "remove_padstack") return [`padstack:${operation.padstackId}`];
+  if (operation.kind === "add_keepout") return [`keepout:${operation.keepout.id}`]; if (operation.kind === "update_keepout" || operation.kind === "remove_keepout") return [`keepout:${operation.keepoutId}`];
+  if (operation.kind === "add_dimension") return [`dimension:${operation.dimension.id}`]; if (operation.kind === "update_dimension" || operation.kind === "remove_dimension") return [`dimension:${operation.dimensionId}`];
+  if (operation.kind === "update_stackup") return ["board:stackup"]; if (operation.kind === "update_net_classing") return ["board:net-classing"]; if (operation.kind === "update_constraint_state") return ["board:constraint-state"];
+  if (operation.kind === "update_placement_settings") return ["board:placement-settings"]; if (operation.kind === "update_routing_history") return ["board:routing-history"];
+  // B06 — schematic operations declare component + incident-entity scope.
+  if (operation.kind === "schematic_delete_component") return [`schcomp:${operation.componentId}`, ...operation.removeWireIds.map((id) => `schwire:${id}`), ...operation.removeNetLabelIds.map((id) => `schlabel:${id}`)];
+  if (operation.kind === "schematic_restore_entities") return [...operation.components.map((item) => `schcomp:${item.entity.id}`), ...operation.kicadComponents.map((item) => `schcomp:${item.entity.id}`), ...operation.wires.map((item) => `schwire:${item.entity.id}`), ...operation.netLabels.map((item) => `schlabel:${item.entity.id}`)];
+  if (operation.kind === "schematic_replace_component") return [`schcomp:${operation.componentId}`, ...operation.wireEndpointMoves.map((move) => `schwire:${move.wireId}`), ...operation.netLabelMoves.map((move) => `schlabel:${move.labelId}`)];
+  if (operation.kind === "schematic_set_component_properties" || operation.kind === "schematic_transform_component") return [`schcomp:${operation.componentId}`];
+  // B07 — graph operations declare their exact entity scope.
+  if (operation.kind === "schematic_add_wire") return [`schwire:${operation.wire.id}`];
+  if (operation.kind === "schematic_delete_wire" || operation.kind === "schematic_update_wire_geometry") return [`schwire:${operation.wireId}`];
+  if (operation.kind === "schematic_add_net_label") return [`schlabel:${operation.label.id}`];
+  if (operation.kind === "schematic_delete_net_label" || operation.kind === "schematic_update_net_label") return [`schlabel:${operation.labelId}`];
+  if (operation.kind === "schematic_add_component") return [`schcomp:${operation.component.id}`];
   return [operation.kind === "update_board_outline" ? "board:outline" : "board:routing-preferences"];
 }
 
@@ -23,6 +43,7 @@ export function declaredScopeForOperations(operations: readonly EngineeringOpera
   for (const operation of operations) {
     if (operation.kind === "add_track") { netIds.push(operation.track.netId); layers.push(operation.track.layer); } else if (operation.kind === "add_via") { netIds.push(operation.via.netId); layers.push(...operation.via.layers); } else if (operation.kind === "add_zone") { netIds.push(operation.zone.netId); layers.push(operation.zone.layer); }
     if (operation.kind === "update_board_outline") globalDomains.add("boardGeometry"); if (operation.kind === "update_routing_preferences") globalDomains.add("copperTopology"); if (operation.kind === "update_net") { globalDomains.add("electricalIntent"); netIds.push(operation.netId); } if (operation.kind === "pin_asset" || operation.kind === "remove_pinned_asset") globalDomains.add("assets");
+    if (operation.kind.startsWith("schematic_")) globalDomains.add("schematic");
   }
   return { objectIds: [...new Set(objectIds)].sort(), netIds: [...new Set(netIds)].sort((a, b) => a - b), layers: [...new Set(layers)].sort(), boundsByLayer: {}, globalDomains: [...globalDomains].sort() };
 }

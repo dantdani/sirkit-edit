@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { injectAuthorizedPrincipal, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import type { BundleResult } from "@/app/lib/pcb/fab/types";
 import { KicadCliError } from "@/app/lib/pcb/fab/types";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
@@ -30,10 +31,14 @@ const releaseManifest = {
   readinessReportId: readiness.reportId,
 } as ManufacturingReleaseManifest;
 
+// [B16.0.2 §G] the engineering export is authenticated + project-scoped:
+// requests carry the project SELECTOR + same-origin Origin; the test acts as a
+// pcb_editor of that project.
+const SELECTOR = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "project-gerbers", "x-sirkit-branch-id": "main" };
 function request(body: unknown): Request {
   return new Request("http://localhost/api/pcb/export/gerbers", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", origin: "http://localhost", ...SELECTOR },
     body: JSON.stringify(body),
   });
 }
@@ -61,7 +66,9 @@ function fakeResult(): BundleResult {
 beforeEach(() => {
   buildFabBundleMock.mockReset();
   compileNativeMock.mockReset();
+  injectAuthorizedPrincipal({ userId: "gerbers-editor", tenantId: "local", projectId: "project-gerbers", role: "editor" });
 });
+afterEach(() => { resetInjectedIdentity(); });
 
 describe("POST /api/pcb/export/gerbers Stage 3 release policy", () => {
   it("rejects a browser-supplied board as verified manufacturing authority", async () => {

@@ -24,7 +24,7 @@ import type { PadstackInput } from "../padstack/types";
 /** A reference to one selectable board item. Pads are addressed through their
  *  footprint (pad geometry has no standalone id — see Stage 1 invariant). */
 export type SelectionRef =
-  | { kind: "via" | "track" | "zone" | "text" | "footprint"; id: string }
+  | { kind: "via" | "track" | "zone" | "text" | "footprint" | "dimension"; id: string }
   | { kind: "pad"; footprintId: string; padNumber: string };
 
 export type EditCommand =

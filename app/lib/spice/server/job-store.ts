@@ -1,21 +1,54 @@
+/**
+ * SPICE run job store — [B16.0.2 §B] EVERY run and batch is bound internally
+ * to a SERVER-DERIVED project scope `{ tenantId, projectId, branchId }`
+ * (the trusted request context of the caller that started it), and EVERY
+ * read / list / cancel / subscribe operation requires the EXACT same scope.
+ *
+ * R2 (B16.0.1 gap): the store carried only the client-asserted
+ * `SimulationProject.id` and no trusted ownership, so a member of project B
+ * could enumerate, inspect, subscribe to, download, and cancel project A's
+ * runs by id. Closed here:
+ *  - `startRunPlan` REQUIRES a trusted scope; the client's `project.id` stays
+ *    a display-only assertion (`record.projectId`), never an ownership key;
+ *  - a foreign-scope caller learns NOTHING: `getRun`/`getBatch` return null,
+ *    `getRuns` lists nothing, `cancelRun` is a no-op returning false,
+ *    `subscribeRun` adds NO listener (returns an inert unsubscribe) — so the
+ *    route layer can answer a uniform bounded 404 (no existence oracle);
+ *  - there is NO unscoped public accessor — the internal helpers that need
+ *    one are module-private.
+ */
+
 import { createId, nowIso } from "../identity";
 import { estimateRunPlan } from "../run-plan";
 import type { RunBatchRecord, RunEvent, RunPoint, RunRecord, RunStatus, SimulationPartSnapshot, SimulationProject } from "../types";
 import { executeRunPoint } from "./worker";
 
+/** The server-derived ownership scope a run/batch is bound to. */
+export interface RunScope {
+  tenantId: string;
+  projectId: string;
+  branchId: string;
+}
+
 interface JobState {
   record: RunRecord;
+  scope: RunScope;
   abort: AbortController;
   runPoint: RunPoint;
 }
 
+interface BatchState {
+  record: RunBatchRecord;
+  scope: RunScope;
+}
+
 interface StoreState {
   jobs: Map<string, JobState>;
-  batches: Map<string, RunBatchRecord>;
+  batches: Map<string, BatchState>;
   listeners: Map<string, Set<(record: RunRecord) => void>>;
 }
 
-const globalKey = Symbol.for("sirkit.spice.job-store.v1");
+const globalKey = Symbol.for("sirkit.spice.job-store.v2");
 const globalObject = globalThis as typeof globalThis & { [globalKey]?: StoreState };
 const state: StoreState = globalObject[globalKey] ?? {
   jobs: new Map(),
@@ -25,6 +58,23 @@ const state: StoreState = globalObject[globalKey] ?? {
 globalObject[globalKey] = state;
 
 const TERMINAL = new Set<RunStatus>(["completed", "failed", "cancelled"]);
+
+function sameScope(a: RunScope, b: RunScope): boolean {
+  return a.tenantId === b.tenantId && a.projectId === b.projectId && a.branchId === b.branchId;
+}
+
+function wellFormedScope(scope: unknown): scope is RunScope {
+  if (typeof scope !== "object" || scope === null) return false;
+  const s = scope as Record<string, unknown>;
+  return ["tenantId", "projectId", "branchId"].every((key) => typeof s[key] === "string" && (s[key] as string).trim().length > 0);
+}
+
+/** Module-private: the job for a run id ONLY when the scope matches. */
+function ownedJob(runId: string, scope: RunScope): JobState | null {
+  const job = state.jobs.get(runId);
+  if (!job || !sameScope(job.scope, scope)) return null;
+  return job;
+}
 
 function emit(runId: string): void {
   const record = state.jobs.get(runId)?.record;
@@ -44,7 +94,7 @@ function addEvent(runId: string, event: Omit<RunEvent, "sequence" | "timestamp">
 }
 
 function updateBatch(batchId: string): void {
-  const batch = state.batches.get(batchId);
+  const batch = state.batches.get(batchId)?.record;
   if (!batch) return;
   const runs = batch.runIds.map((id) => state.jobs.get(id)?.record).filter((record): record is RunRecord => Boolean(record));
   batch.completed = runs.filter((run) => run.status === "completed").length;
@@ -55,6 +105,17 @@ function updateBatch(batchId: string): void {
     batch.finishedAt = nowIso();
   } else if (runs.some((run) => run.status === "running" || run.status === "post-processing")) batch.status = "running";
   else batch.status = "queued";
+}
+
+function cancelInternal(runId: string): boolean {
+  const job = state.jobs.get(runId);
+  if (!job || TERMINAL.has(job.record.status)) return false;
+  job.abort.abort();
+  job.record.status = "cancelled";
+  job.record.progress = 100;
+  job.record.finishedAt = nowIso();
+  addEvent(runId, { status: "cancelled", progress: 100, message: "Cancellation requested" });
+  return true;
 }
 
 async function executeQueuedRun(
@@ -76,9 +137,16 @@ async function executeQueuedRun(
       signal: job.abort.signal,
       onEvent: (event) => addEvent(runId, event),
     });
+    // [B16.0.23 §E/§F] a TERMINAL record is authoritative: a late worker
+    // settlement (a runner that ignored the abort signal) can NEVER overwrite
+    // a cancelled/failed/completed run after the fact. Reproduced verbatim
+    // pre-edit through the worker seam; the real worker settles "cancelled"
+    // on abort, so this is defense-in-depth at the store boundary.
+    if (TERMINAL.has(job.record.status)) return;
     Object.assign(job.record, result, { finishedAt: nowIso() });
     if (result.status === "failed") job.record.progress = Math.max(job.record.progress, 100);
   } catch (error) {
+    if (TERMINAL.has(job.record.status)) return; // same guard on the throw path
     const message = error instanceof Error ? error.message : String(error);
     job.record.status = job.abort.signal.aborted ? "cancelled" : "failed";
     job.record.error = message;
@@ -90,12 +158,20 @@ async function executeQueuedRun(
   }
 }
 
+/**
+ * Start a run plan. `scope` is the TRUSTED server-derived ownership scope and
+ * is REQUIRED (a malformed/missing scope throws before anything is created);
+ * `project.id` is a client assertion kept for display only.
+ */
 export function startRunPlan(input: {
+  scope: RunScope;
   project: SimulationProject;
   runPlanId: string;
   parts?: SimulationPartSnapshot[];
   maxRuns?: number;
 }): RunBatchRecord {
+  if (!wellFormedScope(input.scope)) throw new Error("A trusted project scope is required to start a run plan");
+  const scope: RunScope = { tenantId: input.scope.tenantId, projectId: input.scope.projectId, branchId: input.scope.branchId };
   const estimate = estimateRunPlan(input.project, input.runPlanId);
   const maxRuns = input.maxRuns ?? 500;
   if (estimate.totalRuns === 0) throw new Error("Run plan expands to zero runs");
@@ -122,8 +198,9 @@ export function startRunPlan(input: {
       stdout: "",
       stderr: "",
       createdAt,
+      scope: { ...scope },
     };
-    state.jobs.set(runId, { record, abort: new AbortController(), runPoint: point });
+    state.jobs.set(runId, { record, scope: { ...scope }, abort: new AbortController(), runPoint: point });
   }
   const batch: RunBatchRecord = {
     id: batchId,
@@ -136,8 +213,9 @@ export function startRunPlan(input: {
     failed: 0,
     cancelled: 0,
     createdAt: nowIso(),
+    scope: { ...scope },
   };
-  state.batches.set(batchId, batch);
+  state.batches.set(batchId, { record: batch, scope: { ...scope } });
   const concurrency = Math.max(1, Math.min(8, Math.round(plan.concurrency)));
   void (async () => {
     let cursor = 0;
@@ -149,7 +227,7 @@ export function startRunPlan(input: {
         if (!job || job.abort.signal.aborted) continue;
         await executeQueuedRun(batchId, runId, input.project, input.runPlanId, input.parts ?? []);
         if (plan.stopOnFailure && state.jobs.get(runId)?.record.status === "failed") {
-          for (const pendingId of runIds.slice(cursor)) cancelRun(pendingId);
+          for (const pendingId of runIds.slice(cursor)) cancelInternal(pendingId);
           cursor = runIds.length;
         }
       }
@@ -160,46 +238,70 @@ export function startRunPlan(input: {
   return structuredClone(batch);
 }
 
-export function getRun(runId: string): RunRecord | null {
-  const record = state.jobs.get(runId)?.record;
-  if (!record) return null;
-  return structuredClone(record);
+/** The run ONLY when `scope` is its exact owner; otherwise null (no oracle). */
+export function getRun(runId: string, scope: RunScope): RunRecord | null {
+  const job = ownedJob(runId, scope);
+  if (!job) return null;
+  return structuredClone(job.record);
 }
 
-export function getRuns(runIds?: string[]): RunRecord[] {
+/** The runs owned by `scope` (optionally filtered to `runIds`). Foreign ids are
+ *  silently absent — a foreign-scope caller can never enumerate. */
+export function getRuns(scope: RunScope, runIds?: string[]): RunRecord[] {
   const ids = runIds ?? [...state.jobs.keys()];
-  return ids.map(getRun).filter((record): record is RunRecord => Boolean(record)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return ids
+    .map((id) => getRun(id, scope))
+    .filter((record): record is RunRecord => Boolean(record))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export function getBatch(batchId: string): RunBatchRecord | null {
+/** The batch ONLY when `scope` is its exact owner; otherwise null. */
+export function getBatch(batchId: string, scope: RunScope): RunBatchRecord | null {
   const batch = state.batches.get(batchId);
-  if (!batch) return null;
+  if (!batch || !sameScope(batch.scope, scope)) return null;
   updateBatch(batchId);
-  return structuredClone(batch);
+  return structuredClone(batch.record);
 }
 
-export function cancelRun(runId: string): boolean {
-  const job = state.jobs.get(runId);
-  if (!job || TERMINAL.has(job.record.status)) return false;
-  job.abort.abort();
-  job.record.status = "cancelled";
-  job.record.progress = 100;
-  job.record.finishedAt = nowIso();
-  addEvent(runId, { status: "cancelled", progress: 100, message: "Cancellation requested" });
-  return true;
+/** Cancel ONLY when `scope` owns the run; a foreign scope is a no-op (false)
+ *  and the execution/cancellation authority is never touched. */
+export function cancelRun(runId: string, scope: RunScope): boolean {
+  if (!ownedJob(runId, scope)) return false;
+  return cancelInternal(runId);
 }
 
-export function subscribeRun(runId: string, listener: (record: RunRecord) => void): () => void {
+/**
+ * Subscribe ONLY when `scope` owns the run. A foreign scope adds NO listener
+ * and receives NO initial record — the returned unsubscribe is inert. The
+ * second return value reports whether a subscription was actually created so
+ * a route can authorize BEFORE opening a stream.
+ */
+export function subscribeRun(runId: string, scope: RunScope, listener: (record: RunRecord) => void): () => void {
+  const job = ownedJob(runId, scope);
+  if (!job) return () => undefined;
   let listeners = state.listeners.get(runId);
   if (!listeners) {
     listeners = new Set();
     state.listeners.set(runId, listeners);
   }
   listeners.add(listener);
-  const initial = getRun(runId);
-  if (initial) listener(initial);
+  listener(structuredClone(job.record));
   return () => {
     listeners?.delete(listener);
     if (listeners?.size === 0) state.listeners.delete(runId);
   };
+}
+
+/** Diagnostics/tests: the number of live listeners on a run (unscoped COUNT
+ *  only — never a record, never contents). */
+export function runListenerCount(runId: string): number {
+  return state.listeners.get(runId)?.size ?? 0;
+}
+
+/** Tests only: clear every job/batch/listener (abort in-flight runs). */
+export function __resetJobStoreForTests(): void {
+  for (const job of state.jobs.values()) job.abort.abort();
+  state.jobs.clear();
+  state.batches.clear();
+  state.listeners.clear();
 }

@@ -23,6 +23,7 @@ export type ResolvedItem =
   | { kind: "zone"; ref: SelectionRef; zone: Zone }
   | { kind: "text"; ref: SelectionRef; text: SilkTextItem }
   | { kind: "footprint"; ref: SelectionRef; footprint: FootprintInstance }
+  | { kind: "dimension"; ref: SelectionRef; dimension: NonNullable<PcbBoard["dimensions"]>[number] }
   | {
       kind: "pad";
       ref: SelectionRef;
@@ -59,6 +60,11 @@ export function getItems(board: PcbBoard, refs: SelectionRef[]): ResolvedItem[] 
       case "footprint": {
         const footprint = board.footprints.find((f) => f.id === ref.id);
         if (footprint) out.push({ kind: "footprint", ref, footprint });
+        break;
+      }
+      case "dimension": {
+        const dimension = (board.dimensions ?? []).find((d) => d.id === ref.id);
+        if (dimension) out.push({ kind: "dimension", ref, dimension });
         break;
       }
       case "pad": {

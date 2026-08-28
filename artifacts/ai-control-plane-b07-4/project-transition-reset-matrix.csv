@@ -1,0 +1,31 @@
+field_or_resource,kind,reset_behavior_on_hydration,late_callback_protection
+project async scopes (registry generation),ownership,beginProject bumps generation BEFORE resets run — every prior scope permanently stale,isCurrent()/ifCurrent gates in every handler
+in-flight fetches (chat/generate/edit/review/tidy/cross-verify),network,previous generation's AbortSignal aborted,AbortError classified as cancellation; catch guards
+generation-owned timers (auto pipeline; scoped genError auto-clears),timers,all canceled at beginProject; scope.setTimeout guarded at fire time,stale scope timers never run
+pendingReplace (replacement dialog),dialog state,setPendingReplace(null),dialog only ever opens after scope+digest+validation gate
+pendingTier1 (sealed proposal),dialog state,setPendingTier1(null),tier1StillPinned gate before surfacing
+schematicRecovery,dialog state,setSchematicRecovery(null); re-evaluated by the new openForProject,exhaustive outcome switch repopulates truthfully; [B07.5] outcome application additionally scope+session-owned
+recovery decision ownership [ADDED B07.5],single-flight gate + busy flag,recoveryDecisionAdapterRef.reset() + setRecoveryDecisionBusy(false),stale decisions classify stale-project and update nothing; duplicate clicks refused
+checkpoints list [ADDED B07.5],project-owned list,setCheckpoints([]) (intentional empty state) then scoped latest-request reload,stale-generation/superseded reads and errors ignored; rows identity-filtered
+historyOpen [ADDED B07.5],dialog state,setHistoryOpen(false),no stale checkpoint row can be clicked across a transition; restore re-checks identity anyway
+simulation state [ADDED B07.5],request-owned results,simulationRunnerRef.reset() + setSimResult(null) + setSimError(null) + setSimLoading(false) + setPanes([]) + setActivePaneId(null),stale results/errors/finally ignored by the runner; scope.signal aborts the in-flight fetch (simMode/chartPanelOpen are app-level view prefs and intentionally survive)
+pendingSuggestions (scoped batch),actionable state,setPendingSuggestions(null),producers store only while scope+digest current; staleness effect; evaluateSuggestionBatch apply gate
+suggestionsMinimized,ui,setSuggestionsMinimized(false),n/a
+genError,transient error,setGenError(null),setScopedGenError writes+clears only while scope current
+aiProviderFailure,transient error,setAiProviderFailure(null),[CORRECTED B07.5] pre-B07.5 the global provider-failure dispatch raced ahead of the scope check and could repopulate this after the reset; now the dispatch is ownership-gated and the listener re-checks stillCurrent
+lastAiRetryRef,retry callback,lastAiRetryRef.current = null,retry UI (aiProviderFailure) also cleared — no cross-project replay
+isGenerating + activeGenerationRef,busy,false + null,finally clears only when requestId matches
+isEditing + activeEditRef,busy,false + null,same
+isReviewing + activeReviewRef,busy,false + null,same
+isTidying + activeTidyRef,busy,false + null,same
+isSecondOpinion + activeSecondOpinionRef,busy,false + null,same
+loading (chat) + activeChatRef,busy,false + null,same
+lastDesignPrompt,project-owned value,HYDRATED: record.designPrompt ?? "" (never leaked),n/a
+chat messages,project-owned value,setMessages(record.chat...) (loaded); stream/error writers id-keyed + scope-gated,UUID ids collision-resistant; appendChatFor project guard
+activity logs,project-owned value,replaced with loaded chat,id-keyed map updates are no-ops after replacement
+autoRunToken/autoRunIncludesTidy,pipeline,token not reset (timer itself is generation-owned and canceled),pipelineScope.isCurrent() before each stage
+gesture coordinator,interaction queue,invalidate() (B07.1-B07.3 unchanged),epoch + stillCurrent cancellation
+schematic session,canonical,dispose() then fresh session; registry captures the NEW session,captured-session submission; UNKNOWN_BASE_PROJECTION
+pendingHydrationForRef/pendingRecordRef,persistence guards,set/cleared as before (B06.3/R06 unchanged),persistProject refusal until hydrated commit
+selection/wireDraft/tool,ui,cleared as before,n/a
+pageSize/view/pcbMounted,project-owned value,hydrated from record as before,n/a

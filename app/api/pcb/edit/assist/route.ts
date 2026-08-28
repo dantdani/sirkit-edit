@@ -32,6 +32,7 @@ import {
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
 import type { CompactItem } from "@/app/lib/pcb/edit/digest";
 import type { LayerId } from "@/app/lib/pcb/layers";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -342,13 +343,11 @@ function validateCommands(
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
-export async function POST(req: Request): Promise<Response> {
-  let raw: unknown;
-  try {
-    raw = await req.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.13] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// run inside the wrapper; the callback receives the trusted context and parsed
+// body only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const raw: unknown = rawBody;
   const body = parseBody(raw);
   if (!body) {
     return Response.json(
@@ -437,4 +436,4 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   return Response.json({ ok: false, error: firstError ?? "validation failed" }, { status: 422 });
-}
+});

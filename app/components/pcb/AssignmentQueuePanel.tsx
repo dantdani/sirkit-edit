@@ -5,7 +5,10 @@ import { AlertTriangle, CheckCircle2, History, Loader2, RefreshCw, ShieldCheck, 
 import { ASSIGNMENT_REQUEST_VERSION, type AssignmentDecisionAction, type AssignmentDecisionPlan, type AssignmentDecisionRequest, type AssignmentDecisionResult, type PhysicalAssignmentItem } from "@/app/lib/assignment-queue/types";
 
 interface Scope { tenantId: string; projectId: string; branchId: string; assemblyVariantId: string }
-const headers = (scope: Scope, json = false): HeadersInit => ({ ...(json ? { "Content-Type": "application/json" } : {}), "x-sirkit-tenant-id": scope.tenantId, "x-sirkit-project-id": scope.projectId, "x-sirkit-branch-id": scope.branchId, "x-sirkit-actor-id": "local-user", "x-sirkit-role": "project_admin", "x-sirkit-session-id": "pcb-assignment-workbench" });
+// B16.0: only the project/branch SELECTOR is sent. Identity/role are derived
+// server-side from the authenticated session + membership; the route
+// overrides any body actorContext with the server-derived actor.
+const headers = (scope: Scope, json = false): HeadersInit => ({ ...(json ? { "Content-Type": "application/json" } : {}), "x-sirkit-tenant-id": scope.tenantId, "x-sirkit-project-id": scope.projectId, "x-sirkit-branch-id": scope.branchId });
 const title = (value: string): string => value.replaceAll("_", " ");
 
 export function AssignmentQueuePanel({ scope, onClose }: { scope: Scope; onClose: () => void }) {

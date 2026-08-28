@@ -17,7 +17,7 @@
  */
 
 import type { SchematicState } from "@/lib/schematic-types";
-import { netLabelNameKey } from "@/lib/schematic-types";
+import { netLabelNameKey, normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { buildNetUnionFind } from "@/app/lib/connectivity";
 import { pinWorldPos, kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
@@ -140,6 +140,18 @@ const THEORY_PIN_NUMBERS: Record<string, Record<string, string>> = {
   diode: { cathode: "1", anode: "2" },
 };
 
+/**
+ * [B10.2] THE production physical-theory-component rule, shared so no
+ * second divergent pin/physicality definition can exist: a theory
+ * component is a PHYSICAL part exactly when it has a theory pin contract
+ * here (ground symbols and voltage/current sources are sim stimuli with no
+ * board footprint). Returns pinName → pinNumber, or null for non-physical
+ * types.
+ */
+export function theoryPinContract(type: string): Readonly<Record<string, string>> | null {
+  return THEORY_PIN_NUMBERS[type] ?? null;
+}
+
 const THEORY_REF_PREFIX: Record<string, string> = {
   resistor: "R",
   capacitor: "C",
@@ -172,19 +184,18 @@ export function buildNetlist(
 
   // Theory passives/diodes are physical parts; ground symbols become the GND
   // net; voltage/current sources are sim stimuli with no board footprint.
-  const refCounters = new Map<string, number>();
+  // B07.1 — the netlist reference IS the component's displayed reference
+  // (`refDes ?? id`), never a positionally synthesized one: identity stays on
+  // `id`, presentation follows the editable display reference everywhere.
   for (const c of theoryComps) {
     const pinMap = THEORY_PIN_NUMBERS[c.type];
     if (!pinMap) continue;
-    const prefix = THEORY_REF_PREFIX[c.type];
-    const n = (refCounters.get(prefix) ?? 0) + 1;
-    refCounters.set(prefix, n);
     const pins = Object.entries(pinMap).map(([pinName, number]) => {
       pinSites.push({ componentId: c.id, pinNumber: number, point: pinWorldPos(c, pinName) });
       return { number, name: pinName };
     });
     pins.sort((a, b) => a.number.localeCompare(b.number));
-    components.push({ id: c.id, ref: `${prefix}${n}`, value: c.value, pins });
+    components.push({ id: c.id, ref: normalizeRefDes(schDisplayRef(c)), value: c.value, pins });
   }
 
   const kicadPinPoints: Point[] = [];
@@ -327,6 +338,7 @@ export interface PcbSyncPublicationGraph { components: PcbSyncSchematicComponent
 export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart: PartLookup = () => null): PcbSyncPublicationGraph {
   const netlist = buildNetlist(schematic, getPart), refs = new Set<string>(), componentIds = new Set<string>(), pinIds = new Set<string>(), connected = new Set<string>();
   const instanceById = new Map((schematic.kicadComponents ?? []).map((item) => [item.id, item]));
+  const theoryById = new Map(schematic.components.map((item) => [item.id, item]));
   for (const component of netlist.components) {
     if (componentIds.has(component.id) || refs.has(component.ref)) throw new Error("PS_COMPONENT_IDENTITY_DUPLICATE");
     componentIds.add(component.id); refs.add(component.ref);
@@ -335,7 +347,11 @@ export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart:
   }
   for (const net of netlist.nets) for (const node of net.nodes) { const pinId = `${node.componentId}:pin:${node.pinNumber}`; if (!componentIds.has(node.componentId) || !pinIds.has(pinId)) throw new Error("PS_NET_MEMBER_REFERENCE_INVALID"); if (connected.has(pinId)) throw new Error("PS_NET_MEMBER_DUPLICATE"); connected.add(pinId); }
   const components = netlist.components.map((component): PcbSyncSchematicComponent => {
-    const instance = instanceById.get(component.id), symbolAssetVersionId = instance?.symbolAssetVersionId ?? (instance ? "" : `sirkit.theory-symbol:${component.ref.replace(/[0-9]+$/, "").toLowerCase()}:v1`);
+    // B07.1 — the theory symbol identity derives from the component TYPE, not
+    // the (renameable) display reference: renaming R3 → RSENSE must not
+    // change which symbol asset the component publishes.
+    const instance = instanceById.get(component.id), theory = theoryById.get(component.id);
+    const symbolAssetVersionId = instance?.symbolAssetVersionId ?? (instance ? "" : theory ? `sirkit.theory-symbol:${(THEORY_REF_PREFIX[theory.type] ?? "x").toLowerCase()}:v1` : "");
     if (!symbolAssetVersionId) throw new Error("PS_SYMBOL_ASSET_REQUIRED");
     const pins = component.pins.map((pin) => ({ pinInstanceId: `${component.id}:pin:${pin.number}`, number: pin.number, ...(pin.name ? { name: pin.name } : {}), disposition: connected.has(`${component.id}:pin:${pin.number}`) ? "connected" as const : "unconnected" as const }));
     return { componentInstanceId: component.id, componentRevision: `schematic-component:${pcbSyncDigest({ id: component.id, ref: component.ref, value: component.value, symbolAssetVersionId, pins })}`, referenceDesignator: component.ref, ...(component.value ? { value: component.value } : {}), hierarchyPath: ["root"], symbolAssetVersionId, applicability: "applicable", pins };

@@ -1,6 +1,6 @@
 import { buildNetUnionFind } from "@/app/lib/connectivity";
 import { kicadPinWorldPos, pinWorldPos, pointKey } from "@/app/lib/geometry";
-import { PIN_NAMES, netLabelNameKey, type KicadComponentInstance, type Point, type SchComponent } from "@/lib/schematic-types";
+import { PIN_NAMES, netLabelNameKey, normalizeRefDes, schDisplayRef, type KicadComponentInstance, type Point, type SchComponent } from "@/lib/schematic-types";
 import { createId } from "./identity";
 import { getActiveDesign } from "./project";
 import type {
@@ -217,7 +217,13 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
       componentPinNodes[`${component.id}.${pin}`] = nodeId;
       return { name: pin, nodeId };
     });
-    const name = uniqueName(sanitizeElementName(component.id, prefix), seenDeviceNames);
+    // B07.1 — identity vs presentation: the device `id`, bindings,
+    // componentPinNodes, and SourceRef.id stay on the IMMUTABLE stable id;
+    // the device name and SourceRef.label follow the normalized DISPLAY
+    // reference, so a rename changes presentation only and every saved
+    // stable-id target still resolves.
+    const displayRef = normalizeRefDes(schDisplayRef(component));
+    const name = uniqueName(sanitizeElementName(displayRef, prefix), seenDeviceNames);
     devices.push({
       id: component.id,
       name,
@@ -227,7 +233,7 @@ export function compileCanonicalIr(input: CompileIrInput): CompileIrResult {
       modelId: component.type === "diode" ? "builtin_1n4148_generic" : undefined,
       modelName: component.type === "diode" ? "SIRKIT_D1N4148" : undefined,
       parameters: {},
-      source: { kind: "schematic-component", id: component.id, label: name },
+      source: { kind: "schematic-component", id: component.id, label: displayRef },
     });
   }
 

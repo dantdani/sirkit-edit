@@ -1,0 +1,14 @@
+method,path,wrapper,max_bytes,deadline_ms,options,notes
+POST,/api/spice/ai,authenticatedJsonRoute,8000000,30000,none,provider-credit; §G error split + _tools.ts schemas + validator; proposal-only
+POST,/api/spice/compile,publicJsonRoute,8000000,30000,none,stateless deterministic compile transform; no store/worker/fs/network
+POST,/api/spice/models/import,authenticatedJsonRoute,4000000,20000,none,stateless candidate validation; server sha256 checksum; persists nothing
+POST,/api/spice/models/smoke-test,authenticatedJsonRoute,2000000,15000,none,shell-less server-owned spawn AFTER auth+screens; evidence only
+POST,/api/spice/reports,publicJsonRoute,8000000,30000,none,stateless document renderer over caller-supplied evidence
+POST,/api/spice/run-plans/estimate,publicJsonRoute,8000000,30000,none,stateless plan-expansion arithmetic
+GET,/api/spice/runs,authenticatedRoute,,,{query:true; querySelector:true},scoped list; ids/batchId filters first-value-wins
+POST,/api/spice/runs,authenticatedJsonRoute,8000000,30000,none,WRITE_EDITORS+CSRF; trusted-scope startRunPlan; 202 batch
+GET,/api/spice/runs/[id],authenticatedRoute,,,{querySelector:true; routeParams:[id]},uniform SPICE_RUN_NOT_FOUND 404
+DELETE,/api/spice/runs/[id],authenticatedRoute,,,{routeParams:[id]},WRITE_EDITORS+CSRF; owner-only cancel; 409 when terminal
+GET,/api/spice/runs/[id]/bundle,authenticatedRoute,,,{querySelector:true; routeParams:[id]},zip attachment; artifact root path-prefix confined
+GET,/api/spice/runs/[id]/events,authenticatedRoute,,,{querySelector:true; routeParams:[id]},SSE stream; authorize before ANY listener
+GET,/api/spice/runs/[id]/waveforms,authenticatedRoute,,,{query:true; querySelector:true; routeParams:[id]},32..20000 point clamp; slice+downsample

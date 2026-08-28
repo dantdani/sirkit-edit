@@ -1,10 +1,56 @@
-import type { EngineeringActor, ProjectRole } from "@/app/lib/engineering/types";
+/**
+ * B16.0 — assignment-queue request scope, now SERVER-DERIVED (R02-B1-011).
+ * Identity, actor kind, and role come from `resolveTrustedRequestContext`,
+ * never from `x-sirkit-*` headers. Same-origin CSRF, media-type, and size
+ * guards are preserved.
+ */
+import type { EngineeringActor } from "@/app/lib/engineering/types";
+import type { TrustedRequestContext } from "@/app/lib/auth/types";
+import { authorizeRequest, scopedTrustedJson } from "@/app/lib/auth/authorize";
+import { jsonError } from "@/app/lib/auth/request-security";
 
 export const ASSIGNMENT_API_MAX_BYTES = 1_000_000;
-const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,511}$/;
+/** [B16.0.22] the deadline `scopedTrustedJson` has always used for this family —
+ *  it passes no `deadlineMs`, so the bounded reader's 30 s default applies.
+ *  The canonical-wrapper adopter passes this explicitly to preserve it. */
+export const ASSIGNMENT_API_DEADLINE_MS = 30_000;
+/** Server-authoritative fields a client may never supply (historical list). */
+export const ASSIGNMENT_FORBIDDEN_BODY_KEYS = ["sourceBundle", "binding", "mappingRecord", "policyRecord", "board", "path", "url"] as const;
 export interface AssignmentApiScope { tenantId: string; projectId: string; branchId: string; actor: EngineeringActor }
+
+/** Request-free projection of the trusted context into the assignment scope —
+ *  the canonical-wrapper equivalent of what `assignmentApiScope` /
+ *  `scopedAssignmentJson` returned. */
+export function assignmentScopeFromContext(context: TrustedRequestContext): AssignmentApiScope {
+  return { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor };
+}
+
+/** The EXACT historical forbidden-authority-field refusal (byte-identical to
+ *  `scopedTrustedJson`'s: generic message, no key suffix, no-store). Returned
+ *  before any feature-state or durable work. Request-free. */
+export function assignmentForbiddenAuthorityRefusal(body: Record<string, unknown>): Response | null {
+  for (const key of ASSIGNMENT_FORBIDDEN_BODY_KEYS) {
+    if (key in body) return jsonError(400, "AUTH_AUTHORITATIVE_INPUT_FORBIDDEN", "The request body carries a forbidden authoritative field.");
+  }
+  return null;
+}
 export function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
-function safeId(value: string | undefined): value is string { return Boolean(value && SAFE_ID.test(value) && !value.includes("..") && !/[\u0000-\u001f\u007f]/.test(value)); }
-function role(value: string | null): ProjectRole | null { return value === "viewer" || value === "commenter" || value === "pcb_editor" || value === "automation" || value === "reviewer" || value === "project_admin" || value === "migration_admin" ? value : null; }
-export function assignmentApiScope(request: Request): { ok: true; scope: AssignmentApiScope } | { ok: false; response: Response } { const tenantId = request.headers.get("x-sirkit-tenant-id")?.trim(), projectId = request.headers.get("x-sirkit-project-id")?.trim(), branchId = request.headers.get("x-sirkit-branch-id")?.trim(), actorId = request.headers.get("x-sirkit-actor-id")?.trim(), sessionId = request.headers.get("x-sirkit-session-id")?.trim() || "assignment-queue-api", actorRole = role(request.headers.get("x-sirkit-role")); if (![tenantId, projectId, branchId, actorId, sessionId].every(safeId) || !actorRole) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_UNAUTHENTICATED" }, { status: 401, headers: { "Cache-Control": "no-store" } }) }; const origin = request.headers.get("origin"); if (origin) { try { if (new URL(origin).host !== new URL(request.url).host) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_CROSS_ORIGIN_DENIED" }, { status: 403 }) }; } catch { return { ok: false, response: Response.json({ ok: false, code: "AQ_API_CROSS_ORIGIN_DENIED" }, { status: 403 }) }; } } const kind = request.headers.get("x-sirkit-actor-kind"); if (kind && !["human", "ai", "import_adapter", "system_migration", "automated_engine"].includes(kind)) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_ACTOR_KIND_INVALID" }, { status: 401 }) }; const actorKind = kind === "ai" || kind === "import_adapter" || kind === "system_migration" || kind === "automated_engine" ? kind : "human"; return { ok: true, scope: { tenantId: tenantId!, projectId: projectId!, branchId: branchId!, actor: { actorId: actorId!, actorKind, role: actorRole, sessionId } } }; }
-export async function scopedAssignmentJson(request: Request): Promise<{ ok: true; body: Record<string, unknown>; scope: AssignmentApiScope } | { ok: false; response: Response }> { const authorized = assignmentApiScope(request); if (!authorized.ok) return authorized; if (request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") return { ok: false, response: Response.json({ ok: false, code: "AQ_API_MEDIA_TYPE_UNSUPPORTED" }, { status: 415 }) }; const declared = Number(request.headers.get("content-length")); if (Number.isFinite(declared) && declared > ASSIGNMENT_API_MAX_BYTES) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_PAYLOAD_TOO_LARGE" }, { status: 413 }) }; const raw = await request.text(); if (new TextEncoder().encode(raw).byteLength > ASSIGNMENT_API_MAX_BYTES) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_PAYLOAD_TOO_LARGE" }, { status: 413 }) }; let value: unknown; try { value = JSON.parse(raw); } catch { return { ok: false, response: Response.json({ ok: false, code: "AQ_API_INVALID_JSON" }, { status: 400 }) }; } if (!object(value)) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_OBJECT_REQUIRED" }, { status: 400 }) }; if (["sourceBundle", "binding", "mappingRecord", "policyRecord", "board", "path", "url"].some((key) => key in value)) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_AUTHORITATIVE_INPUT_FORBIDDEN" }, { status: 400 }) }; return { ok: true, body: value, scope: authorized.scope }; }
+
+export async function assignmentApiScope(request: Request): Promise<{ ok: true; scope: AssignmentApiScope } | { ok: false; response: Response }> {
+  // Same-origin CSRF is now enforced automatically by the route policy inside
+  // authorizeRequest (POST is a mutation) — a caller cannot forget it.
+  const authorized = await authorizeRequest(request);
+  if (!authorized.ok) return { ok: false, response: authorized.response };
+  if (authorized.kind !== "authenticated") return { ok: false, response: Response.json({ ok: false, code: "AQ_API_UNAUTHENTICATED" }, { status: 401 }) };
+  const { context } = authorized;
+  return { ok: true, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor } };
+}
+
+export async function scopedAssignmentJson(request: Request): Promise<{ ok: true; body: Record<string, unknown>; scope: AssignmentApiScope } | { ok: false; response: Response }> {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > ASSIGNMENT_API_MAX_BYTES) return { ok: false, response: Response.json({ ok: false, code: "AQ_API_PAYLOAD_TOO_LARGE" }, { status: 413 }) };
+  const scoped = await scopedTrustedJson(request, { maxBytes: ASSIGNMENT_API_MAX_BYTES, forbiddenBodyKeys: ASSIGNMENT_FORBIDDEN_BODY_KEYS });
+  if (!scoped.ok) return scoped;
+  const { context } = scoped;
+  return { ok: true, body: scoped.body, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, actor: context.actor } };
+}

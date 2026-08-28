@@ -32,6 +32,7 @@ import { ACTION_COVERAGE_REGISTRY, type ActionCoverageRecord, type ActionKind, t
 import { pcbRevisionId } from "../pcb/revision";
 import type { PcbBoard } from "../pcb/types";
 import { InteractiveUiChannel } from "./interactive-channel.internal";
+import { retireReplacementAuthorityGrant, verifyReplacementAuthorityGrant } from "./schematic-authority.internal";
 import { applyEngineeringOperations } from "./operations";
 import { computeProjectRevision, revisionMatches, semanticStateDigest } from "./revision";
 import { engineeringDigest } from "./stable";
@@ -67,28 +68,102 @@ export interface ExecutorCommandContract {
  * transaction service can execute today. A B01 record is descriptive only
  * until it has an explicit binding here and its coverage is `implemented`.
  */
+/** B08 — every PCB operation kind the kernel can execute (used by the
+ *  broad-candidate commands whose delta compilation may touch any board
+ *  field, and by canonical undo/redo replay). */
+export const ALL_PCB_OPERATION_KINDS = Object.freeze([
+  "move_footprint", "set_footprint_protection", "set_copper_protection",
+  "add_track", "update_track", "remove_track",
+  "add_via", "update_via", "remove_via",
+  "add_zone", "update_zone", "remove_zone",
+  "add_text", "update_text", "remove_text",
+  "add_silk", "update_silk", "remove_silk",
+  "add_padstack", "update_padstack", "remove_padstack",
+  "add_keepout", "update_keepout", "remove_keepout",
+  "add_dimension", "update_dimension", "remove_dimension",
+  "update_board_outline", "update_stackup", "update_routing_preferences",
+  "update_net_classing", "update_constraint_state", "update_placement_settings",
+  "update_routing_history", "update_net",
+] satisfies readonly EngineeringOperation["kind"][]);
+
 export const KERNEL_OPERATION_BINDINGS = Object.freeze({
   "pcb.move-footprint": ["move_footprint"],
   "pcb.rotate-side-footprint": ["move_footprint"],
   "pcb.edit-track": ["add_track", "update_track"],
-  "pcb.delete-item": ["remove_track", "remove_via", "remove_zone"],
+  // B08: deletion covers every deletable annotation/copper kind, and removes
+  // the routing-history events that referenced ripped-up copper.
+  "pcb.delete-item": ["remove_track", "remove_via", "remove_zone", "remove_text", "remove_silk", "remove_dimension", "update_routing_history"],
   "pcb.arrange": ["move_footprint"],
+  // B08 — interactive routing: one gesture (route commit, via placement,
+  // stretch, rip-up, candidate commit) compiles to one transaction. Route
+  // candidates may also rewrite zones/constraint state (commitRouteCandidate).
+  "pcb.route-copper": ["add_track", "update_track", "remove_track", "add_via", "remove_via", "update_zone", "update_constraint_state", "update_routing_history"],
+  // B08 — bulk candidates: each applies ONE compiled transaction.
+  "pcb.auto-place": ["move_footprint", "add_track", "update_track", "remove_track", "add_via", "update_via", "remove_via", "add_zone", "update_zone", "remove_zone", "update_constraint_state", "update_board_outline"],
+  "pcb.autoroute-import": ["add_track", "remove_track", "add_via", "remove_via", "update_routing_history"],
+  "pcb.autonomous-layout": [...ALL_PCB_OPERATION_KINDS],
+  "pcb.board-repair": ["add_track", "update_track", "remove_track", "add_via", "update_via", "remove_via", "add_zone", "update_zone", "remove_zone", "update_constraint_state", "update_routing_history"],
+  // B08 — AI assist explicit apply: a declared compound command whose batch
+  // compiles atomically (mixed widths/moves/deletes/padstacks in ONE
+  // transaction) — never a silent legacy fallback.
+  "pcb.assist-edit": [...ALL_PCB_OPERATION_KINDS],
+  // B15.3 — the human-approved bounded PCB proposal apply: the delta of a
+  // recompiled candidate whose operation VOCABULARY is exactly the closed
+  // B15 bounded set (no deletions except the explicit remove_dimension form,
+  // no zones/text/silk/padstack/outline/stackup — those cannot appear in a
+  // bounded proposal, so the kernel binding truthfully excludes them).
+  "pcb.bounded-edit-apply": [
+    "move_footprint", "add_track", "update_track", "add_via", "update_via",
+    "update_routing_preferences", "update_net_classing",
+    "add_dimension", "update_dimension", "remove_dimension",
+    "add_keepout", "update_keepout",
+  ],
+  // B08 — protection is its own command + capability.
+  "pcb.protection": ["set_footprint_protection", "set_copper_protection"],
+  // B08 — padstack library management (+ via association).
+  "pcb.padstack": ["add_padstack", "update_padstack", "remove_padstack", "update_via"],
+  "pcb.placement-settings": ["update_placement_settings"],
   // B03: canonical undo/redo replays a durable record's inverse (or forward)
   // operations as a NEW transaction, so it may need the inverse kind of every
   // slice operation (undoing a delete re-adds; undoing an add removes).
+  // B06 extends it with the schematic slice inverses; B08 with the full PCB
+  // vocabulary.
   "pcb.undo-redo-canonical": [
-    "move_footprint",
-    "add_track", "update_track", "remove_track",
-    "add_via", "update_via", "remove_via",
-    "add_zone", "update_zone", "remove_zone",
+    ...ALL_PCB_OPERATION_KINDS,
+    "schematic_delete_component", "schematic_restore_entities", "schematic_replace_component",
+    "schematic_set_component_properties", "schematic_transform_component",
+    // B07 — graph-slice inverses.
+    "schematic_add_wire", "schematic_delete_wire", "schematic_update_wire_geometry",
+    "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
+    "schematic_add_component",
   ],
-  // These bindings document the available Stage 10 vocabulary, but remain
-  // non-executable while their B01 coverage status is partial.
+  // ── B06 — canonical schematic semantic mutations ───────────────────────────
+  "schematic.delete-component": ["schematic_delete_component"],
+  "schematic.replace-component": ["schematic_replace_component"],
+  "schematic.set-property": ["schematic_set_component_properties"],
+  // B07: one completed drag/stretch gesture commits component transforms
+  // together with attached wire geometry and label moves — one transaction.
+  "schematic.move-rotate": ["schematic_transform_component", "schematic_update_wire_geometry", "schematic_update_net_label"],
+  // ── B07 — canonical schematic graph mutations ──────────────────────────────
+  "schematic.connect": [
+    "schematic_add_wire", "schematic_delete_wire", "schematic_update_wire_geometry",
+    "schematic_add_net_label", "schematic_delete_net_label", "schematic_update_net_label",
+  ],
+  "schematic.add-component": ["schematic_add_component"],
+  // One chat-initiated tier-1 apply = one atomic transaction that may mix
+  // property edits and pre-planned deletes (provider output is compiled by
+  // the deterministic tier-1 planner; it never supplies operations directly).
+  "schematic.edit-tier1-apply": ["schematic_set_component_properties", "schematic_delete_component"],
+  // B08 — these commands are now implemented end-to-end.
   "pcb.create-via": ["add_via"],
   "pcb.edit-via": ["update_via"],
   "pcb.zone": ["add_zone", "update_zone", "remove_zone"],
-  "pcb.rules": ["update_routing_preferences"],
-  "pcb.board-geometry": ["update_board_outline"],
+  "pcb.silkscreen-text": ["add_silk", "update_silk", "remove_silk", "add_text", "update_text", "remove_text"],
+  "pcb.rules": ["update_routing_preferences", "update_net_classing"],
+  // Board geometry: outline + stackup edits also reconcile stackup plane
+  // zones inside the SAME transaction; keepouts share the geometry command.
+  "pcb.board-geometry": ["update_board_outline", "update_stackup", "add_zone", "update_zone", "remove_zone", "add_keepout", "update_keepout", "remove_keepout"],
+  "pcb.dimension": ["add_dimension", "update_dimension", "remove_dimension"],
 } satisfies Partial<Record<string, readonly EngineeringOperation["kind"][]>>);
 
 export const KERNEL_EXECUTABLE_COVERAGE_STATUSES = Object.freeze([
@@ -349,6 +424,47 @@ export class CanonicalExecutor {
       }
     }
 
+    // ── B06.2 — executor-level replacement-authority gate ────────────────────
+    // An INITIAL execution that installs ANY atomic-authority field (or
+    // claims consumed resources / a grant id) must present a matching
+    // registered runtime grant minted by `consumeReplacementAuthority`.
+    // Serialized operation data can never manufacture authority: the check
+    // compares the live branded grant's scope, canonical revision, component,
+    // target part, every installed field, and consumed-resource records
+    // against the operation, BEFORE any mutation or durable record exists.
+    // Idempotent retries of an already-durable transaction replay without a
+    // live grant (the duplicate short-circuit returns the original result);
+    // durable undo/redo replays through `executeUndoRedo`, whose operations
+    // come exclusively from durable records.
+    const usedGrantIds: string[] = [];
+    const alreadyDurable = this.service.durableRecords().some((record) => record.transaction.clientOperationId === request.idempotencyKey);
+    if (!alreadyDurable) {
+      const project = this.service.currentProject();
+      for (const operation of request.operations) {
+        if (operation.kind !== "schematic_replace_component") continue;
+        const replacement = operation.replacement;
+        const installsAuthority = Boolean(
+          replacement.atomicPartRevisionId || replacement.symbolAssetVersionId || replacement.footprintAssetVersionId ||
+          replacement.mappingCertificateId || replacement.selectionRecordId ||
+          operation.consumedAuthorityResources !== undefined || operation.authorityGrantId !== undefined,
+        );
+        if (!installsAuthority) continue;
+        const check = verifyReplacementAuthorityGrant({
+          grantId: operation.authorityGrantId,
+          scope: { tenantId: project.tenantId, projectId: project.projectId, branchId: project.branchId },
+          currentCanonicalRevision: this.service.currentRevision().canonicalStateDigest,
+          operation,
+        });
+        if (!check.ok) {
+          return reject("unauthorized", [
+            `AUTHORITY_GRANT_${check.code.toUpperCase()}`,
+            `Replacement of ${operation.componentId} installs atomic authority without a valid runtime grant: ${check.detail}`,
+          ]);
+        }
+        usedGrantIds.push(operation.authorityGrantId!);
+      }
+    }
+
     const transaction = createEngineeringTransaction({
       transactionId: request.transactionId ?? `tx:${request.commandId}:${request.idempotencyKey}`,
       projectId: request.expectedRevision.projectId,
@@ -363,6 +479,12 @@ export class CanonicalExecutor {
     });
 
     const outcome = await this.service.submit(transaction);
+    // Grants are single-use: retire them only after the transaction is
+    // durably accepted (a rejected/failed submit keeps the grant usable for
+    // an exact retry).
+    if (outcome.state === "accepted" || outcome.state === "rebased") {
+      for (const grantId of usedGrantIds) retireReplacementAuthorityGrant(grantId);
+    }
     return this.mapOutcome(request, contract, outcome);
   }
 

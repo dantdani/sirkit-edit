@@ -20,13 +20,31 @@
 
 import { createHash } from "node:crypto";
 import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
-import { DEFAULT_PAGE_SIZE } from "@/lib/schematic-types";
+import { DEFAULT_PAGE_SIZE, schDisplayRef } from "@/lib/schematic-types";
+import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { KICAD_SCALE_PX_PER_MM } from "@/app/lib/geometry";
 import type { CachedPart } from "./parts-cache";
 import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
 import { assignFootprints } from "@/lib/footprint-assign";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 import { atomicSnapshotToCachedPart } from "@/app/lib/atomic/kicad-adapters";
+
+/**
+ * B07.2 — typed fail-closed validation error thrown by `exportToKicadSch`
+ * when the input state violates the shared canonical identity/geometry
+ * contract. The `/api/export/kicad` route validates BEFORE catalog lookup
+ * and maps this (or its own pre-check) to a structured 422; any other
+ * caller must catch it — the serializer is never callable in a way that
+ * silently accepts invalid canonical state.
+ */
+export class SchematicExportValidationError extends Error {
+  readonly issues: readonly string[];
+  constructor(issues: readonly string[]) {
+    super(`Schematic state failed canonical validation: ${issues[0] ?? "unknown issue"}`);
+    this.name = "SchematicExportValidationError";
+    this.issues = issues;
+  }
+}
 
 export type KicadExportInput = {
   state: SchematicState;
@@ -54,15 +72,6 @@ const THEORY_LIB_ID: Record<TheoryType, string> = {
   diode: "Device:D",
   "voltage-source": "Simulation_SPICE:VSOURCE",
   "current-source": "Simulation_SPICE:ISOURCE",
-};
-
-const THEORY_REFDES_PREFIX: Record<TheoryType, string> = {
-  resistor: "R",
-  capacitor: "C",
-  inductor: "L",
-  diode: "D",
-  "voltage-source": "V",
-  "current-source": "I",
 };
 
 // Power ports resolve to the lib_id `power:<name>` for every rail and ground.
@@ -159,6 +168,16 @@ const TODAY = new Date().toISOString().slice(0, 10);
 
 export function exportToKicadSch(input: KicadExportInput): string {
   const { state, parts } = input;
+  // B07.2 — FAIL-CLOSED ingress: the COMPLETE state must satisfy the shared
+  // canonical identity + geometry contract before a single byte is
+  // serialized. Duplicate stable ids, duplicate case-insensitive displayed
+  // references, invalid rotations, off-grid coordinates, malformed wires or
+  // labels all throw the typed error below — export never conceals
+  // canonical corruption by renaming or normalizing anything. Callers that
+  // cannot catch (the /api/export/kicad route validates first and returns a
+  // structured 422) must not reach serialization with invalid input.
+  const validationIssues = validateSchematicStateIntegrity(state);
+  if (validationIssues.length > 0) throw new SchematicExportValidationError(validationIssues);
   const components = state.components ?? [];
   const kicadComponents = state.kicadComponents ?? [];
   const wires = state.wires ?? [];
@@ -244,13 +263,13 @@ export function exportToKicadSch(input: KicadExportInput): string {
     }
   }
 
-  // Per-type refDes counters for Theory components (R1, C1, ...).
-  const refDesCount: Record<string, number> = {};
-  const nextRefDes = (prefix: string): string => {
-    const n = (refDesCount[prefix] ?? 0) + 1;
-    refDesCount[prefix] = n;
-    return `${prefix}${n}`;
-  };
+  // B07.1/B07.2 — theory components export their DISPLAYED reference
+  // (refDes ?? id); positional synthesis is gone. Uniqueness is guaranteed by
+  // the entry validation above (validateSchematicStateIntegrity): a state
+  // with colliding references throws SchematicExportValidationError BEFORE
+  // any serialization — a canonical reference is NEVER silently renamed
+  // (B07.1's deterministic `_2` fallback concealed canonical corruption and
+  // was removed).
 
   for (const inst of kicadComponents) {
     const libId = partLibId.get(inst.id);
@@ -275,7 +294,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
   for (const comp of components) {
     if (comp.type === "ground") continue; // emitted as a power port in (D)
     const t = comp.type as TheoryType;
-    const refDes = nextRefDes(THEORY_REFDES_PREFIX[t]);
+    const refDes = schDisplayRef(comp);
     lines.push(
       buildSymbolInstance({
         libId: THEORY_LIB_ID[t],

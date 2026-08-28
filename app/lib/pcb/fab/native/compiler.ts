@@ -204,6 +204,12 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
     [
       `${snapshot.boardName} - Sirkit native manufacturing package`,
       "",
+      ...(input.releaseDisposition === "engineering_prototype_export" ? [
+        "NOTICE: this is an ENGINEERING PROTOTYPE EXPORT of a client working copy - NOT a verified manufacturing release.",
+        "It is unsuitable as deterministic release evidence; verified release is produced only by the server-authoritative release flow.",
+        `Attribution (server-derived from the authenticated session): actor=${input.actor ?? "unattributed"}; project=${input.projectIdentity ?? snapshot.boardName}.`,
+        "",
+      ] : []),
       "Status: native beta, independently parsed and geometry-checked before packaging.",
       "Production policy: keep the KiCad-assisted export as fallback until external CAM and fabricator acceptance gates pass.",
       `Snapshot: ${snapshot.sourceHash}`,

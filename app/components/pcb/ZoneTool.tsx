@@ -17,7 +17,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { produce } from "immer";
 import { Container, Graphics } from "pixi.js";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbScene, ScenePointerEvent } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { PcbBoard, Zone } from "@/app/lib/pcb/types";
@@ -148,7 +150,15 @@ export function ZoneTool({ scene, active, board, getHistory, activeLayer, toast 
   const commit = useCallback((cmd: ZoneCommand): void => {
     const h = stateRef.current.getHistory();
     if (!h) return;
-    h.execute(zoneCommandLabel(cmd, h.present), (draft) => mutateBoardWithZoneCommand(draft, cmd));
+    // B08 — one zone command = one canonical transaction (same domain
+    // mutator, delta-compiled through the canonical PCB commit gateway).
+    void commitPcbCandidate(h, {
+      commandId: "pcb.zone",
+      label: zoneCommandLabel(cmd, h.present),
+      buildCandidate: (board) => produce(board, (draft) => mutateBoardWithZoneCommand(draft, cmd)),
+    }).then((result) => {
+      if (!result.ok) stateRef.current.toast?.(result.message);
+    });
   }, []);
 
   useEffect(() => {

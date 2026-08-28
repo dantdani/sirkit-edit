@@ -1,5 +1,6 @@
 /** Client controller for verified native-beta and KiCad-assisted fab exports. */
 
+import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { useCallback, useEffect, useRef, useState } from "react";
 import JSZip from "jszip";
 import type { PcbBoard } from "@/app/lib/pcb/types";
@@ -41,6 +42,11 @@ export interface FabExportEditor {
    * explicitly-labelled unverified path.
    */
   verifiedRelease?: () => Promise<{ ok: boolean; message: string }>;
+  /** [B16.0.2 §G] the active project identity — a SELECTOR for the
+   *  authenticated, project-scoped engineering export route. Attribution is
+   *  derived SERVER-side from the session; the browser never sends an actor
+   *  or project label. */
+  getScope?: () => ProjectSelectorScope | null;
 }
 
 export interface FabExportHandle {
@@ -142,7 +148,7 @@ export function useFabExport(editor: FabExportEditor): FabExportHandle {
     try {
       const response = await fetch("/api/pcb/export/gerbers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...projectSelectorHeaders(editorRef.current.getScope?.() ?? null) },
         body: JSON.stringify({
           board,
           netlist: editorRef.current.getNetlist() ?? undefined,
@@ -213,7 +219,16 @@ export function useFabExport(editor: FabExportEditor): FabExportHandle {
     }
 
     // Verified releases come from the MFG01 server-authoritative loader when
-    // the editor provides it — never from this browser board.
+    // the editor provides it — never from this browser board. [B16.0.2 §G]
+    // When no server-authoritative release flow exists (demo / unpersisted
+    // board) a verified request is refused HERE — it is never routed to the
+    // legacy engineering-export path, which can only ever produce an
+    // explicitly-labelled unverified engineering prototype export.
+    if (!engineeringOverride && !editorRef.current.verifiedRelease) {
+      setLastError("Verified manufacturing release is only available through the server-authoritative release flow for a persisted project. This dialog can only generate an explicitly-labelled UNVERIFIED engineering prototype export (enable the override).");
+      setState("error");
+      return;
+    }
     if (!engineeringOverride && editorRef.current.verifiedRelease) {
       setState("compilingNative");
       try {
@@ -236,13 +251,15 @@ export function useFabExport(editor: FabExportEditor): FabExportHandle {
     try {
       const response = await fetch("/api/pcb/export/gerbers", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...projectSelectorHeaders(editorRef.current.getScope?.() ?? null) },
         body: JSON.stringify({
           board,
           netlist: editorRef.current.getNetlist() ?? undefined,
           fabPresetId,
-          releaseMode: engineeringOverride ? "engineering" : "verified",
-          waiverReason: engineeringOverride ? waiverReason.trim() : undefined,
+          // Only the explicitly-labelled engineering prototype export is ever
+          // requested from this legacy path (see the refusal above).
+          releaseMode: "engineering",
+          waiverReason: waiverReason.trim(),
           boardName,
           engine,
           action: "package",

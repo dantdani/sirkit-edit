@@ -5,6 +5,7 @@ import { boardToDsn, writeDsn } from "@/app/lib/pcb/dsn/write-dsn";
 import { parseSes, SesImportError, type SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
 import { validateDsn } from "@/app/lib/pcb/dsn/preflight";
 import { runFreerouting } from "@/app/lib/pcb/autoroute/runner";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
 import { buildAutorouteCandidate } from "@/app/lib/pcb/autoroute/verification";
 import {
@@ -148,17 +149,17 @@ function layerUsageForBoard(board: PcbBoard): Partial<Record<LayerId, SesLayerUs
   return usage;
 }
 
-export async function POST(request: Request): Promise<Response> {
-  let raw: unknown;
-  try {
-    raw = await request.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
-  if (typeof raw !== "object" || raw === null) {
-    return Response.json({ ok: false, error: "body must be an object" }, { status: 400 });
-  }
-  const body = raw as {
+/** [B16.0.2 §A/§D] a whole PcbBoard + netlist travels in the body. */
+const AUTOROUTE_MAX_BODY_BYTES = 16_000_000;
+const AUTOROUTE_BODY_DEADLINE_MS = 60_000;
+
+// [B16.0.13] canonical wrapper — freerouting is an external (java) process on
+// caller-supplied data: the wrapper runs authenticated membership + role +
+// CSRF and the bounded total-settlement read BEFORE the callback, so no
+// process can spawn until every boundary succeeds. The callback receives ONLY
+// the wrapper-projected AbortSignal (exposeAbortSignal) for cancellation.
+export const POST = authenticatedJsonRoute({ maxBytes: AUTOROUTE_MAX_BODY_BYTES, deadlineMs: AUTOROUTE_BODY_DEADLINE_MS, exposeAbortSignal: true }, async ({ body: rawBody, signal }): Promise<Response> => {
+  const body = rawBody as {
     board?: unknown;
     maxPasses?: unknown;
     timeoutMs?: unknown;
@@ -223,7 +224,7 @@ export async function POST(request: Request): Promise<Response> {
       maxPasses: pass.engineMaxPasses,
       timeoutMs: Math.max(1, deadline - Date.now()),
     };
-    if (request.signal.aborted) return {
+    if (signal!.aborted) return {
       ok: false,
       routeAttemptId: pass.routeAttemptId,
       authoritativeSourceRevision: pass.requestedSourceRevision,
@@ -282,7 +283,7 @@ export async function POST(request: Request): Promise<Response> {
       javaPath: runtimeInfo.javaPath,
       maxPasses: pass.engineMaxPasses,
       timeoutMs: remainingMs,
-      signal: request.signal,
+      signal: signal!,
     });
     const processEvidence = {
       dsnDigest: sha256(dsnText),
@@ -501,4 +502,4 @@ export async function POST(request: Request): Promise<Response> {
       apiKeyRequired: false,
     },
   });
-}
+});

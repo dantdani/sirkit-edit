@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import type { CandidateCollectionContext, CandidateSourceResult, FootprintCandidateSource } from "../types";
 import { collectCandidateSources, Stage1BindingCandidateSource } from "../adapters";
 import { FootprintResolutionService } from "../service";
@@ -145,7 +146,13 @@ describe("bounded service, shadow compatibility, API, and hostile adapters", () 
   });
 
   it("requires API authentication and exposes exact read-only versions", async () => {
-    expect((await GET(new Request("http://localhost/api/footprint-resolution"))).status).toBe(401);
+    // B16.0.1: identity is SERVER-derived. A genuinely unauthenticated caller
+    // (injected null identity) is refused 401; a selector-less but locally
+    // authenticated request is refused 400 (missing project selector).
+    injectIdentity(null);
+    expect((await GET(new Request("http://localhost/api/footprint-resolution", { headers }))).status).toBe(401);
+    resetInjectedIdentity();
+    expect((await GET(new Request("http://localhost/api/footprint-resolution"))).status).toBe(400);
     const response = await GET(new Request("http://localhost/api/footprint-resolution", { headers }));
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, readOnly: true, resolverVersion: "sirkit.footprint-resolver/2.0.0", productionPcbSyncAuthority: "legacy_until_stage3", cache: { mode: "disabled" } });
@@ -165,12 +172,17 @@ describe("bounded service, shadow compatibility, API, and hostile adapters", () 
   it("rejects non-JSON media types before parsing", async () => {
     const response = await POST(new Request("http://localhost/api/footprint-resolution", { method: "POST", headers: { ...headers, "content-type": "text/plain" }, body: "{}" }));
     expect(response.status).toBe(415);
-    expect(await response.json()).toMatchObject({ code: "FR_API_MEDIA_TYPE_UNSUPPORTED" });
+    // B16.0.1: the refusal moved into the shared authorization adapter
+    // (scopedTrustedJson) — same 415, shared code (pcb-sync precedent).
+    expect(await response.json()).toMatchObject({ code: "AUTH_MEDIA_TYPE_UNSUPPORTED" });
   });
 
   it("rejects malformed API bodies before touching persistence", async () => {
     const response = await POST(new Request("http://localhost/api/footprint-resolution", { method: "POST", headers, body: "{" }));
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ code: "FR_API_INVALID_JSON" });
+    // B16.0.1: shared adapter code (same 400 refusal before persistence).
+    expect(await response.json()).toMatchObject({ code: "AUTH_INVALID_JSON" });
   });
 });
+
+afterEach(() => { resetInjectedIdentity(); });

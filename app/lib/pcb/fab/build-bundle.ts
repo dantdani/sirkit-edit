@@ -241,6 +241,11 @@ export async function buildFabBundle(
         fabPreset.notes,
         "",
         `Release disposition: ${prepared.disposition === "verified_manufacturing_release" ? "verified PCB fabrication checks" : "unverified engineering prototype export"}.`,
+        ...(prepared.disposition === "verified_manufacturing_release" ? [] : [
+          "NOTICE: this is an ENGINEERING PROTOTYPE EXPORT of a client working copy — NOT a verified manufacturing release.",
+          "It is unsuitable as deterministic release evidence; verified release is produced only by the server-authoritative release flow.",
+          `Attribution (server-derived from the authenticated session): actor=${input.actor ?? "unattributed"}; project=${input.projectIdentity ?? boardName}.`,
+        ]),
         `Readiness: ${prepared.report.overallState} (${prepared.report.reportId}).`,
         `DRC (${drcPreset.name}): ${drcErrors} error(s), ${drcWarnings} warning(s).`,
         "",

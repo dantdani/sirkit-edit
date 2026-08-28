@@ -3,15 +3,17 @@
  *
  * Returns the list of user-facing categories with how many parts each holds,
  * most-populated first. Cached for an hour — the category list barely changes.
+ * [B16.0.8] canonical wrapper — the callback receives no Request.
  */
 
 import { count, desc, eq } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
+export const GET = publicRoute(undefined, async () => {
   try {
     const db = getDb();
     const rows = await db
@@ -37,4 +39,4 @@ export async function GET(): Promise<Response> {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

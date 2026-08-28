@@ -4,9 +4,13 @@ import {
   openAIModelProfile,
 } from "@/app/lib/llm/openai-config";
 
+import { publicRoute } from "@/app/lib/auth/route-handlers";
+
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute(undefined, async (): Promise<Response> => {
   const openAIModel = configuredOpenAIModel();
   const openAIProfile = openAIModelProfile(openAIModel);
   const anthropicModel = process.env.SIRKIT_ANTHROPIC_MODEL?.trim() || "claude-opus-4-7";
@@ -34,4 +38,4 @@ export async function GET(): Promise<Response> {
     },
     { headers: { "Cache-Control": "no-store" } },
   );
-}
+});

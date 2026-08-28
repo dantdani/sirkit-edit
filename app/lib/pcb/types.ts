@@ -253,6 +253,40 @@ export interface BoardText {
   thickness: Nm;
 }
 
+// ─── B08 — dimension annotations ─────────────────────────────────────────────
+
+export type DimensionKind = "horizontal" | "vertical" | "aligned";
+
+/** Layers a dimension annotation may live on (documentation layers). */
+export const DIMENSION_LAYERS = ["silkTop", "silkBottom", "fabTop", "fabBottom"] as const;
+export type DimensionLayer = (typeof DIMENSION_LAYERS)[number];
+
+/**
+ * B08 — a native dimension annotation: two measured endpoints (integer nm),
+ * an orientation, and a perpendicular offset for the dimension line. The
+ * measured value is DERIVED from the endpoints at render/export time (never
+ * stored, so it cannot go stale); `unit`/`precision` are display metadata.
+ * Dimensions are semantic board state: they persist in `.sirkit.json`,
+ * participate in canonical revisions/digests, and undo/redo exactly.
+ */
+export interface BoardDimension {
+  id: string;
+  kind: DimensionKind;
+  /** Measured endpoints, integer nanometres. */
+  a: Vec2;
+  b: Vec2;
+  /** Signed perpendicular offset of the dimension line from the measured
+   *  span (for horizontal: below/above; vertical: right/left; aligned:
+   *  normal direction), integer nanometres. */
+  offsetNm: Nm;
+  layer: DimensionLayer;
+  unit: "mm" | "in";
+  /** Display decimal places for the derived value. */
+  precision: 0 | 1 | 2 | 3 | 4;
+  textHeightNm: Nm;
+  strokeWidthNm: Nm;
+}
+
 export type BoardOutline =
   | { kind: "rect"; width: Nm; height: Nm; origin: Vec2 }
   | { kind: "roundrect"; width: Nm; height: Nm; cornerRadius: Nm; origin: Vec2 }
@@ -330,6 +364,9 @@ export interface PcbBoard {
     spacingPreset: "compact" | "comfortable" | "spacious" | "custom";
     envelopeScale: number;
   };
+  /** B08: native dimension annotations. Optional/additive — boards saved
+   *  before B08 load unchanged and have no dimensions. */
+  dimensions?: BoardDimension[];
   /** Stage 6 authoritative typed constraint sources/program. Optional only for legacy-load migration. */
   constraintState?: BoardConstraintState;
 }

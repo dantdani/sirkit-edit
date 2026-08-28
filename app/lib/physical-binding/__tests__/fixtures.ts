@@ -12,8 +12,8 @@ export function scope(componentInstanceId = "component-uuid-1", variants = ["var
   return { tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardInstanceId: "board-1", componentInstanceId, hierarchyPath: ["root", "motor-control"], assemblyVariantIds: variants };
 }
 
-export function exactCandidate(componentInstanceId = "component-uuid-1", options: { manufacturingComplete?: boolean; candidateKeySuffix?: string; variants?: string[] } = {}): ComponentPhysicalBinding {
-  const physicalScope = scope(componentInstanceId, options.variants);
+export function exactCandidate(componentInstanceId = "component-uuid-1", options: { manufacturingComplete?: boolean; candidateKeySuffix?: string; variants?: string[]; scopeOverrides?: Partial<PhysicalBindingScope> } = {}): ComponentPhysicalBinding {
+  const physicalScope = { ...scope(componentInstanceId, options.variants), ...options.scopeOverrides };
   return createPhysicalBindingCandidate({
     scope: physicalScope,
     classification: { populationKind: "physical", deviceClass: "microcontroller", mountingTechnology: "smd", polarity: "unknown", classificationEvidenceRefs: ["evidence-class"] },

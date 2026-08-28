@@ -1,13 +1,11 @@
-import { authorizeKicadHttpLibrary } from "@/app/lib/atomic/server-auth";
+import { kicadLibraryRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
-export function GET(request: Request): Response {
-  const denied = authorizeKicadHttpLibrary(request);
-  if (denied) return denied;
-  return Response.json([{
+// [B16.0.8] canonical narrow variant — token boundary inside the wrapper.
+export const GET = kicadLibraryRoute(undefined, () =>
+  Response.json([{
     id: "published",
     name: "Sirkit / Published Atomic Parts",
     description: "Immutable evidence-backed component revisions approved in Sirkit",
-  }]);
-}
+  }]));

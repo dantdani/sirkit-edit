@@ -1,0 +1,3 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/pcb/qualify,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/pcb/release,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted

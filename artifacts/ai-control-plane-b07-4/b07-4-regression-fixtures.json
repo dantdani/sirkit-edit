@@ -1,0 +1,27 @@
+{
+  "schema": "sirkit.b07-4-regression-fixtures.v1",
+  "suite": "app/lib/engineering/__tests__/b07-4-project-async-scope.test.ts",
+  "fixtures": [
+    { "id": "T1/T22", "title": "Project transition reset clears every transient field; suggestions disappear on switch", "expected": "reset body clears pendingReplace/pendingTier1/schematicRecovery/pendingSuggestions/genError/aiProviderFailure/retries/all busy flags; hydration runs beginProject + reset; lastDesignPrompt hydrated to record value or ''" },
+    { "id": "T2", "title": "Applying a project-A batch in project B", "expected": "evaluateSuggestionBatch refuses (different project or session) BEFORE any request; batch cleared with truthful toast" },
+    { "id": "T3", "title": "Batch after a same-project canonical edit", "expected": "refused as stale on exact digest; same-base apply still allowed (no silent rebase either way)" },
+    { "id": "T4", "title": "Late project-A review after B hydrates", "expected": "producer gate (scope.isCurrent) stores nothing" },
+    { "id": "T5/T6/T7", "title": "Replacement dialog gating", "expected": "opens only for current scope + matching authoritative digest + validating result; stale marks only its own activity log; hydration reset closes it; same-project current-base dialog still works" },
+    { "id": "T8/T9/T10", "title": "Generation checkpoint ownership", "expected": "written immediately from the exact adopted candidate to the CAPTURED project; no ambient setTimeout(addCheckpoint) exists; generation-owned timers canceled by transition write nothing" },
+    { "id": "T11/T12/T13", "title": "Delete/swap catalog preflight", "expected": "scope captured pre-await; stale scope cancels silently; coordinator stillCurrent cancels before execution (head untouched, nothing adopted); same-project flow executes against the LATEST canonical head" },
+    { "id": "T14/T15/T16", "title": "Tier-1 pinning", "expected": "compiled+sealed against the invocation snapshot; pin re-checked before compile, after catalog awaits, and before surfacing; sealed digest must equal invocation digest; stale/foreign context produces NO proposal" },
+    { "id": "T17/T18/T19", "title": "Scoped errors, busy state, retries", "expected": "setScopedGenError writes/clears only while current; finally clears busy only when requestId matches (stale completion cannot clear newer state); reset clears retries so no cross-project replay" },
+    { "id": "T20", "title": "lastDesignPrompt", "expected": "resets to '' when the new record has no stored prompt" },
+    { "id": "T21", "title": "Chat streaming", "expected": "UUID message ids; abortable fetch; stream loop scope-gated with reader.cancel; late chunks/errors cannot update another project" },
+    { "id": "T23", "title": "Auto tidy/review pipeline", "expected": "generation-owned timer — canceled at transition; stages re-check scope currency" },
+    { "id": "T24", "title": "Abort classification", "expected": "beginProject/dispose abort the generation signal; AbortError paths return silently (cancellation), busy released via requestId guard — never reported as provider failure" }
+  ],
+  "regression_suites_still_green": [
+    "b07-3-serialization (FIFO, transactional adoption, undo/redo)",
+    "b07-2-interaction-interlock (+ export fail-closed route)",
+    "b07-1-identity-geometry-gestures",
+    "b07-graph-gestures",
+    "b06 / b06-1 / b06-2 / b06-3 (authority, durability, lineage, quarantine, mark sanitization; test 19 updated to the reset-function structure)",
+    "action-registry / tool-registry gates (AI mutation exposure closed)"
+  ]
+}
