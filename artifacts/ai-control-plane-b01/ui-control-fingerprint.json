@@ -53,6 +53,8 @@
       "Autoroute locally with Freerouting (no API key)",
       "Board height (mm)",
       "Board width (mm)",
+      "Dimension annotation: click two points, then place the line (B08)",
+      "Dimension tool",
       "Draw copper zone (Z)",
       "Edit history",
       "Export KiCad PCB",
