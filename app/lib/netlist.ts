@@ -3,7 +3,7 @@ import type {
   SchComponent,
   SchComponentType,
 } from "@/lib/schematic-types";
-import { PIN_NAMES } from "@/lib/schematic-types";
+import { PIN_NAMES, normalizeRefDes, schDisplayRef } from "@/lib/schematic-types";
 import { pinWorldPos, pointKey } from "./geometry";
 import { buildNetUnionFind } from "./connectivity";
 
@@ -53,10 +53,15 @@ const TYPE_PREFIX: Record<SchComponentType, string> = {
   ground:           "G",
 };
 
+// B07.1 — SPICE element names are PRESENTATION and derive from the displayed
+// reference (`refDes ?? id`), never from the stable id directly. This rule is
+// mirrored EXACTLY by the frontend probe-key derivation (frontendSpiceName in
+// app/page.tsx) — the two must stay in lockstep or probe vectors stop
+// matching emitted element names.
 function spiceName(comp: SchComponent): string {
   const prefix = TYPE_PREFIX[comp.type];
-  const id = comp.id.toUpperCase();
-  return id.startsWith(prefix) ? id : prefix + id;
+  const display = normalizeRefDes(schDisplayRef(comp)).toUpperCase();
+  return display.startsWith(prefix) ? display : prefix + display;
 }
 
 // ─── Main serializer ──────────────────────────────────────────────────────────
