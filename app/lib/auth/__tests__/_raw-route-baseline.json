@@ -1,0 +1,17 @@
+[
+  {
+    "method": "POST",
+    "route": "/api/mapping-verification",
+    "sha1": "2ab3f165ee9848f01fa87ec77ccd70c48f259b41"
+  },
+  {
+    "method": "POST",
+    "route": "/api/passive-policy",
+    "sha1": "1968df386f33dd3d4a2446993b72cb77db7c6919"
+  },
+  {
+    "method": "POST",
+    "route": "/api/pcb-sync",
+    "sha1": "f19a1a40b37a3770780ab0833e418e5b8838753e"
+  }
+]
