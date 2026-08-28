@@ -14,6 +14,7 @@
  */
 
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { runBuildToolLoop } from "@/app/lib/build-loop";
 import { requestedProvider } from "@/app/lib/llm/request";
 import { getPartsByIds } from "@/app/lib/parts-search";
@@ -21,13 +22,11 @@ import { EDIT_BUILD_SYSTEM_PROMPT } from "@/app/lib/prompts";
 
 export const runtime = "nodejs";
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { instruction?: unknown; netlist?: unknown; provider?: unknown };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as { instruction?: unknown; netlist?: unknown; provider?: unknown };
 
   const instruction = body.instruction;
   if (typeof instruction !== "string" || instruction.trim() === "") {
@@ -67,4 +66,4 @@ export async function POST(req: Request): Promise<Response> {
     { ok: false, error: result.error, code: result.code, provider: result.provider },
     { status: result.status },
   );
-}
+});
