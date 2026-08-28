@@ -54,17 +54,26 @@ describe("B01 contract resolution", () => {
       allowedOperationKinds: ["add_track", "update_track"],
     });
     expect(resolveExecutorContract("manufacturing.release")).toMatchObject({ approvalTier: "release" });
-    expect(resolveExecutorContract("pcb.dimension")).toMatchObject({ executable: false });
-    expect(resolveExecutorContract("schematic.add-component")).toMatchObject({
-      status: "ui-only",
-      executable: false,
-      allowedOperationKinds: [],
+    // B08: dimensions became a fully implemented canonical command.
+    expect(resolveExecutorContract("pcb.dimension")).toMatchObject({
+      status: "implemented",
+      executable: true,
+      allowedOperationKinds: ["add_dimension", "update_dimension", "remove_dimension"],
     });
+    // B07: component placement became a canonical graph command.
+    expect(resolveExecutorContract("schematic.add-component")).toMatchObject({
+      status: "implemented",
+      executable: true,
+      allowedOperationKinds: ["schematic_add_component"],
+    });
+    // B08: general via creation is implemented (routing interaction).
     expect(resolveExecutorContract("pcb.create-via")).toMatchObject({
-      status: "partial",
-      executable: false,
+      status: "implemented",
+      executable: true,
       allowedOperationKinds: ["add_via"],
     });
+    // B08: a still-partial proposal command remains non-executable.
+    expect(resolveExecutorContract("pcb.ai-rules-brief")).toMatchObject({ executable: false });
     expect(resolveExecutorContract("does.not-exist")).toBeNull();
   });
 
@@ -72,7 +81,9 @@ describe("B01 contract resolution", () => {
     const { executor } = await openExecutor();
     const before = executor.currentRevision();
     const unknown = await executor.execute(request(executor, { commandId: "does.not-exist" }));
-    const missing = await executor.execute(request(executor, { commandId: "pcb.dimension" }));
+    // B08: pcb.dimension became executable; schematic.generate remains a
+    // partial mutating command with no kernel binding.
+    const missing = await executor.execute(request(executor, { commandId: "schematic.generate" }));
     const readOnly = await executor.execute(request(executor, { commandId: "validation.erc-drc" }));
     expect(unknown).toMatchObject({ status: "rejected", reasonCode: "unknown_command" });
     expect(missing).toMatchObject({ status: "rejected", reasonCode: "not_executable" });

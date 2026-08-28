@@ -1,14 +1,19 @@
 /**
- * B05 — pure, deterministic engineering-context assembler.
+ * B05/B05.1 — pure, deterministic engineering-context assembler.
  *
  * Builds a versioned, provider-neutral EngineeringContextEnvelope from
  * EXPLICIT caller-supplied snapshots and authority records. It never reaches
  * into React state, browser globals, providers, or databases; it contains no
  * prompt text and no provider message objects; it performs no retrieval and
  * no mutation. Every fact carries revision/provenance, collections are
- * bounded and deterministically ordered, units are explicit (nm), and
- * UNKNOWN (asked-for but unavailable) is distinguishable from OMITTED
- * (deliberately not supplied). Nothing here connects to /api/chat.
+ * bounded and deterministically ordered, units are explicit (nm).
+ *
+ * B05.1: sections carry SOURCE-RESOURCE references (id/version/digest), the
+ * envelope carries the resource-manifest digest, and a section whose source
+ * is pinned to a DIFFERENT canonical revision is refused as `unavailable` —
+ * facts from incompatible revisions are never silently combined. UNKNOWN
+ * (asked-for but unavailable at this revision), OMITTED (deliberately not
+ * supplied), STALE, and UNAVAILABLE are four distinct states.
  */
 
 import { engineeringDigest } from "./stable";
@@ -18,9 +23,20 @@ import type { SelectionRef } from "../pcb/edit/commands";
 import { pcbRevisionId } from "../pcb/revision";
 import type { CanonicalProjectState } from "./types";
 
+export interface ContextSectionSource {
+  resourceId: string;
+  sourceVersion: string;
+  contentDigest: string;
+  freshness: "current" | "stale" | "unknown";
+  /** Canonical revision the source is pinned to, when applicable. */
+  sourceCanonicalRevision?: string;
+}
+
 export type ContextSection<T> =
-  | { status: "present"; data: T }
+  | { status: "present"; data: T; source?: ContextSectionSource }
   | { status: "unknown"; reason: string }
+  | { status: "stale"; reason: string; source?: ContextSectionSource }
+  | { status: "unavailable"; reason: string; source?: ContextSectionSource }
   | { status: "omitted" };
 
 export interface ContextBudget {
@@ -34,6 +50,8 @@ export interface ContextBudget {
 export const DEFAULT_CONTEXT_BUDGET: ContextBudget = Object.freeze({
   maxNets: 50, maxViolations: 50, maxSelection: 100, maxComponents: 100, maxChangeRefs: 20,
 });
+
+type SourcedSectionName = "selection" | "schematicSummary" | "componentAuthority" | "validationFailures" | "readiness" | "recentChanges";
 
 export interface ContextAssemblerInput {
   canonicalState: CanonicalProjectState;
@@ -49,11 +67,15 @@ export interface ContextAssemblerInput {
   validationFailures?: ReadonlyArray<{ id: string; kind: string; severity: string; objectIds: readonly string[] }>;
   readinessSummary?: { status: string; blockingCount: number; sourceRevision: string };
   recentChangeRefs?: ReadonlyArray<{ transactionId: string; sequence: number; reason: string }>;
+  /** B05.1: per-section source-resource references. */
+  sources?: Partial<Record<SourcedSectionName, ContextSectionSource>>;
+  /** B05.1: manifest digest of the resource bundle these facts came from. */
+  resourceManifestDigest?: string;
   budget?: Partial<ContextBudget>;
 }
 
 export interface EngineeringContextEnvelope {
-  schema: "sirkit.engineering-context.v1";
+  schema: "sirkit.engineering-context.v2";
   tenantId: string;
   projectId: string;
   branchId: string;
@@ -62,6 +84,10 @@ export interface EngineeringContextEnvelope {
   authority: { source: string; status: string };
   currentEditor: string;
   units: "nm";
+  /** B05.1: pins the envelope to its resource bundle, when one was used. */
+  resourceManifestDigest: string | null;
+  /** Auxiliary authority sources referenced by any section (deterministic). */
+  auxiliarySources: ContextSectionSource[];
   selection: ContextSection<Array<{ kind: string; id: string }>>;
   boardSummary: ContextSection<{
     footprints: number; tracks: number; vias: number; zones: number; nets: number;
@@ -91,7 +117,21 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
   const truncation: EngineeringContextEnvelope["truncation"] = [];
   const revision = computeProjectRevision(state);
 
-  const selection: EngineeringContextEnvelope["selection"] = input.selection === undefined
+  /** B05.1 gate: never combine facts from incompatible revisions, and
+   *  surface stale sources as stale rather than silently present. */
+  const gated = <T>(section: SourcedSectionName, build: () => ContextSection<T>): ContextSection<T> => {
+    const source = input.sources?.[section];
+    if (source?.sourceCanonicalRevision && source.sourceCanonicalRevision !== revision.canonicalStateDigest) {
+      return { status: "unavailable", reason: `source resource is pinned to canonical revision ${source.sourceCanonicalRevision}, envelope revision is ${revision.canonicalStateDigest}`, source };
+    }
+    if (source?.freshness === "stale") {
+      return { status: "stale", reason: "source resource is marked stale by its producer", source };
+    }
+    const built = build();
+    return built.status === "present" && source ? { ...built, source } : built;
+  };
+
+  const selection = gated<Array<{ kind: string; id: string }>>("selection", () => input.selection === undefined
     ? { status: "omitted" }
     : {
         status: "present",
@@ -101,7 +141,7 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
             .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)),
           budget.maxSelection, "selection", truncation,
         ),
-      };
+      });
 
   const outline = board.outline as { kind: string; width?: number; height?: number };
   const boardSummary: EngineeringContextEnvelope["boardSummary"] = {
@@ -134,14 +174,14 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
     ),
   };
 
-  const componentAuthority: EngineeringContextEnvelope["componentAuthority"] = input.componentAuthority === undefined
+  const componentAuthority = gated<ComponentAuthoritySummary[]>("componentAuthority", () => input.componentAuthority === undefined
     ? { status: "omitted" }
     : {
         status: "present",
         data: bounded(inspectComponentAuthority(input.componentAuthority), budget.maxComponents, "componentAuthority", truncation),
-      };
+      });
 
-  const validationFailures: EngineeringContextEnvelope["validationFailures"] = input.validationFailures === undefined
+  const validationFailures = gated<Array<{ id: string; kind: string; severity: string; objectIds: string[] }>>("validationFailures", () => input.validationFailures === undefined
     ? { status: "unknown", reason: "no validation report was supplied for this revision" }
     : {
         status: "present",
@@ -151,10 +191,14 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
             .sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id)),
           budget.maxViolations, "validationFailures", truncation,
         ),
-      };
+      });
+
+  const auxiliarySources = Object.values(input.sources ?? {})
+    .filter((source): source is ContextSectionSource => source !== undefined)
+    .sort((a, b) => a.resourceId.localeCompare(b.resourceId));
 
   const envelopeBase = {
-    schema: "sirkit.engineering-context.v1" as const,
+    schema: "sirkit.engineering-context.v2" as const,
     tenantId: state.tenantId,
     projectId: state.projectId,
     branchId: state.branchId,
@@ -168,18 +212,20 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
     authority: { source: input.authoritySource, status: input.authorityStatus },
     currentEditor: input.currentEditor,
     units: "nm" as const,
+    resourceManifestDigest: input.resourceManifestDigest ?? null,
+    auxiliarySources,
     selection,
     boardSummary,
-    schematicSummary: (input.schematicSummary === undefined
+    schematicSummary: gated<unknown>("schematicSummary", () => (input.schematicSummary === undefined
       ? { status: "omitted" }
-      : { status: "present", data: input.schematicSummary }) as ContextSection<unknown>,
+      : { status: "present", data: input.schematicSummary })),
     componentAuthority,
     relevantNets,
     validationFailures,
-    readiness: (input.readinessSummary === undefined
+    readiness: gated<{ status: string; blockingCount: number; sourceRevision: string }>("readiness", () => (input.readinessSummary === undefined
       ? { status: "unknown", reason: "readiness was not evaluated for this revision" }
-      : { status: "present", data: input.readinessSummary }) as EngineeringContextEnvelope["readiness"],
-    recentChanges: (input.recentChangeRefs === undefined
+      : { status: "present", data: input.readinessSummary })),
+    recentChanges: gated<Array<{ transactionId: string; sequence: number; reason: string }>>("recentChanges", () => (input.recentChangeRefs === undefined
       ? { status: "omitted" }
       : {
           status: "present",
@@ -187,9 +233,9 @@ export function assembleEngineeringContext(input: ContextAssemblerInput): Engine
             [...input.recentChangeRefs].sort((a, b) => a.sequence - b.sequence),
             budget.maxChangeRefs, "recentChanges", truncation,
           ),
-        }) as EngineeringContextEnvelope["recentChanges"],
+        })),
     truncation,
     sourceDigests: { canonicalState: revision.canonicalStateDigest },
   };
-  return { ...envelopeBase, contextDigest: engineeringDigest({ schema: "sirkit.engineering-context-digest.v1", envelope: envelopeBase }) };
+  return { ...envelopeBase, contextDigest: engineeringDigest({ schema: "sirkit.engineering-context-digest.v2", envelope: envelopeBase }) };
 }

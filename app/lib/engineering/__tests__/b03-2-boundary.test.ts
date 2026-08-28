@@ -195,10 +195,13 @@ describe("interactive-channel composition boundary", () => {
   });
 
   it("10. no production file outside the approved composition boundary imports the channel module", () => {
-    // Approved importers of interactive-channel.internal (production code):
+    // Approved importers of interactive-channel.internal (production code).
+    // B06 adds the schematic editor session — editor-session composition,
+    // exactly like the PCB adapter (documented in the B03.2 boundary doc).
     const approved = new Set([
       "app/lib/engineering/executor.ts",
       "app/lib/engineering/editor-adapter.ts",
+      "app/lib/engineering/schematic-session.ts",
       "app/lib/engineering/interactive-channel.internal.ts",
     ]);
     const roots = ["app", "lib", "components"];

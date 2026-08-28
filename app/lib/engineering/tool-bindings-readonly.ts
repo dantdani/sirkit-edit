@@ -1,17 +1,23 @@
 /**
- * B05 — explicit, allowlisted, READ-ONLY implementation bindings.
+ * B05/B05.1 — explicit, allowlisted, READ-ONLY implementation bindings.
  *
  * Every activated binding is registered here IN CODE. The resolver never
  * imports descriptor-supplied module strings, never uses dynamic import,
  * eval, generated code, or reflection — a descriptor is callable only when
  * its declared module+symbol EXACTLY match an allowlisted entry, and only
- * read bindings exist in this stage. Proposal, mutation, destructive,
- * release, view-session, and internal undo bindings are structurally absent
- * and explicitly rejected by the resolver.
+ * read bindings exist in this stage.
  *
- * Bindings are pure over the caller-supplied ReadResourceSet: no provider
- * calls, no database access, no React/browser state, no history writes, no
- * browser storage, no durable envelopes, no manufacturing authority.
+ * B05.1: every binding DECLARES the resource kinds it consumes
+ * (`requiredResources` / `optionalResources`). The invocation service hands
+ * bindings a SCOPED view containing only declared resources — undeclared
+ * resources are structurally absent, so a binding cannot read them. Outputs
+ * that combine auxiliary authority (DRC rules, presets, netlist, authority
+ * records) carry explicit `pinned` provenance naming the exact resource
+ * ids/versions/digests they consumed.
+ *
+ * Bindings are pure over the supplied resources: no provider calls, no
+ * database access, no React/browser state, no history writes, no browser
+ * storage, no durable envelopes, no manufacturing authority.
  * Non-deterministic timing fields from underlying engines are normalized so
  * results are digest-stable and replayable.
  */
@@ -26,32 +32,41 @@ import { evaluatePcbFabricationReadiness } from "../pcb/readiness/evaluate";
 import type { FabPreset } from "../pcb/fab/types";
 import type { PcbNetlist } from "../pcb/netlist-bridge";
 import { pcbRevisionId } from "../pcb/revision";
-import { inspectComponentAuthority, type ComponentAuthorityInput } from "./component-authority";
+import { inspectComponentAuthority, type ComponentAuthorityRecord, type ComponentCatalogCandidate } from "./component-authority";
+import { inspectSchematicState } from "./schematic-read";
 import { computeProjectRevision } from "./revision";
-import { canonicalJsonValue } from "./stable";
+import type { ReadAuthorityResourceEnvelope, ReadResourceKind } from "./resource-envelopes";
+import { canonicalJsonValue, engineeringDigest } from "./stable";
 import type { ToolDescriptor } from "./tool-registry";
-import type { ToolAuthoritySource } from "./tool-registry";
 import type { CanonicalProjectState } from "./types";
 
-// ─── Resources (explicit snapshots; the binding never fetches anything) ──────
+// ─── Scoped resource view (only DECLARED kinds are present) ──────────────────
 
-export interface ReadResourceSet {
-  /** The pinned engineering snapshot every result is verified against. */
-  canonicalState: CanonicalProjectState;
-  authoritySource: ToolAuthoritySource;
-  availableAuthority: readonly ToolAuthoritySource[];
-  selectionRefs?: readonly SelectionRef[];
-  componentAuthority?: Omit<ComponentAuthorityInput, "componentIds">;
-  drcRules?: DrcRules;
-  readiness?: { fabPreset: FabPreset; drcPreset: DrcPreset; netlist?: PcbNetlist };
+/** Envelope reference passed to bindings for pinning output provenance. */
+export interface ConsumedResourceRef {
+  resourceId: string;
+  kind: ReadResourceKind;
+  sourceVersion: string;
+  contentDigest: string;
 }
 
-/** Structured "this fact is unavailable" — mapped to authority_unavailable. */
-export class ReadBindingUnavailableError extends Error {
-  constructor(readonly missing: string) {
-    super(`READ_RESOURCE_UNAVAILABLE:${missing}`);
-    this.name = "ReadBindingUnavailableError";
-  }
+export interface ReadBindingResources {
+  canonicalState: CanonicalProjectState;
+  canonicalRef: ConsumedResourceRef;
+  selection?: { refs: readonly SelectionRef[]; ref: ConsumedResourceRef };
+  componentAuthority?: {
+    records: readonly ComponentAuthorityRecord[];
+    candidates?: readonly ComponentCatalogCandidate[];
+    ref: ConsumedResourceRef;
+  };
+  drcRules?: { rules: DrcRules; ref: ConsumedResourceRef };
+  fabPreset?: { preset: FabPreset; ref: ConsumedResourceRef };
+  drcPreset?: { preset: DrcPreset; ref: ConsumedResourceRef };
+  netlist?: { netlist: PcbNetlist; ref: ConsumedResourceRef };
+}
+
+export function consumedRef(envelope: ReadAuthorityResourceEnvelope): ConsumedResourceRef {
+  return { resourceId: envelope.resourceId, kind: envelope.kind, sourceVersion: envelope.sourceVersion, contentDigest: envelope.contentDigest };
 }
 
 export interface ActivatedReadBinding {
@@ -62,7 +77,10 @@ export interface ActivatedReadBinding {
   /** Must EXACTLY match the descriptor's declared implementation evidence. */
   module: string;
   symbol: string;
-  invoke(args: Record<string, unknown>, resources: ReadResourceSet, signal?: AbortSignal): unknown | Promise<unknown>;
+  /** Resource kinds this binding consumes — the service supplies ONLY these. */
+  requiredResources: readonly ReadResourceKind[];
+  optionalResources?: readonly ReadResourceKind[];
+  invoke(args: Record<string, unknown>, resources: ReadBindingResources, signal?: AbortSignal): unknown | Promise<unknown>;
 }
 
 // ─── Deterministic normalizers ───────────────────────────────────────────────
@@ -83,21 +101,34 @@ function withoutTiming<T extends Record<string, unknown>>(value: T, keys: string
 
 export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.freeze([
   {
-    bindingId: "read.canonical-revision", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.canonical-revision", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.project.canonical-revision-inspect",
     module: "app/lib/engineering/revision.ts", symbol: "computeProjectRevision",
+    requiredResources: ["canonical-state"],
     invoke: (_args, resources) => ({ revision: computeProjectRevision(resources.canonicalState) }),
   },
   {
-    bindingId: "read.pcb-revision", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.schematic-snapshot", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.schematic.inspect",
+    module: "app/lib/engineering/schematic-read.ts", symbol: "inspectSchematicState",
+    requiredResources: ["canonical-state"],
+    // B09 — the canonical-state envelope carries the authoritative schematic
+    // snapshot as opaque JSON (B07.3); the pure accessor projects it
+    // deterministically and fails closed on malformed shapes.
+    invoke: (_args, resources) => ({ report: toPlainJson(inspectSchematicState(resources.canonicalState.schematic) as unknown as Record<string, unknown>) }),
+  },
+  {
+    bindingId: "read.pcb-revision", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.pcb.revision-inspect",
     module: "app/lib/pcb/revision.ts", symbol: "pcbRevisionId",
+    requiredResources: ["canonical-state"],
     invoke: (_args, resources) => ({ revision: pcbRevisionId(resources.canonicalState.pcb) }),
   },
   {
-    bindingId: "read.board-snapshot", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.board-snapshot", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.pcb.board-inspect",
     module: "app/lib/pcb/ai/snapshot.ts", symbol: "buildAIPcbSnapshot",
+    requiredResources: ["canonical-state"],
     invoke: (args, resources) => {
       const projectId = typeof args.projectId === "string" ? args.projectId : resources.canonicalState.projectId;
       const snapshot = buildAIPcbSnapshot(resources.canonicalState.pcb, { projectId });
@@ -106,11 +137,16 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
     },
   },
   {
-    bindingId: "read.selection", bindingVersion: "1.0.0", kind: "read",
+    // [B10] 1.2.0: consumed by the agent over the sealed selection-snapshot
+    // resource; without args.refs (the agent's empty strict schema) it
+    // inspects the CURRENT sealed selection.
+    bindingId: "read.selection", bindingVersion: "1.2.0", kind: "read",
     toolId: "sirkit.selection.inspect",
     module: "app/lib/pcb/selection-queries.ts", symbol: "getItems",
+    requiredResources: ["canonical-state", "selection-snapshot"],
     invoke: (args, resources) => {
-      const requested = (args.refs as SelectionRef[] | undefined) ?? [...(resources.selectionRefs ?? [])];
+      if (!resources.selection) throw new Error("SELECTION_RESOURCE_ABSENT");
+      const requested = (args.refs as SelectionRef[] | undefined) ?? [...resources.selection.refs];
       const items = getItems(resources.canonicalState.pcb, requested);
       // Compact deterministic projection — never the raw objects (footprint
       // defs are large and carry no additional selection facts).
@@ -122,6 +158,7 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
           case "zone": return { kind: item.kind, id: item.zone.id, netId: item.zone.netId, layer: item.zone.layer, units: "nm" };
           case "text": return { kind: item.kind, id: item.text.id, layer: item.text.layer, units: "nm" };
           case "pad": return { kind: item.kind, id: `${item.footprint.id}:${item.pad.number}`, netId: item.netId, units: "nm" };
+          case "dimension": return { kind: item.kind, id: item.dimension.id, layer: item.dimension.layer, units: "nm" };
         }
       }).sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
       const resolvedIds = new Set(resolved.map((item) => item.id));
@@ -129,27 +166,38 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
         .map((ref) => (ref.kind === "pad" ? `${ref.footprintId}:${ref.padNumber}` : ref.id))
         .filter((id) => !resolvedIds.has(id))
         .sort();
-      return { items: resolved, droppedRefs: dropped };
+      return { items: resolved, droppedRefs: dropped, pinned: { selection: resources.selection.ref } };
     },
   },
   {
-    bindingId: "read.drc", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.drc", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.validation.drc-run",
     module: "app/lib/pcb/drc/run-drc.ts", symbol: "runDrc",
+    requiredResources: ["canonical-state", "drc-rules"],
     invoke: (_args, resources) => {
-      if (!resources.drcRules) throw new ReadBindingUnavailableError("drcRules");
-      const report = runDrc(resources.canonicalState.pcb, resources.drcRules) as unknown as Record<string, unknown>;
+      if (!resources.drcRules) throw new Error("DRC_RULES_RESOURCE_ABSENT");
+      const raw = runDrc(resources.canonicalState.pcb, resources.drcRules.rules) as unknown as Record<string, unknown>;
       // stats.elapsedMs is wall-clock — normalize for digest determinism.
-      const normalized = structuredClone(report);
+      const normalized = structuredClone(raw);
       const stats = normalized.stats as Record<string, unknown> | undefined;
       if (stats && "elapsedMs" in stats) stats.elapsedMs = 0;
-      return { report: toPlainJson(normalized) };
+      const report = toPlainJson(normalized);
+      return {
+        report,
+        pinned: {
+          boardRevision: pcbRevisionId(resources.canonicalState.pcb),
+          drcRules: resources.drcRules.ref,
+          engineVersion: String((report as Record<string, unknown>).checkVersion ?? "unversioned"),
+          reportDigest: engineeringDigest(report),
+        },
+      };
     },
   },
   {
-    bindingId: "read.connectivity", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.connectivity", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.validation.connectivity-verify",
     module: "app/lib/pcb/connectivity-board.ts", symbol: "computeConnectivity",
+    requiredResources: ["canonical-state"],
     invoke: (_args, resources) => {
       const connectivity = computeConnectivity(resources.canonicalState.pcb);
       // BoardConnectivity carries a Map — project to a plain, sorted, JSON-safe
@@ -170,28 +218,49 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
     },
   },
   {
-    bindingId: "read.component-authority", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.component-authority", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.component-authority.inspect",
     module: "app/lib/engineering/component-authority.ts", symbol: "inspectComponentAuthority",
+    requiredResources: ["canonical-state", "component-authority-records"],
     invoke: (args, resources) => {
-      if (!resources.componentAuthority) throw new ReadBindingUnavailableError("componentAuthority");
+      if (!resources.componentAuthority) throw new Error("COMPONENT_AUTHORITY_RESOURCE_ABSENT");
       const componentIds = (args.componentIds as string[] | undefined) ?? resources.componentAuthority.records.map((record) => record.componentId);
-      return { components: inspectComponentAuthority({ componentIds, ...resources.componentAuthority }) };
+      const components = inspectComponentAuthority({
+        componentIds,
+        projectId: resources.canonicalState.projectId,
+        records: resources.componentAuthority.records,
+        candidates: resources.componentAuthority.candidates,
+      });
+      return { components, pinned: { authorityResource: resources.componentAuthority.ref } };
     },
   },
   {
-    bindingId: "read.readiness", bindingVersion: "1.0.0", kind: "read",
+    bindingId: "read.readiness", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.manufacturing.readiness-inspect",
     module: "app/lib/pcb/readiness/evaluate.ts", symbol: "evaluatePcbFabricationReadiness",
+    requiredResources: ["canonical-state", "fab-preset", "drc-preset"],
+    optionalResources: ["netlist"],
     invoke: (_args, resources) => {
-      if (!resources.readiness) throw new ReadBindingUnavailableError("readinessInputs");
-      const report = evaluatePcbFabricationReadiness({
+      if (!resources.fabPreset || !resources.drcPreset) throw new Error("READINESS_RESOURCES_ABSENT");
+      const report = toPlainJson(evaluatePcbFabricationReadiness({
         board: resources.canonicalState.pcb,
-        fabPreset: resources.readiness.fabPreset,
-        drcPreset: resources.readiness.drcPreset,
-        ...(resources.readiness.netlist ? { netlist: resources.readiness.netlist } : {}),
-      });
-      return { report: toPlainJson(report) };
+        fabPreset: resources.fabPreset.preset,
+        drcPreset: resources.drcPreset.preset,
+        ...(resources.netlist ? { netlist: resources.netlist.netlist } : {}),
+      }));
+      return {
+        report,
+        // Inspection provenance ONLY — a readiness report is never
+        // manufacturing authority or release evidence.
+        pinned: {
+          boardRevision: pcbRevisionId(resources.canonicalState.pcb),
+          fabPreset: resources.fabPreset.ref,
+          drcPreset: resources.drcPreset.ref,
+          ...(resources.netlist ? { netlist: resources.netlist.ref } : {}),
+          engineVersion: "pcb/readiness/evaluate",
+          reportDigest: engineeringDigest(report),
+        },
+      };
     },
   },
 ] satisfies readonly ActivatedReadBinding[]);
@@ -224,6 +293,9 @@ export function resolveReadBinding(
       state: "not_callable",
       reason: `Descriptor evidence (${descriptor.binding.module ?? "?"}#${descriptor.binding.symbol ?? "?"}) does not match the allowlisted implementation (${entry.module}#${entry.symbol}).`,
     };
+  }
+  if (!entry.requiredResources.includes("canonical-state")) {
+    return { state: "not_callable", reason: "Every read binding must declare the canonical-state resource." };
   }
   return { state: "resolved", binding: entry };
 }
