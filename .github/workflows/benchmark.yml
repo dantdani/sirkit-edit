@@ -23,10 +23,22 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run benchmark:validate
+      # Output redirection captures the diagnostics for the failure artifact
+      # WITHOUT masking the exit code (no pipes, no continue-on-error).
+      - run: pnpm run benchmark:validate > benchmark-validate.json
       - run: pnpm exec tsc --noEmit
-      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot
-      - run: pnpm run stage10:test -- --reporter=dot
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot --reporter=junit --outputFile=vitest-benchmark-core.xml
+      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-core-failure-diagnostics
+          path: |
+            benchmark-validate.json
+            vitest-*.xml
+          if-no-files-found: ignore
+          retention-days: 14
 
   benchmark-nightly:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -42,9 +54,19 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run benchmark:validate
-      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot
-      - run: pnpm run stage10:test -- --reporter=dot
+      - run: pnpm run benchmark:validate > benchmark-validate.json
+      - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts --reporter=dot --reporter=junit --outputFile=vitest-nightly.xml
+      - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-nightly-failure-diagnostics
+          path: |
+            benchmark-validate.json
+            vitest-*.xml
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Declare unavailable protected suites
         run: |
           echo "Hidden holdout requires holdout-admin credentials and is not exposed to CI candidates."
