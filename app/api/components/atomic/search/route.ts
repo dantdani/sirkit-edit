@@ -1,5 +1,6 @@
 import type { ComponentQuery } from "@/app/lib/atomic/types";
 import { searchPublishedAtomicCatalog } from "@/app/lib/atomic/server-search";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -15,9 +16,11 @@ function isQuery(value: unknown): value is ComponentQuery {
     && typeof query.limit === "number";
 }
 
-export async function POST(request: Request): Promise<Response> {
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const POST = publicJsonRoute({ maxBytes: 200_000, deadlineMs: 10_000 }, async ({ body: rawBody }): Promise<Response> => {
   try {
-    const body: unknown = await request.json();
+    const body: unknown = rawBody;
     if (!isQuery(body)) return Response.json({ ok: false, error: "Invalid structured component query" }, { status: 400 });
     const result = await searchPublishedAtomicCatalog({ ...body, limit: Math.max(0, Math.min(100, Math.floor(body.limit))) });
     return Response.json({ ok: true, ...result });
@@ -25,5 +28,4 @@ export async function POST(request: Request): Promise<Response> {
     const message = error instanceof Error ? error.message : "Atomic search failed";
     return Response.json({ ok: false, error: message }, { status: /different catalog snapshot/.test(message) ? 409 : 500 });
   }
-}
-
+});
