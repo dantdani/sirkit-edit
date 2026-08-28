@@ -10,6 +10,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, partOffers, alternates } from "@/app/lib/db/schema";
 import { bestOfferPrice, type AlternateKind } from "@/app/lib/alternates";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -38,18 +39,16 @@ function clampLimit(raw: string | null): number {
   return Math.min(50, Math.max(1, Math.floor(n)));
 }
 
-export async function GET(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-): Promise<Response> {
-  const { id } = await ctx.params;
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute({ routeParams: ["id"], query: true }, async ({ params, meta }): Promise<Response> => {
+  const id = params!.id;
   if (!UUID_RE.test(id)) {
     return Response.json({ ok: false, error: "Invalid part id" }, { status: 400 });
   }
 
-  const url = new URL(req.url);
-  const kindParam = url.searchParams.get("kind") ?? "all";
-  const limit = clampLimit(url.searchParams.get("limit"));
+  const kindParam = meta.query?.kind ?? "all";
+  const limit = clampLimit(meta.query?.limit ?? null);
   const kinds: AlternateKind[] =
     kindParam === "drop_in" ? ["drop_in"] : kindParam === "fff" ? ["fff"] : ["drop_in", "fff"];
 
@@ -139,4 +138,4 @@ export async function GET(
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

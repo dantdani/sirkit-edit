@@ -18,6 +18,7 @@ import { getDb } from "@/app/lib/db/client";
 import { parts, libraries } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import type { KicadPin } from "@/app/lib/kicad/types";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -57,14 +58,10 @@ type LifecycleStatus =
   | "active" | "nrnd" | "last_time_buy" | "eol" | "obsolete" | "unknown";
 type RohsStatus = "compliant" | "non_compliant" | "unknown";
 
-export async function POST(req: Request): Promise<Response> {
-  // ── Parse & validate ──────────────────────────────────────────────────────
-  let body: SearchBody;
-  try {
-    body = (await req.json()) as SearchBody;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.8] canonical wrapper — policy → media → bounded body inside the
+// wrapper; the callback receives the parsed body + a bounded query projection.
+export const POST = publicJsonRoute({ maxBytes: 200000, deadlineMs: 10000, query: true }, async ({ body: parsed, meta }) => {
+  const body = parsed as unknown as SearchBody;
 
   const query = typeof body.query === "string" ? body.query.trim() : "";
   if (query.length > MAX_QUERY_LENGTH) {
@@ -85,7 +82,7 @@ export async function POST(req: Request): Promise<Response> {
   // Generic KiCad templates are excluded by default; opt in with
   // ?includeGenerics=true (or { includeGenerics: true } in the body).
   const includeGenerics =
-    new URL(req.url).searchParams.get("includeGenerics") === "true" ||
+    meta.query?.includeGenerics === "true" ||
     body.includeGenerics === true;
 
   try {
@@ -134,7 +131,7 @@ export async function POST(req: Request): Promise<Response> {
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});
 
 // ── Query modes ─────────────────────────────────────────────────────────────
 
