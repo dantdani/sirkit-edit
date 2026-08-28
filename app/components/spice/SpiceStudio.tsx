@@ -1,6 +1,7 @@
 "use client";
 
-import { throwAiResponseError, withAiBrain } from "@/app/lib/ai-preferences";
+import { projectSelectorHeaders, withProjectSelectorQuery, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
+import { throwAiResponseError, withAiBrain, type AiRequestOwnership } from "@/app/lib/ai-preferences";
 
 import {
   useCallback,
@@ -203,7 +204,19 @@ function operationLabel(operation: AiStudioOperation): string {
   }
 }
 
-export default function SpiceStudio({ schematic, legacyPanel }: { schematic: SchematicState; legacyPanel?: ReactNode }) {
+export default function SpiceStudio({ schematic, legacyPanel, aiOwnership, projectScope = null }: {
+  schematic: SchematicState;
+  /** [B16.0.2 §B] the ACTIVE project identity from the page (selector only —
+   *  never authority). Run/bundle/event/model routes are project-scoped on
+   *  the server; without a scope those surfaces are unavailable. */
+  projectScope?: ProjectSelectorScope | null;
+  legacyPanel?: ReactNode;
+  /** B07.5 (failure F) — capture the OWNER of an AI request at submission
+   *  (the page passes its project-generation scope factory). Provider-
+   *  failure events and retries carry this owner and refuse once it is
+   *  stale; without it, requests fall back to component-lifetime ownership. */
+  aiOwnership?: () => AiRequestOwnership;
+}) {
   const schematicHash = useMemo(() => stableHash(schematic), [schematic]);
   const [project, setProject] = useState<SimulationProject>(() => refreshDesignRevision(loadStudioProject() ?? createSimulationProject(schematic), schematic));
   const projectRef = useRef(project);
@@ -234,6 +247,13 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
   const [approvedOps, setApprovedOps] = useState<Set<number>>(new Set());
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  // B07.5 — component-lifetime half of AI request ownership: a response
+  // (or provider-failure dispatch/retry) arriving after unmount is dead.
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
   const pastRef = useRef<SimulationProject[]>([]);
   const futureRef = useRef<SimulationProject[]>([]);
   const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
@@ -357,14 +377,16 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
 
   async function startRuns(runPlanId = activePlan.id, projectOverride = projectRef.current) {
     setAiError(null);
-    const response = await fetch("/api/spice/runs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: projectOverride, runPlanId, parts }) });
+    const response = await fetch("/api/spice/runs", { method: "POST", headers: { "Content-Type": "application/json", ...projectSelectorHeaders(projectScope) }, body: JSON.stringify({ project: projectOverride, runPlanId, parts }) });
     const data = await response.json() as { ok?: boolean; error?: string; batch?: RunBatchRecord };
     if (!response.ok || !data.batch) throw new Error(data.error ?? "Could not start run plan");
     setActiveBatch(data.batch);
-    const initial = await fetch(`/api/spice/runs?ids=${data.batch.runIds.join(",")}`).then((result) => result.json()) as { runs: RunRecord[] };
+    const initial = await fetch(`/api/spice/runs?ids=${data.batch.runIds.join(",")}`, { headers: projectSelectorHeaders(projectScope) }).then((result) => result.json()) as { runs: RunRecord[] };
     initial.runs.forEach(mergeRun);
     for (const runId of data.batch.runIds) {
-      const source = new EventSource(`/api/spice/runs/${runId}/events`);
+      // EventSource cannot set headers: the project SELECTOR travels as query
+      // parameters (opaque ids only — never design data, never authority).
+      const source = new EventSource(withProjectSelectorQuery(`/api/spice/runs/${runId}/events`, projectScope));
       eventSourcesRef.current.set(runId, source);
       source.addEventListener("run", (event) => {
         const run = JSON.parse((event as MessageEvent).data) as RunRecord;
@@ -377,7 +399,7 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
   }
 
   async function cancelRun(runId: string) {
-    const response = await fetch(`/api/spice/runs/${runId}`, { method: "DELETE" });
+    const response = await fetch(`/api/spice/runs/${runId}`, { method: "DELETE", headers: projectSelectorHeaders(projectScope) });
     const data = await response.json() as { run?: RunRecord };
     if (data.run) mergeRun(data.run);
   }
@@ -386,7 +408,7 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
     setModelImportBusy(true);
     try {
       const content = await file.text();
-      const response = await fetch("/api/spice/models/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fileName: file.name, content }) });
+      const response = await fetch("/api/spice/models/import", { method: "POST", headers: { "Content-Type": "application/json", ...projectSelectorHeaders(projectScope) }, body: JSON.stringify({ fileName: file.name, content }) });
       const data = await response.json() as { ok?: boolean; error?: string; report?: ModelImportReport };
       if (!response.ok || !data.report) throw new Error(data.error ?? "Model import failed");
       setModelImport(data.report);
@@ -406,7 +428,7 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
     if (!modelImport) return;
     setModelImportBusy(true);
     try {
-      const response = await fetch("/api/spice/models/smoke-test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: modelImport.candidate }) });
+      const response = await fetch("/api/spice/models/smoke-test", { method: "POST", headers: { "Content-Type": "application/json", ...projectSelectorHeaders(projectScope) }, body: JSON.stringify({ model: modelImport.candidate }) });
       const data = await response.json() as { ok?: boolean; error?: string; model?: ModelImportReport["candidate"]; check?: { message?: string } };
       if (data.model) setModelImport((current) => current ? { ...current, candidate: data.model! } : current);
       if (!response.ok || !data.ok) throw new Error(data.error ?? data.check?.message ?? "Model smoke test failed");
@@ -417,19 +439,29 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
 
   async function askAi() {
     if (!aiInstruction.trim()) return;
+    // B07.5 (failure F) — explicit request ownership captured at
+    // SUBMISSION: the page's project generation (when provided) AND this
+    // component's lifetime. throwAiResponseError dispatches no provider-
+    // failure event and its retry refuses once this owner is stale, and no
+    // response content (question/proposal/error) is applied to a stale
+    // owner. The busy flag is component-lifetime (it guards this
+    // component's own submission path).
+    const pageOwner = aiOwnership?.();
+    const ownership: AiRequestOwnership = { isCurrent: () => aliveRef.current && (pageOwner ? pageOwner.isCurrent() : true) };
     setAiBusy(true); setAiError(null); setAiQuestion(null); setProposal(null);
     try {
       const response = await fetch("/api/spice/ai", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withAiBrain({ instruction: aiInstruction, project, testId: activeTest.id, parts, runs: runs.slice(0, 12) })) });
       const data = await response.json() as { ok?: boolean; error?: string; question?: string; proposal?: AiStudioProposal };
-      if (!response.ok) await throwAiResponseError(new Response(JSON.stringify(data), { status: response.status, headers: { "Content-Type": "application/json" } }), () => void askAi());
+      if (!response.ok) await throwAiResponseError(new Response(JSON.stringify(data), { status: response.status, headers: { "Content-Type": "application/json" } }), () => void askAi(), ownership);
+      if (!ownership.isCurrent()) return;
       if (!data.ok) throw new Error(data.error ?? "AI setup failed");
       if (data.question) setAiQuestion(data.question);
       if (data.proposal) {
         setProposal(data.proposal);
         setApprovedOps(new Set(data.proposal.operations.map((entry, index) => entry.approval === "automatic" ? index : -1).filter((index) => index >= 0)));
       }
-    } catch (error) { setAiError(error instanceof Error ? error.message : String(error)); }
-    finally { setAiBusy(false); }
+    } catch (error) { if (ownership.isCurrent()) setAiError(error instanceof Error ? error.message : String(error)); }
+    finally { if (aliveRef.current) setAiBusy(false); }
   }
 
   async function applyProposal() {
@@ -508,7 +540,7 @@ export default function SpiceStudio({ schematic, legacyPanel }: { schematic: Sch
       <div className="min-h-0 flex-1">
         {layout.activeWorkspace === "setup" && <SetupWorkspace project={project} activeTest={activeTest} activeTestId={activeTestId} setActiveTestId={setActiveTestId} section={section} setSection={setSection} compile={compile} compiling={compiling} schematic={schematic} countFor={(sectionId) => countForSection(activeTest, project, sectionId)} mutateTest={mutateActiveTest} commitProject={commitProject} parts={parts} />}
         {layout.activeWorkspace === "runs" && <RunsWorkspace runs={runs} selectedRunId={selectedRun?.id ?? null} onSelect={(id) => { setSelectedRunId(id); setWorkspace("results"); }} onCancel={(id) => void cancelRun(id)} batch={activeBatch} />}
-        {layout.activeWorkspace === "results" && <ResultsWorkspace run={selectedRun} runs={runs} compareRun={comparisonRun} compareRunId={compareRunId} setCompareRunId={setCompareRunId} panes={resultPanes} activePaneId={activePaneId} setActivePaneId={setActivePaneId} setPanes={setResultPanes} toggleSignal={togglePaneSignal} exportCsv={exportRunCsv} legacyPanel={legacyPanel} legacyOpen={legacyOpen} setLegacyOpen={setLegacyOpen} />}
+        {layout.activeWorkspace === "results" && <ResultsWorkspace run={selectedRun} runs={runs} compareRun={comparisonRun} compareRunId={compareRunId} setCompareRunId={setCompareRunId} panes={resultPanes} activePaneId={activePaneId} setActivePaneId={setActivePaneId} setPanes={setResultPanes} toggleSignal={togglePaneSignal} exportCsv={exportRunCsv} legacyPanel={legacyPanel} legacyOpen={legacyOpen} setLegacyOpen={setLegacyOpen} projectScope={projectScope} />}
         {layout.activeWorkspace === "models" && <ModelsWorkspace project={project} schematic={schematic} parts={parts} report={modelImport} busy={modelImportBusy} onFile={importModel} onSmoke={() => void smokeImportedModel()} onAdd={addImportedModel} onDismiss={() => setModelImport(null)} commitProject={commitProject} />}
         {layout.activeWorkspace === "reports" && <ReportsWorkspace project={project} runs={runs} />}
       </div>
@@ -653,11 +685,11 @@ function RunsWorkspace({ runs, selectedRunId, onSelect, onCancel, batch }: { run
   return <div className="h-full overflow-auto p-5"><div className="mx-auto max-w-7xl"><div className="mb-5 flex items-end justify-between"><div><div className="text-[10px] uppercase tracking-[0.18em] text-zinc-600">Simulation orchestrator</div><h2 className="mt-1 text-xl font-semibold">Run monitor</h2></div>{batch && <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-xs"><span className="text-zinc-500">Batch </span>{batch.completed}/{batch.total} completed · {batch.failed} failed</div>}</div>{runs.length === 0 ? <Empty>No runs yet. Execute the active plan from the persistent run bar.</Empty> : <div className="overflow-hidden rounded-xl border border-zinc-800"><table className="w-full text-left text-xs"><thead className="bg-zinc-900 text-[10px] uppercase text-zinc-600"><tr><th className="px-3 py-2">Run</th><th>Status</th><th>Progress</th><th>Started</th><th>Evidence</th><th /></tr></thead><tbody>{runs.map((run) => <tr key={run.id} onDoubleClick={() => onSelect(run.id)} className={`border-t border-zinc-800 hover:bg-zinc-900/60 ${run.id === selectedRunId ? "bg-teal-500/5" : ""}`}><td className="max-w-md px-3 py-3"><div className="truncate font-medium text-zinc-200">{run.label}</div><div className="mt-0.5 font-mono text-[9px] text-zinc-700">{run.id}</div></td><td><span className={`rounded px-2 py-1 text-[9px] font-medium ${STATUS_STYLE[run.status]}`}>{run.status}</span></td><td className="w-44"><div className="mr-4 h-1.5 rounded bg-zinc-800"><div className="h-full rounded bg-teal-500 transition-all" style={{ width: `${run.progress}%` }} /></div></td><td className="text-[10px] text-zinc-500">{new Date(run.createdAt).toLocaleTimeString()}</td><td className="text-[10px] text-zinc-500">{run.waveforms.length} traces · {run.scalars.length} scalar</td><td className="pr-3 text-right"><button onClick={() => onSelect(run.id)} className="studio-button">Open</button>{!["completed", "failed", "cancelled"].includes(run.status) && <button onClick={() => onCancel(run.id)} className="studio-icon ml-1 text-red-400"><CircleStop className="size-3.5" /></button>}</td></tr>)}</tbody></table></div>}</div></div>;
 }
 
-function ResultsWorkspace(props: { run: RunRecord | null; runs: RunRecord[]; compareRun: RunRecord | null; compareRunId: string | null; setCompareRunId(id: string | null): void; panes: ResultPane[]; activePaneId: string; setActivePaneId(id: string): void; setPanes(fn: (panes: ResultPane[]) => ResultPane[]): void; toggleSignal(name: string): void; exportCsv(run: RunRecord): void; legacyPanel?: ReactNode; legacyOpen: boolean; setLegacyOpen(open: boolean): void }) {
+function ResultsWorkspace(props: { run: RunRecord | null; runs: RunRecord[]; compareRun: RunRecord | null; compareRunId: string | null; setCompareRunId(id: string | null): void; panes: ResultPane[]; activePaneId: string; setActivePaneId(id: string): void; setPanes(fn: (panes: ResultPane[]) => ResultPane[]): void; toggleSignal(name: string): void; exportCsv(run: RunRecord): void; legacyPanel?: ReactNode; legacyOpen: boolean; setLegacyOpen(open: boolean): void; projectScope: ProjectSelectorScope | null }) {
   const { run } = props;
   if (!run) return <div className="grid h-full place-items-center text-sm text-zinc-600">Run a test plan or choose a stored result.</div>;
   const comparison = props.compareRun ? compareRunRecords(run, props.compareRun) : null;
-  return <div className="flex h-full min-h-0 flex-col"><div className="flex h-10 shrink-0 items-center gap-2 border-b border-zinc-800 px-3 text-[11px]"><select value={run.id} disabled className="h-7 max-w-md rounded border border-zinc-700 bg-zinc-900 px-2"><option>{run.label}</option></select><GitCompareArrows className="ml-2 size-3.5 text-zinc-600" /><select value={props.compareRunId ?? ""} onChange={(event) => props.setCompareRunId(event.target.value || null)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-zinc-300"><option value="">Compare against…</option>{props.runs.filter((candidate) => candidate.id !== run.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select><button onClick={() => props.exportCsv(run)} className="studio-button ml-auto"><Download className="size-3.5" />CSV</button><button onClick={() => downloadText(`${run.id}.json`, JSON.stringify(run, null, 2), "application/json")} className="studio-button"><FileJson className="size-3.5" />JSON</button>{run.manifest && <a href={`/api/spice/runs/${run.id}/bundle`} className="studio-button"><FileArchive className="size-3.5" />Run bundle</a>}{props.legacyPanel && <button onClick={() => props.setLegacyOpen(!props.legacyOpen)} className="studio-button"><PanelBottom className="size-3.5" />Quick scope</button>}</div>
+  return <div className="flex h-full min-h-0 flex-col"><div className="flex h-10 shrink-0 items-center gap-2 border-b border-zinc-800 px-3 text-[11px]"><select value={run.id} disabled className="h-7 max-w-md rounded border border-zinc-700 bg-zinc-900 px-2"><option>{run.label}</option></select><GitCompareArrows className="ml-2 size-3.5 text-zinc-600" /><select value={props.compareRunId ?? ""} onChange={(event) => props.setCompareRunId(event.target.value || null)} className="h-7 rounded border border-zinc-700 bg-zinc-900 px-2 text-zinc-300"><option value="">Compare against…</option>{props.runs.filter((candidate) => candidate.id !== run.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.label}</option>)}</select><button onClick={() => props.exportCsv(run)} className="studio-button ml-auto"><Download className="size-3.5" />CSV</button><button onClick={() => downloadText(`${run.id}.json`, JSON.stringify(run, null, 2), "application/json")} className="studio-button"><FileJson className="size-3.5" />JSON</button>{run.manifest && <a href={withProjectSelectorQuery(`/api/spice/runs/${run.id}/bundle`, props.projectScope)} className="studio-button"><FileArchive className="size-3.5" />Run bundle</a>}{props.legacyPanel && <button onClick={() => props.setLegacyOpen(!props.legacyOpen)} className="studio-button"><PanelBottom className="size-3.5" />Quick scope</button>}</div>
     {props.legacyOpen && props.legacyPanel ? <div className="relative min-h-0 flex-1">{props.legacyPanel}</div> : <div className="flex min-h-0 flex-1"><aside className="w-60 shrink-0 overflow-auto border-r border-zinc-800 p-2"><div className="mb-2 text-[10px] uppercase tracking-[0.16em] text-zinc-600">Signals</div>{run.waveforms.map((waveform) => { const active = props.panes.find((pane) => pane.id === props.activePaneId)?.signals.includes(waveform.name); return <button key={waveform.id} onClick={() => props.toggleSignal(waveform.name)} className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[11px] ${active ? "bg-teal-500/10 text-teal-300" : "text-zinc-400 hover:bg-zinc-900"}`}><span className="size-1.5 rounded-full bg-teal-400" /><span className="min-w-0 flex-1 truncate">{waveform.name}</span><span className="text-[9px] text-zinc-700">{waveform.unit}</span></button>})}<button onClick={() => { const pane = { id: createId("pane"), title: `Pane ${props.panes.length + 1}`, signals: [] }; props.setPanes((panes) => [...panes, pane]); props.setActivePaneId(pane.id); }} className="studio-button mt-2 w-full"><Plus className="size-3.5" />Add pane</button></aside><main className="min-w-0 flex-1 overflow-auto p-3"><div className="space-y-3">{props.panes.map((pane) => <div key={pane.id} onClick={() => props.setActivePaneId(pane.id)} className={props.activePaneId === pane.id ? "ring-1 ring-teal-500/60 rounded-lg" : ""}><SpiceWaveformPlot title={pane.title} series={run.waveforms.filter((waveform) => pane.signals.includes(waveform.name))} xScale={run.waveforms[0]?.xName.toLowerCase() === "frequency" ? "log" : "linear"} height={Math.max(260, Math.floor(520 / props.panes.length))} /></div>)}</div></main><aside className="w-80 shrink-0 overflow-auto border-l border-zinc-800 p-3"><div className="mb-3 flex items-center gap-2"><Table2 className="size-4 text-teal-400" /><div className="text-xs font-semibold">Measurements & specifications</div></div>{run.scalars.length === 0 ? <Empty>No scalar results for this run.</Empty> : <div className="space-y-1">{run.scalars.map((scalar) => <div key={scalar.id} className="rounded border border-zinc-800 p-2"><div className="flex items-center"><span className="min-w-0 flex-1 truncate text-[11px]">{scalar.name}</span><span className={`rounded px-1.5 py-0.5 text-[8px] uppercase ${scalar.status === "pass" ? "bg-emerald-950 text-emerald-300" : scalar.status === "fail" || scalar.status === "error" ? "bg-red-950 text-red-300" : scalar.status === "warning" ? "bg-amber-950 text-amber-300" : "bg-zinc-800 text-zinc-500"}`}>{scalar.status}</span></div><div className="mt-1 font-mono text-sm text-zinc-200">{scalar.value === undefined ? "—" : formatEngineering(scalar.value, scalar.unit ?? "", 7)}</div>{scalar.message && <div className="mt-1 text-[9px] text-zinc-600">{scalar.message}</div>}</div>)}</div>}{comparison && <div className="mt-4 rounded border border-zinc-800 p-2"><div className="text-[10px] font-semibold uppercase text-zinc-500">Comparison · {comparison.status}</div>{comparison.scalarChanges.slice(0, 8).map((change) => <div key={change.name} className="mt-1 flex justify-between text-[9px]"><span>{change.name}</span><span className={change.delta && change.delta > 0 ? "text-amber-400" : "text-zinc-500"}>{change.delta === undefined ? "—" : formatEngineering(change.delta, "", 4)}</span></div>)}</div>}</aside></div>}
     {!props.legacyOpen && <div className="h-36 shrink-0 overflow-auto border-t border-zinc-800 bg-black p-2 font-mono text-[10px] text-zinc-500"><div className="mb-1 text-zinc-700">SIMULATION CONSOLE · {run.manifest?.simulator.version ?? "manifest pending"}</div>{run.events.map((event) => <div key={event.sequence}><span className="text-zinc-700">{new Date(event.timestamp).toLocaleTimeString()} </span><span className="text-teal-700">[{event.status}]</span> {event.message}</div>)}{run.stderr && <pre className="mt-2 whitespace-pre-wrap text-red-400/70">{run.stderr}</pre>}</div>}
   </div>;
