@@ -1,14 +1,15 @@
 import { asc, eq } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { atomicPartRevisions } from "@/app/lib/db/schema";
-import { authorizeKicadHttpLibrary } from "@/app/lib/atomic/server-auth";
+import { kicadLibraryRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }): Promise<Response> {
-  const denied = authorizeKicadHttpLibrary(request);
-  if (denied) return denied;
-  const raw = (await context.params).id;
+// [B16.0.12] canonical narrow variant — the constant-time KiCad token boundary
+// runs inside the wrapper BEFORE parameter processing; the callback receives a
+// bounded plain param record, never the Authorization header or the Request.
+export const GET = kicadLibraryRoute({ routeParams: ["id"] }, async ({ params }): Promise<Response> => {
+  const raw = params!.id;
   const id = raw.endsWith(".json") ? raw.slice(0, -5) : raw;
   if (id !== "published") return Response.json([], { status: 200 });
   try {
@@ -26,4 +27,4 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Catalog unavailable" }, { status: 500 });
   }
-}
+});
