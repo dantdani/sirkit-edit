@@ -1,0 +1,6 @@
+# Enforce LF in working trees on every platform. The repository's committed
+# blobs are LF; several executable gates scan source files for \n-joined
+# patterns, and the migration-ratchet baseline records sha1s of route-file
+# BYTES — a CRLF-smudged checkout (Windows autocrlf) breaks both. text=auto
+# leaves binary files untouched.
+* text=auto eol=lf
