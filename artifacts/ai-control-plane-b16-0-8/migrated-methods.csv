@@ -1,0 +1,16 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/assignment-queue/materialize,auth,canonical-wrapper,workerJsonRoute,(adopted),adopted
+POST,/api/assignment-queue/revalidate,auth,canonical-wrapper,workerRoute,(adopted),adopted
+POST,/api/constraints/explain,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/constraints/preview,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/engineering-effects,auth,canonical-wrapper,workerRoute,(adopted),adopted
+GET,/api/footprint-resolution,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+GET,/api/kicad/v1/categories.json,public,canonical-wrapper,kicadLibraryRoute,(adopted),adopted
+GET,/api/kicad/v1/parts/[id],public,canonical-wrapper,kicadLibraryRoute,(adopted),adopted
+GET,/api/kicad/v1,public,canonical-wrapper,kicadLibraryRoute,(adopted),adopted
+GET,/api/mapping-verification,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+GET,/api/parts/categories,public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/parts/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+GET,/api/requirements/capabilities,public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/requirements/compile,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/requirements/sources,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
