@@ -1,3 +1,4 @@
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { llmRouter } from "@/app/lib/llm/router";
 import { providerErrorResponse } from "@/app/lib/llm/errors";
 import { requestedProvider } from "@/app/lib/llm/request";
@@ -5,8 +6,9 @@ import {
   assistantResponseMessage,
   toolResultsMessage,
   type LLMMessage,
-  type LLMTool,
+  type LLMResponse,
 } from "@/app/lib/llm/types";
+import { SPICE_TOOL_SCHEMAS, validateSpiceToolInput } from "./_tools";
 import { createId, nowIso } from "@/app/lib/spice/identity";
 import { createDefaultTest } from "@/app/lib/spice/project";
 import { auditSimulationReadiness } from "@/app/lib/spice/readiness";
@@ -36,28 +38,6 @@ const MAX_ITERATIONS = 18;
 
 type JsonObject = Record<string, unknown>;
 
-const TOOL_SCHEMAS: LLMTool[] = [
-  { name: "inspect_schematic", description: "Inspect the immutable design revision, components, nets, and current simulation setup.", inputSchema: { type: "object", properties: {} } },
-  { name: "audit_simulation_readiness", description: "Run the deterministic readiness audit and return blocking errors, warnings, and fixes.", inputSchema: { type: "object", properties: { test_id: { type: "string" } } } },
-  { name: "search_models", description: "Search governed simulation models by query and validation constraints.", inputSchema: { type: "object", properties: { query: { type: "string" }, category: { type: "string" }, trusted_only: { type: "boolean" } }, required: ["query"] } },
-  { name: "assign_model", description: "Propose assigning a governed model and explicit symbol-to-model pin map. Review is always required.", inputSchema: { type: "object", properties: { component_id: { type: "string" }, model_id: { type: "string" }, pin_map: { type: "object", additionalProperties: { type: "string" } }, confidence: { type: "number", minimum: 0, maximum: 1 }, rationale: { type: "string" } }, required: ["component_id", "model_id", "pin_map", "confidence", "rationale"] } },
-  { name: "create_test", description: "Propose a named, non-destructive simulation test overlay.", inputSchema: { type: "object", properties: { name: { type: "string" }, description: { type: "string" } }, required: ["name"] } },
-  { name: "add_overlay_element", description: "Propose a simulation-only source, load, probe, initial condition, or fault.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, kind: { type: "string", enum: ["voltage-source", "current-source", "resistive-load", "capacitive-load", "inductive-load", "probe", "initial-condition", "fault"] }, name: { type: "string" }, positive_net: { type: "string" }, negative_net: { type: "string" }, target_net: { type: "string" }, value: { type: "string" }, waveform: { type: "string" }, quantity: { type: "string", enum: ["voltage", "current", "power"] }, fault: { type: "string", enum: ["open", "short", "stuck-high", "stuck-low"] }, rationale: { type: "string" } }, required: ["test_id", "kind", "name", "rationale"] } },
-  { name: "set_design_variable", description: "Propose a unit-aware design variable and optional bounds/tolerance distribution.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, value: { type: "string" }, unit: { type: "string" }, description: { type: "string" }, min: { type: "string" }, max: { type: "string" }, distribution: { type: "object" } }, required: ["test_id", "name", "value", "unit"] } },
-  { name: "configure_analysis", description: "Propose an operating-point, DC, AC, transient, or noise analysis using structured fields.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, type: { type: "string", enum: ["op", "dc", "ac", "tran", "noise"] }, source: { type: "string" }, start: { type: "string" }, stop: { type: "string" }, step: { type: "string" }, scale: { type: "string", enum: ["dec", "oct", "lin"] }, points: { type: "integer" }, start_frequency: { type: "string" }, stop_frequency: { type: "string" }, output_step: { type: "string" }, stop_time: { type: "string" }, max_step: { type: "string" }, output: { type: "string" }, input_source: { type: "string" }, rationale: { type: "string" } }, required: ["test_id", "name", "type", "rationale"] } },
-  { name: "configure_sweep", description: "Propose a linear, logarithmic, or list sweep over a named design variable.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, variable: { type: "string" }, kind: { type: "string", enum: ["linear", "log", "list"] }, start: { type: "string" }, stop: { type: "string" }, step: { type: "string" }, points_per_decade: { type: "integer" }, values: { type: "array", items: { type: "string" } } }, required: ["test_id", "name", "variable", "kind"] } },
-  { name: "configure_corner_set", description: "Propose named supply, component, temperature, or model corners.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, corners: { type: "array", items: { type: "object", properties: { name: { type: "string" }, values: { type: "object", additionalProperties: { type: "string" } }, temperature_c: { type: "number" } }, required: ["name", "values"] } } }, required: ["test_id", "name", "corners"] } },
-  { name: "define_measurement", description: "Propose a typed engineering measurement tied to actual saved signals.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, operator: { type: "string" }, expression: { type: "string" }, secondary_expression: { type: "string" }, unit: { type: "string" }, from: { type: "string" }, to: { type: "string" }, at: { type: "string" }, threshold: { type: "number" }, tolerance: { type: "number" }, description: { type: "string" } }, required: ["test_id", "name", "operator", "expression"] } },
-  { name: "define_specification", description: "Propose pass/fail logic around a previously defined measurement.", inputSchema: { type: "object", properties: { test_id: { type: "string" }, name: { type: "string" }, measurement_name: { type: "string" }, comparison: { type: "string", enum: ["<", "<=", ">", ">=", "between", "outside"] }, limit: { type: "number" }, upper_limit: { type: "number" }, unit: { type: "string" }, severity: { type: "string", enum: ["warning", "error"] } }, required: ["test_id", "name", "measurement_name", "comparison", "limit", "unit", "severity"] } },
-  { name: "estimate_run_plan", description: "Expand the structured run plan and return exact run count, cost estimate, and warnings.", inputSchema: { type: "object", properties: { run_plan_id: { type: "string" } }, required: ["run_plan_id"] } },
-  { name: "run_simulation", description: "Propose executing a run plan. The user still sees and approves the structured proposal.", inputSchema: { type: "object", properties: { run_plan_id: { type: "string" }, rationale: { type: "string" } }, required: ["run_plan_id", "rationale"] } },
-  { name: "read_results", description: "Read actual run scalars and signal ranges. Using this tool creates evidence references for conclusions.", inputSchema: { type: "object", properties: { run_id: { type: "string" }, signals: { type: "array", items: { type: "string" } } }, required: ["run_id"] } },
-  { name: "diagnose_failure", description: "Read structured diagnostics, logs, and source mappings for a failed run.", inputSchema: { type: "object", properties: { run_id: { type: "string" } }, required: ["run_id"] } },
-  { name: "compare_runs", description: "Compare scalar results, statuses, analyses, and model checksums across two runs.", inputSchema: { type: "object", properties: { run_a: { type: "string" }, run_b: { type: "string" } }, required: ["run_a", "run_b"] } },
-  { name: "propose_design_patch", description: "Propose—but never apply—a production schematic change grounded in result evidence. Explicit confirmation is required.", inputSchema: { type: "object", properties: { description: { type: "string" }, changes: { type: "array", items: { type: "object" } } }, required: ["description", "changes"] } },
-  { name: "ask_user", description: "Ask one concise question when a safety-critical requirement is ambiguous.", inputSchema: { type: "object", properties: { question: { type: "string" } }, required: ["question"] } },
-  { name: "submit_proposal", description: "Finish by presenting the recorded typed operations for review, with assumptions and uncertainty.", inputSchema: { type: "object", properties: { summary: { type: "string" }, rationale: { type: "string" }, confidence: { type: "number", minimum: 0, maximum: 1 }, assumptions: { type: "array", items: { type: "string" } }, uncertainty: { type: "string" } }, required: ["summary", "rationale", "confidence", "assumptions"] } },
-];
 
 const SYSTEM_PROMPT = `You are Sirkit SPICE Studio's simulation engineer. Work only through the typed tools. Inspect the schematic and run the deterministic readiness audit before proposing setup. Do not invent nets, components, models, signals, measurements, or result values. Testbench elements are overlays; never mutate the production schematic. Model assignments, pin maps, analyses, distributions, and solver changes require review. Production component or topology changes require explicit confirmation. Before any claim about results, call read_results, diagnose_failure, or compare_runs; the gateway attaches evidence. State uncertainty when models are approximate or unverified. Build the smallest technically sufficient setup, record operations with tools, then call submit_proposal.`;
 
@@ -165,9 +145,17 @@ function measurementOperation(raw: JsonObject): Extract<AiStudioOperation, { op:
   return { op: "define-measurement", testId: string(raw, "test_id"), measurement };
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { instruction?: string; project?: SimulationProject; testId?: string; parts?: SimulationPartSnapshot[]; runs?: RunRecord[]; provider?: unknown };
-  try { body = await req.json() as typeof body; } catch { return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 }); }
+// B16.0.1 §A: provider-credit route — require a trusted, active project
+// member (editor role) and same-origin CSRF before spending any credit.
+// [B16.0.23 §G] canonical wrapper — that boundary (authorization → media
+// type → bounded 8 MB / 30 s read) now lives in `authenticatedJsonRoute`;
+// the callback never sees the Request. Every refusal above and below spends
+// ZERO provider credit. The AI surface is PROPOSAL-ONLY: it records typed
+// operations for human review and can never create, run, cancel, delete,
+// certify, or approve a simulation.
+export const POST = authenticatedJsonRoute<{ instruction?: string; project?: SimulationProject; testId?: string; parts?: SimulationPartSnapshot[]; runs?: RunRecord[]; provider?: unknown }>(
+  { maxBytes: 8_000_000, deadlineMs: 30_000 },
+  async ({ body }) => {
   if (!body.project || typeof body.instruction !== "string" || body.instruction.trim() === "") return Response.json({ ok: false, error: "instruction and project are required" }, { status: 400 });
   const project = body.project;
   const parts = body.parts ?? [];
@@ -176,11 +164,22 @@ export async function POST(req: Request): Promise<Response> {
   const evidence: EvidenceRef[] = [];
   const provider = requestedProvider(body.provider);
   const messages: LLMMessage[] = [{ role: "user", content: `Current selected test: ${body.testId ?? "none"}\nUser request: ${body.instruction.trim()}` }];
-  try {
-    for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
-      const response = await llmRouter.generate({ provider, maxTokens: 4096, temperature: 0, system: SYSTEM_PROMPT, tools: TOOL_SCHEMAS, toolChoice: "required", messages, schematicState: schematicDigest(project, parts), userRequest: body.instruction.trim() });
+  for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+    // [B16.0.23 §G] provider-invocation-ONLY try/catch — exclusively a
+    // genuine provider failure may produce the 503 provider envelope.
+    let response: LLMResponse;
+    try {
+      response = await llmRouter.generate({ provider, maxTokens: 4096, temperature: 0, system: SYSTEM_PROMPT, tools: SPICE_TOOL_SCHEMAS, toolChoice: "required", messages, schematicState: schematicDigest(project, parts), userRequest: body.instruction.trim() });
+    } catch (error) {
+      return providerErrorResponse(error, provider);
+    }
+    try {
       const tool = response.toolCalls[0];
-      if (!tool) throw new Error("AI did not call a typed simulation tool");
+      if (!tool) return Response.json({ ok: false, code: "SPICE_AI_NO_TOOL_CALL", error: "AI did not call a typed simulation tool" }, { status: 422, headers: { "Cache-Control": "no-store" } });
+      // [B16.0.23 §G] structural validation against the EXACT schema node
+      // the provider was shown — BEFORE any tool handler or normalization.
+      const validated = validateSpiceToolInput(tool.name, tool.input);
+      if (!validated.ok) return Response.json({ ok: false, code: "SPICE_AI_TOOL_INPUT_INVALID", error: validated.error }, { status: 422, headers: { "Cache-Control": "no-store" } });
       const raw = object(tool.input);
       let toolResult: unknown;
       if (tool.name === "inspect_schematic") toolResult = schematicDigest(project, parts);
@@ -252,12 +251,15 @@ export async function POST(req: Request): Promise<Response> {
       } else throw new Error(`Unknown tool ${tool.name}`);
       messages.push(assistantResponseMessage(response));
       messages.push(toolResultsMessage([{ type: "tool_result", toolCallId: tool.id, output: JSON.stringify(toolResult).slice(0, 30_000) }]));
+    } catch (error) {
+      // [B16.0.23 §G] LOCAL failure (unknown tool, semantic refusal such as
+      // a missing test/model/run, malformed nested input): a DETERMINISTIC
+      // local envelope — the provider is never blamed for local validation.
+      return Response.json({ ok: false, code: "SPICE_AI_REQUEST_INVALID", error: error instanceof Error ? error.message : String(error) }, { status: 422, headers: { "Cache-Control": "no-store" } });
     }
-    return Response.json({ ok: false, error: "AI tool loop reached its iteration limit" }, { status: 422 });
-  } catch (error) {
-    return providerErrorResponse(error, provider);
   }
-}
+  return Response.json({ ok: false, error: "AI tool loop reached its iteration limit" }, { status: 422 });
+  });
 
 function dedupeEvidence(evidence: EvidenceRef[]): EvidenceRef[] {
   const seen = new Set<string>();

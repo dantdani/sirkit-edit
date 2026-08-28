@@ -7,8 +7,13 @@ import { createId, nowIso } from "@/app/lib/spice/identity";
 import { assertModelSafeForExecution } from "@/app/lib/spice/models";
 import { NGSPICE_EXECUTABLE } from "@/app/lib/spice/server/worker";
 import type { ModelAsset } from "@/app/lib/spice/types";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
+
+/** [B16.0.2 §A/§D] a single model asset travels in the body. */
+const MAX_BODY_BYTES = 2_000_000;
+const BODY_DEADLINE_MS = 15_000;
 
 function fixture(model: ModelAsset): string {
   const content = model.transformedContent ?? model.originalContent;
@@ -62,10 +67,17 @@ async function execute(path: string, cwd: string): Promise<{ code: number | null
   });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { model?: ModelAsset };
-  try { body = await req.json() as typeof body; } catch { return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 }); }
-  if (!body.model) return Response.json({ ok: false, error: "model is required" }, { status: 400 });
+// [B16.0.2 §A] ngspice is an external process: authenticated membership +
+// engineering role + CSRF BEFORE the body is read or any process spawns.
+// [B16.0.23] canonical wrapper — that ordering now lives in
+// `authenticatedJsonRoute` (2 MB / 15 s bounded read); every refusal returns
+// before `spawn`. The executable, args, cwd, timeout, and output ceilings
+// stay server-owned; a smoke-test PASS is evidence only ("smoke-tested"),
+// never model approval or certification.
+export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
+  { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS },
+  async ({ body }) => {
+  if (!body.model || typeof body.model !== "object") return Response.json({ ok: false, error: "model is required" }, { status: 400 });
   const model = structuredClone(body.model);
   let directory: string | null = null;
   try {
@@ -93,4 +105,4 @@ export async function POST(req: Request): Promise<Response> {
   } finally {
     if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
-}
+  });
