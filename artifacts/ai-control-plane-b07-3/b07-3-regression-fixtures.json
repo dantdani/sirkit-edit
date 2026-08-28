@@ -1,0 +1,33 @@
+{
+  "schema": "sirkit.b07-3-regression-fixtures.v1",
+  "suite": "app/lib/engineering/__tests__/b07-3-serialization.test.ts",
+  "fixtures": [
+    { "id": 1, "title": "Two concurrent commands both apply FIFO; UI == durable head", "prefix_behavior": "statusA completed, statusB discarded-stale, durable head held both while the UI showed only A (reproduced before fix)", "expected": "both applied; head sequence 2; visible digest equals head digest" },
+    { "id": 2, "title": "Three rapid property edits ordered, none discarded", "expected": "applied x3 in submission order; final value = third edit" },
+    { "id": 3, "title": "First-command failure does not poison the queue", "expected": "rejected then applied against the unchanged head" },
+    { "id": 4, "title": "Sealed proposal queued behind another mutation", "expected": "session rejects EXPECTED_BASE_DIGEST_MISMATCH; nothing changed by the proposal" },
+    { "id": 5, "title": "Project switch before a queued command starts", "expected": "canceled-stale stage before-execution — never executed, never adopted" },
+    { "id": 6, "title": "Old-session commit after a switch", "expected": "canceled-stale stage after-commit; old session durable head advanced; new project UI untouched" },
+    { "id": 7, "title": "Invalid AI lifecycle result", "prefix_behavior": "invalid candidate rendered + authoritative while ready session held the old head (reproduced before fix)", "expected": "rejected-invalid; UI/mirror/history/head all unchanged" },
+    { "id": 8, "title": "Quarantine/persistence failure during adoption", "expected": "persistence-failed; everything unchanged" },
+    { "id": 9, "title": "Successful lifecycle adoption", "expected": "canonical adoption first, then UI, then extras — atomically in one queue job" },
+    { "id": "10-12", "title": "Checkpoint restore semantics", "expected": "invalid → nothing (no dialog/PCB/chat/success); persistence failure → no success extras; success → extras only after adoption" },
+    { "id": 13, "title": "Sheet-size adoption", "expected": "failure retains prior size (extras never run); the independent repro shape (command + sheet change) lands FIFO with UI == head, visiblePageSize consistent" },
+    { "id": 14, "title": "Response pinned to project A after switch to B", "expected": "canceled-stale-project via the stillCurrent project token — even when SUBMITTED after the switch; neither session touched" },
+    { "id": "15-16", "title": "AI/tidy result after an intervening manual edit", "expected": "canceled-stale-base via the exact-base pin; the newer manual edit stands" },
+    { "id": 17, "title": "Advisory snapshot during an active preview", "expected": "authoritativeState() never contains preview geometry" },
+    { "id": 18, "title": "Page wiring (supplement)", "expected": "pins captured before async producers; appendChatFor project guards; all lifecycle replacements through the gateway; no direct adoptLifecycleProjection().then() remains; no visible-array request bodies" },
+    { "id": 19, "title": "Undo reconciliation failure", "expected": "failed; cursor, projection, authoritative state, and canonical head unchanged" },
+    { "id": 20, "title": "Undo blocks gestures and commands until reconciliation settles", "expected": "begin() false and commands queue behind; both consistent after settlement" },
+    { "id": 21, "title": "Successful undo", "expected": "verified replay first; cursor+projection after; UI == canonical head == history present" },
+    { "id": 22, "title": "Recovery bypass via lifecycle adoption", "expected": "rejected-conflicted while invalid-projection recovery pending" },
+    { "id": 23, "title": "Autosave adoption candidates", "expected": "authoritative snapshot (autosave source) never contains an unadopted candidate mid-flight" }
+  ],
+  "regression_suites_still_green": [
+    "b07-2-interaction-interlock (preview→Rotate closed, export fail-closed route tests)",
+    "b07-1-identity-geometry-gestures (identity/geometry/setter gate)",
+    "b07-graph-gestures (graph + gesture + boundary)",
+    "b06 / b06-1 / b06-2 / b06-3 (authority, durability, lineage, quarantine, mark sanitization)",
+    "action-registry / tool-registry gates (AI mutation exposure closed)"
+  ]
+}
