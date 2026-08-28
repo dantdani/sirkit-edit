@@ -23,6 +23,7 @@ import { shapeDistance, shapeBBox } from "../geometry";
 import type { PcbBoard } from "../types";
 import { trackShape, padWorldShape, segmentDistance } from "../geometry-copper";
 import { silkItemPolylines } from "../silk/geometry";
+import { dimensionGeometry, dimensionHitDistanceNm } from "../dimensions/geometry";
 import { mmToNm } from "../units";
 
 export type OutlineHandleId = "nw" | "ne" | "sw" | "se" | `v${number}`;
@@ -35,6 +36,8 @@ export type PickResult =
   | { kind: "track"; id: string }
   | { kind: "zone"; id: string }
   | { kind: "text"; id: string }
+  // B08: dimension annotations.
+  | { kind: "dimension"; id: string }
   | { kind: "pad"; footprintId: string; padNumber: string };
 
 /** Fixed at-cursor pick tolerance for copper/text items (Stage 17). */
@@ -47,6 +50,7 @@ const PRIORITY: Record<PickResult["kind"], number> = {
   pad: 5,
   track: 4,
   text: 3,
+  dimension: 3,
   footprint: 2,
   zone: 1,
 };
@@ -224,6 +228,16 @@ export function buildBoardPickEntries(
         maxY: via.at.y + r,
       },
       hit: (p) => Math.hypot(p.x - via.at.x, p.y - via.at.y) <= r + tolNm,
+    });
+  }
+
+  // B08: dimension annotations pick on their exact strokes (shared geometry).
+  for (const dimension of board.dimensions ?? []) {
+    const geometry = dimensionGeometry(dimension);
+    entries.push({
+      result: { kind: "dimension", id: dimension.id },
+      bbox: geometry.bbox,
+      hit: (p) => dimensionHitDistanceNm(dimension, p) <= dimension.strokeWidthNm / 2 + tolNm,
     });
   }
 

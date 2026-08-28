@@ -89,6 +89,21 @@ function emitNetClasses(board: PcbBoard, nets: KicadNetRef[], rules: DrcRules): 
   return out;
 }
 
+/**
+ * B08 — capabilities this exporter can NOT represent truthfully. Dimension
+ * annotations have no emitter yet: exporting a board that carries them must
+ * surface an EXPLICIT diagnostic (never silently omit content while
+ * claiming a complete export). The caller (route → client) shows it.
+ */
+export function kicadExportUnsupportedDiagnostics(board: PcbBoard): string[] {
+  const diagnostics: string[] = [];
+  const dimensions = board.dimensions?.length ?? 0;
+  if (dimensions > 0) {
+    diagnostics.push(`${dimensions} dimension annotation(s) are NOT included in the .kicad_pcb output — the exporter cannot represent Sirkit dimensions yet. The exported copper/silk/outline are complete.`);
+  }
+  return diagnostics;
+}
+
 export function writeKicadPcb(
   board: PcbBoard,
   netlist: PcbNetlist,

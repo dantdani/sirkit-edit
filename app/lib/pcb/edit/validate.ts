@@ -59,6 +59,8 @@ export function refExists(board: PcbBoard, ref: SelectionRef): boolean {
       return findZone(board, ref.id) !== undefined;
     case "text":
       return findSilkText(board, ref.id) !== undefined;
+    case "dimension":
+      return (board.dimensions ?? []).some((d) => d.id === ref.id);
     case "footprint":
       return findFootprint(board, ref.id) !== undefined;
     case "pad": {

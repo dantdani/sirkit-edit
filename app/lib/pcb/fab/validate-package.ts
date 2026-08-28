@@ -65,14 +65,14 @@ function pathIssues(paths: string[]): ManufacturingValidationIssue[] {
 function requiredRoleIssues(records: ManufacturingReleaseFile[], mir: ManufacturingIr): ManufacturingValidationIssue[] {
   const roles = new Set(records.map((record) => record.role));
   const issues: ManufacturingValidationIssue[] = [];
-  const require = (role: ManufacturingReleaseFile["role"]): void => {
+  const requireRole = (role: ManufacturingReleaseFile["role"]): void => {
     if (!roles.has(role)) issues.push({ code: "MFG_REQUIRED_FILE_MISSING", message: `Required ${role} output is missing.` });
   };
-  for (const role of ["copper_top", "copper_bottom", "mask_top", "mask_bottom", "outline", "readme"] as const) require(role);
-  if (mir.drills.some((drill) => drill.plated)) require("pth_drill");
-  if (mir.drills.some((drill) => !drill.plated)) require("npth_drill");
+  for (const role of ["copper_top", "copper_bottom", "mask_top", "mask_bottom", "outline", "readme"] as const) requireRole(role);
+  if (mir.drills.some((drill) => drill.plated)) requireRole("pth_drill");
+  if (mir.drills.some((drill) => !drill.plated)) requireRole("npth_drill");
   for (const [layerId, role] of [["silkTop", "silk_top"], ["silkBottom", "silk_bottom"]] as const) {
-    if ((mir.layers.find((layer) => layer.id === layerId)?.primitives.length ?? 0) > 0) require(role);
+    if ((mir.layers.find((layer) => layer.id === layerId)?.primitives.length ?? 0) > 0) requireRole(role);
   }
   return issues;
 }

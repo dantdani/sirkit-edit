@@ -1,3 +1,4 @@
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { LayerId } from "../layers";
 import type { PcbBoard } from "../types";
 import type { PcbHistory } from "../history";
@@ -137,11 +138,20 @@ export class PCBToolService implements PCBToolServiceContract {
       ...args,
       commitSelected: async ({ board, expectedSourceRevision, selectedRevision, runId }) => {
         if (pcbRevisionId(this.board) !== expectedSourceRevision) return { ok: false, error: "Authoritative board changed before autonomous layout commit." };
-        this.options.history.execute("Autonomous placement and routing", (draft) => {
-          const writable = draft as unknown as Record<string, unknown>;
-          for (const key of Object.keys(writable)) delete writable[key];
-          Object.assign(writable, structuredClone(board));
-        }, { actor: "system", operationType: "autonomous_layout", transactionId: runId, reason: "Selected only after capability, placement, RC02 connectivity, and DRC verification." });
+        // B08 — the verified candidate applies as ONE canonical transaction
+        // (delta-compiled); the source-revision pin is re-verified at
+        // serialized execution time, never a raw whole-board history write.
+        const commit = await commitPcbCandidate(this.options.history, {
+          commandId: "pcb.autonomous-layout",
+          label: "Autonomous placement and routing",
+          idempotencyKey: `autonomous-layout:${runId}`,
+          metadata: { actor: "system", operationType: "autonomous_layout", transactionId: runId, reason: "Selected only after capability, placement, RC02 connectivity, and DRC verification." },
+          buildCandidate: (current) => {
+            if (pcbRevisionId(current) !== expectedSourceRevision) throw new Error("Authoritative board changed before autonomous layout commit.");
+            return structuredClone(board);
+          },
+        });
+        if (!commit.ok) return { ok: false, error: commit.message };
         const committedRevision = pcbRevisionId(this.board);
         return committedRevision === selectedRevision ? { ok: true, committedRevision } : { ok: false, committedRevision, error: "Committed board revision differs from the selected verified candidate." };
       },
@@ -301,7 +311,7 @@ export class PCBToolService implements PCBToolServiceContract {
     if (!preview) return { ok: false, error: `Unknown repair preview ${previewId}.` };
     const plan = this.plans.get(preview.planId);
     if (!plan) return { ok: false, error: `Repair plan ${preview.planId} is no longer available.` };
-    const result = applyRepairTransaction(this.options.history, plan, preview, approvedFixIds);
+    const result = await applyRepairTransaction(this.options.history, plan, preview, approvedFixIds);
     return result.ok ? { ok: true, transactionId: preview.id } : result;
   }
 

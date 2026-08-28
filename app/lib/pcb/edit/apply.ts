@@ -52,7 +52,7 @@ function turnedDeg(deg: number, quarterTurns: 1 | -1): number {
 
 type Mutator = (draft: PcbBoard) => void;
 
-function idSet(refs: SelectionRef[], kind: "via" | "track" | "zone" | "text" | "footprint"): Set<string> {
+function idSet(refs: SelectionRef[], kind: "via" | "track" | "zone" | "text" | "footprint" | "dimension"): Set<string> {
   const out = new Set<string>();
   for (const ref of refs) {
     if (ref.kind === kind) out.add(ref.id);
@@ -185,12 +185,16 @@ function compileCommand(board: PcbBoard, cmd: EditCommand): Mutator {
       const vias = idSet(cmd.refs, "via");
       const zones = idSet(cmd.refs, "zone");
       const texts = idSet(cmd.refs, "text");
+      const dimensions = idSet(cmd.refs, "dimension");
       return (draft) => {
         if (tracks.size > 0) draft.tracks = draft.tracks.filter((t) => !tracks.has(t.id));
         if (vias.size > 0) draft.vias = draft.vias.filter((v) => !vias.has(v.id));
         if (zones.size > 0) draft.zones = draft.zones.filter((z) => !zones.has(z.id));
         if (texts.size > 0 && draft.silkItems) {
           draft.silkItems = draft.silkItems.filter((s) => !(s.kind === "text" && texts.has(s.id)));
+        }
+        if (dimensions.size > 0 && draft.dimensions) {
+          draft.dimensions = draft.dimensions.filter((d) => !dimensions.has(d.id));
         }
       };
     }
@@ -403,6 +407,8 @@ function validateRefLive(board: PcbBoard, ref: SelectionRef): boolean {
       return board.zones.some((z) => z.id === ref.id);
     case "text":
       return (board.silkItems ?? []).some((s) => s.kind === "text" && s.id === ref.id);
+    case "dimension":
+      return (board.dimensions ?? []).some((d) => d.id === ref.id);
     case "footprint":
       return board.footprints.some((f) => f.id === ref.id);
     case "pad": {

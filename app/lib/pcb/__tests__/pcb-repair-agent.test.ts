@@ -7,6 +7,7 @@ import { runDrc } from "../drc/run-drc";
 import { planDrcRepairs } from "../repair/planner";
 import { applyRepairTransaction, automaticallySelectedFixes, previewRepairTransaction } from "../repair/transaction";
 import { createHistory } from "../history";
+import { authorizeBarePcbHistory } from "@/app/lib/engineering/pcb-bare-authority.internal";
 import { buildAIPcbSnapshot, diffAIPcbSnapshots } from "../ai/snapshot";
 import { validateNoRuleWeakening } from "../repair/approval-policy";
 import { PCB_AI_TOOLS } from "../ai/pcb-tool-schemas";
@@ -81,7 +82,8 @@ describe("engine-grounded PCB repair", () => {
     expect(board.tracks.every((track) => track.width === mmToNm(0.05))).toBe(true); // preview is pure
 
     const history = createHistory(board);
-    expect(applyRepairTransaction(history, plan, preview, []).ok).toBe(true);
+    authorizeBarePcbHistory(history); // B08.1 explicit test composition
+    expect((await applyRepairTransaction(history, plan, preview, [])).ok).toBe(true);
     expect(runDrc(history.present, rules).summary.errors).toBe(0);
     expect(history.events.at(-1)).toMatchObject({ actor: "ai", operation: "pcb_repair", transactionId: preview.id });
     history.undo();
@@ -194,8 +196,9 @@ describe("engine-grounded PCB repair", () => {
     expect(preview.metrics.movedFootprints).toBe(1);
     expect(preview.metrics.errorsAfter).toBeLessThan(preview.metrics.errorsBefore);
     const history = createHistory(board);
-    expect(applyRepairTransaction(history, plan, preview, []).ok).toBe(false);
-    expect(applyRepairTransaction(history, plan, preview, placementFixes.map((fix) => fix.id)).ok).toBe(true);
+    authorizeBarePcbHistory(history); // B08.1 explicit test composition
+    expect((await applyRepairTransaction(history, plan, preview, [])).ok).toBe(false);
+    expect((await applyRepairTransaction(history, plan, preview, placementFixes.map((fix) => fix.id))).ok).toBe(true);
   });
 
   it("routes through the provider-neutral backend tool while preserving manual copper", async () => {
