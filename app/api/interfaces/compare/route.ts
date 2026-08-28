@@ -1,5 +1,9 @@
 import { compareInterfaceCandidates } from "@/app/lib/interfaces/selection";
 import type { InterfacePlanningCandidate } from "@/app/lib/interfaces/types";
-export const runtime = "nodejs";
-export async function POST(request: Request): Promise<Response> { let body: { candidates?: InterfacePlanningCandidate[] }; try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid JSON" }, { status: 400 }); } const projectId = request.headers.get("x-sirkit-project-id"), actorId = request.headers.get("x-sirkit-actor-id"); if (!projectId || !actorId) return Response.json({ ok: false, error: "project and actor scope headers are required" }, { status: 401 }); if (!Array.isArray(body.candidates) || body.candidates.length < 2 || body.candidates.some((item) => item.projectId !== projectId)) return Response.json({ ok: false, error: "at least two same-project candidates are required" }, { status: 403 }); try { return Response.json({ ok: true, comparison: compareInterfaceCandidates(body.candidates) }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : "comparison failed" }, { status: 422 }); } }
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
+export const runtime = "nodejs";
+// [B16.0.9] canonical wrapper — authorization -> media -> bounded body run inside
+// the wrapper; the callback receives the trusted context and parsed body only.
+export const POST = authenticatedJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ context, body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as { candidates?: InterfacePlanningCandidate[] }; const projectId = context.projectId; if (!Array.isArray(body.candidates) || body.candidates.length < 2 || body.candidates.some((item) => item.projectId !== projectId)) return Response.json({ ok: false, error: "at least two same-project candidates are required" }, { status: 403 }); try { return Response.json({ ok: true, comparison: compareInterfaceCandidates(body.candidates) }, { headers: { "Cache-Control": "no-store" } }); } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : "comparison failed" }, { status: 422 }); } });
