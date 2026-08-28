@@ -1,0 +1,7 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/model-simulation/denominator,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/model-simulation/execute,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/model-simulation/measure,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/model-simulation/problem,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/model-simulation/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/model-simulation/readiness,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
