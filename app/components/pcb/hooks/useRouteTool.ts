@@ -15,7 +15,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { produce } from "immer";
 import { Container } from "pixi.js";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbScene, ScenePointerEvent } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { LayerId } from "@/app/lib/pcb/layers";
@@ -120,13 +122,24 @@ export function useRouteTool(editor: RouteToolEditor): RouteToolHandle {
             : cmd.kind === "StretchTrack"
               ? cmd.after[0]?.layer
               : undefined;
-        h.execute(routeCommandLabel(cmd, h.present), (draft) => mutateBoardWithCommand(draft, cmd), {
-          operationType: cmd.kind,
-          ...(netId === undefined ? {} : { netId }),
-          ...(layer === undefined ? {} : { layer }),
-          ...(cmd.kind === "CommitRouteCandidate"
-            ? { details: { candidateId: cmd.candidate.candidateId, candidateDigest: cmd.candidate.candidateDigest, mode: cmd.candidate.request.routeMode, posture: cmd.candidate.request.posture } }
-            : event ? { details: { candidateId: event.candidateId, mode: event.mode, direction: event.direction, rules: event.rules } } : {}),
+        // B08 — one routing gesture = one canonical transaction (the same
+        // domain mutator produces the candidate; the gateway delta-compiles
+        // it). Protection filtering stays inside the mutator, so locked
+        // copper never appears in the compiled operations.
+        void commitPcbCandidate(h, {
+          commandId: "pcb.route-copper",
+          label: routeCommandLabel(cmd, h.present),
+          metadata: {
+            operationType: cmd.kind,
+            ...(netId === undefined ? {} : { netId }),
+            ...(layer === undefined ? {} : { layer }),
+            ...(cmd.kind === "CommitRouteCandidate"
+              ? { details: { candidateId: cmd.candidate.candidateId, candidateDigest: cmd.candidate.candidateDigest, mode: cmd.candidate.request.routeMode, posture: cmd.candidate.request.posture } }
+              : event ? { details: { candidateId: event.candidateId, mode: event.mode, direction: event.direction, rules: event.rules } } : {}),
+          },
+          buildCandidate: (board) => produce(board, (draft) => mutateBoardWithCommand(draft, cmd)),
+        }).then((result) => {
+          if (!result.ok) editorRef.current.toast?.(result.message);
         });
       },
       {

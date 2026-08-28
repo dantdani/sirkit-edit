@@ -82,8 +82,9 @@ export function refBBox(board: PcbBoard, ref: SelectionRef): BBox | null {
         maxY: item.position.y,
       };
     }
+    case "dimension":
     case "pad":
-      return null; // pads are never arrange targets (validator rejects)
+      return null; // pads/dimensions are never arrange targets (validator rejects)
   }
 }
 
@@ -111,6 +112,7 @@ export function refAnchor(board: PcbBoard, ref: SelectionRef): Vec2 | null {
       return findZone(board, ref.id)?.polygon[0] ?? null;
     case "text":
       return findSilkText(board, ref.id)?.position ?? null;
+    case "dimension":
     case "pad":
       return null;
   }

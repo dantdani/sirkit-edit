@@ -29,7 +29,8 @@ import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { mmToNm } from "@/app/lib/pcb/units";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
-import { scopedPcbSyncJson } from "../../pcb-sync/_scope";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { PCB_SYNC_API_MAX_BYTES, PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext, pcbSyncForbiddenAuthorityRefusal } from "../../pcb-sync/_scope";
 import { stage3Repository } from "../../pcb-sync/route";
 
 export const runtime = "nodejs";
@@ -92,10 +93,17 @@ function packageClassFor(footprintId: string): "passive_smd_0603_0805" | "soic_t
   return "non_hdi_other";
 }
 
-export async function POST(request: Request): Promise<Response> {
-  const parsed = await scopedPcbSyncJson(request);
-  if (!parsed.ok) return parsed.response;
-  const { body, scope } = parsed;
+// [B16.0.15 §B] canonical wrapper — the authenticated-release policy
+// (pcb_editor | project_admin), same-origin CSRF, media-type, and the bounded
+// 8 MB/30 s body read all run inside the wrapper BEFORE the callback, so no
+// durable board load, capability evaluation, router creation, routing process,
+// or authority persistence can begin until every boundary succeeds. The
+// callback receives the trusted context and parsed body only — never the
+// Request, URL, host, origin, or any client-provided identity/role.
+export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, deadlineMs: PCB_SYNC_API_DEADLINE_MS }, async ({ context, body }): Promise<Response> => {
+  const forbidden = pcbSyncForbiddenAuthorityRefusal(body);
+  if (forbidden) return forbidden;
+  const scope = pcbSyncScopeFromContext(context);
   const boardId = typeof body.boardId === "string" ? body.boardId : "";
   const designId = typeof body.designId === "string" ? body.designId : "";
   if (!boardId || !designId) {
@@ -229,4 +237,4 @@ export async function POST(request: Request): Promise<Response> {
     const message = error instanceof Error ? error.message : String(error);
     return Response.json({ ok: false, code: message.split(":")[0] || "MFG_QUALIFY_FAILED", error: message }, { status: 500 });
   }
-}
+});

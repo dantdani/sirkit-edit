@@ -1,0 +1,6 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/pcb/ai-rules/from-brief,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/pcb/autoroute,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/pcb/edit/assist,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/pcb/export/gerbers,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/pcb/repair/agent,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted

@@ -16,6 +16,7 @@
  */
 
 import type { SchematicEditOp } from "@/lib/schematic-types";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { llmRouter } from "@/app/lib/llm/router";
 import { providerErrorResponse } from "@/app/lib/llm/errors";
 import { requestedProvider } from "@/app/lib/llm/request";
@@ -23,13 +24,11 @@ import { EDIT_SYSTEM_PROMPT, EDIT_APPLY_TOOL } from "@/app/lib/prompts";
 
 type EditComponent = { refDes: string; kind: string; value: string };
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { instruction?: unknown; components?: unknown; provider?: unknown };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as { instruction?: unknown; components?: unknown; provider?: unknown };
 
   const instruction = body.instruction;
   const provider = requestedProvider(body.provider);
@@ -104,4 +103,4 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   return Response.json({ ok: true, ops, note, needsTopology });
-}
+});

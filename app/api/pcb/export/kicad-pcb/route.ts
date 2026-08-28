@@ -15,7 +15,8 @@
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 import type { WriteKicadPcbOptions } from "@/app/lib/pcb/kicad/write-pcb";
-import { writeKicadPcb, netlistFromBoard } from "@/app/lib/pcb/kicad/write-pcb";
+import { writeKicadPcb, netlistFromBoard, kicadExportUnsupportedDiagnostics } from "@/app/lib/pcb/kicad/write-pcb";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -51,13 +52,10 @@ function sanitizeName(name: unknown): string {
   return clean.length > 0 ? clean.slice(0, 80) : "sirkit-board";
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let raw: unknown;
-  try {
-    raw = await req.json();
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const POST = publicJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const raw: unknown = rawBody;
 
   if (typeof raw !== "object" || raw === null) {
     return Response.json({ ok: false, error: "body must be an object" }, { status: 400 });
@@ -86,11 +84,16 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: false, error: `export failed: ${errMsg(e)}` }, { status: 500 });
   }
 
+  // B08 — content the exporter cannot represent is surfaced EXPLICITLY
+  // (never silently omitted while claiming a complete export).
+  const unsupported = kicadExportUnsupportedDiagnostics(board);
+
   return new Response(text, {
     status: 200,
     headers: {
       "Content-Type": "application/octet-stream",
       "Content-Disposition": `attachment; filename="${boardName}.kicad_pcb"`,
+      ...(unsupported.length > 0 ? { "X-Sirkit-Export-Unsupported": encodeURIComponent(unsupported.join(" | ")) } : {}),
     },
   });
-}
+});

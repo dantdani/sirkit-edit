@@ -1,0 +1,26 @@
+{
+  "schema": "sirkit.b07-2-regression-fixtures.v1",
+  "suites": [
+    "app/lib/engineering/__tests__/b07-2-interaction-interlock.test.ts",
+    "app/api/export/kicad/__tests__/route-fail-closed.test.ts"
+  ],
+  "fixtures": [
+    { "id": "T1", "title": "Canonical x=100, preview x=150, Rotate during preview", "expected": "gateway refuses before execution; head sequence 0; canonical x stays 100; the gesture's own commit remains the only path to x=150", "prefix_behavior": "session rebased lineage and made x=150 canonical (reproduced before fix)" },
+    { "id": "T1b", "title": "Session fail-safe: execute() with the preview state directly", "expected": "rejected stale_revision with UNKNOWN_BASE_PROJECTION; zero rebase events; head unchanged" },
+    { "id": "T2-T6", "title": "Delete / property / graph wire / Tier-1 apply / replacement during preview", "expected": "all refused through the same gate; nothing executed; nothing adopted" },
+    { "id": "T7", "title": "Undo/redo during preview, commit, and command flight", "expected": "runExclusiveSync returns false in all three busy states; true when idle" },
+    { "id": "T8-T9", "title": "Command arriving while gesture commit is in flight", "expected": "serialized behind the exact commit; executes against the committed head (x=150 + rotation); exactly two transactions" },
+    { "id": "T10", "title": "Command after FAILED gesture commit (off-grid final geometry)", "expected": "commit rejected + rollback; command executes against restored base x=100" },
+    { "id": "T11", "title": "Late completion from an old interaction/project epoch", "expected": "gate returns discarded-stale; result never adopted" },
+    { "id": "T12", "title": "No interaction-race path emits a legacy 'rebased' event", "expected": "asserted in every §1/§2 scenario" },
+    { "id": "T13", "title": "Preview state never enters canonical history unless its gesture commits", "expected": "head digest equals the pre-gesture base after every refusal/failure path" },
+    { "id": "T14", "title": "Invalid projection WITH valid canonical fallback", "expected": "projection-conflict reason invalid-projection-identity; keep-local structurally refused; resolveConflictAdoptCanonical succeeds and session becomes ready" },
+    { "id": "T15-T16", "title": "Invalid projection WITHOUT fallback + reload", "expected": "invalid-projection outcome with named issues; nothing written; recoverStartFresh refused; a new session over the same store reproduces the identical outcome" },
+    { "id": "T17", "title": "Consumers blocked while invalid/conflicted", "expected": "edit structurally rejected (session_conflicted); export/simulation/pcb-sync/checkpoint blocked for every non-ready lifecycle; autosave blocked on conflicted/recovery-pending only" },
+    { "id": "T18", "title": "Duplicate case-insensitive displayed references to /api/export/kicad", "expected": "structured 422 SCHEMATIC_STATE_INVALID with sanitized issues" },
+    { "id": "T19", "title": "Duplicate stable IDs to export", "expected": "422 with 'duplicate stable id' issue" },
+    { "id": "T20", "title": "Invalid geometry to export (off-grid, bad rotation, malformed wire)", "expected": "422 with INVALID_PX issues" },
+    { "id": "T21", "title": "Serializer duplicate-reference handling", "expected": "throws typed SchematicExportValidationError; no _2 suffix repair exists" },
+    { "id": "T22", "title": "Valid export determinism", "expected": "byte-identical across runs and through the route; displayed reference verbatim; no synthetic suffixes" }
+  ]
+}

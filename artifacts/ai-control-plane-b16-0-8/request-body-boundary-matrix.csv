@@ -1,0 +1,154 @@
+method,route,policy_class,access,handler_symbol,media_type,max_wire_bytes,deadline_ms,authorization_ordering,parser,downstream,evidence_test
+GET,/api/ai/runtime,public,public,GET,-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/architecture/alternatives,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/architecture/candidates,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/architecture/compare,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/architecture/problem,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/architecture/propose,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/assignment-queue/materialize,auth,authenticated,workerJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:workerJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/assignment-queue/revalidate,auth,authenticated,workerRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/assignment-queue,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/assignment-queue,auth+csrf,authenticated,POST,application/json,1000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/auth/callback,public,public,GET,-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/auth/signin,public+csrf,public,POST,application/json,16000,10000,bounded-body-before-compute,readBoundedJsonBody,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/auth/signout,public+csrf,public,POST,-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom/cart/digikey,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom/cart/lcsc,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom/cart/mouser,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom/diff,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/bom/export-csv,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/bom/notifications,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+PATCH,/api/bom/notifications,auth+csrf,authenticated,PATCH,application/json,16000,10000,authorize-then-body,readBoundedJsonObject,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+DELETE,/api/bom/notifications,auth+csrf,authenticated,DELETE,application/json,16000,10000,authorize-then-body,readBoundedJsonObject,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/bom/procurement-packet,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom/snapshot,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/bom/snapshot,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/corners,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/evaluate,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/export,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/feedback,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/problem,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/propose,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/report,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/calculation/transaction,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/chat,auth+csrf,authenticated,POST,application/json,limit,30000(default),authorize-then-body,readBoundedStream+manual-parse,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-knowledge/applicability,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-knowledge/compile,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-knowledge/compose,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-knowledge/problem,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-knowledge/propose,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-verification/problem,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-verification/propose,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-verification/readiness,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/circuit-verification/run,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/alternative,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/catalog,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/evaluate,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/export,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/feedback,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/problem,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/propose,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/solve,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/sourcing,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/component-selection/transaction,auth+csrf,authenticated,POST,application/json,12000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/components/atomic,public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/components/atomic/search,public,public,POST,application/json,200000,10000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/constraints/explain,public,public,publicJsonRoute(…),application/json,2000000,15000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/constraints/preview,public,public,publicJsonRoute(…),application/json,2000000,15000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/engineering-effects,auth,authenticated,workerRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/export/kicad,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/firmware-bringup/problem,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/firmware-bringup/propose,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/firmware-bringup/resources,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/footprint-resolution,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/footprint-resolution,auth+csrf,authenticated,POST,application/json,4000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/full-flow/propose,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/full-flow/run,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/full-flow/transition,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/allocate,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/alternatives,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/candidates,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/compare,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/problem,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/interfaces/propose,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/kicad/v1/categories.json,public,public,kicadLibraryRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/kicad/v1/parts/[id],public,public,kicadLibraryRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/kicad/v1/parts/category/[id],public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/kicad/v1,public,public,kicadLibraryRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/mapping-verification,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/mapping-verification,auth+csrf,authenticated,createMappingPostHandler(…),application/json,4000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts via handler.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/denominator,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/execute,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/measure,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/problem,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/propose,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/model-simulation/readiness,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/parts/[id]/alternates,public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/parts/[id],public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/parts/categories,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/parts/search,public,public,publicJsonRoute(…),application/json,200000,10000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/passive-policy,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/passive-policy,auth+csrf,authenticated,createPassivePolicyPostHandler(…),application/json,64000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/pcb-sync,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb-sync,auth+csrf,authenticated,createPcbSyncPostHandler(…),application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/ai-rules/from-brief,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/apply-authorization,auth+csrf,authenticated,POST,application/json,64000,10000,authorize-then-body,readBoundedJsonBody,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/assign/suggest,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/autoroute,auth+csrf,authenticated,POST,application/json,16000000,60000,authorize-then-body,readBoundedJsonObject,process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/edit/assist,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/export/gerbers,auth+csrf,authenticated,POST,application/json,16000000,60000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/export/kicad-pcb,public,public,POST,application/json,16000000,45000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/pcb/footprints/[id],public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/pcb/footprints/resolve,public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/pcb/footprints/search,public,public,GET,-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/placement/preview,public,public,POST,application/json,16000000,45000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/qualify,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../../pcb-sync/_scope.ts,durable+process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/release,auth+csrf,authenticated,POST,application/json,8000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../../pcb-sync/_scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/pcb/repair/agent,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/physical-bindings,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/physical-bindings,auth+csrf,authenticated,POST,application/json,2000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/alternatives,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/candidates,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/compare,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/problem,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/propose,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/power/reconcile,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/release-engineering/problem,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/release-engineering/propose,auth+csrf,authenticated,POST,application/json,64000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/replacement-authority,auth+csrf,authenticated,POST,application/json,16384,10000,authorize-then-body,readBoundedStream+manual-parse,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/requirements/capabilities,public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/requirements/compile,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,2000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/requirements/sources,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,1600000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/compare,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/diff,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/export,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/graph/validate,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/kicad/inspect,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/layout,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/problem,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/propose,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/transaction,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic-compiler/variants,auth+csrf,authenticated,POST,application/json,32000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via ../_scope.ts,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/build-multi,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/build,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/cross-verify,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/edit-build,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/edit,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/layout-critic,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic/review,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/schematic,auth+csrf,authenticated,POST,application/json,16000000,45000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/simulate,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/spice/ai,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,provider,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/spice/compile,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,process,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/spice/models/import,auth+csrf,authenticated,POST,application/json,4000000,20000,authorize-then-body,readBoundedJsonObject,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/spice/models/smoke-test,auth+csrf,authenticated,POST,application/json,2000000,15000,authorize-then-body,readBoundedJsonObject,process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/spice/reports,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/spice/run-plans/estimate,public,public,POST,application/json,8000000,30000,bounded-body-before-compute,readBoundedJsonObject,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+GET,/api/spice/runs/[id]/bundle,auth,authenticated,GET,-,-,-,no-body,-,durable+process,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/spice/runs/[id]/events,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/spice/runs/[id],auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+DELETE,/api/spice/runs/[id],auth+csrf,authenticated,DELETE,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/spice/runs/[id]/waveforms,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/spice/runs,auth+csrf,authenticated,POST,application/json,8000000,30000,authorize-then-body,readBoundedJsonObject,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/spice/runs,auth,authenticated,GET,-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

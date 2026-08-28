@@ -47,8 +47,12 @@ verified in tests).
 
 Successful results carry provenance: tool id/version, invocation/trace ids,
 project/branch, pinned source revision, authority source, binding
-id/version, input/output digests, timestamps, and `revision-verified`
-status. Failures return typed statuses with controlled diagnostics only —
+id/version, input/output digests, timestamps, and — since B05.1 — a truthful
+verification state (`canonical-revision-verified` for canonical-only reads,
+`composite-resources-verified` for reads that consumed auxiliary authority)
+plus the consumed-resource references and bundle manifest digest. The
+original B05 `revision-verified` state overstated composite verification and
+was replaced (see `../ai-control-plane-b05-1/composite-verification-policy.md`). Failures return typed statuses with controlled diagnostics only —
 binding exceptions are redacted to `IMPLEMENTATION_ERROR:<name>` (no
 messages, stacks, or upstream bodies; tested against embedded secrets).
 Traces are bounded, provider-neutral, and secret-free.

@@ -6,7 +6,8 @@ import { PostgresPhysicalBindingRepository } from "@/app/lib/physical-binding/se
 import type { ComponentPhysicalBinding, PhysicalBindingScope, PhysicalBindingTransitionRequest } from "@/app/lib/physical-binding/types";
 import { validatePhysicalBinding } from "@/app/lib/physical-binding/validation";
 import type { NewPhysicalBindingCandidate } from "@/app/lib/physical-binding/domain";
-import { bindingScope, object, scopedBindingJson } from "./_scope";
+import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
+import { PHYSICAL_BINDING_API_DEADLINE_MS, PHYSICAL_BINDING_API_MAX_BYTES, bindingScopeFromContext, object } from "./_scope";
 
 export const runtime = "nodejs";
 
@@ -29,26 +30,32 @@ function redacted(binding: ComponentPhysicalBinding, includeRaw: boolean): Compo
   return { ...binding, legacySource: { ...binding.legacySource, rawFields: { redacted: true } } };
 }
 
-export async function GET(request: Request): Promise<Response> {
-  const authorized = bindingScope(request);
-  if (!authorized.ok) return authorized.response;
-  const url = new URL(request.url);
-  const setId = url.searchParams.get("setId")?.trim();
+// [B16.0.22] canonical wrapper — authorization inside the wrapper (all-members
+// read, no CSRF per the exact policy row); `setId` and `includeLegacyRaw`
+// travel ONLY through the bounded first-value-wins query projection, and the
+// legacy-raw reveal stays gated on the TRUSTED role.
+export const GET = authenticatedRoute({ query: true }, async ({ context, meta }) => {
+  const scope = bindingScopeFromContext(context), query = meta.query ?? {};
+  const setId = query.setId?.trim();
   if (!setId) return Response.json({ ok: false, code: "PB_API_SET_ID_REQUIRED", error: "setId query parameter is required." }, { status: 400 });
   try {
     const state = await repository.load(setId);
     if (!state) return Response.json({ ok: false, code: "PB_BINDING_SET_NOT_FOUND", error: "Binding set not found." }, { status: 404 });
-    if (!sameScope(state.set.scope, authorized.scope)) return Response.json({ ok: false, code: "PB_API_SCOPE_FORBIDDEN", error: "Binding set is outside the authorized project scope." }, { status: 403 });
-    const includeRaw = url.searchParams.get("includeLegacyRaw") === "true" && ["project_admin", "migration_admin"].includes(authorized.scope.actor.role);
+    if (!sameScope(state.set.scope, scope)) return Response.json({ ok: false, code: "PB_API_SCOPE_FORBIDDEN", error: "Binding set is outside the authorized project scope." }, { status: 403 });
+    const includeRaw = query.includeLegacyRaw === "true" && ["project_admin", "migration_admin"].includes(scope.actor.role);
     const selected = state.bindings.find((item) => item.revisionId === state.set.effectiveSelectedRevisionId);
     return Response.json({ ok: true, authoritative: true, set: state.set, bindings: state.bindings.map((item) => redacted(item, includeRaw)), assessments: state.assessments, auditEvents: state.auditEvents, migrationRecords: state.migrationRecords.map((record) => ({ ...record, rawFields: undefined })), legacyCompatibilityView: selected ? legacyFootprintAssignmentView(selected) : null }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return errorResponse(error); }
-}
+});
 
-export async function POST(request: Request): Promise<Response> {
-  const parsed = await scopedBindingJson(request);
-  if (!parsed.ok) return parsed.response;
-  const { body, scope } = parsed;
+// [B16.0.22] canonical wrapper — authorization + exact-origin CSRF + the
+// bounded 2 MB / 30 s JSON read inside the wrapper; operation dispatch,
+// per-operation role gates, and scope byte-matching are unchanged and keyed
+// off the TRUSTED scope only.
+export const POST = authenticatedJsonRoute(
+  { maxBytes: PHYSICAL_BINDING_API_MAX_BYTES, deadlineMs: PHYSICAL_BINDING_API_DEADLINE_MS },
+  async ({ context, body }) => {
+  const scope = bindingScopeFromContext(context);
   const operation = typeof body.operation === "string" ? body.operation : "";
   try {
     if (operation === "create_candidate") {
@@ -109,4 +116,4 @@ export async function POST(request: Request): Promise<Response> {
     }
     return Response.json({ ok: false, code: "PB_API_OPERATION_UNSUPPORTED", error: "Unsupported physical-binding operation." }, { status: 400 });
   } catch (error) { return errorResponse(error); }
-}
+  });

@@ -22,9 +22,23 @@ export class BrowserIndexedDbProjectStore implements AtomicProjectStore {
     const database = await this.open(); const transaction = database.transaction(STORE_NAME, "readwrite", { durability: "strict" }); const store = transaction.objectStore(STORE_NAME); const storageKey = key(input.project.projectId, input.project.branchId);
     try {
       const current = await requestValue(store.get(storageKey) as IDBRequest<ProjectPersistenceEnvelope | undefined>); if (!current) throw new Error("PROJECT_NOT_INITIALIZED"); if (current.transactionLog.some((record) => record.transaction.clientOperationId === input.record.transaction.clientOperationId)) { await transactionDone(transaction); return structuredClone(current); } if (current.snapshotRevision.headSequence !== input.expectedHeadSequence) throw new Error(`STORE_HEAD_MISMATCH:${current.snapshotRevision.headSequence}`);
-      const envelope = createPersistenceEnvelope({ project: input.project, revision: input.revision, transactionLog: [...current.transactionLog, input.record], buildId: input.buildId, migrationHistory: current.migrationHistory }); store.put(envelope, storageKey); await transactionDone(transaction); return structuredClone(envelope);
+      // B06.3: commits carry the envelope's lineage forward (the envelope is
+      // the exclusive lineage authority; projection marks never select it).
+      const envelope = createPersistenceEnvelope({ project: input.project, revision: input.revision, transactionLog: [...current.transactionLog, input.record], buildId: input.buildId, migrationHistory: current.migrationHistory, ...(current.lineageId ? { lineageId: current.lineageId } : {}) }); store.put(envelope, storageKey); await transactionDone(transaction); return structuredClone(envelope);
     } catch (error) { try { transaction.abort(); } catch { /* already completed/aborted */ } throw error; }
   }
   async backup(projectId: string, branchId: string): Promise<ProjectPersistenceEnvelope> { const value = await this.load(projectId, branchId); if (!value) throw new Error("PROJECT_NOT_FOUND"); return value; }
   async restore(envelope: ProjectPersistenceEnvelope): Promise<ProjectPersistenceEnvelope> { const errors = validatePersistenceEnvelope(envelope); if (errors.length) throw new Error(`RESTORE_INTEGRITY_FAILED:${errors.join(",")}`); const database = await this.open(); const transaction = database.transaction(STORE_NAME, "readwrite", { durability: "strict" }); transaction.objectStore(STORE_NAME).put(structuredClone(envelope), key(envelope.projectId, envelope.branchId)); await transactionDone(transaction); return structuredClone(envelope); }
+  /** B06.2 quarantine — RAW copy (valid or corrupt, no validation) to a
+   *  quarantine key that `load` (an exact-key get) never returns. */
+  async preserveEnvelope(projectId: string, branchId: string, label: string): Promise<boolean> {
+    const database = await this.open();
+    const transaction = database.transaction(STORE_NAME, "readwrite", { durability: "strict" });
+    const store = transaction.objectStore(STORE_NAME);
+    const value = await requestValue(store.get(key(projectId, branchId)) as IDBRequest<unknown>);
+    if (value === undefined) { await transactionDone(transaction); return false; }
+    store.put(value, `${key(projectId, branchId)}\0quarantine\0${label}`);
+    await transactionDone(transaction);
+    return true;
+  }
 }

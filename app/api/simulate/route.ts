@@ -1,14 +1,101 @@
-import { spawn } from "child_process";
-import { writeFile, readFile, unlink } from "fs/promises";
-import { tmpdir } from "os";
-import { join } from "path";
-import { randomUUID } from "crypto";
+/**
+ * B16.0.24 §G/§H — the legacy same-origin single-shot SPICE simulation route,
+ * migrated to the canonical authenticated JSON boundary and hardened into a
+ * confined ngspice sandbox.
+ *
+ * SECURITY BOUNDARY (§G): `authenticatedJsonRoute` runs identity + LIVE
+ * membership + engineering role + same-origin CSRF, then the bounded 8 MB /
+ * 30 s object read, BEFORE this callback — so NO process, temp file, or netlist
+ * work is reachable before authorization, media type, body, and schema
+ * validation. The runner then uses a SERVER-OWNED executable, a FIXED argument
+ * vector `["-b", <server temp path>]`, `shell:false`, a per-request
+ * server-created isolated temp directory (never a shared cwd), server-owned
+ * filenames, a MINIMAL allowlisted environment (never the full inherited server
+ * env), no network, a strict timeout, and bounded stdout/stderr/raw-file/parse
+ * sizes. Caller input controls NONE of: executable, arguments, shell, working
+ * directory, environment, output paths, include/library paths, control
+ * directives, files, or network. The generated netlist is screened for
+ * `.include`/`.lib`/`.control`/shell injection before spawning, and cleanup
+ * runs in every success, refusal, timeout, abort, spawn-error, parse-error, and
+ * disconnect path.
+ *
+ * TRUTHFULNESS (§H): a successful process exit is an EXECUTED simulation result
+ * only — never physical validation, engineering approval, design readiness,
+ * safety certification, or manufacturing release.
+ */
+import { spawn } from "node:child_process";
+import { mkdtemp, open, rm, writeFile, type FileHandle } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SchematicState } from "@/lib/schematic-types";
 import { schematicToSpice, type SpiceAnalysis } from "@/app/lib/netlist";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+
+/** [B16.0.2 §A/§D] a whole SchematicState travels in the body. */
+const MAX_BODY_BYTES = 8_000_000;
+const BODY_DEADLINE_MS = 30_000;
+
+/** Server-owned execution limits (never caller-influenced). */
+const PROCESS_TIMEOUT_MS = 10_000;
+const MAX_OUTPUT_BYTES = 1_000_000;
+const MAX_RAW_BYTES = 20_000_000;
+const MAX_PARSE_TOKENS = 5_000_000;
+const MAX_PARSE_POINTS = 2_000_000;
+const MAX_PARSE_VARIABLES = 10_000;
 
 const NGSPICE_EXECUTABLE = process.env.NGSPICE_BIN?.trim() || (process.platform === "win32" ? "ngspice_con" : "ngspice");
 
-// ─── ASCII raw-file parser ────────────────────────────────────────────────────
+/** A MINIMAL allowlisted environment — the exact worker allowlist. Never the
+ *  full inherited server environment. */
+function safeEnvironment(): NodeJS.ProcessEnv {
+  const allowed = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"];
+  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
+  for (const key of allowed) if (process.env[key] !== undefined) env[key] = process.env[key];
+  return env;
+}
+
+/**
+ * PRIMARY injection defense — reject caller-supplied schematic fields that could
+ * inject an arbitrary SPICE directive line. A component value / analysis field /
+ * net-label name is a single token; a newline, carriage return, or backtick in
+ * one is the only way to smuggle a `.include`/`.control`/shell line into the
+ * emitted deck (the serializer legitimately emits exactly ONE `.control` block
+ * with `run` + `write result.raw`, so scanning the OUTPUT for `.control` would
+ * false-positive — the input guard is what closes injection).
+ */
+function assertSchematicFieldsSafe(state: SchematicState, analysis?: SpiceAnalysis): void {
+  const unsafe = (value: unknown): boolean => typeof value === "string" && /[\r\n`]/.test(value);
+  for (const component of state.components) {
+    if (unsafe(component.value)) throw new Error("a component value contains an illegal control character");
+  }
+  for (const label of state.netLabels ?? []) {
+    if (unsafe(label.name)) throw new Error("a net label name contains an illegal control character");
+  }
+  if (analysis) {
+    for (const value of Object.values(analysis as Record<string, unknown>)) {
+      if (unsafe(value)) throw new Error("an analysis field contains an illegal control character");
+    }
+  }
+}
+
+/**
+ * Belt-and-braces OUTPUT screen — refuse a generated netlist that carries an
+ * include/library/source/shell directive (which the serializer NEVER emits, so
+ * any occurrence is injected). `.control` is deliberately NOT screened here: the
+ * serializer emits its own legitimate batch-mode control block.
+ */
+function assertNetlistSafe(netlist: string): void {
+  const forbidden: Array<{ pattern: RegExp; label: string }> = [
+    { pattern: /^\s*\.(?:include|inc|lib)\b/im, label: "include/library directives" },
+    { pattern: /^\s*\.(?:shell|cd|source|quit|exec|system|destroy|remcirc)\b/im, label: "filesystem or shell commands" },
+    { pattern: /(?:^|\n)\s*![^=]/m, label: "shell escapes" },
+    { pattern: /`[^`]+`/, label: "command substitution" },
+  ];
+  const hit = forbidden.find((entry) => entry.pattern.test(netlist));
+  if (hit) throw new Error(`generated netlist contains a forbidden ${hit.label}`);
+}
+
+// ─── ASCII raw-file parser (bounded) ──────────────────────────────────────────
 
 interface SimResult {
   analysis: string;
@@ -24,50 +111,47 @@ function parseAsciiRaw(raw: string): SimResult {
   const variables: string[] = [];
   let i = 0;
 
-  // Header
   for (; i < lines.length; i++) {
     const line = lines[i];
     if (line.startsWith("Plotname:")) {
-      plotname = line.slice("Plotname:".length).trim();
+      plotname = line.slice("Plotname:".length).trim().slice(0, 200);
     } else if (line.startsWith("Flags:")) {
       flags = line.slice("Flags:".length).trim();
     } else if (line.startsWith("No. Variables:")) {
-      numVars = parseInt(line.slice("No. Variables:".length).trim(), 10);
+      numVars = Math.min(MAX_PARSE_VARIABLES, Math.max(0, parseInt(line.slice("No. Variables:".length).trim(), 10) || 0));
     } else if (line.trimEnd() === "Variables:") {
       i++;
       for (; i < lines.length; i++) {
         const vl = lines[i];
         if (vl.trimEnd() === "Values:") break;
         const parts = vl.trim().split(/\s+/);
-        // format: "  idx  varname  type"
-        if (parts.length >= 2) variables.push(parts[1]);
+        if (parts.length >= 2 && variables.length < MAX_PARSE_VARIABLES) variables.push(parts[1]);
       }
       break;
     }
   }
 
-  // Skip to "Values:" line
   for (; i < lines.length; i++) {
     if (lines[i].trimEnd() === "Values:") { i++; break; }
   }
 
   const isComplex  = flags.toLowerCase().includes("complex");
   const valsPerVar = isComplex ? 2 : 1;
-  const stride     = 1 + numVars * valsPerVar; // sequential index + per-var values
+  const stride     = 1 + numVars * valsPerVar;
 
-  // Tokenize numbers across all remaining lines. Split on whitespace and commas;
-  // ngspice ASCII complex pairs use "re,im" or whitespace-separated forms.
   const tokens: number[] = [];
   for (; i < lines.length; i++) {
     for (const part of lines[i].split(/[\s,]+/)) {
       if (part === "") continue;
       const n = Number(part);
       if (!isNaN(n)) tokens.push(n);
+      if (tokens.length >= MAX_PARSE_TOKENS) break;
     }
+    if (tokens.length >= MAX_PARSE_TOKENS) break;
   }
 
   const points: Record<string, number>[] = [];
-  for (let t = 0; t + stride <= tokens.length; t += stride) {
+  for (let t = 0; t + stride <= tokens.length && points.length < MAX_PARSE_POINTS; t += stride) {
     const point: Record<string, number> = {};
     for (let k = 0; k < variables.length && k < numVars; k++) {
       const name   = variables[k];
@@ -76,7 +160,6 @@ function parseAsciiRaw(raw: string): SimResult {
         const re = tokens[valIdx];
         const im = tokens[valIdx + 1];
         if (k === 0 && /freq/i.test(name)) {
-          // The swept variable in AC: take real part (imag is always 0).
           point[name] = re;
         } else {
           const mag    = Math.sqrt(re * re + im * im);
@@ -92,8 +175,6 @@ function parseAsciiRaw(raw: string): SimResult {
     points.push(point);
   }
 
-  // Build the variable list reported to the client. For AC, replace each
-  // non-frequency variable with its derived .mag / .phase signals.
   let finalVars: string[];
   if (isComplex) {
     finalVars = [];
@@ -109,177 +190,181 @@ function parseAsciiRaw(raw: string): SimResult {
   return { analysis: plotname, variables: finalVars, points };
 }
 
-// ─── Route ────────────────────────────────────────────────────────────────────
+// ─── Bounded raw-file reader ──────────────────────────────────────────────────
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { state: SchematicState; analysis?: SpiceAnalysis };
+export type BoundedRawRead =
+  | { ok: true; text: string }
+  | { ok: false; reason: "over-limit" | "invalid-utf8" | "unreadable" };
+
+/**
+ * [B16.0.24.1 §1] a TRULY bounded read of the server-owned simulator output.
+ * The file is opened through a handle; the declared size is an ADVISORY
+ * fast-fail only — storage is allocated in fixed 64 KiB chunks proportional to
+ * the ACTUAL bytes read (never the declared size), so an enormous declared
+ * size cannot cause a proportional allocation, and a stat/read race (a file
+ * that grows after stat) is caught by the actual-read cap. At most
+ * `maxBytes` + 1 bytes are ever consumed; crossing the ceiling refuses
+ * EXPLICITLY (partial oversized output is never returned, so parsing can
+ * never begin on it). Invalid UTF-8 fails deterministically (fatal decode —
+ * never a lossy replacement-character parse). The handle is closed in every
+ * path; a close failure never masks the read outcome.
+ */
+export async function readBoundedRawFile(path: string, maxBytes: number): Promise<BoundedRawRead> {
+  let handle: FileHandle | null = null;
   try {
-    body = (await req.json()) as { state: SchematicState; analysis?: SpiceAnalysis };
+    handle = await open(path, "r");
+    // Advisory fast-fail: a hugely-declared artifact is refused without a
+    // single content read (and without any size-proportional allocation).
+    const declared = (await handle.stat()).size;
+    if (declared > maxBytes) return { ok: false, reason: "over-limit" };
+    const chunkSize = 65_536;
+    const chunk = Buffer.alloc(chunkSize);
+    const pieces: Buffer[] = [];
+    let total = 0;
+    for (;;) {
+      const { bytesRead } = await handle.read(chunk, 0, chunkSize, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      // The REAL bound: actual bytes, immune to the stat/growth race.
+      if (total > maxBytes) return { ok: false, reason: "over-limit" };
+      pieces.push(Buffer.from(chunk.subarray(0, bytesRead)));
+    }
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(pieces, total));
+    } catch {
+      return { ok: false, reason: "invalid-utf8" };
+    }
+    return { ok: true, text };
   } catch {
-    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+    return { ok: false, reason: "unreadable" };
+  } finally {
+    if (handle) await handle.close().catch(() => {});
   }
+}
 
+// ─── Runner ───────────────────────────────────────────────────────────────────
+
+interface ProcessResult { code: number | null; stdout: string; stderr: string; timedOut: boolean; }
+
+function runNgspice(netlistPath: string, cwd: string, signal: AbortSignal): Promise<ProcessResult> {
+  return new Promise<ProcessResult>((resolve, reject) => {
+    // shell:false (explicit); server-owned exe + fixed argv; isolated cwd;
+    // minimal env; no network reachable through the deck's directives.
+    const child = spawn(NGSPICE_EXECUTABLE, ["-b", netlistPath], { stdio: ["ignore", "pipe", "pipe"], cwd, env: safeEnvironment(), windowsHide: true, shell: false });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    const onAbort = () => { timedOut = false; child.kill(); };
+    if (signal.aborted) child.kill();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    child.stdout?.on("data", (d: Buffer) => { stdout = (stdout + d.toString()).slice(-MAX_OUTPUT_BYTES); });
+    child.stderr?.on("data", (d: Buffer) => { stderr = (stderr + d.toString()).slice(-MAX_OUTPUT_BYTES); });
+    child.on("error", (err: NodeJS.ErrnoException) => { reject(err.code === "ENOENT" ? new Error("ngspice executable not found on PATH") : err); });
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, PROCESS_TIMEOUT_MS);
+    child.on("close", (code) => { clearTimeout(timer); signal.removeEventListener("abort", onAbort); resolve({ code, stdout, stderr, timedOut }); });
+  });
+}
+
+// [B16.0.24 §G] canonical authenticated wrapper — authorization + CSRF + the
+// bounded 8 MB / 30 s object read happen BEFORE this callback; the request
+// abort signal reaches the runner only through the declared `exposeAbortSignal`
+// input.
+export const POST = authenticatedJsonRoute<{ state?: SchematicState; analysis?: SpiceAnalysis }>(
+  { maxBytes: MAX_BODY_BYTES, deadlineMs: BODY_DEADLINE_MS, exposeAbortSignal: true },
+  async ({ body, signal }) => {
   const { state, analysis } = body;
 
-  // Validate
+  // Semantic validation — BEFORE any temp file or process work.
   if (!state?.components?.length) {
     return Response.json({ error: "Schematic has no components" }, { status: 400 });
   }
-  const hasSrc = state.components.some(
-    (c) => c.type === "voltage-source" || c.type === "current-source",
-  );
+  const hasSrc = state.components.some((c) => c.type === "voltage-source" || c.type === "current-source");
   if (!hasSrc) {
-    return Response.json(
-      { error: "Schematic must have at least one voltage or current source" },
-      { status: 400 },
-    );
+    return Response.json({ error: "Schematic must have at least one voltage or current source" }, { status: 400 });
   }
-  // A ground reference can be the ground component OR a ground net label
-  // ("ground"-kind, or named GND/0).
   const hasGroundLabel = (state.netLabels ?? []).some((l) => {
     const name = l.name.trim().toUpperCase();
     return l.kind === "ground" || name === "GND" || name === "0";
   });
   if (!state.components.some((c) => c.type === "ground") && !hasGroundLabel) {
-    return Response.json(
-      { error: "Schematic must have at least one ground component or GND label" },
-      { status: 400 },
-    );
+    return Response.json({ error: "Schematic must have at least one ground component or GND label" }, { status: 400 });
   }
 
-  const uuid        = randomUUID();
-  const netlistPath = join(tmpdir(), `${uuid}.cir`);
-  const rawPath     = join(tmpdir(), `${uuid}.raw`);
-
-  // Generate netlist
+  // Generate the netlist (server-owned RELATIVE raw filename) and screen it for
+  // injected control/include/shell directives BEFORE spawning anything.
   let netlist: string;
   let nodeMap: Record<string, string>;
   let pinNodes: Record<string, string>;
   try {
-    ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: `${uuid}.raw` }));
+    assertSchematicFieldsSafe(state, analysis);
+    ({ netlist, nodeMap, pinNodes } = schematicToSpice(state, { analysis, rawOutputPath: "result.raw" }));
+    assertNetlistSafe(netlist);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return Response.json({ error: `Netlist generation failed: ${msg}` }, { status: 400 });
   }
 
-  console.error("[simulate] netlist:\n" + netlist);
-  await writeFile(netlistPath, netlist, "utf8");
-
+  // Per-request server-created isolated temp directory; server-owned filenames.
+  let directory: string | null = null;
   try {
-    // Run NGSpice
-    const { code, stdout, stderr } = await new Promise<{
-      code: number | null;
-      stdout: string;
-      stderr: string;
-    }>((resolve, reject) => {
-      let stdout = "", stderr = "";
-      let timedOut = false;
+    directory = await mkdtemp(join(tmpdir(), "sirkit-simulate-"));
+    const netlistPath = join(directory, "netlist.cir");
+    const rawPath = join(directory, "result.raw");
+    await writeFile(netlistPath, netlist, "utf8");
 
-      const child = spawn(
-        NGSPICE_EXECUTABLE,
-        ["-b", netlistPath],
-        { stdio: "pipe", cwd: tmpdir(), windowsHide: true },
-      );
-
-      child.on("error", (err: NodeJS.ErrnoException) => {
-        if (err.code === "ENOENT") reject(new Error("ENOENT"));
-        else reject(err);
-      });
-
-      child.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
-      child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
-
-      const timer = setTimeout(() => {
-        timedOut = true;
-        child.kill();
-      }, 10_000);
-
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        if (timedOut) reject(new Error("TIMEOUT"));
-        else resolve({ code, stdout, stderr });
-      });
-    });
-
-    if (code !== 0) {
-      console.error("[simulate] NGSpice failed (exit code " + String(code) + ")");
-      console.error("[simulate] netlist:\n" + netlist);
-      console.error("[simulate] stderr:\n" + stderr);
-      console.error("[simulate] stdout:\n" + stdout);
-      return Response.json(
-        {
-          ok: false,
-          error: stderr.slice(-5000) || stdout.slice(-5000) || `NGSpice exited with code ${String(code)}`,
-          netlist,
-        },
-        { status: 500 },
-      );
-    }
-
-    // Read raw file
-    let rawText: string;
+    let result: ProcessResult;
     try {
-      rawText = await readFile(rawPath, "utf8");
-    } catch {
-      return Response.json(
-        { error: "NGSpice produced no output file" },
-        { status: 500 },
-      );
-    }
-
-    // Parse
-    let result: SimResult;
-    try {
-      result = parseAsciiRaw(rawText);
+      result = await runNgspice(netlistPath, directory, signal ?? new AbortController().signal);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[simulate] parse error:", msg, "\nraw:", rawText.slice(0, 2000));
-      return Response.json(
-        { ok: false, error: "Could not parse simulation output", raw: rawText.slice(0, 5000) },
-        { status: 500 },
-      );
+      if (e instanceof Error && e.message === "ngspice executable not found on PATH") {
+        return Response.json({ error: "ngspice executable not found on PATH" }, { status: 500 });
+      }
+      throw e;
+    }
+    if (result.timedOut) {
+      return Response.json({ error: "Simulation timed out" }, { status: 504 });
+    }
+    if (result.code !== 0) {
+      return Response.json({ ok: false, error: result.stderr.slice(-3000) || result.stdout.slice(-3000) || `NGSpice exited with code ${String(result.code)}` }, { status: 500 });
     }
 
-    if (result.variables.length === 0 || result.points.length === 0) {
-      console.error("[simulate] empty result — variables:", result.variables.length, "points:", result.points.length);
-      console.error("[simulate] netlist:\n" + netlist);
-      console.error("[simulate] raw output:\n" + rawText.slice(0, 3000));
-      console.error("[simulate] stdout:\n" + stdout);
-      return Response.json(
-        { ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings.", netlist },
-        { status: 500 },
-      );
+    // [B16.0.24.1 §1] TRULY bounded read: at most MAX_RAW_BYTES actual bytes,
+    // chunked storage (never allocated from the declared size), explicit
+    // over-limit refusal — partial oversized output is NEVER parsed.
+    const rawRead = await readBoundedRawFile(rawPath, MAX_RAW_BYTES);
+    if (!rawRead.ok) {
+      if (rawRead.reason === "over-limit") {
+        return Response.json({ ok: false, error: "Simulation output exceeded the bounded size limit" }, { status: 500 });
+      }
+      if (rawRead.reason === "invalid-utf8") {
+        return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
+      }
+      return Response.json({ error: "NGSpice produced no output file" }, { status: 500 });
+    }
+    const rawText = rawRead.text;
+
+    let parsed: SimResult;
+    try {
+      parsed = parseAsciiRaw(rawText);
+    } catch {
+      return Response.json({ ok: false, error: "Could not parse simulation output" }, { status: 500 });
+    }
+    if (parsed.variables.length === 0 || parsed.points.length === 0) {
+      return Response.json({ ok: false, error: "Simulation produced no data points. Check the netlist and analysis settings." }, { status: 500 });
     }
 
-    console.log("[simulate] ok — variables:", result.variables.join(", "), "| points:", result.points.length);
     return Response.json({
       ok:           true,
-      analysis:     result.analysis,
+      analysis:     parsed.analysis,
       analysisType: analysis?.type ?? "tran",
-      variables:    result.variables,
-      points:       result.points,
+      variables:    parsed.variables,
+      points:       parsed.points,
       netlist,
       nodeMap,
       pinNodes,
     });
-  } catch (e) {
-    if (e instanceof Error && e.message === "ENOENT") {
-      return Response.json(
-        { error: "NGSpice executable not found on PATH" },
-        { status: 500 },
-      );
-    }
-    if (e instanceof Error && e.message === "TIMEOUT") {
-      return Response.json(
-        { error: "Simulation timed out after 10 seconds" },
-        { status: 504 },
-      );
-    }
-    throw e;
   } finally {
-    await Promise.all([
-      unlink(netlistPath).catch(() => {}),
-      unlink(rawPath).catch(() => {}),
-    ]);
+    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
-}
+  });

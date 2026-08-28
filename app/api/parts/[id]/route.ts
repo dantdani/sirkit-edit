@@ -11,6 +11,7 @@ import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, partsAtomicLinks, type KeySpecs } from "@/app/lib/db/schema";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { legacyPartToAtomicDraft, type LegacyAtomicDraft } from "@/app/lib/atomic/compatibility";
+import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -61,11 +62,10 @@ type AtomicAssignment = {
   approved: true;
 };
 
-export async function GET(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-): Promise<Response> {
-  const { id } = await ctx.params;
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Promise<Response> => {
+  const id = params!.id;
 
   if (!UUID_RE.test(id)) {
     return Response.json({ ok: true, part: null });
@@ -149,4 +149,4 @@ export async function GET(
     const message = err instanceof Error ? err.message : String(err);
     return Response.json({ ok: false, error: message }, { status: 500 });
   }
-}
+});

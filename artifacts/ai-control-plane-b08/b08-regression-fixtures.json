@@ -1,0 +1,19 @@
+{
+  "schema": "sirkit.b08-regression-fixtures.v1",
+  "suites": {
+    "new": ["app/lib/engineering/__tests__/b08-canonical-pcb.test.ts (18)", "app/lib/engineering/__tests__/b08-pcb-mutation-gate.test.ts (2)"],
+    "updated_truthfully": [
+      "executor-kernel.test.ts — pcb.dimension/pcb.create-via now implemented+executable; not-executable probe moved to schematic.generate",
+      "editor-adapter.test.ts test 17 — rewritten from 'non-slice batches fall back to legacy' to the B08 no-fallback + declared-compound contract",
+      "pcb-repair-agent.test.ts — applyRepairTransaction awaited (now async through the canonical gateway)",
+      "action-registry/b04 artifacts regenerated (79 records, 137 routes)"
+    ],
+    "still_green": [
+      "b07 glob + b04-tool-registry = 172 (the accepted B07.5 gate)",
+      "engineering directory suites (b03/b03.1/b03.2/b05/b05.1/b06*/b07* + b08)",
+      "PCB domain sweep app/lib/pcb + app/components/pcb (755+)",
+      "full suite 2048 tests: 2009 passed / 20 skipped; 19 parallel-load timing/jsdom failures ALL pass isolated (documented flaky set)"
+    ]
+  },
+  "browser_smoke": "see final report — performed against the local dev server without paid AI calls"
+}

@@ -17,6 +17,7 @@
  *      or:  { ok:false; error }
  */
 
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { normalizeBuildNetlist, crossCheckNetlists } from "@/lib/netlist-crosscheck";
@@ -97,13 +98,11 @@ async function callSchGen(prompt: string): Promise<string> {
   throw new Error("SchGen endpoint unavailable after retries (still loading?)");
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let body: { prompt?: unknown; state?: SchematicState };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
+// (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
+// only and cannot reach the raw request.
+export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as { prompt?: unknown; state?: SchematicState };
 
   const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
   const state = body.state;
@@ -159,4 +158,4 @@ export async function POST(req: Request): Promise<Response> {
 
   const { findings, agreement, summary } = crossCheckNetlists(primary, second);
   return Response.json({ ok: true, available: true, findings, agreement, summary, coverage });
-}
+});

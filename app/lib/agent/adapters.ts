@@ -1,0 +1,236 @@
+/**
+ * B09 — provider agent adapters (the ONLY modules that touch provider SDK
+ * types for the agent loop).
+ *
+ * Each adapter owns exactly: request/response translation, continuation
+ * mechanics, tool-call ID preservation, text/tool-call normalization, and
+ * usage/stop-reason normalization. Continuation state is OPAQUE and
+ * TRANSIENT: OpenAI's `response.output` items (including reasoning items —
+ * requested via `include: ["reasoning.encrypted_content"]` because state is
+ * managed manually with `store:false`) and Anthropic's raw assistant
+ * content blocks live only inside `ProviderContinuation.state` and never
+ * reach Sirkit traces, proposals, persisted chat, or user output.
+ *
+ * OpenAI uses the Responses API FLAT function-tool shape; every
+ * `function_call` keeps its `call_id`, and results return as
+ * `function_call_output` items tied to that exact id. Anthropic preserves
+ * the assistant's `tool_use` blocks verbatim and immediately follows them
+ * with a user message whose `tool_result` blocks (exact `tool_use_id`,
+ * `is_error` on failures) precede any other content.
+ */
+
+import OpenAI from "openai";
+import type {
+  Response as OpenAIResponse,
+  ResponseCreateParamsNonStreaming,
+  ResponseInputItem,
+  Tool as OpenAIResponsesTool,
+} from "openai/resources/responses/responses";
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  ContentBlock,
+  ContentBlockParam,
+  Message as AnthropicMessage,
+  MessageCreateParamsNonStreaming,
+  MessageParam,
+  Tool as AnthropicTool,
+} from "@anthropic-ai/sdk/resources/messages/messages";
+import { toProviderError } from "../llm/errors";
+import { configuredOpenAIModel, configuredOpenAIReasoningEffort, type OpenAIReasoningEffort } from "../llm/openai-config";
+import type { AgentStep, AgentToolResult, ProviderAgentAdapter, ProviderToolDeclaration } from "./contracts";
+import { renderAnthropicAgentTool, renderOpenAiResponsesTool } from "./provider-tools";
+
+const MAX_OUTPUT_TOKENS = 4096;
+
+// ─── OpenAI (Responses API, manual conversation state) ───────────────────────
+
+type OpenAIClient = Pick<OpenAI, "responses">;
+
+interface OpenAIContinuationState {
+  /** The full manually-managed input list: prior items + every prior
+   *  response's output items (reasoning items included) in order. */
+  input: ResponseInputItem[];
+  instructions: string;
+}
+
+function normalizeOpenAIStep(response: OpenAIResponse, state: OpenAIContinuationState): AgentStep {
+  const toolCalls = response.output
+    .filter((item) => item.type === "function_call")
+    .map((item) => ({ callId: item.call_id, providerName: item.name, argumentsText: item.arguments }));
+  return {
+    text: response.output_text ?? "",
+    toolCalls,
+    stopReason: response.status ?? null,
+    usage: { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens },
+    model: response.model,
+    continuation: {
+      provider: "openai",
+      // Every continuation item required by reasoning models is preserved:
+      // the response's output items are appended verbatim to the input list.
+      state: { input: [...state.input, ...(response.output as unknown as ResponseInputItem[])], instructions: state.instructions } satisfies OpenAIContinuationState,
+    },
+  };
+}
+
+export class OpenAIAgentAdapter implements ProviderAgentAdapter {
+  readonly provider = "openai" as const;
+  private client?: OpenAIClient;
+
+  constructor(
+    client?: OpenAIClient,
+    private readonly model = configuredOpenAIModel(),
+    private readonly reasoningEffort: OpenAIReasoningEffort | undefined = configuredOpenAIReasoningEffort(model),
+  ) {
+    this.client = client;
+  }
+
+  private getClient(): OpenAIClient {
+    this.client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 2, timeout: 120_000 });
+    return this.client;
+  }
+
+  private params(state: OpenAIContinuationState, tools: readonly ProviderToolDeclaration[]): ResponseCreateParamsNonStreaming {
+    return {
+      model: this.model,
+      instructions: state.instructions,
+      input: state.input,
+      tools: tools.length > 0 ? (tools.map(renderOpenAiResponsesTool) as unknown as OpenAIResponsesTool[]) : undefined,
+      tool_choice: tools.length > 0 ? "auto" : undefined,
+      // Sequential, deterministic tool handling — one batch at a time.
+      parallel_tool_calls: tools.length > 0 ? false : undefined,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+      reasoning: this.reasoningEffort ? { effort: this.reasoningEffort } : undefined,
+      // Manual state management: reasoning items must round-trip.
+      include: ["reasoning.encrypted_content"],
+      store: false,
+      stream: false,
+    };
+  }
+
+  async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
+    const items: ResponseInputItem[] = [
+      ...input.history.map((turn): ResponseInputItem => ({ role: turn.role, content: turn.text })),
+      { role: "user", content: input.userMessage },
+    ];
+    const state: OpenAIContinuationState = { input: items, instructions: input.system };
+    try {
+      const response = await this.getClient().responses.create(this.params(state, input.tools), { signal: input.signal });
+      return normalizeOpenAIStep(response, state);
+    } catch (error) {
+      throw toProviderError(this.provider, error);
+    }
+  }
+
+  async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
+    const prior = input.continuation.state as OpenAIContinuationState;
+    const outputs: ResponseInputItem[] = input.results.map((result) => ({
+      type: "function_call_output",
+      call_id: result.callId,
+      output: result.outputText,
+    }));
+    const state: OpenAIContinuationState = { input: [...prior.input, ...outputs], instructions: prior.instructions };
+    try {
+      const response = await this.getClient().responses.create(this.params(state, input.tools), { signal: input.signal });
+      return normalizeOpenAIStep(response, state);
+    } catch (error) {
+      throw toProviderError(this.provider, error);
+    }
+  }
+}
+
+// ─── Anthropic (Messages API) ────────────────────────────────────────────────
+
+type AnthropicClient = Pick<Anthropic, "messages">;
+
+interface AnthropicContinuationState {
+  system: string;
+  /** Full message list; assistant turns carry RAW content blocks verbatim. */
+  messages: MessageParam[];
+}
+
+function normalizeAnthropicStep(message: AnthropicMessage, state: AnthropicContinuationState): AgentStep {
+  const text = message.content.filter((block) => block.type === "text").map((block) => block.text).join("");
+  const toolCalls = message.content
+    .filter((block) => block.type === "tool_use")
+    .map((block) => ({ callId: block.id, providerName: block.name, argumentsText: JSON.stringify(block.input ?? {}) }));
+  return {
+    text,
+    toolCalls,
+    stopReason: message.stop_reason,
+    usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
+    model: message.model,
+    continuation: {
+      provider: "anthropic",
+      state: {
+        system: state.system,
+        // The assistant's content blocks (tool_use included) are preserved
+        // VERBATIM so the follow-up tool_result blocks pair correctly.
+        messages: [...state.messages, { role: "assistant", content: message.content as ContentBlock[] as unknown as ContentBlockParam[] }],
+      } satisfies AnthropicContinuationState,
+    },
+  };
+}
+
+export class AnthropicAgentAdapter implements ProviderAgentAdapter {
+  readonly provider = "anthropic" as const;
+  private client?: AnthropicClient;
+
+  constructor(client?: AnthropicClient, private readonly model = process.env.SIRKIT_ANTHROPIC_MODEL ?? "claude-opus-4-7") {
+    this.client = client;
+  }
+
+  private getClient(): AnthropicClient {
+    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    return this.client;
+  }
+
+  private params(state: AnthropicContinuationState, tools: readonly ProviderToolDeclaration[]): MessageCreateParamsNonStreaming {
+    return {
+      model: this.model,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      system: state.system,
+      messages: state.messages,
+      tools: tools.length > 0 ? (tools.map(renderAnthropicAgentTool) as unknown as AnthropicTool[]) : undefined,
+      tool_choice: tools.length > 0 ? { type: "auto", disable_parallel_tool_use: true } : undefined,
+    };
+  }
+
+  async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {
+    const state: AnthropicContinuationState = {
+      system: input.system,
+      messages: [
+        ...input.history.map((turn): MessageParam => ({ role: turn.role, content: turn.text })),
+        { role: "user", content: input.userMessage },
+      ],
+    };
+    try {
+      const message = await this.getClient().messages.create(this.params(state, input.tools), { signal: input.signal });
+      return normalizeAnthropicStep(message, state);
+    } catch (error) {
+      throw toProviderError(this.provider, error);
+    }
+  }
+
+  async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
+    const prior = input.continuation.state as AnthropicContinuationState;
+    // tool_result blocks (exact tool_use_id, is_error on failure) come
+    // FIRST in the user turn — before any additional user text (none here).
+    const results: ContentBlockParam[] = input.results.map((result: AgentToolResult) => ({
+      type: "tool_result",
+      tool_use_id: result.callId,
+      content: result.outputText,
+      ...(result.isError ? { is_error: true } : {}),
+    }));
+    const state: AnthropicContinuationState = { system: prior.system, messages: [...prior.messages, { role: "user", content: results }] };
+    try {
+      const message = await this.getClient().messages.create(this.params(state, input.tools), { signal: input.signal });
+      return normalizeAnthropicStep(message, state);
+    } catch (error) {
+      throw toProviderError(this.provider, error);
+    }
+  }
+}
+
+export function agentAdapterFor(provider: "openai" | "anthropic"): ProviderAgentAdapter {
+  return provider === "openai" ? new OpenAIAgentAdapter() : new AnthropicAgentAdapter();
+}

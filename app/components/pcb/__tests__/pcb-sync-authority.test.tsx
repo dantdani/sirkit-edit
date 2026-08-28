@@ -26,8 +26,11 @@ function applyResult(record: ReturnType<typeof makeBoardRecord>) { return { resu
 
 describe("durable PCB editor authority", () => {
   it("publishes the actual canonical schematic and rejects duplicate identity before transport", () => {
-    const graph = buildPcbSyncPublicationGraph(schematic); expect(graph.components.map((item) => item.referenceDesignator)).toEqual(["R1"]); expect(graph.components[0]?.pins.every((pin) => pin.disposition === "unconnected")).toBe(true);
-    const duplicate: SchematicState = { ...schematic, kicadComponents: [{ id: "catalog-1", partId: "part-1", x: 100, y: 0, rotation: 0, refDes: "R1", value: "1k", symbolAssetVersionId: "symbol:r1" }] };
+    // B07.1/B07.2: the published reference IS the displayed reference
+    // (refDes ?? id) — a legacy component without refDes publishes its
+    // stable id verbatim, never a positionally synthesized "R1".
+    const graph = buildPcbSyncPublicationGraph(schematic); expect(graph.components.map((item) => item.referenceDesignator)).toEqual(["resistor-1"]); expect(graph.components[0]?.pins.every((pin) => pin.disposition === "unconnected")).toBe(true);
+    const duplicate: SchematicState = { ...schematic, kicadComponents: [{ id: "catalog-1", partId: "part-1", x: 100, y: 0, rotation: 0, refDes: "resistor-1", value: "1k", symbolAssetVersionId: "symbol:r1" }] };
     expect(() => buildPcbSyncPublicationGraph(duplicate, () => ({ pins: [{ number: "1", name: "A", type: "passive", orientation: 0, length: 100, position: { x: 0, y: 0 } }] }))).toThrow("PS_COMPONENT_IDENTITY_DUPLICATE");
   });
 
@@ -50,9 +53,24 @@ describe("durable PCB editor authority", () => {
     expect((await client.loadBoard("board-1")).ok).toBe(false);
   });
 
-  it("classifies old local PCB data as explicit legacy import and never calls legacy sync", () => {
-    localStorage.clear(); expect(saveCurrentBoard(createEmptyBoard(), schematic, null)).toBe(true); expect(loadLegacyBoardImport()).not.toBeNull();
-    const source = readFileSync(`${process.cwd()}/app/components/pcb/PcbEditor.tsx`, "utf8"); expect(source).not.toMatch(/\bsyncFromSchematic\s*\(/); expect(source).toContain("applyingRef.current"); expect(source).toContain("Apply sync plan"); expect(source).not.toContain("saveCurrentBoard(");
+  it("classifies old local PCB data as explicit legacy import and never calls legacy sync", async () => {
+    localStorage.clear();
+    // [B12.5 §C] PCB persistence no longer activates projects: the current
+    // project is established ONLY by the page's transactional activation
+    // (markProjectCurrent), and board saves land on it without ever
+    // touching the pointer. saveCurrentBoard on an empty workspace still
+    // succeeds — it materializes an INACTIVE record — but legacy import
+    // reads the ACTIVE project, so the fixture activates one first.
+    const { createProjectRecord, markProjectCurrent } = await import("@/app/lib/project/current");
+    const record = createProjectRecord("Legacy import fixture");
+    expect(markProjectCurrent(record.id).ok).toBe(true);
+    expect(saveCurrentBoard(createEmptyBoard(), schematic, null)).toBe(true);
+    expect(localStorage.getItem("sirkit:currentProjectId")).toBe(record.id); // the save did NOT repoint
+    expect(loadLegacyBoardImport()).not.toBeNull();
+    // [B08.3] the ambient `applyingRef` single-flight boolean was replaced
+    // by the request-owned operation registry (behaviorally covered in
+    // b08-3-owned-sync.test.ts); the editor still never calls legacy sync.
+    const source = readFileSync(`${process.cwd()}/app/components/pcb/PcbEditor.tsx`, "utf8"); expect(source).not.toMatch(/\bsyncFromSchematic\s*\(/); expect(source).toContain('runVerifiedServerAdoption(ownedOps, "sync-apply"'); expect(source).toContain("Apply sync plan"); expect(source).not.toContain("saveCurrentBoard(");
   });
 
   it.runIf(Boolean(process.env.R03_B10D_RETRY02_DATABASE_URL))("uses the editor client through real handlers and PostgreSQL durable authority", async () => {

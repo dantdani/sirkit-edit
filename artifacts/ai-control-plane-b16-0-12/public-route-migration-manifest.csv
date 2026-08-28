@@ -1,0 +1,13 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+GET,/api/ai/runtime,public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/components/atomic,public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/components/atomic/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/export/kicad,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+GET,/api/kicad/v1/parts/category/[id],public,canonical-wrapper,kicadLibraryRoute,(adopted),adopted
+GET,/api/parts/[id]/alternates,public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/parts/[id],public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/pcb/export/kicad-pcb,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+GET,/api/pcb/footprints/[id],public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/pcb/footprints/resolve,public,canonical-wrapper,publicRoute,(adopted),adopted
+GET,/api/pcb/footprints/search,public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/pcb/placement/preview,public,canonical-wrapper,publicJsonRoute,(adopted),adopted

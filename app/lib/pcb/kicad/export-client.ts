@@ -9,6 +9,9 @@ export async function downloadKicadPcb(
   board: PcbBoard,
   netlist: PcbNetlist | null,
   boardName = "sirkit-board",
+  /** B08 — surfaces explicit unsupported-content diagnostics (e.g. dimension
+   *  annotations the exporter cannot represent). Never silently dropped. */
+  onDiagnostic?: (message: string) => void,
 ): Promise<boolean> {
   try {
     const res = await fetch("/api/pcb/export/kicad-pcb", {
@@ -21,6 +24,8 @@ export async function downloadKicadPcb(
       }),
     });
     if (!res.ok) throw new Error(`export failed (HTTP ${res.status})`);
+    const unsupported = res.headers.get("X-Sirkit-Export-Unsupported");
+    if (unsupported) onDiagnostic?.(decodeURIComponent(unsupported));
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

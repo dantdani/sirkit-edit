@@ -1,0 +1,6 @@
+method,path,wrapper,options,notes
+GET,/api/auth/callback,publicRoute,"{query:true, requestOrigin:true}",PKCE redirect; code/next via bounded query; meta.origin from resolveExpectedOrigin
+POST,/api/auth/signin,publicJsonRoute,"{maxBytes:16000, deadlineMs:10000, legacyReaderRefusals:auth-signin-v1}",public+CSRF; byte-exact AUTH_SIGNIN_* refusals; no token in body; no signup
+POST,/api/auth/signout,publicRoute,{exposeEnvironment:true},public+CSRF; env via declarative option; local_dev signedOut:false; unconfigured 503; no redirect
+POST,/api/chat,agentStreamRoute,"{maxBytes:8000000, defaultScope:local/local/local}",body-scope + lenient parse + NDJSON stream + abort signal; policy body-scope-server-actor unchanged
+POST,/api/simulate,authenticatedJsonRoute,"{maxBytes:8000000, deadlineMs:30000, exposeAbortSignal:true}",hardened runner: isolated dir, env allowlist, shell:false, bounded output/parse, injection guards, cleanup

@@ -1,11 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { createPassivePolicyPostHandler } from "../handler";
 import { InMemoryPassivePolicyRepository } from "@/app/lib/passive-policy/repository";
 import { InMemoryPassivePolicyContextProvider } from "@/app/lib/passive-policy/providers";
 import { PassivePolicyService } from "@/app/lib/passive-policy/service";
 import { ScopedPassivePolicyInvalidationTarget } from "@/app/lib/passive-policy/invalidation";
 
-const headers = { "content-type": "application/json", "x-sirkit-tenant-id": "tenant-1", "x-sirkit-project-id": "project-1", "x-sirkit-branch-id": "main", "x-sirkit-actor-id": "admin-1", "x-sirkit-role": "project_admin" };
+// B16.0.1: identity/actor/role are SERVER-DERIVED (authorizeRequest → verified
+// principal + active project membership). x-sirkit-actor-id / x-sirkit-role
+// headers are no longer read by any production route — only the selector
+// headers remain (never authority). Inject a deterministic project admin so
+// the happy paths observe the known actorId "admin-1"; individual tests
+// override this to exercise unauthenticated / insufficient-role paths.
+beforeEach(() => { injectAuthorizedPrincipal({ userId: "admin-1", tenantId: "tenant-1", projectId: "project-1", role: "admin" }); });
+afterEach(() => { resetInjectedIdentity(); });
+
+const headers = { "content-type": "application/json", origin: "http://localhost", "x-sirkit-tenant-id": "tenant-1", "x-sirkit-project-id": "project-1", "x-sirkit-branch-id": "main" };
 const service = new PassivePolicyService({ repository: new InMemoryPassivePolicyRepository(), contextProvider: new InMemoryPassivePolicyContextProvider(), invalidation: new ScopedPassivePolicyInvalidationTarget() });
 function request(body: unknown, extra: Record<string, string> = {}) { return new Request("http://localhost/api/passive-policy", { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify(body) }); }
 const mutationHeaders = { "x-sirkit-passive-policy-mutation": "acknowledged" };
@@ -24,8 +34,21 @@ describe("passive policy API security", () => {
 
   it("requires authentication and an explicit opt-in mutation acknowledgement", async () => {
     const handler = createPassivePolicyPostHandler(service, () => "observe");
-    const unauthenticated = await handler(new Request("http://localhost/api/passive-policy", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }));
+    // B16.0.1: authentication is a VERIFIED server-side principal, never a
+    // header. Even a fully-formed request carrying every selector header is
+    // refused 401 when no verified session exists — strictly stronger than the
+    // old "missing identity headers → 401" (identity cannot be asserted at all).
+    injectIdentity(null);
+    const unauthenticated = await handler(request({ operation: "evaluate", requestId: "r1", componentInstanceId: "C1", assemblyVariantId: "variant-default" }));
     expect(unauthenticated.status).toBe(401);
+    // B16.0.1: the membership ROLE is server-derived too — a viewer is refused
+    // by the route-policy chokepoint (POST /api/passive-policy permits only
+    // REVIEW_EDITORS) with 403 BEFORE any handler logic runs.
+    injectAuthorizedPrincipal({ userId: "viewer-1", tenantId: "tenant-1", projectId: "project-1", role: "viewer" });
+    const denied = await handler(request({ operation: "evaluate", requestId: "r1", componentInstanceId: "C1", assemblyVariantId: "variant-default" }));
+    expect(denied.status).toBe(403);
+    expect((await denied.json()).code).toBe("AUTH_ROLE_DENIED");
+    injectAuthorizedPrincipal({ userId: "admin-1", tenantId: "tenant-1", projectId: "project-1", role: "admin" });
     const mutation = await handler(request({ operation: "publish", requestId: "r1", policyId: "project-passive-policy", expectedRevision: 1, idempotencyKey: "key-1", reason: "Publish" }));
     expect((await mutation.json()).code).toBe("PP_POLICY_MUTATION_NOT_ENABLED");
   });
@@ -34,6 +57,8 @@ describe("passive policy API security", () => {
     const applyApprovedException = vi.fn(async (_request: unknown) => ({ operation: "approved" })), revokeException = vi.fn(async (_request: unknown) => ({ operation: "revoked" })), supersedeException = vi.fn(async (_request: unknown) => ({ operation: "superseded" }));
     const handler = createPassivePolicyPostHandler({ applyApprovedException, revokeException, supersedeException } as unknown as PassivePolicyService, () => "opt_in");
     expect((await handler(request(mutation("approve_exception", exception()), mutationHeaders))).status).toBe(200);
+    // B16.0.1: actorId/role come from the injected VERIFIED principal
+    // (admin-1, membership role admin → project_admin), never from headers.
     expect(applyApprovedException.mock.calls[0]![0]).toMatchObject({ tenantId: "tenant-1", projectId: "project-1", actorContext: { actorId: "admin-1", role: "project_admin" }, operation: "approve", exception: { state: "pending", createdBy: { actorId: "admin-1" } } });
     const revoke = mutation("revoke_exception", { exceptionId: "exception-opt_out", expectedDecisionRevision: 1, evidenceRefs: ["revoke-evidence-r1"] });
     expect((await handler(request(revoke, mutationHeaders))).status).toBe(200);
@@ -45,6 +70,9 @@ describe("passive policy API security", () => {
 
   it("rejects forged identity, unknown fields/actions, and maps stale exception revision safely", async () => {
     const revokeException = vi.fn(async (_request: unknown) => { throw new Error("PP_EXCEPTION_REVISION_CONFLICT"); }), handler = createPassivePolicyPostHandler({ revokeException } as unknown as PassivePolicyService, () => "opt_in");
+    // B16.0.1: a body-supplied actorContext is still refused by the scope's
+    // forbidden-authoritative-key screen — and even if it were not, the actor
+    // is server-derived, so the forgery could never take effect.
     const forged = { ...mutation("approve_exception", exception()), actorContext: { actorId: "attacker", role: "project_admin" } };
     const forgedResponse = await handler(request(forged, mutationHeaders));
     expect(forgedResponse.status).toBe(400);

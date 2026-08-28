@@ -70,6 +70,8 @@ import { silkItemPolylines } from "../silk/geometry";
 import { renderCopper } from "./copper";
 import { renderZones } from "./zones";
 import { renderSilkItems } from "./silk";
+import { renderDimensions } from "./dimensions";
+import { dimensionGeometry } from "../dimensions/geometry";
 
 export type { PickResult, OutlineHandleId } from "./pick";
 
@@ -525,6 +527,7 @@ export function createPcbScene(): PcbScene {
     vias: unknown;
     zones: unknown;
     silkItems: unknown;
+    dimensions: unknown;
   } | null = null;
 
   function rebuildPickIndex(b: PcbBoard): void {
@@ -534,7 +537,8 @@ export function createPcbScene(): PcbScene {
       pickSource.tracks === b.tracks &&
       pickSource.vias === b.vias &&
       pickSource.zones === b.zones &&
-      pickSource.silkItems === b.silkItems
+      pickSource.silkItems === b.silkItems &&
+      pickSource.dimensions === b.dimensions
     ) {
       return;
     }
@@ -544,6 +548,7 @@ export function createPcbScene(): PcbScene {
       vias: b.vias,
       zones: b.zones,
       silkItems: b.silkItems,
+      dimensions: b.dimensions,
     };
     const entries: PickEntry[] = instances.map((r) => ({
       result: { kind: "footprint", id: r.id },
@@ -623,6 +628,7 @@ export function createPcbScene(): PcbScene {
     vias: Map<string, PcbBoard["vias"][number]>;
     zones: Map<string, PcbBoard["zones"][number]>;
     silk: Map<string, NonNullable<PcbBoard["silkItems"]>[number]>;
+    dimensions: Map<string, NonNullable<PcbBoard["dimensions"]>[number]>;
   }
 
   function buildOverlayLookup(b: PcbBoard): OverlayLookup {
@@ -631,6 +637,7 @@ export function createPcbScene(): PcbScene {
       vias: new Map(b.vias.map((v) => [v.id, v])),
       zones: new Map(b.zones.map((z) => [z.id, z])),
       silk: new Map((b.silkItems ?? []).map((s) => [s.id, s])),
+      dimensions: new Map((b.dimensions ?? []).map((d) => [d.id, d])),
     };
   }
 
@@ -698,6 +705,13 @@ export function createPcbScene(): PcbScene {
         if (minX === Infinity) return;
         const pad = Math.round(item.strokeWidthNm / 2);
         strokeBBoxNm(g, { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }, scale);
+        return;
+      }
+      case "dimension": {
+        const dimension = lookup.dimensions.get(ref.id);
+        if (!dimension) return;
+        const geometry = dimensionGeometry(dimension);
+        strokeBBoxNm(g, geometry.bbox, scale);
         return;
       }
       case "pad": {
@@ -981,7 +995,8 @@ export function createPcbScene(): PcbScene {
     const copper = renderCopper(b, (layer) => container(layer as ContainerKey));
     const zones = renderZones(b, (layer) => container(layer as ContainerKey));
     const silk = renderSilkItems(b, (layer) => container(layer as ContainerKey));
-    primitives = footprintPrimitives + copper.primitives + zones.primitives + silk.items;
+    const dimensions = renderDimensions(b, (layer) => container(layer as ContainerKey));
+    primitives = footprintPrimitives + copper.primitives + zones.primitives + silk.items + dimensions.items;
     // Stage 17: copper-only commits (same footprints array via immer sharing)
     // must still refresh the pick index; it dirty-checks its own sources.
     rebuildPickIndex(b);

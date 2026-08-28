@@ -107,6 +107,10 @@ export function pcbRevisionPayload(board: PcbBoard): unknown {
     })),
     placementPolicy: board.placementPolicy,
     placementPreferences: board.placementPreferences,
+    // B08: dimension annotations are semantic board state. Conditional so
+    // every pre-B08 board (no dimensions) keeps its exact revision id —
+    // existing stage evidence and head claims stay verifiable.
+    ...(board.dimensions?.length ? { dimensions: [...board.dimensions].sort(byId) } : {}),
     netClassing,
     constraintState: board.constraintState ? {
       schemaVersion: board.constraintState.schemaVersion,

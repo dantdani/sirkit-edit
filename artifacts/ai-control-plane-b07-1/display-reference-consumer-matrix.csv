@@ -1,0 +1,22 @@
+consumer,file,field,class,before_b07_1,after_b07_1,rename_behavior,pinning_test
+netlist component id,app/lib/pcb/netlist-bridge.ts,NetlistComponent.id,identity,stable id,stable id (unchanged),unchanged,b07-1 B1
+netlist theory ref,app/lib/pcb/netlist-bridge.ts,NetlistComponent.ref,presentation,POSITIONAL synthesis (R1/R2... by type counter; display discarded),normalizeRefDes(schDisplayRef(c)),follows rename,b07-1 B1
+netlist kicad ref,app/lib/pcb/netlist-bridge.ts,NetlistComponent.ref,presentation,inst.refDes,inst.refDes (unchanged),follows rename,b07-1 B1
+pcb-sync componentInstanceId,app/lib/pcb/netlist-bridge.ts,PcbSyncSchematicComponent.componentInstanceId,identity,netlist id (stable id),stable id (unchanged),unchanged,b07-1 B2
+pcb-sync referenceDesignator,app/lib/pcb/netlist-bridge.ts,PcbSyncSchematicComponent.referenceDesignator,presentation,positional theory ref,displayed reference,follows rename; componentRevision digest changes; fails closed on duplicates (PS_COMPONENT_IDENTITY_DUPLICATE),b07-1 B2/B3
+pcb-sync theory symbol id,app/lib/pcb/netlist-bridge.ts,symbolAssetVersionId,identity,derived from ref letter prefix (would corrupt under display refs),derived from component TYPE (byte-identical for all previously valid refs),unchanged by rename,b07-1 B2
+board reconciliation,app/lib/pcb/netlist-bridge.ts syncFromSchematic,FootprintInstance.id,identity,keyed on component id,keyed on component id (unchanged),copper/placement preserved across rename,existing netlist-bridge suite
+SPICE device id,app/lib/spice/ir.ts,IrDevice.id,identity,stable id,stable id (unchanged),unchanged,b07-1 B5
+SPICE device name,app/lib/spice/ir.ts,IrDevice.name,presentation,sanitizeElementName(component.id),sanitizeElementName(normalizeRefDes(schDisplayRef(c))),follows rename,b07-1 B5
+SPICE SourceRef,app/lib/spice/ir.ts,IrDevice.source,identity+presentation,id=stable id; label=derived-from-id device name,id=stable id; label=displayed reference,label follows rename; id stable,b07-1 B5
+SPICE bindings/overlays/pin nodes,app/lib/spice/ir.ts,modelBindings/componentPinNodes/overlay targets,identity,stable id,stable id (unchanged),saved targets still resolve after rename,b07-1 B5
+legacy SPICE netlist element names,app/lib/netlist.ts spiceName,element name,presentation,derived from comp.id,derived from schDisplayRef (mirrored EXACTLY by page probe keys),follows rename; probe keys stay matched,existing sim flows + B5
+frontend probe keys,app/page.tsx frontendSpiceName/compProbeKey,probe vector names,presentation,derived from comp.id,derived from schDisplayRef (lockstep with lib/netlist.ts),follows rename,manual browser verification
+KiCad export theory refDes,app/lib/kicad-export.ts,symbol Reference property,presentation,POSITIONAL synthesis (R1/C1...),schDisplayRef(comp) with deterministic _N suffix only for legacy duplicate states,follows rename,export route + b07-1 E-suite build
+KiCad export symbol uuid,app/lib/kicad-export.ts,uuidFor("symbol" id),identity,stable id seed,stable id seed (unchanged),unchanged,existing export tests
+BOM theory refs,app/lib/bom/build.ts,BomLine.refs,presentation,c.id,schDisplayRef(c),follows rename,bom suite
+BOM instance ids,app/lib/bom/build.ts,componentInstanceIds,identity,kicad stable ids,unchanged,unchanged,bom suite
+delete-plan label,app/lib/engineering/schematic-plans.ts,componentLabel,presentation,type + component.id,type + schDisplayRef(component),follows rename,plans suite
+tier-1 proposal target display,app/lib/engineering/schematic-plans.ts,SchematicEditOp.target resolution,presentation->identity,display resolved then compiled to stable ids (B07),unchanged,resolution by display; operations by stable id,b06/b07 suites
+selection/inspector/history labels,app/page.tsx,selectedId + panel labels,identity+presentation,selection by stable id; labels via schDisplayRef (B07),unchanged,labels follow rename; selection stable,b07 suite 19
+physical bindings / component authority,app/api/physical-bindings + app/lib/atomic,componentInstanceId,identity,kicad stable id,unchanged,unchanged,authority suites

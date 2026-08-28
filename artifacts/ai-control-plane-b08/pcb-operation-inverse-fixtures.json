@@ -1,0 +1,22 @@
+{
+  "schema": "sirkit.b08-inverse-fixtures.v1",
+  "suite": "app/lib/engineering/__tests__/b08-canonical-pcb.test.ts",
+  "contract": "roundTrip(): apply operations, apply kernel-minted inverses → semanticStateDigest EXACTLY equals the base; forward replay from the restored state reproduces the result digest.",
+  "fixtures": [
+    { "id": "T1", "title": "Middle-element deletion per ordered collection (track/via/zone/text/dimension)", "expected": "indexed add inverse restores exact array order [a,b,c]; digest-exact both directions" },
+    { "id": "T2", "title": "Add then undo per entity type incl. silk into an ABSENT optional collection", "expected": "digest-exact; pruneEmptyCollection restores collection absence; atIndex insertion lands exactly" },
+    { "id": "T3", "title": "Patch adds padstackId; undo", "expected": "replace-snapshot inverse restores field ABSENCE ('padstackId' in via === false)" },
+    { "id": "T4", "title": "Protection lock/unlock + locked-object refusal + replace flip refusal + footprint protection absence", "expected": "PROTECTED_OBJECT for generic updates on locked; protection inverse replays unblocked; PROTECTION_VIA_UPDATE on flip-by-replace; unlock restores property absence" },
+    { "id": "T5", "title": "Annular ring / padstack reference / global id / dimension validation", "expected": "INVALID_VIA, UNKNOWN_PADSTACK, BOARD_INTEGRITY duplicate id, INVALID_DIMENSION — all pre-mutation" },
+    { "id": "T6", "title": "Padstack deletion with live references inside a batch", "expected": "PADSTACK_IN_USE; whole batch atomic; source digest unchanged" },
+    { "id": "T7", "title": "Route gesture (segment+via+routing history)", "expected": "ONE transaction, ONE history entry; undo verified-replay digest-exact; zero rebases" },
+    { "id": "T8", "title": "Stale-base candidate", "expected": "structured refusal; board reference-identical; no history entry" },
+    { "id": "T9", "title": "Autoroute net replacement with locked copper", "expected": "locked track survives; unlocked replaced; one transaction" },
+    { "id": "T10-12", "title": "Zone/silk/rules/stackup/keepout/placement-settings commits", "expected": "each = one canonical transaction; digest-exact undo via verified replay (routing-preferences absence restored exactly)" },
+    { "id": "T13", "title": "Unsupported delta (footprint add / net add)", "expected": "PCB_DELTA_UNSUPPORTED fail-closed; zero mutation" },
+    { "id": "T14", "title": "Dimension update/revision/export", "expected": "digest-exact replace round-trip; pcbRevisionId + boardGeometry domain change; explicit KiCad unsupported diagnostic; empty diagnostic without dimensions" },
+    { "id": "T15-16", "title": "Disposed-session late commit + FIFO serialization", "expected": "[B08.1] T15 now asserts a session_retired STRUCTURED REFUSAL with EXACT zero mutation (board reference identity, digest, entry count); FIFO serialization unchanged" },
+    { "id": "T17-18", "title": "Persistence failure + idempotency", "expected": "persistence_failed rolls back board AND history; duplicate submission never double-applies" },
+    { "id": "T19-20", "title": "Tool boundary", "expected": "destructive without channel/approval → approval_required; release → release_tier_blocked; ai + manage_protection → unauthorized" }
+  ]
+}

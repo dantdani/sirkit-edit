@@ -93,7 +93,7 @@ describe("Stage 7 provider-neutral preview and AI boundary", () => {
     expect(JSON.stringify(tools.replay(run.runId))).not.toMatch(/sk-|api[_-]?key|Users\\/i);
     expect(PCB_AI_TOOLS.some((tool) => tool.name === "apply_placement")).toBe(false);
 
-    const response = await previewRoute(new Request("http://localhost/api/pcb/placement/preview", { method: "POST", body: JSON.stringify({ board, options: { candidateCount: 2, localRefinementPasses: 0 } }) }));
+    const response = await previewRoute(new Request("http://localhost/api/pcb/placement/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ board, options: { candidateCount: 2, localRefinementPasses: 0 } }) }));
     expect(response.status).toBe(200);
     const body = await response.json() as { ok: boolean; result: { selectedCandidateId?: string } };
     expect(body.ok).toBe(true);

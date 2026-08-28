@@ -143,23 +143,46 @@ export function createPcbSyncPostHandler(service: PcbSynchronizationService, fea
   };
 }
 
-export function createPcbSyncBoardGetHandler(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState) {
-  return async function get(request: Request): Promise<Response> {
-    const authorized = pcbSyncScope(request); if (!authorized.ok) return authorized.response;
+/**
+ * [B16.0.22] Request-free authoritative board load. The canonical route
+ * wrapper authorizes and projects the query (deterministic first-value-wins);
+ * this core validates the projected fields and reads the durable record. The
+ * unknown-field refusal is preserved exactly; the historical DUPLICATED-key
+ * refusal lives only in the legacy Request adapter below (the canonical query
+ * projection cannot carry duplicates).
+ */
+export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState) {
+  return async function loadBoard(scope: { tenantId: string; projectId: string; branchId: string }, query: Readonly<Record<string, string>>): Promise<Response> {
     const state = featureState();
     try {
-      const url = new URL(request.url), allowed = new Set(["boardId", "knownRevision", "knownDigest"]);
-      if ([...url.searchParams.keys()].some((key) => !allowed.has(key)) || [...allowed].some((key) => url.searchParams.getAll(key).length > 1)) fail("PS_API_UNKNOWN_FIELD");
-      const boardId = id(url.searchParams.get("boardId"), "PS_BOARD_ID_INVALID"), knownRevision = url.searchParams.get("knownRevision"), knownDigest = url.searchParams.get("knownDigest");
+      const allowed = new Set(["boardId", "knownRevision", "knownDigest"]);
+      if (Object.keys(query).some((key) => !allowed.has(key))) fail("PS_API_UNKNOWN_FIELD");
+      const boardId = id(query.boardId, "PS_BOARD_ID_INVALID"), knownRevision = query.knownRevision ?? null, knownDigest = query.knownDigest ?? null;
       if (knownRevision !== null) id(knownRevision, "PS_BOARD_REVISION_INVALID"); if (knownDigest !== null) id(knownDigest, "PS_BOARD_DIGEST_INVALID");
-      const scope = { tenantId: authorized.scope.tenantId, projectId: authorized.scope.projectId, branchId: authorized.scope.branchId, boardId }, record = await repository.getBoard(scope);
-      const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope };
+      const boardScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId }, record = await repository.getBoard(boardScope);
+      const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope: boardScope };
       if (!record) { const result: PcbSyncBoardLoadResult = { ...common, status: "not_found" }; return Response.json({ ok: true, operation: "load_board", boardChanged: false, result }, { status: 404, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } }); }
-      const rebuilt = makeBoardRecord({ ...scope, board: record.board, updatedAt: record.updatedAt });
+      const rebuilt = makeBoardRecord({ ...boardScope, board: record.board, updatedAt: record.updatedAt });
       if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) fail("PS_BOARD_RECORD_DIGEST_MISMATCH");
       const conditional = (knownRevision !== null || knownDigest !== null) && (knownRevision === null || knownRevision === record.revision) && (knownDigest === null || knownDigest === record.digest);
       const result: PcbSyncBoardLoadResult = conditional ? { ...common, status: "not_modified" } : { ...common, status: "found", record };
       return Response.json({ ok: true, operation: "load_board", boardChanged: false, result }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+    } catch (error) { return errorResponse(error); }
+  };
+}
+
+/** Legacy Request adapter over the core (standing tests): authorizes through
+ *  `pcbSyncScope` and preserves the historical duplicated-query-key refusal. */
+export function createPcbSyncBoardGetHandler(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState) {
+  const core = createPcbSyncBoardGetCore(repository, featureState);
+  return async function get(request: Request): Promise<Response> {
+    const authorized = await pcbSyncScope(request); if (!authorized.ok) return authorized.response;
+    try {
+      const url = new URL(request.url), allowed = new Set(["boardId", "knownRevision", "knownDigest"]);
+      if ([...url.searchParams.keys()].some((key) => !allowed.has(key)) || [...allowed].some((key) => url.searchParams.getAll(key).length > 1)) fail("PS_API_UNKNOWN_FIELD");
+      const query: Record<string, string> = {};
+      for (const key of allowed) { const value = url.searchParams.get(key); if (value !== null) query[key] = value; }
+      return await core(authorized.scope, query);
     } catch (error) { return errorResponse(error); }
   };
 }

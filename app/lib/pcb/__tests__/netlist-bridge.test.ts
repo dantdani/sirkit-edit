@@ -105,7 +105,10 @@ describe("buildNetlist", () => {
   it("derives deterministic net ids: named alphabetical first, then unnamed", () => {
     const netlist = buildNetlist(theoryFixture());
 
-    expect(netlist.components.map((c) => c.ref)).toEqual(["R1", "R2", "C1", "D1", "L1"]);
+    // B07.1: the netlist ref IS the displayed reference (refDes ?? id) — for
+    // legacy components without refDes that is the stable id verbatim, never
+    // a positionally synthesized "R1".
+    expect(netlist.components.map((c) => c.ref)).toEqual(["r1", "r2", "c1", "d1", "l1"]);
     expect(netlist.nets.map((net) => ({ id: net.id, name: net.name, nodes: net.nodes }))).toEqual([
       { id: 1, name: "+3V3", nodes: [{ componentId: "c1", pinNumber: "2" }] },
       { id: 2, name: "GND", nodes: [{ componentId: "r1", pinNumber: "1" }] },

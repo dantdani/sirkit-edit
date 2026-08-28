@@ -1,0 +1,439 @@
+{
+  "schema": "sirkit.b07-schematic-graph-replay-fixtures.v1",
+  "fixtures": [
+    {
+      "fixtureId": "wire-add",
+      "description": "Add a wire segment at the end of the collection; inverse is an indexed delete.",
+      "commandId": "schematic.connect",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:addw:w-new",
+          "kind": "schematic_add_wire",
+          "wire": {
+            "id": "w-new",
+            "vertices": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 30,
+                "y": 0
+              }
+            ]
+          },
+          "atIndex": 3
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:addw:w-new",
+          "kind": "schematic_delete_wire",
+          "wireId": "w-new"
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-a24e265ee207d265",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "wire-delete-middle",
+      "description": "Delete the MIDDLE wire; the inverse restores it at its exact index (order survives undo).",
+      "commandId": "schematic.connect",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:delw:w2",
+          "kind": "schematic_delete_wire",
+          "wireId": "w2"
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:delw:w2",
+          "kind": "schematic_add_wire",
+          "wire": {
+            "id": "w2",
+            "vertices": [
+              {
+                "x": 500,
+                "y": 400
+              },
+              {
+                "x": 560,
+                "y": 400
+              }
+            ]
+          },
+          "atIndex": 1
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-ce5811a24bfdca7d",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "wire-geometry-endpoint",
+      "description": "Move one endpoint of w1; inverse restores the prior vertex array exactly.",
+      "commandId": "schematic.connect",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:updw:w1",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w1",
+          "vertices": [
+            {
+              "x": 130,
+              "y": 100
+            },
+            {
+              "x": 300,
+              "y": 100
+            }
+          ]
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:updw:w1",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w1",
+          "vertices": [
+            {
+              "x": 130,
+              "y": 100
+            },
+            {
+              "x": 280,
+              "y": 100
+            }
+          ]
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-706b6cf2fa6b7d93",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "wire-geometry-interior",
+      "description": "Move the INTERIOR vertex of w4; endpoints untouched.",
+      "commandId": "schematic.connect",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:updw:w4",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w4",
+          "vertices": [
+            {
+              "x": 130,
+              "y": 50
+            },
+            {
+              "x": 140,
+              "y": 100
+            },
+            {
+              "x": 130,
+              "y": 150
+            }
+          ]
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:updw:w4",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w4",
+          "vertices": [
+            {
+              "x": 130,
+              "y": 50
+            },
+            {
+              "x": 130,
+              "y": 100
+            },
+            {
+              "x": 130,
+              "y": 150
+            }
+          ]
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-54a9044c61f6433d",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "label-add-move-delete",
+      "description": "Add one label, move+rotate another, delete a third — one atomic batch.",
+      "commandId": "schematic.connect",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:dell:l2",
+          "kind": "schematic_delete_net_label",
+          "labelId": "l2"
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g1:updl:l1",
+          "kind": "schematic_update_net_label",
+          "labelId": "l1",
+          "patch": {
+            "position": {
+              "x": 330,
+              "y": 110
+            },
+            "orientation": 90
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g2:addl:l-new",
+          "kind": "schematic_add_net_label",
+          "label": {
+            "id": "l-new",
+            "position": {
+              "x": 600,
+              "y": 600
+            },
+            "name": "VIN",
+            "kind": "label",
+            "orientation": 0
+          },
+          "atIndex": 1
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g2:addl:l-new",
+          "kind": "schematic_delete_net_label",
+          "labelId": "l-new"
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g1:updl:l1",
+          "kind": "schematic_update_net_label",
+          "labelId": "l1",
+          "patch": {
+            "position": {
+              "x": 320,
+              "y": 100
+            },
+            "orientation": 0
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:dell:l2",
+          "kind": "schematic_add_net_label",
+          "label": {
+            "id": "l2",
+            "position": {
+              "x": 500,
+              "y": 400
+            },
+            "name": "VOUT",
+            "kind": "label",
+            "orientation": 0
+          },
+          "atIndex": 1
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-d4dc918985908e6a",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "theory-rename-display",
+      "description": "Rename theory R1 (display refDes) — the stable id never changes; the inverse clears the override, restoring field absence digest-exactly.",
+      "commandId": "schematic.set-property",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:props:R1",
+          "kind": "schematic_set_component_properties",
+          "family": "theory",
+          "componentId": "R1",
+          "patch": {
+            "refDes": "RSENSE"
+          }
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:props:R1",
+          "kind": "schematic_set_component_properties",
+          "family": "theory",
+          "componentId": "R1",
+          "patch": {
+            "value": "1k",
+            "refDes": null
+          }
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-c5e1ef606f1e9e1d",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "gesture-drag-batch",
+      "description": "One completed drag gesture: component transform + attached wire geometry + label move commit as ONE transaction with one exact inverse batch.",
+      "commandId": "schematic.move-rotate",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:xform:R1",
+          "kind": "schematic_transform_component",
+          "family": "theory",
+          "componentId": "R1",
+          "x": 200,
+          "y": 200,
+          "rotation": 0
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g1:updw:w1",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w1",
+          "vertices": [
+            {
+              "x": 230,
+              "y": 200
+            },
+            {
+              "x": 280,
+              "y": 100
+            }
+          ]
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g2:updl:l2",
+          "kind": "schematic_update_net_label",
+          "labelId": "l2",
+          "patch": {
+            "position": {
+              "x": 520,
+              "y": 420
+            }
+          }
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g2:updl:l2",
+          "kind": "schematic_update_net_label",
+          "labelId": "l2",
+          "patch": {
+            "position": {
+              "x": 500,
+              "y": 400
+            }
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g1:updw:w1",
+          "kind": "schematic_update_wire_geometry",
+          "wireId": "w1",
+          "vertices": [
+            {
+              "x": 130,
+              "y": 100
+            },
+            {
+              "x": 280,
+              "y": 100
+            }
+          ]
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:xform:R1",
+          "kind": "schematic_transform_component",
+          "family": "theory",
+          "componentId": "R1",
+          "x": 100,
+          "y": 100,
+          "rotation": 0
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-9c124bb77637f646",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "theory-placement",
+      "description": "Place a theory component: immutable stable id + editable display reference; inverse is a plain delete.",
+      "commandId": "schematic.add-component",
+      "operations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "op:g0:addc:uuid-new-1",
+          "kind": "schematic_add_component",
+          "family": "theory",
+          "component": {
+            "id": "uuid-new-1",
+            "type": "capacitor",
+            "x": 400,
+            "y": 400,
+            "rotation": 0,
+            "value": "100n",
+            "refDes": "C1"
+          },
+          "atIndex": 2
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:g0:addc:uuid-new-1",
+          "kind": "schematic_delete_component",
+          "family": "theory",
+          "componentId": "uuid-new-1",
+          "removeWireIds": [],
+          "removeNetLabelIds": []
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-81d71dea7aad75c1",
+      "inverseRoundTripExact": true
+    }
+  ]
+}

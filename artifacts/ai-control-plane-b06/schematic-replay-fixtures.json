@@ -1,0 +1,582 @@
+{
+  "schema": "sirkit.b06-schematic-replay-fixtures.v2",
+  "stateDigest": "eng1-15e1fa733f10d492",
+  "fixtures": [
+    {
+      "fixtureId": "delete-connected-kicad",
+      "description": "Delete U1: removes wire w1 (endpoint on pin 1) and label l1 (on pin 2); w4 (interior vertex) and same-name label l2 survive. Inverse restores at exact indices.",
+      "commandId": "schematic.delete-component",
+      "operations": [
+        {
+          "operationId": "op:sch-delete:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_delete_component",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "removeWireIds": [
+            "w1"
+          ],
+          "removeNetLabelIds": [
+            "l1"
+          ]
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:sch-delete:u1-id",
+          "kind": "schematic_restore_entities",
+          "components": [],
+          "kicadComponents": [
+            {
+              "at": 0,
+              "entity": {
+                "id": "u1-id",
+                "partId": "lib:part-a",
+                "x": 300,
+                "y": 100,
+                "rotation": 0,
+                "refDes": "U1",
+                "value": "10k",
+                "atomicPartRevisionId": "rev-old",
+                "mappingCertificateId": "cert-old"
+              }
+            }
+          ],
+          "wires": [
+            {
+              "at": 0,
+              "entity": {
+                "id": "w1",
+                "vertices": [
+                  {
+                    "x": 130,
+                    "y": 100
+                  },
+                  {
+                    "x": 280,
+                    "y": 100
+                  }
+                ]
+              }
+            }
+          ],
+          "netLabels": [
+            {
+              "at": 0,
+              "entity": {
+                "id": "l1",
+                "position": {
+                  "x": 320,
+                  "y": 100
+                },
+                "name": "VOUT",
+                "kind": "label",
+                "orientation": 0
+              }
+            }
+          ]
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-e96c9d1b60ca8b70",
+      "inverseRoundTripExact": true,
+      "plan": {
+        "family": "kicad",
+        "componentId": "u1-id",
+        "componentLabel": "U1",
+        "pinCoordinates": [
+          {
+            "x": 280,
+            "y": 100
+          },
+          {
+            "x": 320,
+            "y": 100
+          }
+        ],
+        "removeWireIds": [
+          "w1"
+        ],
+        "removeNetLabelIds": [
+          "l1"
+        ],
+        "removedLabelNames": [
+          "VOUT"
+        ],
+        "downstream": {
+          "physicalBinding": "The physical-binding set keyed by this componentInstanceId becomes orphan-eligible. NO runtime orphan transition exists today — resolving the durable binding is an explicit owner action.",
+          "pcbSync": "The publication graph loses this componentInstanceId; the sync dirty flag flips and existing plans fail closed at preflight (PS_SCHEMATIC_REVISION_MISMATCH / removed-net protection).",
+          "bomSpice": "BOM regroups on the next signature change; SPICE captures a new design revision on next run (existing runs stay pinned to their snapshot).",
+          "readiness": "Schematic parity certificate and manufacturing readiness recompute against the new netlist."
+        }
+      }
+    },
+    {
+      "fixtureId": "replace-verified-bundle-authority",
+      "description": "Replace U1 with a verified pin-identical part. Authority was consumed from a validated B05.1 component-authority bundle (never a caller assertion); stale rev-old/cert-old cannot survive; consumed resource ids+digests travel in the operation.",
+      "commandId": "schematic.replace-component",
+      "operations": [
+        {
+          "operationId": "op:sch-replace:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-a",
+          "replacement": {
+            "partId": "lib:part-b",
+            "atomicPartRevisionId": "rev-new",
+            "symbolAssetVersionId": "sym-new",
+            "footprintAssetVersionId": "fp-new",
+            "mappingCertificateId": "cert-new",
+            "selectionRecordId": "sel-new"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "1"
+            },
+            {
+              "fromPin": "2",
+              "toPin": "2"
+            }
+          ],
+          "wireEndpointMoves": [],
+          "netLabelMoves": [],
+          "consumedAuthorityResources": [
+            {
+              "resourceId": "res:canonical:fixture",
+              "contentDigest": "eng1-6779fff341dbb21c"
+            },
+            {
+              "resourceId": "res:component-authority:fixture",
+              "contentDigest": "eng1-a7cf99e9b900a688"
+            }
+          ],
+          "authorityGrantId": "grant-2e60266b4e3c7528"
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:sch-replace:u1-id",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-b",
+          "replacement": {
+            "partId": "lib:part-a",
+            "value": "10k",
+            "atomicPartRevisionId": "rev-old",
+            "mappingCertificateId": "cert-old"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "1"
+            },
+            {
+              "fromPin": "2",
+              "toPin": "2"
+            }
+          ],
+          "wireEndpointMoves": [],
+          "netLabelMoves": []
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-814ff623863ec4c6",
+      "inverseRoundTripExact": true,
+      "plan": {
+        "componentId": "u1-id",
+        "sourcePartId": "lib:part-a",
+        "targetPartId": "lib:part-b",
+        "mode": "pin-identical-substitution",
+        "authorityStatus": "verified-atomic",
+        "pinMapping": [
+          {
+            "fromPin": "1",
+            "toPin": "1"
+          },
+          {
+            "fromPin": "2",
+            "toPin": "2"
+          }
+        ],
+        "preservedConnections": [
+          "1",
+          "2"
+        ],
+        "droppedConnections": [],
+        "wireEndpointMoves": [],
+        "netLabelMoves": [],
+        "consumedAuthorityResources": [
+          {
+            "resourceId": "res:canonical:fixture",
+            "contentDigest": "eng1-6779fff341dbb21c"
+          },
+          {
+            "resourceId": "res:component-authority:fixture",
+            "contentDigest": "eng1-a7cf99e9b900a688"
+          }
+        ],
+        "warnings": [],
+        "downstream": [
+          "netlist pin set changes under a stable component id; schematic parity + sync dirty flag update",
+          "physical-binding qualification for this componentInstanceId must be re-established for the new identity",
+          "existing pcb-sync plans go stale (fail closed at preflight)",
+          "BOM regroups by the new part identity; SPICE captures a new design revision on next run",
+          "manufacturing readiness recomputes against the new netlist"
+        ]
+      }
+    },
+    {
+      "fixtureId": "replace-explicit-mapping-with-label-move",
+      "description": "Replace U1 with a renumbered part via an explicit 1→3/2→4 mapping: wire w1's endpoint AND net label VOUT (l1, on pin 2) move to the mapped pin positions; authority is cleared (none supplied). Inverse moves both back.",
+      "commandId": "schematic.replace-component",
+      "operations": [
+        {
+          "operationId": "op:sch-replace:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-a",
+          "replacement": {
+            "partId": "lib:part-d"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "1",
+              "toPin": "3"
+            },
+            {
+              "fromPin": "2",
+              "toPin": "4"
+            }
+          ],
+          "wireEndpointMoves": [
+            {
+              "wireId": "w1",
+              "end": "end",
+              "to": {
+                "x": 260,
+                "y": 100
+              }
+            }
+          ],
+          "netLabelMoves": [
+            {
+              "labelId": "l1",
+              "from": {
+                "x": 320,
+                "y": 100
+              },
+              "to": {
+                "x": 340,
+                "y": 100
+              }
+            }
+          ]
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:sch-replace:u1-id",
+          "kind": "schematic_replace_component",
+          "componentId": "u1-id",
+          "expectedCurrentPartId": "lib:part-d",
+          "replacement": {
+            "partId": "lib:part-a",
+            "value": "10k",
+            "atomicPartRevisionId": "rev-old",
+            "mappingCertificateId": "cert-old"
+          },
+          "pinMapping": [
+            {
+              "fromPin": "3",
+              "toPin": "1"
+            },
+            {
+              "fromPin": "4",
+              "toPin": "2"
+            }
+          ],
+          "wireEndpointMoves": [
+            {
+              "wireId": "w1",
+              "end": "end",
+              "to": {
+                "x": 280,
+                "y": 100
+              }
+            }
+          ],
+          "netLabelMoves": [
+            {
+              "labelId": "l1",
+              "from": {
+                "x": 340,
+                "y": 100
+              },
+              "to": {
+                "x": 320,
+                "y": 100
+              }
+            }
+          ]
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-3bd450c1776a06b2",
+      "inverseRoundTripExact": true,
+      "plan": {
+        "componentId": "u1-id",
+        "sourcePartId": "lib:part-a",
+        "targetPartId": "lib:part-d",
+        "mode": "mapped-substitution",
+        "authorityStatus": "authority-cleared",
+        "pinMapping": [
+          {
+            "fromPin": "1",
+            "toPin": "3"
+          },
+          {
+            "fromPin": "2",
+            "toPin": "4"
+          }
+        ],
+        "preservedConnections": [
+          "1",
+          "2"
+        ],
+        "droppedConnections": [],
+        "wireEndpointMoves": [
+          {
+            "wireId": "w1",
+            "end": "end",
+            "to": {
+              "x": 260,
+              "y": 100
+            }
+          }
+        ],
+        "netLabelMoves": [
+          {
+            "labelId": "l1",
+            "labelName": "VOUT",
+            "from": {
+              "x": 320,
+              "y": 100
+            },
+            "to": {
+              "x": 340,
+              "y": 100
+            }
+          }
+        ],
+        "consumedAuthorityResources": [],
+        "warnings": [
+          "Existing atomic authority on this instance is CLEARED by the replacement (it belonged to the previous part)."
+        ],
+        "downstream": [
+          "netlist pin set changes under a stable component id; schematic parity + sync dirty flag update",
+          "physical-binding qualification for this componentInstanceId must be re-established for the new identity",
+          "existing pcb-sync plans go stale (fail closed at preflight)",
+          "BOM regroups by the new part identity; SPICE captures a new design revision on next run",
+          "manufacturing readiness recomputes against the new netlist"
+        ]
+      }
+    },
+    {
+      "fixtureId": "properties-and-transform",
+      "description": "Set U1 value+refDes then move/rotate it in one transaction; inverses restore both exactly.",
+      "commandId": "schematic.set-property + schematic.move-rotate",
+      "operations": [
+        {
+          "operationId": "op:fix-props",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_set_component_properties",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "patch": {
+            "value": "22k",
+            "refDes": "U9"
+          }
+        },
+        {
+          "operationId": "op:fix-move",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_transform_component",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "x": 400,
+          "y": 200,
+          "rotation": 90
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:fix-move",
+          "kind": "schematic_transform_component",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "x": 300,
+          "y": 100,
+          "rotation": 0
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:fix-props",
+          "kind": "schematic_set_component_properties",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "patch": {
+            "value": "10k",
+            "refDes": "U1"
+          }
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-c92139fd524f23b2",
+      "inverseRoundTripExact": true
+    },
+    {
+      "fixtureId": "tier1-batch",
+      "description": "AI tier-1 proposal (set-value + kicad rename + delete) compiled by the all-or-nothing compiler into one atomic transaction, applied only via the sealed-proposal boundary.",
+      "commandId": "schematic.edit-tier1-propose → schematic.edit-tier1-apply",
+      "operations": [
+        {
+          "operationId": "op:tier1:0:value:R1",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_set_component_properties",
+          "family": "theory",
+          "componentId": "R1",
+          "patch": {
+            "value": "4.7k"
+          }
+        },
+        {
+          "operationId": "op:tier1:1:refdes:u1-id",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_set_component_properties",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "patch": {
+            "refDes": "U9"
+          }
+        },
+        {
+          "operationId": "op:tier1:2:delete:R2",
+          "schemaVersion": 1,
+          "units": "px",
+          "kind": "schematic_delete_component",
+          "family": "theory",
+          "componentId": "R2",
+          "removeWireIds": [],
+          "removeNetLabelIds": []
+        }
+      ],
+      "inverseOperations": [
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:tier1:2:delete:R2",
+          "kind": "schematic_restore_entities",
+          "components": [
+            {
+              "at": 1,
+              "entity": {
+                "id": "R2",
+                "type": "resistor",
+                "x": 100,
+                "y": 300,
+                "rotation": 0,
+                "value": "2k"
+              }
+            }
+          ],
+          "kicadComponents": [],
+          "wires": [],
+          "netLabels": []
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:tier1:1:refdes:u1-id",
+          "kind": "schematic_set_component_properties",
+          "family": "kicad",
+          "componentId": "u1-id",
+          "patch": {
+            "value": "10k",
+            "refDes": "U1"
+          }
+        },
+        {
+          "schemaVersion": 1,
+          "units": "px",
+          "operationId": "inverse:op:tier1:0:value:R1",
+          "kind": "schematic_set_component_properties",
+          "family": "theory",
+          "componentId": "R1",
+          "patch": {
+            "value": "1k"
+          }
+        }
+      ],
+      "baseSchematicDigest": "eng1-15e1fa733f10d492",
+      "resultSchematicDigest": "eng1-482653a42cb84dfd",
+      "inverseRoundTripExact": true
+    }
+  ],
+  "refusals": [
+    {
+      "fixtureId": "refuse-pin-count-only",
+      "description": "Same pin COUNT but different pin names is never implicit compatibility.",
+      "refusal": "explicit-pin-mapping-required",
+      "detail": "Connected pin(s) 1, 2 have no identity-equal pin on the replacement part; an explicit mapping (or acknowledged drop) is required."
+    },
+    {
+      "fixtureId": "refuse-caller-claimed-verified",
+      "description": "A plain caller-supplied verified-atomic object is never authority — only the internal bundle adapter can mint it.",
+      "refusal": "ambiguous-authority",
+      "detail": "Verified atomic authority can only be established by the approved authority adapter consuming a validated resource bundle; a caller-supplied status/identifier object is never authority."
+    },
+    {
+      "fixtureId": "refuse-forged-atomic-identifiers",
+      "description": "Atomic identifiers on a catalog-unverified marker are refused, never promoted.",
+      "refusal": "ambiguous-authority",
+      "detail": "Verified atomic authority can only be established by the approved authority adapter consuming a validated resource bundle; a caller-supplied status/identifier object is never authority."
+    },
+    {
+      "fixtureId": "refuse-delete-without-pins",
+      "description": "A kicad delete without supplied catalog pin data cannot compute deterministic cleanup and is refused.",
+      "refusal": "pins-unavailable",
+      "detail": "Pin data for part lib:part-a was not supplied; deterministic cleanup requires it."
+    },
+    {
+      "fixtureId": "refuse-unacknowledged-drop",
+      "description": "Losing a connected pin requires explicit acknowledgement.",
+      "refusal": "unacknowledged-dropped-connections",
+      "detail": "Connected pin(s) 1 would lose their connections; explicit acknowledgement is required."
+    },
+    {
+      "fixtureId": "refuse-tier1-theory-rename-blocks-all",
+      "description": "A theory id-rename is unsupported and blocks the COMPLETE tier-1 proposal — the valid set-value never executes.",
+      "refusal": "unsupported-theory-rename",
+      "detail": "Renaming theory component R2 from an AI proposal is not enabled (interactive rename exists; proposal activation is an explicit owner decision); the proposal is blocked."
+    }
+  ]
+}

@@ -7,12 +7,11 @@ import type { CircuitVerificationProblem, RequirementCoverageRecord, RuleRegistr
 import { validateSchematicGraph } from "@/app/lib/schematic-compiler/graph";
 import type { SchematicSemanticGraph } from "@/app/lib/schematic-compiler/types";
 import { projectAllSchematicVariants } from "@/app/lib/schematic-compiler/variants";
-import { object, scopedJson } from "../_scope";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { object, circuitVerificationScopeFromContext, CIRCUIT_VERIFICATION_API_MAX_BYTES, CIRCUIT_VERIFICATION_API_DEADLINE_MS } from "../_scope";
 export const runtime = "nodejs";
 
-export async function POST(request: Request): Promise<Response> {
-  const parsed = await scopedJson(request); if (!parsed.ok) return parsed.response;
-  const { body, scope } = parsed;
+export const POST = authenticatedJsonRoute({ maxBytes: CIRCUIT_VERIFICATION_API_MAX_BYTES, deadlineMs: CIRCUIT_VERIFICATION_API_DEADLINE_MS }, async ({ context, body }): Promise<Response> => { const scope = circuitVerificationScopeFromContext(context);
   if (!object(body.problem) || !object(body.graph) || !object(body.registry)) return Response.json({ ok: false, error: "problem, authoritative graph, and approved registry are required" }, { status: 400 });
   const problem = body.problem as unknown as CircuitVerificationProblem, graph = body.graph as unknown as SchematicSemanticGraph, registry = body.registry as unknown as RuleRegistrySnapshot;
   const errors = [...validateCircuitVerificationProblem(problem), ...validateRuleRegistry(registry), ...validateSchematicGraph(graph).diagnostics.map((item) => item.code)];
@@ -20,4 +19,4 @@ export async function POST(request: Request): Promise<Response> {
   const capabilityProfile = defaultCircuitVerificationCapabilityProfile(), projections = projectAllSchematicVariants(graph), contexts = compileVerificationContexts({ problem, graph }), denominator = compileRequiredRuleDenominator({ problem, graph, projections, registry, capabilityProfile, contexts }), startedAt = new Date().toISOString();
   const run = runFullCircuitOracle({ problem, graph, projections, registry, capabilityProfile, contexts, denominator, requirementCoverage: Array.isArray(body.requirementCoverage) ? body.requirementCoverage as RequirementCoverageRecord[] : [], startedAt, finishedAt: startedAt });
   return Response.json({ ok: true, contexts, denominator, run }, { headers: { "Cache-Control": "no-store" } });
-}
+});

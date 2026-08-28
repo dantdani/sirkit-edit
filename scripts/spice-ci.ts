@@ -85,16 +85,19 @@ async function main(): Promise<void> {
   const project: SimulationProject = parsed;
   const runPlanId = cli.runPlanId || project.runPlans[0]?.id;
   if (!runPlanId) throw new Error("The project contains no run plan");
-  const batch = startRunPlan({ project, runPlanId, maxRuns: 1000 });
+  // [B16.0.2 B] the job store binds every run to a trusted scope; this CLI
+  // runs out-of-process against its own in-memory store under a fixed scope.
+  const CI_SCOPE = { tenantId: "local", projectId: `spice-ci:${project.id}`, branchId: "main" };
+  const batch = startRunPlan({ scope: CI_SCOPE, project, runPlanId, maxRuns: 1000 });
   const deadline = Date.now() + 24 * 60 * 60 * 1000;
-  let current = getBatch(batch.id);
+  let current = getBatch(batch.id, CI_SCOPE);
   while (current && !["completed", "failed", "cancelled"].includes(current.status) && Date.now() < deadline) {
     process.stderr.write(`\rSirkit SPICE: ${current.completed + current.failed + current.cancelled}/${current.total} finished`);
     await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-    current = getBatch(batch.id);
+    current = getBatch(batch.id, CI_SCOPE);
   }
   process.stderr.write("\n");
-  const runs = getRuns(batch.runIds);
+  const runs = getRuns(CI_SCOPE, batch.runIds);
   const failed = runs.some((run) => run.status !== "completed" || run.scalars.some((scalar) => scalar.status === "fail" || scalar.status === "error"));
   const result: CiResult = {
     schemaVersion: 1,

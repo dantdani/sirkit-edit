@@ -10,7 +10,17 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, act } from "@testing-library/react";
 import { Inspector } from "../Inspector";
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo";
-import { createHistory } from "@/app/lib/pcb/history";
+import { createHistory as createHistoryRaw } from "@/app/lib/pcb/history";
+import { authorizeBarePcbHistory } from "@/app/lib/engineering/pcb-bare-authority.internal";
+import type { PcbBoard } from "@/app/lib/pcb/types";
+
+// B08.1 — component tests use EXPLICITLY authorized bare histories (the
+// sanctioned planner/test composition); product histories are session-bound.
+const createHistory = (board: PcbBoard) => {
+  const history = createHistoryRaw(board);
+  authorizeBarePcbHistory(history);
+  return history;
+};
 import { createSelectionStore } from "@/app/lib/pcb/selection";
 import { getPreset } from "@/app/lib/pcb/drc/presets";
 import { mmToNm } from "@/app/lib/pcb/units";

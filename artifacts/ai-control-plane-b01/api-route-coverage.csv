@@ -8,11 +8,14 @@ path,methods,record_id,class
 /api/assignment-queue,GET;POST,pcb.assignment-queue,mutate
 /api/assignment-queue/materialize,POST,pcb.assignment-queue,mutate
 /api/assignment-queue/revalidate,POST,pcb.assignment-queue,mutate
+/api/auth/callback,GET,auth.signin,mutate
+/api/auth/signin,POST,auth.signin,mutate
+/api/auth/signout,POST,auth.signout,mutate
 /api/bom,POST,bom.workbench,read
 /api/bom/cart/digikey,POST,bom.workbench,read
 /api/bom/cart/lcsc,POST,bom.workbench,read
 /api/bom/cart/mouser,POST,bom.workbench,read
-/api/bom/diff,GET,bom.workbench,read
+/api/bom/diff,POST,bom.workbench,read
 /api/bom/export-csv,POST,bom.workbench,read
 /api/bom/notifications,DELETE;GET;PATCH,bom.workbench,mutate
 /api/bom/procurement-packet,POST,bom.workbench,read
@@ -82,6 +85,7 @@ path,methods,record_id,class
 /api/passive-policy,GET;POST,pcb.footprint-resolution,mutate
 /api/pcb-sync,GET;POST,pcb.sync-durable,mutate
 /api/pcb/ai-rules/from-brief,POST,pcb.ai-rules-brief,propose
+/api/pcb/apply-authorization,POST,auth.apply-reauthorization,read
 /api/pcb/assign/suggest,POST,pcb.assign-suggest,propose
 /api/pcb/autoroute,POST,routing.autoroute,mutate
 /api/pcb/edit/assist,POST,pcb.assist-edit,propose
@@ -103,6 +107,7 @@ path,methods,record_id,class
 /api/power/reconcile,POST,cd.power.workbench,propose
 /api/release-engineering/problem,POST,cd.release-engineering.workbench,propose
 /api/release-engineering/propose,POST,cd.release-engineering.workbench,propose
+/api/replacement-authority,POST,schematic.replace-component-propose,read
 /api/requirements/capabilities,GET,cd.requirements.workbench,read
 /api/requirements/compile,POST,cd.requirements.workbench,propose
 /api/requirements/sources,POST,cd.requirements.workbench,propose
@@ -120,7 +125,7 @@ path,methods,record_id,class
 /api/schematic/build,POST,schematic.generate,mutate
 /api/schematic/build-multi,POST,schematic.generate,mutate
 /api/schematic/cross-verify,POST,schematic.review-advisory,read
-/api/schematic/edit,POST,schematic.set-property,mutate
+/api/schematic/edit,POST,schematic.edit-tier1-propose,propose
 /api/schematic/edit-build,POST,schematic.edit-topology,mutate
 /api/schematic/layout-critic,POST,schematic.review-advisory,read
 /api/schematic/review,POST,schematic.review-advisory,read

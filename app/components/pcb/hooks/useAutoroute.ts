@@ -1,11 +1,14 @@
 /** One-click bounded multilayer FreeRouting completion with one atomic commit. */
 
+import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbHistory } from "@/app/lib/pcb/history";
+import type { PcbBoardLifecycleScope } from "@/app/lib/pcb/lifecycle/board-lifecycle";
 import { createEmptyBoard, type PcbBoard, type Track, type Via } from "@/app/lib/pcb/types";
 import { parseSes, type SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
 import { buildAutorouteImportCommand } from "@/app/lib/pcb/autoroute/command";
-import { applyRouteCommand, mutateBoardWithCommand } from "@/app/lib/pcb/route-tool.commands";
+import { applyRouteCommand } from "@/app/lib/pcb/route-tool.commands";
 import { computeElectricalTruth } from "@/app/lib/pcb/electrical-truth";
 import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
@@ -18,10 +21,18 @@ import type { ReadinessReport } from "@/app/lib/pcb/readiness/types";
 
 export interface AutorouteEditor {
   getHistory: () => PcbHistory | null;
+  /** B08.2 — capture THE board lifecycle scope at submission: every side
+   *  effect (progress, results, errors, toasts, commit submission) verifies
+   *  it after every await; the scope's signal aborts the in-flight fetch on
+   *  lifecycle replacement. Absent (tests without an owner) → unscoped. */
+  captureLifecycle?: () => PcbBoardLifecycleScope;
   toast?: (message: string) => void;
   getDrcRules?: () => DrcRules;
   getNetlist?: () => PcbNetlist | null;
   getDrcPresetId?: () => DrcPresetId;
+  /** [B16.0.2 §B] the active project identity — sent as a SELECTOR only; the
+   *  autoroute route is authenticated + project-scoped on the server. */
+  getScope?: () => ProjectSelectorScope | null;
 }
 
 export type AutorouteState = "idle" | "queued" | "running" | "complete" | "partial" | "failed" | "cancelled";
@@ -52,6 +63,10 @@ export interface AutorouteHandle {
   lastError?: string;
   run(): Promise<void>;
   cancel(): void;
+  /** B08.2 — lifecycle replacement: abort the in-flight request, discard
+   *  results/errors, and release the NEW generation from the old busy flag.
+   *  Silent (never toasts) — the replacement is not a user cancellation. */
+  invalidate(): void;
 }
 
 interface AutorouteApiResponse {
@@ -95,52 +110,71 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastResult, setLastResult] = useState<AutorouteResult>();
   const [lastError, setLastError] = useState<string>();
-  const runningRef = useRef(false);
+  // B08.2 — request-keyed busy ownership: `active` names the EXACT run that
+  // owns the busy flag and whether its generation is still current. A run
+  // whose generation ended no longer blocks a fresh-generation run, and a
+  // stale run's finalizer can never release a newer run's flag.
+  const activeRef = useRef<{ requestId: string; isCurrent: () => boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startRef = useRef(0);
-
-  const stopTimer = useCallback(() => {
-    if (timerRef.current !== null) clearInterval(timerRef.current);
-    timerRef.current = null;
-  }, []);
+  const requestSeqRef = useRef(0);
 
   useEffect(() => () => {
-    stopTimer();
     abortRef.current?.abort();
-  }, [stopTimer]);
+  }, []);
 
   const toast = (message: string): void => editorRef.current.toast?.(message);
 
   const cancel = useCallback(() => {
-    if (!runningRef.current) return;
+    if (!activeRef.current) return;
     abortRef.current?.abort();
-    runningRef.current = false;
-    stopTimer();
+    abortRef.current = null;
+    activeRef.current = null;
     setState("cancelled");
     toast("Autoroute cancelled; board unchanged");
-  }, [stopTimer]);
+  }, []);
+
+  const invalidate = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    activeRef.current = null;
+    setState("idle");
+    setElapsedMs(0);
+    setLastResult(undefined);
+    setLastError(undefined);
+  }, []);
 
   const run = useCallback(async (): Promise<void> => {
-    if (runningRef.current) return;
+    // Busy only while the owning run's GENERATION is still current — a
+    // lifecycle replacement releases the new generation immediately.
+    if (activeRef.current?.isCurrent()) return;
+    // B08.2 — the lifecycle scope is captured at SUBMISSION and verified
+    // after every await; generation (never the digest pin alone) decides
+    // staleness, so a same-digest checkpoint restore still invalidates.
+    const scope = editorRef.current.captureLifecycle?.() ?? null;
+    const owned = (): boolean => scope === null || scope.isCurrent();
+    const requestId = scope?.requestId ?? `autoroute-local-${++requestSeqRef.current}`;
     const board: PcbBoard = editorRef.current.getHistory()?.present ?? createEmptyBoard();
     const baseRevision = pcbRevisionId(board);
-    runningRef.current = true;
+    activeRef.current = { requestId, isCurrent: owned };
     setState("queued");
     setLastError(undefined);
     setElapsedMs(0);
-    startRef.current = Date.now();
-    stopTimer();
-    timerRef.current = setInterval(() => setElapsedMs(Date.now() - startRef.current), 250);
+    const startedAt = Date.now();
+    const elapsedTimer = setInterval(() => {
+      if (owned()) setElapsedMs(Date.now() - startedAt);
+    }, 250);
     const controller = new AbortController();
     abortRef.current = controller;
+    const onLifecycleAbort = (): void => controller.abort();
+    scope?.signal.addEventListener("abort", onLifecycleAbort, { once: true });
 
     try {
       await new Promise((resolve) => setTimeout(resolve, 0));
+      if (!owned()) return;
       setState("running");
       const response = await fetch("/api/pcb/autoroute", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...projectSelectorHeaders(editorRef.current.getScope?.() ?? null) },
         body: JSON.stringify({
           board,
           netlist: editorRef.current.getNetlist?.() ?? undefined,
@@ -149,6 +183,7 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
         signal: controller.signal,
       });
       const body = await response.json() as AutorouteApiResponse;
+      if (!owned()) return; // stale: the candidate is discarded silently
       if (!response.ok || !body.ok || (!body.routes && !body.sesText)) {
         throw new Error(body.error ?? `Autoroute failed (${response.status})`);
       }
@@ -174,18 +209,34 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
         if (body.candidateRevision && pcbRevisionId(projected) !== body.candidateRevision) {
           throw new Error("Autoroute candidate provenance check failed; board was left unchanged.");
         }
-        history.execute("Autoroute board", (draft) => mutateBoardWithCommand(draft, command), {
-          operationType: "autoroute_completion",
-          actor: "autorouter",
-          reason: `Applied ${acceptedPasses} monotonic high-effort routing pass(es).`,
-          details: {
-            routeAttemptId: body.routeAttemptId,
-            sourceRevision: body.sourceRevision ?? baseRevision,
-            candidateRevision: body.candidateRevision,
-            passReports,
-            failures,
+        if (!owned()) return; // stale: never even SUBMIT the commit
+        // B08 — ONE canonical transaction; the base revision is re-verified
+        // against the board at serialized execution time, so a changed base
+        // discards the candidate with zero mutation. (A lifecycle
+        // replacement also retires the history — the gateway refuses.)
+        const commit = await commitPcbCandidate(history, {
+          commandId: "pcb.autoroute-import",
+          label: "Autoroute board",
+          ...(body.routeAttemptId ? { idempotencyKey: `autoroute:${body.routeAttemptId}` } : {}),
+          metadata: {
+            operationType: "autoroute_completion",
+            actor: "autorouter",
+            reason: `Applied ${acceptedPasses} monotonic high-effort routing pass(es).`,
+            details: {
+              routeAttemptId: body.routeAttemptId,
+              sourceRevision: body.sourceRevision ?? baseRevision,
+              candidateRevision: body.candidateRevision,
+              passReports,
+              failures,
+            },
+          },
+          buildCandidate: (board) => {
+            if (pcbRevisionId(board) !== baseRevision) throw new Error("Board changed while autorouting; the stale route candidate was discarded.");
+            return applyRouteCommand(board, command);
           },
         });
+        if (!owned()) return;
+        if (!commit.ok) throw new Error(commit.message);
       }
 
       const electricalTruth = computeElectricalTruth(history.present);
@@ -214,9 +265,10 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
         debugDirectory: body.debugDirectory,
         fabricationReadiness: body.readiness,
       };
+      if (!owned()) return;
       setLastResult(result);
       setState(result.status);
-      const seconds = ((Date.now() - startRef.current) / 1000).toFixed(1);
+      const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
       const engine = body.engine?.version ? `Freerouting ${body.engine.version} local · ` : "";
       const drcChip = drcErrors === undefined ? "" : ` · DRC: ${drcErrors} error${drcErrors === 1 ? "" : "s"}`;
       if (result.status === "complete") {
@@ -226,7 +278,8 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
         toast(`${engine}Autoroute partial — ${result.completedConnections}/${result.requiredConnections} connections completed · ${result.remainingConnections} remain · ${result.acceptedPasses}/${result.passCount} passes improved${blocker}${drcChip}`);
       }
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return; // user cancel or lifecycle abort
+      if (!owned()) return; // stale generation: errors belong to nobody
       const raw = error instanceof Error ? error.message : String(error);
       const message = raw === "jar-missing"
         ? "Local Freerouting is not installed — run npm run setup:freerouting (no API key required)"
@@ -237,11 +290,13 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
       setState("failed");
       toast(`Autoroute failed: ${message}`);
     } finally {
-      runningRef.current = false;
-      stopTimer();
-      abortRef.current = null;
+      clearInterval(elapsedTimer);
+      scope?.signal.removeEventListener("abort", onLifecycleAbort);
+      // Request-keyed release: only THIS run may clear its own ownership.
+      if (activeRef.current?.requestId === requestId) activeRef.current = null;
+      if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [stopTimer]);
+  }, []);
 
-  return { state, elapsedMs, lastResult, lastError, run, cancel };
+  return { state, elapsedMs, lastResult, lastError, run, cancel, invalidate };
 }

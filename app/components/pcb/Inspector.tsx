@@ -31,6 +31,7 @@ import { FootprintInspector } from "./inspectors/FootprintInspector";
 import { ZoneInspector } from "./inspectors/ZoneInspector";
 import { TextInspector } from "./inspectors/TextInspector";
 import { MixedInspector } from "./inspectors/MixedInspector";
+import { DimensionInspector } from "./inspectors/DimensionInspector"; // B08
 import { ArrangeSection } from "./inspectors/ArrangeSection"; // Stage 17 Phase D
 import { AssistBox } from "./AssistBox"; // Stage 17 Phase D
 
@@ -41,6 +42,7 @@ const KIND_WORD: Record<ResolvedItem["kind"], string> = {
   text: "text item",
   footprint: "part",
   pad: "pad",
+  dimension: "dimension",
 };
 
 function headerText(board: PcbBoard, items: ResolvedItem[]): string {
@@ -55,6 +57,8 @@ function headerText(board: PcbBoard, items: ResolvedItem[]): string {
         return `Zone · ${netLabel(board, item.zone.netId)}`;
       case "text":
         return `Silk text`;
+      case "dimension":
+        return `Dimension`;
       case "footprint":
         return item.footprint.ref;
       case "pad":
@@ -107,7 +111,7 @@ export function Inspector({
   const kind = kinds.size === 1 ? items[0].kind : "mixed";
 
   const deletable: SelectionRef[] = set.refs.filter(
-    (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text",
+    (r) => r.kind === "track" || r.kind === "via" || r.kind === "zone" || r.kind === "text" || r.kind === "dimension",
   );
   const hasFootprints = set.refs.some((r) => r.kind === "footprint");
 
@@ -162,6 +166,14 @@ export function Inspector({
           <TextInspector
             items={items.flatMap((i) => (i.kind === "text" ? [i.text] : []))}
             commit={commit}
+          />
+        );
+      case "dimension":
+        return (
+          <DimensionInspector
+            items={items.flatMap((i) => (i.kind === "dimension" ? [i.dimension] : []))}
+            getHistory={getHistory}
+            toast={toast}
           />
         );
       default:
