@@ -9,10 +9,12 @@
  * Body: { state: SchematicState; title?: string; description?: string; company?: string }
  */
 
-import { exportToKicadSch } from "@/app/lib/kicad-export";
+import { exportToKicadSch, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
@@ -30,13 +32,10 @@ function sanitizeFilename(raw: string): string {
   return base.length > 0 ? base : "sirkit_export";
 }
 
-export async function POST(req: Request): Promise<Response> {
-  let body: ExportBody;
-  try {
-    body = (await req.json()) as ExportBody;
-  } catch {
-    return Response.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
-  }
+// [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
+// the wrapper; the callback receives only bounded projections, never the Request.
+export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as ExportBody;
 
   const state = body.state;
   if (!state) {
@@ -49,6 +48,26 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json(
       { ok: false, error: "Schematic has no components to export" },
       { status: 400 },
+    );
+  }
+
+  // B07.2 — FAIL-CLOSED: the complete state is validated against the shared
+  // canonical identity + geometry contract BEFORE any catalog lookup or
+  // serialization. Duplicate stable ids, duplicate case-insensitive
+  // displayed references, invalid rotations/geometry, malformed wires or
+  // labels all reject with a structured, sanitized 422 — export never
+  // conceals canonical corruption by renaming references.
+  const validationIssues = validateSchematicStateIntegrity(state);
+  if (validationIssues.length > 0) {
+    return Response.json(
+      {
+        ok: false,
+        code: "SCHEMATIC_STATE_INVALID",
+        error: "The schematic failed canonical identity/geometry validation and was not exported. Nothing was changed.",
+        issues: validationIssues.slice(0, 20).map((issue) => issue.slice(0, 300)),
+        issueCount: validationIssues.length,
+      },
+      { status: 422 },
     );
   }
 
@@ -76,14 +95,33 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const sch = exportToKicadSch({
-    state,
-    parts,
-    title: body.title,
-    description: body.description,
-    company: body.company,
-    componentSelections: body.componentSelections,
-  });
+  let sch: string;
+  try {
+    sch = exportToKicadSch({
+      state,
+      parts,
+      title: body.title,
+      description: body.description,
+      company: body.company,
+      componentSelections: body.componentSelections,
+    });
+  } catch (error) {
+    // Defense in depth: the serializer's own typed validation (should be
+    // unreachable after the pre-check above) still maps to a structured 422.
+    if (error instanceof SchematicExportValidationError) {
+      return Response.json(
+        {
+          ok: false,
+          code: "SCHEMATIC_STATE_INVALID",
+          error: "The schematic failed canonical identity/geometry validation and was not exported. Nothing was changed.",
+          issues: error.issues.slice(0, 20).map((issue) => issue.slice(0, 300)),
+          issueCount: error.issues.length,
+        },
+        { status: 422 },
+      );
+    }
+    throw error;
+  }
 
   const filename = `${sanitizeFilename(body.title ?? "sirkit_export")}.kicad_sch`;
   return new Response(sch, {
@@ -93,4 +131,4 @@ export async function POST(req: Request): Promise<Response> {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
-}
+});
