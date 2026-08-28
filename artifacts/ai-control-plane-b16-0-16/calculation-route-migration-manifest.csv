@@ -1,0 +1,9 @@
+method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+POST,/api/calculation/corners,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/evaluate,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/export,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/feedback,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/problem,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/propose,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/report,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/calculation/transaction,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
