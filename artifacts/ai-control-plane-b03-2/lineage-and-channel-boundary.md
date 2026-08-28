@@ -48,7 +48,9 @@ Tests: `__tests__/b03-2-boundary.test.ts`.
   No general factory exists on any supported public surface.
 - Approved production importers (everything else fails CI):
   - `app/lib/engineering/executor.ts` (identity verification only)
-  - `app/lib/engineering/editor-adapter.ts` (session composition)
+  - `app/lib/engineering/editor-adapter.ts` (PCB session composition)
+  - `app/lib/engineering/schematic-session.ts` (B06: schematic session
+    composition — the same editor-session boundary)
   - dedicated security tests under `app/lib/engineering/__tests__/`
 - Architectural CI test (`b03-2-boundary.test.ts`): scans every production
   `.ts`/`.tsx` under `app/`, `lib/`, `components/` (excluding tests) and
