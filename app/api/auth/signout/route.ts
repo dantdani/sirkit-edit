@@ -1,11 +1,22 @@
 /**
  * B16.0 — the minimal sign-out boundary.
  *
- * POST clears the Supabase Auth session cookies (logout) via the SSR server
- * client. Same-origin only (CSRF), no open redirect, no token in the URL or
- * response. Logout retires the authenticated principal — pending
+ * POST retires the caller's Supabase Auth session cookies (logout) via the
+ * SSR server client. Same-origin only (CSRF), no open redirect, no token in
+ * the URL or response. Logout retires the authenticated principal — pending
  * proposals/approvals bound to that principal are invalidated because a
  * subsequent request has no verified session (401) or a changed principal.
+ *
+ * [B16.1B §E] TWO facts are reported, never conflated:
+ *  - `signedOut: true` — the LOCAL cookie family was retired (the SDK always
+ *    removes the local session on sign-out), and
+ *  - `remoteRevocation: "confirmed" | "unconfirmed"` — whether the Auth
+ *    server ACKNOWLEDGED the global sign-out (refresh-token family revoked).
+ *    Reproduced defect: with the provider unreachable the route reported
+ *    `signedOut: true` although the remote session stayed live. The remote
+ *    call is deadline-bounded; a failure is reported as `unconfirmed` (the
+ *    session may still be live remotely until the token expires), never as a
+ *    confirmed revocation.
  *
  * There is NO sign-UP endpoint here (unrestricted self-signup is not enabled)
  * and no token is ever returned.
@@ -15,6 +26,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { jsonError } from "@/app/lib/auth/request-security";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
+import { createBoundedFetch, SESSION_VERIFICATION_DEADLINE_MS } from "@/app/lib/auth/bounded-fetch";
+import { sessionCookieOptions } from "@/app/lib/auth/session-cookies";
 
 export const runtime = "nodejs";
 
@@ -41,9 +54,12 @@ export const POST = publicRoute({ exposeAuthRuntime: true }, async ({ authRuntim
     return Response.json({ ok: false, code: "AUTH_SIGNOUT_UNAVAILABLE", mode: "production", error: "Production authentication is not configured in this deployment; there is no session to sign out of." }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
 
+  const bounded = createBoundedFetch({ deadlineMs: SESSION_VERIFICATION_DEADLINE_MS });
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(url, key, {
+      cookieOptions: sessionCookieOptions(),
+      global: { fetch: bounded.fetch },
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll(cookiesToSet) {
@@ -51,9 +67,15 @@ export const POST = publicRoute({ exposeAuthRuntime: true }, async ({ authRuntim
         },
       },
     });
-    await supabase.auth.signOut();
-    return Response.json({ ok: true, signedOut: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
+    // Global scope: every session of the user is asked to be revoked. The SDK
+    // retires the LOCAL session regardless of the server's answer; the answer
+    // decides `remoteRevocation`.
+    const result = await supabase.auth.signOut({ scope: "global" });
+    const remoteRevocation = result && result.error ? "unconfirmed" : "confirmed";
+    return Response.json({ ok: true, signedOut: true, remoteRevocation }, { status: 200, headers: { "Cache-Control": "no-store" } });
   } catch {
     return jsonError(500, "AUTH_SIGNOUT_FAILED", "Sign-out could not be completed.");
+  } finally {
+    bounded.dispose();
   }
 });

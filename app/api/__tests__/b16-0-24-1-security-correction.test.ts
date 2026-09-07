@@ -315,8 +315,12 @@ describe("B16.0.24.1 §3 — sign-out session retirement (fake SSR client)", () 
     });
     const res = await signoutPost(signoutReq());
     expect(res.status).toBe(200);
-    expect(await payload(res)).toEqual({ ok: true, signedOut: true });
+    // [B16.1B §E supersession] the body now distinguishes LOCAL cookie
+    // retirement (`signedOut`) from the server-ACKNOWLEDGED global revocation
+    // (`remoteRevocation`); an acknowledged sign-out reports "confirmed".
+    expect(await payload(res)).toEqual({ ok: true, signedOut: true, remoteRevocation: "confirmed" });
     expect(ssr.signOut).toHaveBeenCalledTimes(1);
+    expect(ssr.signOut).toHaveBeenCalledWith({ scope: "global" });
     expect(ssr.creates).toEqual([{ url: "https://project.supabase.co", key: "pk-test-123" }]);
     expect(cookieJar.sets).toEqual([{ name: "sb-session", value: "" }]); // retirement via the SSR adapter
   });

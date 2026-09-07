@@ -3,11 +3,18 @@
  *
  * POST { email, password } verifies the credential against Supabase Auth via
  * the official SSR server client (`signInWithPassword`); on success the SSR
- * client writes the session COOKIES (httpOnly, managed by @supabase/ssr) and
- * the response body carries NO token, session, or user object — identity is
- * subsequently derived server-side by `resolveTrustedRequestContext` from the
- * cookie session. On failure the response is a uniform 401 with no indication
- * of whether the account exists (no user enumeration).
+ * client writes the session COOKIES and the response body carries NO token,
+ * session, or user object — identity is subsequently derived server-side by
+ * `resolveTrustedRequestContext` from the cookie session. On failure the
+ * response is a uniform 401 with no indication of whether the account exists
+ * (no user enumeration).
+ *
+ * [B16.1B §D] Cookie flags are SERVER-OWNED (`sessionCookieOptions`): the SSR
+ * library's own default is `httpOnly: false` with no `secure` attribute, so
+ * the historical "httpOnly, managed by @supabase/ssr" claim was false; the
+ * session cookie family is now written HttpOnly, SameSite=Lax, Path=/, and
+ * Secure whenever the server-owned expected origin is https. The credential
+ * call is deadline-bounded (an unreachable provider cannot hold the request).
  *
  * Deliberate boundaries:
  *  - There is NO sign-UP endpoint anywhere under /api/auth (unrestricted
@@ -26,6 +33,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { jsonError } from "@/app/lib/auth/request-security";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { createBoundedFetch, SESSION_VERIFICATION_DEADLINE_MS } from "@/app/lib/auth/bounded-fetch";
+import { sessionCookieOptions } from "@/app/lib/auth/session-cookies";
 
 export const runtime = "nodejs";
 
@@ -58,9 +67,12 @@ export const POST = publicJsonRoute<Record<string, unknown>>(
     return jsonError(503, "AUTH_SIGNIN_UNAVAILABLE", "Production sign-in is not configured in this deployment.");
   }
 
+  const bounded = createBoundedFetch({ deadlineMs: SESSION_VERIFICATION_DEADLINE_MS });
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(url, key, {
+      cookieOptions: sessionCookieOptions(),
+      global: { fetch: bounded.fetch },
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll(cookiesToSet) {
@@ -76,5 +88,7 @@ export const POST = publicJsonRoute<Record<string, unknown>>(
     return Response.json({ ok: true }, { status: 200, headers: { "Cache-Control": "no-store" } });
   } catch {
     return jsonError(500, "AUTH_SIGNIN_ERROR", "Sign-in could not be completed.");
+  } finally {
+    bounded.dispose();
   }
   });
