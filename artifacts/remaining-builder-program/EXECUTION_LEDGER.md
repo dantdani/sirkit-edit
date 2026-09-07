@@ -23,3 +23,4 @@ _(results appended below as they are observed)_
 - `git diff --check` → clean.
 - Sanctioned generators ×2 → sha1 `4d93461b` / `e22ec3a3` / `0599d5e6` / `49f279fd` both runs, identical to committed files (git status clean under artifacts/).
 - Scoped ESLint over every B16.1C production module → 0 errors, 1 pre-existing warning (`app/api/pcb/edit/__tests__/assist-live.test.ts` unused directive, not in range).
+- Independent archive identity (CONFIRMED): the acceptance suite's evidence ZIP (`%TEMP%/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip`, 40,962 bytes) hashes to `23314a7513b3c87fb135caab534e5d6d708b1259508e88d17919d8b7d7acf456` — equal to the B16.1C claim; releaseId `mfg-release-110d72644994b65fd0d757ff5c3311e2`, board `pcb2-d3c41a58ca702019`; 10 members all dated 1980-01-01; in-repo independent reader 80/80 checks ok; third-party gerbonara 1.6.3 `INDEPENDENT VERIFICATION: PASS`.
