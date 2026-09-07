@@ -51,7 +51,7 @@ import {
 
 // ─── Request-owned operation registry ────────────────────────────────────────
 
-export type PcbOwnedOperationKind = "sync-preparation" | "sync-apply" | "qualification";
+export type PcbOwnedOperationKind = "sync-preparation" | "sync-apply" | "qualification" | "release";
 
 export interface PcbOwnedOperationHandle {
   readonly kind: PcbOwnedOperationKind;
@@ -352,6 +352,54 @@ export async function runVerifiedServerAdoption<Committed, Rec>(
     return { status: "adopted" };
   } catch (error) {
     op.ifOwned(() => ports.commitFailed(error instanceof Error ? error.message : String(error)));
+    return { status: "error", error };
+  } finally {
+    op.finish();
+  }
+}
+
+// ─── Owned manufacturing release (B16.1C §E/§F) ─────────────────────────────
+
+export interface OwnedReleasePorts<Released> {
+  /** The irreversible server release. NOT signal-aborted — the response is
+   *  the only evidence of what was published. Never throws — classify. */
+  release(): Promise<{ ok: true; value: Released } | { ok: false; message: string; code?: string; correlationId?: string }>;
+  /** Owned-gated failure surface (bounded code + correlation id). */
+  fail(failure: { message: string; code?: string; correlationId?: string }): void;
+  /** Owned-gated success surface (filename, digest, authority identity). */
+  complete(released: Released): void;
+  /** A stale run: the server DID (or may have) published a release for a
+   *  board this generation no longer owns — record truthfully, never
+   *  describe it as cancelled. */
+  settleStale(scope: PcbBoardLifecycleScope): void;
+}
+
+export type OwnedReleaseRun =
+  | { status: "refused-busy" }
+  | { status: "completed" }
+  | { status: "failed"; code?: string }
+  | { status: "stale" }
+  | { status: "error"; error: unknown };
+
+/**
+ * Single-flight, request-owned release: a second click while the same
+ * generation's release is in flight is refused (never a second request);
+ * the durable request itself is idempotent server-side (same sealed
+ * authority → same bytes, one ledger entry), so an explicit retry after a
+ * failure is safe.
+ */
+export async function runOwnedRelease<Released>(registry: PcbOwnedOperationRegistry, ports: OwnedReleasePorts<Released>): Promise<OwnedReleaseRun> {
+  const op = registry.begin("release");
+  if (!op) return { status: "refused-busy" };
+  try {
+    const result = await ports.release();
+    if (!op.owned()) { ports.settleStale(op.scope); return { status: "stale" }; }
+    if (!result.ok) { ports.fail({ message: result.message, code: result.code, correlationId: result.correlationId }); return { status: "failed", code: result.code }; }
+    ports.complete(result.value);
+    return { status: "completed" };
+  } catch (error) {
+    if (!op.owned()) { ports.settleStale(op.scope); return { status: "stale" }; }
+    ports.fail({ message: `Release failed: ${error instanceof Error ? error.message : String(error)}` });
     return { status: "error", error };
   } finally {
     op.finish();

@@ -36,7 +36,7 @@ import { useEditorContextPublisher } from "@/app/lib/agent/use-editor-context-pu
 import { projectAgentNetlist } from "@/app/lib/agent/netlist-validation"; // B10.1
 import { schematicStateDigest } from "@/app/lib/engineering/schematic-model"; // B10
 import { ensureCurrentProjectScope, loadCurrentProjectScope, loadPcbSnapshotRevision, loadStageEvidence, loadWorkingCopy, normalizeBoardForEditor, saveAuthoritativeBoardCache, saveCurrentManufacturingRelease, savePcbSnapshotRevision, saveStageEvidence, saveWorkingCopy, stashWorkingConflict } from "@/app/lib/pcb/board-persistence";
-import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID } from "@/app/lib/pcb/board-identity";
+import { pcbBoardInstanceId, pcbDesignInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID } from "@/app/lib/pcb/board-identity";
 import { checkpointStore } from "@/app/lib/project/checkpoints";
 import type { AiRequestOwnership } from "@/app/lib/ai-preferences";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
@@ -130,6 +130,8 @@ import { PcbEditorRuntime } from "@/app/lib/pcb/lifecycle/editor-runtime";
 import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import { SyncButton } from "./SyncButton";
 import { SyncPlacementDialog } from "./SyncPlacementDialog";
+import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B16.1C §F]
+import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
 import { RoutingControls } from "./RoutingControls";
 import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
@@ -368,7 +370,7 @@ export default function PcbEditor({
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
   const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
-  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: `design:${init.scope.projectId}`, boardId: pcbBoardInstanceId(init.scope.projectId), assemblyVariantId: PCB_BOARD_ASSEMBLY_VARIANT_ID } : null, [init.scope]);
+  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: pcbDesignInstanceId(init.scope.projectId), boardId: pcbBoardInstanceId(init.scope.projectId), assemblyVariantId: PCB_BOARD_ASSEMBLY_VARIANT_ID } : null, [init.scope]);
   // B16.0: the client no longer asserts an actor/role — identity is derived
   // server-side from the authenticated session and project membership.
   const client = useMemo(() => syncIdentity ? new PcbSyncClient({ tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }) : null, [syncIdentity]);
@@ -401,6 +403,10 @@ export default function PcbEditor({
     return () => { unsubscribe(); };
   }, [ownedOps]);
   const { syncing, applying, qualifying } = ownedBusy;
+  // [B16.1C §C/§F] bumped after every verified server adoption so the durable
+  // manufacturing truth (authority/release currency) is re-read from the server.
+  const [manufacturingRefreshToken, setManufacturingRefreshToken] = useState(0);
+  const bumpManufacturingTruth = useCallback(() => setManufacturingRefreshToken((n) => n + 1), []);
   // B09.0 — the live history/gesture-tool/teardown trio lives behind ONE
   // stable method-encapsulated runtime (the PcbBoardLifecycleOwner
   // pattern), replacing bare refs mutated from effects. The runtime also
@@ -850,10 +856,11 @@ export default function PcbEditor({
           ? "Durable PCB plan applied and verified; imported footprints were arranged near the board center."
           : "Durable PCB plan applied and verified from the authoritative server board.");
         boardCheckpoint(`Synchronized PCB (server revision ${record.revision.slice(0, 12)}…)`, arranged ?? record.board);
+        bumpManufacturingTruth(); // [B16.1C] the board moved: authority/release currency must be re-read
       },
       settle: settleStaleServerCommit,
     });
-  }, [client, pendingPreflight, syncIdentity, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle]);
+  }, [client, pendingPreflight, syncIdentity, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
 
   // ── History + move tool lifecycle ──────────────────────────────────────────
   // Boards arriving from OUTSIDE the history stack (initial load, demo, sync)
@@ -979,7 +986,9 @@ export default function PcbEditor({
   // ── R06: server qualification (real router + RC01–RC03) and MFG01 release ──
   // B08.3 — `qualifying` (like `syncing`/`applying`) is derived from the
   // request-owned operation registry above, never an ambient boolean.
-  const [releasing, setReleasing] = useState(false);
+  // [B16.1C §F] `releasing` is now the registry's "release" slot as well (a
+  // second click while a release is in flight is refused, never a second
+  // request) — see useManufacturingWorkflow below.
   // B16.0: qualify/release send only the project/branch SELECTOR; the server
   // derives identity/role from the authenticated session + project membership.
   const scopeHeaders = useCallback((): Record<string, string> => syncIdentity ? {
@@ -988,6 +997,42 @@ export default function PcbEditor({
     "x-sirkit-project-id": syncIdentity.projectId,
     "x-sirkit-branch-id": syncIdentity.branchId,
   } : {}, [syncIdentity]);
+  // [B16.1C §C/§F] durable manufacturing truth (snapshot head, qualification
+  // authority currency, ledgered release) is hydrated from the server on
+  // mount and after every verified adoption; the explicit workflow state is
+  // reconstructed from it — never from browser memory.
+  const manufacturingIdentity = useMemo(() => syncIdentity ? { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, designId: syncIdentity.designId, boardId: syncIdentity.boardId } : null, [syncIdentity]);
+  const manufacturing = useManufacturingWorkflow({
+    client: init.demo ? null : client,
+    identity: init.demo ? null : manufacturingIdentity,
+    scopeHeaders,
+    ownedOps,
+    lifecycle: pcbLifecycle,
+    hasSchematic: schematic.components.length + (schematic.kicadComponents?.length ?? 0) > 0,
+    schematicBaseDigest: null,
+    refreshToken: manufacturingRefreshToken + hydrateToken,
+    onNotice: setToast,
+    onReleased: (result) => {
+      if (init.demo || !syncIdentity) return;
+      const board = authorityRef.current?.board ?? boardRef.current;
+      if (!board) return;
+      saveStageEvidence(syncIdentity.projectId, { releasedBoardRevision: result.boardRevision || pcbRevisionId(board), releasedAt: Date.now(), releaseId: result.releaseId });
+      boardCheckpoint("Released manufacturing package", board);
+    },
+  });
+  const releasing = manufacturing.releasing;
+  // [B16.1C §C/§F] pre-edit probe P1: a fresh browser remembered NO snapshot
+  // revision (localStorage empty → 0) and every publication against an
+  // already-published design collided with PS_SNAPSHOT_REVISION_CONFLICT.
+  // The durable snapshot head now arrives with the manufacturing truth and
+  // becomes the publication base — server truth wins over browser memory.
+  const manufacturingSnapshotHead = manufacturing.hydration.status === "loaded" ? manufacturing.hydration.truth?.snapshot ?? null : null;
+  useEffect(() => {
+    if (init.demo || !syncIdentity || !manufacturingSnapshotHead) return;
+    if (snapshotRevisionRef.current === manufacturingSnapshotHead.revision) return;
+    snapshotRevisionRef.current = manufacturingSnapshotHead.revision;
+    savePcbSnapshotRevision(syncIdentity.projectId, manufacturingSnapshotHead.revision);
+  }, [init.demo, syncIdentity, manufacturingSnapshotHead]);
 
   const handleQualify = useCallback(async () => {
     if (!syncIdentity || !client) return;
@@ -1030,57 +1075,39 @@ export default function PcbEditor({
         setRouteStaleNotice(null);
         boardCheckpoint("Qualified and routed board (server, RC01–RC03 verified)", editorBoard);
         setToast(`Board qualified: routed with 0 remaining connections, 0 shorts, 0 route-blocking DRC errors (server revision ${body.boardRevision?.slice(0, 12) ?? "?"}…).`);
+        bumpManufacturingTruth(); // [B16.1C] re-read the sealed authority head
       },
       settle: settleStaleServerCommit,
     });
-  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle]);
+  }, [syncIdentity, client, scopeHeaders, boardCheckpoint, adoptBoardLifecycle, settleStaleServerCommit, ownedOps, pcbLifecycle, bumpManufacturingTruth]);
 
   /**
    * MFG01 verified release: the server reloads its OWN durable authority,
    * recomputes RC01–RC03, and packages a deterministic ZIP. A browser board
-   * never becomes release authority — this is the only verified-release
-   * path, shared by the toolbar button AND the Send-to-fab dialog.
+   * never becomes release authority.
+   *
+   * [B16.1C §F] release is a human administrator's SEPARATE decision: this
+   * entry (shared by the toolbar and the Send-to-fab dialog) never releases
+   * directly — it checks that a CURRENT qualification authority exists for
+   * this exact board and opens the authorization dialog, which names the
+   * authority revision/digest the administrator confirms. The release request
+   * itself runs request-owned (single-flight) in useManufacturingWorkflow.
    */
   const performVerifiedRelease = useCallback(async (): Promise<{ ok: boolean; message: string }> => {
     if (!syncIdentity) return { ok: false, message: "No durable project scope is active." };
     if (releasing) return { ok: false, message: "A release is already running." };
-    setReleasing(true);
-    try {
-      const res = await fetch("/api/pcb/release", { method: "POST", headers: scopeHeaders(), body: JSON.stringify({ boardId: syncIdentity.boardId, designId: syncIdentity.designId }) });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { code?: string; error?: string } | null;
-        return {
-          ok: false,
-          message: body?.code === "MFG_AUTHORITY_NOT_FOUND"
-            ? "Release blocked: no manufacturing authority exists yet. Run “Qualify & route” first."
-            : `Release failed: ${body?.code ?? res.status}${body?.error ? ` — ${body.error}` : ""}`,
-        };
-      }
-      const releaseId = res.headers.get("X-Sirkit-Release-Id") ?? "release";
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `sirkit-${syncIdentity.boardId.replace(/[^A-Za-z0-9_-]/g, "-")}-${releaseId.slice(-12)}.zip`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      const board = authorityRef.current?.board ?? boardRef.current;
-      if (board) {
-        saveStageEvidence(syncIdentity.projectId, { releasedBoardRevision: pcbRevisionId(board), releasedAt: Date.now(), releaseId });
-        boardCheckpoint("Released manufacturing package", board);
-      }
-      return { ok: true, message: `Verified manufacturing release downloaded (${releaseId.slice(-12)}). RC01–RC03 were recomputed server-side against the durable authority before packaging.` };
-    } catch (error) {
-      return { ok: false, message: `Release failed: ${error instanceof Error ? error.message : String(error)}` };
-    } finally {
-      setReleasing(false);
+    if (manufacturing.hydration.status !== "loaded") return { ok: false, message: "Release is unavailable until the durable manufacturing truth has been read for this board." };
+    if (!manufacturing.canRequestRelease) {
+      return { ok: false, message: manufacturing.truth?.authority ? "Release blocked: the qualification authority is not current for this board. Run “Qualify & route” again first." : "Release blocked: no manufacturing authority exists yet. Run “Qualify & route” first." };
     }
-  }, [syncIdentity, releasing, scopeHeaders, boardCheckpoint]);
+    manufacturing.requestRelease();
+    return { ok: false, message: "Release requires a separate administrator authorization — review the sealed authority in the manufacturing panel and authorize it there." };
+  }, [syncIdentity, releasing, manufacturing]);
 
   const handleRelease = useCallback(async () => {
     const result = await performVerifiedRelease();
-    setToast(result.message);
-  }, [performVerifiedRelease]);
+    if (!result.ok && !manufacturing.releaseConfirmation) setToast(result.message);
+  }, [performVerifiedRelease, manufacturing.releaseConfirmation]);
 
   // ── Stage 7: interactive routing tool (active only in "route" mode) ─────────
   const netClasses = useNetClass({ getHistory: () => editorRuntime.getHistory() }, { ownership: assistOwnership });
@@ -2018,11 +2045,12 @@ export default function PcbEditor({
               <button
                 type="button"
                 onClick={() => void handleRelease()}
-                disabled={releasing || routeStaleNotice !== null}
-                title={routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : "MFG01 verified manufacturing release (server recomputes RC01–RC03, deterministic Gerber ZIP)"}
+                disabled={releasing || qualifying || routeStaleNotice !== null || !manufacturing.canRequestRelease}
+                title={routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : !manufacturing.canRequestRelease ? "Release needs a CURRENT qualification authority for this exact board (run Qualify & route first)" : "MFG01 verified manufacturing release — a separate administrator authorization follows (server recomputes RC01–RC03, deterministic Gerber ZIP)"}
                 className="ml-1 rounded border border-zinc-600 px-2 py-1 text-[11px] text-zinc-200 hover:border-teal-500 disabled:opacity-50"
+                data-testid="pcb-release-button"
               >
-                {releasing ? "Releasing…" : "Release ZIP"}
+                {releasing ? "Releasing…" : "Request release"}
               </button>
               <span
                 className={`ml-2 text-[11px] ${boardSaveState === "error" ? "text-red-300" : "text-zinc-500"}`}
@@ -2038,6 +2066,22 @@ export default function PcbEditor({
           {routeStaleNotice && (
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-40 max-w-xl rounded border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-200" data-testid="route-stale-banner">
               Routing evidence is stale: {routeStaleNotice}
+            </div>
+          )}
+          {/* [B16.1C §F] the visible manufacturing workflow: durable truth,
+              explicit state, qualification/release actions (disabled while
+              pending), separate administrator authorization, explicit
+              retry, and the release result — all reconstructed from the
+              server after any refresh. */}
+          {!init.demo && syncIdentity && (
+            <div className="absolute bottom-2 left-2 z-30 max-w-2xl">
+              <ManufacturingWorkflowPanel
+                workflow={manufacturing}
+                qualifying={qualifying}
+                canQualify={Boolean(authoritativeRecord)}
+                onQualify={() => void handleQualify()}
+                routeStaleNotice={routeStaleNotice}
+              />
             </div>
           )}
           {/* B08.2 — divergence notice from the reconciliation boundary:

@@ -24,6 +24,12 @@ export interface PcbSyncClientScope { tenantId: string; projectId: string; branc
 export type PcbSyncClientFailureKind = "not_found" | "blocked" | "stale" | "conflict" | "retryable" | "terminal";
 export type PcbSyncClientResult<T> = { ok: true; value: T } | { ok: false; kind: PcbSyncClientFailureKind; code: string; status: number; detail?: string };
 export type PcbSyncFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+/** [B16.1C] the reload-time manufacturing truth returned beside a board load (`include=manufacturing`). */
+export interface PcbSyncManufacturingTruth {
+  snapshot: null | { revision: number; snapshotDigest: string; schematicRevision: string; schematicDigest: string };
+  authority: null | { revision: number; recordDigest: string; boardRevision: string; boardDigest: string; schematicRevision: string; schematicDigest: string; componentAuthorityDigest: string; fabricationProfileId: string; qualifiedAt: string; actor: string; current: boolean };
+  latestRelease: null | { releaseId: string; archiveSha256: string; manifestContentDigest: string; filename: string; authorityRecordDigest: string; authorityRevision: number; boardRevision: string; actor: string; releasedAt: string; current: boolean };
+}
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 /** A thrown fetch is not always a network outage: aborts (page navigation/reload,
@@ -67,5 +73,22 @@ export class PcbSyncClient {
   /** Preflight is cancelable — its plan is inert until an explicit apply. */
   preflight(request: Omit<PcbSyncPreflightRequest, "tenantId" | "projectId" | "branchId" | "actorContext">, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<PcbSyncPreflightResult>> { return this.post("preflight", request, preflight, {}, options); }
   apply(request: Omit<PcbSyncApplyRequest, "tenantId" | "projectId" | "branchId" | "actorContext">): Promise<PcbSyncClientResult<PcbSyncApplyResult>> { return this.post("apply", request, applyResult, { "x-sirkit-pcb-sync-opt-in": "true" }); }
+  /**
+   * [B16.1C §C/§F] fresh-browser hydration: the authoritative board (or
+   * `not_found`) PLUS the server-owned manufacturing truth — the durable
+   * snapshot head to publish against, the qualification authority head and
+   * whether it is current for this board, and the latest ledgered release.
+   * A 404 `not_found` is a truthful answer (ok), not a failure.
+   */
+  async loadBoardWithManufacturing(boardId: string): Promise<PcbSyncClientResult<{ load: PcbSyncBoardLoadResult; manufacturing: PcbSyncManufacturingTruth | null }>> {
+    const query = new URLSearchParams({ boardId, include: "manufacturing" });
+    let response: Response;
+    try { response = await this.request(`${this.endpoint}?${query}`, { method: "GET", headers: this.headers() }); } catch (error) { return fetchFailure(error); }
+    let body: unknown;
+    try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); }
+    if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status);
+    const manufacturing = object(body.manufacturing) && "authority" in body.manufacturing && "latestRelease" in body.manufacturing ? body.manufacturing as unknown as PcbSyncManufacturingTruth : null;
+    return { ok: true, value: { load: body.result, manufacturing } };
+  }
   async loadBoard(boardId: string, known?: Pick<PcbSyncBoardRecord, "revision" | "digest">): Promise<PcbSyncClientResult<PcbSyncBoardLoadResult>> { const query = new URLSearchParams({ boardId, ...(known ? { knownRevision: known.revision, knownDigest: known.digest } : {}) }); let response: Response; try { response = await this.request(`${this.endpoint}?${query}`, { method: "GET", headers: this.headers() }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
 }
