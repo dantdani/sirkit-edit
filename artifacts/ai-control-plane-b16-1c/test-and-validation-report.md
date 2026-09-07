@@ -69,7 +69,7 @@ The release archive itself is the fifth generator: byte-identical across every r
 - `vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts app/lib/pcb/__tests__/stage-08-professional-routing.test.ts` → 2 files, 29/29
 - `pnpm run stage10:test` → 56 files, 801/801
 
-The GitHub Actions run for the B16.1C branch is recorded in `final-verdict.md` once the PR exists (the workflow runs on push).
+The GitHub Actions `benchmark` workflow runs on the pushed branch (PR https://github.com/dantdani/sirkit-edit/pull/5); its status at report time is stated in the closing report and in `final-verdict.md`.
 
 ## 10. Router recordings (local, real FreeRouting) — RECORDED
 

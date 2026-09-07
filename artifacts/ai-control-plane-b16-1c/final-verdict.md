@@ -14,11 +14,20 @@
 
 ## Commits (Dandi Desta <dandidesta82@gmail.com>, no AI co-author trailers per the owner mandate)
 
-Recorded after the commits were made — see the closing report and the memory ledger; the branch is pushed as `integration/b16-1c-prompt-to-gerber`.
+| Commit | Subject |
+|---|---|
+| `16d1382` | server-owned qualification authority and deterministic, ledgered release |
+| `8a635a4` | prompt-to-Gerber workflow state machine and deterministic acceptance/recovery suites |
+| `c29c92d` | visible manufacturing workflow with a separate administrator release authorization |
+| `ed83e69` | stage artifacts |
+| `2e380bb` | line-ending-independent acceptance catalog; router fixtures re-recorded |
+| (this file's commit) | records the PR URL below |
+
+Branch `integration/b16-1c-prompt-to-gerber` pushed to `origin` (dantdani/sirkit-edit).
 
 ## Pull request
 
-Opened against `main` after every gate above passed; NOT merged (owner mandate). URL and head SHA are recorded in the closing report.
+https://github.com/dantdani/sirkit-edit/pull/5 — opened against `main` after every gate above passed; NOT merged (owner mandate). Head SHA at opening: `2e380bb07dcc07cf72e12a5bc37eebfdb3be51f5`; the final head SHA (after this record) is stated in the closing report.
 
 ## Confirmed limitations (verbatim from the stage)
 
