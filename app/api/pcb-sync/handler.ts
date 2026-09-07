@@ -151,22 +151,45 @@ export function createPcbSyncPostHandler(service: PcbSynchronizationService, fea
  * refusal lives only in the legacy Request adapter below (the canonical query
  * projection cannot carry duplicates).
  */
-export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState) {
+/**
+ * [B16.1C §C] the reload-time manufacturing truth a browser needs to
+ * reconstruct workflow state: the durable qualification authority head and
+ * the latest ledgered release, each flagged `current` against the board the
+ * request just loaded. Read-only, bounded, secret-free.
+ */
+export interface PcbSyncManufacturingSummary {
+  /** [B16.1C] the durable schematic snapshot head for the project's primary design/variant — the `expectedSnapshotRevision` a fresh browser must publish against. */
+  snapshot: null | { revision: number; snapshotDigest: string; schematicRevision: string; schematicDigest: string };
+  authority: null | { revision: number; recordDigest: string; boardRevision: string; boardDigest: string; schematicRevision: string; schematicDigest: string; componentAuthorityDigest: string; fabricationProfileId: string; qualifiedAt: string; actor: string; current: boolean };
+  latestRelease: null | { releaseId: string; archiveSha256: string; manifestContentDigest: string; filename: string; authorityRecordDigest: string; authorityRevision: number; boardRevision: string; actor: string; releasedAt: string; current: boolean };
+}
+export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string } | null) => Promise<PcbSyncManufacturingSummary>;
+
+export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState, manufacturing?: PcbSyncManufacturingSummaryReader) {
   return async function loadBoard(scope: { tenantId: string; projectId: string; branchId: string }, query: Readonly<Record<string, string>>): Promise<Response> {
     const state = featureState();
     try {
-      const allowed = new Set(["boardId", "knownRevision", "knownDigest"]);
+      const allowed = new Set(["boardId", "knownRevision", "knownDigest", "include"]);
       if (Object.keys(query).some((key) => !allowed.has(key))) fail("PS_API_UNKNOWN_FIELD");
       const boardId = id(query.boardId, "PS_BOARD_ID_INVALID"), knownRevision = query.knownRevision ?? null, knownDigest = query.knownDigest ?? null;
       if (knownRevision !== null) id(knownRevision, "PS_BOARD_REVISION_INVALID"); if (knownDigest !== null) id(knownDigest, "PS_BOARD_DIGEST_INVALID");
+      const include = query.include ?? null;
+      if (include !== null && include !== "manufacturing") fail("PS_API_UNKNOWN_FIELD");
+      const includeManufacturing = include === "manufacturing";
+      if (includeManufacturing && !manufacturing) fail("PS_API_UNKNOWN_FIELD");
       const boardScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId }, record = await repository.getBoard(boardScope);
       const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope: boardScope };
-      if (!record) { const result: PcbSyncBoardLoadResult = { ...common, status: "not_found" }; return Response.json({ ok: true, operation: "load_board", boardChanged: false, result }, { status: 404, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } }); }
+      if (!record) {
+        const result: PcbSyncBoardLoadResult = { ...common, status: "not_found" };
+        const summary = includeManufacturing ? await manufacturing!(boardScope, null) : undefined;
+        return Response.json({ ok: true, operation: "load_board", boardChanged: false, result, ...(summary ? { manufacturing: summary } : {}) }, { status: 404, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+      }
       const rebuilt = makeBoardRecord({ ...boardScope, board: record.board, updatedAt: record.updatedAt });
       if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) fail("PS_BOARD_RECORD_DIGEST_MISMATCH");
       const conditional = (knownRevision !== null || knownDigest !== null) && (knownRevision === null || knownRevision === record.revision) && (knownDigest === null || knownDigest === record.digest);
       const result: PcbSyncBoardLoadResult = conditional ? { ...common, status: "not_modified" } : { ...common, status: "found", record };
-      return Response.json({ ok: true, operation: "load_board", boardChanged: false, result }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+      const summary = includeManufacturing ? await manufacturing!(boardScope, { revision: record.revision, digest: record.digest }) : undefined;
+      return Response.json({ ok: true, operation: "load_board", boardChanged: false, result, ...(summary ? { manufacturing: summary } : {}) }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
     } catch (error) { return errorResponse(error); }
   };
 }

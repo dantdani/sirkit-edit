@@ -66,7 +66,9 @@ export class DurableManufacturingAuthorityStore {
       committedAt: input.savedAt,
     });
     void committed;
-    return { revision: (current?.revision ?? 0) + 1, recordDigest };
+    const head = await this.head(scope);
+    if (!head || head.recordDigest !== recordDigest) throw new Error("MFG_AUTHORITY_SAVE_UNVERIFIED");
+    return { revision: head.revision, recordDigest };
   }
 
   /**
@@ -83,6 +85,14 @@ export class DurableManufacturingAuthorityStore {
       if (authority.boardRevision !== locator.expectedBoardRevision || authority.boardDigest !== locator.expectedBoardDigest) return null;
       return structuredClone(authority);
     };
+  }
+
+  /** [B16.1C] the durable head — payload plus the aggregate revision and record digest a release binds. */
+  async getHead(scope: ManufacturingAuthorityScope): Promise<{ authority: ManufacturingReleaseAuthority; revision: number; recordDigest: string } | null> {
+    const head = await this.head(scope);
+    if (!head) return null;
+    if (manufacturingAuthorityRecordDigest(head.payload) !== head.recordDigest) throw new Error("MFG_AUTHORITY_RECORD_DIGEST_MISMATCH");
+    return { authority: structuredClone(head.payload), revision: head.revision, recordDigest: head.recordDigest };
   }
 
   async get(scope: ManufacturingAuthorityScope): Promise<ManufacturingReleaseAuthority | null> {

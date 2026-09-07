@@ -17,11 +17,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { injectAuthorizedPrincipal, injectIdentity, injectMembership, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
+import { authoritativeBoardDigest } from "@/app/lib/pcb/fab/release-gate";
 
 // ── expensive / durable seams (spies) ────────────────────────────────────────
 const getBoard = vi.hoisted(() => vi.fn());
 const publishBoard = vi.hoisted(() => vi.fn());
-vi.mock("@/app/api/pcb-sync/route", () => ({ stage3Repository: { getBoard, publishBoard } }));
+// [B16.1C] the qualify route reads the durable HEAD (record + aggregate
+// revision) and the server-owned binding repository; release re-reads the
+// board head to refuse stale authority. `getBoard` stays for the legacy
+// zero-work assertions (it is never reached any more, which is itself pinned).
+const getBoardHead = vi.hoisted(() => vi.fn());
+const listAudits = vi.hoisted(() => vi.fn<() => Promise<unknown[]>>(async () => []));
+const getPlan = vi.hoisted(() => vi.fn<() => Promise<unknown>>(async () => null));
+const listSelectedPeers = vi.hoisted(() => vi.fn<() => Promise<unknown[]>>(async () => []));
+vi.mock("@/app/api/pcb-sync/route", () => ({ stage3Repository: { getBoard, getBoardHead, publishBoard, listAudits, getPlan }, stage3BindingRepository: { listSelectedPeers } }));
 
 const createRouter = vi.hoisted(() => vi.fn(async () => ({})));
 vi.mock("@/app/lib/pcb/autonomous/production-router", () => ({ createAutonomousRouteExecutor: createRouter }));
@@ -34,11 +43,17 @@ vi.mock("@/app/lib/pcb/autonomous/capability-profile", async (orig) => ({ ...(aw
 
 const authoritySave = vi.hoisted(() => vi.fn(async () => ({ revision: 1, recordDigest: "sha256:auth" })));
 const authorityGet = vi.hoisted(() => vi.fn());
+// [B16.1C] both routes read the durable authority HEAD (payload + aggregate
+// revision + record digest); `authorityGet` is kept as a spy so the legacy
+// zero-work assertions still prove no bare read happens either.
+const authorityGetHead = vi.hoisted(() => vi.fn());
 const authorityLoader = vi.hoisted(() => vi.fn(() => vi.fn()));
 vi.mock("@/app/lib/pcb/fab/authority-store", async (orig) => ({
   ...(await orig() as object),
-  DurableManufacturingAuthorityStore: class { save = authoritySave; get = authorityGet; loader = authorityLoader; },
+  DurableManufacturingAuthorityStore: class { save = authoritySave; get = authorityGet; getHead = authorityGetHead; loader = authorityLoader; },
 }));
+const ledgerRecord = vi.hoisted(() => vi.fn<(scope: unknown, input: Record<string, unknown>) => Promise<{ created: boolean; record: { releaseId: string } }>>(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } })));
+vi.mock("@/app/lib/pcb/fab/release-ledger", async (orig) => ({ ...(await orig() as object), DurableManufacturingReleaseLedger: class { record = ledgerRecord; latest = vi.fn(async () => null); list = vi.fn(async () => []); } }));
 
 const getWorkflowRepo = vi.hoisted(() => vi.fn(() => ({})));
 vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: getWorkflowRepo }));
@@ -57,6 +72,10 @@ const qReq = (body: string, h: Record<string, string> = {}): Request => post("/a
 const rReq = (body: string, h: Record<string, string> = {}): Request => post("/api/pcb/release", body, h);
 async function payload(res: Response): Promise<Record<string, unknown>> { return (await res.json()) as Record<string, unknown>; }
 const VALID = JSON.stringify({ designId: "d1", boardId: "b1" });
+/** [B16.1C] the stored authority head the release route re-reads: board revision/digest plus the release-time facets it re-checks. */
+function storedAuthority(boardRevision: string, boardDigest: string) {
+  return { boardRevision, boardDigest, manufacturingRuleProfile: { evidence: { verifiedAt: "2026-09-07" }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } };
+}
 
 function authed(role: "viewer" | "commenter" | "editor" | "reviewer" | "admin"): void {
   injectAuthorizedPrincipal({ userId: "u1", tenantId: "local", projectId: "proj-1", role });
@@ -74,6 +93,10 @@ function counting(path: string, headers: Record<string, string>, counter: { pull
 /** Every durable/expensive seam untouched — the refusal did zero real work. */
 function zeroWork(): void {
   expect(getBoard).not.toHaveBeenCalled();
+  expect(getBoardHead).not.toHaveBeenCalled();
+  expect(listSelectedPeers).not.toHaveBeenCalled();
+  expect(authorityGetHead).not.toHaveBeenCalled();
+  expect(ledgerRecord).not.toHaveBeenCalled();
   expect(publishBoard).not.toHaveBeenCalled();
   expect(createRouter).not.toHaveBeenCalled();
   expect(qualifyLayout).not.toHaveBeenCalled();
@@ -84,7 +107,9 @@ function zeroWork(): void {
 
 afterEach(() => {
   resetInjectedIdentity(); vi.unstubAllEnvs();
-  for (const s of [getBoard, publishBoard, createRouter, qualifyLayout, evalCapability, authoritySave, authorityGet, authorityLoader, getWorkflowRepo, releasePackage]) s.mockReset();
+  for (const s of [getBoard, getBoardHead, listAudits, getPlan, listSelectedPeers, publishBoard, createRouter, qualifyLayout, evalCapability, authoritySave, authorityGet, authorityGetHead, authorityLoader, getWorkflowRepo, releasePackage, ledgerRecord]) s.mockReset();
+  listAudits.mockImplementation(async () => []); getPlan.mockImplementation(async () => null); listSelectedPeers.mockImplementation(async () => []);
+  ledgerRecord.mockImplementation(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } }));
   createRouter.mockImplementation(async () => ({}));
   authoritySave.mockImplementation(async () => ({ revision: 1, recordDigest: "sha256:auth" }));
   authorityLoader.mockImplementation(() => vi.fn());
@@ -185,12 +210,12 @@ describe("B16.0.15 §C — role separation (policy-exact)", () => {
       resetInjectedIdentity();
     }
     for (const role of ["editor", "admin"] as const) {
-      getBoard.mockResolvedValueOnce(null);
+      getBoardHead.mockResolvedValueOnce(null); // [B16.1C] the durable read is the board HEAD
       authed(role);
       const res = await qualify(qReq(VALID));
-      expect(res.status, role).toBe(404); // reached getBoard → not-found (proves authorization passed)
+      expect(res.status, role).toBe(404); // reached getBoardHead → not-found (proves authorization passed)
       expect((await payload(res)).code).toBe("MFG_AUTHORITATIVE_BOARD_NOT_FOUND");
-      resetInjectedIdentity(); getBoard.mockReset();
+      resetInjectedIdentity(); getBoardHead.mockReset();
     }
   });
 
@@ -202,10 +227,10 @@ describe("B16.0.15 §C — role separation (policy-exact)", () => {
       expect(releasePackage).not.toHaveBeenCalled();
       resetInjectedIdentity();
     }
-    authorityGet.mockResolvedValueOnce(null);
+    authorityGetHead.mockResolvedValueOnce(null); // [B16.1C] the durable read is the authority HEAD
     authed("admin");
     const res = await release(rReq(VALID));
-    expect(res.status).toBe(404); // reached store.get → not-found (proves project_admin passed)
+    expect(res.status).toBe(404); // reached store.getHead → not-found (proves project_admin passed)
     expect((await payload(res)).code).toBe("MFG_AUTHORITY_NOT_FOUND");
   });
 });
@@ -213,17 +238,25 @@ describe("B16.0.15 §C — role separation (policy-exact)", () => {
 describe("B16.0.15 §D/§E — trusted-scope durable reads & locator pinning", () => {
   it("[qualify] the durable board read uses the TRUSTED context scope + validated body.boardId only", async () => {
     authed("editor");
-    getBoard.mockResolvedValueOnce(null);
+    getBoardHead.mockResolvedValueOnce(null);
     const res = await qualify(qReq(JSON.stringify({ designId: "d1", boardId: "b1", tenantIdBogus: "evil" })));
     expect(res.status).toBe(404);
-    expect(getBoard).toHaveBeenCalledTimes(1);
-    expect(getBoard.mock.calls[0]![0]).toEqual({ tenantId: "local", projectId: "proj-1", branchId: "main", boardId: "b1" });
+    expect(getBoardHead).toHaveBeenCalledTimes(1);
+    expect(getBoardHead.mock.calls[0]![0]).toEqual({ tenantId: "local", projectId: "proj-1", branchId: "main", boardId: "b1" });
+    expect(getBoard).not.toHaveBeenCalled(); // [B16.1C] the head read replaced the bare record read
     expect(createRouter).not.toHaveBeenCalled(); // not-found → no router work
   });
 
   it("[qualify] an INELIGIBLE design performs ZERO router/process work (pre-flight before router creation)", async () => {
     authed("editor");
-    getBoard.mockResolvedValueOnce({ board: createEmptyBoard(), revision: 1, digest: "sha256:src" });
+    // [B16.1C] the route now resolves server-owned component authority (an
+    // empty board has no footprints → trivially complete) and the schematic
+    // synchronization identity BEFORE the capability screen; both are mocked
+    // as present so the screen is what refuses.
+    getBoardHead.mockResolvedValueOnce({ record: { board: createEmptyBoard(), revision: "pcb2-src", digest: "sha256:src" }, aggregateRevision: 1 });
+    listAudits.mockResolvedValueOnce([{ outcome: "committed", planId: "plan-1" }]);
+    getPlan.mockResolvedValueOnce({ planId: "plan-1", snapshot: { schematicRevision: "schematic:1", schematicDigest: "sha256:sch", snapshotDigest: "sha256:snap" } });
+    authorityGetHead.mockResolvedValueOnce(null);
     evalCapability.mockReturnValue({ placementMayStart: false, blockers: ["outside-profile"] });
     const res = await qualify(qReq(VALID));
     expect(res.status).toBe(422);
@@ -233,37 +266,75 @@ describe("B16.0.15 §D/§E — trusted-scope durable reads & locator pinning", (
     expect(authoritySave).not.toHaveBeenCalled(); // no authority persisted on failure
   });
 
+  it("[qualify] a synchronized board with NO server-owned binding authority is refused BEFORE the capability screen and the router (B16.1C probe P5/P6)", async () => {
+    authed("editor");
+    const board = { ...createEmptyBoard(), footprints: [{ id: "f1", ref: "R1", footprintId: "fp", at: { x: 0, y: 0 }, rotationDeg: 0, side: "top", padNets: {}, def: { libName: "L", name: "N", attributes: { smd: true, throughHole: false, excludeFromPos: false, excludeFromBom: false }, pads: [], graphics: [], bodyBBox: { minX: 0, minY: 0, maxX: 1, maxY: 1 }, models: [], rawSexpr: "" }, syncIdentity: { componentInstanceId: "c1", bindingRevisionId: "b:r1", footprintAssetVersionId: "fp", footprintContentDigest: "sha256:fp", mappingCertificateId: "m1", symbolAssetVersionId: "s1", syncPlanId: "plan-1" } }] };
+    getBoardHead.mockResolvedValueOnce({ record: { board, revision: "pcb2-src", digest: "sha256:src" }, aggregateRevision: 3 });
+    const res = await qualify(qReq(VALID));
+    expect(res.status).toBe(422);
+    const body = await payload(res);
+    expect(body.code).toBe("MFG_COMPONENT_AUTHORITY_INCOMPLETE");
+    expect((body.blockers as Array<{ code: string }>).map((b) => b.code)).toEqual(["QA_BINDING_NOT_FOUND"]);
+    expect(listSelectedPeers).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "local", projectId: "proj-1", branchId: "main", boardInstanceId: "b1", componentInstanceId: "c1" }));
+    expect(evalCapability).not.toHaveBeenCalled();
+    expect(createRouter).not.toHaveBeenCalled();
+    expect(authoritySave).not.toHaveBeenCalled();
+  });
+
   it("[release] missing authority → exact 404 MFG_AUTHORITY_NOT_FOUND; releaseManufacturingPackage NEVER called", async () => {
     authed("admin");
-    authorityGet.mockResolvedValueOnce(null);
+    authorityGetHead.mockResolvedValueOnce(null);
     const res = await release(rReq(VALID));
     expect(res.status).toBe(404);
     expect((await payload(res)).code).toBe("MFG_AUTHORITY_NOT_FOUND");
-    expect(authorityGet.mock.calls[0]![0]).toEqual({ tenantId: "local", projectId: "proj-1", branchId: "main", designId: "d1", boardId: "b1" });
+    expect(authorityGetHead.mock.calls[0]![0]).toEqual({ tenantId: "local", projectId: "proj-1", branchId: "main", designId: "d1", boardId: "b1" });
     expect(releasePackage).not.toHaveBeenCalled();
+    expect(ledgerRecord).not.toHaveBeenCalled();
+  });
+
+  it("[release] authority qualified against an EARLIER board revision → 409 MFG_AUTHORITY_STALE; releaseManufacturingPackage NEVER called (B16.1C probe P7)", async () => {
+    authed("admin");
+    authorityGetHead.mockResolvedValueOnce({ authority: storedAuthority("rev-9", "sha256:board9"), revision: 1, recordDigest: "sha256:authrec" });
+    getBoardHead.mockResolvedValueOnce({ record: { board: createEmptyBoard(), revision: "rev-10", digest: "sha256:board10" }, aggregateRevision: 2 });
+    const res = await release(rReq(VALID));
+    expect(res.status).toBe(409);
+    const body = await payload(res);
+    expect(body.code).toBe("MFG_AUTHORITY_STALE");
+    expect(body).toMatchObject({ authorityBoardRevision: "rev-9", currentBoardRevision: "rev-10" });
+    expect(releasePackage).not.toHaveBeenCalled();
+    expect(ledgerRecord).not.toHaveBeenCalled();
   });
 
   it("[release] the release locator is pinned from TRUSTED context + stored authority revision/digest (never the client)", async () => {
     authed("admin");
-    authorityGet.mockResolvedValueOnce({ boardRevision: "rev-9", boardDigest: "sha256:board9" });
-    releasePackage.mockResolvedValueOnce({ releaseId: "rel-abc123456789", archiveSha256: "sha256:arch", manifest: { m: 1 }, validation: { v: 1 }, archiveBytes: new Uint8Array([1, 2, 3]) });
+    // [B16.1C] the current durable board must MATCH the stored authority (revision + content digest) or the release is refused as stale.
+    const digest = authoritativeBoardDigest(createEmptyBoard());
+    authorityGetHead.mockResolvedValueOnce({ authority: storedAuthority("rev-9", digest), revision: 1, recordDigest: "sha256:authrec" });
+    getBoardHead.mockResolvedValueOnce({ record: { board: createEmptyBoard(), revision: "rev-9", digest }, aggregateRevision: 1 });
+    releasePackage.mockResolvedValueOnce({ releaseId: "rel-abc123456789", archiveSha256: "sha256:arch", manifest: { m: 1, manifestContentDigest: "mfg-manifest-1" }, validation: { v: 1 }, archiveBytes: new Uint8Array([1, 2, 3]) });
     const res = await release(rReq(JSON.stringify({ designId: "d1", boardId: "b1", boardRevision: "attacker-rev", boardDigest: "attacker-digest" })));
     expect(res.status).toBe(200);
     expect(releasePackage).toHaveBeenCalledTimes(1);
     const locator = (releasePackage.mock.calls[0]![0] as { locator: Record<string, unknown> }).locator;
     expect(locator).toEqual({
       tenantId: "local", projectId: "proj-1", branchId: "main", designId: "d1", boardId: "b1",
-      expectedBoardRevision: "rev-9", expectedBoardDigest: "sha256:board9", // from STORED authority, not the attacker body
+      expectedBoardRevision: "rev-9", expectedBoardDigest: digest, // from STORED authority, not the attacker body
     });
+    // [B16.1C] every release is ledgered against the exact authority head it packaged.
+    expect(ledgerRecord).toHaveBeenCalledTimes(1);
+    expect(ledgerRecord.mock.calls[0]![1]).toMatchObject({ releaseId: "rel-abc123456789", archiveSha256: "sha256:arch", authorityRevision: 1, authorityRecordDigest: "sha256:authrec", boardRevision: "rev-9", actor: "u1" });
   });
 
   it("[release] format=manifest returns the exact JSON shape; default returns a ZIP with exact headers", async () => {
     authed("admin");
-    authorityGet.mockResolvedValue({ boardRevision: "rev-9", boardDigest: "sha256:board9" });
-    releasePackage.mockResolvedValue({ releaseId: "rel-abcdef123456", archiveSha256: "sha256:arch", manifest: { kind: "manifest" }, validation: { ok: true }, archiveBytes: new Uint8Array([9, 8, 7]) });
+    const digest = authoritativeBoardDigest(createEmptyBoard());
+    authorityGetHead.mockResolvedValue({ authority: storedAuthority("rev-9", digest), revision: 1, recordDigest: "sha256:authrec" });
+    getBoardHead.mockResolvedValue({ record: { board: createEmptyBoard(), revision: "rev-9", digest }, aggregateRevision: 1 });
+    releasePackage.mockResolvedValue({ releaseId: "rel-abcdef123456", archiveSha256: "sha256:arch", manifest: { kind: "manifest", manifestContentDigest: "mfg-manifest-1" }, validation: { ok: true }, archiveBytes: new Uint8Array([9, 8, 7]) });
     const manifest = await release(rReq(JSON.stringify({ designId: "d1", boardId: "b1", format: "manifest" })));
     expect(manifest.status).toBe(200);
-    expect(await payload(manifest)).toEqual({ ok: true, releaseId: "rel-abcdef123456", archiveSha256: "sha256:arch", manifest: { kind: "manifest" }, validation: { ok: true } });
+    // [B16.1C] the manifest response additionally names the filename, the authority head, and the ledger record.
+    expect(await payload(manifest)).toEqual({ ok: true, releaseId: "rel-abcdef123456", filename: "sirkit-b1-abcdef123456.zip", archiveSha256: "sha256:arch", manifest: { kind: "manifest", manifestContentDigest: "mfg-manifest-1" }, validation: { ok: true }, authorityRevision: 1, authorityDigest: "sha256:authrec", record: { releaseId: "rel-abcdef123456" } });
     expect(manifest.headers.get("Cache-Control")).toBe("no-store");
 
     const zip = await release(rReq(JSON.stringify({ designId: "d1", boardId: "b1" })));
@@ -275,6 +346,10 @@ describe("B16.0.15 §D/§E — trusted-scope durable reads & locator pinning", (
     expect(zip.headers.get("X-Sirkit-Release-Disposition")).toBe("verified_manufacturing_release");
     expect(zip.headers.get("X-Sirkit-Archive-Sha256")).toBe("sha256:arch");
     expect(zip.headers.get("X-Sirkit-Board-Revision")).toBe("rev-9");
+    expect(zip.headers.get("X-Sirkit-Authority-Revision")).toBe("1");
+    expect(zip.headers.get("X-Sirkit-Authority-Digest")).toBe("sha256:authrec");
+    expect(zip.headers.get("X-Sirkit-Manifest-Digest")).toBe("mfg-manifest-1");
+    expect(zip.headers.get("X-Sirkit-Release-Recorded")).toBe("created");
     expect(new Uint8Array(await zip.arrayBuffer())).toEqual(new Uint8Array([9, 8, 7]));
   });
 });

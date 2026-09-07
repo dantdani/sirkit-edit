@@ -10,6 +10,7 @@ import { pcbRevisionId } from "../revision";
 import type { PcbBoard } from "../types";
 import { outlinePolygon, polygonBBox } from "../zones/geometry";
 import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+import { emitGerberJob, type JobFileEntry } from "./native/ancillary";
 import { compileNativeFabPackage } from "./native/compiler";
 import { groupDrills } from "./native/drill";
 import { compileManufacturingIr } from "./native/mir";
@@ -28,6 +29,8 @@ import {
   type ManufacturingRuleProfile,
 } from "./release-manifest";
 import { extractAndValidateReleaseArchive, validateFabricationFiles, validateReleaseFileSet, type ManufacturingReadbackResult } from "./validate-package";
+import type { QualificationComponentAuthority } from "./qualification-authority";
+import type { SchematicAuthorityIdentity } from "./qualification-evidence";
 
 const FIXED_ZIP_DATE = new Date("1980-01-01T00:00:00.000Z");
 const BARE_RECIPE = Object.freeze({
@@ -92,6 +95,11 @@ export interface ManufacturingReleaseAuthority {
     capabilityEvaluation: AutonomousCapabilityEvaluation;
   };
   componentAuthority: ManufacturingComponentAuthority;
+  /** [B16.1C §D] the exact binding/footprint/mapping/package tuples the component
+   *  authority facets were derived from (server-owned, audit evidence). */
+  qualificationAuthority?: QualificationComponentAuthority;
+  /** [B16.1C §D] the schematic synchronization identity the board was last applied from. */
+  schematicAuthority?: SchematicAuthorityIdentity;
   fabPreset: FabPreset;
   drcPreset: DrcPreset;
   manufacturingRuleProfile: ManufacturingRuleProfile;
@@ -226,16 +234,29 @@ function packageFiles(input: NativeFabCompileInput, compiled: Awaited<ReturnType
     files.push(file);
     records.push({ path, role, kind: file.kind as ManufacturingReleaseFile["kind"], mediaType: file.mediaType, bytes: file.bytes.byteLength, sha256: file.sha256, ...metadata });
   };
+  // [B16.1C §E] the Gerber job file must describe exactly the members this
+  // release ships. The native compiler lists every layer it compiled (for a
+  // bare-board release that includes a paste layer the release gate never
+  // packages), so the job file is regenerated here from the SHIPPED entries —
+  // the independent archive verifier (and any board house) cross-checks it.
+  const jobEntries: JobFileEntry[] = [];
   for (const layer of mir.layers) {
     const role = roleForLayer(layer.id);
     if (!role) continue;
-    take(prefixed(snapshot, `${snapshot.boardName}${layerSuffix(snapshot, layer.id, layer.sourceLayer)}`), role, { mirLayerId: layer.id });
+    const basename = `${snapshot.boardName}${layerSuffix(snapshot, layer.id, layer.sourceLayer)}`;
+    take(prefixed(snapshot, basename), role, { mirLayerId: layer.id });
+    jobEntries.push({ path: basename, fileFunction: layer.fileFunction, filePolarity: layer.polarity, fileFormat: "Gerber" });
   }
   for (const group of groupDrills(mir)) {
-    take(prefixed(snapshot, `${snapshot.boardName}-${group.id}.xnc`), group.plated ? "pth_drill" : "npth_drill", { drillGroupId: group.id });
+    const basename = `${snapshot.boardName}-${group.id}.xnc`;
+    take(prefixed(snapshot, basename), group.plated ? "pth_drill" : "npth_drill", { drillGroupId: group.id });
+    jobEntries.push({ path: basename, fileFunction: group.fileFunction, fileFormat: "XNC" });
   }
   const jobPath = prefixed(snapshot, `${snapshot.boardName}.gbrjob`);
-  take(jobPath, "gerber_job");
+  const jobBytes = utf8(emitGerberJob(snapshot, mir, jobEntries));
+  const jobFile: NativeFabFile = { path: jobPath, kind: "job", mediaType: "application/json", bytes: jobBytes, sha256: sha256(jobBytes) };
+  files.push(jobFile);
+  records.push({ path: jobPath, role: "gerber_job", kind: "job", mediaType: jobFile.mediaType, bytes: jobBytes.byteLength, sha256: jobFile.sha256 });
   const readmePath = prefixed(snapshot, "README.txt");
   const readmeBytes = utf8([
     `${snapshot.boardName} - verified Sirkit MFG01 bare-board package`,

@@ -51,6 +51,22 @@ export class DurablePcbSyncSnapshotStore implements PcbSyncSnapshotProvider, Pcb
     }
   }
 
+  /**
+   * [B16.1C §C/§F] the CURRENT durable snapshot head for a design/variant: the
+   * integer aggregate revision a fresh browser must send as
+   * `expectedSnapshotRevision`, plus the schematic identity it describes.
+   * Before B16.1C no read exposed this, so a new browser session (localStorage
+   * empty → revision 0) could only ever collide with PS_SNAPSHOT_REVISION_CONFLICT
+   * on an already-published design (pre-edit probe P1).
+   */
+  async getSnapshotHead(input: Pick<PcbSyncAuthoritativeSnapshot, "tenantId" | "projectId" | "branchId" | "designId" | "assemblyVariantId">): Promise<{ revision: number; snapshotDigest: string; schematicRevision: string; schematicDigest: string; netGraphDigest: string } | null> {
+    const record = await this.workflow.loadHead<PcbSyncAuthoritativeSnapshot>(durableAggregateIdentity(snapshotScope(input), SNAPSHOT, snapshotKey(input)));
+    if (!record) return null;
+    const snapshot = record.payload;
+    if (authoritativeSnapshotDigest(withoutSnapshotDigest(snapshot)) !== snapshot.snapshotDigest || record.recordDigest !== snapshot.snapshotDigest) throw new Error("PS_SNAPSHOT_DIGEST_MISMATCH");
+    return { revision: record.revision, snapshotDigest: snapshot.snapshotDigest, schematicRevision: snapshot.schematicRevision, schematicDigest: snapshot.schematicDigest, netGraphDigest: snapshot.netGraphDigest };
+  }
+
   async acquire(request: PcbSyncPreflightRequest, signal?: AbortSignal): Promise<PcbSyncAuthoritativeSnapshot> {
     if (signal?.aborted) throw new Error("PS_REQUEST_CANCELLED");
     const key = snapshotKey(request);
@@ -69,7 +85,28 @@ export class DurablePcbSyncRepository implements PcbSyncRepository {
     const scope: PcbSyncRepositoryScope = record;
     const rebuilt = makeBoardRecord({ ...scope, board: record.board, updatedAt: record.updatedAt });
     if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) throw new Error("PS_BOARD_RECORD_DIGEST_MISMATCH");
-    await this.workflow.commit({ scope: workflowScope(scope), scopeKey: scopeKey(scope), idempotencyKey: input.idempotencyKey, operations: [{ aggregateType: BOARD, aggregateKey: boardKey(scope), expectedRevision: input.expectedRevision, payload: structuredClone(record), recordDigest: record.digest }], outbox: [], result: { boardRevision: record.revision }, committedAt: record.updatedAt });
+    try {
+      await this.workflow.commit({ scope: workflowScope(scope), scopeKey: scopeKey(scope), idempotencyKey: input.idempotencyKey, operations: [{ aggregateType: BOARD, aggregateKey: boardKey(scope), expectedRevision: input.expectedRevision, payload: structuredClone(record), recordDigest: record.digest }], outbox: [], result: { boardRevision: record.revision }, committedAt: record.updatedAt });
+    } catch (error) {
+      // [B16.1C] the same translation `commit` performs — a transport CAS
+      // conflict is a bounded PS_* code, never a raw DW_* string.
+      if (error instanceof Error && error.message === "DW_OPTIMISTIC_REVISION_CONFLICT") throw new Error("PS_DURABLE_PUBLICATION_REVISION_CONFLICT");
+      throw error;
+    }
+  }
+
+  /**
+   * [B16.1C §D] the CURRENT durable board head: the verified board record
+   * plus the integer aggregate revision a compare-and-swap publication must
+   * pin. Qualification uses this instead of a literal so a board that has
+   * been re-synchronized or re-qualified (aggregate revision > 1) publishes
+   * safely and a concurrent change is refused, never silently overwritten.
+   */
+  async getBoardHead(scope: PcbSyncRepositoryScope): Promise<{ record: PcbSyncBoardRecord; aggregateRevision: number } | null> {
+    const head = await this.boardHead(scope); if (!head) return null;
+    const record = head.payload, rebuilt = makeBoardRecord({ ...scope, board: record.board, updatedAt: record.updatedAt });
+    if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest || head.recordDigest !== record.digest) throw new Error("PS_BOARD_RECORD_DIGEST_MISMATCH");
+    return { record: structuredClone(record), aggregateRevision: head.revision };
   }
 
   private boardHead(scope: PcbSyncRepositoryScope): Promise<DurableAggregateRecord<PcbSyncBoardRecord> | null> { return this.workflow.loadHead(durableAggregateIdentity(workflowScope(scope), BOARD, boardKey(scope))); }
