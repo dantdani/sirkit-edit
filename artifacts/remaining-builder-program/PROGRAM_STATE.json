@@ -1,0 +1,18 @@
+{
+  "programVersion": "1.0.0",
+  "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
+  "currentChapter": "B16",
+  "currentCheckpoint": "B16-A",
+  "status": "in_progress",
+  "baseSha": "b7bb6d6a46654fab48daf33cb8b3a163ea360432",
+  "branch": "integration/b16-1c-prompt-to-gerber",
+  "lastGreenSha": "c82d1cbcbb1476937631b6e3c932f67bfb630893",
+  "openBlockers": [],
+  "liveBlockers": [
+    "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
+    "real LLM provider turn: UNKNOWN (no credits)",
+    "bundled FreeRouting runtime is local-only; CI replays committed recordings"
+  ],
+  "nextAction": "B16-A: finish independent re-measurement of PR #5 (narrow suites, full suite, benchmark commands, independent ZIP/Gerber validators, adversarial review); correct any finding on the PR branch with its own regression test; then merge PR #5 normally, fast-forward local main, record the merge SHA.",
+  "updatedAt": "2026-09-07T19:05:00-04:00"
+}
