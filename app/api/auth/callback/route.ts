@@ -9,12 +9,17 @@
  *
  * When Supabase is not configured, or the exchange fails, the browser is sent
  * to the sign-in page with a bounded error flag — never a provider diagnostic.
+ *
+ * [B16.1B] The exchange is deadline-bounded and the session cookies it writes
+ * carry the server-owned HttpOnly/Secure option set (`sessionCookieOptions`).
  */
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { safeRedirectPath } from "@/app/lib/auth/request-security";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
+import { createBoundedFetch, SESSION_VERIFICATION_DEADLINE_MS } from "@/app/lib/auth/bounded-fetch";
+import { sessionCookieOptions } from "@/app/lib/auth/session-cookies";
 
 export const runtime = "nodejs";
 
@@ -38,9 +43,12 @@ export const GET = publicRoute({ query: true, requestOrigin: true }, async ({ me
     return Response.redirect(new URL("/signin?error=auth", origin), 303);
   }
 
+  const bounded = createBoundedFetch({ deadlineMs: SESSION_VERIFICATION_DEADLINE_MS });
   try {
     const cookieStore = await cookies();
     const supabase = createServerClient(url, key, {
+      cookieOptions: sessionCookieOptions(),
+      global: { fetch: bounded.fetch },
       cookies: {
         getAll() { return cookieStore.getAll(); },
         setAll(cookiesToSet) {
@@ -55,5 +63,7 @@ export const GET = publicRoute({ query: true, requestOrigin: true }, async ({ me
     return Response.redirect(new URL(next, origin), 303);
   } catch {
     return Response.redirect(new URL("/signin?error=auth", origin), 303);
+  } finally {
+    bounded.dispose();
   }
 });

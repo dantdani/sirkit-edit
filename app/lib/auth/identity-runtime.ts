@@ -9,7 +9,7 @@
  */
 
 import type { IdentityProvider } from "./identity-provider";
-import { LocalDevIdentityProvider, SupabaseIdentityProvider, createSupabaseClaimsVerifier } from "./identity-provider";
+import { LocalDevIdentityProvider, SupabaseIdentityProvider, createSupabaseSessionVerifiers } from "./identity-provider";
 import type { ProjectMembershipRepository } from "./project-membership";
 import { LocalDevProjectMembershipRepository } from "./project-membership";
 import { PostgresProjectMembershipRepository } from "./postgres-membership";
@@ -20,9 +20,12 @@ import { resolveAuthMode } from "./mode";
 function productionIdentityProvider(environment: Record<string, string | undefined> = process.env): IdentityProvider | null {
   const mode = resolveAuthMode(environment);
   if (mode === "local_dev") return new LocalDevIdentityProvider();
-  // Production: the Supabase adapter. If the SDK/config is absent the verifier
-  // returns null (fail closed), so the resolver refuses with 401.
-  return new SupabaseIdentityProvider(createSupabaseClaimsVerifier(environment));
+  // Production: the Supabase adapter — signed-claim validation PLUS the
+  // [B16.1B §E] server-confirmed session-liveness policy, both on ONE bounded
+  // per-request client. If the SDK/config is absent the verifiers fail closed
+  // (null / "unavailable"), so the resolver refuses with 401.
+  const verifiers = createSupabaseSessionVerifiers(environment);
+  return new SupabaseIdentityProvider(verifiers.verifyClaims, { verifier: verifiers.liveness });
 }
 
 const DEFAULT_IDENTITY_FACTORY: () => IdentityProvider | null = () => productionIdentityProvider();
