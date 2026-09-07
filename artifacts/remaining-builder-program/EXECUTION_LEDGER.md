@@ -15,3 +15,11 @@ Identity: commits by `Dandi Desta <dandidesta82@gmail.com>`, real timestamps, no
 **Re-measurement plan (runbook B16-A.3):** narrow suites (acceptance, recovery, qualification/release, component authority, route/tool/invariant gates), tsc, scoped ESLint, `git diff --check`, sanctioned generators ×2, bounded full suite, benchmark-quality commands, independent ZIP/Gerber validators; plus an adversarial multi-lens review of the diff (authority bypass, determinism/host dependence, human truth, test integrity, CI risk) with two refuters per finding.
 
 _(results appended below as they are observed)_
+
+### B16-A narrow re-measurement (CONFIRMED, 2026-09-07 local, head c82d1cb + ledger commit 9b05187)
+
+- `pnpm exec tsc --noEmit` → exit 0.
+- Narrow suites (`app/lib/workflow/prompt-to-gerber/__tests__`, `app/lib/pcb/fab/__tests__`, `app/api/pcb`, `b16-1c-invariant-tripwires`, `b16-0-15-tranche-parity`, `manufacturing-workflow-panel`, `manufacturing-release-gate`, `native-fab`, `b16-1b-auth-composition`, `physical-binding`, `footprint-resolver`, `pcb-sync`): 37 files passed, 1 skipped (opt-in DB); 341 tests passed, 11 skipped, 0 failed; 15.5 s.
+- `git diff --check` → clean.
+- Sanctioned generators ×2 → sha1 `4d93461b` / `e22ec3a3` / `0599d5e6` / `49f279fd` both runs, identical to committed files (git status clean under artifacts/).
+- Scoped ESLint over every B16.1C production module → 0 errors, 1 pre-existing warning (`app/api/pcb/edit/__tests__/assist-live.test.ts` unused directive, not in range).
