@@ -20,8 +20,10 @@ import {
   check,
   foreignKey,
   primaryKey,
+  pgPolicy,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { authenticatedRole } from "drizzle-orm/supabase";
 import type { KicadPin } from "../kicad/types";
 import type { SnapshotRow, BomSnapshotMeta } from "../snapshots";
 import type { Pad, FootprintModelRef } from "../pcb/types";
@@ -1338,7 +1340,19 @@ export const projectMembers = pgTable("project_members", {
   stateCheck: check("project_members_state_check", sql`${table.state} IN ('active','revoked')`),
   versionCheck: check("project_members_version_check", sql`${table.version} > 0`),
   identityCheck: check("project_members_identity_check", sql`btrim(${table.membershipId}) <> '' AND btrim(${table.tenantId}) <> '' AND btrim(${table.projectId}) <> '' AND btrim(${table.userId}) <> '' AND btrim(${table.auditActorId}) <> ''`),
-}));
+  // [B16.1B §F] schema/runtime parity for the RLS defence in depth declared by
+  // migration 0027: the documented `drizzle-kit push` path applies the SCHEMA,
+  // so the policy must live here too or a pushed database silently lacks it.
+  // Same predicate as the migration: an authenticated user may SELECT only
+  // their OWN ACTIVE membership; no INSERT/UPDATE/DELETE policy exists for
+  // `authenticated`, so a user can never grant, escalate, or revoke
+  // membership through the publishable-key client.
+  selfSelect: pgPolicy("project_members_self_select", {
+    for: "select",
+    to: authenticatedRole,
+    using: sql`${table.state} = 'active' AND ${table.userId} = (select auth.uid())::text`,
+  }),
+})).enableRLS();
 
 // ─── Inferred row types (consumed across the codebase) ──────────────────────
 
