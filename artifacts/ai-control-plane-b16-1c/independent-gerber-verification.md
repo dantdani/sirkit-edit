@@ -2,15 +2,15 @@
 
 Subject: the deterministic acceptance release produced by `acceptance-pipeline.test.ts` step 10 and reproduced byte-identically on every replay.
 
-- filename `sirkit-board-b16-1c-blinker-e5437bba0531.zip`
-- archive sha256 `7432a65a27485e796ccafef5c70347a7aea216af5bf579991ca18da929b54c20`
-- release id `mfg-release-69cb64a4a41b221f0ed4e5437bba0531`; manifest digest `mfg-manifest-06232495c2e4ab9d34534e3718a1b9e53507d587aafe32cbdb9868710d2049b4`
-- board revision `pcb2-0b7f191c06df5865` (21 × 21 mm, 2 copper layers); authority r1 `sha256:f8677a84…bc8f7a`
+- filename `sirkit-board-b16-1c-blinker-57ff5c3311e2.zip`
+- archive sha256 `23314a7513b3c87fb135caab534e5d6d708b1259508e88d17919d8b7d7acf456`
+- release id `mfg-release-110d72644994b65fd0d757ff5c3311e2`; manifest digest `mfg-manifest-2cceca5717d891f6916cda97e5b3f578e4bf1d4fe07ea3c29f0ac70a216afc64`
+- board revision `pcb2-d3c41a58ca702019` (21 × 21 mm, 2 copper layers); authority r1 `sha256:116cfad9…81ecbf`
 - evidence location: `SIRKIT_B16_1C_EVIDENCE_DIR` or `<os tmpdir>/sirkit-b16-1c-evidence/` (`b16-1c-acceptance-release.zip`, `b16-1c-acceptance-manifest.json`, `b16-1c-acceptance-evidence.json`) — never under the repository (B11.5 closure).
 
 ## Validator 1 — `app/lib/pcb/fab/independent-archive-verifier.ts` (in-process, acceptance step 11) — CONFIRMED
 
-Shares no decision logic with the generator: its own RS-274X lexer (extended `%…%` blocks, `%AM` macro extents, `%ADD` apertures, D01/D02/D03 with a current point, G36/G37 regions), its own Excellon/XNC lexer (M48/METRIC/tool table/hits/M30), its own canonical-JSON digest. 61 rows, all PASS on the acceptance archive; the categories:
+Shares no decision logic with the generator: its own RS-274X lexer (extended `%…%` blocks, `%AM` macro extents, `%ADD` apertures, D01/D02/D03 with a current point, G36/G37 regions), its own Excellon/XNC lexer (M48/METRIC/tool table/hits/M30), its own canonical-JSON digest. 80 rows, all PASS on the acceptance archive; the categories:
 
 1. ZIP: 10 members, all `gerber/<safe name>`, no duplicates, every member dated 1980-01-01 (deterministic archive).
 2. Manifest: schema `sirkit.pcb-manufacturing-release.v1`; content digest recomputed independently = declared; release id recomputed from manifest digest + board digest = declared; board revision = the qualified board; component count 9.

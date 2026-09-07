@@ -48,7 +48,10 @@ export const BLINKER_ACCEPTANCE_PROMPT =
 export const BLINKER_CATALOG_NOW = new Date("2026-09-01T00:00:00.000Z");
 
 const KICAD_DIR = join(dirname(fileURLToPath(import.meta.url)), "kicad");
-const kicadSource = (file: string): string => readFileSync(join(KICAD_DIR, file), "utf8");
+// Line endings are normalized so the parsed assets' content hashes (and every
+// identity derived from them: asset version ids, bindings, board revisions,
+// router-fixture keys) are the same on an LF or a CRLF checkout.
+const kicadSource = (file: string): string => readFileSync(join(KICAD_DIR, file), "utf8").replace(/\r\n/g, "\n");
 
 export const KICAD_LIBRARY_LICENSE: LicenseRecord = {
   id: "license_kicad_libraries_cc_by_sa_4",

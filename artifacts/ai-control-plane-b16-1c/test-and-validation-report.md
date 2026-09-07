@@ -56,11 +56,11 @@ Clean (only the advisory CRLF→LF normalization notices for seven files checked
 - `artifacts/ai-control-plane-b01/api-route-coverage.csv` `0599d5e6cc5b268dd50849d7bffa68b4a1f1b34a`
 - `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv` `49f279fd5436186d49d9ea9490ba9d1baac49d0a`
 
-The release archive itself is the fifth generator: byte-identical across every replay (acceptance step 10 twice in-process; sha256 `7432a65a27485e796ccafef5c70347a7aea216af5bf579991ca18da929b54c20` on every run of the day).
+The release archive itself is the fifth generator: byte-identical across every replay (acceptance step 10 twice in-process; sha256 `23314a7513b3c87fb135caab534e5d6d708b1259508e88d17919d8b7d7acf456` on every run of the day).
 
 ## 8. Independent Gerber / ZIP verification
 
-`independent-archive-verifier.ts` 61/61 PASS (in the acceptance suite) and `scripts/verify-release-independent.py` (gerbonara 1.6.3) PASS on the evidence ZIP — see `independent-gerber-verification.md`.
+`independent-archive-verifier.ts` 80/80 PASS (in the acceptance suite) and `scripts/verify-release-independent.py` (gerbonara 1.6.3) PASS on the evidence ZIP — see `independent-gerber-verification.md`.
 
 ## 9. Benchmark-quality workflow, locally (`.github/workflows/benchmark.yml` steps)
 
@@ -76,3 +76,9 @@ The GitHub Actions run for the B16.1C branch is recorded in `final-verdict.md` o
 - `blinker-route-fixture.json`: 2 executions (one blocked attempt on the smallest fitted outline, one complete on 21 × 21 mm), FreeRouting 2.2.4 on the bundled JRE, ~19 s.
 - `blinker-route-fixture-recovery.json`: 4 executions (H.6 retry qualification + H.13 re-qualification), ~37 s.
 - Replay: acceptance 11 tests in ~6 s; recovery 9 tests in ~8 s; both deterministic across three consecutive replays.
+
+## 11. Line-ending determinism finding (fixed before the PR) — RECORDED
+
+The first recordings were made while the committed KiCad fixture copies were CRLF in the working tree (git stores them LF under the repository's `.gitattributes`). Because every catalog identity derives from `sha256(source)`, an LF checkout (CI) would have produced different asset ids, bindings and board revisions than the recording keys. Fix: the working copies were normalized to LF and `blinker-catalog.ts` normalizes `
+` → `
+` before parsing, so identities are the same on either checkout; both router fixtures were re-recorded (2 + 4 executions) and every prompt-to-Gerber suite plus the B11.5 closure replayed green (6 files, 51 tests). All digests in these artifacts are from the re-recorded run.

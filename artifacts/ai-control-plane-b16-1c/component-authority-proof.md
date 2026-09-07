@@ -26,7 +26,7 @@ The production resolver (`createProductionFootprintResolutionService` over the b
 
 ## Qualification reads only that authority (CONFIRMED)
 
-`resolveQualificationComponentAuthority` (contract in `qualification-authority-contract.md`) accepted all 9 tuples: 0805 passives → `passive_smd_0603_0805` (×7), `SOIC-8 3.9x4.9mm P1.27mm` → `soic_tssop`, `PinHeader 1x02 P2.54mm Vertical` (through_hole, 2 pins) → `through_hole_header`; digest `qualification-authority-1afc9d9b84e24c57ce254f2a2fcf32e2dbed55a1514401901fd33f674b85d411` (acceptance evidence). Negative proof: the golden RC03 board with synthetic identities and no binding records is refused 422 `MFG_COMPONENT_AUTHORITY_INCOMPLETE` with one `QA_BINDING_NOT_FOUND` per footprint and zero router runs (recovery H.3); all nine `QA_*` codes are unit-pinned (`qualification-authority.test.ts`).
+`resolveQualificationComponentAuthority` (contract in `qualification-authority-contract.md`) accepted all 9 tuples: 0805 passives → `passive_smd_0603_0805` (×7), `SOIC-8 3.9x4.9mm P1.27mm` → `soic_tssop`, `PinHeader 1x02 P2.54mm Vertical` (through_hole, 2 pins) → `through_hole_header`; digest `qualification-authority-a959f6fc8f03a4c94e4a08ee95d0e9ad4750af97c025715c499a8a6fb6fb1b42` (acceptance evidence). Negative proof: the golden RC03 board with synthetic identities and no binding records is refused 422 `MFG_COMPONENT_AUTHORITY_INCOMPLETE` with one `QA_BINDING_NOT_FOUND` per footprint and zero router runs (recovery H.3); all nine `QA_*` codes are unit-pinned (`qualification-authority.test.ts`).
 
 ## Electrical truth of the design (CONFIRMED by `verifyBlinkerSchematic`, 24 PASS rows in the acceptance run)
 
