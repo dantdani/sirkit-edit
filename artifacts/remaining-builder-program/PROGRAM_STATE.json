@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B16-A: finish independent re-measurement of PR #5 (narrow suites, full suite, benchmark commands, independent ZIP/Gerber validators, adversarial review); correct any finding on the PR branch with its own regression test; then merge PR #5 normally, fast-forward local main, record the merge SHA.",
-  "updatedAt": "2026-09-07T19:05:00-04:00"
+  "nextAction": "B16-A: correct the 28 confirmed review findings (F1-F28 in EXECUTION_LEDGER.md) on the PR #5 branch, each with reproduction + regression test; then bounded full suite, benchmark commands, secret scan, CI, merge PR #5 normally, fast-forward main, record the merge SHA.",
+  "updatedAt": "2026-09-07T20:05:00-04:00"
 }
