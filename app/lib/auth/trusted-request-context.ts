@@ -149,9 +149,17 @@ function refuse(response: Response): TrustedContextResult {
 }
 
 function deriveCorrelationId(request: Request): string {
-  // A bounded, non-secret correlation id (never a token). Derived from method
-  // + path + a coarse time bucket is deterministic and leaks nothing.
+  // A bounded, non-secret correlation id (never a token, never derived from a
+  // credential). Two facets: a route facet (digest of method + path, so an
+  // operator can group traces by route) and a PER-REQUEST facet of fresh
+  // entropy, so two requests to the same route never share an id.
+  // [B16-A F1] the previous derivation hashed only method + path and was
+  // therefore a per-route constant — every `/api/pcb/qualify` failure carried
+  // the same id and the redacted server trace could not be found by it.
   let path = "";
   try { path = new URL(request.url).pathname; } catch { path = ""; }
-  return `corr-${engineeringDigest({ schema: "sirkit.request-correlation.v1", method: request.method, path }).slice(5, 17)}`;
+  const route = engineeringDigest({ schema: "sirkit.request-correlation.v1", method: request.method, path }).slice(5, 13);
+  const entropy = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(entropy);
+  return `corr-${route}-${Array.from(entropy, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }

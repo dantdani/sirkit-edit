@@ -30,6 +30,7 @@ import {
   pointInOutline,
   worldCourtyardBBox,
 } from "./geometry";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface ForceDirectedInput {
   /** Read for the outline (boundary force) and padNets (spring graph). */
@@ -60,7 +61,7 @@ const SEED_GRID_GAP_NM = mmToNm(1);
 
 export function runForceDirected(input: ForceDirectedInput): ForceDirectedResult {
   const { board, params } = input;
-  const fps = [...input.footprints].sort((a, b) => a.id.localeCompare(b.id));
+  const fps = [...input.footprints].sort((a, b) => compareCodePoints(a.id, b.id));
   const n = fps.length;
   if (n === 0) {
     return { positions: new Map(), iterations: 0, converged: true, finalMaxDisplacementNm: 0, hyperedgeCount: 0, springIncidences: 0 };

@@ -1,4 +1,5 @@
 import { sha256, stableJson } from "./native/stable";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export type ManufacturingReleaseMode = "bare_pcb" | "assembled_pcb";
 
@@ -159,8 +160,8 @@ export function createManufacturingReleaseManifestV1(content: ManifestContent): 
   const normalized: ManifestContent = {
     ...content,
     evidence: { ...content.evidence, rc02: { ...content.evidence.rc02, routePassIds: [...content.evidence.rc02.routePassIds].sort() } },
-    files: [...content.files].sort((left, right) => left.path.localeCompare(right.path)),
-    intentionallyAbsent: [...content.intentionallyAbsent].sort((left, right) => left.role.localeCompare(right.role)),
+    files: [...content.files].sort((left, right) => compareCodePoints(left.path, right.path)),
+    intentionallyAbsent: [...content.intentionallyAbsent].sort((left, right) => compareCodePoints(left.role, right.role)),
     limitations: [...content.limitations].sort(),
   };
   const manifestContentDigest = `mfg-manifest-${sha256(stableJson(normalized))}`;

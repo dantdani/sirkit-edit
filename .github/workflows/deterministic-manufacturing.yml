@@ -1,0 +1,65 @@
+# [B16-A F9] The deterministic prompt-to-Gerber manufacturing path runs in CI on
+# every pull request and on main: fake provider adapter, committed KiCad
+# fixtures, committed router recordings replayed by placed-board revision (the
+# bundled FreeRouting runtime is local-only), frozen clock, deterministic UUIDs,
+# pinned release identities (archive sha256, release id, board revision).
+# No credentials, no database, no network. A drift in ANY identity fails here.
+name: deterministic-manufacturing
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prompt-to-gerber:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # The acceptance suite writes its evidence (ZIP, manifest, check tables) here — never under the repository.
+      # (a literal path: the `runner` context is not available in job-level env)
+      SIRKIT_B16_1C_EVIDENCE_DIR: /tmp/sirkit-b16-1c-evidence
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      # Narrow, deterministic suites only (never the whole suite here): the
+      # acceptance + recovery pipelines, the manufacturing routes and their
+      # hardening tests, the fabrication gate, the browser workflow panel, the
+      # invariant tripwires and the locale-independence proof.
+      - run: >-
+          pnpm exec vitest run
+          app/lib/workflow/prompt-to-gerber/__tests__
+          app/api/pcb/qualify app/api/pcb/release
+          app/api/__tests__/b16-0-15-tranche-parity.test.ts
+          app/api/__tests__/b16-1c-invariant-tripwires.test.ts
+          app/api/__tests__/b16-a-review-corrections-tripwires.test.ts
+          app/api/pcb-sync/__tests__
+          app/lib/pcb/fab/__tests__
+          app/lib/pcb-sync/__tests__
+          app/lib/pcb/__tests__/b16-a-locale-independent-identities.test.ts
+          app/lib/auth/__tests__/b16-a-correlation-id.test.ts
+          app/components/pcb/__tests__/manufacturing-workflow-panel.test.tsx
+          --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
+      - name: Upload evidence and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-manufacturing-evidence
+          path: |
+            vitest-deterministic-manufacturing.xml
+            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-evidence.json
+            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip
+          if-no-files-found: ignore
+          retention-days: 14

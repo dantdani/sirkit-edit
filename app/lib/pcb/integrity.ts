@@ -9,6 +9,7 @@ import type {
 } from "./types";
 import { reconcileStackupPlaneZones } from "./zones/plane";
 import { markZoneFillDirty, zoneFillInputRevision, zoneFillIsCurrent } from "./zones/fill-lifecycle";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export type EngineeringDiagnosticSeverity = "error" | "warning" | "info";
 
@@ -37,9 +38,9 @@ export function engineeringDiagnostic(
 }
 
 export function compareDiagnostics(a: EngineeringDiagnostic, b: EngineeringDiagnostic): number {
-  return a.code.localeCompare(b.code)
-    || a.summary.localeCompare(b.summary)
-    || JSON.stringify(a.objectIds ?? []).localeCompare(JSON.stringify(b.objectIds ?? []));
+  return compareCodePoints(a.code, b.code)
+    || compareCodePoints(a.summary, b.summary)
+    || compareCodePoints(JSON.stringify(a.objectIds ?? []), JSON.stringify(b.objectIds ?? []));
 }
 
 export function normalizePinIdentifier(value: string): string {
@@ -52,7 +53,7 @@ export function schematicEndpointKey(componentInstanceId: string, pinNumber: str
 }
 
 export function canonicalEndpointSet(keys: readonly string[]): string[] {
-  return [...new Set(keys)].sort((a, b) => a.localeCompare(b));
+  return [...new Set(keys)].sort((a, b) => compareCodePoints(a, b));
 }
 
 /** Two independently-seeded FNV-1a lanes, represented as 64 bits of stable text. */
@@ -92,7 +93,7 @@ export function validateReferenceDesignators(
   const ids = new Map<string, number>();
   const byCanonical = new Map<string, Array<{ id: string; ref: string }>>();
 
-  for (const component of [...components].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const component of [...components].sort((a, b) => compareCodePoints(a.id, b.id))) {
     ids.set(component.id, (ids.get(component.id) ?? 0) + 1);
     const trimmed = component.ref.trim();
     const canonical = canonicalReference(component.ref);
@@ -129,7 +130,7 @@ export function validateReferenceDesignators(
       ));
     }
   }
-  for (const [canonical, instances] of [...byCanonical].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [canonical, instances] of [...byCanonical].sort(([a], [b]) => compareCodePoints(a, b))) {
     const componentIds = [...new Set(instances.map((instance) => instance.id))].sort();
     if (componentIds.length < 2) continue;
     diagnostics.push(engineeringDiagnostic(
@@ -247,7 +248,7 @@ export function migrateBoardElectricalIdentities(
     if (footprint.pinPadMappings !== undefined) continue;
     const inferred: ResolvedPinPadMapping[] = Object.entries(footprint.padNets)
       .filter(([, netId]) => netId !== 0)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareCodePoints(a, b))
       .map(([padNumber]) => ({
         componentInstanceId: footprint.id,
         endpointKey: schematicEndpointKey(footprint.id, padNumber),
@@ -335,7 +336,7 @@ export function lockedCopperRefs(board: PcbBoard): LockedCopperRef[] {
     ...board.tracks.filter((item) => item.locked).map((item) => ({ kind: "track" as const, id: item.id })),
     ...board.vias.filter((item) => item.locked).map((item) => ({ kind: "via" as const, id: item.id })),
     ...board.zones.filter((item) => item.locked).map((item) => ({ kind: "zone" as const, id: item.id })),
-  ].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
+  ].sort((a, b) => compareCodePoints(a.kind, b.kind) || compareCodePoints(a.id, b.id));
 }
 
 export function lockedMutationDiagnostics(
@@ -345,7 +346,7 @@ export function lockedMutationDiagnostics(
 ): EngineeringDiagnostic[] {
   return refs
     .filter((ref) => lockedCopperObject(board, ref)?.locked === true)
-    .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id))
+    .sort((a, b) => compareCodePoints(a.kind, b.kind) || compareCodePoints(a.id, b.id))
     .map((ref) => engineeringDiagnostic(
       "LOCKED_OBJECT_MUTATION_DENIED",
       `${ref.kind} ${ref.id} is locked and cannot be ${operation}.`,

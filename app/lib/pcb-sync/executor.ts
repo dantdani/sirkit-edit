@@ -3,6 +3,7 @@ import { boardDigest } from "./board";
 import { pcbSyncDigest } from "./stable";
 import type { PcbSyncIssue, PcbSyncOperation, PcbSyncPlan } from "./types";
 import { pcbSyncIssue } from "./validation";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 function materialization(plan: PcbSyncPlan, componentId: string) {
   const found = plan.materializations.find((item) => item.componentInstanceId === componentId);
@@ -39,7 +40,7 @@ export function executePcbSyncPlan(base: PcbBoard, plan: PcbSyncPlan): { board: 
   if (plan.lifecycle !== "applicable" && plan.lifecycle !== "applying") throw new Error("PS_PLAN_NOT_APPLICABLE");
   if (plan.blockedOperations.length) throw new Error("PS_PLAN_HAS_BLOCKED_OPERATIONS");
   const board = structuredClone(base), outcomes: Array<{ operationId: string; status: "applied" | "preserved" | "skipped" }> = [];
-  for (const operation of [...plan.operations].sort((a, b) => a.orderingKey.localeCompare(b.orderingKey))) {
+  for (const operation of [...plan.operations].sort((a, b) => compareCodePoints(a.orderingKey, b.orderingKey))) {
     switch (operation.kind) {
       case "create_board":
       case "mark_dnp_or_excluded":
@@ -121,7 +122,7 @@ export function executePcbSyncPlan(base: PcbBoard, plan: PcbSyncPlan): { board: 
     }
   }
   board.nets.sort((a, b) => a.id - b.id);
-  board.footprints.sort((a, b) => a.id.localeCompare(b.id));
+  board.footprints.sort((a, b) => compareCodePoints(a.id, b.id));
   return { board, outcomes };
 }
 
@@ -146,5 +147,5 @@ export function validateStagedBoard(staged: PcbBoard, original: PcbBoard | null,
     for (const key of ["tracks", "vias", "zones", "texts", "silkItems", "routingKeepouts", "routingHistory", "stackup", "stackupConfig", "outline", "constraintState", "netClassing"] as const) if (pcbSyncDigest(original[key]) !== pcbSyncDigest(staged[key])) issues.push(pcbSyncIssue({ code: "PS_STAGED_UNRELATED_STATE_CHANGED", scope: "board", message: `Staged synchronization unexpectedly changed preserved board state: ${key}.` }));
   }
   try { boardDigest(staged); } catch { issues.push(pcbSyncIssue({ code: "PS_STAGED_SERIALIZATION_FAILED", scope: "board", message: "Staged board could not be canonically serialized." })); }
-  return issues.sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0")));
+  return issues.sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0")));
 }

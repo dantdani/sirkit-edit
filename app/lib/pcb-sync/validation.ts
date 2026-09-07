@@ -1,4 +1,5 @@
 import { PCB_SYNC_APPLY_REQUEST_VERSION, PCB_SYNC_REQUEST_VERSION, type PcbSyncApplyRequest, type PcbSyncIssue, type PcbSyncIssueScope, type PcbSyncPreflightRequest } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+\-]{0,511}$/;
 const BOARD_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._+\-]{0,127}$/;
@@ -40,7 +41,7 @@ export function validatePreflightRequest(request: PcbSyncPreflightRequest): PcbS
     if (!BOARD_NAME.test(request.target.boardName) || request.target.boardName.includes("..") || /[\\/:*?"<>|]/.test(request.target.boardName)) issues.push(pcbSyncIssue({ code: "PS_BOARD_NAME_UNSAFE", scope: "request", message: "Board name is invalid or unsafe." }));
     if (request.target.boardFormatVersion !== "sirkit-json-pcb/1") issues.push(pcbSyncIssue({ code: "PS_BOARD_FORMAT_UNSUPPORTED", scope: "board", message: "New-board format is unsupported." }));
   } else if (!validId(request.target.expectedBoardRevision)) issues.push(pcbSyncIssue({ code: "PS_BOARD_REVISION_INVALID", scope: "request", message: "Expected board revision is required." }));
-  return issues.sort((a, b) => a.code.localeCompare(b.code));
+  return issues.sort((a, b) => compareCodePoints(a.code, b.code));
 }
 
 export function validateApplyRequest(request: PcbSyncApplyRequest): PcbSyncIssue[] {
@@ -50,5 +51,5 @@ export function validateApplyRequest(request: PcbSyncApplyRequest): PcbSyncIssue
   if (request?.confirmation !== "apply_exact_plan" || request?.expectedPlanLifecycle !== "applicable") issues.push(pcbSyncIssue({ code: "PS_APPLY_CONFIRMATION_REQUIRED", scope: "authorization", message: "Exact-plan apply confirmation is required." }));
   if (!request?.actorContext || !validId(request.actorContext.actorId) || !validId(request.actorContext.sessionId)) issues.push(pcbSyncIssue({ code: "PS_APPLY_ACTOR_INVALID", scope: "authorization", message: "Apply actor context is missing or invalid." }));
   if (!Number.isFinite(Date.parse(request?.requestedAt))) issues.push(pcbSyncIssue({ code: "PS_APPLY_TIMESTAMP_INVALID", scope: "request", message: "Apply requested time is invalid." }));
-  return issues.sort((a, b) => a.code.localeCompare(b.code));
+  return issues.sort((a, b) => compareCodePoints(a.code, b.code));
 }

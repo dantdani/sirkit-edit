@@ -260,13 +260,13 @@
     "consumedResources": [
       {
         "resourceId": "res:canonical:fixture",
-        "contentDigest": "eng1-6779fff341dbb21c"
+        "contentDigest": "eng1-583c5793b5a1d74c"
       },
       {
         "resourceId": "res:component-authority:fixture",
         "contentDigest": "eng1-a7cf99e9b900a688"
       }
     ],
-    "manifestDigest": "eng1-bfa1a470ab7211af"
+    "manifestDigest": "eng1-42729fc52d0c043e"
   }
 }

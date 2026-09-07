@@ -14,6 +14,13 @@ export function pcbBoardInstanceId(projectId: string): string {
   return `board:${projectId}`;
 }
 
+/** [B16.1C] the durable design id for a project's primary design — the key the
+ *  manufacturing authority and release ledger are scoped by. Before B16.1C the
+ *  editor restated this formula as an inline literal; there is now one formula. */
+export function pcbDesignInstanceId(projectId: string): string {
+  return `design:${projectId}`;
+}
+
 /** The hierarchy path the physical-binding creator defaults to
  *  (`bindAtomicSelection` → `["root"]`). The read path must match exactly. */
 export const PCB_BOARD_HIERARCHY_PATH: readonly string[] = Object.freeze(["root"]);

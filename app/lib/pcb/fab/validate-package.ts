@@ -8,6 +8,7 @@ import { parseXnc } from "./native/xnc-parser";
 import { verifyXnc } from "./native/xnc-verify";
 import type { ManufacturingReleaseFile, ManufacturingReleaseManifestV1 } from "./release-manifest";
 import { validateManifestContentDigest } from "./release-manifest";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const MFG01_VALIDATOR_ID = "sirkit-independent-fab-readback/1" as const;
 const MAX_FILES = 64;
@@ -95,7 +96,7 @@ export function validateFabricationFiles(input: {
   let parsedDrills = 0;
   const drillGroups = new Map(groupDrills(input.mir).map((group) => [group.id, group]));
 
-  for (const record of [...input.records].sort((left, right) => left.path.localeCompare(right.path))) {
+  for (const record of [...input.records].sort((left, right) => compareCodePoints(left.path, right.path))) {
     const file = fileByPath.get(record.path);
     if (!file) {
       issues.push({ code: "MFG_MANIFEST_FILE_MISSING", message: "Manifest file is absent.", path: record.path });
@@ -138,8 +139,8 @@ export function validateFabricationFiles(input: {
   if (expectedDrills !== parsedDrills) issues.push({ code: "MFG_DRILL_CONSERVATION_FAILED", message: `Expected ${expectedDrills} drill objects, received ${parsedDrills}.` });
   const summary = {
     validatorId: MFG01_VALIDATOR_ID,
-    gerber: gerber.sort((a, b) => a.path.localeCompare(b.path)),
-    drills: drills.sort((a, b) => a.path.localeCompare(b.path)),
+    gerber: gerber.sort((a, b) => compareCodePoints(a.path, b.path)),
+    drills: drills.sort((a, b) => compareCodePoints(a.path, b.path)),
     expectedPrimitives,
     parsedPrimitives,
     expectedDrills,
@@ -176,7 +177,7 @@ export async function extractAndValidateReleaseArchive(bytes: Uint8Array): Promi
   if (unsafe.length) throw new Error(`${unsafe[0].code}: ${unsafe[0].message}`);
   const files: Array<{ path: string; bytes: Uint8Array }> = [];
   let total = 0;
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+  for (const entry of entries.sort((left, right) => compareCodePoints(left.name, right.name))) {
     const content = await entry.async("uint8array");
     total += content.byteLength;
     if (total > MAX_UNCOMPRESSED_BYTES) throw new Error("MFG_ARCHIVE_UNCOMPRESSED_LIMIT_EXCEEDED");

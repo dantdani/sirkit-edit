@@ -34,6 +34,7 @@ import {
   type ReleaseWaiver,
   type SchematicParityCertificate,
 } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const CHECK_ORDER: ReadinessCheckCode[] = [
   "IDENTITY_INTEGRITY",
@@ -220,7 +221,7 @@ export function aggregateReadiness(input: AggregateReadinessInput): ReadinessRep
     )),
   ].map(stableDiagnostic).sort(compareDiagnostics);
 
-  const suppliedWaivers = [...(input.waivers ?? [])].sort((a, b) => a.id.localeCompare(b.id));
+  const suppliedWaivers = [...(input.waivers ?? [])].sort((a, b) => compareCodePoints(a.id, b.id));
   const waivers = suppliedWaivers.filter((waiver) => validWaiver(waiver, input.designRevision, input.fabPreset));
   const unresolvedChecks = checks.filter((check) => check.state !== "pass");
   const nonWaivable = stale || unresolvedChecks.some((check) => !check.waivableForEngineeringExport);

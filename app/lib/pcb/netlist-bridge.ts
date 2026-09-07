@@ -54,6 +54,7 @@ import type { BBox, Vec2 } from "./geometry";
 import { reclassifyBoard } from "./netclass-rules";
 import { pcbSyncDigest, publicationSourceDigest } from "../pcb-sync/stable";
 import type { PcbSyncIssue, PcbSyncSchematicComponent, PcbSyncSchematicNet } from "../pcb-sync/types";
+import { compareCodePoints, compareNatural } from "@/app/lib/stable-compare";
 
 // ─── Pinned netlist types ────────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ export function buildNetlist(
       pinSites.push({ componentId: c.id, pinNumber: number, point: pinWorldPos(c, pinName) });
       return { number, name: pinName };
     });
-    pins.sort((a, b) => a.number.localeCompare(b.number));
+    pins.sort((a, b) => compareCodePoints(a.number, b.number));
     components.push({ id: c.id, ref: normalizeRefDes(schDisplayRef(c)), value: c.value, pins });
   }
 
@@ -282,7 +283,7 @@ export function buildNetlist(
   // drop node-less roots, then assign deterministic ids: named nets sorted
   // alphabetically get 1..k, unnamed nets follow in stable node-key order.
   const compareNodes = (a: NodeRec, b: NodeRec): number =>
-    a.ref === b.ref ? a.pinNumber.localeCompare(b.pinNumber, undefined, { numeric: true }) : a.ref.localeCompare(b.ref, undefined, { numeric: true });
+    a.ref === b.ref ? compareNatural(a.pinNumber, b.pinNumber) : compareNatural(a.ref, b.ref);
 
   const namedNets = new Map<string, NodeRec[]>();
   const unnamedNets: NodeRec[][] = [];
@@ -298,7 +299,7 @@ export function buildNetlist(
 
   const nodeKey = (nodes: NodeRec[]): string =>
     nodes.map((n) => `${n.ref}.${n.pinNumber}`).sort()[0] ?? "";
-  unnamedNets.sort((a, b) => nodeKey(a).localeCompare(nodeKey(b), undefined, { numeric: true }));
+  unnamedNets.sort((a, b) => compareNatural(nodeKey(a), nodeKey(b)));
 
   const nets: NetlistNet[] = [];
   let nextId = 1;
@@ -355,9 +356,9 @@ export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart:
     if (!symbolAssetVersionId) throw new Error("PS_SYMBOL_ASSET_REQUIRED");
     const pins = component.pins.map((pin) => ({ pinInstanceId: `${component.id}:pin:${pin.number}`, number: pin.number, ...(pin.name ? { name: pin.name } : {}), disposition: connected.has(`${component.id}:pin:${pin.number}`) ? "connected" as const : "unconnected" as const }));
     return { componentInstanceId: component.id, componentRevision: `schematic-component:${pcbSyncDigest({ id: component.id, ref: component.ref, value: component.value, symbolAssetVersionId, pins })}`, referenceDesignator: component.ref, ...(component.value ? { value: component.value } : {}), hierarchyPath: ["root"], symbolAssetVersionId, applicability: "applicable", pins };
-  }).sort((a, b) => a.referenceDesignator.localeCompare(b.referenceDesignator, undefined, { numeric: true }));
+  }).sort((a, b) => compareNatural(a.referenceDesignator, b.referenceDesignator));
   const netIds = new Set<string>(), nets = netlist.nets.map((net): PcbSyncSchematicNet => {
-    const members = net.nodes.map((node) => ({ componentInstanceId: node.componentId, pinInstanceId: `${node.componentId}:pin:${node.pinNumber}`, pinNumber: node.pinNumber })).sort((a, b) => a.pinInstanceId.localeCompare(b.pinInstanceId));
+    const members = net.nodes.map((node) => ({ componentInstanceId: node.componentId, pinInstanceId: `${node.componentId}:pin:${node.pinNumber}`, pinNumber: node.pinNumber })).sort((a, b) => compareCodePoints(a.pinInstanceId, b.pinInstanceId));
     if (!members.length) throw new Error("PS_NET_MEMBER_REFERENCE_INVALID");
     // RC01/MFG parity recomputes canonical endpoint-derived identity
     // (integrity.ts stableNetIdForEndpoints) from the source netlist, so the
@@ -365,7 +366,7 @@ export function buildPcbSyncPublicationGraph(schematic: SchematicState, getPart:
     const stableNetId = stableNetIdForEndpoints(net.endpointKeys, net.name); if (netIds.has(stableNetId)) throw new Error("PS_NET_IDENTITY_DUPLICATE"); netIds.add(stableNetId);
     const name = net.name.trim(), upper = name.toUpperCase(), classification: PcbSyncSchematicNet["classification"] = /^(GND|VSS|AGND|DGND|PGND)/.test(upper) ? "ground" : /^(VCC|VDD|VBUS|VIN|\+)/.test(upper) ? "power" : "signal";
     return { stableNetId, connectivityRevision: `connectivity:${pcbSyncDigest({ stableNetId, members })}`, canonicalScope: ["root"], displayName: name, aliases: [], classification, members, explicitNoConnectPinIds: [], constraintRefs: [] };
-  }).sort((a, b) => a.stableNetId.localeCompare(b.stableNetId));
+  }).sort((a, b) => compareCodePoints(a.stableNetId, b.stableNetId));
   // Digest the SHARED canonical form the publisher recomputes server-side —
   // digesting these arrays as built would disagree with it (different component,
   // pin and member orderings) and publication would reject a valid graph.
@@ -434,7 +435,7 @@ function stagingStartY(board: PcbBoard, outlineMinX: number, outlineMinY: number
 
 /** Natural ref compare: R2 before R10. */
 export function compareRefs(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  return compareNatural(a, b, { caseInsensitive: true });
 }
 
 /**
@@ -600,7 +601,7 @@ export function placeNewFootprint(
   const { positions } = centeredImportPositions(board, [def], board.footprints, true);
   const at = positions[0];
   const footprints = [...board.footprints, { ...inst, at }].sort((a, b) =>
-    a.id.localeCompare(b.id),
+    compareCodePoints(a.id, b.id),
   );
   return { ...board, footprints };
 }
@@ -935,7 +936,7 @@ export async function syncFromSchematic(
     nets: reconciliation.nets,
     // Sorted by id so the array order is a pure function of the schematic —
     // required for the sync-twice deep-equal invariant.
-    footprints: [...keptInstances, ...newInstances].sort((a, b) => a.id.localeCompare(b.id)),
+    footprints: [...keptInstances, ...newInstances].sort((a, b) => compareCodePoints(a.id, b.id)),
     // Reconciliation rejects any routed deletion/split/merge before this
     // candidate exists. Safe numeric-id changes are remapped by stable identity.
     tracks: base.tracks.map((t) => ({ ...t, netId: remapNet(t.netId) })),

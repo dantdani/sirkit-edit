@@ -6,6 +6,7 @@ import {
   stableNetIdForEndpoints,
   type EngineeringDiagnostic,
 } from "./integrity";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface LogicalNetCandidate {
   id: number;
@@ -297,8 +298,8 @@ export function reconcileBoardNets(
       if (a.overlap !== b.overlap) return b.overlap - a.overlap;
       const an = newById.get(a.netId)!;
       const bn = newById.get(b.netId)!;
-      return an.endpointKeys.join("\0").localeCompare(bn.endpointKeys.join("\0"))
-        || an.name.localeCompare(bn.name)
+      return compareCodePoints(an.endpointKeys.join("\0"), bn.endpointKeys.join("\0"))
+        || compareCodePoints(an.name, bn.name)
         || an.id - bn.id;
     });
     if (neighbors[0]) chosenNewByOld.set(oldNet.id, neighbors[0].netId);
@@ -317,7 +318,7 @@ export function reconcileBoardNets(
   const reconciledNets: PcbNet[] = [{ id: 0, name: "", stableId: "net:unconnected", endpointKeys: [] }];
   for (const newNet of newNets) {
     const chosenOld = [...(oldChosenByNew.get(newNet.id) ?? [])]
-      .sort((a, b) => (a.stableId ?? "").localeCompare(b.stableId ?? "") || a.id - b.id);
+      .sort((a, b) => compareCodePoints(a.stableId ?? "", b.stableId ?? "") || a.id - b.id);
     let stableId = chosenOld[0]?.stableId ?? stableNetIdForEndpoints(newNet.endpointKeys, newNet.name);
     if (usedStableIds.has(stableId)) {
       let suffix = 2;

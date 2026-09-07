@@ -15,8 +15,9 @@ import type {
 import { validateReferenceDesignators } from "../../integrity";
 import { computeElectricalTruth } from "../../electrical-truth";
 import { zoneFillIsCurrent } from "../../zones/fill-lifecycle";
+import { compareCodePoints, compareNatural } from "@/app/lib/stable-compare";
 
-const byStringId = <T extends { id: string }>(a: T, b: T): number => a.id.localeCompare(b.id);
+const byStringId = <T extends { id: string }>(a: T, b: T): number => compareCodePoints(a.id, b.id);
 
 function copperSourceId(item: CopperItemRef): string {
   return copperItemId(item);
@@ -24,8 +25,8 @@ function copperSourceId(item: CopperItemRef): string {
 
 function canonicalBoard(board: PcbBoard): PcbBoard {
   const copy = structuredClone(board);
-  copy.nets.sort((a, b) => a.id - b.id || a.name.localeCompare(b.name));
-  copy.footprints.sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }) || a.id.localeCompare(b.id));
+  copy.nets.sort((a, b) => a.id - b.id || compareCodePoints(a.name, b.name));
+  copy.footprints.sort((a, b) => compareNatural(a.ref, b.ref) || compareCodePoints(a.id, b.id));
   copy.tracks.sort(byStringId);
   copy.vias.sort(byStringId);
   copy.zones.sort(byStringId);
@@ -33,23 +34,23 @@ function canonicalBoard(board: PcbBoard): PcbBoard {
   copy.silkItems?.sort(byStringId);
   copy.padstacks?.sort(byStringId);
   for (const fp of copy.footprints) {
-    fp.def.pads.sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
-    fp.def.graphics = [...fp.def.graphics].sort((a, b) => stableJson(a).localeCompare(stableJson(b)));
+    fp.def.pads.sort((a, b) => compareNatural(a.number, b.number));
+    fp.def.graphics = [...fp.def.graphics].sort((a, b) => compareCodePoints(stableJson(a), stableJson(b)));
   }
   return copy;
 }
 
 function canonicalNetlist(netlist: PcbNetlist): PcbNetlist {
   const copy = structuredClone(netlist);
-  copy.components.sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }) || a.id.localeCompare(b.id));
+  copy.components.sort((a, b) => compareNatural(a.ref, b.ref) || compareCodePoints(a.id, b.id));
   for (const component of copy.components) {
-    component.pins.sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+    component.pins.sort((a, b) => compareNatural(a.number, b.number));
   }
-  copy.nets.sort((a, b) => a.id - b.id || a.name.localeCompare(b.name));
+  copy.nets.sort((a, b) => a.id - b.id || compareCodePoints(a.name, b.name));
   for (const net of copy.nets) {
     net.nodes.sort((a, b) =>
-      a.componentId.localeCompare(b.componentId) ||
-      a.pinNumber.localeCompare(b.pinNumber, undefined, { numeric: true }),
+      compareCodePoints(a.componentId, b.componentId) ||
+      compareNatural(a.pinNumber, b.pinNumber),
     );
   }
   return copy;
@@ -199,7 +200,7 @@ export function createManufacturingSnapshot(
         status: "current" as const,
         unsupportedConstructs: [],
       }];
-    }).sort((a, b) => a.zoneId.localeCompare(b.zoneId))),
+    }).sort((a, b) => compareCodePoints(a.zoneId, b.zoneId))),
     transform: {
       originXNm: bbox.minX,
       originYNm: bbox.maxY,

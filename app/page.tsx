@@ -57,6 +57,7 @@ import { checkpointBelongsToProject, checkpointStore, type ProjectCheckpoint } f
 // B06: canonical schematic semantic mutations — the migrated handlers issue
 // shared domain commands through the trusted schematic editor session.
 import { SchematicEditorSession } from "@/app/lib/engineering/schematic-session";
+import { describeSchematicProposal } from "@/app/lib/workflow/prompt-to-gerber/review-summary"; // [B16.1C §F]
 import type { SchematicCanonicalMark } from "@/app/lib/engineering/schematic-projection";
 import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } from "@/app/lib/engineering/schematic-plans";
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
@@ -2550,6 +2551,9 @@ export default function Home() {
   const [pendingSuggestions, setPendingSuggestions] = useState<ScopedSuggestionBatch | null>(null);
   const [suggestionsMinimized, setSuggestionsMinimized] = useState(false);
   const [genError, setGenError]         = useState<string | null>(null);
+  // [B16.1C §F] the ONE pending generated-schematic proposal (also the first
+  // generation onto an empty sheet). Nothing is applied until the human
+  // approves it in the review dialog, which states exactly what will change.
   const [pendingReplace, setPendingReplace] = useState<{
     state: SchematicState;
     explanation: string;
@@ -2559,7 +2563,14 @@ export default function Home() {
     /** B07.3/B07.4 — exact-base invocation pin captured before generation
      *  (with its async scope for project/session-generation currency). */
     pin?: { projectId: string | null; session: SchematicEditorSession | null; baseDigest: string; scope: ProjectAsyncScope };
+    /** [B16-A F11] carried from the Tier-2 edit path ("Apply suggestions" must not re-trigger the auto loop). */
+    skipAutoRun?: boolean;
+    /** [B16-A F11] a validation note the dialog shows alongside the proposal (never blocks the human's decision). */
+    validationNote?: string | null;
   } | null>(null);
+  // [B16.1C §F] what the pending proposal will change, against the LIVE
+  // canonical schematic at review time (recomputed when either changes).
+  const pendingProposalSummary = useMemo(() => pendingReplace ? describeSchematicProposal(pendingReplace.state, { components, wires, kicadComponents, netLabels }) : null, [pendingReplace, components, wires, kicadComponents, netLabels]);
 
   // B06.1: the ONE pending sealed tier-1 proposal. Provider output only ever
   // lands here; nothing mutates until the explicit human apply.
@@ -4745,16 +4756,14 @@ export default function Home() {
         setScopedGenError(scope, "The schematic changed while generating — the result is stale and was not applied.");
         return;
       }
-      if (components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0) {
-        finishActivityLog(logId, "Generated replacement; waiting for confirmation");
-        // The pin travels with the pending replacement: confirming later
-        // still rejects as stale if the schematic or project moved on.
-        setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin });
-      } else {
-        const adopted = await applySchematic(state, explanation, prompt, { promptAlreadyLogged: true, pin });
-        if (adopted) finishActivityLog(logId, "Applied schematic to canvas");
-        else failActivityLog(logId, "Result not applied (stale or rejected)");
-      }
+      // [B16.1C §F] EVERY generated schematic is a proposal that waits for the
+      // human's explicit approval in the review dialog — including the first
+      // generation onto an empty sheet, which used to apply itself. The
+      // dialog states what will change (parts, wires, labels, what is
+      // replaced); the pin travels with the pending proposal so confirming
+      // later still rejects as stale if the schematic or project moved on.
+      finishActivityLog(logId, components.length > 0 || wires.length > 0 || kicadComponents.length > 0 || netLabels.length > 0 ? "Generated replacement; waiting for confirmation" : "Generated schematic proposal; waiting for approval");
+      setPendingReplace({ state, explanation, prompt, logId, promptAlreadyLogged: true, pin });
     } catch (err) {
       if (isAbortError(err) || !scope.isCurrent()) {
         // Cancellation (project switch/unmount) — not a provider failure;
@@ -4894,21 +4903,19 @@ export default function Home() {
 
         appendActivityStep(logId, "Laying out and validating edit");
         const built = autoLayoutBuildValidated(nl, loaded);
-        // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
-        // instruction + explanation into the chat transcript — but only AFTER
-        // canonical adoption succeeds (B07.3 transactional gateway, pinned to
-        // the base captured before the request).
-        const adopted = await applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt, {
-          promptAlreadyLogged: true,
-          skipAutoRun: isApplyingSuggestions,
-          pin,
-        });
-        if (adopted) finishActivityLog(logId, isApplyingSuggestions ? "Applied suggestions to canvas" : "Applied edit to canvas");
-        else failActivityLog(logId, "Edit result not applied (stale or rejected)");
-        if (!built.validation.ok) {
-          const v = built.validation.violations;
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
-        }
+        // [B16-A F11] the provider's topology edit is a PROPOSAL like every
+        // other generation: it is staged in the review dialog (which names
+        // exactly what will change against the live schematic) and nothing is
+        // applied until the human approves it there. Before this correction
+        // the edit-build result — and the "Apply suggestions" result — were
+        // adopted directly here, a hidden auto-apply of provider output.
+        // Re-layout replaces positions (Tier 2 tradeoff); the invocation pin
+        // travels with the proposal so a late approval is still refused as
+        // stale by the transactional gateway (B07.3).
+        const validationNote = built.validation.ok ? null : `Electrical check: ${built.validation.violations.length} issue(s) — ${built.validation.violations.slice(0, 3).map((x) => x.message).join("  |  ")}${built.validation.violations.length > 3 ? " …" : ""}`;
+        if (!scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return; }
+        finishActivityLog(logId, isApplyingSuggestions ? "Suggestions proposal ready; waiting for approval" : "Edit proposal ready; waiting for approval");
+        setPendingReplace({ state: built.state, explanation: data2.explanation || "Updated the circuit.", prompt, logId, promptAlreadyLogged: true, pin, skipAutoRun: isApplyingSuggestions, validationNote });
         return;
       }
 
@@ -6124,11 +6131,16 @@ export default function Home() {
             }
           }}
         >
-          <DialogContent>
+          <DialogContent data-testid="schematic-proposal-review">
             <DialogHeader>
-              <DialogTitle>Replace the current schematic?</DialogTitle>
+              <DialogTitle>{pendingProposalSummary?.headline ?? "Apply the generated schematic?"}</DialogTitle>
             </DialogHeader>
-            <p className="text-sm text-zinc-400">This will replace all existing components and wires.</p>
+            {/* [B16.1C §F] the approval names exactly what will change. */}
+            <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-400" data-testid="schematic-proposal-summary">
+              {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}
+            </ul>
+            {pendingReplace?.explanation && <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>}
+            {pendingReplace?.validationNote && <p className="text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>}
             <DialogFooter>
               <Button
                 variant="ghost"
@@ -6139,13 +6151,14 @@ export default function Home() {
               >
                 Cancel
               </Button>
-              <Button onClick={() => {
+              <Button data-testid="schematic-proposal-approve" onClick={() => {
                 if (pendingReplace) {
                   const pending = pendingReplace;
                   setPendingReplace(null);
                   void applySchematic(pending.state, pending.explanation, pending.prompt, {
                     promptAlreadyLogged: pending.promptAlreadyLogged,
                     pin: pending.pin,
+                    skipAutoRun: pending.skipAutoRun,
                   }).then((adopted) => {
                     if (pending.logId) {
                       if (adopted) finishActivityLog(pending.logId, "Applied replacement to canvas");
@@ -6153,7 +6166,7 @@ export default function Home() {
                     }
                   });
                 }
-              }}>Replace</Button>
+              }}>{pendingProposalSummary?.replaces ? "Replace" : "Apply"}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

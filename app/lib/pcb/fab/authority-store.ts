@@ -10,7 +10,7 @@
  * reload and re-verify it independently of any client state.
  */
 
-import type { DurableWorkflowRepository, DurableWorkflowScope } from "../../durable-workflow/types";
+import type { DurableAppendOperation, DurableOutboxEffect, DurableWorkflowRepository, DurableWorkflowScope } from "../../durable-workflow/types";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "../../durable-workflow/stable";
 import { sha256, stableJson } from "./native/stable";
 import type { ManufacturingReleaseAuthority, ManufacturingReleaseLocator } from "./release-gate";
@@ -40,6 +40,18 @@ export function manufacturingAuthorityRecordDigest(authority: ManufacturingRelea
   return `sha256:${sha256(stableJson(authority))}`;
 }
 
+/** [B16-A F2] the authority publication as ONE append operation (+ its outbox effect), so the qualification can commit it atomically with the routed board. */
+export function authorityPublicationOperation(authority: ManufacturingReleaseAuthority, expectedRevision: number): { operation: DurableAppendOperation<ManufacturingReleaseAuthority>; effect: DurableOutboxEffect; recordDigest: string; scope: DurableWorkflowScope } {
+  const scope: ManufacturingAuthorityScope = authority;
+  const recordDigest = manufacturingAuthorityRecordDigest(authority);
+  return {
+    scope: workflowScope(scope),
+    recordDigest,
+    operation: { aggregateType: AUTHORITY, aggregateKey: authorityKey(scope), expectedRevision, payload: structuredClone(authority), recordDigest },
+    effect: { owner: { aggregateType: AUTHORITY, aggregateKey: authorityKey(scope) }, eventType: "mfg.authority-published", eventVersion: 1, topic: "mfg.authority-published", payload: { boardId: scope.boardId, boardRevision: authority.boardRevision, recordDigest } },
+  };
+}
+
 export class DurableManufacturingAuthorityStore {
   constructor(private readonly workflow: DurableWorkflowRepository) {}
 
@@ -66,7 +78,9 @@ export class DurableManufacturingAuthorityStore {
       committedAt: input.savedAt,
     });
     void committed;
-    return { revision: (current?.revision ?? 0) + 1, recordDigest };
+    const head = await this.head(scope);
+    if (!head || head.recordDigest !== recordDigest) throw new Error("MFG_AUTHORITY_SAVE_UNVERIFIED");
+    return { revision: head.revision, recordDigest };
   }
 
   /**
@@ -83,6 +97,14 @@ export class DurableManufacturingAuthorityStore {
       if (authority.boardRevision !== locator.expectedBoardRevision || authority.boardDigest !== locator.expectedBoardDigest) return null;
       return structuredClone(authority);
     };
+  }
+
+  /** [B16.1C] the durable head — payload plus the aggregate revision and record digest a release binds. */
+  async getHead(scope: ManufacturingAuthorityScope): Promise<{ authority: ManufacturingReleaseAuthority; revision: number; recordDigest: string } | null> {
+    const head = await this.head(scope);
+    if (!head) return null;
+    if (manufacturingAuthorityRecordDigest(head.payload) !== head.recordDigest) throw new Error("MFG_AUTHORITY_RECORD_DIGEST_MISMATCH");
+    return { authority: structuredClone(head.payload), revision: head.revision, recordDigest: head.recordDigest };
   }
 
   async get(scope: ManufacturingAuthorityScope): Promise<ManufacturingReleaseAuthority | null> {

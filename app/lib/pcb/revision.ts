@@ -2,6 +2,7 @@ import type { PcbBoard } from "./types";
 import { stableHash } from "./smart-routing/hash";
 import { padSemanticKey } from "./pad-identity";
 import { resolveVia } from "./padstack/registry";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const PCB_REVISION_SCHEMA = "sirkit.pcb-revision.v2" as const;
 
@@ -11,7 +12,7 @@ export function canonicalJsonValue(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .filter(([, child]) => child !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareCodePoints(a, b))
       .map(([key, child]) => [key, canonicalJsonValue(child)]),
   );
 }
@@ -20,7 +21,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonicalJsonValue(value));
 }
 
-const byId = <T extends { id: string }>(a: T, b: T): number => a.id.localeCompare(b.id);
+const byId = <T extends { id: string }>(a: T, b: T): number => compareCodePoints(a.id, b.id);
 
 /** Semantic routing/electrical/manufacturing state; UI and history are absent. */
 export function pcbRevisionPayload(board: PcbBoard): unknown {
@@ -37,23 +38,23 @@ export function pcbRevisionPayload(board: PcbBoard): unknown {
     padNets: footprint.padNets,
     pinPadMappings: [...(footprint.pinPadMappings ?? [])]
       .map((mapping) => ({ ...mapping, padNumbers: [...mapping.padNumbers].sort() }))
-      .sort((a, b) => a.endpointKey.localeCompare(b.endpointKey) || a.symbolPinNumber.localeCompare(b.symbolPinNumber)),
+      .sort((a, b) => compareCodePoints(a.endpointKey, b.endpointKey) || compareCodePoints(a.symbolPinNumber, b.symbolPinNumber)),
     footprintPadClassifications: footprint.footprintPadClassifications,
     syncIdentity: footprint.syncIdentity,
     def: {
       ...footprint.def,
-      pads: [...footprint.def.pads].sort((a, b) => padSemanticKey(a).localeCompare(padSemanticKey(b))),
-      graphics: [...footprint.def.graphics].sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b))),
-      models: [...footprint.def.models].sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b))),
+      pads: [...footprint.def.pads].sort((a, b) => compareCodePoints(padSemanticKey(a), padSemanticKey(b))),
+      graphics: [...footprint.def.graphics].sort((a, b) => compareCodePoints(canonicalJson(a), canonicalJson(b))),
+      models: [...footprint.def.models].sort((a, b) => compareCodePoints(canonicalJson(a), canonicalJson(b))),
     },
   }));
   const nets = [...board.nets]
     .map((net) => ({ ...net, endpointKeys: [...(net.endpointKeys ?? [])].sort() }))
-    .sort((a, b) => (a.stableId ?? "").localeCompare(b.stableId ?? "") || a.id - b.id);
+    .sort((a, b) => compareCodePoints(a.stableId ?? "", b.stableId ?? "") || a.id - b.id);
   const stackupConfig = board.stackupConfig
     ? {
         ...board.stackupConfig,
-        copperLayers: [...board.stackupConfig.copperLayers].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
+        copperLayers: [...board.stackupConfig.copperLayers].sort((a, b) => a.order - b.order || compareCodePoints(a.id, b.id)),
       }
     : undefined;
   const netClassing = board.netClassing
@@ -66,7 +67,7 @@ export function pcbRevisionPayload(board: PcbBoard): unknown {
               ? { ...change, appliesTo: { ...change.appliesTo, netIds: [...change.appliesTo.netIds].sort((a, b) => a - b) } }
               : change),
           }))
-          .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)),
+          .sort((a, b) => compareCodePoints(a.createdAt, b.createdAt) || compareCodePoints(a.id, b.id)),
       }
     : undefined;
   const vias = [...board.vias].sort(byId).map((via) => {
@@ -95,7 +96,7 @@ export function pcbRevisionPayload(board: PcbBoard): unknown {
     vias,
     zones: [...board.zones].sort(byId).map((zone) => ({
       ...zone,
-      fill: [...zone.fill].sort((a, b) => canonicalJson(a).localeCompare(canonicalJson(b))),
+      fill: [...zone.fill].sort((a, b) => compareCodePoints(canonicalJson(a), canonicalJson(b))),
     })),
     texts: [...board.texts].sort(byId),
     silkItems: [...(board.silkItems ?? [])].sort(byId),

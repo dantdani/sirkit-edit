@@ -10,6 +10,7 @@ import { PCB_SYNC_APPLY_REQUEST_VERSION, PCB_SYNC_APPLY_RESULT_VERSION, PCB_SYNC
 import { authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { pcbSyncScopeFromContext } from "./_scope";
 import { createPcbSyncBoardGetCore, createPcbSyncPostHandler } from "./handler";
+import { createManufacturingSummaryReader } from "./manufacturing-summary";
 
 export const runtime = "nodejs";
 
@@ -19,9 +20,16 @@ const workflow = getDurableWorkflowRepository();
 export const stage3SnapshotProvider = new DurablePcbSyncSnapshotStore(workflow);
 export const stage3Repository = new DurablePcbSyncRepository(workflow);
 export const stage3Telemetry = new PcbSyncTelemetry();
-export const stage3FootprintResolver = createProductionFootprintResolutionService({ repository: new PostgresPhysicalBindingRepository() });
+/** [B16.1C §D] the ONE server-owned physical-binding source shared by footprint
+ *  resolution AND manufacturing qualification, so the package/footprint/pin
+ *  authority a qualification reads is exactly what synchronization committed. */
+export const stage3BindingRepository = new PostgresPhysicalBindingRepository();
+export const stage3FootprintResolver = createProductionFootprintResolutionService({ repository: stage3BindingRepository });
 const service = new PcbSynchronizationService({ snapshotProvider: stage3SnapshotProvider, resolver: stage3FootprintResolver, resourceProvider: new AtomicPcbSyncResourceProvider(), repository: stage3Repository, telemetry: stage3Telemetry });
-const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState);
+// [B16.1C §C] reload-time manufacturing truth (qualification authority head +
+// latest ledgered release) over the SAME durable workflow repository, so what a
+// browser reconstructs after refresh is exactly what the server committed.
+const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState, createManufacturingSummaryReader(workflow));
 
 // [B16.0.22] canonical wrapper — authorization inside the wrapper (all-members
 // read, no CSRF per the exact policy row). The `boardId` dispatch and the
@@ -30,7 +38,10 @@ const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState
 // returns the static feature-gated capability document.
 export const GET = authenticatedRoute({ query: true }, ({ context, meta }) => {
   const query = meta.query ?? {};
-  if ("boardId" in query) return boardGet(pcbSyncScopeFromContext(context), query);
+  // [B16-A F14] the trusted context's SERVER-DERIVED role and actor kind reach
+  // the manufacturing summary so a browser can show release capability
+  // truthfully; the release route remains the only enforcement point.
+  if ("boardId" in query) return boardGet(pcbSyncScopeFromContext(context), query, { role: context.actor.role, actorKind: context.actor.actorKind });
   const state = pcbSyncFeatureState();
   return Response.json({
     ok: true,

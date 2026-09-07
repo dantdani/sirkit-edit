@@ -18,6 +18,7 @@ import type { PcbBoard, BoardOutline } from "../types";
 import type { Vec2, BBox } from "../geometry";
 import type { FootprintPlacement } from "./types";
 import { bboxesOverlap, courtyardFitsOutline, outlineBBox, outlineCenter, worldCourtyardBBox } from "./geometry";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const MAX_NUDGE_ATTEMPTS = 8;
 const MAX_SPIRAL_RINGS = 50;
@@ -83,7 +84,7 @@ export function resolveCollisions(
 } {
   const outline = board.outline;
   const oBox = outlineBBox(outline);
-  const sorted = [...footprintPlacements].sort((a, b) => a.id.localeCompare(b.id));
+  const sorted = [...footprintPlacements].sort((a, b) => compareCodePoints(a.id, b.id));
 
   // Impossible-board guard: a single footprint larger than the outline can
   // never be clipped inside — fail loudly instead of walking forever.

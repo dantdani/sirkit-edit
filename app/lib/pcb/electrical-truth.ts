@@ -16,6 +16,7 @@ import { engineeringDiagnostic, compareDiagnostics, type EngineeringDiagnostic }
 import { stableHash } from "./smart-routing/hash";
 import { zoneFillIsCurrent } from "./zones/fill-lifecycle";
 import { stackupPlaneZoneId } from "./zones/plane";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const ELECTRICAL_TRUTH_SCHEMA = "sirkit.electrical-truth.v1" as const;
 export type ElectricalProofState = "proven" | "failed" | "unknown";
@@ -267,7 +268,7 @@ function terminalGroupsForNet(
       physicalPadInstanceIds: padIds,
       provenance: legacy ? "legacy-pad-assignment" : "stage1-mapping",
     };
-  }).sort((a, b) => a.id.localeCompare(b.id));
+  }).sort((a, b) => compareCodePoints(a.id, b.id));
   return { groups, missing: [...new Set(missing)].sort(), coveredPads: new Set(groups.flatMap((group) => group.physicalPadInstanceIds)), legacy };
 }
 
@@ -298,7 +299,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
         layers,
       }];
     }),
-  ).sort((a, b) => a.id.localeCompare(b.id));
+  ).sort((a, b) => compareCodePoints(a.id, b.id));
 
   const terminalGroups: ElectricalTerminalGroup[] = [];
   const missingEndpointKeys: string[] = [];
@@ -409,7 +410,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
       .map((id) => stableIdByNumeric.get(id))
       .filter((id): id is string => Boolean(id)))].sort();
     return { id: `short:${stableHash(objectIds.join("\0"))}`, objectIds, stableNetIds };
-  }).sort((a, b) => a.id.localeCompare(b.id));
+  }).sort((a, b) => compareCodePoints(a.id, b.id));
   for (const short of shorts) diagnostics.push(engineeringDiagnostic(
     "ELECTRICAL_SHORT",
     `Different stable nets physically touch at ${short.objectIds.join(" and ")}.`,
@@ -432,7 +433,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
   const orphanCopper: ElectricalOrphanStatus[] = [...orphanReasons].map(([objectId, reason]) => {
     const netId = refById.has(objectId) ? refNetId(board, refById.get(objectId)!) : 0;
     return { objectId, netId, ...(stableIdByNumeric.get(netId) ? { stableNetId: stableIdByNumeric.get(netId) } : {}), reason };
-  }).sort((a, b) => a.objectId.localeCompare(b.objectId));
+  }).sort((a, b) => compareCodePoints(a.objectId, b.objectId));
   for (const orphan of orphanCopper) diagnostics.push(engineeringDiagnostic(
     "ORPHAN_COPPER",
     `${orphan.objectId} is not part of a proven terminal-to-terminal path.`,
@@ -474,7 +475,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
       effectiveClusters.set(root, bucket);
     });
     const terminalClusters = [...terminalClusterRoots].sort((a, b) => a - b).map((root) => {
-      const refs = (effectiveClusters.get(root) ?? []).sort((a, b) => copperItemId(a).localeCompare(copperItemId(b)));
+      const refs = (effectiveClusters.get(root) ?? []).sort((a, b) => compareCodePoints(copperItemId(a), copperItemId(b)));
       return { refs, positions: refs.flatMap((ref) => refPositions(board, ref)) };
     });
     const required = Math.max(0, built.groups.length - 1);
@@ -535,7 +536,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
   }
 
   const uniqueUnresolved = [...new Map(unresolved
-    .sort((a, b) => a.code.localeCompare(b.code) || a.summary.localeCompare(b.summary))
+    .sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.summary, b.summary))
     .map((item) => [`${item.code}\0${item.summary}`, item])).values()];
   const uniqueDiagnostics = [...new Map(diagnostics
     .sort(compareDiagnostics)
@@ -559,7 +560,7 @@ export function computeElectricalTruth(board: PcbBoard): ElectricalTruthReport {
     assigned: {
       state: assignedState,
       physicalPads,
-      terminalGroups: terminalGroups.sort((a, b) => a.id.localeCompare(b.id)),
+      terminalGroups: terminalGroups.sort((a, b) => compareCodePoints(a.id, b.id)),
       missingEndpointKeys: [...new Set(missingEndpointKeys)].sort(),
       unaccountedPadInstanceIds: [...new Set(unaccountedPadInstanceIds)].sort(),
     },

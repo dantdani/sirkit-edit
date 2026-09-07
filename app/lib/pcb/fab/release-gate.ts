@@ -10,6 +10,7 @@ import { pcbRevisionId } from "../revision";
 import type { PcbBoard } from "../types";
 import { outlinePolygon, polygonBBox } from "../zones/geometry";
 import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+import { emitGerberJob, type JobFileEntry } from "./native/ancillary";
 import { compileNativeFabPackage } from "./native/compiler";
 import { groupDrills } from "./native/drill";
 import { compileManufacturingIr } from "./native/mir";
@@ -28,6 +29,9 @@ import {
   type ManufacturingRuleProfile,
 } from "./release-manifest";
 import { extractAndValidateReleaseArchive, validateFabricationFiles, validateReleaseFileSet, type ManufacturingReadbackResult } from "./validate-package";
+import type { QualificationComponentAuthority } from "./qualification-authority";
+import type { SchematicAuthorityIdentity } from "./qualification-evidence";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const FIXED_ZIP_DATE = new Date("1980-01-01T00:00:00.000Z");
 const BARE_RECIPE = Object.freeze({
@@ -92,6 +96,11 @@ export interface ManufacturingReleaseAuthority {
     capabilityEvaluation: AutonomousCapabilityEvaluation;
   };
   componentAuthority: ManufacturingComponentAuthority;
+  /** [B16.1C §D] the exact binding/footprint/mapping/package tuples the component
+   *  authority facets were derived from (server-owned, audit evidence). */
+  qualificationAuthority?: QualificationComponentAuthority;
+  /** [B16.1C §D] the schematic synchronization identity the board was last applied from. */
+  schematicAuthority?: SchematicAuthorityIdentity;
   fabPreset: FabPreset;
   drcPreset: DrcPreset;
   manufacturingRuleProfile: ManufacturingRuleProfile;
@@ -226,16 +235,29 @@ function packageFiles(input: NativeFabCompileInput, compiled: Awaited<ReturnType
     files.push(file);
     records.push({ path, role, kind: file.kind as ManufacturingReleaseFile["kind"], mediaType: file.mediaType, bytes: file.bytes.byteLength, sha256: file.sha256, ...metadata });
   };
+  // [B16.1C §E] the Gerber job file must describe exactly the members this
+  // release ships. The native compiler lists every layer it compiled (for a
+  // bare-board release that includes a paste layer the release gate never
+  // packages), so the job file is regenerated here from the SHIPPED entries —
+  // the independent archive verifier (and any board house) cross-checks it.
+  const jobEntries: JobFileEntry[] = [];
   for (const layer of mir.layers) {
     const role = roleForLayer(layer.id);
     if (!role) continue;
-    take(prefixed(snapshot, `${snapshot.boardName}${layerSuffix(snapshot, layer.id, layer.sourceLayer)}`), role, { mirLayerId: layer.id });
+    const basename = `${snapshot.boardName}${layerSuffix(snapshot, layer.id, layer.sourceLayer)}`;
+    take(prefixed(snapshot, basename), role, { mirLayerId: layer.id });
+    jobEntries.push({ path: basename, fileFunction: layer.fileFunction, filePolarity: layer.polarity, fileFormat: "Gerber" });
   }
   for (const group of groupDrills(mir)) {
-    take(prefixed(snapshot, `${snapshot.boardName}-${group.id}.xnc`), group.plated ? "pth_drill" : "npth_drill", { drillGroupId: group.id });
+    const basename = `${snapshot.boardName}-${group.id}.xnc`;
+    take(prefixed(snapshot, basename), group.plated ? "pth_drill" : "npth_drill", { drillGroupId: group.id });
+    jobEntries.push({ path: basename, fileFunction: group.fileFunction, fileFormat: "XNC" });
   }
   const jobPath = prefixed(snapshot, `${snapshot.boardName}.gbrjob`);
-  take(jobPath, "gerber_job");
+  const jobBytes = utf8(emitGerberJob(snapshot, mir, jobEntries));
+  const jobFile: NativeFabFile = { path: jobPath, kind: "job", mediaType: "application/json", bytes: jobBytes, sha256: sha256(jobBytes) };
+  files.push(jobFile);
+  records.push({ path: jobPath, role: "gerber_job", kind: "job", mediaType: jobFile.mediaType, bytes: jobBytes.byteLength, sha256: jobFile.sha256 });
   const readmePath = prefixed(snapshot, "README.txt");
   const readmeBytes = utf8([
     `${snapshot.boardName} - verified Sirkit MFG01 bare-board package`,
@@ -249,12 +271,12 @@ function packageFiles(input: NativeFabCompileInput, compiled: Awaited<ReturnType
   const readme: NativeFabFile = { path: readmePath, kind: "readme", mediaType: "text/plain", bytes: readmeBytes, sha256: sha256(readmeBytes) };
   files.push(readme);
   records.push({ path: readmePath, role: "readme", kind: "readme", mediaType: readme.mediaType, bytes: readme.bytes.byteLength, sha256: readme.sha256 });
-  return { files: files.sort((a, b) => a.path.localeCompare(b.path)), records: records.sort((a, b) => a.path.localeCompare(b.path)) };
+  return { files: files.sort((a, b) => compareCodePoints(a.path, b.path)), records: records.sort((a, b) => compareCodePoints(a.path, b.path)) };
 }
 
 async function deterministicArchive(files: NativeFabFile[]): Promise<Uint8Array> {
   const zip = new JSZip();
-  for (const file of [...files].sort((left, right) => left.path.localeCompare(right.path))) zip.file(file.path, file.bytes, { date: FIXED_ZIP_DATE, createFolders: false, unixPermissions: 0o100644 });
+  for (const file of [...files].sort((left, right) => compareCodePoints(left.path, right.path))) zip.file(file.path, file.bytes, { date: FIXED_ZIP_DATE, createFolders: false, unixPermissions: 0o100644 });
   return zip.generateAsync({ type: "uint8array", compression: "STORE", platform: "UNIX", streamFiles: false });
 }
 
@@ -326,7 +348,7 @@ export async function releaseManufacturingPackage(input: { locator: Manufacturin
   const manifestFile: NativeFabFile = { path: manifestPath, kind: "manifest", mediaType: "application/json", bytes: manifestBytes, sha256: sha256(manifestBytes) };
   const packageValidation = validateReleaseFileSet({ files: packaged.files, manifest, mir });
   if (!packageValidation.valid) fail("MFG_PACKAGE_VALIDATION_FAILED", packageValidation.issues[0]?.message ?? "Package validation failed.");
-  const files = [...packaged.files, manifestFile].sort((a, b) => a.path.localeCompare(b.path));
+  const files = [...packaged.files, manifestFile].sort((a, b) => compareCodePoints(a.path, b.path));
   const archiveBytes = await deterministicArchive(files);
   const extracted = await extractAndValidateReleaseArchive(archiveBytes);
   const extractedCore: NativeFabFile[] = extracted.files.filter((file) => file.path !== extracted.manifestPath).map((file) => {

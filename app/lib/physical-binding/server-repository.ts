@@ -9,6 +9,7 @@ import {
 } from "../db/schema";
 import { physicalBindingDigest } from "./stable";
 import { assertPhysicalBindingReplay, type PhysicalBindingAggregateState, type PhysicalBindingCommitRequest, type PhysicalBindingRepository } from "./repository";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 function date(value: string, code: string): Date {
   const parsed = new Date(value);
@@ -73,10 +74,10 @@ export class PostgresPhysicalBindingRepository implements PhysicalBindingReposit
     ]);
     return {
       set: setRow.bindingSet,
-      bindings: bindingRows.map((row) => row.binding).sort((a, b) => a.revisionId.localeCompare(b.revisionId)),
-      auditEvents: auditRows.map((row) => row.event).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.eventId.localeCompare(b.eventId)),
-      migrationRecords: migrationRows.map((row) => row.record).sort((a, b) => a.migrationKey.localeCompare(b.migrationKey)),
-      assessments: assessmentRows.map((row) => row.assessment).sort((a, b) => a.assessedAt.localeCompare(b.assessedAt) || a.assessmentId.localeCompare(b.assessmentId)),
+      bindings: bindingRows.map((row) => row.binding).sort((a, b) => compareCodePoints(a.revisionId, b.revisionId)),
+      auditEvents: auditRows.map((row) => row.event).sort((a, b) => compareCodePoints(a.occurredAt, b.occurredAt) || compareCodePoints(a.eventId, b.eventId)),
+      migrationRecords: migrationRows.map((row) => row.record).sort((a, b) => compareCodePoints(a.migrationKey, b.migrationKey)),
+      assessments: assessmentRows.map((row) => row.assessment).sort((a, b) => compareCodePoints(a.assessedAt, b.assessedAt) || compareCodePoints(a.assessmentId, b.assessmentId)),
     };
   }
 
@@ -89,7 +90,7 @@ export class PostgresPhysicalBindingRepository implements PhysicalBindingReposit
     const loaded = await Promise.all(rows.map((row) => this.load(row.setId)));
     return loaded.filter((state): state is PhysicalBindingAggregateState => Boolean(state))
       .filter((state) => state.set.scope.hierarchyPath.join("\0") === scope.hierarchyPath.join("\0") && (state.set.scope.assemblyVariantIds.length === 0 || state.set.scope.assemblyVariantIds.includes(scope.assemblyVariantId)))
-      .sort((a, b) => a.set.setId.localeCompare(b.set.setId));
+      .sort((a, b) => compareCodePoints(a.set.setId, b.set.setId));
   }
 
   async listSelectedPeers(scope: PhysicalBindingAggregateState["set"]["scope"]): Promise<PhysicalBindingAggregateState["bindings"]> {
@@ -101,7 +102,7 @@ export class PostgresPhysicalBindingRepository implements PhysicalBindingReposit
     const revisionIds = sets.map((row) => row.revisionId).filter((value): value is string => Boolean(value));
     if (!revisionIds.length) return [];
     const rows = await db.select({ binding: physicalBindingRevisions.binding }).from(physicalBindingRevisions).where(inArray(physicalBindingRevisions.revisionId, revisionIds));
-    return rows.map((row) => row.binding).sort((a, b) => a.revisionId.localeCompare(b.revisionId));
+    return rows.map((row) => row.binding).sort((a, b) => compareCodePoints(a.revisionId, b.revisionId));
   }
 
   async commit(input: PhysicalBindingCommitRequest): Promise<{ state: PhysicalBindingAggregateState; duplicate: boolean }> {

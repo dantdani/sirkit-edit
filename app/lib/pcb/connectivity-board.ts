@@ -33,6 +33,7 @@ import { physicalPadInstances } from "./pad-identity";
 import { stableHash } from "./smart-routing/hash";
 import { createCopperPolicy } from "./copper-policy";
 import { zoneFillIsCurrent } from "./zones/fill-lifecycle";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 // PENDING (Stage 6 integration window): once Stage 5's ratsnest.ts merges,
 // replace this local declaration with `import type { Airwire } from "./ratsnest"`.
@@ -189,7 +190,7 @@ function collectItems(board: PcbBoard): Item[] {
       region,
       regionIndex,
       key: JSON.stringify({ outer: region.outer, holes: region.holes, boundingBox: region.boundingBox, areaNm2: region.areaNm2 }),
-    })).sort((a, b) => a.key.localeCompare(b.key) || a.regionIndex - b.regionIndex);
+    })).sort((a, b) => compareCodePoints(a.key, b.key) || a.regionIndex - b.regionIndex);
     const occurrences = new Map<string, number>();
     regions.forEach(({ region, regionIndex, key }) => {
       if (region.outer.length < 3) return;

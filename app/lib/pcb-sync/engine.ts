@@ -2,6 +2,7 @@ import { assessComponents, assessNets } from "./reconciliation";
 import { buildSyncPlan } from "./plan";
 import { pcbSyncId } from "./stable";
 import type { PcbSyncGateResult, PcbSyncIssue, PcbSyncPreflightContext, PcbSyncPreflightResult, PcbSyncPreflightStatus, PcbSyncReadinessSummary, PcbSyncTraceStep } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 function gate(input: { code: string; pass: boolean; scope: PcbSyncGateResult["scope"]; message: string; stableIds?: string[]; remediation?: string; evidence?: string[]; notApplicable?: boolean }): PcbSyncGateResult {
   const status = input.notApplicable ? "not_applicable" : input.pass ? "pass" : "blocked";
@@ -73,13 +74,13 @@ export class PcbSyncPreflightEngine {
       gate({ code: "PS_BOARD_PROFILE_SUPPORTED", pass: context.boardAssessment.blockers.length === 0 && context.boardAssessment.formatSupported, scope: "board", message: "Target board is within the proven lossless adapter profile." }),
       gate({ code: "PS_PREREQUISITES_PASS", pass: context.snapshot.prerequisiteIssues.every((item) => !item.blocking), scope: "snapshot", message: "Pinned prerequisite checks pass." }),
       gate({ code: "PS_PREFLIGHT_READ_ONLY", pass: true, scope: "system", message: "Preflight does not mutate the target board." }),
-    ].sort((a, b) => a.code.localeCompare(b.code));
+    ].sort((a, b) => compareCodePoints(a.code, b.code));
     for (const failed of globalGates.filter((item) => item.blocking && item.status !== "pass")) allIssues.push({ code: failed.code, severity: "blocking", blocking: true, scope: failed.scope, stableIds: failed.stableIds, displayRefs: [], message: failed.message, remediationCategory: failed.remediationCategory, evidenceRefs: failed.evidenceRefs, causedBy: failed.causedBy, retryability: "after_user_action", helpKey: `pcb-sync/${failed.code.toLowerCase()}` });
-    const dedupedIssues = [...new Map(allIssues.map((item) => [`${item.code}\0${item.stableIds.join("|")}`, item])).values()].sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0")));
+    const dedupedIssues = [...new Map(allIssues.map((item) => [`${item.code}\0${item.stableIds.join("|")}`, item])).values()].sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0")));
     const plan = buildSyncPlan(context, components, nets, globalGates);
     const planBlockers = plan.blockedOperations.map((item): PcbSyncIssue => ({ code: item.reasonCodes[0] ?? "PS_OPERATION_BLOCKED", severity: "blocking", blocking: true, scope: item.risk === "copper_affecting" || item.risk === "constraint_affecting" ? "board" : "plan", stableIds: [item.targetStableId], displayRefs: [], message: item.summary, remediationCategory: item.risk === "copper_affecting" ? "stage8_copper_protection" : "sync_plan", evidenceRefs: [], causedBy: item.reasonCodes, retryability: "after_user_action", helpKey: `pcb-sync/${(item.reasonCodes[0] ?? "operation_blocked").toLowerCase()}` }));
-    const blockers = [...new Map([...dedupedIssues.filter((item) => item.blocking), ...planBlockers].map((item) => [`${item.code}\0${item.stableIds.join("|")}`, item])).values()].sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0")));
-    const warnings = [...context.boardAssessment.warnings, ...components.flatMap((item) => item.warnings), ...nets.flatMap((item) => item.warnings), ...dedupedIssues.filter((item) => !item.blocking)].sort((a, b) => a.code.localeCompare(b.code));
+    const blockers = [...new Map([...dedupedIssues.filter((item) => item.blocking), ...planBlockers].map((item) => [`${item.code}\0${item.stableIds.join("|")}`, item])).values()].sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0")));
+    const warnings = [...context.boardAssessment.warnings, ...components.flatMap((item) => item.warnings), ...nets.flatMap((item) => item.warnings), ...dedupedIssues.filter((item) => !item.blocking)].sort((a, b) => compareCodePoints(a.code, b.code));
     const readiness = summary(context, components, nets, plan);
     const materialOperations = plan.operations.filter((item) => !["preserve_component_instance", "preserve_net", "mark_dnp_or_excluded", "no_op"].includes(item.kind));
     const status: PcbSyncPreflightStatus = blockers.length ? deriveStatus(blockers) : materialOperations.length ? "ready_to_apply" : "ready_no_changes";
