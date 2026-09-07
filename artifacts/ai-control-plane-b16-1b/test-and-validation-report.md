@@ -39,7 +39,7 @@ Route migration ratchet (inside the battery): green — 153 methods, 150 canonic
 | scoped ESLint on every changed source and test | 0 errors, 0 warnings (one unused directive removed during the stage) |
 | `git diff --check` (committed range and artifacts) | clean |
 | sanctioned generators ×2 (`generate-b16-0-7-artifacts.ts`, `generate-b16-0-8-baseline.ts`) | byte-stable; regenerated files identical to the committed ones (`git status` empty for them); baseline sha1 `d0542262…` unchanged |
-| secret scan of every changed/new file and of every staged diff before each commit | 27 files / 0 hits; per-commit scans 0 hits ×4 (×5 with the artifacts commit) |
+| secret scan of every changed/new file and of every staged diff before each commit | 27 files / 0 hits; per-commit scans 0 hits for the four code/test commits; the artifacts commit scan flagged 2 matches that were inspected and found to be this report's own bare mention of the database URL scheme (no URL, no host, no credential) — reworded in the follow-up docs commit, after which the scan is 0 hits |
 
 ## benchmark-quality commands (local)
 

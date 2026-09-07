@@ -17,7 +17,7 @@
 | any REAL value from `.env.local` (all keys ≥ 8 chars, compared in memory) | 0 hits |
 | the real project reference | 0 hits |
 | JWT-shaped strings (`eyJ…` × 3 segments ≥ 20 chars) | 0 hits |
-| `postgres://` / `postgresql://` URLs | 0 hits |
+| database connection URLs (postgres / postgresql scheme) | 0 hits |
 | email addresses other than `example.invalid` sentinels and the committer identity | 0 hits |
 
 The same scan is repeated as part of the pre-commit secret check for each commit (`test-and-validation-report.md`).
