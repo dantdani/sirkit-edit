@@ -69,6 +69,12 @@ vi.mock("@/app/lib/pcb/autonomous/production-router", async () => {
         seams.recorded ??= fixtures.emptyRouteFixture(new Date().toISOString());
         return fixtures.recordingRouteExecutor(await actual.createAutonomousRouteExecutor(options), seams.recorded);
       }
+      if (fixtures.liveRouterRequested()) {
+        // [B16-A F21] opt-in LIVE router: the real production executor, unrecorded, unpinned.
+        const actual = await vi.importActual<typeof import("@/app/lib/pcb/autonomous/production-router")>("@/app/lib/pcb/autonomous/production-router");
+        const live = await actual.createAutonomousRouteExecutor(options);
+        return async (input: Parameters<typeof live>[0]) => { seams.observedRoutes.push("live"); return live(input); };
+      }
       const fixture = fixtures.loadRouteFixture(ROUTE_FIXTURE_PATH);
       if (!fixture) throw new Error(`ROUTE_FIXTURE_MISSING:${ROUTE_FIXTURE_PATH}`);
       return fixtures.replayRouteExecutor(fixture, seams.observedRoutes);
@@ -81,7 +87,8 @@ import { POST as physicalBindings } from "@/app/api/physical-bindings/route";
 import { GET as pcbSyncGet, POST as pcbSyncPost } from "@/app/api/pcb-sync/route";
 import { POST as qualify } from "@/app/api/pcb/qualify/route";
 import { POST as release } from "@/app/api/pcb/release/route";
-import { recordingRequested, saveRouteFixture } from "./fixtures/route-fixture";
+import { liveRouterRequested, recordingRequested, saveRouteFixture } from "./fixtures/route-fixture";
+import { loadExpectedIdentities, saveExpectedIdentities, type ExpectedReleaseIdentities } from "./fixtures/expected-identities";
 import { evidenceDirectory, writeEvidence } from "./fixtures/evidence";
 import { verifyReleaseArchiveIndependently } from "@/app/lib/pcb/fab/independent-archive-verifier";
 import { BLINKER_ACCEPTANCE_PROMPT, BLINKER_NETLIST, blinkerCatalog } from "./fixtures/blinker-catalog";
@@ -93,7 +100,11 @@ import type { PcbSyncManufacturingSummary } from "@/app/api/pcb-sync/handler";
 import type { PcbSyncBoardRecord } from "@/app/lib/pcb-sync/types";
 
 const RECORDING = recordingRequested();
-const QUALIFY_TIMEOUT_MS = RECORDING ? 900_000 : 60_000;
+const LIVE = liveRouterRequested();
+const QUALIFY_TIMEOUT_MS = RECORDING || LIVE ? 900_000 : 60_000;
+// [B16-A F9] the committed identities every REPLAY must reproduce exactly (written when recording, skipped only under the live router).
+const PINNED = RECORDING || LIVE ? null : loadExpectedIdentities();
+if (!RECORDING && !LIVE && !PINNED) throw new Error("EXPECTED_IDENTITIES_MISSING: record the fixtures with SIRKIT_B16_1C_RECORD_ROUTES=1");
 
 function table(report: ElectricalReport): string { return report.checks.map((row) => `  ${row.ok ? "PASS" : "FAIL"}  ${row.name}: ${row.detail}`).join("\n"); }
 function sha256(bytes: Uint8Array): string { return createHash("sha256").update(bytes).digest("hex"); }
@@ -120,6 +131,12 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     for (const fn of restore.reverse()) fn();
     writeEvidence("b16-1c-acceptance-evidence.json", JSON.stringify(evidence, null, 2));
     if (RECORDING && seams.recorded) { saveRouteFixture(ROUTE_FIXTURE_PATH, seams.recorded); console.log(`[B16.1C] recorded ${seams.recorded.order.length} router executions → ${ROUTE_FIXTURE_PATH}`); }
+    if (RECORDING && evidence.qualification && evidence.release) {
+      const q = evidence.qualification as { boardRevision: string; authorityRevision: number; authorityDigest: string; componentAuthorityDigest: string; rc01: { digest: string }; rc02: { digest: string }; rc03: { digest: string }; routerExecutions: number };
+      const r = evidence.release as { releaseId: string; filename: string; archiveSha256: string; manifestContentDigest: string; counts: Record<string, number>; files: Array<{ path: string; role: string; sha256: string }> };
+      const pinned: ExpectedReleaseIdentities = { schemaVersion: "sirkit.b16-1c.expected-identities.v1", fixedNow: FIXED_NOW, qualification: { boardRevision: q.boardRevision, authorityRevision: q.authorityRevision, authorityDigest: q.authorityDigest, componentAuthorityDigest: q.componentAuthorityDigest, rc01Digest: q.rc01.digest, rc02Digest: q.rc02.digest, rc03Digest: q.rc03.digest, routerExecutions: q.routerExecutions }, release: { releaseId: r.releaseId, filename: r.filename, archiveSha256: r.archiveSha256, archiveByteLength: releasedBytes?.byteLength ?? 0, manifestContentDigest: r.manifestContentDigest, counts: r.counts, files: r.files } };
+      saveExpectedIdentities(pinned); console.log("[B16.1C] pinned release identities re-recorded");
+    }
   });
 
   it("1. prompt → schematic proposal through the canonical build route (fake provider, zero credits)", async () => {
@@ -238,6 +255,10 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     expect(String((body.rc02 as { digest: string }).digest)).toMatch(/^route-[0-9a-f]{64}$/);
     expect(String((body.rc03 as { digest: string }).digest)).toMatch(/^capability-[0-9a-f]{64}$/);
     expect(body.boardRevision).not.toBe(appliedRevision);
+    // [B16-A F9] every replay reproduces the COMMITTED qualification identities exactly.
+    if (PINNED) {
+      expect({ boardRevision: body.boardRevision, authorityRevision: body.authorityRevision, authorityDigest: body.authorityDigest, componentAuthorityDigest: body.componentAuthorityDigest, rc01Digest: (body.rc01 as { digest: string }).digest, rc02Digest: (body.rc02 as { digest: string }).digest, rc03Digest: (body.rc03 as { digest: string }).digest, routerExecutions: seams.observedRoutes.length }).toEqual(PINNED.qualification);
+    }
     qualified = body;
     evidence.qualification = { boardRevision: body.boardRevision, authorityRevision: body.authorityRevision, authorityDigest: body.authorityDigest, componentAuthorityDigest: body.componentAuthorityDigest, rc01: body.rc01, rc02: body.rc02, rc03: body.rc03, routerExecutions: RECORDING ? seams.recorded?.order.length : seams.observedRoutes.length };
 
@@ -344,6 +365,10 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
 
     writeEvidence("b16-1c-acceptance-manifest.json", JSON.stringify(manifestBody.manifest, null, 2));
     evidence.release = { releaseId: manifestBody.releaseId, filename, archiveSha256: archiveSha, manifestContentDigest: (manifestBody.manifest as { manifestContentDigest: string }).manifestContentDigest, counts: manifest.counts, files: manifest.files.map((file) => ({ path: file.path, role: file.role, sha256: file.sha256 })) };
+    // [B16-A F9] the released bytes, the manifest, every member and the ledger id equal the COMMITTED identities.
+    if (PINNED) {
+      expect({ releaseId: manifestBody.releaseId, filename, archiveSha256: archiveSha, archiveByteLength: bytes.byteLength, manifestContentDigest: (manifestBody.manifest as { manifestContentDigest: string }).manifestContentDigest, counts: manifest.counts, files: manifest.files.map((file) => ({ path: file.path, role: file.role, sha256: file.sha256 })) }).toEqual(PINNED.release);
+    }
     expect(existsSync(join(evidenceDirectory(), "b16-1c-acceptance-release.zip"))).toBe(true);
   });
 

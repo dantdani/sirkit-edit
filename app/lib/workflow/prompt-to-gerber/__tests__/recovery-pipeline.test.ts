@@ -57,6 +57,11 @@ vi.mock("@/app/lib/pcb/autonomous/production-router", async () => {
         const actual = await vi.importActual<typeof import("@/app/lib/pcb/autonomous/production-router")>("@/app/lib/pcb/autonomous/production-router");
         seams.recorded ??= fixtures.emptyRouteFixture(new Date().toISOString());
         executor = fixtures.recordingRouteExecutor(await actual.createAutonomousRouteExecutor(options), seams.recorded);
+      } else if (fixtures.liveRouterRequested()) {
+        // [B16-A F21] opt-in LIVE router: the real production executor, unrecorded, unpinned.
+        const actual = await vi.importActual<typeof import("@/app/lib/pcb/autonomous/production-router")>("@/app/lib/pcb/autonomous/production-router");
+        const live = await actual.createAutonomousRouteExecutor(options);
+        executor = async (input) => { seams.observedRoutes.push("live"); return live(input); };
       } else {
         const fixture = fixtures.loadRouteFixture(ROUTE_FIXTURE_PATH);
         if (!fixture) throw new Error(`ROUTE_FIXTURE_MISSING:${ROUTE_FIXTURE_PATH}`);
@@ -75,7 +80,7 @@ import { POST as physicalBindings } from "@/app/api/physical-bindings/route";
 import { GET as pcbSyncGet, POST as pcbSyncPost, stage3Repository } from "@/app/api/pcb-sync/route";
 import { POST as qualify } from "@/app/api/pcb/qualify/route";
 import { POST as release } from "@/app/api/pcb/release/route";
-import { recordingRequested, saveRouteFixture } from "./fixtures/route-fixture";
+import { liveRouterRequested, recordingRequested, saveRouteFixture } from "./fixtures/route-fixture";
 import { BLINKER_NETLIST, blinkerCatalog } from "./fixtures/blinker-catalog";
 import { applyRequest, ASSEMBLY_VARIANT_ID, BOARD_ID, DESIGN_ID, deterministicUuids, freezeClock, getRequest, jsonRequest, layoutProposal, preflightRequest, publicationRequest, readJson, restoreIdentity, SCOPE, signInAs, type LaidOutSchematic } from "./fixtures/harness";
 import { buildAutonomousGoldenBoard } from "@/app/lib/pcb/__tests__/fixtures/autonomous-golden-board";
@@ -91,7 +96,7 @@ import type { PcbSyncManufacturingSummary } from "@/app/api/pcb-sync/handler";
 import type { PcbSyncBoardRecord } from "@/app/lib/pcb-sync/types";
 
 const RECORDING = recordingRequested();
-const QUALIFY_TIMEOUT_MS = RECORDING ? 900_000 : 60_000;
+const QUALIFY_TIMEOUT_MS = RECORDING || liveRouterRequested() ? 900_000 : 60_000;
 type BoardLoad = { ok: boolean; result: { status: string; record?: PcbSyncBoardRecord }; manufacturing?: PcbSyncManufacturingSummary };
 const boardQuery = (boardId = BOARD_ID, scope: { tenantId: string; projectId: string; branchId: string } = SCOPE) => getRequest(`/api/pcb-sync?boardId=${encodeURIComponent(boardId)}&include=manufacturing`, { scope });
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");

@@ -48,6 +48,19 @@ export interface RecordedRouteFixture {
 export const RECORD_ROUTES_ENV = "SIRKIT_B16_1C_RECORD_ROUTES";
 export function recordingRequested(): boolean { return process.env[RECORD_ROUTES_ENV] === "1"; }
 
+/**
+ * [B16-A F21] Env switch: run the REAL production executor without recording
+ * and without replaying. The replay seam substitutes the whole production
+ * executor, so the TypeScript routing-integration code (boardToDsn,
+ * validateDsn, writeDsn, runFreerouting, parseSes, buildAutorouteCandidate,
+ * completeAutoroute) is exercised only by a live run; this switch is the
+ * documented way to exercise it on a machine with the bundled runtime. Under
+ * a live run the pinned release identities are NOT asserted (a different
+ * router outcome is a legitimate, reported possibility), every other gate is.
+ */
+export const LIVE_ROUTER_ENV = "SIRKIT_B16_1C_LIVE_ROUTER";
+export function liveRouterRequested(): boolean { return process.env[LIVE_ROUTER_ENV] === "1" && !recordingRequested(); }
+
 export function emptyRouteFixture(recordedAt: string): RecordedRouteFixture {
   return { schemaVersion: ROUTE_FIXTURE_SCHEMA, recordedAt, router: { engine: "", versions: [], runtimes: [] }, order: [], entries: {} };
 }
