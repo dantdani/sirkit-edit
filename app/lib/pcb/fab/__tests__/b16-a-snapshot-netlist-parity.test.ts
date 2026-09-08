@@ -11,16 +11,16 @@
  * tampered boards fail with the exact parity diagnostics.
  */
 import { describe, expect, it } from "vitest";
-import { boardToSourceNetlist } from "../../pcb/board-netlist";
-import { schematicEndpointKey, stableNetIdForEndpoints } from "../../pcb/integrity";
-import { buildSchematicParityCertificate } from "../../pcb/readiness/parity";
-import { pcbRevisionId } from "../../pcb/revision";
-import { createEmptyBoard, type FootprintInstance, type PcbBoard } from "../../pcb/types";
-import { mmToNm } from "../../pcb/units";
+import { boardToSourceNetlist } from "../../board-netlist";
+import { schematicEndpointKey, stableNetIdForEndpoints } from "../../integrity";
+import { buildSchematicParityCertificate } from "../../readiness/parity";
+import { pcbRevisionId } from "../../revision";
+import { createEmptyBoard, type FootprintInstance, type PcbBoard } from "../../types";
+import { mmToNm } from "../../units";
 import { snapshotToSourceNetlist } from "../snapshot-netlist";
-import type { PcbSyncAuthoritativeSnapshot } from "../types";
-import { footprintDef, snapshotBase } from "./fixtures";
-import { authoritativeSnapshotDigest } from "../stable";
+import type { PcbSyncAuthoritativeSnapshot } from "../../../pcb-sync/types";
+import { footprintDef, snapshotBase } from "../../../pcb-sync/__tests__/fixtures";
+import { authoritativeSnapshotDigest } from "../../../pcb-sync/stable";
 
 const U1 = "sync-u1", U2 = "sync-u2";
 const u1p1 = schematicEndpointKey(U1, "1"), u2p1 = schematicEndpointKey(U2, "1"), u1p2 = schematicEndpointKey(U1, "2"), u2p2 = schematicEndpointKey(U2, "2");

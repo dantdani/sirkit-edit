@@ -12,6 +12,6 @@
   {
     "method": "POST",
     "route": "/api/pcb-sync",
-    "sha1": "35250de3152b79d2a8c8015c9e4bebdfba2ba39d"
+    "sha1": "d9a93ad15bf35bacf0eed4b2737db2f2418715c0"
   }
 ]

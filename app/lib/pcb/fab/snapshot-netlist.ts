@@ -17,9 +17,9 @@
  * identity recomputed by parity equals the identity the board carries.
  */
 
-import { canonicalEndpointSet, schematicEndpointKey } from "../pcb/integrity";
-import type { PcbNetlist } from "../pcb/netlist-bridge";
-import type { PcbSyncAuthoritativeSnapshot } from "./types";
+import { canonicalEndpointSet, schematicEndpointKey } from "../integrity";
+import type { PcbNetlist } from "../netlist-bridge";
+import type { PcbSyncAuthoritativeSnapshot } from "../../pcb-sync/types";
 
 export function snapshotToSourceNetlist(snapshot: Pick<PcbSyncAuthoritativeSnapshot, "components" | "nets">): PcbNetlist {
   const components = snapshot.components

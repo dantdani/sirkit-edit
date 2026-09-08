@@ -149,14 +149,14 @@
           "consumedAuthorityResources": [
             {
               "resourceId": "res:canonical:fixture",
-              "contentDigest": "eng1-6779fff341dbb21c"
+              "contentDigest": "eng1-583c5793b5a1d74c"
             },
             {
               "resourceId": "res:component-authority:fixture",
               "contentDigest": "eng1-a7cf99e9b900a688"
             }
           ],
-          "authorityGrantId": "grant-2e60266b4e3c7528"
+          "authorityGrantId": "grant-084ceba088fc1323"
         }
       ],
       "inverseOperations": [
@@ -216,7 +216,7 @@
         "consumedAuthorityResources": [
           {
             "resourceId": "res:canonical:fixture",
-            "contentDigest": "eng1-6779fff341dbb21c"
+            "contentDigest": "eng1-583c5793b5a1d74c"
           },
           {
             "resourceId": "res:component-authority:fixture",

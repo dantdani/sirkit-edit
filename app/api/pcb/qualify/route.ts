@@ -65,7 +65,7 @@ import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { mmToNm } from "@/app/lib/pcb/units";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
-import { snapshotToSourceNetlist } from "@/app/lib/pcb-sync/snapshot-netlist";
+import { snapshotToSourceNetlist } from "@/app/lib/pcb/fab/snapshot-netlist";
 import type { PcbSyncAuthoritativeSnapshot } from "@/app/lib/pcb-sync/types";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { PCB_SYNC_API_MAX_BYTES, PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext, pcbSyncForbiddenAuthorityRefusal, type PcbSyncApiScope } from "../../pcb-sync/_scope";
