@@ -22,6 +22,13 @@
  *    release id) so a reload can truthfully show what was released;
  *  - every failure is a bounded public envelope with a correlation id.
  *
+ * [B16-A F6] corrected against the review of B16.1C: the administrator's
+ * confirmation pins (`expectedAuthorityRevision`, `expectedAuthorityDigest`)
+ * are MANDATORY and type-checked — a same-origin administrator POST without
+ * them is refused (400), so the "confirm the exact authority" step is a server
+ * invariant rather than a browser courtesy; the request body is closed to the
+ * declared keys (an unknown key is refused, never ignored).
+ *
  * `format: "manifest"` returns the manifest metadata without a ZIP body.
  */
 
@@ -39,6 +46,9 @@ export const maxDuration = 300;
 
 /** Fabrication-profile evidence older than this at RELEASE time is refused. */
 export const RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS = 366 * 24 * 60 * 60 * 1000;
+
+/** [B16-A F6] the ONLY keys a release request may carry. */
+export const RELEASE_BODY_KEYS: ReadonlySet<string> = new Set(["boardId", "designId", "expectedAuthorityRevision", "expectedAuthorityDigest", "format"]);
 
 export function releaseFilename(boardId: string, releaseId: string): string {
   return `sirkit-${boardId.replace(/[^A-Za-z0-9_-]/g, "-")}-${releaseId.slice(-12)}.zip`;
@@ -60,6 +70,9 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
   // the policy already requires project_admin; this refusal makes the
   // invariant explicit and test-pinned for any future actor kind.
   if (scope.actor.actorKind !== "human" || scope.actor.role !== "project_admin") return manufacturingRefusal("MFG_RELEASE_HUMAN_REQUIRED", { correlationId });
+  // [B16-A F6] closed body: an undeclared key is refused, never silently ignored.
+  const unknownFields = Object.keys(body).filter((key) => !RELEASE_BODY_KEYS.has(key)).sort();
+  if (unknownFields.length > 0 || (body.format !== undefined && body.format !== "manifest")) return manufacturingRefusal("MFG_API_UNKNOWN_FIELD", { correlationId, extra: { fields: unknownFields.length > 0 ? unknownFields : ["format"] } });
   const boardId = typeof body.boardId === "string" ? body.boardId : "";
   const designId = typeof body.designId === "string" ? body.designId : "";
   if (!boardId || !designId) return manufacturingRefusal("MFG_API_SCOPE_REQUIRED", { correlationId });
@@ -71,11 +84,16 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
   try {
     const stored = await store.getHead(authorityScope);
     if (!stored) return manufacturingRefusal("MFG_AUTHORITY_NOT_FOUND", { correlationId });
-    // [B16.1C §F] the administrator confirmed a SPECIFIC authority in the
-    // browser; if it moved on between the confirmation and this request, the
+    // [B16.1C §F / B16-A F6] the administrator confirmed a SPECIFIC authority
+    // in the browser. The confirmation is a SERVER invariant: both pins are
+    // mandatory and type-checked (an integer revision and the record digest);
+    // if the authority moved on between the confirmation and this request the
     // release is refused rather than packaging something never reviewed.
     const expectedRevision = body.expectedAuthorityRevision, expectedDigest = body.expectedAuthorityDigest;
-    if ((expectedRevision !== undefined && expectedRevision !== stored.revision) || (expectedDigest !== undefined && expectedDigest !== stored.recordDigest)) {
+    if (!Number.isSafeInteger(expectedRevision) || (expectedRevision as number) < 1 || typeof expectedDigest !== "string" || expectedDigest.length === 0) {
+      return manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_REQUIRED", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } });
+    }
+    if (expectedRevision !== stored.revision || expectedDigest !== stored.recordDigest) {
       return manufacturingRefusal("MFG_AUTHORITY_CONFIRMATION_MISMATCH", { correlationId, extra: { authorityRevision: stored.revision, authorityDigest: stored.recordDigest } });
     }
     // The authority must describe the board's CURRENT durable revision.

@@ -253,7 +253,8 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     const ok = a.status === 200 ? a : b;
     expect((await readJson(ok)).idempotent).toBe(true); // the board is already qualified — no router run
     signInAs("admin");
-    const [r1, r2] = await Promise.all([release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID })), release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }))]);
+    const confirmed = { designId: DESIGN_ID, boardId: BOARD_ID, expectedAuthorityRevision: qualified.authorityRevision, expectedAuthorityDigest: qualified.authorityDigest };
+    const [r1, r2] = await Promise.all([release(jsonRequest("/api/pcb/release", confirmed)), release(jsonRequest("/api/pcb/release", confirmed))]);
     expect(r1.status).toBe(200); expect(r2.status).toBe(200);
     const bytes1 = new Uint8Array(await r1.arrayBuffer()), bytes2 = new Uint8Array(await r2.arrayBuffer());
     expect(Buffer.compare(Buffer.from(bytes1), Buffer.from(bytes2))).toBe(0);
@@ -304,7 +305,8 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     // genuinely new record even where the deterministic placement/routing reproduces the same copper.
     vi.setSystemTime(new Date(new Date().getTime() + 3_600_000));
     signInAs("admin");
-    const stale = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    // The administrator confirms the (still current) sealed authority; the release is refused because the BOARD moved on.
+    const stale = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID, expectedAuthorityRevision: qualified.authorityRevision, expectedAuthorityDigest: qualified.authorityDigest }));
     const staleBody = await readJson<{ code: string; authorityBoardRevision: string; currentBoardRevision: string }>(stale);
     expect(stale.status).toBe(409);
     expect(staleBody.code).toBe("MFG_AUTHORITY_STALE");
@@ -324,7 +326,7 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     // digest says so; only the sealed authority RECORD (board, evidence, time, revision) is new.
     expect(requalifiedBody.componentAuthorityDigest).toBe(qualified.componentAuthorityDigest);
     signInAs("admin");
-    const second = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    const second = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID, expectedAuthorityRevision: requalifiedBody.authorityRevision, expectedAuthorityDigest: requalifiedBody.authorityDigest }));
     expect(second.status).toBe(200);
     expect(second.headers.get("X-Sirkit-Release-Id")).not.toBe(firstRelease!.releaseId);
     expect(second.headers.get("X-Sirkit-Release-Recorded")).toBe("created");
@@ -366,10 +368,11 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
       expect(r.status).toBe(404);
       expect((await readJson(r)).code).toBe("MFG_AUTHORITY_NOT_FOUND");
     }
-    // Client-supplied scope in the body is ignored: the trusted selector decides.
+    // [B16-A F6] client-supplied scope in the body is REFUSED as an undeclared field (never honoured, never silently ignored): the trusted selector decides.
     signInAs("admin", otherProject);
     const spoof = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID, projectId: SCOPE.projectId, tenantId: SCOPE.tenantId }, { scope: otherProject }));
-    expect(spoof.status).toBe(404);
+    expect(spoof.status).toBe(400);
+    expect((await readJson(spoof)).code).toBe("MFG_API_UNKNOWN_FIELD");
     void ASSEMBLY_VARIANT_ID;
   });
 

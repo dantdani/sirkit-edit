@@ -1,4 +1,4 @@
-import type { DurableAggregateRecord, DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
+import type { DurableAggregateRecord, DurableAppendOperation, DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "../durable-workflow/stable";
 import { makeBoardRecord } from "./board";
 import type { PcbBoard } from "../pcb/types";
@@ -25,6 +25,19 @@ function storedPlan(plan: PcbSyncPlan): PcbSyncPlan { return { ...plan, operatio
 function loadedPlan(plan: PcbSyncPlan): PcbSyncPlan { return { ...plan, operations: plan.operations.map((operation) => ({ ...operation, targetStableId: operation.targetStableId.replaceAll(PLAN_NUL_STORAGE, "\0"), orderingKey: operation.orderingKey.replaceAll(PLAN_NUL_STORAGE, "\0") })) }; }
 
 interface AuditStream { audits: PcbSyncAuditRecord[] }
+
+/**
+ * [B16-A F2] the board publication as ONE append operation, so a caller can
+ * commit the board together with other aggregates (the qualification commits
+ * the routed board and its manufacturing authority atomically). The record is
+ * rebuilt and digest-checked exactly as `publishBoard` does.
+ */
+export function boardPublicationOperation(record: PcbSyncBoardRecord, expectedRevision: number): DurableAppendOperation<PcbSyncBoardRecord> {
+  const scope: PcbSyncRepositoryScope = record;
+  const rebuilt = makeBoardRecord({ ...scope, board: record.board, updatedAt: record.updatedAt });
+  if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) throw new Error("PS_BOARD_RECORD_DIGEST_MISMATCH");
+  return { aggregateType: BOARD, aggregateKey: boardKey(scope), expectedRevision, payload: structuredClone(record), recordDigest: record.digest };
+}
 
 export class DurablePcbSyncSnapshotStore implements PcbSyncSnapshotProvider, PcbSyncSnapshotPublisher {
   constructor(private readonly workflow: DurableWorkflowRepository) {}
@@ -65,6 +78,21 @@ export class DurablePcbSyncSnapshotStore implements PcbSyncSnapshotProvider, Pcb
     const snapshot = record.payload;
     if (authoritativeSnapshotDigest(withoutSnapshotDigest(snapshot)) !== snapshot.snapshotDigest || record.recordDigest !== snapshot.snapshotDigest) throw new Error("PS_SNAPSHOT_DIGEST_MISMATCH");
     return { revision: record.revision, snapshotDigest: snapshot.snapshotDigest, schematicRevision: snapshot.schematicRevision, schematicDigest: snapshot.schematicDigest, netGraphDigest: snapshot.netGraphDigest };
+  }
+
+  /**
+   * [B16-A F4] the EXACT applied snapshot a committed plan names (by digest),
+   * read from the snapshot aggregate's durable history and digest-verified —
+   * the RC01 parity source for qualification. Null when no such snapshot was
+   * ever published for the design/variant.
+   */
+  async getSnapshotByDigest(input: Pick<PcbSyncAuthoritativeSnapshot, "tenantId" | "projectId" | "branchId" | "designId" | "assemblyVariantId">, snapshotDigest: string): Promise<PcbSyncAuthoritativeSnapshot | null> {
+    const records = await this.workflow.history<PcbSyncAuthoritativeSnapshot>(durableAggregateIdentity(snapshotScope(input), SNAPSHOT, snapshotKey(input)));
+    const record = [...records].reverse().find((item) => item.payload.snapshotDigest === snapshotDigest);
+    if (!record) return null;
+    const snapshot = record.payload;
+    if (authoritativeSnapshotDigest(withoutSnapshotDigest(snapshot)) !== snapshot.snapshotDigest || record.recordDigest !== snapshot.snapshotDigest) throw new Error("PS_SNAPSHOT_DIGEST_MISMATCH");
+    return structuredClone(snapshot);
   }
 
   async acquire(request: PcbSyncPreflightRequest, signal?: AbortSignal): Promise<PcbSyncAuthoritativeSnapshot> {

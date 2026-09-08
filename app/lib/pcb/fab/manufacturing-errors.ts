@@ -23,6 +23,14 @@ export interface ManufacturingPublicError {
 /** The CLOSED vocabulary. A code outside this table is never emitted. */
 export const MANUFACTURING_PUBLIC_ERRORS = Object.freeze({
   MFG_API_SCOPE_REQUIRED: { status: 400, message: "designId and boardId are required." },
+  // [B16-A F3/F6] closed request bodies: an unknown key is refused, never ignored (a client cannot steer qualification or release through an undeclared field).
+  MFG_API_UNKNOWN_FIELD: { status: 400, message: "The request body carries a field this operation does not accept." },
+  // [B16-A F6] the administrator's confirmation of the EXACT authority is a server invariant, not a browser courtesy.
+  MFG_AUTHORITY_CONFIRMATION_REQUIRED: { status: 400, message: "Release requires the administrator's confirmation of the exact authority: expectedAuthorityRevision (integer) and expectedAuthorityDigest (string)." },
+  // [B16-A F5] the designId must name the design the board was synchronized from.
+  MFG_DESIGN_SCOPE_MISMATCH: { status: 422, message: "designId does not name the design this board was last synchronized from." },
+  // [B16-A F2] the routed board and its authority are committed together; a post-commit verification failure is reported, never hidden.
+  MFG_QUALIFICATION_COMMIT_UNVERIFIED: { status: 500, message: "The qualification commit could not be verified after writing. Reload to see the durable state before retrying." },
   MFG_AUTHORITATIVE_BOARD_NOT_FOUND: { status: 404, message: "No authoritative board exists for this scope." },
   MFG_AUTHORITY_NOT_FOUND: { status: 404, message: "No manufacturing authority exists for this board. Run qualification first." },
   MFG_AUTHORITY_STALE: { status: 409, message: "The manufacturing authority was qualified against an earlier board revision. Re-run qualification before releasing." },

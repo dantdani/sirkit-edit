@@ -10,7 +10,7 @@
  * reload and re-verify it independently of any client state.
  */
 
-import type { DurableWorkflowRepository, DurableWorkflowScope } from "../../durable-workflow/types";
+import type { DurableAppendOperation, DurableOutboxEffect, DurableWorkflowRepository, DurableWorkflowScope } from "../../durable-workflow/types";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "../../durable-workflow/stable";
 import { sha256, stableJson } from "./native/stable";
 import type { ManufacturingReleaseAuthority, ManufacturingReleaseLocator } from "./release-gate";
@@ -38,6 +38,18 @@ function authorityKey(scope: ManufacturingAuthorityScope): string {
 
 export function manufacturingAuthorityRecordDigest(authority: ManufacturingReleaseAuthority): string {
   return `sha256:${sha256(stableJson(authority))}`;
+}
+
+/** [B16-A F2] the authority publication as ONE append operation (+ its outbox effect), so the qualification can commit it atomically with the routed board. */
+export function authorityPublicationOperation(authority: ManufacturingReleaseAuthority, expectedRevision: number): { operation: DurableAppendOperation<ManufacturingReleaseAuthority>; effect: DurableOutboxEffect; recordDigest: string; scope: DurableWorkflowScope } {
+  const scope: ManufacturingAuthorityScope = authority;
+  const recordDigest = manufacturingAuthorityRecordDigest(authority);
+  return {
+    scope: workflowScope(scope),
+    recordDigest,
+    operation: { aggregateType: AUTHORITY, aggregateKey: authorityKey(scope), expectedRevision, payload: structuredClone(authority), recordDigest },
+    effect: { owner: { aggregateType: AUTHORITY, aggregateKey: authorityKey(scope) }, eventType: "mfg.authority-published", eventVersion: 1, topic: "mfg.authority-published", payload: { boardId: scope.boardId, boardRevision: authority.boardRevision, recordDigest } },
+  };
 }
 
 export class DurableManufacturingAuthorityStore {

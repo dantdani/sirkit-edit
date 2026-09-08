@@ -277,7 +277,12 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
 
   it("10. the administrator releases: verified ZIP, ledgered, byte-identical on repeat, visible after refresh", async () => {
     signInAs("admin");
-    const first = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    // [B16-A F6] the administrator's confirmation of the EXACT authority is mandatory; a release without it is refused.
+    const unconfirmed = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    expect(unconfirmed.status).toBe(400);
+    expect((await readJson(unconfirmed)).code).toBe("MFG_AUTHORITY_CONFIRMATION_REQUIRED");
+    const confirmed = { designId: DESIGN_ID, boardId: BOARD_ID, expectedAuthorityRevision: qualified.authorityRevision, expectedAuthorityDigest: qualified.authorityDigest };
+    const first = await release(jsonRequest("/api/pcb/release", confirmed));
     if (first.status !== 200) throw new Error(`release failed: ${first.status} ${JSON.stringify(await readJson(first)).slice(0, 800)}`);
     const bytes = new Uint8Array(await first.arrayBuffer());
     const archiveSha = sha256(bytes);
@@ -291,14 +296,14 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     const filename = /filename="([^"]+)"/.exec(first.headers.get("Content-Disposition") ?? "")?.[1];
     expect(filename).toMatch(/^sirkit-board-b16-1c-blinker-[0-9a-f]{12}\.zip$/);
 
-    const second = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    const second = await release(jsonRequest("/api/pcb/release", confirmed));
     expect(second.status).toBe(200);
     const bytes2 = new Uint8Array(await second.arrayBuffer());
     expect(Buffer.compare(Buffer.from(bytes), Buffer.from(bytes2))).toBe(0);
     expect(second.headers.get("X-Sirkit-Release-Recorded")).toBe("existing");
     expect(second.headers.get("X-Sirkit-Release-Id")).toBe(first.headers.get("X-Sirkit-Release-Id"));
 
-    const manifestResponse = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID, format: "manifest" }));
+    const manifestResponse = await release(jsonRequest("/api/pcb/release", { ...confirmed, format: "manifest" }));
     const manifestBody = await readJson<{ ok: boolean; releaseId: string; filename: string; archiveSha256: string; manifest: Record<string, unknown>; record: Record<string, unknown> }>(manifestResponse);
     expect(manifestResponse.status).toBe(200);
     expect(manifestBody.archiveSha256).toBe(archiveSha);

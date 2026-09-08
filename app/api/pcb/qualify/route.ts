@@ -5,11 +5,13 @@
  * over the DURABLE authoritative board, followed by persistence of the exact
  * ManufacturingReleaseAuthority the MFG01 release gate will reload.
  *
- * The client supplies only scope identifiers — never board content. The board
- * is loaded from the durable repository, qualified with the bundled
+ * The client supplies only scope identifiers (`boardId`, `designId`) — never
+ * board content, never a seed, never any other key (the body is closed). The
+ * board is loaded from the durable repository, qualified with the bundled
  * FreeRouting runtime through the production executor, and the selected
- * verified candidate is committed back durably. Failure at any gate leaves the
- * authoritative board untouched and returns bounded blocking evidence.
+ * verified candidate is committed back durably TOGETHER with its sealed
+ * authority. Failure at any gate leaves the authoritative board untouched and
+ * returns bounded blocking evidence.
  *
  * [B16.1C §D] Qualification authority, corrected against the pre-edit probes:
  *  - package class, footprint, and pin-mapping authority come ONLY from the
@@ -23,12 +25,25 @@
  *    digests of the exact tuples; the schematic identity is the last applied
  *    synchronization snapshot;
  *  - re-qualifying the ALREADY qualified board is idempotent (no router run);
- *    a concurrent qualification of the same board is refused (409);
  *  - every failure is a bounded public envelope with a correlation id; raw
  *    exceptions go only to the redacted server trace.
+ *
+ * [B16-A] corrected against the adversarial review of B16.1C:
+ *  - F2: every gate (RC01 parity, RC02 evidence) runs on the candidate in
+ *    memory; the routed board and the authority are ONE durable commit
+ *    (`commitQualification`), so "nothing was changed" is true on every
+ *    refusal and no board ever exists without the authority that describes it;
+ *  - F3: the body is closed to `boardId`/`designId` — the client cannot steer
+ *    the placement RNG (the former `seeds` key) or anything else;
+ *  - F4: RC01 parity is certified against the netlist derived from the LAST
+ *    APPLIED synchronization snapshot (`snapshotToSourceNetlist`), never from
+ *    the routed board itself; that netlist is what the authority seals;
+ *  - F5: `designId` must name the design the board was last synchronized
+ *    from (the applied snapshot's designId) — refused otherwise;
+ *  - F7: single-flight per board is a DURABLE lease (compare-and-swap, TTL),
+ *    so two instances cannot both run a router for the same board.
  */
 
-import { boardToSourceNetlist } from "@/app/lib/pcb/board-netlist";
 import { AUTONOMOUS_PCB_CAPABILITY_PROFILE_V1, evaluateAutonomousCapability } from "@/app/lib/pcb/autonomous/capability-profile";
 import type { AutonomousDesignDeclaration } from "@/app/lib/pcb/autonomous/capability-profile";
 import { createAutonomousRouteExecutor } from "@/app/lib/pcb/autonomous/production-router";
@@ -42,15 +57,19 @@ import { authoritativeBoardDigest, manufacturingComponentAuthorityDigest, type M
 import { manufacturingRuleProfileDigest, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
 import { boundedManufacturingFailure, manufacturingRefusal } from "@/app/lib/pcb/fab/manufacturing-errors";
 import { resolveQualificationComponentAuthority, type QualificationComponentAuthority } from "@/app/lib/pcb/fab/qualification-authority";
+import { commitQualification, qualificationIdempotencyKey } from "@/app/lib/pcb/fab/qualification-commit";
+import { DurableQualificationLease } from "@/app/lib/pcb/fab/qualification-lease";
 import { rc01ParityEvidenceDigest, rc02RouteEvidence, rc02RouteEvidenceDigest, rc03CapabilityEvidenceDigest, type SchematicAuthorityIdentity } from "@/app/lib/pcb/fab/qualification-evidence";
 import { buildSchematicParityCertificate } from "@/app/lib/pcb/readiness/parity";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { mmToNm } from "@/app/lib/pcb/units";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
+import { snapshotToSourceNetlist } from "@/app/lib/pcb-sync/snapshot-netlist";
+import type { PcbSyncAuthoritativeSnapshot } from "@/app/lib/pcb-sync/types";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { PCB_SYNC_API_MAX_BYTES, PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext, pcbSyncForbiddenAuthorityRefusal, type PcbSyncApiScope } from "../../pcb-sync/_scope";
-import { stage3BindingRepository, stage3Repository } from "../../pcb-sync/route";
+import { stage3BindingRepository, stage3Repository, stage3SnapshotProvider } from "../../pcb-sync/route";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -62,6 +81,11 @@ export const maxDuration = 300;
 export const QUALIFIED_FABRICATION_PROFILE_ID = "jlcpcb-2l" as const;
 /** Official capability page the profile limits were re-verified against (B16.1C §D). */
 export const QUALIFIED_FABRICATION_PROFILE_EVIDENCE = Object.freeze({ sourceRef: "https://jlcpcb.com/capabilities/pcb-capabilities", verifiedAt: "2026-09-07" });
+
+/** [B16-A F3] the ONLY keys a qualification request may carry. */
+export const QUALIFY_BODY_KEYS: ReadonlySet<string> = new Set(["boardId", "designId"]);
+/** [B16-A F3] server-owned placement seeds — never a client input. */
+export const QUALIFICATION_PLACEMENT_SEEDS = Object.freeze([101, 202, 303] as const);
 
 /** Conservative JLCPCB-style two-layer rigid prototype profile (bare board). */
 export function bareBoardRuleProfile(): ManufacturingRuleProfile {
@@ -116,9 +140,6 @@ function declarationFor(authority: QualificationComponentAuthority): AutonomousD
   };
 }
 
-/** [B16.1C] one qualification per board at a time — a concurrent second call is refused, never a second router run. */
-const inFlight = new Map<string, Promise<Response>>();
-
 // [B16.0.15 §B] canonical wrapper — the authenticated-release policy
 // (pcb_editor | project_admin), same-origin CSRF, media-type, and the bounded
 // 8 MB/30 s body read all run inside the wrapper BEFORE the callback, so no
@@ -131,17 +152,28 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
   if (forbidden) return forbidden;
   const scope = pcbSyncScopeFromContext(context);
   const correlationId = context.correlationId;
+  // [B16-A F3] closed body: an undeclared key (e.g. the former `seeds`) is refused, never ignored.
+  const unknownFields = Object.keys(body).filter((key) => !QUALIFY_BODY_KEYS.has(key)).sort();
+  if (unknownFields.length > 0) return manufacturingRefusal("MFG_API_UNKNOWN_FIELD", { correlationId, extra: { fields: unknownFields } });
   const boardId = typeof body.boardId === "string" ? body.boardId : "";
   const designId = typeof body.designId === "string" ? body.designId : "";
   if (!boardId || !designId) return manufacturingRefusal("MFG_API_SCOPE_REQUIRED", { correlationId });
-  const guardKey = `${scope.tenantId}\0${scope.projectId}\0${scope.branchId}\0${boardId}`;
-  if (inFlight.has(guardKey)) return manufacturingRefusal("MFG_QUALIFICATION_IN_PROGRESS", { correlationId });
-  const run = qualifyBoard({ scope, boardId, designId, seeds: Array.isArray(body.seeds) ? (body.seeds as number[]) : undefined, correlationId });
-  inFlight.set(guardKey, run);
-  try { return await run; } finally { inFlight.delete(guardKey); }
+  const repositoryScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId };
+  // [B16-A F7] durable single-flight per board (compare-and-swap lease with a
+  // TTL): a concurrent call — in THIS process or any other instance — is
+  // refused 409, never a second router run.
+  const lease = new DurableQualificationLease(getDurableWorkflowRepository());
+  let acquired: Awaited<ReturnType<DurableQualificationLease["acquire"]>>;
+  try { acquired = await lease.acquire(repositoryScope, correlationId); } catch (error) { return boundedManufacturingFailure(error, "qualify", correlationId); }
+  if (!acquired.ok) return manufacturingRefusal("MFG_QUALIFICATION_IN_PROGRESS", { correlationId });
+  try {
+    return await qualifyBoard({ scope, boardId, designId, correlationId });
+  } finally {
+    try { await lease.release(repositoryScope, acquired.token); } catch { /* the TTL bounds a lease that could not be released */ }
+  }
 });
 
-async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; designId: string; seeds?: number[]; correlationId: string }): Promise<Response> {
+async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; designId: string; correlationId: string }): Promise<Response> {
   const { scope, boardId, designId, correlationId } = input;
   const repositoryScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId };
   const authorityScope = { ...repositoryScope, designId };
@@ -160,12 +192,17 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
     }
     const componentAuthority = resolved.authority;
 
-    // 2. The schematic identity the board was last synchronized from.
-    const schematic = await schematicAuthorityFor(repositoryScope);
-    if (!schematic) return manufacturingRefusal("MFG_SCHEMATIC_AUTHORITY_MISSING", { correlationId });
+    // 2. The schematic the board was last synchronized from: identity AND the
+    //    applied snapshot (the RC01 parity source, never the board itself).
+    const applied = await appliedSynchronizationFor(repositoryScope);
+    if (!applied) return manufacturingRefusal("MFG_SCHEMATIC_AUTHORITY_MISSING", { correlationId });
+    const schematic = applied.identity;
+    // [B16-A F5] the client's designId must name the synchronized design.
+    if (applied.designId !== designId) return manufacturingRefusal("MFG_DESIGN_SCOPE_MISMATCH", { correlationId, extra: { synchronizedDesignId: applied.designId } });
 
     // 3. Idempotency: the current board IS the already-qualified routed board.
-    const store = new DurableManufacturingAuthorityStore(getDurableWorkflowRepository());
+    const workflow = getDurableWorkflowRepository();
+    const store = new DurableManufacturingAuthorityStore(workflow);
     const existing = await store.getHead(authorityScope);
     if (existing && existing.authority.boardRevision === sourceRevision && existing.authority.boardDigest === authoritativeBoardDigest(sourceBoard) && existing.authority.qualificationAuthority?.digest === componentAuthority.digest && existing.authority.schematic.digest === schematic.digest) {
       return Response.json(summarize(existing.authority, existing.revision, existing.recordDigest, { idempotent: true, runId: null, selectedCandidateId: null }), { headers: noStore });
@@ -182,7 +219,6 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
     }
 
     const router = await createAutonomousRouteExecutor({ attemptNamespacePrefix: "e2e" });
-    let committed: typeof head.record | null = null;
 
     // Size the board to the design instead of releasing on the profile-maximum
     // default panel. Candidates are tried smallest-first and the ORIGINAL
@@ -194,46 +230,43 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
       { board: sourceBoard, label: "authoritative-default" },
     ];
 
+    // [B16-A F2] no `commitSelected`: the layout verifies and SELECTS a
+    // candidate in memory; nothing durable is written until every gate below
+    // has passed, and then board + authority land in one commit.
     let result: Awaited<ReturnType<typeof qualifyAutonomousLayout>> | null = null;
     const outlineTrace: Array<{ label: string; status: string }> = [];
     for (const attempt of outlineAttempts) {
       const screen = evaluateAutonomousCapability({ board: attempt.board, rules, declaration, phase: "pre_placement" });
       if (!screen.placementMayStart) { outlineTrace.push({ label: attempt.label, status: "ineligible" }); continue; }
-      committed = null;
       const candidateResult = await qualifyAutonomousLayout({
         board: attempt.board,
         rules,
         declaration,
         router,
         projectId: scope.projectId,
-        seeds: input.seeds ?? [101, 202, 303],
+        seeds: [...QUALIFICATION_PLACEMENT_SEEDS],
         placementCandidateCount: 3,
         routedCandidateLimit: 2,
         maxRuntimeMs: 180_000,
         runLabel: `e2e-${boardId}-${attempt.label}`,
-        commitSelected: async ({ board, selectedRevision }) => {
-          const next = makeBoardRecord({ ...repositoryScope, board, updatedAt: new Date().toISOString() });
-          if (next.revision !== selectedRevision) return { ok: false, committedRevision: next.revision, error: "Committed revision differs from the verified candidate." };
-          // [B16.1C §D] compare-and-swap against the board's CURRENT durable
-          // aggregate revision — a board re-synchronized or re-qualified
-          // meanwhile is refused (MFG_BOARD_REVISION_CONFLICT), never overwritten.
-          await stage3Repository.publishBoard(next, { expectedRevision: head.aggregateRevision, idempotencyKey: `qualify:${boardId}:${sourceRevision}->${next.revision}` });
-          committed = next;
-          return { ok: true, committedRevision: next.revision };
-        },
       });
       outlineTrace.push({ label: attempt.label, status: candidateResult.status });
-      if (candidateResult.status === "complete" && candidateResult.selectedBoard && committed) { result = candidateResult; break; }
+      if (candidateResult.status === "complete" && candidateResult.selectedBoard) { result = candidateResult; break; }
     }
-    if (!result || result.status !== "complete" || !result.selectedBoard || !result.selectedRevision || !result.finalCapability || !committed) {
+    if (!result || result.status !== "complete" || !result.selectedBoard || !result.selectedRevision || !result.finalCapability) {
       return manufacturingRefusal("MFG_AUTONOMOUS_QUALIFICATION_FAILED", { correlationId, extra: { outlineTrace, status: result?.status ?? "blocked", blockers: result?.blockers ?? [], attempts: result?.attempts?.map((item) => ({ candidateId: item.candidateId, decision: item.decision, rejectionReasons: item.rejectionReasons })) ?? [] } });
     }
 
     const board = result.selectedBoard;
     const boardRevision = result.selectedRevision;
     const boardDigest = authoritativeBoardDigest(board);
-    const routedNetlist = boardToSourceNetlist(board);
-    const parity = buildSchematicParityCertificate(board, boardRevision, routedNetlist);
+    const committedAt = new Date().toISOString();
+    const next = makeBoardRecord({ ...repositoryScope, board, updatedAt: committedAt });
+    if (next.revision !== boardRevision) return manufacturingRefusal("MFG_AUTONOMOUS_QUALIFICATION_FAILED", { correlationId, extra: { outlineTrace, status: "stale", blockers: [{ code: "CAP_COMMIT_REJECTED", message: "Committed revision differs from the verified candidate." }], attempts: [] } });
+
+    // [B16-A F4] RC01 parity against the APPLIED SCHEMATIC SNAPSHOT's netlist.
+    const sourceNetlist = snapshotToSourceNetlist(applied.snapshot);
+    const parity = buildSchematicParityCertificate(board, boardRevision, sourceNetlist);
     if (parity.state !== "pass") return manufacturingRefusal("MFG_RC01_PARITY_FAILED", { correlationId, extra: { diagnostics: parity.diagnostics } });
     const selectedAttempt = result.attempts.find((attempt) => attempt.candidateId === result.selectedCandidateId && attempt.decision === "complete");
     const routeEvidence = selectedAttempt ? rc02RouteEvidence(selectedAttempt) : null;
@@ -246,11 +279,11 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
       policyRevision: componentAuthority.vocabularyVersion,
       assemblyVariantRevision: componentAuthority.assemblyVariantRevision,
     };
-    const sourceDate = new Date().toISOString();
+    const sourceDate = committedAt;
     const authority: ManufacturingReleaseAuthority = {
       schemaVersion: "sirkit.manufacturing-release-authority.v1",
       tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, designId, boardId,
-      boardRevision, boardDigest, board, netlist: routedNetlist,
+      boardRevision, boardDigest, board, netlist: sourceNetlist,
       schematic: { revision: schematic.revision, digest: schematic.digest },
       rc01: { state: "pass", evidenceId: `rc01:${boardRevision}`, digest: rc01ParityEvidenceDigest(parity), boardRevision },
       rc02: { state: "complete", evidenceId: `rc02:${boardRevision}:${routeEvidence.candidateId}`, digest: rc02RouteEvidenceDigest(routeEvidence), boardRevision, routePassIds: selectedAttempt.route.passIds, remainingConnections: 0, shorts: 0, routeBlockingDrcErrors: 0 },
@@ -262,21 +295,38 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
       manufacturingRuleProfile: bareBoardRuleProfile(),
       releaseMode: "bare_pcb", sourceDate, actor: scope.actor.actorId,
     };
-    const saved = await store.save(authority, { idempotencyKey: `authority:${boardId}:${boardRevision}:${componentAuthority.digest}`, savedAt: sourceDate });
-    return Response.json(summarize(authority, saved.revision, saved.recordDigest, { idempotent: false, runId: result.runId, selectedCandidateId: result.selectedCandidateId ?? null }), { headers: noStore });
+    // [B16-A F2] ONE durable commit: routed board (CAS on the head revision the
+    // qualification read) + sealed authority (CAS on the existing authority
+    // revision). A conflict (board re-synchronized meanwhile) is refused as
+    // MFG_BOARD_REVISION_CONFLICT; an outage leaves BOTH untouched.
+    const committed = await commitQualification(workflow, {
+      boardRecord: next,
+      expectedBoardAggregateRevision: head.aggregateRevision,
+      authority,
+      expectedAuthorityRevision: existing?.revision ?? 0,
+      idempotencyKey: qualificationIdempotencyKey({ boardId, sourceRevision, routedRevision: boardRevision, componentAuthorityDigest: componentAuthority.digest }),
+      committedAt,
+    });
+    return Response.json(summarize(authority, committed.authorityRevision, committed.authorityRecordDigest, { idempotent: false, runId: result.runId, selectedCandidateId: result.selectedCandidateId ?? null }), { headers: noStore });
   } catch (error) {
     return boundedManufacturingFailure(error, "qualify", correlationId);
   }
 }
 
-/** The schematic synchronization identity of the LAST committed apply for the board. */
-async function schematicAuthorityFor(repositoryScope: { tenantId: string; projectId: string; branchId: string; boardId: string }): Promise<SchematicAuthorityIdentity | null> {
+/**
+ * The LAST committed synchronization apply for the board: its schematic
+ * identity, the design it synchronized, AND the exact applied snapshot (read
+ * by digest from the durable snapshot history — the RC01 parity source).
+ */
+async function appliedSynchronizationFor(repositoryScope: { tenantId: string; projectId: string; branchId: string; boardId: string }): Promise<{ identity: SchematicAuthorityIdentity; designId: string; snapshot: PcbSyncAuthoritativeSnapshot } | null> {
   const audits = await stage3Repository.listAudits(repositoryScope);
   const last = [...audits].reverse().find((audit) => audit.outcome === "committed");
   if (!last) return null;
   const plan = await stage3Repository.getPlan(repositoryScope, last.planId);
   if (!plan) return null;
-  return { revision: plan.snapshot.schematicRevision, digest: plan.snapshot.schematicDigest, planId: plan.planId, snapshotDigest: plan.snapshot.snapshotDigest };
+  const snapshot = await stage3SnapshotProvider.getSnapshotByDigest({ tenantId: repositoryScope.tenantId, projectId: repositoryScope.projectId, branchId: repositoryScope.branchId, designId: plan.scope.designId, assemblyVariantId: plan.snapshot.assemblyVariantId }, plan.snapshot.snapshotDigest);
+  if (!snapshot) return null;
+  return { identity: { revision: plan.snapshot.schematicRevision, digest: plan.snapshot.schematicDigest, planId: plan.planId, snapshotDigest: plan.snapshot.snapshotDigest }, designId: plan.scope.designId, snapshot };
 }
 
 function summarize(authority: ManufacturingReleaseAuthority, authorityRevision: number, authorityDigest: string, run: { idempotent: boolean; runId: string | null; selectedCandidateId: string | null }) {
