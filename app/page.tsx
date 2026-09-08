@@ -2563,6 +2563,10 @@ export default function Home() {
     /** B07.3/B07.4 — exact-base invocation pin captured before generation
      *  (with its async scope for project/session-generation currency). */
     pin?: { projectId: string | null; session: SchematicEditorSession | null; baseDigest: string; scope: ProjectAsyncScope };
+    /** [B16-A F11] carried from the Tier-2 edit path ("Apply suggestions" must not re-trigger the auto loop). */
+    skipAutoRun?: boolean;
+    /** [B16-A F11] a validation note the dialog shows alongside the proposal (never blocks the human's decision). */
+    validationNote?: string | null;
   } | null>(null);
   // [B16.1C §F] what the pending proposal will change, against the LIVE
   // canonical schematic at review time (recomputed when either changes).
@@ -4899,21 +4903,19 @@ export default function Home() {
 
         appendActivityStep(logId, "Laying out and validating edit");
         const built = autoLayoutBuildValidated(nl, loaded);
-        // Re-layout replaces positions (Tier 2 tradeoff). applySchematic logs the
-        // instruction + explanation into the chat transcript — but only AFTER
-        // canonical adoption succeeds (B07.3 transactional gateway, pinned to
-        // the base captured before the request).
-        const adopted = await applySchematic(built.state, data2.explanation || "Updated the circuit.", prompt, {
-          promptAlreadyLogged: true,
-          skipAutoRun: isApplyingSuggestions,
-          pin,
-        });
-        if (adopted) finishActivityLog(logId, isApplyingSuggestions ? "Applied suggestions to canvas" : "Applied edit to canvas");
-        else failActivityLog(logId, "Edit result not applied (stale or rejected)");
-        if (!built.validation.ok) {
-          const v = built.validation.violations;
-          setScopedGenError(scope, `Electrical check: ${v.length} issue(s) — ${v.slice(0, 3).map((x) => x.message).join("  |  ")}${v.length > 3 ? " …" : ""}`, 12000);
-        }
+        // [B16-A F11] the provider's topology edit is a PROPOSAL like every
+        // other generation: it is staged in the review dialog (which names
+        // exactly what will change against the live schematic) and nothing is
+        // applied until the human approves it there. Before this correction
+        // the edit-build result — and the "Apply suggestions" result — were
+        // adopted directly here, a hidden auto-apply of provider output.
+        // Re-layout replaces positions (Tier 2 tradeoff); the invocation pin
+        // travels with the proposal so a late approval is still refused as
+        // stale by the transactional gateway (B07.3).
+        const validationNote = built.validation.ok ? null : `Electrical check: ${built.validation.violations.length} issue(s) — ${built.validation.violations.slice(0, 3).map((x) => x.message).join("  |  ")}${built.validation.violations.length > 3 ? " …" : ""}`;
+        if (!scope.isCurrent()) { failActivityLog(logId, "Canceled — the project changed"); return; }
+        finishActivityLog(logId, isApplyingSuggestions ? "Suggestions proposal ready; waiting for approval" : "Edit proposal ready; waiting for approval");
+        setPendingReplace({ state: built.state, explanation: data2.explanation || "Updated the circuit.", prompt, logId, promptAlreadyLogged: true, pin, skipAutoRun: isApplyingSuggestions, validationNote });
         return;
       }
 
@@ -6138,6 +6140,7 @@ export default function Home() {
               {(pendingProposalSummary?.details ?? []).map((line) => <li key={line}>{line}</li>)}
             </ul>
             {pendingReplace?.explanation && <p className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-zinc-500">{pendingReplace.explanation}</p>}
+            {pendingReplace?.validationNote && <p className="text-xs text-amber-300" data-testid="schematic-proposal-validation">{pendingReplace.validationNote}</p>}
             <DialogFooter>
               <Button
                 variant="ghost"
@@ -6155,6 +6158,7 @@ export default function Home() {
                   void applySchematic(pending.state, pending.explanation, pending.prompt, {
                     promptAlreadyLogged: pending.promptAlreadyLogged,
                     pin: pending.pin,
+                    skipAutoRun: pending.skipAutoRun,
                   }).then((adopted) => {
                     if (pending.logId) {
                       if (adopted) finishActivityLog(pending.logId, "Applied replacement to canvas");

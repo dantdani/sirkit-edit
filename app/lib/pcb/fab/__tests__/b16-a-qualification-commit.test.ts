@@ -79,7 +79,7 @@ describe("B16-A F2 — commitQualification writes board + authority atomically",
 
   it("a board re-synchronized meanwhile (aggregate revision moved) refuses the WHOLE commit — the authority is not written either", async () => {
     const t = await seeded();
-    const moved = makeBoardRecord({ ...SCOPE, board: { ...t.source.board, outline: { ...t.source.board.outline, width: mmToNm(50) } }, updatedAt: NOW });
+    const moved = makeBoardRecord({ ...SCOPE, board: { ...t.source.board, outline: { kind: "rect", width: mmToNm(50), height: mmToNm(40), origin: { x: 0, y: 0 } } }, updatedAt: NOW });
     await t.boards.publishBoard(moved, { expectedRevision: t.head.aggregateRevision, idempotencyKey: "resync" });
     await expect(commitQualification(t.workflow, t.input)).rejects.toThrow("DW_OPTIMISTIC_REVISION_CONFLICT");
     expect((await t.boards.getBoardHead(SCOPE))!.record.revision).toBe(moved.revision);
