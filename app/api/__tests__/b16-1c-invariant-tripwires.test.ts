@@ -115,9 +115,13 @@ describe("B16.1C §I — invariant tripwires", () => {
     expect(summary).toContain("store.getHead(");
   });
 
-  it("the protected original repository is untouched by this stage (no B16.1C modules exist there)", () => {
-    const original = "C:\\Users\\robsa\\sirkit";
-    if (!existsSync(original)) return; // not this machine — nothing to assert
+  // [B16-A F26/F27] the protected original's location is resolved from the
+  // environment (default: the owner's machine). Where it is absent — CI, any
+  // other machine — the test is reported SKIPPED, never as a vacuous pass.
+  const configuredOriginal = process.env.SIRKIT_PROTECTED_ORIGINAL_PATH?.trim();
+  const PROTECTED_ORIGINAL = configuredOriginal ? configuredOriginal : "C:\\Users\\robsa\\sirkit";
+  it.skipIf(!existsSync(PROTECTED_ORIGINAL))("the protected original repository is untouched by this stage (no B16.1C modules exist there)", () => {
+    const original = PROTECTED_ORIGINAL;
     for (const path of ["app/lib/pcb/fab/qualification-authority.ts", "app/lib/pcb/fab/manufacturing-errors.ts", "app/lib/pcb/fab/release-ledger.ts", "app/lib/workflow/prompt-to-gerber/machine.ts", "app/api/pcb-sync/manufacturing-summary.ts"]) {
       expect(existsSync(join(original, path)), path).toBe(false);
     }

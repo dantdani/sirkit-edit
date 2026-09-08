@@ -362,9 +362,20 @@ describe("B16.0.8 §A — generator refusal + exception pin (tripwires)", () => 
     expect(classifyRouteMethodForm(`import { publicRoute } from "./evil";\nexport const GET = publicRoute(undefined, () => Response.json({}));`, "GET", "app/api/x/route.ts", ROOT).form).not.toBe("canonical-wrapper");
     expect(classifyRouteMethodForm(`import { evil as publicRoute } from "@/app/lib/auth/route-handlers";\nexport const GET = publicRoute(undefined, () => Response.json({}));`, "GET", "app/api/x/route.ts", ROOT).form).not.toBe("canonical-wrapper");
   });
-  it("the generator's pure scan agrees with the checked-in baseline (no drift)", () => {
-    const current = currentRawMethods(ROOT).map((e) => `${e.route}#${e.method}`).sort();
+  it("the generator's pure scan agrees with the checked-in baseline (no drift: same keys AND the same per-route source sha1)", () => {
+    const current = currentRawMethods(ROOT);
+    const currentKeys = current.map((e) => `${e.route}#${e.method}`).sort();
     const checked = [...baselineKeys].sort();
-    expect(current).toEqual(checked);
+    expect(currentKeys).toEqual(checked);
+    // [B16-A F28] comparing keys alone let a baseline-tracked raw route change
+    // silently (B16.1C edited POST /api/pcb-sync while the baseline kept the
+    // b7bb6d6 sha1). Every entry's sha1 must equal the route source on disk, so
+    // an edit to a tracked raw route fails CI until the baseline is regenerated
+    // by the sanctioned generator (which still refuses additions).
+    const currentSha1 = new Map(current.map((e) => [`${e.route}#${e.method}`, e.sha1]));
+    const drifted = (baseline as Array<{ method: string; route: string; sha1: string }>)
+      .filter((e) => currentSha1.get(`${e.route}#${e.method}`) !== e.sha1)
+      .map((e) => `${e.method} ${e.route}: baseline sha1 ${e.sha1} ≠ source sha1 ${currentSha1.get(`${e.route}#${e.method}`) ?? "(absent)"}`);
+    expect(drifted, `baseline-tracked raw route source changed since _raw-route-baseline.json was generated — regenerate it with \`pnpm exec tsx scripts/generate-b16-0-8-baseline.ts\` from the repository root and commit the result:\n${drifted.join("\n")}`).toEqual([]);
   });
 });
