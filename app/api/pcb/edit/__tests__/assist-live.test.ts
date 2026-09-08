@@ -1,24 +1,24 @@
 /**
  * Stage 17 Phase D gate (live): the assist endpoint returns VALIDATED
  * commands for the four example instructions against the real Claude API.
- * OPT-IN: set PCB_ASSIST_LIVE=1 (plus a funded ANTHROPIC_API_KEY) to run —
- * the key in .env.local currently has no credit balance, so gating on the
- * key alone would fail every `pnpm test`. Every response must pass the
+ * OPT-IN: export PCB_ASSIST_LIVE=1 AND a funded ANTHROPIC_API_KEY in the REAL
+ * process environment to run. B16-B item 5: no test reads .env.local any more
+ * (the key there had no credit balance, and an environment failure must never
+ * surface as a functional one in the default suite), so the key has to be
+ * exported explicitly for this run. Every response must pass the
  * CLIENT gate (compileEdits on the live board) — the same bar AssistBox
  * applies.
  *
- *   PCB_ASSIST_LIVE=1 pnpm vitest run app/api/pcb/edit/__tests__/assist-live.test.ts
+ *   PCB_ASSIST_LIVE=1 ANTHROPIC_API_KEY=… pnpm vitest run app/api/pcb/edit/__tests__/assist-live.test.ts
  */
 
 import { describe, it, expect } from "vitest";
-import { loadEnvLocal } from "../../../../lib/load-env-local";
 import { buildRoutedDemo } from "@/app/lib/pcb/demo/routed-demo";
 import { ensureBoardPadstacks } from "@/app/lib/pcb/padstack/migrate";
 import { buildDigest, buildItemIndex } from "@/app/lib/pcb/edit/digest";
 import { compileEdits } from "@/app/lib/pcb/edit/apply";
 import type { SelectionRef } from "@/app/lib/pcb/edit/commands";
 
-loadEnvLocal();
 const hasKey =
   typeof process.env.ANTHROPIC_API_KEY === "string" &&
   process.env.ANTHROPIC_API_KEY !== "" &&

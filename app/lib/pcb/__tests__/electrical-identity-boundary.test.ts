@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { databaseQualification, withQualifiedDatabase } from "../../db/test-qualification";
 
 vi.mock("../../footprint-resolver/__tests__/fixtures", async () => {
   const { InMemoryPhysicalBindingRepository, PhysicalBindingService } = await import("../../physical-binding/repository");
@@ -136,8 +137,9 @@ describe("R05 electrical identity durable boundary", () => {
     expect(await exerciseDurableIdentity(workflow, () => workflow)).toMatchObject({ originalStableNetId: "stable-net-1" });
   });
 
-  it.runIf(Boolean(process.env.R05_RC01_DATABASE_URL))("qualifies the same identity flow against isolated PostgreSQL", async () => {
-    process.env.DATABASE_URL = process.env.R05_RC01_DATABASE_URL;
+  // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
+  it.runIf(databaseQualification().enabled)("qualifies the same identity flow against isolated PostgreSQL", async () => {
+    process.env.DATABASE_URL = withQualifiedDatabase();
     const { PostgresDurableWorkflowRepository } = await import("../../durable-workflow/server-repository");
     const result = await exerciseDurableIdentity(new PostgresDurableWorkflowRepository(), () => new PostgresDurableWorkflowRepository());
     expect(result.originalStableNetId).toBe("stable-net-1");

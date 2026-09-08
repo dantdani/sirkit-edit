@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import postgres, { type PendingQuery, type Row } from "postgres";
 import { getSqlClient } from "../../db/client";
+import { databaseQualification } from "../../db/test-qualification";
 import { evaluatePhysicalReadiness } from "../readiness";
 import { InMemoryPhysicalBindingRepository, PhysicalBindingService, type PhysicalBindingCommitRequest } from "../repository";
 import { PostgresPhysicalBindingRepository } from "../server-repository";
@@ -10,7 +11,8 @@ import { physicalBindingDigest } from "../stable";
 import type { PhysicalBindingMigrationRecord } from "../types";
 import { ACTOR, exactCandidate, transition } from "./fixtures";
 
-const databaseUrl = process.env.R03_B07_DATABASE_URL;
+// B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
+const databaseUrl = databaseQualification().url;
 if (databaseUrl) process.env.DATABASE_URL = databaseUrl;
 const sql = databaseUrl ? postgres(databaseUrl, { max: 2, prepare: false, onnotice: () => {} }) : null;
 const live = describe.runIf(Boolean(databaseUrl));

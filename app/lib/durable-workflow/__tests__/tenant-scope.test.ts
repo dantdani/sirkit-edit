@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PostgresDurableWorkflowRepository } from "../server-repository";
 import { durableAggregateIdentity } from "../stable";
+import { databaseQualification } from "../../db/test-qualification";
 
-const databaseUrl = process.env.R03_B06_DATABASE_URL;
+// B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
+const databaseUrl = databaseQualification().url;
 if (databaseUrl) process.env.DATABASE_URL = databaseUrl;
 const db = describe.runIf(Boolean(databaseUrl));
 const run = `${process.pid}-${Date.now()}`;

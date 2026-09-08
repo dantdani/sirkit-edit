@@ -5,23 +5,38 @@
  * emitVerbatim over the re-parsed root must equal the stored text byte-for-byte
  * — the property that makes Stage 13's splice-based .kicad_pcb export legal.
  *
- * Runs only when DATABASE_URL is available (loaded from .env.local on dev
- * machines); skips otherwise so `pnpm test` stays green in CI.
+ * OPT-IN (B16-B item 5 / LB-4): runs ONLY when the explicit database
+ * qualification marker is present in the real process environment —
+ *
+ *   SIRKIT_DB_QUALIFICATION=1 SIRKIT_DB_QUALIFICATION_URL=postgres://…
+ *
+ * This test never reads .env.local and never gates on DATABASE_URL. It used
+ * to (loadEnvLocal + DATABASE_URL), and the owner's .env.local points at a
+ * Supabase project that no longer resolves, so the DEFAULT deterministic suite
+ * failed with "PostgresError: (ENOTFOUND) …" — an environment failure dressed
+ * up as a functional one. Without the marker every case here is SKIPPED.
  */
 
-import { describe, it, expect, afterAll } from "vitest";
-import { loadEnvLocal } from "../../load-env-local";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { databaseQualification, withQualifiedDatabase } from "../../db/test-qualification";
 import { parseKicadMod } from "../kicad-mod";
 import { parseSexpr, emitVerbatim } from "../sexpr";
 
-loadEnvLocal();
-const hasDb = typeof process.env.DATABASE_URL === "string" && process.env.DATABASE_URL !== "";
+const q = databaseQualification();
 
-describe.skipIf(!hasDb)("pcb_footprints raw_sexpr round-trip (DB)", () => {
+describe.runIf(q.enabled)("pcb_footprints raw_sexpr round-trip (DB)", () => {
+  // The shared client reads DATABASE_URL lazily: publish the QUALIFICATION url
+  // for the duration of this suite only, and put back whatever was there.
+  let priorDatabaseUrl: string | undefined;
+  beforeAll(() => {
+    priorDatabaseUrl = process.env.DATABASE_URL;
+    process.env.DATABASE_URL = withQualifiedDatabase();
+  });
   afterAll(async () => {
-    if (!hasDb) return;
     const { getSqlClient } = await import("../../db/client");
     await getSqlClient().end();
+    if (priorDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = priorDatabaseUrl;
   });
 
   // 30 s timeout: the remote DB round-trip gets starved when the full suite
