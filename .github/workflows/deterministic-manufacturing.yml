@@ -4,6 +4,11 @@
 # bundled FreeRouting runtime is local-only), frozen clock, deterministic UUIDs,
 # pinned release identities (archive sha256, release id, board revision).
 # No credentials, no database, no network. A drift in ANY identity fails here.
+#
+# [B16-B] The `database-delivery` job proves the migration mechanism on a
+# disposable in-process PostgreSQL (PGlite): clean / upgrade / replay / drift /
+# interruption, executable RLS and CHECK behaviour, schema-first parity, and
+# that every DB-backed test is opt-in (no marker → skipped, never failed).
 name: deterministic-manufacturing
 
 on:
@@ -61,5 +66,35 @@ jobs:
             vitest-deterministic-manufacturing.xml
             /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-evidence.json
             /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
+  database-delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # No DATABASE_URL, no qualification marker: the DB-backed suites must report SKIPPED, the disposable-PostgreSQL proofs must PASS.
+      - run: >-
+          pnpm exec vitest run
+          app/lib/db
+          app/lib/pcb/__tests__/ingest-integrity.test.ts
+          app/lib/physical-binding/__tests__/schema-integrity.test.ts
+          app/lib/durable-workflow/__tests__/tenant-scope.test.ts
+          --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-delivery-diagnostics
+          path: vitest-database-delivery.xml
           if-no-files-found: ignore
           retention-days: 14

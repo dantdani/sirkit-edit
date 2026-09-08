@@ -91,3 +91,17 @@ Every finding F1–F28 is corrected on `integration/b16-1c-prompt-to-gerber` wit
 **Started:** 2026-09-07 (local) on `chapter/b16-foundation-closeout` at `62ea4a6`.
 
 _(discovery, reproduction and results appended below as they are observed)_
+
+### B16-B discovery and reproduction (CONFIRMED, 2026-09-07 local)
+
+- Journal: 27 entries (0000–0026); `0027`/`0028` unjournaled; snapshots only to 0008; no `db:migrate`; documented path `db:push`. Migrations assume platform objects they never create (`vector` extension; `authenticated` role; `auth.uid()`), and the schema-first DDL creates no extension at all (needs `vector` + `pg_trgm` pre-enabled).
+- Disposable PostgreSQL: Docker Desktop 4.67 fails at engine start (`initializing Inference manager … dockerInference: The file cannot be accessed by the system`, a Docker Desktop defect; recorded LB-6, machine settings not changed; the instance I started was stopped again). Chosen instead: PGlite 0.4.6 (PostgreSQL 17.5 in-process, pgvector/pg_trgm/pgcrypto) as the deterministic disposable instance for the default suite; real-server qualification opt-in via `SIRKIT_DB_QUALIFICATION=1` + `SIRKIT_DB_QUALIFICATION_URL` (scratch schema per run).
+- Feasibility probe: all 29 files / 465 statement chunks apply in ≈0.5 s; RLS enforced under `SET ROLE authenticated`; 0028 CHECK present.
+
+### B16-B implementation (CONFIRMED, commits `ddf1dc0`, `dc909f6`, `cb22578`, `c6d7b75`, pushed)
+
+- `app/lib/db/migrations/{manifest,runner,verify-schema,postgres-executor}.ts`, `scripts/db-migrate.ts` (`pnpm run db:migrate`, `--status`, `--dry-run`); `db:push` refused as a delivery path.
+- Proofs on the disposable instance (`app/lib/db/__tests__`): manifest integrity; clean 29/29; upgrade 0000–0026 → identical fingerprint; idempotent replay; checksum drift refused; interrupted 0026 rolled back and resumed; in-lock race → verified skip; unknown/gap refused; RLS executable (own active rows only; write refused); CHECK three-valued behaviour; schema-first vs migrations parity: both meet every criterion, 30 structural divergences recorded (16 migration-only integrity constraints — a `db:push` database silently lacks them).
+- DB-test gating (item 5): 7 DB-gated tests + `assist-live` converted to `databaseQualification()`; default run without marker: 10 files passed / 3 skipped, 68 tests passed / 16 skipped, 0 failed (LB-4 closed for the default suite); with the marker pointed at an unreachable server the gates open and fail on `ECONNREFUSED` (proved, not assumed).
+- Measurements: tsc 0; ESLint 0 errors (1 pre-existing warning in `assist-live`); new suites 20 + 26 tests green; CI job `database-delivery` added to `deterministic-manufacturing.yml`.
+- Adversarial review of `a3445f1..c6d7b75` dispatched (four lenses, two refuters per finding); corrections follow before B16-C.
