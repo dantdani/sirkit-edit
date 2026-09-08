@@ -73,7 +73,8 @@ describe("B16.1C §I — invariant tripwires", () => {
     expect(src).not.toMatch(/footprintId\)\s*\?\s*"|\/(0603|0805|SOIC|TSSOP|Header|PinHeader)\//i);
     expect(src).not.toMatch(/non_hdi_other/);
     expect(src).not.toMatch(/expectedRevision:\s*1\b/);
-    expect(src).toContain("expectedRevision: head.aggregateRevision");
+    // [B16-A F2] the CAS pin now travels into the ONE atomic board+authority commit.
+    expect(src).toContain("expectedBoardAggregateRevision: head.aggregateRevision");
     expect(src).toContain("MFG_QUALIFICATION_IN_PROGRESS");
     expect(src).toContain("boundedManufacturingFailure(");
     expect(src).not.toMatch(/error instanceof Error \? error\.message/);
