@@ -7,6 +7,11 @@
  * SEPARATE administrator confirmation for release, explicit idempotent
  * retry, actionable bounded errors, and the release result (filename,
  * archive digest, authority revision, download).
+ *
+ * [B16-A] F13: a failed hydration renders its own state — never the idle
+ * label; F14: a viewer the server says may not release sees the button
+ * disabled with the reason; F18: the result text says exactly what was
+ * verified (Sirkit's own read-back, not a third-party DFM check).
  */
 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +21,7 @@ import type { UseManufacturingWorkflowResult } from "./hooks/useManufacturingWor
 const STATE_LABEL: Record<string, string> = {
   idle: "No durable board yet — synchronize the schematic to the PCB",
   hydrating_project: "Reading durable truth…",
+  hydration_failed: "Durable truth could not be read — retry hydration",
   awaiting_qualification: "Durable board synchronized — qualification needed",
   qualifying: "Qualifying (server-owned placement + routing)…",
   qualification_failed: "Qualification failed",
@@ -37,10 +43,13 @@ export interface ManufacturingWorkflowPanelProps {
 }
 
 export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, onQualify, routeStaleNotice = null }: ManufacturingWorkflowPanelProps) {
-  const { hydration, truth, releasing, releaseConfirmation, releaseResult, error, canRequestRelease } = workflow;
-  const state = qualifying ? "qualifying" : releasing ? "releasing" : releaseConfirmation ? "awaiting_release_authorization" : error?.operation === "release" ? "release_failed" : workflow.workflow?.state ?? (hydration.status === "loading" ? "hydrating_project" : "idle");
+  const { hydration, truth, releasing, releaseConfirmation, releaseResult, error, canRequestRelease, releaseCapability } = workflow;
+  // [B16-A F13] a failed hydration is its own state; "idle" is reserved for a truthful "no durable board yet".
+  const state = qualifying ? "qualifying" : releasing ? "releasing" : releaseConfirmation ? "awaiting_release_authorization" : error?.operation === "release" ? "release_failed" : workflow.workflow?.state ?? (hydration.status === "loading" ? "hydrating_project" : hydration.status === "failed" ? "hydration_failed" : "idle");
   const identity = workflow.workflow?.identity;
   const pending = qualifying || releasing || hydration.status === "loading";
+  const unreadable = hydration.status === "failed";
+  const releaseTitle = routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : !releaseCapability.allowed ? releaseCapability.reason ?? "This viewer may not authorize a manufacturing release" : !canRequestRelease ? "Release needs a CURRENT qualification authority for this exact board" : "Request a verified manufacturing release (administrator confirmation follows)";
   return (
     <div className="rounded border border-zinc-700 bg-zinc-900/90 px-3 py-2 text-[11px] text-zinc-200 shadow" data-testid="p2g-panel">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -52,14 +61,14 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
       </div>
       <div className="mt-1 flex flex-wrap gap-x-3 text-zinc-400" data-testid="p2g-identity">
         <span>board {short(identity?.boardRevision ?? (hydration.status === "loaded" ? hydration.boardRevision : null))}</span>
-        <span>authority {truth?.authority ? `r${truth.authority.revision}${truth.authority.current ? "" : " (stale)"} ${short(truth.authority.recordDigest, 18)}` : "none"}</span>
-        <span>release {truth?.latestRelease ? `${truth.latestRelease.filename}${truth.latestRelease.current ? "" : " (stale)"}` : "none"}</span>
+        <span>authority {unreadable ? "unreadable" : truth?.authority ? `r${truth.authority.revision}${truth.authority.current ? "" : " (stale)"} ${short(truth.authority.recordDigest, 18)}` : "none"}</span>
+        <span>release {unreadable ? "unreadable" : truth?.latestRelease ? `${truth.latestRelease.filename}${truth.latestRelease.current ? "" : " (stale)"}` : "none"}</span>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" data-testid="p2g-qualify" onClick={onQualify} disabled={pending || !canQualify} title={!canQualify ? "Needs an applied durable board — run Schematic → PCB and apply the plan first" : "Server-side autonomous placement + real routing + RC01–RC03 verification"} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
           {qualifying ? "Qualifying…" : "Qualify & route"}
         </button>
-        <button type="button" data-testid="p2g-request-release" onClick={workflow.requestRelease} disabled={pending || !canRequestRelease || routeStaleNotice !== null} title={routeStaleNotice ? `Release blocked — ${routeStaleNotice}` : !canRequestRelease ? "Release needs a CURRENT qualification authority for this exact board" : "Request a verified manufacturing release (administrator confirmation follows)"} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
+        <button type="button" data-testid="p2g-request-release" onClick={workflow.requestRelease} disabled={pending || !canRequestRelease || !releaseCapability.allowed || routeStaleNotice !== null} title={releaseTitle} className="rounded border border-zinc-600 px-2 py-1 hover:border-teal-500 disabled:opacity-50">
           {releasing ? "Releasing…" : "Request release"}
         </button>
         {error && (
@@ -69,6 +78,9 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
         )}
         <button type="button" data-testid="p2g-refresh" onClick={() => void workflow.refresh()} disabled={pending} className="rounded border border-zinc-700 px-2 py-1 text-zinc-400 hover:border-zinc-500 disabled:opacity-50">Refresh</button>
       </div>
+      {hydration.status === "loaded" && !releaseCapability.allowed && releaseCapability.reason && (
+        <div className="mt-1 text-zinc-400" data-testid="p2g-release-capability">{releaseCapability.reason}</div>
+      )}
       {error && (
         <div className="mt-2 rounded border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-200" data-testid="p2g-error">
           <span className="font-medium">{error.code}</span> — {error.message}
@@ -81,7 +93,7 @@ export function ManufacturingWorkflowPanel({ workflow, qualifying, canQualify, o
           <div className="text-teal-200/90">archive sha256 <span className="font-mono" data-testid="p2g-release-sha">{releaseResult.archiveSha256}</span></div>
           <div className="text-teal-200/90">release id <span className="font-mono">{releaseResult.releaseId}</span> · authority r<span data-testid="p2g-release-authority">{releaseResult.authorityRevision}</span> {short(releaseResult.authorityDigest, 18)} · board {short(releaseResult.boardRevision)} · ledger {releaseResult.recorded}</div>
           {releaseResult.blobUrl && <a href={releaseResult.blobUrl} download={releaseResult.filename} data-testid="p2g-download" className="underline">Download again</a>}
-          <div className="text-teal-200/70">Gerbers generated and independently read back on the server. This is not a fabricated, ordered, assembled, or electrically certified board.</div>
+          <div className="text-teal-200/70">Gerbers generated and read back on the server by Sirkit&apos;s internal parser (not a third-party DFM check). This is not a fabricated, ordered, assembled, or electrically certified board.</div>
         </div>
       )}
       <Dialog open={releaseConfirmation !== null} onOpenChange={(open) => { if (!open) workflow.cancelRelease(); }}>

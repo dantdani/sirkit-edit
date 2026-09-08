@@ -158,7 +158,8 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     const body = await readJson<BoardLoad>(response);
     expect(response.status).toBe(404);
     expect(body.result.status).toBe("not_found");
-    expect(body.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null });
+    // [B16-A F12/F14] every subject verified-absent; the signed-in editor may not authorize a release.
+    expect(body.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null, integrity: { authority: "absent", snapshot: "absent", latestRelease: "absent", codes: [] }, viewer: { role: "pcb_editor", actorKind: "human", canRelease: false } });
   });
 
   it("4. component authority: a human reviewer binds every instance to its published atomic revision (server-owned records)", async () => {

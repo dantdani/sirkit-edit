@@ -147,7 +147,8 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     // Nothing durable exists after proposals alone.
     const load = await readJson<BoardLoad>(await pcbSyncGet(boardQuery()));
     expect(load.result.status).toBe("not_found");
-    expect(load.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null });
+    // [B16-A F12/F14] every subject verified-absent; the signed-in editor may not authorize a release.
+    expect(load.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null, integrity: { authority: "absent", snapshot: "absent", latestRelease: "absent", codes: [] }, viewer: { role: "pcb_editor", actorKind: "human", canRelease: false } });
   });
 
   it("H.3 component-authority refusal: a board without server-owned binding authority cannot be qualified (fails closed, no router run)", async () => {
@@ -353,7 +354,8 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
       const boardId = pcbBoardInstanceId(scope.projectId), designId = pcbDesignInstanceId(scope.projectId);
       const load = await readJson<BoardLoad>(await pcbSyncGet(boardQuery(boardId, scope)));
       expect(load.result.status, scope.branchId).toBe("not_found");
-      expect(load.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null });
+      // [B16-A F12/F14] nothing crosses scopes: every subject verified-absent; the administrator's capability is about the viewer, not the (empty) scope.
+      expect(load.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null, integrity: { authority: "absent", snapshot: "absent", latestRelease: "absent", codes: [] }, viewer: { role: "project_admin", actorKind: "human", canRelease: true } });
       // The main-branch board id is invisible from the other branch/project as well.
       const cross = await readJson<BoardLoad>(await pcbSyncGet(boardQuery(BOARD_ID, scope)));
       expect(cross.result.status).toBe("not_found");

@@ -25,13 +25,32 @@ export type PcbSyncClientFailureKind = "not_found" | "blocked" | "stale" | "conf
 export type PcbSyncClientResult<T> = { ok: true; value: T } | { ok: false; kind: PcbSyncClientFailureKind; code: string; status: number; detail?: string };
 export type PcbSyncFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 /** [B16.1C] the reload-time manufacturing truth returned beside a board load (`include=manufacturing`). */
+export type PcbSyncManufacturingIntegrityState = "ok" | "absent" | "corrupt";
 export interface PcbSyncManufacturingTruth {
   snapshot: null | { revision: number; snapshotDigest: string; schematicRevision: string; schematicDigest: string };
   authority: null | { revision: number; recordDigest: string; boardRevision: string; boardDigest: string; schematicRevision: string; schematicDigest: string; componentAuthorityDigest: string; fabricationProfileId: string; qualifiedAt: string; actor: string; current: boolean };
   latestRelease: null | { releaseId: string; archiveSha256: string; manifestContentDigest: string; filename: string; authorityRecordDigest: string; authorityRevision: number; boardRevision: string; actor: string; releasedAt: string; current: boolean };
+  /** [B16-A F12] per-subject verification state from the server; a `corrupt` subject is null with `current` false and its bounded code is listed. */
+  integrity: { authority: PcbSyncManufacturingIntegrityState; snapshot: PcbSyncManufacturingIntegrityState; latestRelease: PcbSyncManufacturingIntegrityState; codes: string[] };
+  /** [B16-A F14] the server-derived viewer and whether it may authorize a release (informational; the release route enforces). */
+  viewer: { role: string; actorKind: string; canRelease: boolean };
 }
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+const INTEGRITY_STATES = new Set<string>(["ok", "absent", "corrupt"]);
+function integrityState(value: unknown): value is PcbSyncManufacturingIntegrityState { return typeof value === "string" && INTEGRITY_STATES.has(value); }
+/** [B16-A F12/F14] exactly the shape the server sends: the three subjects (null or the
+ *  identity fields the workflow consumes), the integrity verdicts, and the viewer. Anything
+ *  else is an invalid response — never silently "no truth". */
+function manufacturingTruth(value: unknown): value is PcbSyncManufacturingTruth {
+  if (!object(value)) return false;
+  const { snapshot, authority, latestRelease, integrity, viewer } = value;
+  if (snapshot !== null && !(object(snapshot) && Number.isSafeInteger(snapshot.revision) && typeof snapshot.snapshotDigest === "string" && typeof snapshot.schematicRevision === "string")) return false;
+  if (authority !== null && !(object(authority) && Number.isSafeInteger(authority.revision) && typeof authority.recordDigest === "string" && typeof authority.boardRevision === "string" && typeof authority.componentAuthorityDigest === "string" && typeof authority.current === "boolean")) return false;
+  if (latestRelease !== null && !(object(latestRelease) && typeof latestRelease.releaseId === "string" && typeof latestRelease.filename === "string" && typeof latestRelease.authorityRecordDigest === "string" && Number.isSafeInteger(latestRelease.authorityRevision) && typeof latestRelease.current === "boolean")) return false;
+  if (!object(integrity) || !integrityState(integrity.authority) || !integrityState(integrity.snapshot) || !integrityState(integrity.latestRelease) || !Array.isArray(integrity.codes) || !integrity.codes.every((code) => typeof code === "string")) return false;
+  return object(viewer) && typeof viewer.role === "string" && typeof viewer.actorKind === "string" && typeof viewer.canRelease === "boolean";
+}
 /** A thrown fetch is not always a network outage: aborts (page navigation/reload,
  * AbortController) and serialization failures land here too. Keep the real cause. */
 function fetchFailure(error: unknown): PcbSyncClientResult<never> {
@@ -87,7 +106,9 @@ export class PcbSyncClient {
     let body: unknown;
     try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); }
     if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status);
-    const manufacturing = object(body.manufacturing) && "authority" in body.manufacturing && "latestRelease" in body.manufacturing ? body.manufacturing as unknown as PcbSyncManufacturingTruth : null;
+    // Absent → the server sent no truth (null). Present but malformed → an invalid response, never degraded to "no truth".
+    if (body.manufacturing !== undefined && !manufacturingTruth(body.manufacturing)) return failure("PS_API_INVALID_RESPONSE", 502);
+    const manufacturing = body.manufacturing === undefined ? null : body.manufacturing;
     return { ok: true, value: { load: body.result, manufacturing } };
   }
   async loadBoard(boardId: string, known?: Pick<PcbSyncBoardRecord, "revision" | "digest">): Promise<PcbSyncClientResult<PcbSyncBoardLoadResult>> { const query = new URLSearchParams({ boardId, ...(known ? { knownRevision: known.revision, knownDigest: known.digest } : {}) }); let response: Response; try { response = await this.request(`${this.endpoint}?${query}`, { method: "GET", headers: this.headers() }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body) || body.ok !== true || !boardLoad(body.result)) return failure(object(body) && typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }

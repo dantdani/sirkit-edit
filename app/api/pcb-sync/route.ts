@@ -38,7 +38,10 @@ const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState
 // returns the static feature-gated capability document.
 export const GET = authenticatedRoute({ query: true }, ({ context, meta }) => {
   const query = meta.query ?? {};
-  if ("boardId" in query) return boardGet(pcbSyncScopeFromContext(context), query);
+  // [B16-A F14] the trusted context's SERVER-DERIVED role and actor kind reach
+  // the manufacturing summary so a browser can show release capability
+  // truthfully; the release route remains the only enforcement point.
+  if ("boardId" in query) return boardGet(pcbSyncScopeFromContext(context), query, { role: context.actor.role, actorKind: context.actor.actorKind });
   const state = pcbSyncFeatureState();
   return Response.json({
     ok: true,

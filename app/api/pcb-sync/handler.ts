@@ -156,17 +156,32 @@ export function createPcbSyncPostHandler(service: PcbSynchronizationService, fea
  * reconstruct workflow state: the durable qualification authority head and
  * the latest ledgered release, each flagged `current` against the board the
  * request just loaded. Read-only, bounded, secret-free.
+ *
+ * [B16-A F12] every durable subject also carries an integrity verdict: a
+ * record whose stored digest no longer matches its payload is reported as
+ * `corrupt` with its bounded code — never silently as "absent".
+ * [B16-A F14] the summary names the trusted viewer's role/kind and whether
+ * that viewer may authorize a release (mirrors the release route's refusal;
+ * informational — the release route stays the enforcement point).
  */
+export type PcbSyncManufacturingIntegrityState = "ok" | "absent" | "corrupt";
+/** The server-derived actor a board read is computed for (from the trusted context — never a header). */
+export interface PcbSyncManufacturingViewer { role: string; actorKind: string }
 export interface PcbSyncManufacturingSummary {
   /** [B16.1C] the durable schematic snapshot head for the project's primary design/variant — the `expectedSnapshotRevision` a fresh browser must publish against. */
   snapshot: null | { revision: number; snapshotDigest: string; schematicRevision: string; schematicDigest: string };
   authority: null | { revision: number; recordDigest: string; boardRevision: string; boardDigest: string; schematicRevision: string; schematicDigest: string; componentAuthorityDigest: string; fabricationProfileId: string; qualifiedAt: string; actor: string; current: boolean };
   latestRelease: null | { releaseId: string; archiveSha256: string; manifestContentDigest: string; filename: string; authorityRecordDigest: string; authorityRevision: number; boardRevision: string; actor: string; releasedAt: string; current: boolean };
+  /** [B16-A F12] per-subject verification state; `codes` lists the bounded error codes observed (never a message or stack). A `corrupt` subject is reported as null above with `current` false. */
+  integrity: { authority: PcbSyncManufacturingIntegrityState; snapshot: PcbSyncManufacturingIntegrityState; latestRelease: PcbSyncManufacturingIntegrityState; codes: string[] };
+  /** [B16-A F14] the trusted viewer and whether it may authorize a release (human project administrator only). */
+  viewer: { role: string; actorKind: string; canRelease: boolean };
 }
-export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string } | null) => Promise<PcbSyncManufacturingSummary>;
+export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string } | null, viewer?: PcbSyncManufacturingViewer) => Promise<PcbSyncManufacturingSummary>;
 
 export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState, manufacturing?: PcbSyncManufacturingSummaryReader) {
-  return async function loadBoard(scope: { tenantId: string; projectId: string; branchId: string }, query: Readonly<Record<string, string>>): Promise<Response> {
+  // [B16-A F14] `viewer` is the route's trusted actor projection (role + kind); it only ever reaches the summary reader.
+  return async function loadBoard(scope: { tenantId: string; projectId: string; branchId: string }, query: Readonly<Record<string, string>>, viewer?: PcbSyncManufacturingViewer): Promise<Response> {
     const state = featureState();
     try {
       const allowed = new Set(["boardId", "knownRevision", "knownDigest", "include"]);
@@ -181,14 +196,14 @@ export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, feature
       const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope: boardScope };
       if (!record) {
         const result: PcbSyncBoardLoadResult = { ...common, status: "not_found" };
-        const summary = includeManufacturing ? await manufacturing!(boardScope, null) : undefined;
+        const summary = includeManufacturing ? await manufacturing!(boardScope, null, viewer) : undefined;
         return Response.json({ ok: true, operation: "load_board", boardChanged: false, result, ...(summary ? { manufacturing: summary } : {}) }, { status: 404, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
       }
       const rebuilt = makeBoardRecord({ ...boardScope, board: record.board, updatedAt: record.updatedAt });
       if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) fail("PS_BOARD_RECORD_DIGEST_MISMATCH");
       const conditional = (knownRevision !== null || knownDigest !== null) && (knownRevision === null || knownRevision === record.revision) && (knownDigest === null || knownDigest === record.digest);
       const result: PcbSyncBoardLoadResult = conditional ? { ...common, status: "not_modified" } : { ...common, status: "found", record };
-      const summary = includeManufacturing ? await manufacturing!(boardScope, { revision: record.revision, digest: record.digest }) : undefined;
+      const summary = includeManufacturing ? await manufacturing!(boardScope, { revision: record.revision, digest: record.digest }, viewer) : undefined;
       return Response.json({ ok: true, operation: "load_board", boardChanged: false, result, ...(summary ? { manufacturing: summary } : {}) }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
     } catch (error) { return errorResponse(error); }
   };
