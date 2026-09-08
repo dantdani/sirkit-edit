@@ -19,3 +19,28 @@ Every earlier claim or test whose meaning this stage changed, with what replaced
 | Gerber job file lists every compiled layer | REFUTED for bare-board releases (a paste layer that never ships was listed). | `release-gate.ts` regenerates the job file from the shipped members; independent reader pins it. |
 | `manufacturingRefusal` body without correlation id | EXTENDED — the body carries `correlationId` (header unchanged). | `manufacturing-errors.test.ts`. |
 | B16.1B memory note "full suite 4591/0" | SUPERSEDED by this stage's counts (see `test-and-validation-report.md`). | — |
+
+## B16-A — claims of THIS stage's artifacts superseded by the adversarial review (`b16-a-review-corrections.md`)
+
+| B16.1C claim (as written at `c82d1cb`) | Status | Superseded by |
+|---|---|---|
+| "No hidden auto-approval anywhere … every generation waits in the review dialog" | REFUTED (F11, high): `handleEditSchematic`'s Tier-2 path applied `edit-build` output directly. | `d795aba`: Tier-2 edits and "Apply suggestions" stage in the dialog; the layout tidy is the one documented non-dialog apply; source tripwire pins three `applySchematic(` sites. |
+| Release contract row 4 "optional client pin `expectedAuthorityRevision/Digest`" | SUPERSEDED (F6): the pins are a mandatory server invariant (400 `MFG_AUTHORITY_CONFIRMATION_REQUIRED` / 409 `MFG_AUTHORITY_CONFIRMATION_MISMATCH`); bodies closed. | `3231f3f`; `b16-a-release-confirmation.test.ts`. |
+| Qualification contract "in-flight guard per (tenant, project, branch, board)" | SUPERSEDED (F7): it was a process-local `Map`; now a durable CAS lease with a 330 s TTL. | `3231f3f`; `qualification-lease.ts`; lease tests. |
+| Qualification contract "the selected verified candidate is committed with `publishBoard(…)`" and "a router crash leaves board and authority untouched" | SUPERSEDED (F2): the board was published inside `commitSelected` BEFORE RC01/RC02/seal; now routed board + authority are ONE durable commit and every gate leaves the board untouched. | `3231f3f`, `fba0e1e`; `qualification-commit.ts`; `b16-a-qualification-commit.test.ts`. |
+| RC01 "parity" sealed as `authority.netlist` | REFUTED (F4): parity was `boardToSourceNetlist(board)` vs the board — tautological. | `3231f3f`; `snapshot-netlist.ts`; `b16-a-snapshot-netlist-parity.test.ts`. |
+| H.15 "body-supplied scope ignored" / qualify body `seeds` | SUPERSEDED (F3/F5): unknown keys are REFUSED (`MFG_API_UNKNOWN_FIELD`); seeds are server-owned; `designId` must equal the applied plan's design (`MFG_DESIGN_SCOPE_MISMATCH`). | `3231f3f`; tranche-parity F3/F5; tripwire. |
+| "correlation id in header AND body" (implying a usable trace key) | SUPERSEDED (F1): the id was a per-route constant; now per request (route facet + fresh entropy). | `cee3b04`; `b16-a-correlation-id.test.ts`. |
+| Every recorded identity (board revision, digests, release id, archive sha256, fixture keys) | SUPERSEDED (F8): canonical sorts used `localeCompare` (host-ICU-dependent); code-point comparators replace them; all identities re-recorded — shown as `IDENTITY` placeholder until substituted. | `8746b46`; `stable-compare.ts`; `b16-a-locale-independent-identities.test.ts`. |
+| Release contract row 5 "DEFLATE level fixed" | REFUTED (F10): the archive is STORE. | doc corrected (this pass). |
+| Final verdict "byte-identical … across days" | SUPERSEDED (F15): across replays under the frozen clock; "same sealed authority → same bytes". | doc corrected. |
+| H.14 "61 PASS rows"; component-authority proof "24 PASS rows" | REFUTED (F16): 80 and 26, counted from source. | doc corrected. |
+| README "two independent readers … verify against the manifest and the board" | SUPERSEDED (F17): reader 2 (gerbonara, local only) checks layers/outline/drill/bboxes only. | doc corrected. |
+| Panel text "Gerbers generated and independently read back on the server" | SUPERSEDED (F18): "… read back on the server by Sirkit's internal parser (not a third-party DFM check)". | `92c9601`; panel test asserts the exact text. |
+| H.7 "dialog only for admins (server refuses others)" | REFUTED (F14): any member saw the enabled control and the dialog. | `92c9601`; `viewer.canRelease`; panel F14. |
+| Hydration proof: summary `authority: null` means "nothing qualified"; `include=<other>` → 400 | SUPERSEDED (F12/F25): `integrity` per subject distinguishes `absent` from `corrupt`; the refusal is 422. | `92c9601`; `b16-a-manufacturing-summary.test.ts`. |
+| Panel "stale confirmation → explicit retry" test | SUPERSEDED (F19): the test was tautological; retry now re-hydrates and re-confirms. | `92c9601`; panel F19 ×3. |
+| Security proof "grep … `DATABASE_URL` … none" | REFUTED: 8 occurrences at HEAD `adda8e5` (1 code pattern string, 7 documentation lines; no value). | doc corrected. |
+| Final verdict commit list (5 commits + "this file's commit") | SUPERSEDED: full branch list `b7bb6d6..HEAD` (22 commits at `adda8e5`). | doc corrected. |
+| B16.1C "no `.github` workflow was modified"; "recorded release identities … reproduced on every replay" with no test asserting them | SUPERSEDED (F9): `.github/workflows/deterministic-manufacturing.yml` runs the deterministic suites on every PR / push to `main`; `fixtures/expected-identities.json` is asserted on every replay. | `850ee3e`, `4da76b8` (PROPOSED-until-merged as a `main` gate). |
+| Qualification contract "the production `AutonomousRouteExecutor` … replayed in CI" (implying the TS routing integration is covered) | SUPERSEDED (F21): the replay seam substitutes the whole executor; `SIRKIT_B16_1C_LIVE_ROUTER=1` is the documented way to exercise `boardToDsn`/`validateDsn`/`writeDsn`/`runFreerouting`/`parseSes`/`buildAutorouteCandidate`. | `850ee3e`; `unknowns-and-owner-decisions.md` #3. |
