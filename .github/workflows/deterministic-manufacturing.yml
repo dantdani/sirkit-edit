@@ -21,7 +21,8 @@ jobs:
     timeout-minutes: 25
     env:
       # The acceptance suite writes its evidence (ZIP, manifest, check tables) here — never under the repository.
-      SIRKIT_B16_1C_EVIDENCE_DIR: ${{ runner.temp }}/sirkit-b16-1c-evidence
+      # (a literal path: the `runner` context is not available in job-level env)
+      SIRKIT_B16_1C_EVIDENCE_DIR: /tmp/sirkit-b16-1c-evidence
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -58,7 +59,7 @@ jobs:
           name: deterministic-manufacturing-evidence
           path: |
             vitest-deterministic-manufacturing.xml
-            ${{ runner.temp }}/sirkit-b16-1c-evidence/b16-1c-acceptance-evidence.json
-            ${{ runner.temp }}/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip
+            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-evidence.json
+            /tmp/sirkit-b16-1c-evidence/b16-1c-acceptance-release.zip
           if-no-files-found: ignore
           retention-days: 14
