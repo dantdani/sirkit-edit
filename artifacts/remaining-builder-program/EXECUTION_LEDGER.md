@@ -81,3 +81,13 @@ Every finding F1–F28 is corrected on `integration/b16-1c-prompt-to-gerber` wit
 **Measurements (CONFIRMED):** `tsc --noEmit` 0; ESLint 0 errors on every touched file (app/page.tsx carries 15 pre-existing errors unrelated to the edit — same count before/after); engineering suite 56 files / 801 tests; agent suite 21 / 297; broad identity-chain set 269 files: 11 failures under parallel load (5 vitest worker RPC timeouts) → all 5 load-sensitive AST/perf suites pass in isolation (79/79), the remaining ones were the regenerated pins, the Stage 3 `netlist-bridge` rule (fixed by the move) and the dead-DB test; full suite at `7d341ff` state: 4739 passed / 29 skipped, failures = 8 B11 files (fixed by the pin regeneration, agent dir now 297/297) + `ingest-integrity` (dead `DATABASE_URL`, LB-4, B16-B); benchmark:validate 63 packages / 0 diagnostics; stage-09 core 18/18. CI: `benchmark-quality` and `deterministic-manufacturing` SUCCESS at `4da76b8`. Secret scan of `b7bb6d6..HEAD`: only the synthetic redaction fixture string.
 
 **Final bounded full suite at `7d341ff` (CONFIRMED, 2026-09-07 20:41 local):** 432 files → 427 passed, 3 skipped, 2 failed; 4,783 tests → 4,752 passed, 29 skipped, 2 failed. The two failures: `app/lib/pcb/__tests__/ingest-integrity.test.ts` (dead `DATABASE_URL`, LB-4 — B16-B makes DB tests opt-in) and `app/lib/pcb/__tests__/route-tool.test.ts` "direct live preview avoids catastrophic slowdown with 500 tracks" (5 s perf budget, timed out under the 432-file parallel run; passes in isolation 25/25 — recorded as the pre-existing load-sensitive perf set, not dismissed: the isolation run is the evidence). CI on `7d341ff`: `benchmark-quality` SUCCESS, `deterministic-manufacturing` SUCCESS.
+
+**B16-A CLOSED (CONFIRMED, 2026-09-07 local):** PR #5 merged normally (merge commit `62ea4a65327510a842be46afe97bda0147aac15a` on `main`, via GitHub after `benchmark-quality` + `deterministic-manufacturing` SUCCESS on branch head `a9fa5e7`, mergeStateStatus CLEAN). Local `main` fast-forwarded to the merge commit. Chapter branch `chapter/b16-foundation-closeout` created from it for B16-B/B16-C and the B16 closeout artifacts (`artifacts/ai-control-plane-b16-closeout/`).
+
+---
+
+## B16-B — Deployable database and authentication boundary
+
+**Started:** 2026-09-07 (local) on `chapter/b16-foundation-closeout` at `62ea4a6`.
+
+_(discovery, reproduction and results appended below as they are observed)_
