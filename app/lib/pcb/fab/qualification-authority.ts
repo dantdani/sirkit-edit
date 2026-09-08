@@ -29,6 +29,7 @@ import type { PcbBoard } from "../types";
 import type { ComponentPhysicalBinding } from "../../physical-binding/types";
 import type { PhysicalBindingRepository } from "../../physical-binding/repository";
 import { sha256, stableJson } from "./native/stable";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const QUALIFICATION_PACKAGE_VOCABULARY_VERSION = "sirkit.qualification-package-vocabulary.v1";
 
@@ -144,7 +145,7 @@ export async function resolveQualificationComponentAuthority(input: {
   const classesByFootprintId = new Map<string, Set<AutonomousPackageClass>>();
   const variants = new Set<string>();
 
-  for (const footprint of [...input.board.footprints].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const footprint of [...input.board.footprints].sort((a, b) => compareCodePoints(a.id, b.id))) {
     const identity = footprint.syncIdentity;
     if (!identity) {
       blockers.push(blocker("QA_SYNC_IDENTITY_MISSING", `Footprint ${footprint.ref} carries no synchronization identity (binding, footprint asset, mapping certificate).`, [footprint.id]));
@@ -216,13 +217,13 @@ export async function resolveQualificationComponentAuthority(input: {
   for (const [footprintId, classes] of classesByFootprintId) {
     if (classes.size > 1) blockers.push(blocker("QA_PACKAGE_CLASS_CONFLICT", `Footprint asset ${footprintId} resolves to conflicting package classes (${[...classes].sort().join(", ")}).`, [footprintId]));
   }
-  if (blockers.length) return { ok: false, blockers: blockers.sort((a, b) => a.code.localeCompare(b.code) || a.objectIds.join(",").localeCompare(b.objectIds.join(","))) };
+  if (blockers.length) return { ok: false, blockers: blockers.sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.objectIds.join(","), b.objectIds.join(","))) };
 
   const footprintQualifications: AutonomousDesignDeclaration["footprintQualifications"] = {};
-  for (const [footprintId, classes] of [...classesByFootprintId].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [footprintId, classes] of [...classesByFootprintId].sort(([a], [b]) => compareCodePoints(a, b))) {
     footprintQualifications[footprintId] = { packageClass: [...classes][0]!, authority: "proven" };
   }
-  const sorted = [...tuples].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId));
+  const sorted = [...tuples].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId));
   const content: Omit<QualificationComponentAuthority, "digest"> = {
     schemaVersion: "sirkit.qualification-component-authority.v1",
     vocabularyVersion: QUALIFICATION_PACKAGE_VOCABULARY_VERSION,

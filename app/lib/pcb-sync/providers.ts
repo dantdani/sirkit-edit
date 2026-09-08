@@ -4,6 +4,7 @@ import type { MappingCertificate, PortableAtomicSnapshot } from "../atomic/types
 import type { PcbSyncAuthoritativeSnapshot, PcbSyncFootprintMaterialization, PcbSyncResourceProvider, PcbSyncSchematicComponent, PcbSyncSnapshotProvider, VerifiedPinPadMappingArtifact } from "./types";
 import type { FootprintResolutionResult } from "../footprint-resolver/types";
 import { pcbSyncDigest } from "./stable";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export class InMemoryPcbSyncSnapshotProvider implements PcbSyncSnapshotProvider {
   constructor(private readonly snapshots: PcbSyncAuthoritativeSnapshot[] = []) {}
@@ -40,7 +41,7 @@ function mappingArtifact(snapshot: PortableAtomicSnapshot, certificate: MappingC
     symbolAssetVersionId: certificate.symbolVersionId,
     footprintAssetVersionId: certificate.footprintVersionId,
     footprintContentDigest,
-    entries: entries.sort((a, b) => a.symbolPinNumber.localeCompare(b.symbolPinNumber)),
+    entries: entries.sort((a, b) => compareCodePoints(a.symbolPinNumber, b.symbolPinNumber)),
     mechanicalPadNumbers: snapshot.footprint.pads.filter((pad) => pad.mechanical).map((pad) => pad.number).sort(),
     evidenceRefs: [...certificate.evidenceIds].sort(),
   };

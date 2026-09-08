@@ -12,6 +12,7 @@
 import { canonicalEndpointSet } from "./integrity";
 import type { PcbNetlist } from "./netlist-bridge";
 import type { PcbBoard } from "./types";
+import { compareNatural } from "@/app/lib/stable-compare";
 
 export function boardToSourceNetlist(board: PcbBoard): PcbNetlist {
   const components = board.footprints
@@ -20,9 +21,9 @@ export function boardToSourceNetlist(board: PcbBoard): PcbNetlist {
       ref: footprint.ref,
       pins: [...(footprint.pinPadMappings ?? [])]
         .map((mapping) => ({ number: mapping.symbolPinNumber }))
-        .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true })),
+        .sort((a, b) => compareNatural(a.number, b.number)),
     }))
-    .sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }));
+    .sort((a, b) => compareNatural(a.ref, b.ref));
 
   const nets = board.nets
     .filter((net) => net.id !== 0)

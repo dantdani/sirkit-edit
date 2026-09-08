@@ -5,6 +5,7 @@ import { stableHash } from "../smart-routing/hash";
 import { getBoardStackup, routableCopperLayers } from "../stackup";
 import type { PcbBoard } from "../types";
 import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const AUTONOMOUS_PCB_CAPABILITY_PROFILE_V1 = {
   id: "sirkit.autonomous-pcb-capability.v1",
@@ -225,7 +226,7 @@ export function evaluateAutonomousCapability(input: {
     if (!routing || !routing.complete || routing.remainingConnections !== 0 || routing.shorts !== 0 || routing.routeBlockingDrcErrors !== 0) blockers.push(blocker("CAP_ROUTING_NOT_COMPLETE", "invalid", "Final layout requires zero remaining connections, shorts, and route-blocking DRC errors."));
   }
 
-  const sortedBlockers = blockers.sort((left, right) => left.code.localeCompare(right.code) || left.objectIds.join(",").localeCompare(right.objectIds.join(",")));
+  const sortedBlockers = blockers.sort((left, right) => compareCodePoints(left.code, right.code) || compareCodePoints(left.objectIds.join(","), right.objectIds.join(",")));
   const status = statusFor(sortedBlockers);
   const base = {
     schemaVersion: "sirkit.autonomous-capability-evaluation.v1" as const,

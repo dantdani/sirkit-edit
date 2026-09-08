@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import type { DurableAggregateIdentity, DurableOutboxEvent, DurableWorkflowScope } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const UNORDERED_KEYS = new Set(["evidenceRefs", "sourceRefs", "dependencyRefs", "componentInstanceIds", "stage2DependencyKeys", "assemblyVariantIds"]);
 function canonical(value: unknown, key?: string): unknown {
   if (typeof value === "string") return value.normalize("NFC");
   if (typeof value === "number") { if (!Number.isFinite(value)) throw new Error("DW_NON_FINITE_NUMBER"); return Object.is(value, -0) ? 0 : value; }
-  if (Array.isArray(value)) { const items = value.map((item) => canonical(item)); return key && UNORDERED_KEYS.has(key) ? [...items].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))) : items; }
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, child]) => child !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([childKey, child]) => [childKey, canonical(child, childKey)]));
+  if (Array.isArray(value)) { const items = value.map((item) => canonical(item)); return key && UNORDERED_KEYS.has(key) ? [...items].sort((a, b) => compareCodePoints(JSON.stringify(a), JSON.stringify(b))) : items; }
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).filter(([, child]) => child !== undefined).sort(([a], [b]) => compareCodePoints(a, b)).map(([childKey, child]) => [childKey, canonical(child, childKey)]));
   return value;
 }
 function id(value: string, code: string): string { const next = value?.normalize("NFC").trim(); if (!next || next.length > 512 || /[\u0000-\u001f\u007f]/.test(next)) throw new Error(code); return next; }

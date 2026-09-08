@@ -4,6 +4,7 @@ import type { FootprintResolutionResult } from "../footprint-resolver/types";
 import { pcbSyncDigest } from "./stable";
 import type { ComponentTransferAssessment, NetPadMember, NetTransferAssessment, PcbSyncFootprintMaterialization, PcbSyncIssue, PcbSyncNetStatus, PcbSyncPreflightContext, PcbSyncRiskClass, PcbSyncSchematicComponent, PcbSyncSchematicNet } from "./types";
 import { pcbSyncIssue } from "./validation";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 function blockedStatus(result: FootprintResolutionResult): ComponentTransferAssessment["status"] {
   const codes = result.blockers.map((item) => item.code);
@@ -51,14 +52,14 @@ function validateMaterialization(component: PcbSyncSchematicComponent, result: F
     if (!allowsNoPad && entry.padNumbers.length === 0) issues.push(pcbSyncIssue({ code: "PS_MAPPING_PAD_MISSING", scope: "mapping", message: `${component.referenceDesignator}.${pin.number} has no verified physical pad.`, stableIds: [component.componentInstanceId, pin.pinInstanceId], displayRefs: [component.referenceDesignator], remediation: "verify_pin_pad_mapping" }));
     for (const pad of entry.padNumbers) if (!padNumbers.has(pad)) issues.push(pcbSyncIssue({ code: "PS_MAPPING_NONEXISTENT_PAD", scope: "mapping", message: `${component.referenceDesignator}.${pin.number} maps to a pad absent from the immutable footprint.`, stableIds: [component.componentInstanceId, pin.pinInstanceId], displayRefs: [component.referenceDesignator], remediation: "verify_pin_pad_mapping" }));
   }
-  return issues.sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0")));
+  return issues.sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0")));
 }
 
 export function assessComponents(context: PcbSyncPreflightContext): ComponentTransferAssessment[] {
   const board = context.boardRecord?.board ?? context.snapshot.newBoardTemplate;
   const footprints = board?.footprints ?? [];
   const materializationByComponent = new Map(context.materializations.map((item) => [item.componentInstanceId, item]));
-  return [...context.snapshot.components].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId)).map((component): ComponentTransferAssessment => {
+  return [...context.snapshot.components].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)).map((component): ComponentTransferAssessment => {
     const matches = footprints.filter((footprint) => footprint.id === component.componentInstanceId || footprint.syncIdentity?.componentInstanceId === component.componentInstanceId);
     const resolution = context.resolutionByComponent[component.componentInstanceId];
     const common = { componentInstanceId: component.componentInstanceId, referenceDesignator: component.referenceDesignator, hierarchyPath: [...component.hierarchyPath], componentRevision: component.componentRevision, applicability: component.applicability };
@@ -129,11 +130,11 @@ export function assessNets(context: PcbSyncPreflightContext, components: Compone
     const key = boardNetName(net).normalize("NFC").trim().toLocaleLowerCase("en-US");
     canonicalNames.set(key, [...(canonicalNames.get(key) ?? []), net.stableNetId]);
   }
-  return [...context.snapshot.nets].sort((a, b) => a.stableNetId.localeCompare(b.stableNetId)).map((net): NetTransferAssessment => {
+  return [...context.snapshot.nets].sort((a, b) => compareCodePoints(a.stableNetId, b.stableNetId)).map((net): NetTransferAssessment => {
     const blockers: PcbSyncIssue[] = [];
     const members: NetPadMember[] = [];
     const seen = new Set<string>();
-    for (const member of [...net.members].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId) || a.pinInstanceId.localeCompare(b.pinInstanceId))) {
+    for (const member of [...net.members].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId) || compareCodePoints(a.pinInstanceId, b.pinInstanceId))) {
       const memberKey = `${member.componentInstanceId}\0${member.pinInstanceId}`;
       if (seen.has(memberKey)) blockers.push(pcbSyncIssue({ code: "PS_NET_MEMBER_DUPLICATE", scope: "net", message: "Canonical net graph contains a duplicate pin member.", stableIds: [net.stableNetId, member.componentInstanceId, member.pinInstanceId], remediation: "schematic_connectivity" }));
       seen.add(memberKey);
@@ -167,7 +168,7 @@ export function assessNets(context: PcbSyncPreflightContext, components: Compone
     else if (membershipChanged) { status = "ready_unrouted_membership_update"; proposedOperation = "update_unrouted_net_membership"; }
     else if (existing.name !== boardNetName(net)) { status = "ready_safe_rename"; proposedOperation = "rename_net_identity_preserving"; }
     else { status = "ready_unchanged"; proposedOperation = "preserve_net"; }
-    return { stableNetId: net.stableNetId, canonicalScope: [...net.canonicalScope], displayName: boardNetName(net), aliases: [...net.aliases].sort(), classification: net.classification, members, ...(existing ? { existingBoardNetId: existing.id, existingBoardNetName: existing.name } : {}), proposedOperation, connectivityDigest: pcbSyncDigest({ stableNetId: net.stableNetId, members: endpointKeys, classification: net.classification }), routedCopperAffected: protectedChange, status, blockers: blockers.sort((a, b) => a.code.localeCompare(b.code)), warnings: [] };
+    return { stableNetId: net.stableNetId, canonicalScope: [...net.canonicalScope], displayName: boardNetName(net), aliases: [...net.aliases].sort(), classification: net.classification, members, ...(existing ? { existingBoardNetId: existing.id, existingBoardNetName: existing.name } : {}), proposedOperation, connectivityDigest: pcbSyncDigest({ stableNetId: net.stableNetId, members: endpointKeys, classification: net.classification }), routedCopperAffected: protectedChange, status, blockers: blockers.sort((a, b) => compareCodePoints(a.code, b.code)), warnings: [] };
   });
 }
 
@@ -175,5 +176,5 @@ export function extraBoardFootprints(context: PcbSyncPreflightContext): Footprin
   const board = context.boardRecord?.board;
   if (!board) return [];
   const ids = new Set(context.snapshot.components.map((item) => item.componentInstanceId));
-  return board.footprints.filter((item) => !ids.has(item.syncIdentity?.componentInstanceId ?? item.id)).sort((a, b) => a.id.localeCompare(b.id));
+  return board.footprints.filter((item) => !ids.has(item.syncIdentity?.componentInstanceId ?? item.id)).sort((a, b) => compareCodePoints(a.id, b.id));
 }

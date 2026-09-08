@@ -11,6 +11,7 @@ import {
 import { canonicalJson } from "../revision";
 import { stableHash } from "../smart-routing/hash";
 import type { SchematicParityCertificate } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export function schematicRevisionId(netlist: PcbNetlist): string {
   const canonical = {
@@ -18,12 +19,12 @@ export function schematicRevisionId(netlist: PcbNetlist): string {
       id: component.id,
       pins: [...component.pins].map((pin) => pin.number.trim()).sort(),
       pinPadMapping: component.pinPadMapping,
-    })).sort((a, b) => a.id.localeCompare(b.id)),
+    })).sort((a, b) => compareCodePoints(a.id, b.id)),
     nets: [...netlist.nets].map((net) => ({
       name: net.name,
       endpointKeys: canonicalEndpointSet(net.endpointKeys),
       nodeKeys: canonicalEndpointSet(net.nodes.map((node) => schematicEndpointKey(node.componentId, node.pinNumber))),
-    })).sort((a, b) => a.endpointKeys.join("\0").localeCompare(b.endpointKeys.join("\0")) || a.name.localeCompare(b.name)),
+    })).sort((a, b) => compareCodePoints(a.endpointKeys.join("\0"), b.endpointKeys.join("\0")) || compareCodePoints(a.name, b.name)),
   };
   const text = canonicalJson(canonical);
   return `sch1-${stableHash(`a\0${text}`)}${stableHash(`b\0${text}`)}`;
@@ -181,7 +182,7 @@ export function buildSchematicParityCertificate(
     const intentional = intentionalNoConnects.includes(endpointKey);
     if ((!expected && intentional) || expected === assigned) return [];
     return [{ endpointKey, ...(expected ? { intendedStableNetId: expected } : {}), ...(assigned ? { assignedStableNetId: assigned } : {}) }];
-  }).sort((a, b) => a.endpointKey.localeCompare(b.endpointKey));
+  }).sort((a, b) => compareCodePoints(a.endpointKey, b.endpointKey));
 
   const assignedNets = board.nets.filter((net) => net.id !== 0).map((net) => net.stableId ?? `unresolved-net:${net.id}`).sort();
   const intendedNetSet = new Set(intendedNets);

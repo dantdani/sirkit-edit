@@ -15,6 +15,7 @@
 
 import type { PcbBoard } from "../types";
 import type { PcbNetlist } from "../netlist-bridge";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 /** Seeded PRNG returning doubles in [0, 1). Standard mulberry32. */
 export function mulberry32(seed: number): () => number {
@@ -45,7 +46,7 @@ export function hashBoardNetlist(board: PcbBoard, netlist: PcbNetlist | null): n
   const parts: string[] = [JSON.stringify(board.outline), JSON.stringify(board.nets)];
   for (const f of board.footprints) {
     const padNets = Object.entries(f.padNets)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareCodePoints(a, b))
       .map(([pad, net]) => `${pad}=${net}`)
       .join(",");
     parts.push(`${f.id}|${f.footprintId}|${f.side}|${padNets}`);

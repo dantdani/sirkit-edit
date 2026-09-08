@@ -14,6 +14,7 @@ import type { PcbBoard, FootprintInstance } from "../types";
 import { footprintWorldBBox } from "../edit/arrange";
 import { outlineBBoxNm } from "../render/outline";
 import { mmToNm } from "../units";
+import { compareNatural } from "@/app/lib/stable-compare";
 
 const MARGIN_NM = mmToNm(2);
 
@@ -37,7 +38,7 @@ export function arrangeStagedFootprints(board: PcbBoard): PcbBoard | null {
   cellW += MARGIN_NM;
   cellH += MARGIN_NM;
 
-  const ordered = [...staged].sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }));
+  const ordered = [...staged].sort((a, b) => compareNatural(a.ref, b.ref));
   const columns = Math.max(1, Math.ceil(Math.sqrt(ordered.length)));
   const rows = Math.ceil(ordered.length / columns);
   const gridW = columns * cellW;

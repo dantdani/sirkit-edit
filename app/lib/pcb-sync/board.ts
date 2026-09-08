@@ -3,6 +3,7 @@ import type { PcbBoard } from "../pcb/types";
 import { pcbSyncDigest } from "./stable";
 import type { BoardTransferAssessment, PcbSyncBoardClass, PcbSyncBoardRecord, PcbSyncIssue, PcbSyncRiskClass } from "./types";
 import { pcbSyncIssue } from "./validation";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export function boardDigest(board: PcbBoard): string { return pcbSyncDigest(pcbRevisionPayload(board)); }
 
@@ -46,7 +47,7 @@ export function inspectBoard(boardId: string, record: PcbSyncBoardRecord | null,
     constrained: classified.constrained,
     unknownConstructs,
     risk: unknownConstructs.length ? "unsupported_unknown" : classified.risk,
-    blockers: blockers.sort((a, b) => a.code.localeCompare(b.code)),
+    blockers: blockers.sort((a, b) => compareCodePoints(a.code, b.code)),
     warnings: [],
   };
 }

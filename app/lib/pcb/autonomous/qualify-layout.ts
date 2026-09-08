@@ -14,6 +14,7 @@ import {
   type AutonomousCapabilityEvaluation,
   type AutonomousDesignDeclaration,
 } from "./capability-profile";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface AutonomousRouteExecution {
   sourceRevision: string;
@@ -94,8 +95,8 @@ export interface AutonomousLayoutQualificationResult {
 function protectedCopper(board: PcbBoard): { tracks: Track[]; vias: Via[] } {
   const protectedItem = (item: Track | Via): boolean => item.locked === true || item.source === "human" || item.source === "imported" || item.source === undefined;
   return {
-    tracks: board.tracks.filter(protectedItem).map((track) => structuredClone(track)).sort((left, right) => left.id.localeCompare(right.id)),
-    vias: board.vias.filter(protectedItem).map((via) => structuredClone(via)).sort((left, right) => left.id.localeCompare(right.id)),
+    tracks: board.tracks.filter(protectedItem).map((track) => structuredClone(track)).sort((left, right) => compareCodePoints(left.id, right.id)),
+    vias: board.vias.filter(protectedItem).map((via) => structuredClone(via)).sort((left, right) => compareCodePoints(left.id, right.id)),
   };
 }
 
@@ -119,7 +120,7 @@ function routeRank(attempt: AutonomousPlacementAttempt): [number, number, number
 function compareRank(left: AutonomousPlacementAttempt, right: AutonomousPlacementAttempt): number {
   const a = routeRank(left);
   const b = routeRank(right);
-  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3].localeCompare(b[3]);
+  return a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || compareCodePoints(a[3], b[3]);
 }
 
 function failure(code: string, message: string, objectIds: string[] = []): AutonomousCapabilityBlocker {
@@ -179,7 +180,7 @@ export async function qualifyAutonomousLayout(input: {
   const completedRoutes = new Map<string, { board: PcbBoard; verification: AutorouteVerification; finalCapability: AutonomousCapabilityEvaluation }>();
   const legalCandidates = placementRun.candidates
     .filter((candidate) => candidate.hardReport.legal)
-    .sort((left, right) => Number(right.selected) - Number(left.selected) || left.objectiveReport.evaluatedWeightedPenalty - right.objectiveReport.evaluatedWeightedPenalty || left.legacyDiagnostics.ratsnestLengthNm - right.legacyDiagnostics.ratsnestLengthNm || left.candidateId.localeCompare(right.candidateId));
+    .sort((left, right) => Number(right.selected) - Number(left.selected) || left.objectiveReport.evaluatedWeightedPenalty - right.objectiveReport.evaluatedWeightedPenalty || left.legacyDiagnostics.ratsnestLengthNm - right.legacyDiagnostics.ratsnestLengthNm || compareCodePoints(left.candidateId, right.candidateId));
   const attempts: AutonomousPlacementAttempt[] = placementRun.candidates.filter((candidate) => !candidate.hardReport.legal).map((candidate) => ({
     attemptId: `${runId}:${candidate.candidateId}`,
     candidateId: candidate.candidateId,

@@ -1,12 +1,13 @@
 import type { FootprintInstance, Pad } from "./types";
 import { stableHash } from "./smart-routing/hash";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareCodePoints(a, b))
       .map(([key, child]) => [key, canonicalValue(child)]),
   );
 }
@@ -38,7 +39,7 @@ export interface IndexedPhysicalPad {
  */
 export function physicalPadInstances(footprint: FootprintInstance): IndexedPhysicalPad[] {
   const entries = footprint.def.pads.map((pad, padIndex) => ({ pad, padIndex, key: padSemanticKey(pad) }));
-  entries.sort((a, b) => a.key.localeCompare(b.key) || a.padIndex - b.padIndex);
+  entries.sort((a, b) => compareCodePoints(a.key, b.key) || a.padIndex - b.padIndex);
   const occurrences = new Map<string, number>();
   return entries.map(({ pad, padIndex, key }) => {
     const occurrence = (occurrences.get(key) ?? 0) + 1;
@@ -50,7 +51,7 @@ export function physicalPadInstances(footprint: FootprintInstance): IndexedPhysi
       padNumber: pad.number,
       pad,
     };
-  }).sort((a, b) => a.id.localeCompare(b.id));
+  }).sort((a, b) => compareCodePoints(a.id, b.id));
 }
 
 export function physicalPadByIdentity(

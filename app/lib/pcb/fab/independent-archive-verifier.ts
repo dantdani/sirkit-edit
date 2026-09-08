@@ -15,6 +15,7 @@
 
 import { createHash } from "node:crypto";
 import JSZip from "jszip";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface ArchiveCheck { name: string; ok: boolean; detail: string }
 export interface ArchiveVerification {
@@ -58,7 +59,7 @@ function sha256(bytes: Uint8Array | string): string { return createHash("sha256"
 
 /** Independent canonical JSON: sorted keys, undefined dropped, -0 → 0 (the manifest's declared digest definition). */
 function canonical(value: unknown): string {
-  const norm = (item: unknown): unknown => Array.isArray(item) ? item.map(norm) : item && typeof item === "object" ? Object.fromEntries(Object.entries(item as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, norm(v)])) : typeof item === "number" && Object.is(item, -0) ? 0 : item;
+  const norm = (item: unknown): unknown => Array.isArray(item) ? item.map(norm) : item && typeof item === "object" ? Object.fromEntries(Object.entries(item as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => compareCodePoints(a, b)).map(([k, v]) => [k, norm(v)])) : typeof item === "number" && Object.is(item, -0) ? 0 : item;
   return JSON.stringify(norm(value));
 }
 

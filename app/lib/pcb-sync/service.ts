@@ -14,6 +14,7 @@ import { DefaultPcbSyncAuthorizationProvider } from "./authorization";
 import { PcbSyncTelemetry } from "./observability";
 import { resolvePinPadMapping } from "../pcb/pin-pad-mapping";
 import { canonicalReference, schematicEndpointKey } from "../pcb/integrity";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const statuses: FootprintResolutionStatus[] = ["resolved", "not_applicable", "unresolved_missing_data", "unresolved_ambiguous", "blocked_conflict", "blocked_invalid", "blocked_unapproved", "blocked_stale", "blocked_unavailable", "blocked_unsupported", "deferred_to_user_decision", "error"];
 function emptySummary(): Record<FootprintResolutionStatus, number> { return Object.fromEntries(statuses.map((status) => [status, 0])) as Record<FootprintResolutionStatus, number>; }
@@ -55,7 +56,7 @@ function validateMaterializationAuthority(
   }
 
   const netIdByEndpoint = new Map<string, number>();
-  [...snapshot.nets].sort((a, b) => a.stableNetId.localeCompare(b.stableNetId)).forEach((net, index) => {
+  [...snapshot.nets].sort((a, b) => compareCodePoints(a.stableNetId, b.stableNetId)).forEach((net, index) => {
     for (const member of net.members) netIdByEndpoint.set(schematicEndpointKey(member.componentInstanceId, member.pinNumber), index + 1);
   });
   const electricalPadNumbers = new Set(materialization.footprintDef.pads.filter((pad) => pad.type !== "np_thru_hole").map((pad) => pad.number));
@@ -83,7 +84,7 @@ function validateMaterializationAuthority(
   for (const padNumber of materialization.mapping.mechanicalPadNumbers) {
     if (!footprintPadNumbers.has(padNumber)) issue("PS_MAPPING_NONEXISTENT_MECHANICAL_PAD", `${component.referenceDesignator} classifies missing footprint pad '${padNumber}' as mechanical.`);
   }
-  return issues.sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0")));
+  return issues.sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0")));
 }
 
 export interface PcbSynchronizationServiceOptions {
@@ -119,7 +120,7 @@ export class PcbSynchronizationService {
   }
 
   private async resolveApplicable(request: PcbSyncPreflightRequest, components: Awaited<ReturnType<PcbSyncSnapshotProvider["acquire"]>>["components"], signal?: AbortSignal): Promise<FootprintResolutionBatchResult> {
-    const ordered = [...components].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId));
+    const ordered = [...components].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId));
     const chunks = Array.from({ length: Math.ceil(ordered.length / 256) }, (_, index) => ordered.slice(index * 256, (index + 1) * 256));
     const batches: FootprintResolutionBatchResult[] = [];
     for (let index = 0; index < chunks.length; index += 4) {
@@ -133,7 +134,7 @@ export class PcbSynchronizationService {
       batches.push(...resolved);
     }
     if (batches.some((batch) => batch.policyId !== request.resolutionPolicyId || batch.policyVersion !== request.resolutionPolicyVersion)) throw new Error("PS_RESOLVER_BATCH_POLICY_MISMATCH");
-    const results = batches.flatMap((batch) => batch.results).sort((a, b) => a.inputSnapshot.componentId.localeCompare(b.inputSnapshot.componentId));
+    const results = batches.flatMap((batch) => batch.results).sort((a, b) => compareCodePoints(a.inputSnapshot.componentId, b.inputSnapshot.componentId));
     const summary = emptySummary();
     for (const result of results) summary[result.status] += 1;
     return { schemaVersion: "sirkit.footprint-resolution-batch-result.v1", batchId: `pcb-sync-${request.requestId}`, policyId: request.resolutionPolicyId, policyVersion: request.resolutionPolicyVersion, results, summary, dependencyDigest: pcbSyncDigest(results.map((result) => result.inputSnapshot.dependencyDigest)), evaluatedAt: request.requestedAt };
@@ -193,7 +194,7 @@ export class PcbSynchronizationService {
       }
     }
     const boardAssessment = inspectBoard(request.target.boardId, boardRecord, request.target.kind === "new_board" ? snapshot.newBoardTemplate : undefined);
-    const applicable = snapshot.components.filter((item) => item.applicability === "applicable").sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId));
+    const applicable = snapshot.components.filter((item) => item.applicability === "applicable").sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId));
     let resolverBatch: FootprintResolutionBatchResult;
     if (contextIssues.some((item) => item.blocking) || applicable.length === 0) resolverBatch = { schemaVersion: "sirkit.footprint-resolution-batch-result.v1", batchId: `pcb-sync-${request.requestId}`, policyId: request.resolutionPolicyId, policyVersion: request.resolutionPolicyVersion, results: [], summary: emptySummary(), dependencyDigest: "not-evaluated", evaluatedAt: request.requestedAt };
     else resolverBatch = await this.resolveApplicable(request, applicable, signal);
@@ -219,7 +220,7 @@ export class PcbSynchronizationService {
       if (component) contextIssues.push(...validateMaterializationAuthority(component, snapshot, materialization));
     }
     contextIssues.push(...boardIdentityIssues);
-    return { request: structuredClone(request), snapshot, boardRecord, boardAssessment, resolverBatch, resolutionByComponent, materializations: materializations.sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId)), policy, contextIssues: contextIssues.sort((a, b) => a.code.localeCompare(b.code)) };
+    return { request: structuredClone(request), snapshot, boardRecord, boardAssessment, resolverBatch, resolutionByComponent, materializations: materializations.sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)), policy, contextIssues: contextIssues.sort((a, b) => compareCodePoints(a.code, b.code)) };
   }
 
   private async runPreflight(request: PcbSyncPreflightRequest, persistPlan: boolean, signal?: AbortSignal): Promise<PcbSyncPreflightResult> {

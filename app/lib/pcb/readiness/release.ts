@@ -6,6 +6,7 @@ import type {
   ReadinessReport,
   ReleaseDisposition,
 } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export class ManufacturingReleaseBlockedError extends Error {
   constructor(
@@ -82,7 +83,7 @@ export interface CreateReleaseManifestInput {
 }
 
 export function createManufacturingReleaseManifest(input: CreateReleaseManifestInput): ManufacturingReleaseManifest {
-  const artifacts = [...input.artifacts].sort((a, b) => a.path.localeCompare(b.path));
+  const artifacts = [...input.artifacts].sort((a, b) => compareCodePoints(a.path, b.path));
   const semantic = {
     projectIdentity: input.projectIdentity,
     disposition: input.prepared.disposition,

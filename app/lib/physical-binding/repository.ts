@@ -12,6 +12,7 @@ import type {
   PhysicalReadinessAssessment,
 } from "./types";
 import type { LegacyMigrationResult } from "./legacy";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface PhysicalBindingAggregateState {
   set: ComponentPhysicalBindingSet;
@@ -55,7 +56,7 @@ export class InMemoryPhysicalBindingRepository implements PhysicalBindingReposit
       && state.set.scope.boardInstanceId === scope.boardInstanceId && state.set.scope.componentInstanceId === scope.componentInstanceId
       && state.set.scope.hierarchyPath.join("\0") === scope.hierarchyPath.join("\0")
       && (state.set.scope.assemblyVariantIds.length === 0 || state.set.scope.assemblyVariantIds.includes(scope.assemblyVariantId)),
-    ).map(clone).sort((a, b) => a.set.setId.localeCompare(b.set.setId));
+    ).map(clone).sort((a, b) => compareCodePoints(a.set.setId, b.set.setId));
   }
   async listSelectedPeers(scope: ComponentPhysicalBinding["scope"]): Promise<ComponentPhysicalBinding[]> {
     const peers: ComponentPhysicalBinding[] = [];
@@ -65,7 +66,7 @@ export class InMemoryPhysicalBindingRepository implements PhysicalBindingReposit
       const selected = state.bindings.find((binding) => binding.revisionId === state.set.effectiveSelectedRevisionId);
       if (selected) peers.push(clone(selected));
     }
-    return peers.sort((a, b) => a.revisionId.localeCompare(b.revisionId));
+    return peers.sort((a, b) => compareCodePoints(a.revisionId, b.revisionId));
   }
   async commit(input: PhysicalBindingCommitRequest): Promise<{ state: PhysicalBindingAggregateState; duplicate: boolean }> {
     const requestDigest = input.requestDigest ?? physicalBindingDigest({ setId: input.setId, idempotencyKey: input.idempotencyKey, state: input.state });
@@ -134,7 +135,7 @@ export class PhysicalBindingService {
       aggregateSetId: set.setId, requestDigest,
     };
     const event: PhysicalBindingAuditEvent = { ...baseAudit, eventDigest: physicalBindingDigest(baseAudit) };
-    const state: PhysicalBindingAggregateState = { set, bindings: [...(prior?.bindings ?? []), binding].sort((a, b) => a.revisionId.localeCompare(b.revisionId)), auditEvents: [...(prior?.auditEvents ?? []), event], migrationRecords: prior?.migrationRecords ?? [], assessments: prior?.assessments ?? [] };
+    const state: PhysicalBindingAggregateState = { set, bindings: [...(prior?.bindings ?? []), binding].sort((a, b) => compareCodePoints(a.revisionId, b.revisionId)), auditEvents: [...(prior?.auditEvents ?? []), event], migrationRecords: prior?.migrationRecords ?? [], assessments: prior?.assessments ?? [] };
     return (await this.repository.commit({ setId: set.setId, expectedRevision: prior?.set.revision ?? 0, idempotencyKey, requestDigest, state })).state;
   }
 
@@ -172,7 +173,7 @@ export class PhysicalBindingService {
     const set = reviseBindingSet(current.set, { replaceRevisionId: binding.revisionId, addRevisionId: successor.revisionId, selectedRevisionId, at: request.at });
     const bindings = current.bindings.filter((item) => item.revisionId !== binding.revisionId);
     bindings.push(successor);
-    const state: PhysicalBindingAggregateState = { ...current, set, bindings: bindings.sort((a, b) => a.revisionId.localeCompare(b.revisionId)), auditEvents: [...current.auditEvents, auditEvent({ setId, requestDigest, binding, successor, request })] };
+    const state: PhysicalBindingAggregateState = { ...current, set, bindings: bindings.sort((a, b) => compareCodePoints(a.revisionId, b.revisionId)), auditEvents: [...current.auditEvents, auditEvent({ setId, requestDigest, binding, successor, request })] };
     return (await this.repository.commit({ setId, expectedRevision: current.set.revision, idempotencyKey: request.idempotencyKey, requestDigest, state })).state;
   }
 
@@ -214,7 +215,7 @@ export class PhysicalBindingService {
     const audit: PhysicalBindingAuditEvent = { ...auditBase, eventDigest: physicalBindingDigest(auditBase) };
     const state: PhysicalBindingAggregateState = {
       set,
-      bindings: [...(prior?.bindings ?? []), result.candidate].sort((a, b) => a.revisionId.localeCompare(b.revisionId)),
+      bindings: [...(prior?.bindings ?? []), result.candidate].sort((a, b) => compareCodePoints(a.revisionId, b.revisionId)),
       auditEvents: [...(prior?.auditEvents ?? []), audit],
       migrationRecords: [...(prior?.migrationRecords ?? []), result.record],
       assessments: prior?.assessments ?? [],

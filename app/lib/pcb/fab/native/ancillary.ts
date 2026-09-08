@@ -1,5 +1,6 @@
 import type { ManufacturingIr, ManufacturingSnapshot } from "./types";
 import { csvField, computeBomRows, emitBomCsv } from "../emit-bom";
+import { compareCodePoints, compareNatural } from "@/app/lib/stable-compare";
 
 const mm6 = (nm: number): string => {
   const text = (nm / 1_000_000).toFixed(6);
@@ -16,7 +17,7 @@ const rotation = (degrees: number): string => {
 export function emitNativePlacement(snapshot: ManufacturingSnapshot): string {
   const rows = snapshot.board.footprints
     .filter((fp) => !fp.def.attributes.excludeFromPos && fp.def.pads.length > 0)
-    .sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true }));
+    .sort((a, b) => compareNatural(a.ref, b.ref));
   const lines = [["Designator", "Mid X (mm)", "Mid Y (mm)", "Layer", "Rotation (deg CCW)", "Footprint"]
     .map(csvField)
     .join(",")];
@@ -75,7 +76,7 @@ export function emitGerberJob(
       LayerNumber: mir.layerCount,
     },
     FilesAttributes: [...entries]
-      .sort((a, b) => a.path.localeCompare(b.path))
+      .sort((a, b) => compareCodePoints(a.path, b.path))
       .map((entry) => ({
         Path: entry.path,
         FileFunction: entry.fileFunction,

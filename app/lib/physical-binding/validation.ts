@@ -6,6 +6,7 @@ import {
   type PackageBinding,
   type PhysicalBindingScope,
 } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface PhysicalBindingValidationIssue {
   code: string;
@@ -100,7 +101,7 @@ export function validatePhysicalBinding(binding: ComponentPhysicalBinding): Phys
   unique(binding.evidenceRefs, "evidenceRefs", issues);
   if (binding.evidenceRefs.length > 512) issues.push({ code: "PB_EVIDENCE_LIMIT", path: "evidenceRefs", message: "Binding exceeds the evidence reference limit." });
   if (!Number.isFinite(Date.parse(binding.createdAt))) issues.push({ code: "PB_TIMESTAMP_INVALID", path: "createdAt", message: "Creation timestamp is invalid." });
-  return issues.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code));
+  return issues.sort((a, b) => compareCodePoints(a.path, b.path) || compareCodePoints(a.code, b.code));
 }
 
 export function validateBindingSet(set: ComponentPhysicalBindingSet, bindings: readonly ComponentPhysicalBinding[]): PhysicalBindingValidationIssue[] {
@@ -119,5 +120,5 @@ export function validateBindingSet(set: ComponentPhysicalBindingSet, bindings: r
     else if (selected.lifecycleState !== "selected") issues.push({ code: "PB_SELECTED_STATE_INVALID", path: "effectiveSelectedRevisionId", message: "Effective binding is not in selected lifecycle state." });
   }
   if (physicalBindingDigest({ ...set, recordDigest: undefined }) !== set.recordDigest) issues.push({ code: "PB_SET_DIGEST_MISMATCH", path: "recordDigest", message: "Binding-set digest does not match canonical content." });
-  return issues.sort((a, b) => a.path.localeCompare(b.path) || a.code.localeCompare(b.code));
+  return issues.sort((a, b) => compareCodePoints(a.path, b.path) || compareCodePoints(a.code, b.code));
 }

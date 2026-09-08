@@ -29,6 +29,7 @@ import { dirname } from "node:path";
 import type { AutonomousRouteExecutor } from "@/app/lib/pcb/autonomous/qualify-layout";
 import type { AutorouteCompletionResult } from "@/app/lib/pcb/autoroute/completion";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const ROUTE_FIXTURE_SCHEMA = "sirkit.b16-1c.recorded-route-fixture.v1" as const;
 
@@ -65,7 +66,7 @@ export function saveRouteFixture(path: string, fixture: RecordedRouteFixture): v
 }
 
 function stable(value: unknown): string {
-  const normalize = (item: unknown): unknown => Array.isArray(item) ? item.map(normalize) : item && typeof item === "object" ? Object.fromEntries(Object.entries(item as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, normalize(v)])) : item;
+  const normalize = (item: unknown): unknown => Array.isArray(item) ? item.map(normalize) : item && typeof item === "object" ? Object.fromEntries(Object.entries(item as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => compareCodePoints(a, b)).map(([k, v]) => [k, normalize(v)])) : item;
   return JSON.stringify(normalize(value), null, 1);
 }
 

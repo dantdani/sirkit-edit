@@ -22,6 +22,7 @@ import type { Vec2 } from "../geometry";
 import { transformPoint } from "../geometry";
 import { NM_PER_MM } from "../units";
 import type { AutoPlaceRotation } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const ROTATIONS: readonly AutoPlaceRotation[] = [0, 90, 180, 270];
 
@@ -54,7 +55,7 @@ export function optimizeRotations(
   }
 
   const out = new Map<string, AutoPlaceRotation>();
-  for (const inst of [...board.footprints].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const inst of [...board.footprints].sort((a, b) => compareCodePoints(a.id, b.id))) {
     if (lockedIds.has(inst.id)) continue;
     const at = positions.get(inst.id) ?? inst.at;
     const mirror = inst.side === "bottom";

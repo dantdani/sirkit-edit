@@ -15,6 +15,7 @@ import type { PcbBoard } from "../types";
 import { assertValidBoardReferences } from "../integrity";
 import type { PcbNetlist } from "../netlist-bridge";
 import type { BomColumn } from "./types";
+import { compareNatural } from "@/app/lib/stable-compare";
 
 export interface BomRow {
   refs: string; // "R7,R8,R9"
@@ -39,7 +40,7 @@ const HEADERS: Record<BomColumn, string> = {
 };
 
 const numericCompare = (a: string, b: string): number =>
-  a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  compareNatural(a, b, { caseInsensitive: true });
 
 export function computeBomRows(board: PcbBoard, netlist: PcbNetlist): BomRow[] {
   assertValidBoardReferences(board);

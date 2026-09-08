@@ -1,4 +1,5 @@
 import type { ManufacturingIr, MirDrill, MirLayer, MirPrimitive } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface DrillGroup {
   id: string;
@@ -56,8 +57,8 @@ export function groupDrills(mir: ManufacturingIr): DrillGroup[] {
     group.drills.push(drill);
   }
   return [...groups.values()]
-    .map((group) => ({ ...group, drills: [...group.drills].sort((a, b) => a.id.localeCompare(b.id)) }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .map((group) => ({ ...group, drills: [...group.drills].sort((a, b) => compareCodePoints(a.id, b.id)) }))
+    .sort((a, b) => compareCodePoints(a.id, b.id));
 }
 
 export function drillGroupAsGerberLayer(group: DrillGroup): MirLayer {
@@ -102,7 +103,7 @@ export function writeXnc(group: DrillGroup): string {
     return [`${diameterNm}|${apertureFunction}`, { diameterNm, apertureFunction }] as const;
   })).entries()]
     .map(([key, value]) => ({ key, ...value }))
-    .sort((a, b) => a.diameterNm - b.diameterNm || a.apertureFunction.localeCompare(b.apertureFunction));
+    .sort((a, b) => a.diameterNm - b.diameterNm || compareCodePoints(a.apertureFunction, b.apertureFunction));
   if (tools.length > 99) throw new Error(`XNC group ${group.id} requires more than 99 tools`);
   const toolNumber = new Map(tools.map((tool, index) => [tool.key, index + 1]));
 

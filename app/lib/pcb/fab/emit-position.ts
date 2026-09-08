@@ -11,6 +11,7 @@ import type { PcbBoard, FootprintInstance, FpGraphic } from "../types";
 import type { PosFormat } from "./types";
 import { csvField } from "./emit-bom";
 import { assertValidBoardReferences } from "../integrity";
+import { compareNatural } from "@/app/lib/stable-compare";
 
 const NM_PER_MM = 1_000_000;
 
@@ -70,7 +71,7 @@ export function emitPositionCsv(
   const instances = board.footprints
     .filter((i) => !i.def.attributes.excludeFromPos && i.def.pads.length > 0)
     .filter((i) => side === "both" || i.side === side)
-    .sort((a, b) => a.ref.localeCompare(b.ref, undefined, { numeric: true, sensitivity: "base" }));
+    .sort((a, b) => compareNatural(a.ref, b.ref, { caseInsensitive: true }));
 
   const lines = [spec.header.map(csvField).join(",")];
   for (const inst of instances) {

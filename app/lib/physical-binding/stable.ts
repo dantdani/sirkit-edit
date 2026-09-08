@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { PHYSICAL_BINDING_CANONICAL_VERSION, type ComponentPhysicalBinding, type PhysicalBindingScope } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const TECHNICAL_SET_KEYS = new Set(["assemblyVariantIds", "evidenceRefs", "decisionEvidenceRefs", "reasonCodes", "staleDependencyIds", "conflictIds", "padIdentifiers", "duplicatePadIdentifiers", "externalValidationRefs", "hierarchyPath", "recognizedFields", "unrecognizedFields"]);
 
@@ -16,13 +17,13 @@ function canonicalValue(value: unknown, key?: string): unknown {
   if (Array.isArray(value)) {
     const items = value.map((item) => canonicalValue(item));
     return key && TECHNICAL_SET_KEYS.has(key)
-      ? [...items].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+      ? [...items].sort((a, b) => compareCodePoints(JSON.stringify(a), JSON.stringify(b)))
       : items;
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(Object.entries(value as Record<string, unknown>)
       .filter(([, child]) => child !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => compareCodePoints(a, b))
       .map(([childKey, child]) => [childKey, canonicalValue(child, childKey)]));
   }
   return value;

@@ -7,6 +7,7 @@ import {
   schematicEndpointKey,
   type EngineeringDiagnostic,
 } from "./integrity";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface ExplicitPinPadMapping {
   symbolPinNumber: string;
@@ -122,7 +123,7 @@ export function resolvePinPadMapping(
   const mappings: ResolvedPinPadMapping[] = [];
   const intentionalSchematicOnlyPins: string[] = [];
   const unmappedSchematicPins: string[] = [];
-  for (const [pinNumber] of [...uniquePins].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [pinNumber] of [...uniquePins].sort(([a], [b]) => compareCodePoints(a, b))) {
     const endpointKey = schematicEndpointKey(component.id, pinNumber);
     const explicit = explicitByPin.get(pinNumber);
     if (explicit) {
@@ -260,7 +261,7 @@ export function resolvePinPadMapping(
     }
   }
   const padNets: Record<string, number> = {};
-  for (const [padNumber, owners] of [...mappingsByPad].sort(([a], [b]) => a.localeCompare(b))) {
+  for (const [padNumber, owners] of [...mappingsByPad].sort(([a], [b]) => compareCodePoints(a, b))) {
     const electricalOwners = owners.filter((owner) => owner.mappingKind !== "intentional-no-connect" && owner.mappingKind !== "schematic-only");
     const netIds = new Set(electricalOwners.map((owner) => netIdByEndpoint.get(owner.endpointKey) ?? 0));
     const sharedIsExplicit = electricalOwners.length > 1 && electricalOwners.every((owner) => owner.mappingKind === "internally-common");
@@ -298,10 +299,10 @@ export function resolvePinPadMapping(
   diagnostics.sort(compareDiagnostics);
   return {
     ok: !diagnostics.some((diagnostic) => diagnostic.severity === "error"),
-    mappings: mappings.sort((a, b) => a.symbolPinNumber.localeCompare(b.symbolPinNumber)),
+    mappings: mappings.sort((a, b) => compareCodePoints(a.symbolPinNumber, b.symbolPinNumber)),
     padNets,
     diagnostics,
-    footprintPadClassifications: Object.fromEntries([...padClassifications].sort(([a], [b]) => a.localeCompare(b))),
+    footprintPadClassifications: Object.fromEntries([...padClassifications].sort(([a], [b]) => compareCodePoints(a, b))),
     accounting,
   };
 }

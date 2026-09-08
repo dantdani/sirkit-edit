@@ -11,6 +11,7 @@ import { pcbRevisionId } from "../revision";
 import type { ExportPreflightResult } from "./types";
 import { resolveNetIdentity } from "../copper-policy";
 import { zoneFillIsCurrent } from "../zones/fill-lifecycle";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export interface RunExportPreflightInput {
   board: PcbBoard;
@@ -39,7 +40,7 @@ export function runExportPreflight(input: RunExportPreflightInput): ExportPrefli
   ));
 
   let fillEvidenceIncomplete = false;
-  for (const zone of [...input.board.zones].sort((a, b) => a.id.localeCompare(b.id))) {
+  for (const zone of [...input.board.zones].sort((a, b) => compareCodePoints(a.id, b.id))) {
     const identity = resolveNetIdentity(input.board, zone.netId);
     if (identity.state !== "proven") diagnostics.push(engineeringDiagnostic(
       "ZONE_NET_IDENTITY_UNRESOLVED",

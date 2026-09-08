@@ -1,6 +1,7 @@
 import { physicalBindingDigest, physicalBindingId } from "../physical-binding/stable";
 import { pcbRevisionPayload } from "../pcb/revision";
 import type { PcbSyncAuthoritativeSnapshot, PcbSyncIssue, PcbSyncPlan, PcbSyncSnapshotIdentity } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export const pcbSyncDigest = physicalBindingDigest;
 export const pcbSyncId = physicalBindingId;
@@ -24,9 +25,9 @@ export interface PcbSyncPublicationGraphParts {
  */
 export function canonicalPublicationGraph(input: PcbSyncPublicationGraphParts): PcbSyncPublicationGraphParts {
   return {
-    components: [...input.components].map((component) => ({ ...component, hierarchyPath: [...component.hierarchyPath], pins: [...component.pins].sort((a, b) => a.pinInstanceId.localeCompare(b.pinInstanceId)) })).sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId)),
-    nets: [...input.nets].map((net) => ({ ...net, canonicalScope: [...net.canonicalScope], aliases: [...net.aliases].sort(), members: [...net.members].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId) || a.pinInstanceId.localeCompare(b.pinInstanceId)), explicitNoConnectPinIds: [...net.explicitNoConnectPinIds].sort(), constraintRefs: [...net.constraintRefs].sort() })).sort((a, b) => a.stableNetId.localeCompare(b.stableNetId)),
-    prerequisiteIssues: [...input.prerequisiteIssues].map(canonicalIssue).sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0"))),
+    components: [...input.components].map((component) => ({ ...component, hierarchyPath: [...component.hierarchyPath], pins: [...component.pins].sort((a, b) => compareCodePoints(a.pinInstanceId, b.pinInstanceId)) })).sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)),
+    nets: [...input.nets].map((net) => ({ ...net, canonicalScope: [...net.canonicalScope], aliases: [...net.aliases].sort(), members: [...net.members].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId) || compareCodePoints(a.pinInstanceId, b.pinInstanceId)), explicitNoConnectPinIds: [...net.explicitNoConnectPinIds].sort(), constraintRefs: [...net.constraintRefs].sort() })).sort((a, b) => compareCodePoints(a.stableNetId, b.stableNetId)),
+    prerequisiteIssues: [...input.prerequisiteIssues].map(canonicalIssue).sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0"))),
   };
 }
 
@@ -60,10 +61,10 @@ export function planTechnicalPayload(plan: Omit<PcbSyncPlan, "planId" | "planDig
     planSchemaVersion: plan.planSchemaVersion,
     scope: plan.scope,
     snapshot: plan.snapshot,
-    operations: [...plan.operations].sort((a, b) => a.orderingKey.localeCompare(b.orderingKey) || a.operationId.localeCompare(b.operationId)).map(({ summary: _summary, ...operation }) => { void _summary; return operation; }),
-    blockedOperations: [...plan.blockedOperations].sort((a, b) => a.blockedOperationId.localeCompare(b.blockedOperationId)),
-    prerequisites: [...plan.prerequisites].sort((a, b) => a.code.localeCompare(b.code) || a.stableIds.join("\0").localeCompare(b.stableIds.join("\0"))),
-    resolverEvidence: [...plan.resolverEvidence].sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId)),
+    operations: [...plan.operations].sort((a, b) => compareCodePoints(a.orderingKey, b.orderingKey) || compareCodePoints(a.operationId, b.operationId)).map(({ summary: _summary, ...operation }) => { void _summary; return operation; }),
+    blockedOperations: [...plan.blockedOperations].sort((a, b) => compareCodePoints(a.blockedOperationId, b.blockedOperationId)),
+    prerequisites: [...plan.prerequisites].sort((a, b) => compareCodePoints(a.code, b.code) || compareCodePoints(a.stableIds.join("\0"), b.stableIds.join("\0"))),
+    resolverEvidence: [...plan.resolverEvidence].sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)),
     materializations: [...plan.materializations].map((item) => ({
       componentInstanceId: item.componentInstanceId,
       bindingRevisionId: item.bindingRevisionId,
@@ -74,7 +75,7 @@ export function planTechnicalPayload(plan: Omit<PcbSyncPlan, "planId" | "planDig
       mappingCertificateId: item.mapping.mappingCertificateId,
       mappingArtifactDigest: item.mapping.artifactDigest,
       materializationDigest: item.materializationDigest,
-    })).sort((a, b) => a.componentInstanceId.localeCompare(b.componentInstanceId)),
+    })).sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)),
     expectedOutput: plan.expectedOutput,
     policyVersions: plan.policyVersions,
   };

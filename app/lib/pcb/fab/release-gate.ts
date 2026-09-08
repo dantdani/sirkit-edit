@@ -31,6 +31,7 @@ import {
 import { extractAndValidateReleaseArchive, validateFabricationFiles, validateReleaseFileSet, type ManufacturingReadbackResult } from "./validate-package";
 import type { QualificationComponentAuthority } from "./qualification-authority";
 import type { SchematicAuthorityIdentity } from "./qualification-evidence";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const FIXED_ZIP_DATE = new Date("1980-01-01T00:00:00.000Z");
 const BARE_RECIPE = Object.freeze({
@@ -270,12 +271,12 @@ function packageFiles(input: NativeFabCompileInput, compiled: Awaited<ReturnType
   const readme: NativeFabFile = { path: readmePath, kind: "readme", mediaType: "text/plain", bytes: readmeBytes, sha256: sha256(readmeBytes) };
   files.push(readme);
   records.push({ path: readmePath, role: "readme", kind: "readme", mediaType: readme.mediaType, bytes: readme.bytes.byteLength, sha256: readme.sha256 });
-  return { files: files.sort((a, b) => a.path.localeCompare(b.path)), records: records.sort((a, b) => a.path.localeCompare(b.path)) };
+  return { files: files.sort((a, b) => compareCodePoints(a.path, b.path)), records: records.sort((a, b) => compareCodePoints(a.path, b.path)) };
 }
 
 async function deterministicArchive(files: NativeFabFile[]): Promise<Uint8Array> {
   const zip = new JSZip();
-  for (const file of [...files].sort((left, right) => left.path.localeCompare(right.path))) zip.file(file.path, file.bytes, { date: FIXED_ZIP_DATE, createFolders: false, unixPermissions: 0o100644 });
+  for (const file of [...files].sort((left, right) => compareCodePoints(left.path, right.path))) zip.file(file.path, file.bytes, { date: FIXED_ZIP_DATE, createFolders: false, unixPermissions: 0o100644 });
   return zip.generateAsync({ type: "uint8array", compression: "STORE", platform: "UNIX", streamFiles: false });
 }
 
@@ -347,7 +348,7 @@ export async function releaseManufacturingPackage(input: { locator: Manufacturin
   const manifestFile: NativeFabFile = { path: manifestPath, kind: "manifest", mediaType: "application/json", bytes: manifestBytes, sha256: sha256(manifestBytes) };
   const packageValidation = validateReleaseFileSet({ files: packaged.files, manifest, mir });
   if (!packageValidation.valid) fail("MFG_PACKAGE_VALIDATION_FAILED", packageValidation.issues[0]?.message ?? "Package validation failed.");
-  const files = [...packaged.files, manifestFile].sort((a, b) => a.path.localeCompare(b.path));
+  const files = [...packaged.files, manifestFile].sort((a, b) => compareCodePoints(a.path, b.path));
   const archiveBytes = await deterministicArchive(files);
   const extracted = await extractAndValidateReleaseArchive(archiveBytes);
   const extractedCore: NativeFabFile[] = extracted.files.filter((file) => file.path !== extracted.manifestPath).map((file) => {

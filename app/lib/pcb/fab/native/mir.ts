@@ -22,6 +22,7 @@ import type {
   MirRegion,
   MirStroke,
 } from "./types";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const ACTIVE_COPPER: Record<2 | 4, LayerId[]> = {
   2: ["copperTop", "copperBottom"],
@@ -329,11 +330,11 @@ function drillForPad(
 }
 
 function sortMir(mir: ManufacturingIr): ManufacturingIr {
-  mir.layers.sort((a, b) => a.id.localeCompare(b.id));
+  mir.layers.sort((a, b) => compareCodePoints(a.id, b.id));
   for (const item of mir.layers) {
-    item.primitives.sort((a, b) => a.id.localeCompare(b.id) || stableJson(a).localeCompare(stableJson(b)));
+    item.primitives.sort((a, b) => compareCodePoints(a.id, b.id) || compareCodePoints(stableJson(a), stableJson(b)));
   }
-  mir.drills.sort((a, b) => Number(a.plated) - Number(b.plated) || a.id.localeCompare(b.id));
+  mir.drills.sort((a, b) => Number(a.plated) - Number(b.plated) || compareCodePoints(a.id, b.id));
   return mir;
 }
 

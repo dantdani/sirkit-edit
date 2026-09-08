@@ -22,6 +22,7 @@ import type {
 import { NativeFabBlockedError } from "./types";
 import { evaluatePcbFabricationReadiness } from "../../readiness/evaluate";
 import { createManufacturingReleaseManifest, prepareManufacturingRelease } from "../../readiness/release";
+import { compareCodePoints } from "@/app/lib/stable-compare";
 
 const FIXED_ZIP_DATE = new Date("1980-01-01T00:00:00.000Z");
 
@@ -68,7 +69,7 @@ function prefix(snapshot: ManufacturingSnapshot, basename: string): string {
 
 async function deterministicZip(files: NativeFabFile[]): Promise<Uint8Array> {
   const zip = new JSZip();
-  for (const item of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+  for (const item of [...files].sort((a, b) => compareCodePoints(a.path, b.path))) {
     zip.file(item.path, item.bytes, {
       date: FIXED_ZIP_DATE,
       createFolders: false,
@@ -237,7 +238,7 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
   const packageId = sha256(stableJson({
     snapshot: snapshot.sourceHash,
     recipe: snapshot.recipe,
-    files: files.map((item) => ({ path: item.path, sha256: item.sha256 })).sort((a, b) => a.path.localeCompare(b.path)),
+    files: files.map((item) => ({ path: item.path, sha256: item.sha256 })).sort((a, b) => compareCodePoints(a.path, b.path)),
   }));
   const manifest: NativeFabManifest = {
     schemaVersion: "sirkit.native-fab-manifest.v2",
@@ -252,7 +253,7 @@ export async function compileNativeFabPackage(input: NativeFabCompileInput): Pro
     planeCertificates: snapshot.planeCertificates,
     files: files
       .map((item) => ({ path: item.path, kind: item.kind, bytes: item.bytes.byteLength, sha256: item.sha256 }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
+      .sort((a, b) => compareCodePoints(a.path, b.path)),
     diagnostics: countDiagnostics(allDiagnostics),
   };
   files.push(file(prefix(snapshot, "manifest.json"), "manifest", "application/json", `${JSON.stringify(manifest, null, 2)}\n`));
