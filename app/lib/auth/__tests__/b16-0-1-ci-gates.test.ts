@@ -47,7 +47,8 @@ const METHOD_NAMES = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
 
 function routeFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
+    // Hidden directories (.git, .next, .claude — which hosts agent worktrees with full copies of the tree) are not source.
+    if (entry === "__tests__" || entry === "node_modules" || entry.startsWith(".")) continue;
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) routeFiles(full, out);
     else if (entry === "route.ts") out.push(full);

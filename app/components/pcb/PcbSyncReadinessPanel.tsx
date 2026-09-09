@@ -6,9 +6,13 @@ import type { PcbSyncPreflightResult, PcbSyncRiskClass } from "@/app/lib/pcb-syn
 
 const riskOrder: PcbSyncRiskClass[] = ["none", "metadata_only", "unrouted_structural", "copper_affecting", "constraint_affecting", "destructive", "unsupported_unknown"];
 
-export function PcbSyncReadinessPanel({ result, busy = false, onApply }: { result: PcbSyncPreflightResult; busy?: boolean; onApply?: (planId: string, planDigest: string) => void }) {
+/** [B16-C.1] blocker codes that mean "structural change on protected copper" — the situations a derived board revision exists for. */
+const STAGE8_BLOCKERS = new Set(["PS_ROUTED_NET_CHANGE_REQUIRES_STAGE8", "PS_FOOTPRINT_REPLACEMENT_REQUIRES_STAGE8", "PS_EXTRA_BOARD_COMPONENT_PROTECTED", "PS_STRUCTURAL_ADD_REQUIRES_UNROUTED_BOARD", "PS_ROUTED_COMPONENT_REMOVAL_REQUIRES_STAGE8", "PS_REMOVED_NET_PROTECTED"]);
+
+export function PcbSyncReadinessPanel({ result, busy = false, onApply, onDeriveRevision }: { result: PcbSyncPreflightResult; busy?: boolean; onApply?: (planId: string, planDigest: string) => void; onDeriveRevision?: () => void }) {
   const [confirmedPreflightId, setConfirmedPreflightId] = useState<string | null>(null);
   const confirmed = confirmedPreflightId === result.preflightId;
+  const stage8Blocked = result.blockers.some((blocker) => STAGE8_BLOCKERS.has(blocker.code));
   const operationsByRisk = useMemo(() => riskOrder.map((risk) => ({ risk, count: result.plan?.operations.filter((item) => item.risk === risk).length ?? 0 })).filter((item) => item.count > 0), [result.plan]);
   const canApply = result.status === "ready_to_apply" && result.plan?.lifecycle === "applicable" && result.blockers.length === 0 && Boolean(onApply);
   const targetLabel = result.board.boardClass.replaceAll("_", " ");
@@ -40,6 +44,9 @@ export function PcbSyncReadinessPanel({ result, busy = false, onApply }: { resul
           <div className="mt-0.5 text-zinc-300">{blocker.message}</div>
           {(blocker.displayRefs.length > 0 || blocker.stableIds.length > 0) && <div className="mt-1 text-[10px] text-zinc-500">{blocker.displayRefs.join(", ")}{blocker.displayRefs.length > 0 && blocker.stableIds.length > 0 ? " · " : ""}{blocker.stableIds.join(", ")}</div>}
         </div>)}
+        {stage8Blocked && onDeriveRevision && <button type="button" onClick={onDeriveRevision} disabled={busy} data-testid="derive-board-revision" className="mt-1 w-full rounded border border-teal-800 bg-teal-950/40 px-2 py-1.5 text-left text-[11px] text-teal-100 hover:bg-teal-900/40 disabled:opacity-50">
+          Protected copper blocks this change. Derive a new board revision: keep the copper that is proven unchanged, strip the rest, review the rework plan, then place, route and qualify again.
+        </button>}
       </div>}
 
       {canApply && <label className="mt-3 flex items-start gap-2 rounded border border-amber-900/60 bg-amber-950/20 p-2 text-[11px] text-amber-100">

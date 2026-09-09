@@ -83,6 +83,8 @@ function classification(board: PcbBoard, violation: DrcViolation): { fixability:
       return generated(board, first)
         ? { fixability: "safe_auto", operation: "replace_via", label: "Replace generated via with a configured legal via" }
         : { fixability: "requires_approval", operation: "replace_via", label: "Preview replacing this via" };
+    case "pthAnnularRing":
+      return { fixability: "manual_only", operation: "manual_review", label: "Choose a footprint variant with a wider plated-hole ring (fabrication profile limit)" };
     case "unconnected":
       return generated(board, first)
         ? { fixability: "safe_auto", operation: "remove_dangling_copper", label: "Remove unused generated dangling copper" }

@@ -57,7 +57,7 @@ vi.mock("@/app/lib/pcb/fab/authority-store", async (orig) => ({
 const ledgerRecord = vi.hoisted(() => vi.fn<(scope: unknown, input: Record<string, unknown>) => Promise<{ created: boolean; record: { releaseId: string } }>>(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } })));
 vi.mock("@/app/lib/pcb/fab/release-ledger", async (orig) => ({ ...(await orig() as object), DurableManufacturingReleaseLedger: class { record = ledgerRecord; latest = vi.fn(async () => null); list = vi.fn(async () => []); } }));
 
-const getWorkflowRepo = vi.hoisted(() => vi.fn(() => ({})));
+const getWorkflowRepo = vi.hoisted(() => vi.fn(() => ({ loadHead: async () => null }))); // [B16-C.1] both routes read the board lineage first (none recorded → current)
 vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: getWorkflowRepo }));
 // [B16-A F7] the durable single-flight lease is a seam here (the workflow repository above is an empty stub); its own behaviour is covered by b16-a-qualification-commit.test.ts.
 const leaseAcquire = vi.hoisted(() => vi.fn(async () => ({ ok: true as const, token: "lease-token", revision: 1, expiresAt: "2999-01-01T00:00:00.000Z" })));
@@ -69,6 +69,8 @@ vi.mock("@/app/lib/pcb/fab/release-gate", async (orig) => ({ ...(await orig() as
 
 import { POST as qualify } from "../pcb/qualify/route";
 import { POST as release } from "../pcb/release/route";
+import { MANUFACTURING_RULE_PROFILE_SCHEMA } from "@/app/lib/pcb/fab/release-manifest";
+import { ruleProfileExpiry } from "@/app/lib/pcb/fab/rule-profile";
 
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "proj-1", "x-sirkit-branch-id": "main" };
 function post(path: string, body: string, headers: Record<string, string> = {}): Request {
@@ -85,7 +87,7 @@ const PINNED = { designId: "d1", boardId: "b1", expectedAuthorityRevision: 1, ex
 // release-time expiry check (366 days) can never make these tests rot.
 const VERIFIED_TODAY = new Date().toISOString().slice(0, 10);
 function storedAuthority(boardRevision: string, boardDigest: string) {
-  return { boardRevision, boardDigest, manufacturingRuleProfile: { evidence: { verifiedAt: VERIFIED_TODAY }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } };
+  return { boardRevision, boardDigest, manufacturingRuleProfile: { schemaVersion: MANUFACTURING_RULE_PROFILE_SCHEMA, evidence: { sourceRefs: ["https://jlcpcb.com/capabilities/pcb-capabilities"], retrievedAt: VERIFIED_TODAY, expiresAt: ruleProfileExpiry(VERIFIED_TODAY), scope: "JLCPCB 1-2 layer rigid FR-4 (test stub)", notes: [] }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } };
 }
 
 function authed(role: "viewer" | "commenter" | "editor" | "reviewer" | "admin"): void {
@@ -124,7 +126,7 @@ afterEach(() => {
   createRouter.mockImplementation(async () => ({}));
   authoritySave.mockImplementation(async () => ({ revision: 1, recordDigest: "sha256:auth" }));
   authorityLoader.mockImplementation(() => vi.fn());
-  getWorkflowRepo.mockImplementation(() => ({}));
+  getWorkflowRepo.mockImplementation(() => ({ loadHead: async () => null })); // [B16-C.1] both routes read the board lineage first (none recorded → current)
 });
 
 const ROUTES = [

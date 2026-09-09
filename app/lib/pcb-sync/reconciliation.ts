@@ -29,6 +29,15 @@ function issueForResolution(component: PcbSyncSchematicComponent, result?: Footp
   });
 }
 
+/** [B16-C.1] on a DERIVED board only copper that survived the semantic proof is protected: a footprint is protected
+ *  iff one of its pads sits on a retained net. Everywhere else the board class decides, exactly as before. */
+function componentProtected(context: PcbSyncPreflightContext, footprint: PcbBoard["footprints"][number] | undefined): boolean {
+  if (!context.derivation) return riskyBoard(context.boardAssessment.boardClass);
+  if (!footprint) return false;
+  const retained = new Set(context.derivation.retainedNetIds);
+  return Object.values(footprint.padNets).some((netId) => netId !== 0 && retained.has(netId));
+}
+
 function riskyBoard(boardClass: PcbSyncPreflightContext["boardAssessment"]["boardClass"]): boolean {
   return ["routed", "zoned", "constrained", "locked_unrouted", "unsupported"].includes(boardClass);
 }
@@ -65,7 +74,7 @@ export function assessComponents(context: PcbSyncPreflightContext): ComponentTra
     const common = { componentInstanceId: component.componentInstanceId, referenceDesignator: component.referenceDesignator, hierarchyPath: [...component.hierarchyPath], componentRevision: component.componentRevision, applicability: component.applicability };
     if (component.applicability === "nonphysical") return { ...common, resolutionStatus: "not_requested", mappingStatus: "not_applicable", proposedOperation: "no_op", risk: "none", status: "nonphysical", blockers: [], warnings: [], resolverBlockerCodes: [], evidenceRefs: [] };
     if (component.applicability === "not_applicable") {
-      const blocked = matches.length && riskyBoard(context.boardAssessment.boardClass);
+      const blocked = matches.length > 0 && componentProtected(context, matches[0]);
       const blockers = blocked ? [pcbSyncIssue({ code: "PS_ROUTED_COMPONENT_REMOVAL_REQUIRES_STAGE8", scope: "board", message: `${component.referenceDesignator} is not populated in this variant but its existing board instance cannot be removed safely before Stage 8.`, stableIds: [component.componentInstanceId], displayRefs: [component.referenceDesignator], remediation: "stage8_copper_protection" })] : [];
       return { ...common, resolutionStatus: resolution?.status ?? "not_requested", mappingStatus: "not_applicable", pcbInstanceId: matches[0]?.id, proposedOperation: matches.length ? blocked ? "blocked" : "remove_unrouted_component" : "mark_dnp_or_excluded", risk: matches.length ? blocked ? "copper_affecting" : "unrouted_structural" : "none", status: blocked ? "blocked_routed_footprint_change" : "not_applicable", blockers, warnings: [], resolverBlockerCodes: resolution?.blockers.map((item) => item.code) ?? [], evidenceRefs: [] };
     }
@@ -94,7 +103,7 @@ export function assessComponents(context: PcbSyncPreflightContext): ComponentTra
     let status: ComponentTransferAssessment["status"] = "ready_no_change", proposedOperation: ComponentTransferAssessment["proposedOperation"] = "preserve_component_instance", risk: PcbSyncRiskClass = "none";
     const blockers: PcbSyncIssue[] = [];
     if (!current) {
-      if (context.request.target.kind === "existing_board" && riskyBoard(context.boardAssessment.boardClass)) {
+      if (context.request.target.kind === "existing_board" && !context.derivation && riskyBoard(context.boardAssessment.boardClass)) {
         status = "blocked_routed_net_change"; proposedOperation = "blocked"; risk = context.boardAssessment.risk;
         blockers.push(pcbSyncIssue({ code: "PS_STRUCTURAL_ADD_REQUIRES_UNROUTED_BOARD", scope: "board", message: `${component.referenceDesignator} cannot be added automatically to this routed, locked, zoned, constrained, or unsupported board.`, stableIds: [component.componentInstanceId], displayRefs: [component.referenceDesignator], remediation: "stage8_copper_protection" }));
       } else { status = "ready_add"; proposedOperation = "add_component_instance"; risk = "unrouted_structural"; }
@@ -102,7 +111,7 @@ export function assessComponents(context: PcbSyncPreflightContext): ComponentTra
       const identity = current.syncIdentity;
       const assetSame = identity?.footprintAssetVersionId === resolved.footprintAsset.assetVersionId && identity?.footprintContentDigest === resolved.footprintAsset.contentDigest && identity?.mappingCertificateId === resolved.pinPadMapping.mappingCertificateId;
       if (!assetSame) {
-        if (riskyBoard(context.boardAssessment.boardClass) || current.locked || current.placementConstraints?.fixedPosition) {
+        if (componentProtected(context, current) || current.locked || current.placementConstraints?.fixedPosition) {
           status = "blocked_routed_footprint_change"; proposedOperation = "blocked"; risk = context.boardAssessment.boardClass === "locked_unrouted" ? "placement_affecting" : "copper_affecting";
           blockers.push(pcbSyncIssue({ code: "PS_FOOTPRINT_REPLACEMENT_REQUIRES_STAGE8", scope: "board", message: `${component.referenceDesignator} requires an immutable footprint or mapping replacement on a protected board.`, stableIds: [component.componentInstanceId], displayRefs: [component.referenceDesignator], remediation: "stage8_copper_protection" }));
         } else { status = "ready_metadata_update"; proposedOperation = "replace_unrouted_footprint"; risk = "unrouted_structural"; }

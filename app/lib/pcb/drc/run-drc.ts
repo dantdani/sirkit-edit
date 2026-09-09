@@ -20,7 +20,7 @@ import type {
 } from "./types";
 import { effectiveRules } from "./rules";
 import { checkCopperClearance } from "./checks/clearance";
-import { checkMinTrackWidth, checkVia, checkHoleToHole, checkCourtyardOverlap } from "./checks/geometry";
+import { checkMinTrackWidth, checkVia, checkPthAnnularRing, checkHoleToHole, checkCourtyardOverlap } from "./checks/geometry";
 import { checkSilkOverPad } from "./checks/silk";
 import { checkUnconnectedAndShorts } from "./checks/connectivity";
 import { checkBoardContainmentAndLayers } from "./checks/containment";
@@ -120,6 +120,7 @@ export function runDrc(board: PcbBoard, rules: DrcRules, options?: RunDrcOptions
     { code: "copper-clearance", run: () => checkCopperClearance(ctx) }, // #1 clearance + #7 edge
     { code: "minimum-track-width", run: () => checkMinTrackWidth(ctx) }, // #2
     { code: "via-geometry", run: () => checkVia(ctx) }, // #3 #4 #5
+    { code: "pth-annular-ring", run: () => checkPthAnnularRing(ctx) }, // [B16-C.4] plated component holes
     { code: "hole-to-hole", run: () => checkHoleToHole(ctx) }, // #6
     { code: "courtyard-overlap", run: () => checkCourtyardOverlap(ctx) }, // #8
     { code: "silkscreen", run: () => checkSilkOverPad(ctx) }, // #9

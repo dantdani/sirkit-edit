@@ -27,6 +27,7 @@ const PHYSICAL_KIND_FIELD: Partial<Record<ConstraintKind, keyof LoweredPhysicalR
   via_diameter: "minViaOuterNm",
   via_drill: "minViaDrillNm",
   annular_ring: "minAnnularRingNm",
+  pth_annular_ring: "minPthAnnularRingNm",
   hole_clearance: "minHoleToHoleNm",
   edge_clearance: "minEdgeClearanceNm",
   silk_clearance: "minSilkPadClearanceNm",
@@ -45,6 +46,8 @@ const DEFAULT_SUPPORT: Partial<Record<ConstraintKind, { consumerId: string; chec
   via_diameter: { consumerId: "pcb-physical-rule-resolver", checkerVersion: "stage6/1", support: "enforced", requiredInputs: ["pcb-geometry"] },
   via_drill: { consumerId: "pcb-physical-rule-resolver", checkerVersion: "stage6/1", support: "enforced", requiredInputs: ["pcb-geometry"] },
   annular_ring: { consumerId: "pcb-physical-rule-resolver", checkerVersion: "stage6/1", support: "enforced", requiredInputs: ["pcb-geometry"] },
+  // [B16-C.4] plated component holes are measured by checkPthAnnularRing (drc/checks/geometry.ts).
+  pth_annular_ring: { consumerId: "pcb-physical-rule-resolver", checkerVersion: "stage6/1", support: "enforced", requiredInputs: ["pcb-geometry"] },
   edge_clearance: { consumerId: "pcb-physical-rule-resolver", checkerVersion: "stage6/1", support: "enforced", requiredInputs: ["board-outline"] },
   // R06 follow-up: these three ARE deterministically measured by the DRC engine
   // (checkHoleToHole #6, checkCourtyardOverlap #8, checkSilkOverPad #9); they

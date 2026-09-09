@@ -13,7 +13,7 @@ const ZERO: DrcRules = {
     minTrackWidthNm: 0,
     minViaOuterNm: 0,
     minViaDrillNm: 0,
-    minAnnularRingNm: 0,
+    minAnnularRingNm: 0, minPthAnnularRingNm: 0,
     minHoleToHoleNm: 0,
     minEdgeClearanceNm: 0,
     minSilkPadClearanceNm: 0,

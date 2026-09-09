@@ -63,6 +63,22 @@ import { compileTier1Proposal, planSchematicDelete, planSchematicReplacement } f
 import { sealTier1Proposal, TIER1_PROPOSAL_SCHEMA, type SealedTier1Proposal } from "@/app/lib/engineering/schematic-proposals";
 import { loadSessionIdentity, sessionAuthorizationBindingFrom, SESSION_IDENTITY_UNAVAILABLE_MESSAGE } from "@/app/lib/project/session-identity";
 import { projectSelectorHeaders } from "@/app/lib/project/project-selector";
+
+/**
+ * [B16-C.5] Every authenticated AI request names the ACTIVE project as a
+ * SELECTOR (`x-sirkit-*` headers) exactly like the simulation and BOM
+ * transports do. The trusted-context boundary refuses a selector-less request
+ * with `AUTH_PROJECT_SELECTOR_REQUIRED` (400) — the page-level browser proof
+ * found the Build-mode generation, edit, review, tidy and second-opinion
+ * fetches sending none. A selector is never authority: the server still loads
+ * the caller's live membership for that scope.
+ */
+function aiRequestHeaders(scope: { projectId: string | null; branchId: string }): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...projectSelectorHeaders(scope.projectId ? { tenantId: "local", projectId: scope.projectId, branchId: scope.branchId } : null),
+  };
+}
 import { createMembershipReauthorizer } from "@/app/lib/project/membership-reauthorization";
 import { applyApprovedTier1Proposal, approvedMutationAudit, type ApprovedMutationReceipt } from "@/app/lib/engineering/approved-agent-mutations";
 import { type ReplacementMutationReceipt } from "@/app/lib/engineering/approved-replacement-mutations";
@@ -4480,7 +4496,8 @@ export default function Home() {
   // at invocation and check them after every await.
   const projectScopeRegistryRef = useRef<ProjectAsyncScopeRegistry | null>(null);
   if (projectScopeRegistryRef.current === null) projectScopeRegistryRef.current = new ProjectAsyncScopeRegistry();
-  useEffect(() => () => projectScopeRegistryRef.current?.dispose(), []);
+  // [B16-C.5] mount re-arms (StrictMode runs this cleanup once and mounts again), unmount disposes.
+  useEffect(() => { projectScopeRegistryRef.current?.resume(); return () => projectScopeRegistryRef.current?.dispose(); }, []);
 
   // B10 — ONE page-owned editor-context bridge: PcbEditor publishes the
   // exact working-copy read source into it; send() captures one atomic
@@ -4677,7 +4694,7 @@ export default function Home() {
         appendActivityStep(logId, "Generating build netlist");
         const res = await fetch("/api/schematic/build-multi", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: aiRequestHeaders(scope),
           body: JSON.stringify({ prompt, provider: aiBrainRef.current }),
           signal: scope.signal,
         });
@@ -4825,7 +4842,7 @@ export default function Home() {
 
       const res = await fetch("/api/schematic/edit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(scope),
         body: JSON.stringify({ instruction: prompt, components: summary, provider: aiBrainRef.current }),
         signal: scope.signal,
       });
@@ -4865,7 +4882,7 @@ export default function Home() {
         appendActivityStep(logId, "Applying netlist edit");
         const res2 = await fetch("/api/schematic/edit-build", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: aiRequestHeaders(scope),
           body: JSON.stringify({ instruction: prompt, netlist: currentNetlist, provider: aiBrainRef.current }),
           signal: scope.signal,
         });
@@ -5080,7 +5097,7 @@ export default function Home() {
 
       const res = await fetch("/api/schematic/review", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(reviewScope),
         body: JSON.stringify({ ...reviewInput, provider: aiBrainRef.current }),
         signal: reviewScope.signal,
       });
@@ -5248,7 +5265,7 @@ export default function Home() {
 
       const res = await fetch("/api/schematic/layout-critic", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(tidyScope),
         body: JSON.stringify({
           provider: aiBrainRef.current,
           state: { ...tidySnapshot, pageSize: tidySnapshot.pageSize ?? pageSize },
@@ -5380,7 +5397,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/schematic/cross-verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: aiRequestHeaders(opinionScope),
         body: JSON.stringify({ prompt, state: { ...opinionSnapshot, pageSize: opinionSnapshot.pageSize ?? pageSize } }),
         signal: opinionScope.signal,
       });
@@ -5852,7 +5869,7 @@ export default function Home() {
                 <div className="p-3 border-b border-zinc-800">
                   <Button
                     variant="secondary" size="sm" className="w-full justify-start gap-2"
-                    onClick={createNewProject}
+                    data-testid="new-project" onClick={createNewProject}
                   >
                     <Plus className="size-3.5" /> New project
                   </Button>
@@ -6573,6 +6590,7 @@ export default function Home() {
                 </div>
               )}
               <Textarea
+                data-testid="prompt-input"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(e) => {
@@ -7926,6 +7944,8 @@ function ActivityBarButton({ icon: Icon, label, active, onClick }: {
     <button
       onClick={onClick}
       title={label}
+      aria-label={label}
+      data-testid={`activity-${label.toLowerCase()}`}
       className={`w-9 h-9 flex items-center justify-center rounded-md transition ${
         active ? "text-zinc-100 bg-zinc-800" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
       }`}
@@ -7944,6 +7964,7 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   return (
     <button
       onClick={onClick}
+      data-testid={`view-tab-${label.toLowerCase()}`}
       className={`h-7 px-2.5 rounded-md text-xs flex items-center gap-1.5 transition ${
         active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900"
       }`}

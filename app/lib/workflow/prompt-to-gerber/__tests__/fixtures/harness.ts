@@ -19,7 +19,7 @@
  */
 
 import { vi } from "vitest";
-import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
+import { injectIdentity, injectMembership, resetInjectedIdentity } from "@/app/lib/auth/test-support";
 import { PCB_BOARD_ASSEMBLY_VARIANT_ID, pcbBoardInstanceId, pcbDesignInstanceId } from "@/app/lib/pcb/board-identity";
 import { buildNetlist, buildPcbSyncPublicationGraph, type NetlistPartData, type PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 import { PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, PCB_SYNC_REQUEST_VERSION, type PcbSyncApplyRequest, type PcbSyncDemoSnapshotPublicationRequest, type PcbSyncPreflightRequest } from "@/app/lib/pcb-sync/types";
@@ -27,7 +27,7 @@ import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import type { BuildLogicalNetlist, SchematicState } from "@/lib/schematic-types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 
-export const FIXED_NOW = "2026-09-07T12:00:00.000Z";
+export const FIXED_NOW = "2026-09-09T12:00:00.000Z"; // [B16-C.4] at or after the rule-profile evidence retrieval date (2026-09-09), else every release is "not yet valid"
 export const SCOPE = { tenantId: "local", projectId: "b16-1c-blinker", branchId: "main" } as const;
 export const BOARD_ID = pcbBoardInstanceId(SCOPE.projectId);
 export const DESIGN_ID = pcbDesignInstanceId(SCOPE.projectId);
@@ -53,7 +53,21 @@ export function deterministicUuids(prefix = "b16-1c-inst"): () => void {
 export function signInAs(role: Role, scope: { tenantId: string; projectId: string; branchId?: string } = SCOPE): void {
   resetInjectedIdentity();
   const userId = role === "admin" ? USERS.admin : role === "editor" ? USERS.editor : role === "reviewer" ? USERS.reviewer : USERS.viewer;
-  injectAuthorizedPrincipal({ userId, tenantId: scope.tenantId, projectId: scope.projectId, role });
+  injectIdentity({ userId });
+  // [B16-C.2] the project's OTHER members keep their memberships while this user is signed in —
+  // a reviewer's session must never read as the editor's revocation (which retires the
+  // editor's pending review request). Each browser session is one user; the project is shared.
+  injectMembership(allFreshBrowserMemberships(scope));
+}
+
+/** Every fresh-browser user with their standing role in the project. */
+export function allFreshBrowserMemberships(scope: { tenantId: string; projectId: string } = SCOPE): Array<{ tenantId: string; projectId: string; userId: string; role: Role }> {
+  return [
+    { tenantId: scope.tenantId, projectId: scope.projectId, userId: USERS.admin, role: "admin" },
+    { tenantId: scope.tenantId, projectId: scope.projectId, userId: USERS.editor, role: "editor" },
+    { tenantId: scope.tenantId, projectId: scope.projectId, userId: USERS.reviewer, role: "reviewer" },
+    { tenantId: scope.tenantId, projectId: scope.projectId, userId: USERS.viewer, role: "viewer" },
+  ];
 }
 /** An UNAUTHENTICATED browser (the identity provider verifies to null) — not the local-dev default principal. */
 export function signOut(): void { injectIdentity(null); }

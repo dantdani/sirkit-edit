@@ -58,7 +58,7 @@ describe("B16.0.2 §H — the banner follows the SERVER auth mode", () => {
     const banner = readFileSync(join(process.cwd(), "app", "components", "auth", "LocalDevIdentityBanner.tsx"), "utf8");
     expect(banner.includes("process.env.NEXT_PUBLIC_SIRKIT_AUTH_MODE")).toBe(false);
     const layout = readFileSync(join(process.cwd(), "app", "layout.tsx"), "utf8");
-    expect(layout).toContain("<LocalDevIdentityBanner authMode={resolveAuthMode(process.env)} />");
+    expect(layout).toContain("<LocalDevIdentityBanner authMode={resolveAuthMode(process.env)}"); // [B16-C §5] the fixture-runtime flag is passed beside it
     expect(layout).toContain('import { resolveAuthMode } from "./lib/auth/mode";');
   });
 });

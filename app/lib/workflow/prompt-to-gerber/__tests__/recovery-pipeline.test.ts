@@ -184,7 +184,10 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     // Second fresh browser (localStorage empty → 0) against the advanced server snapshot: refused, not silently overwritten.
     const stale = await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "publish_demo_snapshot", request: { ...publication, requestId: "publish:fresh-browser", idempotencyKey: "publish:fresh-browser" } }));
     expect(stale.status).toBe(409);
-    expect((await readJson(stale)).code).toBe("PS_SNAPSHOT_REVISION_CONFLICT");
+    const staleBody = await readJson<{ code: string; conflict: { kind: string; expectedRevision: number; currentRevision: number } }>(stale);
+    expect(staleBody.code).toBe("PS_SNAPSHOT_REVISION_CONFLICT");
+    // [B16-C.3] the refusal names the newer revision so the browser can refresh or rebase deliberately.
+    expect(staleBody.conflict).toMatchObject({ kind: "snapshot_revision", expectedRevision: 0, currentRevision: 1 });
     // Hydrate the revision from the server, retry with the SAME idempotency key → replay, no second snapshot.
     const hydrated = await hydrateSnapshotRevision();
     expect(hydrated.snapshotRevision).toBe(1);
@@ -349,6 +352,95 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     expect(after.manufacturing!.authority).toMatchObject({ revision: requalifiedBody.authorityRevision, current: true });
     expect(after.manufacturing!.latestRelease).toMatchObject({ releaseId: second.headers.get("X-Sirkit-Release-Id"), current: true });
     qualified = requalifiedBody;
+  }, QUALIFY_TIMEOUT_MS);
+
+  it("H.14 routed-board revision: a structural change after release derives a NEW board revision (copper kept only by proof), the old board and its releases stay history and can never be released again, the new revision is re-qualified and released on its own", async () => {
+    // The schematic change: a SECOND power header J2 wired to VCC and GND (a connected component — an unconnected spare is
+    // refused by RC03's pin/pad parity rule, see the ledger). This changes the endpoint sets of VCC and GND, so their copper
+    // must be stripped; every other net's copper is provably unchanged and stays.
+    const catalog = blinkerCatalog();
+    const extended2: BuildLogicalNetlist = { ...BLINKER_NETLIST, components: [...BLINKER_NETLIST.components, { refDes: "J2", partId: BLINKER_NETLIST.components[8]!.partId, value: "PWR_AUX", role: "connector" }], connections: [...BLINKER_NETLIST.connections, { kind: "label", pin: "J2.1", labelName: "VCC" }, { kind: "label", pin: "J2.2", labelName: "GND" }] };
+    const relaid2 = layoutProposal(extended2, catalog.cachedParts);
+    expect(relaid2.validationOk, relaid2.violations.join(" | ")).toBe(true);
+    const originalIds2 = new Map((schematic.state.kicadComponents ?? []).map((instance) => [instance.refDes, instance.id]));
+    for (const instance of relaid2.state.kicadComponents ?? []) { const original = originalIds2.get(instance.refDes); if (original) instance.id = original; }
+    const connectedSchematic = { ...relaid2, netlist: buildNetlist(relaid2.state, relaid2.getPart) };
+    await bindAll(connectedSchematic); // the reviewer-approved exact parts (J2 is new; the others replay idempotently)
+    const hydrated2 = await hydrateSnapshotRevision();
+    signInAs("editor");
+    const publication2 = publicationRequest(connectedSchematic, { expectedSnapshotRevision: hydrated2.snapshotRevision });
+    expect((await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "publish_demo_snapshot", request: publication2 }))).status).toBe(201);
+    const head = (await stage3Repository.getBoardHead({ ...SCOPE, boardId: BOARD_ID }))!;
+    const schematicRevision = publication2.schematicRevision;
+    // The Stage 8 guard still refuses the structural change on the routed, released board.
+    const refused = await readJson<{ result: { status: string; blockers: Array<{ code: string }> } }>(await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "preflight", request: preflightRequest({ requestId: `preflight:h14:${head.record.revision}`, schematicRevision, current: { revision: head.record.revision } }) })));
+    expect(refused.result.blockers.map((item) => item.code)).toContain("PS_STRUCTURAL_ADD_REQUIRES_UNROUTED_BOARD");
+    // Preview the rework plan (writes nothing).
+    const revisionRequest = { requestSchemaVersion: "sirkit.pcb-board-revision-request.v1", requestId: `board-revision:${head.record.revision}`, designId: DESIGN_ID, schematicRevision, assemblyVariantId: ASSEMBLY_VARIANT_ID, parent: { boardId: BOARD_ID, expectedBoardRevision: head.record.revision }, carry: { copper: true, placement: true, constraints: true }, resolutionPolicyId: "sirkit.default-footprint-resolution", resolutionPolicyVersion: "1.0.0", syncPolicyId: "sirkit.safe-pcb-sync", syncPolicyVersion: "1.0.0", requestedAt: new Date().toISOString() };
+    type Preview = { result: { status: string; revisionPlan: { planId: string; planDigest: string; derivedBoardId: string; generation: number; components: Array<{ referenceDesignator: string; outcome: string }>; nets: Array<{ displayName: string; outcome: string; proof: { equivalent: boolean; reason: string }; copper: { tracks: number } }>; summary: Record<string, number> }; parentPreflight: { stage8Blocked: boolean }; derivedPreflight: { status: string; planDigest: string | null; operations: Array<{ kind: string }> } } };
+    const previewResponse = await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "preview_board_revision", request: revisionRequest }));
+    const preview = await readJson<Preview>(previewResponse);
+    expect(previewResponse.status, JSON.stringify(preview).slice(0, 800)).toBe(200);
+    expect(preview.result.status, JSON.stringify(preview.result.derivedPreflight).slice(0, 800)).toBe("ready_to_derive");
+    expect(preview.result.parentPreflight.stage8Blocked).toBe(true);
+    expect(preview.result.revisionPlan.derivedBoardId).toBe(`${BOARD_ID}@r1`);
+    // J2 joins VCC and GND. A stable net id is derived from the endpoint set, so each of those nets appears as its old
+    // identity REMOVED (copper stripped, the proof names the successor) plus a new identity ADDED; every other net keeps
+    // its copper by proof; the nine original components are kept, J2 is added.
+    expect(preview.result.revisionPlan.components.find((item) => item.referenceDesignator === "J2")?.outcome).toBe("added");
+    expect(preview.result.revisionPlan.components.filter((item) => item.outcome === "kept")).toHaveLength(9);
+    const removed = preview.result.revisionPlan.nets.filter((net) => net.outcome === "removed");
+    expect(removed.map((net) => net.displayName.replace(/^.*\//, "")).sort()).toEqual(["GND", "VCC"]);
+    expect(removed.every((net) => !net.proof.equivalent && net.copper.tracks > 0 && net.proof.reason.includes("net identity changed with its membership"))).toBe(true);
+    expect(preview.result.revisionPlan.nets.filter((net) => net.outcome === "added").map((net) => net.displayName.replace(/^.*\//, "")).sort()).toEqual(["GND", "VCC"]);
+    expect(preview.result.revisionPlan.summary).toMatchObject({ netsRemoved: 2, netsAdded: 2, netsStripped: 0 });
+    expect(preview.result.revisionPlan.summary.netsRetained).toBeGreaterThan(0);
+    expect(preview.result.revisionPlan.nets.every((net) => net.outcome === "copper_retained" ? net.proof.equivalent : true)).toBe(true);
+    expect(preview.result.revisionPlan.summary.tracksStripped).toBeGreaterThan(0);
+    expect(preview.result.revisionPlan.summary.tracksRetained).toBeGreaterThan(0);
+    expect(preview.result.derivedPreflight.operations.map((item) => item.kind)).toContain("add_component_instance");
+    // Derive (human editor, explicit confirmation, reviewed digests, opt-in header).
+    const deriveRequest = { ...revisionRequest, requestId: `${revisionRequest.requestId}:derive`, planId: preview.result.revisionPlan.planId, planDigest: preview.result.revisionPlan.planDigest, syncPlanDigest: preview.result.derivedPreflight.planDigest, confirmation: "derive_board_revision", idempotencyKey: `derive:${preview.result.revisionPlan.planDigest}` };
+    const derivedResponse = await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "derive_board_revision", request: deriveRequest }, { headers: { "x-sirkit-pcb-sync-opt-in": "true" } }));
+    const derived = await readJson<{ result: { status: string; derivedBoardId: string; boardRevision: string; generation: number; lineage: { state: string; currentBoardId: string } } }>(derivedResponse);
+    expect(derivedResponse.status, JSON.stringify(derived).slice(0, 600)).toBe(201);
+    const derivedBoardId = derived.result.derivedBoardId;
+    expect(derivedBoardId).toBe(`${BOARD_ID}@r1`);
+    expect(derived.result.lineage).toMatchObject({ state: "current", currentBoardId: derivedBoardId });
+    // The OLD board: record untouched, lineage superseded, its two ledger entries kept — and no release or qualification can ever run on it again.
+    const oldLoad = await readJson<BoardLoad & { result: { lineage?: { state: string; supersededBy: string | null; currentBoardId: string } } }>(await pcbSyncGet(boardQuery()));
+    expect(oldLoad.result.record?.revision).toBe(head.record.revision);
+    expect(oldLoad.result.lineage).toMatchObject({ state: "superseded", supersededBy: derivedBoardId, currentBoardId: derivedBoardId });
+    expect(oldLoad.manufacturing!.latestRelease?.current).toBe(true); // history: the last release of the old board stays what it was
+    signInAs("admin");
+    const oldRelease = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: BOARD_ID, expectedAuthorityRevision: qualified.authorityRevision, expectedAuthorityDigest: qualified.authorityDigest }));
+    expect(oldRelease.status).toBe(409);
+    expect(await readJson(oldRelease)).toMatchObject({ code: "MFG_BOARD_SUPERSEDED", supersededBy: derivedBoardId, currentBoardId: derivedBoardId });
+    signInAs("editor");
+    const oldQualify = await qualify(jsonRequest("/api/pcb/qualify", { designId: DESIGN_ID, boardId: BOARD_ID }));
+    expect(oldQualify.status).toBe(409);
+    expect((await readJson(oldQualify)).code).toBe("MFG_BOARD_SUPERSEDED");
+    expect((await new DurableManufacturingReleaseLedger(getDurableWorkflowRepository()).list({ ...SCOPE, designId: DESIGN_ID, boardId: BOARD_ID })).length).toBe(2);
+    // The NEW revision: carried copper, J2 added, NO authority yet; a fresh browser opening the root id is told where to go.
+    const fresh = await readJson<BoardLoad>(await pcbSyncGet(boardQuery(derivedBoardId)));
+    expect(fresh.result.status).toBe("found");
+    expect(fresh.result.record!.board.footprints).toHaveLength(10);
+    expect(fresh.result.record!.board.tracks.length).toBe(preview.result.revisionPlan.summary.tracksRetained); // carried copper only
+    expect(fresh.manufacturing!.authority).toBeNull();
+    expect(fresh.manufacturing!.latestRelease).toBeNull();
+    // Re-qualification runs the whole pipeline on the new revision (recorded router) and seals a NEW authority; the administrator releases it separately.
+    const requalified = await qualify(jsonRequest("/api/pcb/qualify", { designId: DESIGN_ID, boardId: derivedBoardId }));
+    const requalifiedBody = await readJson<{ authorityRevision: number; authorityDigest: string; boardRevision: string }>(requalified);
+    expect(requalified.status, JSON.stringify(requalifiedBody).slice(0, 800)).toBe(200);
+    expect(requalifiedBody.authorityRevision).toBe(1); // the derived board's FIRST authority — nothing carried over from the parent
+    signInAs("admin");
+    const newRelease = await release(jsonRequest("/api/pcb/release", { designId: DESIGN_ID, boardId: derivedBoardId, expectedAuthorityRevision: requalifiedBody.authorityRevision, expectedAuthorityDigest: requalifiedBody.authorityDigest }));
+    expect(newRelease.status, newRelease.status === 200 ? "" : JSON.stringify(await readJson(newRelease)).slice(0, 600)).toBe(200);
+    expect(newRelease.headers.get("X-Sirkit-Release-Recorded")).toBe("created");
+    expect(newRelease.headers.get("X-Sirkit-Release-Id")).not.toBe(firstRelease!.releaseId);
+    const after = await readJson<BoardLoad>(await pcbSyncGet(boardQuery(derivedBoardId)));
+    expect(after.manufacturing!.authority).toMatchObject({ revision: 1, current: true });
+    expect(after.manufacturing!.latestRelease).toMatchObject({ releaseId: newRelease.headers.get("X-Sirkit-Release-Id"), current: true });
   }, QUALIFY_TIMEOUT_MS);
 
   it("H.15 no stale state crosses projects or branches: another project and another branch see nothing and can act on nothing", async () => {

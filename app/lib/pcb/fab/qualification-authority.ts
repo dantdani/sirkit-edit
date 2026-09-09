@@ -25,6 +25,7 @@
  */
 
 import type { AutonomousDesignDeclaration, AutonomousPackageClass } from "../autonomous/capability-profile";
+import { pcbBoardLineageOf } from "../board-identity";
 import type { PcbBoard } from "../types";
 import type { ComponentPhysicalBinding } from "../../physical-binding/types";
 import type { PhysicalBindingRepository } from "../../physical-binding/repository";
@@ -153,7 +154,7 @@ export async function resolveQualificationComponentAuthority(input: {
     }
     const peers = await input.bindings.listSelectedPeers({
       tenantId: input.scope.tenantId, projectId: input.scope.projectId, branchId: input.scope.branchId,
-      boardInstanceId: input.scope.boardId, componentInstanceId: identity.componentInstanceId, hierarchyPath: ["root"], assemblyVariantIds: [],
+      boardInstanceId: pcbBoardLineageOf(input.scope.boardId).rootBoardId /* [B16-C.1] bindings are per lineage, not per revision */, componentInstanceId: identity.componentInstanceId, hierarchyPath: ["root"], assemblyVariantIds: [],
     });
     const binding = peers.find((candidate) => candidate.revisionId === identity.bindingRevisionId);
     if (!binding) {

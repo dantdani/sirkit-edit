@@ -7,6 +7,7 @@ const SAFETY_MINIMUM_FIELDS: Array<keyof DrcRuleSet> = [
   "minViaOuterNm",
   "minViaDrillNm",
   "minAnnularRingNm",
+  "minPthAnnularRingNm",
   "minHoleToHoleNm",
   "minEdgeClearanceNm",
   "minSilkPadClearanceNm",

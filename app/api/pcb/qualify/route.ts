@@ -54,7 +54,8 @@ import type { PcbBoard } from "@/app/lib/pcb/types";
 import { getFabPreset } from "@/app/lib/pcb/fab/presets";
 import { DurableManufacturingAuthorityStore } from "@/app/lib/pcb/fab/authority-store";
 import { authoritativeBoardDigest, manufacturingComponentAuthorityDigest, type ManufacturingReleaseAuthority } from "@/app/lib/pcb/fab/release-gate";
-import { manufacturingRuleProfileDigest, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import type { ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import { buildManufacturingRuleProfile, JLCPCB_2L_RULE_PROFILE_EVIDENCE } from "@/app/lib/pcb/fab/rule-profile";
 import { boundedManufacturingFailure, manufacturingRefusal } from "@/app/lib/pcb/fab/manufacturing-errors";
 import { resolveQualificationComponentAuthority, type QualificationComponentAuthority } from "@/app/lib/pcb/fab/qualification-authority";
 import { commitQualification, qualificationIdempotencyKey } from "@/app/lib/pcb/fab/qualification-commit";
@@ -62,8 +63,8 @@ import { DurableQualificationLease } from "@/app/lib/pcb/fab/qualification-lease
 import { rc01ParityEvidenceDigest, rc02RouteEvidence, rc02RouteEvidenceDigest, rc03CapabilityEvidenceDigest, type SchematicAuthorityIdentity } from "@/app/lib/pcb/fab/qualification-evidence";
 import { buildSchematicParityCertificate } from "@/app/lib/pcb/readiness/parity";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
-import { mmToNm } from "@/app/lib/pcb/units";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
+import { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
 import { snapshotToSourceNetlist } from "@/app/lib/pcb/fab/snapshot-netlist";
 import type { PcbSyncAuthoritativeSnapshot } from "@/app/lib/pcb-sync/types";
@@ -79,43 +80,17 @@ export const maxDuration = 300;
  *  bare board. No other preset is releasable (the release gate structurally
  *  refuses non-two-layer profiles). */
 export const QUALIFIED_FABRICATION_PROFILE_ID = "jlcpcb-2l" as const;
-/** Official capability page the profile limits were re-verified against (B16.1C §D). */
-export const QUALIFIED_FABRICATION_PROFILE_EVIDENCE = Object.freeze({ sourceRef: "https://jlcpcb.com/capabilities/pcb-capabilities", verifiedAt: "2026-09-07" });
+/** [B16-C.4] Source-pinned evidence (URLs, retrieval date, scope, expiry) the qualified profile carries; see fab/rule-profile.ts. */
+export const QUALIFIED_FABRICATION_PROFILE_EVIDENCE = JLCPCB_2L_RULE_PROFILE_EVIDENCE;
 
 /** [B16-A F3] the ONLY keys a qualification request may carry. */
 export const QUALIFY_BODY_KEYS: ReadonlySet<string> = new Set(["boardId", "designId"]);
 /** [B16-A F3] server-owned placement seeds — never a client input. */
 export const QUALIFICATION_PLACEMENT_SEEDS = Object.freeze([101, 202, 303] as const);
 
-/** Conservative JLCPCB-style two-layer rigid prototype profile (bare board). */
+/** Conservative JLCPCB two-layer rigid prototype profile (bare board): limits read from the enforced DRC preset, via and PTH rings split. */
 export function bareBoardRuleProfile(): ManufacturingRuleProfile {
-  const drc = getPreset(QUALIFIED_FABRICATION_PROFILE_ID);
-  const content: Omit<ManufacturingRuleProfile, "digest"> = {
-    schemaVersion: "sirkit.manufacturing-rule-profile.v1",
-    profileId: getFabPreset(QUALIFIED_FABRICATION_PROFILE_ID).id,
-    version: 1,
-    manufacturer: "JLCPCB",
-    processName: "Economy rigid two-layer PTH prototype",
-    evidence: { ...QUALIFIED_FABRICATION_PROFILE_EVIDENCE },
-    construction: { copperLayers: 2, copperThicknessUm: 35, boardThicknessMm: 1.6, material: "FR-4", maxBoardWidthMm: 100, maxBoardHeightMm: 80 },
-    limitsNm: {
-      minTraceWidth: drc.rules.default.minTrackWidthNm,
-      minSpace: drc.rules.default.clearanceNm,
-      minDrill: drc.rules.default.minViaDrillNm,
-      minFinishedHole: drc.rules.default.minViaDrillNm,
-      minAnnularRing: drc.rules.default.minAnnularRingNm,
-      minCopperToEdge: drc.rules.default.minEdgeClearanceNm,
-      minHoleToEdge: drc.rules.default.minEdgeClearanceNm,
-      solderMaskExpansion: mmToNm(0.05),
-      minSolderMaskSliver: mmToNm(0.1),
-      minSilkscreenWidth: mmToNm(0.15),
-      minSilkscreenClearance: drc.rules.default.minSilkPadClearanceNm,
-    },
-    maskPolicy: { componentPads: "explicit_or_profile_opening", defaultViaTenting: "tented" },
-    specialFeatures: { slots: "unsupported", castellations: "unsupported", edgePlating: "unsupported", flex: "unsupported" },
-    assembly: { supported: false },
-  };
-  return { ...content, digest: manufacturingRuleProfileDigest(content) };
+  return buildManufacturingRuleProfile({ presetId: QUALIFIED_FABRICATION_PROFILE_ID, evidence: QUALIFIED_FABRICATION_PROFILE_EVIDENCE });
 }
 
 /**
@@ -180,8 +155,17 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
   const noStore = { "Cache-Control": "no-store", "X-Sirkit-Correlation-Id": correlationId } as const;
   try {
     const head = await stage3Repository.getBoardHead(repositoryScope);
+    // [B16-C.1] a superseded board revision can never be (re)qualified: its authority is frozen history.
+    const lineage = await new DurableBoardLineageStore(getDurableWorkflowRepository()).describe(repositoryScope, boardId);
+    if (lineage.state === "superseded") return manufacturingRefusal("MFG_BOARD_SUPERSEDED", { correlationId, extra: { supersededBy: lineage.supersededBy?.boardId ?? null, currentBoardId: (await new DurableBoardLineageStore(getDurableWorkflowRepository()).resolveCurrent(repositoryScope, boardId)).currentBoardId } });
     if (!head) return manufacturingRefusal("MFG_AUTHORITATIVE_BOARD_NOT_FOUND", { correlationId });
-    const sourceBoard = head.record.board;
+    // [B16-C.1] autonomous qualification derives placement and copper from scratch: tracks and vias already on the
+    // source board (a previous qualification, human routing, or copper carried into a derived revision by proof) are a
+    // starting point for human work, never an input to RC02 — pinning placement to them ("preserve_routed") made every
+    // outline candidate of a derived revision block. They are cleared for the run; the committed routed candidate replaces
+    // the board wholesale, exactly as before.
+    const { routingHistory: _priorRoutingHistory, ...sourceContent } = head.record.board; void _priorRoutingHistory;
+    const sourceBoard: PcbBoard = { ...sourceContent, tracks: [], vias: [] }; // an already-unrouted board is unchanged by this
     const sourceRevision = head.record.revision;
 
     // 1. Server-owned component/package authority — fail closed on any gap.
@@ -204,8 +188,8 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
     const workflow = getDurableWorkflowRepository();
     const store = new DurableManufacturingAuthorityStore(workflow);
     const existing = await store.getHead(authorityScope);
-    if (existing && existing.authority.boardRevision === sourceRevision && existing.authority.boardDigest === authoritativeBoardDigest(sourceBoard) && existing.authority.qualificationAuthority?.digest === componentAuthority.digest && existing.authority.schematic.digest === schematic.digest) {
-      return Response.json(summarize(existing.authority, existing.revision, existing.recordDigest, { idempotent: true, runId: null, selectedCandidateId: null }), { headers: noStore });
+    if (existing && existing.authority.boardRevision === sourceRevision && existing.authority.boardDigest === authoritativeBoardDigest(head.record.board) /* the authority describes the HEAD board, copper included */ && existing.authority.qualificationAuthority?.digest === componentAuthority.digest && existing.authority.schematic.digest === schematic.digest) {
+      return Response.json(summarize(existing.authority, existing.revision, existing.recordDigest, { idempotent: true, runId: null, selectedCandidateId: null }, head.record.digest), { headers: noStore });
     }
 
     const rules = getPreset(QUALIFIED_FABRICATION_PROFILE_ID).rules;
@@ -307,7 +291,7 @@ async function qualifyBoard(input: { scope: PcbSyncApiScope; boardId: string; de
       idempotencyKey: qualificationIdempotencyKey({ boardId, sourceRevision, routedRevision: boardRevision, componentAuthorityDigest: componentAuthority.digest }),
       committedAt,
     });
-    return Response.json(summarize(authority, committed.authorityRevision, committed.authorityRecordDigest, { idempotent: false, runId: result.runId, selectedCandidateId: result.selectedCandidateId ?? null }), { headers: noStore });
+    return Response.json(summarize(authority, committed.authorityRevision, committed.authorityRecordDigest, { idempotent: false, runId: result.runId, selectedCandidateId: result.selectedCandidateId ?? null }, next.digest), { headers: noStore });
   } catch (error) {
     return boundedManufacturingFailure(error, "qualify", correlationId);
   }
@@ -329,13 +313,19 @@ async function appliedSynchronizationFor(repositoryScope: { tenantId: string; pr
   return { identity: { revision: plan.snapshot.schematicRevision, digest: plan.snapshot.schematicDigest, planId: plan.planId, snapshotDigest: plan.snapshot.snapshotDigest }, designId: plan.scope.designId, snapshot };
 }
 
-function summarize(authority: ManufacturingReleaseAuthority, authorityRevision: number, authorityDigest: string, run: { idempotent: boolean; runId: string | null; selectedCandidateId: string | null }) {
+function summarize(authority: ManufacturingReleaseAuthority, authorityRevision: number, authorityDigest: string, run: { idempotent: boolean; runId: string | null; selectedCandidateId: string | null }, committedBoardDigest: string) {
   return {
     ok: true,
     idempotent: run.idempotent,
     runId: run.runId,
     boardRevision: authority.boardRevision,
+    /** The sealed authority's board digest (`pcb-authority-…`, part of the authority identity). */
     boardDigest: authority.boardDigest,
+    /** [B16-C.5] The committed durable board RECORD's digest — what `GET /api/pcb-sync?boardId` reloads as `record.digest`.
+     *  The browser verifies its adoption against THIS (the page-level proof found it comparing the authority digest
+     *  with the record digest, so no qualification could ever verify in a real browser). */
+    committedBoardRevision: authority.boardRevision,
+    committedBoardDigest,
     authorityRevision,
     authorityDigest,
     componentAuthorityDigest: authority.qualificationAuthority?.digest ?? authority.componentAuthority.digest,

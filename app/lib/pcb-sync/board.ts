@@ -12,6 +12,9 @@ export function makeBoardRecord(input: { tenantId: string; projectId: string; br
   return { ...input, board, revision: pcbRevisionId(board), digest: boardDigest(board) };
 }
 
+/** [B16-C.1] the board class the sync boundary reasons about (routed / zoned / constrained / …), for callers outside inspection. */
+export function classifyBoard(board: PcbBoard): { boardClass: PcbSyncBoardClass; risk: PcbSyncRiskClass; constrained: boolean } { return classify(board); }
+
 function classify(board: PcbBoard): { boardClass: PcbSyncBoardClass; risk: PcbSyncRiskClass; constrained: boolean } {
   const constrained = Boolean(board.constraintState || board.netClassing || board.routingKeepouts?.length || board.stackupConfig?.copperLayers.some((layer) => layer.role === "plane"));
   if ((board as { formatVersion?: number }).formatVersion !== 1) return { boardClass: "unsupported", risk: "unsupported_unknown", constrained };

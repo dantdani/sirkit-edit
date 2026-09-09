@@ -14,6 +14,7 @@ export type DrcCheckKind =
   | "viaOuterDiameter"
   | "viaDrill"
   | "annularRing"
+  | "pthAnnularRing"
   | "holeToHole"
   | "edgeClearance"
   | "courtyardOverlap"
@@ -38,7 +39,16 @@ export interface DrcRuleSet {
   minTrackWidthNm: number;
   minViaOuterNm: number;
   minViaDrillNm: number;
-  minAnnularRingNm: number; // (viaOuter - viaDrill) / 2
+  /** VIA annular ring only: (viaOuter - viaDrill) / 2. Not a plated-through-hole limit. */
+  minAnnularRingNm: number;
+  /**
+   * [B16-C.4] PLATED-THROUGH-HOLE (component pad) annular ring: the narrowest
+   * copper between the hole wall and the pad edge, measured per pad. Split
+   * from the via ring because the manufacturer states separate limits (JLCPCB
+   * two-layer: via ring follows from the 0.15/0.25 mm hole/diameter pair, PTH
+   * ring is a stated 0.25 mm recommended / 0.18 mm absolute minimum).
+   */
+  minPthAnnularRingNm: number;
   minHoleToHoleNm: number;
   minEdgeClearanceNm: number;
   minSilkPadClearanceNm: number; // silk-to-pad gap

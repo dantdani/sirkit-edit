@@ -29,6 +29,7 @@ import { LOCAL_DEV_PRINCIPAL_ID, LOCAL_DEV_SESSION_ID } from "./project-membersh
 import { confirmSessionLiveness, type SessionLivenessOutcome, type SessionLivenessVerifier } from "./session-liveness";
 import { createBoundedFetch, SESSION_VERIFICATION_DEADLINE_MS, type BoundedFetch } from "./bounded-fetch";
 
+import { fixturePrincipalId, fixtureRoleFromCookieHeader, fixtureRuntimeEnabled } from "../fixture-runtime/mode";
 export interface VerifiedPrincipal {
   /** The authenticated user id (Supabase `sub` in production). */
   userId: string;
@@ -49,9 +50,13 @@ export interface IdentityProvider {
 /** The local-development identity — a single fixed principal. Explicitly NOT
  *  production authentication; only ever selected in local_dev mode. */
 export class LocalDevIdentityProvider implements IdentityProvider {
-  async verify(): Promise<VerifiedPrincipal | null> {
+  async verify(request?: Request): Promise<VerifiedPrincipal | null> {
+    // [B16-C §5] fixture runtime only: a dev-only cookie selects WHICH local principal
+    // (one per role) so a browser can act as editor, reviewer or administrator in the
+    // page-level proof. Never consulted outside the fixture runtime; never production.
+    const fixtureRole = fixtureRuntimeEnabled() ? fixtureRoleFromCookieHeader(request?.headers.get("cookie")) : null;
     return {
-      userId: LOCAL_DEV_PRINCIPAL_ID,
+      userId: fixtureRole ? fixturePrincipalId(fixtureRole) : LOCAL_DEV_PRINCIPAL_ID,
       sessionId: LOCAL_DEV_SESSION_ID,
       authMethod: "local_dev",
       authStrength: "local_dev",

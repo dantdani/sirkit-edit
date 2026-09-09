@@ -303,4 +303,48 @@ describe("manufacturing workflow panel (fresh browser)", () => {
     expect(releaseButton().disabled).toBe(true);
     expect((screen.getByTestId("p2g-qualify") as HTMLButtonElement).disabled).toBe(true);
   });
+
+  it("[B16-C.5] a board lifecycle replaced while the hydration READ is in flight re-reads the current generation (never stuck at Hydrating…); a lifecycle that keeps moving is reported", async () => {
+    // The browser proof found the panel at "Hydrating durable truth…" for good after a refresh: the editor
+    // adopts the authoritative board right after mounting, retiring the scope the first read captured.
+    let owner: PcbBoardLifecycleOwner | null = null;
+    let reads = 0;
+    const client = {
+      loadBoardWithManufacturing: vi.fn(async () => {
+        reads += 1;
+        if (reads === 1) owner!.adopt({ tenantId: IDENTITY.tenantId, projectId: IDENTITY.projectId, branchId: IDENTITY.branchId, boardId: IDENTITY.boardId }); // replaced mid-read
+        return { ok: true as const, value: { load: { resultSchemaVersion: "sirkit.pcb-sync-board-load-result.v1", status: "found" as const, scope: { ...IDENTITY }, record: { ...IDENTITY, revision: BOARD.revision, digest: BOARD.digest, board: {}, updatedAt: "2026-09-07T12:00:00.000Z" } }, manufacturing: truth({ snapshot: SNAPSHOT }) } };
+      }),
+    } as unknown as PcbSyncClient;
+    function OwnerHarness() {
+      const [created] = useState(() => { const o = new PcbBoardLifecycleOwner(); o.adopt({ tenantId: IDENTITY.tenantId, projectId: IDENTITY.projectId, branchId: IDENTITY.branchId, boardId: IDENTITY.boardId }); owner = o; return o; });
+      const [registry] = useState(() => new PcbOwnedOperationRegistry(created));
+      const workflow = useManufacturingWorkflow({ client, identity: IDENTITY, hasSchematic: true, schematicBaseDigest: "sha256:base", refreshToken: 0, ownedOps: registry, lifecycle: created, scopeHeaders: SCOPE_HEADERS });
+      return <ManufacturingWorkflowPanel workflow={workflow} qualifying={false} canQualify={false} onQualify={() => undefined} />;
+    }
+    render(<OwnerHarness />);
+    await waitFor(() => expect(screen.getByTestId("p2g-hydration").textContent).toContain("Durable truth loaded"));
+    expect(reads).toBe(2); // the superseded read was repeated once for the current generation
+    expect(stateOf()).toBe("awaiting_qualification");
+
+    // A lifecycle that is replaced on EVERY read is reported after the bounded retries, never chased forever.
+    cleanup();
+    reads = 0;
+    const restless = {
+      loadBoardWithManufacturing: vi.fn(async () => {
+        reads += 1;
+        owner!.adopt({ tenantId: IDENTITY.tenantId, projectId: IDENTITY.projectId, branchId: IDENTITY.branchId, boardId: IDENTITY.boardId });
+        return { ok: true as const, value: { load: { resultSchemaVersion: "sirkit.pcb-sync-board-load-result.v1", status: "found" as const, scope: { ...IDENTITY }, record: { ...IDENTITY, revision: BOARD.revision, digest: BOARD.digest, board: {}, updatedAt: "2026-09-07T12:00:00.000Z" } }, manufacturing: truth({ snapshot: SNAPSHOT }) } };
+      }),
+    } as unknown as PcbSyncClient;
+    function RestlessHarness() {
+      const [created] = useState(() => { const o = new PcbBoardLifecycleOwner(); o.adopt({ tenantId: IDENTITY.tenantId, projectId: IDENTITY.projectId, branchId: IDENTITY.branchId, boardId: IDENTITY.boardId }); owner = o; return o; });
+      const [registry] = useState(() => new PcbOwnedOperationRegistry(created));
+      const workflow = useManufacturingWorkflow({ client: restless, identity: IDENTITY, hasSchematic: true, schematicBaseDigest: "sha256:base", refreshToken: 0, ownedOps: registry, lifecycle: created, scopeHeaders: SCOPE_HEADERS });
+      return <ManufacturingWorkflowPanel workflow={workflow} qualifying={false} canQualify={false} onQualify={() => undefined} />;
+    }
+    render(<RestlessHarness />);
+    await waitFor(() => expect(screen.getByTestId("p2g-error").textContent).toContain("MFG_HYDRATION_SUPERSEDED"));
+    expect(reads).toBe(4); // one read + three bounded retries
+  });
 });

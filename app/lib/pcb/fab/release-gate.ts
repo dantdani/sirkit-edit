@@ -19,8 +19,10 @@ import { createManufacturingSnapshot } from "./native/snapshot";
 import { sha256, stableJson, utf8 } from "./native/stable";
 import type { ManufacturingIr, NativeFabCompileInput, NativeFabFile } from "./native/types";
 import type { FabPreset } from "./types";
+import { ruleProfileEvidenceStatus } from "./rule-profile";
 import {
   createManufacturingReleaseManifestV1,
+  MANUFACTURING_RULE_PROFILE_SCHEMA,
   manufacturingRuleProfileDigest,
   type ManufacturingFileRole,
   type ManufacturingReleaseFile,
@@ -147,17 +149,20 @@ function sourceIdentityMatches(locator: ManufacturingReleaseLocator, source: Man
 function validateRuleProfile(source: ManufacturingReleaseAuthority, widthNm: number, heightNm: number): void {
   const profile = source.manufacturingRuleProfile;
   const content = Object.fromEntries(Object.entries(profile).filter(([key]) => key !== "digest")) as Omit<ManufacturingRuleProfile, "digest">;
-  if (profile.schemaVersion !== "sirkit.manufacturing-rule-profile.v1" || profile.digest !== manufacturingRuleProfileDigest(content)) fail("MFG_RULE_PROFILE_DIGEST_INVALID", "Manufacturing rule profile digest is missing or invalid.");
-  if (profile.profileId !== source.fabPreset.id || profile.version !== source.fabPreset.version || profile.manufacturer !== source.fabPreset.fab || profile.manufacturer !== source.drcPreset.fab) fail("MFG_RULE_PROFILE_INCOMPATIBLE", "Manufacturing rule, fabrication, and DRC profile identities differ.");
-  if (!profile.evidence.sourceRef || !/^\d{4}-\d{2}-\d{2}$/.test(profile.evidence.verifiedAt)) fail("MFG_RULE_PROFILE_EVIDENCE_MISSING", "Manufacturing profile requires a controlled source and verification date.");
-  const ageMs = Date.parse(source.sourceDate) - Date.parse(`${profile.evidence.verifiedAt}T00:00:00.000Z`);
-  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > 366 * 24 * 60 * 60 * 1000) fail("MFG_RULE_PROFILE_STALE", "Manufacturing profile evidence is future-dated or older than one year at release time.");
+  // [B16-C.4] a pre-split profile (v1: one shared annular ring, no expiry) is refused distinctly — re-qualify, never release on it.
+  if ((profile as { schemaVersion: string }).schemaVersion !== MANUFACTURING_RULE_PROFILE_SCHEMA) fail("MFG_RULE_PROFILE_SCHEMA_RETIRED", "Manufacturing rule profile pre-dates the via/PTH annular-ring split; re-qualify the board.");
+  if (profile.digest !== manufacturingRuleProfileDigest(content)) fail("MFG_RULE_PROFILE_DIGEST_INVALID", "Manufacturing rule profile digest is missing or invalid.");
+  if (profile.profileId !== source.fabPreset.id || profile.profileId !== source.drcPreset.id || profile.version !== source.drcPreset.version || profile.manufacturer !== source.fabPreset.fab || profile.manufacturer !== source.drcPreset.fab) fail("MFG_RULE_PROFILE_INCOMPATIBLE", "Manufacturing rule, fabrication, and DRC profile identities differ.");
+  const evidenceStatus = ruleProfileEvidenceStatus(profile.evidence, source.sourceDate);
+  if (evidenceStatus === "missing" || evidenceStatus === "invalid_window") fail("MFG_RULE_PROFILE_EVIDENCE_MISSING", "Manufacturing profile requires source URLs, a retrieval date, a scope and an expiry no more than one year after retrieval.");
+  if (evidenceStatus === "expired") fail("MFG_RULE_PROFILE_EXPIRED", "Manufacturing profile evidence has expired at release time; re-verify and re-qualify.");
+  if (evidenceStatus !== "ok") fail("MFG_RULE_PROFILE_STALE", "Manufacturing profile evidence is dated after the release instant.");
   if (profile.construction.copperLayers !== 2 || source.board.stackup !== 2 || profile.construction.maxBoardWidthMm * 1_000_000 < widthNm || profile.construction.maxBoardHeightMm * 1_000_000 < heightNm) fail("MFG_RULE_PROFILE_CONSTRUCTION_MISMATCH", "Board construction is outside the explicit two-layer manufacturing profile.");
   const rules = source.drcPreset.rules.default;
   const limits = profile.limitsNm;
   const exact = [
     [limits.minTraceWidth, rules.minTrackWidthNm], [limits.minSpace, rules.clearanceNm], [limits.minDrill, rules.minViaDrillNm],
-    [limits.minAnnularRing, rules.minAnnularRingNm], [limits.minCopperToEdge, rules.minEdgeClearanceNm], [limits.minSilkscreenClearance, rules.minSilkPadClearanceNm],
+    [limits.minViaAnnularRing, rules.minAnnularRingNm], [limits.minPthAnnularRing, rules.minPthAnnularRingNm], [limits.minCopperToEdge, rules.minEdgeClearanceNm], [limits.minSilkscreenClearance, rules.minSilkPadClearanceNm],
   ];
   if (exact.some(([declared, enforced]) => declared !== enforced) || Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 0)) fail("MFG_RULE_PROFILE_LIMIT_MISMATCH", "Explicit manufacturing limits do not match the enforced DRC profile.");
   if (profile.maskPolicy.componentPads !== "explicit_or_profile_opening" || profile.maskPolicy.defaultViaTenting !== "tented") fail("MFG_MASK_POLICY_UNSUPPORTED", "MFG01 requires explicit component openings and tented default vias.");

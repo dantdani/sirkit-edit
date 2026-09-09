@@ -3,14 +3,37 @@ import { compareCodePoints } from "@/app/lib/stable-compare";
 
 export type ManufacturingReleaseMode = "bare_pcb" | "assembled_pcb";
 
+/**
+ * [B16-C.4] Source-pinned fabrication-rule authority. v2 splits the VIA ring
+ * from the PLATED-THROUGH-HOLE ring (the manufacturer states separate limits)
+ * and carries the evidence contract the runbook requires: source URLs, the
+ * retrieval date, the effective scope and an explicit expiry. A v1 profile
+ * (one shared ring, no expiry) is refused at release time — the board must be
+ * re-qualified under the split limits, never released on the ambiguous ones.
+ */
+export const MANUFACTURING_RULE_PROFILE_SCHEMA = "sirkit.manufacturing-rule-profile.v2" as const;
+
+export interface ManufacturingRuleProfileEvidence {
+  /** Official manufacturer pages the limits were read from (first entry = primary). */
+  sourceRefs: string[];
+  /** ISO date (YYYY-MM-DD) the pages were retrieved and the limits transcribed. */
+  retrievedAt: string;
+  /** ISO date (YYYY-MM-DD) after which no release may rely on this transcription. */
+  expiresAt: string;
+  /** Effective scope of the transcription (manufacturer, layer count, copper weight, board kind). */
+  scope: string;
+  /** Verbatim-adjacent statements that justify each non-obvious limit (recorded, not enforced). */
+  notes: string[];
+}
+
 export interface ManufacturingRuleProfile {
-  schemaVersion: "sirkit.manufacturing-rule-profile.v1";
+  schemaVersion: typeof MANUFACTURING_RULE_PROFILE_SCHEMA;
   profileId: string;
   version: number;
   digest: string;
   manufacturer: string;
   processName: string;
-  evidence: { sourceRef: string; verifiedAt: string };
+  evidence: ManufacturingRuleProfileEvidence;
   construction: {
     copperLayers: 2;
     copperThicknessUm: number;
@@ -24,7 +47,10 @@ export interface ManufacturingRuleProfile {
     minSpace: number;
     minDrill: number;
     minFinishedHole: number;
-    minAnnularRing: number;
+    /** Via ring: (outer - drill) / 2. */
+    minViaAnnularRing: number;
+    /** Plated component hole ring: narrowest copper from hole wall to pad edge. */
+    minPthAnnularRing: number;
     minCopperToEdge: number;
     minHoleToEdge: number;
     solderMaskExpansion: number;

@@ -15,8 +15,8 @@
 
 import type { PcbShapeDescriptor } from "../pcb-shape-types";
 
-export const PCB_SHAPE_SOURCE_DIGEST = "sha256-cf412478820e4a9930a88b8c95e9cdbf" as const;
-export const PCB_SHAPE_GRAPH_DIGEST = "sha256-34cb69e527ca461d09cb8fdcc95854a0" as const;
+export const PCB_SHAPE_SOURCE_DIGEST = "sha256-2e288db73b140196e5125bf2dc58b1c2" as const;
+export const PCB_SHAPE_GRAPH_DIGEST = "sha256-60bb78027e4136117ba0212bc39cde1f" as const;
 
 export const PCB_SHAPE_DESCRIPTOR: PcbShapeDescriptor = {
   "nodes": {
@@ -1563,6 +1563,10 @@ export const PCB_SHAPE_DESCRIPTOR: PcbShapeDescriptor = {
         {
           "k": "literal",
           "v": "annular_ring"
+        },
+        {
+          "k": "literal",
+          "v": "pth_annular_ring"
         },
         {
           "k": "literal",
@@ -3609,6 +3613,13 @@ export const PCB_SHAPE_DESCRIPTOR: PcbShapeDescriptor = {
         },
         {
           "name": "minHoleToHoleNm",
+          "optional": true,
+          "type": {
+            "k": "number"
+          }
+        },
+        {
+          "name": "minPthAnnularRingNm",
           "optional": true,
           "type": {
             "k": "number"

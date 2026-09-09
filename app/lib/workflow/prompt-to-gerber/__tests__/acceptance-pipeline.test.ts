@@ -179,24 +179,57 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     expect(body.manufacturing).toEqual({ snapshot: null, authority: null, latestRelease: null, integrity: { authority: "absent", snapshot: "absent", latestRelease: "absent", codes: [] }, viewer: { role: "pcb_editor", actorKind: "human", canRelease: false } });
   });
 
-  it("4. component authority: a human reviewer binds every instance to its published atomic revision (server-owned records)", async () => {
-    signInAs("admin");
+  it("4. component authority: the editor REQUESTS review of every exact candidate, a reviewer approves each (server-owned records); an editor can never bind directly (403, handoff named)", async () => {
+    // A pcb_editor is NOT a reviewer: binding authority is a human reviewer/admin act.
+    // [B16-C.2] the refusal is 403 (it used to be 422, indistinguishable from malformed input) and names the visible handoff.
+    signInAs("editor");
+    const instances = schematic.state.kicadComponents ?? [];
+    const refused = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "bind_atomic_selection", componentInstanceId: instances[0]!.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instances[0]!.atomicPartRevisionId }));
+    expect(refused.status).toBe(403);
+    expect(await readJson(refused)).toMatchObject({ code: "PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED", handoff: "request_atomic_review" });
+    // The editor asks for review of every instance — the evidence the reviewer will see is projected server-side from the published snapshot.
+    const requestIds = new Map<string, string>();
+    for (const instance of instances) {
+      const response = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "request_atomic_review", componentInstanceId: instance.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instance.atomicPartRevisionId, reason: `B16.1C blinker: ${instance.refDes}` }));
+      const body = await readJson<{ ok: boolean; created: boolean; request: { requestId: string; status: string; evidence: { candidate: { exactMpn: string }; footprint: { footprintName: string } | null; pinToPad: { entries: unknown[] } | null; evidenceDigest: string } } }>(response);
+      expect(response.status, `${instance.refDes}: ${JSON.stringify(body).slice(0, 300)}`).toBe(201);
+      expect(body.request.status).toBe("pending");
+      expect(body.request.evidence.candidate.exactMpn).toBeTruthy();
+      expect(body.request.evidence.footprint?.footprintName).toBeTruthy();
+      expect(body.request.evidence.pinToPad?.entries.length).toBeGreaterThan(0);
+      requestIds.set(instance.id, body.request.requestId);
+    }
+    expect(requestIds.size).toBe(9);
+    // The reviewer sees exactly those requests and approves each: the ordinary binding lifecycle
+    // (create → select → revalidate → approve) runs under the REVIEWER's identity.
+    signInAs("reviewer");
+    const listed = await readJson<{ viewer: { canResolve: boolean }; requests: Array<{ requestId: string; status: string }> }>(await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "list_review_requests", boardInstanceId: BOARD_ID, status: "pending" })));
+    expect(listed.viewer.canResolve).toBe(true);
+    expect(listed.requests.map((item) => item.requestId).sort()).toEqual([...requestIds.values()].sort());
     const bound: Array<{ ref: string; bindingRevisionId: string; lifecycleState: string }> = [];
-    for (const instance of schematic.state.kicadComponents ?? []) {
-      const response = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "bind_atomic_selection", componentInstanceId: instance.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instance.atomicPartRevisionId }));
-      const body = await readJson<{ ok: boolean; bindingRevisionId: string; lifecycleState: string; alreadyBound: boolean }>(response);
-      expect(response.status, `${instance.refDes}: ${JSON.stringify(body)}`).toBe(201);
-      expect(body.lifecycleState).toBe("selected");
-      bound.push({ ref: instance.refDes, bindingRevisionId: body.bindingRevisionId, lifecycleState: body.lifecycleState });
+    for (const instance of instances) {
+      const response = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "resolve_review_request", requestId: requestIds.get(instance.id), decision: "approve", reason: `verified candidate, footprint and pin map for ${instance.refDes}` }));
+      const body = await readJson<{ ok: boolean; request: { status: string; decision: { bindingRevisionId: string; lifecycleState: string } } }>(response);
+      expect(response.status, `${instance.refDes}: ${JSON.stringify(body).slice(0, 300)}`).toBe(200);
+      expect(body.request.status).toBe("approved");
+      expect(body.request.decision.lifecycleState).toBe("selected");
+      bound.push({ ref: instance.refDes, bindingRevisionId: body.request.decision.bindingRevisionId, lifecycleState: body.request.decision.lifecycleState });
     }
     expect(bound).toHaveLength(9);
     evidence.bindings = bound;
-    // A pcb_editor is NOT a reviewer: binding authority is a human reviewer/admin act.
+    // The editor resumes: an approved request is idempotent authority (200) — nothing unrelated to rebuild.
     signInAs("editor");
-    const refused = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "bind_atomic_selection", componentInstanceId: schematic.state.kicadComponents![0]!.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: schematic.state.kicadComponents![0]!.atomicPartRevisionId }));
-    // (The physical-bindings route maps this refusal to 422 with the bounded code — existing behaviour, pinned as-is.)
-    expect(refused.status).toBe(422);
-    expect((await readJson(refused)).code).toBe("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
+    const resumed = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "request_atomic_review", componentInstanceId: instances[0]!.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instances[0]!.atomicPartRevisionId }));
+    expect(resumed.status).toBe(200);
+    expect((await readJson<{ request: { status: string } }>(resumed)).request.status).toBe("approved");
+    // [B16-C.5] and the editor's own Schematic → PCB re-binds every instance: an approved identical selection replays (200, nothing written) instead of a second refusal.
+    for (const instance of instances) {
+      const replay = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "bind_atomic_selection", componentInstanceId: instance.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instance.atomicPartRevisionId }));
+      const replayBody = await readJson<{ ok: boolean; alreadyBound: boolean; bindingRevisionId: string }>(replay);
+      expect(replay.status, `${instance.refDes}: ${JSON.stringify(replayBody).slice(0, 200)}`).toBe(200);
+      expect(replayBody.alreadyBound).toBe(true);
+      expect(replayBody.bindingRevisionId).toBe(bound.find((item) => item.ref === instance.refDes)!.bindingRevisionId);
+    }
   });
 
   it("5. schematic → PCB: publish (against the hydrated snapshot revision) → preflight → apply through the canonical route", async () => {
@@ -264,6 +297,10 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
 
     const load = await readJson<BoardLoad>(await pcbSyncGet(boardQuery()));
     expect(load.result.record!.revision).toBe(body.boardRevision);
+    // [B16-C.5] the response names the committed RECORD's digest (what the browser reloads and verifies against), distinct from the authority's board digest.
+    expect(body).toMatchObject({ committedBoardRevision: load.result.record!.revision, committedBoardDigest: load.result.record!.digest });
+    expect(body.boardDigest).toMatch(/^pcb-authority-/);
+    expect(body.committedBoardDigest).not.toBe(body.boardDigest);
     expect(load.manufacturing!.authority).toMatchObject({ revision: body.authorityRevision, recordDigest: body.authorityDigest, boardRevision: body.boardRevision, current: true, fabricationProfileId: "jlcpcb-2l", actor: USERS.editor });
     routedBoard = load.result.record!.board;
     const routing = verifyBlinkerRouting(routedBoard);

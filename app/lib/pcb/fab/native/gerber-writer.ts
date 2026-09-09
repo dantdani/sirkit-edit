@@ -1,5 +1,5 @@
 import type { PadShape, Vec2 } from "../../geometry";
-import { sha256 } from "./stable";
+import { sha256, stableJson } from "./stable";
 import type {
   ManufacturingIr,
   ManufacturingSnapshot,
@@ -50,8 +50,14 @@ function primitiveApertureKey(primitive: MirPrimitive): string {
   return `${primitive.apertureFunction}|${shapeKey(primitive.shape, primitive.rotationDeg)}`;
 }
 
+// [B16-C.4 finding] the key MUST be canonical: a raw JSON.stringify depends on the
+// pad shape's property order, which differs between an in-process board and one
+// that round-tripped through sorted-key JSON (the recorded route fixture) or
+// PostgreSQL jsonb. Every content digest (stableJson) treated those boards as
+// identical while the aperture codes and macro names — and so the released
+// copper bytes — diverged. Reproduced by b16-c-gerber-aperture-key.test.ts.
 function shapeKey(shape: PadShape, rotationDeg: number): string {
-  return `${shape.kind}|${normalizedRotation(rotationDeg)}|${JSON.stringify(shape)}`;
+  return `${shape.kind}|${normalizedRotation(rotationDeg)}|${stableJson(shape)}`;
 }
 
 function rectMacro(shape: Extract<PadShape, { kind: "rect" }>, rotation: number): string {

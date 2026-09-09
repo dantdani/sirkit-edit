@@ -1,3 +1,4 @@
+import { padAnnularRingNm } from "../drc/checks/geometry";
 import type { DrcRules } from "../drc/types";
 import { computeElectricalTruth } from "../electrical-truth";
 import { canonicalJson, pcbRevisionId } from "../revision";
@@ -115,6 +116,7 @@ function rulesAreExplicit(rules: DrcRules): boolean {
     rules.default.minViaOuterNm,
     rules.default.minViaDrillNm,
     rules.default.minAnnularRingNm,
+    rules.default.minPthAnnularRingNm,
     rules.default.minHoleToHoleNm,
     rules.default.minEdgeClearanceNm,
     rules.default.minSilkPadClearanceNm,
@@ -190,6 +192,14 @@ export function evaluateAutonomousCapability(input: {
   for (const via of input.board.vias) if (!(via.layers.includes("copperTop") && via.layers.includes("copperBottom"))) blockers.push(blocker("CAP_VIA_TYPE_UNSUPPORTED", "unsupported", "Only full top-to-bottom through-vias are supported.", [via.id]));
   for (const zone of input.board.zones) if (!zoneFillIsCurrent(input.board, zone)) blockers.push(blocker("CAP_ZONE_AUTHORITY_INCOMPLETE", "authority", "Every conductive zone must have a current fill proof before autonomous qualification.", [zone.id]));
   if (!rulesAreExplicit(input.rules)) blockers.push(blocker("CAP_MANUFACTURING_RULES_INCOMPLETE", "authority", "Manufacturer width, clearance, via, hole, edge, silk, and courtyard rules must be explicit."));
+  // [B16-C.4] a plated component hole whose ring is below the profile's PTH limit cannot be fixed by placement or routing: refuse before either starts.
+  for (const footprint of input.board.footprints) {
+    for (const pad of footprint.def.pads) {
+      if (pad.type !== "thru_hole" || pad.plated === false || !pad.drill) continue;
+      const ring = padAnnularRingNm(pad);
+      if (ring !== null && ring < input.rules.default.minPthAnnularRingNm) blockers.push(blocker("CAP_PTH_ANNULAR_RING_BELOW_PROFILE", "unsupported", `Plated pad ${footprint.ref}.${pad.number} has a ${(ring / 1e6).toFixed(3)} mm annular ring; the fabrication profile requires ${(input.rules.default.minPthAnnularRingNm / 1e6).toFixed(3)} mm for plated-through holes.`, [footprint.id, pad.number]));
+    }
+  }
 
   if (!declaration) blockers.push(blocker("CAP_RISK_DECLARATION_MISSING", "authority", "An explicit versioned electrical/risk declaration is required; net names are never used as a substitute."));
   else {

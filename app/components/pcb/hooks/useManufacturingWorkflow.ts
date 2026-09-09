@@ -151,10 +151,22 @@ export function useManufacturingWorkflow(input: UseManufacturingWorkflowInput): 
    *  subject failed integrity verification, or the board was replaced locally meanwhile. */
   const hydrate = useCallback(async (): Promise<LoadedHydration | null> => {
     if (!client || !identity) { setHydration({ status: "idle" }); return null; }
+    const read = async (attempt: number): Promise<LoadedHydration | null> => {
     setHydration({ status: "loading" });
     const scope = lifecycle.capture();
     const loaded = await client.loadBoardWithManufacturing(identity.boardId);
-    if (!scope.isCurrent()) return null;
+    if (!scope.isCurrent()) {
+      // [B16-C.5] the board lifecycle was replaced while this READ was in flight (on a reload the
+      // editor adopts the authoritative board right after mounting). A read is harmless to repeat:
+      // re-read for the CURRENT generation instead of leaving the panel at "Hydrating…" for good
+      // (the page-level browser proof found it stuck there after a refresh). Bounded: a lifecycle
+      // that keeps moving is reported, never chased.
+      if (attempt < 3) return read(attempt + 1);
+      setHydration({ status: "failed", code: "MFG_HYDRATION_SUPERSEDED", detail: "The board changed while its manufacturing truth was being read." });
+      setError({ operation: "hydrate", code: "MFG_HYDRATION_SUPERSEDED", message: "The board changed while its manufacturing truth was being read — refresh to read it again.", correlationId: null });
+      lastFailedRef.current = { operation: "hydrate" };
+      return null;
+    }
     if (!loaded.ok) {
       setHydration({ status: "failed", code: loaded.code, detail: loaded.detail });
       setError({ operation: "hydrate", code: loaded.code, message: hydrationFailureMessage(loaded), correlationId: null });
@@ -175,6 +187,8 @@ export function useManufacturingWorkflow(input: UseManufacturingWorkflowInput): 
     setHydration(next);
     setError((current) => current?.operation === "hydrate" ? null : current);
     return next;
+    };
+    return read(0);
   }, [client, identity, lifecycle]);
   const refresh = useCallback(async (): Promise<void> => { await hydrate(); }, [hydrate]);
 

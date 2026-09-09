@@ -20,19 +20,22 @@ const getHead = vi.hoisted(() => vi.fn());
 vi.mock("@/app/lib/pcb/fab/authority-store", async (orig) => ({ ...(await orig() as object), DurableManufacturingAuthorityStore: class { getHead = getHead; loader = () => vi.fn(); } }));
 const ledgerRecord = vi.hoisted(() => vi.fn(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } })));
 vi.mock("@/app/lib/pcb/fab/release-ledger", async (orig) => ({ ...(await orig() as object), DurableManufacturingReleaseLedger: class { record = ledgerRecord; latest = vi.fn(async () => null); list = vi.fn(async () => []); } }));
-vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: () => ({}) }));
+vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: () => ({ loadHead: async () => null }) })); // [B16-C.1] the release route reads the board lineage (none recorded → current)
 const getBoardHead = vi.hoisted(() => vi.fn());
 vi.mock("@/app/api/pcb-sync/route", () => ({ stage3Repository: { getBoardHead }, stage3BindingRepository: { listSelectedPeers: vi.fn(async () => []) } }));
 const releasePackage = vi.hoisted(() => vi.fn());
 vi.mock("@/app/lib/pcb/fab/release-gate", async (orig) => ({ ...(await orig() as object), releaseManufacturingPackage: releasePackage }));
 
 import { POST as release, RELEASE_BODY_KEYS } from "../route";
+import { MANUFACTURING_RULE_PROFILE_SCHEMA } from "@/app/lib/pcb/fab/release-manifest";
+import { ruleProfileExpiry } from "@/app/lib/pcb/fab/rule-profile";
 
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "proj-1", "x-sirkit-branch-id": "main" };
 const req = (body: Record<string, unknown>) => new Request("http://localhost/api/pcb/release", { method: "POST", headers: { "content-type": "application/json", origin: "http://localhost", ...SEL }, body: JSON.stringify(body) });
 const json = async (response: Response) => (await response.json()) as Record<string, unknown>;
 const DIGEST = authoritativeBoardDigest(createEmptyBoard());
-const HEAD = { authority: { boardRevision: "rev-9", boardDigest: DIGEST, manufacturingRuleProfile: { evidence: { verifiedAt: new Date().toISOString().slice(0, 10) }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } }, revision: 4, recordDigest: "sha256:authority-record-4" };
+const TODAY = new Date().toISOString().slice(0, 10);
+const HEAD = { authority: { boardRevision: "rev-9", boardDigest: DIGEST, manufacturingRuleProfile: { schemaVersion: MANUFACTURING_RULE_PROFILE_SCHEMA, evidence: { sourceRefs: ["https://jlcpcb.com/capabilities/pcb-capabilities"], retrievedAt: TODAY, expiresAt: ruleProfileExpiry(TODAY), scope: "JLCPCB 1-2 layer rigid FR-4 (test stub)", notes: [] }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } }, revision: 4, recordDigest: "sha256:authority-record-4" };
 const BOARD = { record: { board: createEmptyBoard(), revision: "rev-9", digest: DIGEST }, aggregateRevision: 7 };
 function admin(): void { injectAuthorizedPrincipal({ userId: "u-admin", tenantId: "local", projectId: "proj-1", role: "admin" }); }
 function nothingReleased(): void { expect(releasePackage).not.toHaveBeenCalled(); expect(ledgerRecord).not.toHaveBeenCalled(); }

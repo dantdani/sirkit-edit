@@ -22,4 +22,4 @@ export function transaction(project: CanonicalProjectState, operations: Engineer
   return createEngineeringTransaction({ transactionId: input?.transactionId ?? `tx:${clientOperationId}`, projectId: project.projectId, branchId: project.branchId, clientOperationId, actor: actor(input?.role, input?.actorId), reason: "Stage 10 test transaction", baseRevision, operations, approvals: [], provenance: { source: "api", toolVersion: "test" }, createdAtClient: "2026-07-17T00:00:00.000Z" });
 }
 
-export const ZERO_DRC_RULES: DrcRules = { default: { clearanceNm: 0, minTrackWidthNm: 0, minViaOuterNm: 0, minViaDrillNm: 0, minAnnularRingNm: 0, minHoleToHoleNm: 0, minEdgeClearanceNm: 0, minSilkPadClearanceNm: 0, minCourtyardClearanceNm: 0 }, perClass: {} };
+export const ZERO_DRC_RULES: DrcRules = { default: { clearanceNm: 0, minTrackWidthNm: 0, minViaOuterNm: 0, minViaDrillNm: 0, minAnnularRingNm: 0, minPthAnnularRingNm: 0, minHoleToHoleNm: 0, minEdgeClearanceNm: 0, minSilkPadClearanceNm: 0, minCourtyardClearanceNm: 0 }, perClass: {} };

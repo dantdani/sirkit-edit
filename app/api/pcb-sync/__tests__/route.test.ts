@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { injectAuthorizedPrincipal, injectIdentity, resetInjectedIdentity } from "@/app/lib/auth/test-support";
+import { databaseQualification, withQualifiedDatabase } from "@/app/lib/db/test-qualification";
 
 vi.mock("@/app/lib/footprint-resolver/__tests__/fixtures", async () => {
   const { InMemoryPhysicalBindingRepository, PhysicalBindingService } = await import("@/app/lib/physical-binding/repository");
@@ -205,7 +206,10 @@ describe("Stage 3 PCB synchronization API", () => {
     // B16.0: a "different actor, same digest" case no longer exists — the
     // actor id is server-derived and can never be varied by a client header.
     const stale = { ...structuredClone(request), requestId: "publish-stale", idempotencyKey: "publish-stale-key", schematicRevision: "schematic-r2" };
-    expect(await (await harness.postHandler(post({ operation: "publish_demo_snapshot", request: stale }))).json()).toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT" });
+    // [B16-C.3] 409 with the newer revision NAMED (current vs expected) — distinct from malformed input (which never carries `conflict`).
+    const staleResponse = await harness.postHandler(post({ operation: "publish_demo_snapshot", request: stale }));
+    expect(staleResponse.status).toBe(409);
+    expect(await staleResponse.json()).toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT", conflict: { kind: "snapshot_revision", expectedRevision: stale.expectedSnapshotRevision, currentRevision: 1, attemptedSchematicRevision: "schematic-r2" } });
     expect(await harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" })).toBeNull();
   });
 
@@ -244,8 +248,9 @@ describe("Stage 3 PCB synchronization API", () => {
     expect(await result.harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-blocked" })).toBeNull();
   });
 
-  it.runIf(Boolean(process.env.R03_B10D_U01_DATABASE_URL))("qualifies the same ready flow against isolated PostgreSQL", async () => {
-    process.env.DATABASE_URL = process.env.R03_B10D_U01_DATABASE_URL;
+  // B16-B item 5 (LB-4): opt-in via SIRKIT_DB_QUALIFICATION=1 + SIRKIT_DB_QUALIFICATION_URL — never .env.local, never DATABASE_URL.
+  it.runIf(databaseQualification().enabled)("qualifies the same ready flow against isolated PostgreSQL", async () => {
+    process.env.DATABASE_URL = withQualifiedDatabase();
     const { PostgresDurableWorkflowRepository } = await import("@/app/lib/durable-workflow/server-repository");
     const result = await exerciseReadyFlow(new PostgresDurableWorkflowRepository()), committed = await result.harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" });
     expect(result.loaded.digest).toBe(result.applied.committedBoardDigest);

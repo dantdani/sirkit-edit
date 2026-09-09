@@ -42,7 +42,7 @@ export interface BindAtomicSelectionResult {
 const VALIDATOR_VERSION = "sirkit.atomic-binding-validator/1";
 
 /** "R_0805_2012Metric" → "0805 (2012 Metric)"; SOIC/headers keep their name. */
-function canonicalPackageName(footprintName: string): { name: string; identitySystem: "metric_imperial_explicit" | "manufacturer"; sourceToken: string } {
+export function canonicalPackageName(footprintName: string): { name: string; identitySystem: "metric_imperial_explicit" | "manufacturer"; sourceToken: string } {
   const chip = /(?:^|_)(0201|0402|0603|0805|1206|1210)_(\d{4})Metric(?:_|$)/.exec(footprintName);
   if (chip) return { name: `${chip[1]} (${chip[2]} Metric)`, identitySystem: "metric_imperial_explicit", sourceToken: chip[1]! };
   return { name: footprintName.replace(/_/g, " "), identitySystem: "manufacturer", sourceToken: footprintName };
@@ -53,14 +53,7 @@ export async function bindAtomicSelection(
   repository: PhysicalBindingRepository,
   input: BindAtomicSelectionInput,
 ): Promise<BindAtomicSelectionResult> {
-  if (input.actor.actorKind !== "human" || !["reviewer", "project_admin"].includes(input.actor.role)) {
-    throw new Error("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
-  }
-  const snapshot = await loadPublishedPortableSnapshot(input.atomicPartRevisionId);
-  if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
-  const { footprint, mapping, symbol, exactPart, manufacturer } = snapshot;
-  if (!footprint || !mapping || !exactPart || !manufacturer) throw new Error("PB_ATOMIC_REVISION_INCOMPLETE");
-  if (mapping.state !== "approved") throw new Error("PB_ATOMIC_MAPPING_UNAPPROVED");
+  if (input.actor.actorKind !== "human") throw new Error("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
 
   const scope: PhysicalBindingScope = {
     tenantId: input.scope.tenantId,
@@ -73,7 +66,12 @@ export async function bindAtomicSelection(
   };
 
   // Idempotent replay: an existing approved selection for the same atomic
-  // revision means this instance is already bound.
+  // revision means this instance is already bound. [B16-C.5] This is a READ
+  // (nothing is written), so it is answered BEFORE the publication-role
+  // requirement: an editor whose candidates a reviewer approved through the
+  // review handoff resumes Schematic → PCB against the reviewer's bindings
+  // instead of being refused again (the browser proof found the second sync
+  // refused 403 nine times after every approval).
   const existingSets = await repository.findForComponentVariant({ ...scope, assemblyVariantId: scope.assemblyVariantIds[0] ?? "variant-default" });
   for (const state of existingSets) {
     const selected = state.bindings.find((binding) => binding.revisionId === state.set.effectiveSelectedRevisionId);
@@ -81,6 +79,16 @@ export async function bindAtomicSelection(
       return { setId: state.set.setId, bindingRevisionId: selected.revisionId, lifecycleState: selected.lifecycleState, alreadyBound: true };
     }
   }
+
+  // Publishing a NEW binding is a human reviewer's / administrator's act.
+  if (!["reviewer", "project_admin"].includes(input.actor.role)) {
+    throw new Error("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
+  }
+  const snapshot = await loadPublishedPortableSnapshot(input.atomicPartRevisionId);
+  if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
+  const { footprint, mapping, symbol, exactPart, manufacturer } = snapshot;
+  if (!footprint || !mapping || !exactPart || !manufacturer) throw new Error("PB_ATOMIC_REVISION_INCOMPLETE");
+  if (mapping.state !== "approved") throw new Error("PB_ATOMIC_MAPPING_UNAPPROVED");
 
   const now = new Date().toISOString();
   const datasheetEvidence = snapshot.evidence.map((item) => item.id).sort();

@@ -26,7 +26,9 @@ export function localDevBannerVisible(serverAuthMode: string | undefined): boole
   return (serverAuthMode ?? "").trim().toLowerCase() !== "production";
 }
 
-export function LocalDevIdentityBanner({ authMode }: { authMode?: string } = {}) {
+export const FIXTURE_RUNTIME_BANNER_TEXT = "FIXTURE RUNTIME — in-memory stores, recorded provider design and recorded router; dev-only role cookie";
+
+export function LocalDevIdentityBanner({ authMode, fixtureRuntime = false }: { authMode?: string; fixtureRuntime?: boolean } = {}) {
   if (!localDevBannerVisible(authMode)) return null;
   return (
     <div
@@ -36,6 +38,7 @@ export function LocalDevIdentityBanner({ authMode }: { authMode?: string } = {})
       className="w-full bg-amber-500 text-black text-[11px] font-semibold tracking-wide text-center py-0.5 px-2"
     >
       {LOCAL_DEV_BANNER_TEXT}
+      {fixtureRuntime && <span data-testid="fixture-runtime-banner"> · {FIXTURE_RUNTIME_BANNER_TEXT}</span>}
     </div>
   );
 }

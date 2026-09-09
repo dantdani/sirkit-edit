@@ -18,6 +18,7 @@
 import { engineeringDigest } from "../engineering/stable";
 import type { ProjectRole } from "../engineering/types";
 
+import { fixtureRoleOfPrincipal, fixtureRuntimeEnabled } from "../fixture-runtime/mode";
 /** The membership roles stored in the authoritative table. They map 1:1 to a
  *  subset of `ProjectRole` via `PROJECT_ROLE_FROM_MEMBERSHIP`. */
 export type MembershipRole =
@@ -129,6 +130,9 @@ export function localDevMembership(input: { tenantId: string; projectId: string 
  *  so). It is never reachable in production. */
 export class LocalDevProjectMembershipRepository implements ProjectMembershipRepository {
   async loadActiveMembership(input: { tenantId: string; projectId: string; userId: string }): Promise<ProjectMembershipRecord | null> {
+    // [B16-C §5] fixture runtime only: the per-role local principals carry exactly their role.
+    const fixtureRole = fixtureRuntimeEnabled() ? fixtureRoleOfPrincipal(input.userId) : null;
+    if (fixtureRole) return { ...localDevMembership({ tenantId: input.tenantId, projectId: input.projectId }), userId: input.userId, role: fixtureRole, auditActorId: "fixture-runtime" };
     if (input.userId !== LOCAL_DEV_PRINCIPAL_ID) return null;
     return localDevMembership({ tenantId: input.tenantId, projectId: input.projectId });
   }

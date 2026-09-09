@@ -13,6 +13,7 @@ const FIELDS: Array<{ field: keyof DrcRuleSet; kind: ConstraintKind }> = [
   { field: "minViaOuterNm", kind: "via_diameter" },
   { field: "minViaDrillNm", kind: "via_drill" },
   { field: "minAnnularRingNm", kind: "annular_ring" },
+  { field: "minPthAnnularRingNm", kind: "pth_annular_ring" },
   { field: "minHoleToHoleNm", kind: "hole_clearance" },
   { field: "minEdgeClearanceNm", kind: "edge_clearance" },
   { field: "minSilkPadClearanceNm", kind: "silk_clearance" },

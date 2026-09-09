@@ -14,6 +14,22 @@ export function pcbBoardInstanceId(projectId: string): string {
   return `board:${projectId}`;
 }
 
+/** [B16-C.1] a DERIVED board revision's id: the lineage root plus its generation.
+ *  Generation 0 is the root itself (`board:<project>`); each derivation appends
+ *  the next generation so the old routed board, its qualification authority and
+ *  its release ledger (all keyed by the old id) stay immutable and addressable. */
+export function pcbDerivedBoardInstanceId(rootBoardId: string, generation: number): string {
+  if (!Number.isSafeInteger(generation) || generation < 1) throw new Error("PS_BOARD_GENERATION_INVALID");
+  return `${rootBoardId}@r${generation}`;
+}
+
+/** The lineage root and generation encoded in a board id (`board:p` → gen 0; `board:p@r3` → gen 3). */
+export function pcbBoardLineageOf(boardId: string): { rootBoardId: string; generation: number } {
+  const match = /^(.*)@r(\d{1,6})$/.exec(boardId);
+  if (!match) return { rootBoardId: boardId, generation: 0 };
+  return { rootBoardId: match[1]!, generation: Number(match[2]) };
+}
+
 /** [B16.1C] the durable design id for a project's primary design — the key the
  *  manufacturing authority and release ledger are scoped by. Before B16.1C the
  *  editor restated this formula as an inline literal; there is now one formula. */

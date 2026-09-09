@@ -1,5 +1,8 @@
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
+import { PcbSyncSnapshotRevisionConflict } from "@/app/lib/pcb-sync/durable";
+import type { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage";
+import type { PcbSyncBoardRevisionDeriveRequest } from "@/app/lib/pcb-sync/types";
 import type { PcbSyncRepository } from "@/app/lib/pcb-sync/repository";
 import type { PcbSyncFeatureState } from "@/app/lib/pcb-sync/rollout";
 import type { PcbSynchronizationService } from "@/app/lib/pcb-sync/service";
@@ -29,8 +32,10 @@ function errorResponse(error: unknown): Response {
   // A non-PS_* message is an unclassified defect, not a policy outcome — keep
   // the response opaque but never lose the cause server-side.
   if (code === "PS_INTERNAL_ERROR") console.error("[pcb-sync] unhandled error:", error);
-  const status = code.includes("AUTHORIZATION") || code.includes("SCOPE") ? 403 : code.includes("NOT_FOUND") ? 404 : code.includes("STALE") || code.includes("REVISION") || code.includes("DIGEST") || code.includes("LIFECYCLE") || code.includes("EXPIRED") || code.includes("IDEMPOTENCY") ? 409 : code.includes("LIMIT") || code.includes("PAYLOAD") ? 413 : code.includes("CANCELLED") ? 408 : 422;
-  return Response.json({ ok: false, code, error: code }, { status, headers: { "Cache-Control": "no-store" } });
+  // [B16-C.3] a revision conflict names the newer revision another session published (current vs expected) — never a bare code.
+  const conflict = error instanceof PcbSyncSnapshotRevisionConflict ? { conflict: error.details } : {};
+  const status = code.includes("AUTHORIZATION") || code.includes("SCOPE") || code.includes("HUMAN_REQUIRED") ? 403 : code.includes("NOT_FOUND") ? 404 : code.includes("CONFIRMATION_REQUIRED") || code.includes("CARRY_INVALID") || code.includes("PARENT_INVALID") || code.includes("IDEMPOTENCY_REQUIRED") ? 400 : code.includes("STALE") || code.includes("REVISION") || code.includes("DIGEST") || code.includes("LIFECYCLE") || code.includes("EXPIRED") || code.includes("IDEMPOTENCY") || code.includes("SUPERSEDED") || code.includes("DERIVATION_BLOCKED") || code.includes("PLAN_MISMATCH") ? 409 : code.includes("LIMIT") || code.includes("PAYLOAD") ? 413 : code.includes("CANCELLED") ? 408 : 422;
+  return Response.json({ ok: false, code, error: code, ...conflict }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 function fail(code: string): never { throw new Error(code); }
@@ -138,6 +143,21 @@ export function createPcbSyncPostHandler(service: PcbSynchronizationService, fea
         const result = await service.apply({ ...input, tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, actorContext: scope.actor }, request.signal);
         return Response.json({ ok: result.status === "applied" || result.status === "idempotent_replay", operation: "apply", boardChanged: result.boardChanged, result }, { status: result.status === "applied" || result.status === "idempotent_replay" ? 200 : 409, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
       }
+      // ── [B16-C.1] routed-board revision lifecycle: preview the rework plan, then derive it deliberately ──
+      if (operation === "preview_board_revision" || operation === "derive_board_revision") {
+        if (!object(body.request)) return Response.json({ ok: false, code: "PS_API_REQUEST_REQUIRED", error: "request object is required." }, { status: 400, headers: { "Cache-Control": "no-store" } });
+        if (!["pcb_editor", "project_admin"].includes(scope.actor.role)) fail("PS_BOARD_DERIVATION_AUTHORIZATION_DENIED");
+        const input = { ...(body.request as Record<string, unknown>), tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, actorContext: scope.actor } as unknown as PcbSyncBoardRevisionDeriveRequest;
+        if (operation === "preview_board_revision") {
+          const result = await service.previewBoardRevision(input, request.signal);
+          return Response.json({ ok: true, operation, boardChanged: false, result }, { headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+        }
+        // Deriving writes a new durable board: the same rollout gate and explicit opt-in as apply.
+        if (state !== "opt_in" && state !== "authoritative_safe_profile") return Response.json({ ok: false, code: "PS_APPLY_ROLLOUT_BLOCKED", error: "Derivation is unavailable during observation rollout." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+        if (request.headers.get("x-sirkit-pcb-sync-opt-in")?.toLowerCase() !== "true") return Response.json({ ok: false, code: "PS_APPLY_OPT_IN_REQUIRED", error: "Explicit Stage 3 apply opt-in is required." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+        const result = await service.deriveBoardRevision(input, request.signal);
+        return Response.json({ ok: true, operation, boardChanged: true, result }, { status: result.status === "derived" ? 201 : 200, headers: { "Cache-Control": "no-store", "X-Sirkit-Pcb-Sync-State": state } });
+      }
       return Response.json({ ok: false, code: "PS_API_OPERATION_UNSUPPORTED", error: "Unsupported PCB synchronization operation." }, { status: 400, headers: { "Cache-Control": "no-store" } });
     } catch (error) { return errorResponse(error); }
   };
@@ -179,7 +199,7 @@ export interface PcbSyncManufacturingSummary {
 }
 export type PcbSyncManufacturingSummaryReader = (scope: { tenantId: string; projectId: string; branchId: string; boardId: string }, current: { revision: string; digest: string } | null, viewer?: PcbSyncManufacturingViewer) => Promise<PcbSyncManufacturingSummary>;
 
-export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState, manufacturing?: PcbSyncManufacturingSummaryReader) {
+export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, featureState: () => PcbSyncFeatureState, manufacturing?: PcbSyncManufacturingSummaryReader, lineage?: DurableBoardLineageStore) {
   // [B16-A F14] `viewer` is the route's trusted actor projection (role + kind); it only ever reaches the summary reader.
   return async function loadBoard(scope: { tenantId: string; projectId: string; branchId: string }, query: Readonly<Record<string, string>>, viewer?: PcbSyncManufacturingViewer): Promise<Response> {
     const state = featureState();
@@ -193,7 +213,9 @@ export function createPcbSyncBoardGetCore(repository: PcbSyncRepository, feature
       const includeManufacturing = include === "manufacturing";
       if (includeManufacturing && !manufacturing) fail("PS_API_UNKNOWN_FIELD");
       const boardScope = { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId }, record = await repository.getBoard(boardScope);
-      const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope: boardScope };
+      // [B16-C.1] which revision of this board's lineage is current — a superseded board tells the browser where to go.
+      const lineageSummary = lineage ? await lineage.resolveCurrent(boardScope, boardId) : undefined;
+      const common = { resultSchemaVersion: PCB_SYNC_BOARD_LOAD_RESULT_VERSION, scope: boardScope, ...(lineageSummary ? { lineage: lineageSummary } : {}) };
       if (!record) {
         const result: PcbSyncBoardLoadResult = { ...common, status: "not_found" };
         const summary = includeManufacturing ? await manufacturing!(boardScope, null, viewer) : undefined;

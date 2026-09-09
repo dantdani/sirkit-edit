@@ -11,6 +11,8 @@ import { physicalBindingDigest } from "./stable";
 import { assertPhysicalBindingReplay, type PhysicalBindingAggregateState, type PhysicalBindingCommitRequest, type PhysicalBindingRepository } from "./repository";
 import { compareCodePoints } from "@/app/lib/stable-compare";
 
+import { fixtureContainer } from "../fixture-runtime/container";
+import { fixtureRuntimeEnabled } from "../fixture-runtime/mode";
 function date(value: string, code: string): Date {
   const parsed = new Date(value);
   if (!Number.isFinite(parsed.getTime())) throw new Error(code);
@@ -61,6 +63,12 @@ function assessmentRow(assessment: PhysicalBindingAggregateState["assessments"][
 
 /** PostgreSQL adapter. Immutable revisions/audits are insert-only; the small set head is the optimistic-lock row. */
 export class PostgresPhysicalBindingRepository implements PhysicalBindingRepository {
+  constructor() {
+    // [B16-C §5] every server composition root constructs its own adapter over the same
+    // PostgreSQL; under the env-gated fixture runtime (non-production, local_dev only) all of
+    // them resolve to ONE shared in-memory store so a dev server can host the browser proof.
+    if (fixtureRuntimeEnabled()) return fixtureContainer().physicalBindingRepository as unknown as PostgresPhysicalBindingRepository;
+  }
   async load(setId: string): Promise<PhysicalBindingAggregateState | null> {
     const db = getDb();
     const setRow = (await db.select().from(physicalBindingSets).where(eq(physicalBindingSets.setId, setId)).limit(1))[0];

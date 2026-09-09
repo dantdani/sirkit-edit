@@ -1,9 +1,10 @@
 import type { DurableAggregateRecord, DurableAppendOperation, DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
+import type { EngineeringActor } from "../engineering/types";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "../durable-workflow/stable";
 import { makeBoardRecord } from "./board";
 import type { PcbBoard } from "../pcb/types";
 import { authoritativeSnapshotDigest, assertPlanDigest, canonicalAuthoritativeSnapshot, pcbSyncDigest, pcbSyncId } from "./stable";
-import { PCB_SYNC_AUDIT_VERSION, PCB_SYNC_DEMO_PUBLICATION_RESULT_VERSION, type PcbSyncApplyResult, type PcbSyncAuditRecord, type PcbSyncAuthoritativeSnapshot, type PcbSyncBoardRecord, type PcbSyncPlan, type PcbSyncPlanLifecycle, type PcbSyncPreflightRequest, type PcbSyncSnapshotProvider, type PcbSyncSnapshotPublicationResult, type PcbSyncSnapshotPublisher } from "./types";
+import { PCB_SYNC_AUDIT_VERSION, PCB_SYNC_DEMO_PUBLICATION_RESULT_VERSION, type PcbSyncApplyResult, type PcbSyncAuditRecord, type PcbSyncAuthoritativeSnapshot, type PcbSyncBoardRecord, type PcbSyncPlan, type PcbSyncPlanLifecycle, type PcbSyncPreflightRequest, type PcbSyncSnapshotProvider, type PcbSyncSnapshotPublicationResult, type PcbSyncSnapshotPublisher, type PcbSyncSnapshotRevisionConflictDetails } from "./types";
 import type { PcbSyncCommitInput, PcbSyncRepository, PcbSyncRepositoryScope } from "./repository";
 
 const BOARD = "pcb-sync.board.v1";
@@ -39,6 +40,36 @@ export function boardPublicationOperation(record: PcbSyncBoardRecord, expectedRe
   return { aggregateType: BOARD, aggregateKey: boardKey(scope), expectedRevision, payload: structuredClone(record), recordDigest: record.digest };
 }
 
+/**
+ * [B16-C.1] The records an ordinary apply writes beside the board — the APPLIED
+ * plan and the committed audit — as append operations for a board scope that
+ * has none yet (a freshly derived revision), so the derived board carries its
+ * own "applied schematic synchronization" evidence in the same commit and
+ * qualification finds it exactly as it would after an ordinary apply.
+ */
+export function synchronizationRecordOperations(input: { scope: PcbSyncRepositoryScope; plan: PcbSyncPlan; actor: EngineeringActor; record: PcbSyncBoardRecord; originalBoardRevision: string | null; completedAt: string; idempotencyKey: string }): { operations: Array<DurableAppendOperation<object>>; audit: PcbSyncAuditRecord } {
+  assertPlanDigest(input.plan);
+  const nextPlan = { ...input.plan, lifecycle: "applied" as const };
+  const auditBase = { schemaVersion: PCB_SYNC_AUDIT_VERSION, auditId: pcbSyncId("pcb-sync-audit", { plan: input.plan.planDigest, board: input.record.revision, key: input.idempotencyKey }), planId: input.plan.planId, planDigest: input.plan.planDigest, scope: input.plan.scope, actor: structuredClone(input.actor), operationIds: input.plan.operations.map((item) => item.operationId), originalBoardRevision: input.originalBoardRevision, committedBoardRevision: input.record.revision, committedBoardDigest: input.record.digest, idempotencyKey: input.idempotencyKey, outcome: "committed" as const, occurredAt: input.completedAt };
+  const audit: PcbSyncAuditRecord = { ...auditBase, auditDigest: pcbSyncDigest(auditBase) };
+  return {
+    audit,
+    operations: [
+      { aggregateType: PLAN, aggregateKey: planKey(input.scope, input.plan.planId), expectedRevision: 0, payload: storedPlan(nextPlan), recordDigest: pcbSyncDigest({ planDigest: nextPlan.planDigest, lifecycle: nextPlan.lifecycle }) },
+      { aggregateType: AUDIT, aggregateKey: auditKey(input.scope), expectedRevision: 0, payload: { audits: [audit] }, recordDigest: pcbSyncDigest([audit.auditDigest]) },
+    ],
+  };
+}
+
+/** [B16-C.3] `PS_SNAPSHOT_REVISION_CONFLICT` with the current and expected revisions attached (message unchanged for every existing catch). */
+export class PcbSyncSnapshotRevisionConflict extends Error {
+  readonly code = "PS_SNAPSHOT_REVISION_CONFLICT" as const;
+  constructor(readonly details: PcbSyncSnapshotRevisionConflictDetails) {
+    super("PS_SNAPSHOT_REVISION_CONFLICT");
+    this.name = "PcbSyncSnapshotRevisionConflict";
+  }
+}
+
 export class DurablePcbSyncSnapshotStore implements PcbSyncSnapshotProvider, PcbSyncSnapshotPublisher {
   constructor(private readonly workflow: DurableWorkflowRepository) {}
 
@@ -59,7 +90,12 @@ export class DurablePcbSyncSnapshotStore implements PcbSyncSnapshotProvider, Pcb
       if (committed.result.snapshotDigest !== digest || committed.result.boardId !== boardId || committed.result.actorId !== actorId) throw new Error("PS_SNAPSHOT_IDEMPOTENCY_CONFLICT");
       return structuredClone({ ...committed.result, created: !committed.idempotent, idempotent: committed.idempotent });
     } catch (error) {
-      if (error instanceof Error && error.message === "DW_OPTIMISTIC_REVISION_CONFLICT") throw new Error("PS_SNAPSHOT_REVISION_CONFLICT");
+      if (error instanceof Error && error.message === "DW_OPTIMISTIC_REVISION_CONFLICT") {
+        // [B16-C.3] name the newer revision another session published, so the caller can refresh or rebase deliberately.
+        const head = await this.getSnapshotHead(canonicalSnapshot).catch(() => null);
+        if (head) throw new PcbSyncSnapshotRevisionConflict({ kind: "snapshot_revision", expectedRevision: input.expectedRevision, currentRevision: head.revision, currentSnapshotDigest: head.snapshotDigest, currentSchematicRevision: head.schematicRevision, currentSchematicDigest: head.schematicDigest, attemptedSchematicRevision: canonicalSnapshot.schematicRevision, attemptedSnapshotDigest: digest });
+        throw new Error("PS_SNAPSHOT_REVISION_CONFLICT");
+      }
       throw error;
     }
   }
