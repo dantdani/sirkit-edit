@@ -206,7 +206,10 @@ describe("Stage 3 PCB synchronization API", () => {
     // B16.0: a "different actor, same digest" case no longer exists — the
     // actor id is server-derived and can never be varied by a client header.
     const stale = { ...structuredClone(request), requestId: "publish-stale", idempotencyKey: "publish-stale-key", schematicRevision: "schematic-r2" };
-    expect(await (await harness.postHandler(post({ operation: "publish_demo_snapshot", request: stale }))).json()).toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT" });
+    // [B16-C.3] 409 with the newer revision NAMED (current vs expected) — distinct from malformed input (which never carries `conflict`).
+    const staleResponse = await harness.postHandler(post({ operation: "publish_demo_snapshot", request: stale }));
+    expect(staleResponse.status).toBe(409);
+    expect(await staleResponse.json()).toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT", conflict: { kind: "snapshot_revision", expectedRevision: stale.expectedSnapshotRevision, currentRevision: 1, attemptedSchematicRevision: "schematic-r2" } });
     expect(await harness.repository.getBoard({ tenantId: "tenant-1", projectId: "project-1", branchId: "main", boardId: "board-1" })).toBeNull();
   });
 

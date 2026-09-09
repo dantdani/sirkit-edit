@@ -1,5 +1,6 @@
 import { createEmptyBoard } from "@/app/lib/pcb/types";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
+import { PcbSyncSnapshotRevisionConflict } from "@/app/lib/pcb-sync/durable";
 import type { PcbSyncRepository } from "@/app/lib/pcb-sync/repository";
 import type { PcbSyncFeatureState } from "@/app/lib/pcb-sync/rollout";
 import type { PcbSynchronizationService } from "@/app/lib/pcb-sync/service";
@@ -29,8 +30,10 @@ function errorResponse(error: unknown): Response {
   // A non-PS_* message is an unclassified defect, not a policy outcome — keep
   // the response opaque but never lose the cause server-side.
   if (code === "PS_INTERNAL_ERROR") console.error("[pcb-sync] unhandled error:", error);
+  // [B16-C.3] a revision conflict names the newer revision another session published (current vs expected) — never a bare code.
+  const conflict = error instanceof PcbSyncSnapshotRevisionConflict ? { conflict: error.details } : {};
   const status = code.includes("AUTHORIZATION") || code.includes("SCOPE") ? 403 : code.includes("NOT_FOUND") ? 404 : code.includes("STALE") || code.includes("REVISION") || code.includes("DIGEST") || code.includes("LIFECYCLE") || code.includes("EXPIRED") || code.includes("IDEMPOTENCY") ? 409 : code.includes("LIMIT") || code.includes("PAYLOAD") ? 413 : code.includes("CANCELLED") ? 408 : 422;
-  return Response.json({ ok: false, code, error: code }, { status, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ ok: false, code, error: code, ...conflict }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 function fail(code: string): never { throw new Error(code); }

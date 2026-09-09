@@ -651,3 +651,21 @@ export type PcbSyncTrustedClock = () => string;
 export interface PcbSyncFaultInjector {
   hit(point: "after_lock" | "after_revalidation" | "after_stage" | "after_mutation" | "after_serialize" | "after_reparse" | "after_validation" | "before_commit" | "during_commit" | "after_commit"): void | Promise<void>;
 }
+
+/**
+ * [B16-C.3] What a `PS_SNAPSHOT_REVISION_CONFLICT` carries to the browser so
+ * "another session published a newer revision" is DISTINCT from malformed
+ * input or a server failure: the revision the caller pinned, the revision and
+ * identity that are current, and what the caller tried to publish. The
+ * browser offers refresh / rebase; it never overwrites silently.
+ */
+export interface PcbSyncSnapshotRevisionConflictDetails {
+  kind: "snapshot_revision";
+  expectedRevision: number;
+  currentRevision: number;
+  currentSnapshotDigest: string;
+  currentSchematicRevision: string;
+  currentSchematicDigest: string;
+  attemptedSchematicRevision: string;
+  attemptedSnapshotDigest: string;
+}

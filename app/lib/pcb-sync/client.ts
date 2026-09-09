@@ -13,6 +13,7 @@ import {
   type PcbSyncPreflightRequest,
   type PcbSyncPreflightResult,
   type PcbSyncSnapshotPublicationResult,
+  type PcbSyncSnapshotRevisionConflictDetails,
 } from "./types";
 import type { PcbBoard } from "../pcb/types";
 
@@ -22,7 +23,8 @@ import type { PcbBoard } from "../pcb/types";
 // OPTIONAL, IGNORED field for source compatibility during the migration.
 export interface PcbSyncClientScope { tenantId: string; projectId: string; branchId: string; actor?: EngineeringActor }
 export type PcbSyncClientFailureKind = "not_found" | "blocked" | "stale" | "conflict" | "retryable" | "terminal";
-export type PcbSyncClientResult<T> = { ok: true; value: T } | { ok: false; kind: PcbSyncClientFailureKind; code: string; status: number; detail?: string };
+/** [B16-C.3] a `stale`/`conflict` failure may carry the server's conflict details (currently only the snapshot-revision conflict). */
+export type PcbSyncClientResult<T> = { ok: true; value: T } | { ok: false; kind: PcbSyncClientFailureKind; code: string; status: number; detail?: string; conflict?: PcbSyncSnapshotRevisionConflictDetails };
 export type PcbSyncFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 /** [B16.1C] the reload-time manufacturing truth returned beside a board load (`include=manufacturing`). */
 export type PcbSyncManufacturingIntegrityState = "ok" | "absent" | "corrupt";
@@ -37,6 +39,12 @@ export interface PcbSyncManufacturingTruth {
 }
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+/** [B16-C.3] the server's snapshot-revision conflict details, accepted only in their exact shape. */
+function snapshotConflict(value: unknown): value is PcbSyncSnapshotRevisionConflictDetails {
+  return object(value) && value.kind === "snapshot_revision" && Number.isSafeInteger(value.expectedRevision) && Number.isSafeInteger(value.currentRevision)
+    && typeof value.currentSnapshotDigest === "string" && typeof value.currentSchematicRevision === "string" && typeof value.currentSchematicDigest === "string"
+    && typeof value.attemptedSchematicRevision === "string" && typeof value.attemptedSnapshotDigest === "string";
+}
 const INTEGRITY_STATES = new Set<string>(["ok", "absent", "corrupt"]);
 function integrityState(value: unknown): value is PcbSyncManufacturingIntegrityState { return typeof value === "string" && INTEGRITY_STATES.has(value); }
 /** [B16-A F12/F14] exactly the shape the server sends: the three subjects (null or the
@@ -84,7 +92,7 @@ export class PcbSyncClient {
   // cookie and the server-owned project membership. The authenticated cookie
   // rides along automatically (same-origin fetch).
   private headers(extra: Record<string, string> = {}): HeadersInit { return { "content-type": "application/json", "x-sirkit-tenant-id": this.scope.tenantId, "x-sirkit-project-id": this.scope.projectId, "x-sirkit-branch-id": this.scope.branchId, ...extra }; }
-  private async post<T>(operation: string, request: object, guard: (value: unknown) => value is T, extraHeaders: Record<string, string> = {}, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<T>> { let response: Response; try { response = await this.request(this.endpoint, { method: "POST", headers: this.headers(extraHeaders), body: JSON.stringify({ operation, request }), ...(options?.signal ? { signal: options.signal } : {}) }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body)) return failure("PS_API_INVALID_RESPONSE", 502); if (body.ok !== true || !guard(body.result)) return failure(typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return { ok: true, value: body.result }; }
+  private async post<T>(operation: string, request: object, guard: (value: unknown) => value is T, extraHeaders: Record<string, string> = {}, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<T>> { let response: Response; try { response = await this.request(this.endpoint, { method: "POST", headers: this.headers(extraHeaders), body: JSON.stringify({ operation, request }), ...(options?.signal ? { signal: options.signal } : {}) }); } catch (error) { return fetchFailure(error); } let body: unknown; try { body = await response.json(); } catch { return failure("PS_API_INVALID_RESPONSE", 502); } if (!object(body)) return failure("PS_API_INVALID_RESPONSE", 502); if (body.ok !== true || !guard(body.result)) { const failed = failure(typeof body.code === "string" ? body.code : "PS_API_INVALID_RESPONSE", response.status); return failed.ok ? failed : { ...failed, ...(snapshotConflict(body.conflict) ? { conflict: body.conflict } : {}) }; } return { ok: true, value: body.result }; }
   // B08.3 — publish/apply take NO AbortSignal deliberately: both commit
   // durable server state, and the response is the caller's only evidence of
   // commitment (a stale caller settles truthfully instead of canceling).

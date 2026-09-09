@@ -134,6 +134,8 @@ import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B
 import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
 import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
+import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
+import type { PcbSyncSnapshotRevisionConflictDetails } from "@/app/lib/pcb-sync/types";
 import { RoutingControls } from "./RoutingControls";
 import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
@@ -408,6 +410,32 @@ export default function PcbEditor({
   // [B16.1C §C/§F] bumped after every verified server adoption so the durable
   // manufacturing truth (authority/release currency) is re-read from the server.
   const [manufacturingRefreshToken, setManufacturingRefreshToken] = useState(0);
+  // [B16-C.3] "another session published a newer revision" — surfaced as its
+  // own dialog (current vs expected revision, refresh / rebase), never as a
+  // bare code, never resolved by overwriting.
+  const [snapshotConflict, setSnapshotConflict] = useState<PcbSyncSnapshotRevisionConflictDetails | null>(null);
+  const lastSyncPlacementRef = useRef<{ centerNewParts?: boolean; spreadOverlaps?: boolean; preserveAbsoluteCoordinates?: boolean } | undefined>(undefined);
+  // [B16-C.2] the component-binding review handoff: an editor REQUESTS reviewer
+  // approval of each exact candidate; a reviewer approves/rejects against the
+  // server-projected evidence; the durable result survives any refresh.
+  // (Declared here, before handleSync, which reads it when a bind is refused.)
+  const reviewScopeHeaders = useCallback((): Record<string, string> => syncIdentity ? {
+    "x-sirkit-tenant-id": syncIdentity.tenantId,
+    "x-sirkit-project-id": syncIdentity.projectId,
+    "x-sirkit-branch-id": syncIdentity.branchId,
+  } : {}, [syncIdentity]);
+  const reviewableComponents = useMemo(
+    () => (schematic.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId).map((k) => ({ id: k.id, refDes: k.refDes, atomicPartRevisionId: k.atomicPartRevisionId! })),
+    [schematic.kicadComponents],
+  );
+  const componentReview = useComponentReview({
+    enabled: !init.demo && Boolean(syncIdentity),
+    scopeHeaders: reviewScopeHeaders,
+    boardInstanceId: syncIdentity?.boardId ?? null,
+    components: reviewableComponents,
+    refreshToken: manufacturingRefreshToken + hydrateToken,
+    onNotice: setToast,
+  });
   const bumpManufacturingTruth = useCallback(() => setManufacturingRefreshToken((n) => n + 1), []);
   // B09.0 — the live history/gesture-tool/teardown trio lives behind ONE
   // stable method-encapsulated runtime (the PcbBoardLifecycleOwner
@@ -727,6 +755,7 @@ export default function PcbEditor({
       return;
     }
     placementChoiceRef.current = { centerNewParts: placement?.centerNewParts !== false && placement?.preserveAbsoluteCoordinates !== true };
+    lastSyncPlacementRef.current = placement; // [B16-C.3] a rebase re-runs exactly this request
     if (!client || !syncIdentity) return;
     const s = schematicRef.current;
     // Every instance carrying published atomic authority gets its Stage 1
@@ -786,7 +815,14 @@ export default function PcbEditor({
       publish: async () => {
         const currentNetlist = buildNetlist(s, getCachedPart), graph = buildPcbSyncPublicationGraph(s, getCachedPart), token = graph.sourceDigest.replace(/^sha256:/, "").slice(0, 40), now = new Date().toISOString();
         const published = await client.publish({ requestSchemaVersion: PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, requestId: `publish:${token}`, designId: syncIdentity.designId, boardId: syncIdentity.boardId, boardName: "Main Board", projectRevision: `project:${token}`, designRevision: `design:${token}`, schematicRevision: `schematic:${token}`, componentSetRevision: `components:${token}`, netGraphRevision: `netgraph:${token}`, assemblyVariantId: syncIdentity.assemblyVariantId, assemblyVariantRevision: "variant:default:1", librarySnapshotRevision: "library:current:1", expectedSnapshotRevision: snapshotRevisionRef.current, idempotencyKey: `publish:${token}`, components: graph.components, nets: graph.nets, prerequisiteIssues: graph.prerequisiteIssues, sourceDigest: graph.sourceDigest, requestedAt: now });
-        if (!published.ok) return { ok: false, message: `Publication failed: ${published.code}${published.detail ? ` — ${published.detail}` : ""}` };
+        if (!published.ok) {
+          // [B16-C.3] a newer revision from another session is its own outcome: the dialog names both revisions and offers refresh / rebase.
+          if (published.code === "PS_SNAPSHOT_REVISION_CONFLICT" && published.conflict) {
+            setSnapshotConflict(published.conflict);
+            return { ok: false, message: `Another session published schematic revision ${published.conflict.currentRevision} (you expected ${published.conflict.expectedRevision}) — nothing was overwritten. Refresh or rebase from the dialog.` };
+          }
+          return { ok: false, message: `Publication failed: ${published.code}${published.detail ? ` — ${published.detail}` : ""}` };
+        }
         return { ok: true, value: { published: published.value, currentNetlist, token, now } };
       },
       persistSnapshotRevision: ({ published }) => {
@@ -821,7 +857,7 @@ export default function PcbEditor({
         settleStaleServerCommit(settlement);
       },
     });
-  }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle]);
+  }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
 
   const handleApplySync = useCallback(async () => {
     const plan = pendingPreflight?.plan; if (!client || !syncIdentity || !plan) return;
@@ -1028,21 +1064,6 @@ export default function PcbEditor({
     },
   });
   const releasing = manufacturing.releasing;
-  // [B16-C.2] the component-binding review handoff: an editor REQUESTS reviewer
-  // approval of each exact candidate; a reviewer approves/rejects against the
-  // server-projected evidence; the durable result survives any refresh.
-  const reviewableComponents = useMemo(
-    () => (schematic.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId).map((k) => ({ id: k.id, refDes: k.refDes, atomicPartRevisionId: k.atomicPartRevisionId! })),
-    [schematic.kicadComponents],
-  );
-  const componentReview = useComponentReview({
-    enabled: !init.demo && Boolean(syncIdentity),
-    scopeHeaders,
-    boardInstanceId: syncIdentity?.boardId ?? null,
-    components: reviewableComponents,
-    refreshToken: manufacturingRefreshToken + hydrateToken,
-    onNotice: setToast,
-  });
   // [B16.1C §C/§F] pre-edit probe P1: a fresh browser remembered NO snapshot
   // revision (localStorage empty → 0) and every publication against an
   // already-published design collided with PS_SNAPSHOT_REVISION_CONFLICT.
@@ -1055,6 +1076,23 @@ export default function PcbEditor({
     snapshotRevisionRef.current = manufacturingSnapshotHead.revision;
     savePcbSnapshotRevision(syncIdentity.projectId, manufacturingSnapshotHead.revision);
   }, [init.demo, syncIdentity, manufacturingSnapshotHead]);
+
+  // [B16-C.3] the two explicit ways out of a snapshot-revision conflict.
+  const handleSnapshotConflictRefresh = useCallback(() => {
+    setSnapshotConflict(null);
+    setManufacturingRefreshToken((token) => token + 1); // re-reads snapshot head, board, authority, release — publishes nothing
+    setToast("Durable truth refreshed from the server; your schematic was not published.");
+  }, []);
+  const handleSnapshotConflictRebase = useCallback(async () => {
+    const conflict = snapshotConflict;
+    if (!conflict || !syncIdentity) return;
+    setSnapshotConflict(null);
+    // Adopt the CURRENT revision as the publication base and republish THIS session's schematic on top of it.
+    snapshotRevisionRef.current = conflict.currentRevision;
+    savePcbSnapshotRevision(syncIdentity.projectId, conflict.currentRevision);
+    setToast(`Rebasing on schematic revision ${conflict.currentRevision} and republishing your schematic…`);
+    await handleSync(lastSyncPlacementRef.current);
+  }, [snapshotConflict, syncIdentity, handleSync]);
 
   const handleQualify = useCallback(async () => {
     if (!syncIdentity || !client) return;
@@ -2107,6 +2145,9 @@ export default function PcbEditor({
                 routeStaleNotice={routeStaleNotice}
               />
             </div>
+          )}
+          {!init.demo && (
+            <SnapshotConflictDialog conflict={snapshotConflict} busy={syncing} onRefresh={handleSnapshotConflictRefresh} onRebase={() => void handleSnapshotConflictRebase()} onDismiss={() => setSnapshotConflict(null)} />
           )}
           {/* B08.2 — divergence notice from the reconciliation boundary:
               display-only, and self-retiring — any later lifecycle adoption

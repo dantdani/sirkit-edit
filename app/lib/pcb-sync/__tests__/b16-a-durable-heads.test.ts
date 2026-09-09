@@ -94,6 +94,8 @@ describe("B16-A F23 — DurablePcbSyncSnapshotStore.getSnapshotHead", () => {
     // a browser sending revision 0 against an already-published design collides).
     const r2 = snapshotR2();
     await expect(store.publish(r2, { expectedRevision: 0, idempotencyKey: "pub-2-stale", publishedAt: NOW })).rejects.toThrow("PS_SNAPSHOT_REVISION_CONFLICT");
+    // [B16-C.3] the conflict NAMES the newer revision (current vs expected) so a browser can refresh or rebase deliberately.
+    await expect(store.publish(r2, { expectedRevision: 0, idempotencyKey: "pub-2-stale-2", publishedAt: NOW })).rejects.toMatchObject({ code: "PS_SNAPSHOT_REVISION_CONFLICT", details: { kind: "snapshot_revision", expectedRevision: 0, currentRevision: 1, currentSnapshotDigest: r1.snapshotDigest, currentSchematicRevision: "schematic-r1", attemptedSchematicRevision: r2.schematicRevision, attemptedSnapshotDigest: r2.snapshotDigest } });
     await expect(store.getSnapshotHead(headIdentity(r1))).resolves.toMatchObject({ revision: 1, snapshotDigest: r1.snapshotDigest });
     const head = await store.getSnapshotHead(headIdentity(r1));
     const second = await store.publish(r2, { expectedRevision: head!.revision, idempotencyKey: "pub-2", publishedAt: NOW });

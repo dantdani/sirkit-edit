@@ -184,7 +184,10 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     // Second fresh browser (localStorage empty → 0) against the advanced server snapshot: refused, not silently overwritten.
     const stale = await pcbSyncPost(jsonRequest("/api/pcb-sync", { operation: "publish_demo_snapshot", request: { ...publication, requestId: "publish:fresh-browser", idempotencyKey: "publish:fresh-browser" } }));
     expect(stale.status).toBe(409);
-    expect((await readJson(stale)).code).toBe("PS_SNAPSHOT_REVISION_CONFLICT");
+    const staleBody = await readJson<{ code: string; conflict: { kind: string; expectedRevision: number; currentRevision: number } }>(stale);
+    expect(staleBody.code).toBe("PS_SNAPSHOT_REVISION_CONFLICT");
+    // [B16-C.3] the refusal names the newer revision so the browser can refresh or rebase deliberately.
+    expect(staleBody.conflict).toMatchObject({ kind: "snapshot_revision", expectedRevision: 0, currentRevision: 1 });
     // Hydrate the revision from the server, retry with the SAME idempotency key → replay, no second snapshot.
     const hydrated = await hydrateSnapshotRevision();
     expect(hydrated.snapshotRevision).toBe(1);
