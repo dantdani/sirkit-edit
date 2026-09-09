@@ -20,6 +20,8 @@ import { pcbRevisionId } from "../revision";
 import { stableHash } from "../smart-routing/hash";
 import type { AutonomousRouteExecution, AutonomousRouteExecutor } from "./qualify-layout";
 
+import { fixtureRouteExecutor } from "../../fixture-runtime/router";
+import { fixtureRuntimeEnabled } from "../../fixture-runtime/mode";
 export interface AutonomousRouterOptions {
   /** Prefix for route attempt ids; candidate id is appended per execution. */
   attemptNamespacePrefix?: string;
@@ -32,6 +34,13 @@ export interface AutonomousRouterOptions {
 export async function createAutonomousRouteExecutor(
   options: AutonomousRouterOptions = {},
 ): Promise<AutonomousRouteExecutor> {
+  // [B16-C §5] fixture runtime: replay a committed FreeRouting recording (or record / live,
+  // explicitly) so a dev server can host the deterministic browser proof without the runtime.
+  if (fixtureRuntimeEnabled()) return fixtureRouteExecutor(() => createRealAutonomousRouteExecutor(options));
+  return createRealAutonomousRouteExecutor(options);
+}
+
+async function createRealAutonomousRouteExecutor(options: AutonomousRouterOptions): Promise<AutonomousRouteExecutor> {
   const runtime = await resolveFreeroutingRuntime();
   if (!runtime.ok) throw new Error(`${runtime.error}: ${runtime.stderr}`);
   const prefix = options.attemptNamespacePrefix ?? "rc03";

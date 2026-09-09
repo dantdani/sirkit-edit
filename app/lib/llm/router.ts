@@ -3,6 +3,7 @@ import { OpenAIProvider } from "./openai-provider";
 import { LLMProviderError } from "./errors";
 import type { LLMChunk, LLMProvider, LLMProviderId, LLMRequest, LLMResponse } from "./types";
 
+import { fixtureRuntimeEnabled } from "../fixture-runtime/mode";
 export class LLMRouter {
   private readonly providers: Map<LLMProviderId, LLMProvider>;
 
@@ -17,10 +18,14 @@ export class LLMRouter {
   }
 
   generate(request: LLMRequest): Promise<LLMResponse> {
+    // [B16-C §5] fixture runtime: no provider is ever called (zero credits); the planner
+    // answers "no decomposition" so the (fixture) build loop runs — never a live SDK.
+    if (fixtureRuntimeEnabled()) return Promise.resolve({ provider: request.provider, model: "fixture-provider", text: "", toolCalls: [], stopReason: "end_turn" });
     return this.resolve(request.provider).generate(request);
   }
 
   stream(request: LLMRequest): AsyncIterable<LLMChunk> {
+    if (fixtureRuntimeEnabled()) throw new LLMProviderError(request.provider);
     return this.resolve(request.provider).stream(request);
   }
 

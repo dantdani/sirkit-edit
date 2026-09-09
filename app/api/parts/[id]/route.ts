@@ -13,6 +13,8 @@ import type { KicadPin } from "@/app/lib/kicad/types";
 import { legacyPartToAtomicDraft, type LegacyAtomicDraft } from "@/app/lib/atomic/compatibility";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
 
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,6 +71,20 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
 
   if (!UUID_RE.test(id)) {
     return Response.json({ ok: true, part: null });
+  }
+
+  // [B16-C §5] fixture runtime: serve the committed blinker catalog part exactly as the
+  // browser cache expects it (no database). Unknown ids are `null`, as in production.
+  if (fixtureRuntimeEnabled()) {
+    const cached = fixtureContainer().catalog.cachedParts.get(id);
+    if (!cached) return Response.json({ ok: true, part: null });
+    const part: PartDetail = {
+      id: cached.id, name: cached.name, description: cached.description ?? null, keywords: null, mpn: cached.mpn ?? null, manufacturer: cached.manufacturer ?? null, datasheet: cached.datasheet ?? null,
+      footprintHint: cached.footprintHint ?? null, mainCategory: cached.mainCategory, libraryName: cached.libraryName, pins: cached.pins, symbolRaw: cached.symbolRaw, properties: cached.properties ?? {},
+      internalPartNumber: null, lifecycleStatus: null, rohsStatus: null, packageNormalized: null, keySpecs: null, isGeneric: false,
+      ...(cached.atomicAssignments ? { atomicAssignments: cached.atomicAssignments as PartDetail["atomicAssignments"] } : {}),
+    };
+    return Response.json({ ok: true, part });
   }
 
   try {

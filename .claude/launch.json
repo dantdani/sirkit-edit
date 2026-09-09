@@ -4,8 +4,19 @@
     {
       "name": "sirkit-dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "sirkit-fixture",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "run",
+        "dev:fixture"
+      ],
+      "port": 3100
     }
   ]
 }

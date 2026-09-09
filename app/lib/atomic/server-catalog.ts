@@ -39,12 +39,16 @@ import type {
   SymbolAssetVersion,
 } from "./types";
 
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 function oneOfKind<T extends { kind: string }>(rows: Array<{ kind: string; payload: Record<string, unknown> }>, kind: T["kind"]): T | undefined {
   return rows.find((row) => row.kind === kind)?.payload as T | undefined;
 }
 
 /** Server-only reconstruction of the immutable portable snapshot from Stage 5 tables. */
 export async function loadPublishedPortableSnapshot(revisionId: string): Promise<PortableAtomicSnapshot | null> {
+  // [B16-C §5] fixture runtime: the committed blinker catalog's published revisions (no database).
+  if (fixtureRuntimeEnabled()) return structuredClone(fixtureContainer().catalog.snapshots.get(revisionId) ?? null);
   const db = getDb();
   const [revisionRow] = await db.select({ revision: atomicPartRevisions.revisionData })
     .from(atomicPartRevisions)

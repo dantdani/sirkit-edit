@@ -39,6 +39,8 @@ import {
 import { runErc, formatErcFeedback, type ErcReport } from "@/lib/erc";
 import { kgDesignNotes } from "@/lib/kg";
 
+import { BLINKER_NETLIST } from "@/app/lib/fixture-runtime/blinker/catalog";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 const MAX_ITERATIONS = 20;
 const SEARCH_LIMIT = 5;
 const ALTERNATES_LIMIT = 5;
@@ -86,6 +88,9 @@ export async function runBuildToolLoop(opts: {
   userMessage: string;
   seedParts?: AiPartResult[];
 }): Promise<BuildLoopResult> {
+  // [B16-C §5] fixture runtime: the recorded blinker design is the provider's answer
+  // (the same design the deterministic acceptance suite uses) — no model turn.
+  if (fixtureRuntimeEnabled()) return { ok: true, netlist: structuredClone(BLINKER_NETLIST), explanation: BLINKER_NETLIST.explanation } as BuildLoopResult;
   // Every part surfaced by a search (or seeded). Used to validate the final
   // submission: a partId must have been surfaced, and its pins must exist.
   const returnedParts = new Map<string, AiPartResult>();

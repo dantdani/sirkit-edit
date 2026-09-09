@@ -38,6 +38,8 @@ import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 
+import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 /** Compact pin descriptor handed to the AI — no positions (keeps tokens small). */
 export type AiPartPin = {
   number: string;
@@ -87,6 +89,10 @@ export type AiPartResult = {
 export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
   const unique = [...new Set(ids)].filter((id) => id);
   if (unique.length === 0) return [];
+  // [B16-C §5] fixture runtime: the committed blinker catalog stands in for the parts table.
+  if (fixtureRuntimeEnabled()) {
+    return unique.flatMap((id) => { const part = fixtureContainer().catalog.cachedParts.get(id); return part ? [{ partId: part.id, name: part.name, mpn: part.mpn, description: part.description, mainCategory: part.mainCategory, pins: part.pins.map((pin) => ({ number: pin.number, name: pin.name, type: pin.type })), lifecycleStatus: "unknown", similarity: 1 }] : []; });
+  }
   const db = getDb();
   const rows = await db
     .select({
@@ -124,6 +130,8 @@ export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
 export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
   const unique = [...new Set(ids)].filter((id) => id);
   if (unique.length === 0) return [];
+  // [B16-C §5] fixture runtime: the committed blinker catalog (CachedPart shape, incl. atomic assignments).
+  if (fixtureRuntimeEnabled()) return unique.flatMap((id) => { const part = fixtureContainer().catalog.cachedParts.get(id); return part ? [structuredClone(part)] : []; });
   const db = getDb();
   const rows = await db
     .select({
