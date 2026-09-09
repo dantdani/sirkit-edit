@@ -75,7 +75,7 @@ export interface MigrateOptions {
   manifest: MigrationManifest;
   /** Report the plan without executing (ledger table is still created). */
   dryRun?: boolean;
-  /** Observer per applied migration (CLI progress). */
+  /** Observer per migration THIS run applied (called inside its transaction, after the ledger row). Never called for a verified skip. */
   onApplied?(entry: MigrationManifestEntry, statementCount: number): void;
   /** Test seam: called before each statement chunk of each migration, inside its transaction (may throw to simulate an interruption; `tx` lets a test simulate a concurrent instance's writes). */
   beforeStatement?(entry: MigrationManifestEntry, index: number, tx: MigrationStatementRunner): Promise<void> | void;
@@ -154,15 +154,28 @@ export async function checkMigrationPrerequisites(runner: MigrationStatementRunn
   return { missing };
 }
 
+/**
+ * Create the ledger table if absent — inside a transaction that holds the
+ * runner's advisory lock, so two runners meeting an absent ledger on the same
+ * server never race `CREATE TABLE IF NOT EXISTS` (which is not race-safe
+ * across sessions in PostgreSQL) into a spurious duplicate-type error.
+ */
+export async function ensureLedger(executor: MigrationExecutor): Promise<void> {
+  await executor.transaction(async (tx) => {
+    await tx.exec(`SELECT pg_advisory_xact_lock(hashtext('${LOCK_KEY}'))`);
+    await tx.exec(ledgerDdl());
+  });
+}
+
 /** Read-only status (creates the ledger table if absent so status works on a clean database). */
 export async function migrationStatus(executor: MigrationExecutor, manifest: MigrationManifest): Promise<MigrationStatus> {
-  await executor.exec(ledgerDdl());
+  await ensureLedger(executor);
   return reconcileLedger(manifest, await readLedger(executor));
 }
 
 export async function migrateDatabase(executor: MigrationExecutor, options: MigrateOptions): Promise<MigrateResult> {
   const { manifest } = options;
-  await executor.exec(ledgerDdl());
+  await ensureLedger(executor);
   const prerequisites = await checkMigrationPrerequisites(executor);
   if (prerequisites.missing.length > 0) throw new MigrationRefusal("DB_MIGRATION_PREREQUISITE_MISSING", prerequisites.missing.join(", "));
   const before = reconcileLedger(manifest, await readLedger(executor));
@@ -189,8 +202,9 @@ export async function migrateDatabase(executor: MigrationExecutor, options: Migr
       }
       await tx.query(`INSERT INTO "${MIGRATION_LEDGER_TABLE}" (name, checksum, statement_count, runner_version) VALUES ($1, $2, $3, $4)`, [entry.name, entry.checksum, entry.statements.length, MIGRATION_RUNNER_VERSION]);
       applied.push(entry.name);
+      // Observed only for a migration THIS run applied — never for the in-lock verified skip above.
+      options.onApplied?.(entry, entry.statements.length);
     });
-    options.onApplied?.(entry, entry.statements.length);
   }
 
   // Post-run verification: the ledger must now be exactly the manifest prefix we intended.

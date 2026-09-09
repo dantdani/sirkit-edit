@@ -14,15 +14,16 @@
  * the executable RLS/CHECK behaviour, not the Supabase platform. A real
  * server run stays opt-in (`SIRKIT_DB_QUALIFICATION=1`).
  *
- * This file is test-only; PGlite is a devDependency and is never imported by
- * production code.
+ * PGlite is a devDependency: this module is imported by the test suites and by
+ * the operator CLI (`scripts/db-migrate.ts`, to compute a verified baseline),
+ * never by a route or any production bundle.
  */
 
 import { PGlite, type Transaction } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { vector } from "@electric-sql/pglite/vector";
-import type { MigrationExecutor, MigrationStatementRunner } from "../migrations/runner";
+import type { MigrationExecutor, MigrationStatementRunner } from "./migrations/runner";
 
 export const PLATFORM_SHIM_SQL = `
 CREATE EXTENSION IF NOT EXISTS vector;

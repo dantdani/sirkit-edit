@@ -20,7 +20,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadMigrationManifest, splitMigrationStatements } from "../migrations/manifest";
 import { migrateDatabase } from "../migrations/runner";
 import { captureSchemaSnapshot, verifyMembershipAndOwnership, type SchemaSnapshot } from "../migrations/verify-schema";
-import { disposablePostgres, type DisposablePostgres } from "./pglite-harness";
+import { disposablePostgres, type DisposablePostgres } from "../disposable-postgres";
 
 let pushed: DisposablePostgres, migrated: DisposablePostgres;
 let exportDdl = "";

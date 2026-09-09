@@ -4,17 +4,16 @@
  * qualification tests against a real PostgreSQL server
  * (`SIRKIT_DB_QUALIFICATION=1` + `SIRKIT_DB_QUALIFICATION_URL`).
  *
- * `search_path` may be pinned to a scratch schema so a shared qualification
- * server hosts a disposable copy (every unqualified object lands there and the
- * schema is dropped afterwards); production runs leave it at the default.
+ * No `search_path` pinning: the drizzle-generated migrations carry 25 explicit
+ * `"public"."<table>"` references (foreign-key targets), so a scratch-schema
+ * copy cannot host them — a qualification run needs a DISPOSABLE DATABASE
+ * (see app/lib/db/__tests__/b16-b-postgres-qualification.test.ts).
  */
 
 import postgres, { type Sql } from "postgres";
 import type { MigrationExecutor, MigrationStatementRunner } from "./runner";
 
 export interface PostgresExecutorOptions {
-  /** Pin every session to this schema (qualification scratch schema). */
-  searchPath?: string;
   /** Connection pool size; the runner needs one connection. */
   max?: number;
 }
@@ -33,7 +32,6 @@ export function createPostgresMigrationExecutor(url: string, options: PostgresEx
     ssl: url.includes("supabase.") ? "require" : undefined,
     connect_timeout: 15,
     onnotice: () => {},
-    ...(options.searchPath ? { connection: { search_path: options.searchPath } } : {}),
   });
   const base = runnerFor(client);
   return {

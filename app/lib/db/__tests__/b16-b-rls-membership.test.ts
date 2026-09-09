@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadMigrationManifest } from "../migrations/manifest";
 import { migrateDatabase } from "../migrations/runner";
 import { captureSchemaSnapshot, verifyMembershipAndOwnership } from "../migrations/verify-schema";
-import { disposablePostgres, PLATFORM_GRANT_SQL, type DisposablePostgres } from "./pglite-harness";
+import { disposablePostgres, PLATFORM_GRANT_SQL, type DisposablePostgres } from "../disposable-postgres";
 
 const U1 = "11111111-1111-1111-1111-111111111111", U2 = "22222222-2222-2222-2222-222222222222", U3 = "33333333-3333-3333-3333-333333333333";
 let db: DisposablePostgres;

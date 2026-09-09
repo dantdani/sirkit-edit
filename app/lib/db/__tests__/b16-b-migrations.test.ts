@@ -20,9 +20,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadMigrationManifest, migrationChecksum, REGISTERED_POST_JOURNAL_MIGRATIONS, splitMigrationStatements, truncateManifest, MigrationManifestError, MIGRATION_LEDGER_TABLE } from "../migrations/manifest";
+import { adoptBaseline, BASELINE_CONFIRMATION, BASELINE_RUNNER_VERSION } from "../migrations/baseline";
 import { checkMigrationPrerequisites, migrateDatabase, migrationStatus, reconcileLedger } from "../migrations/runner";
 import { captureSchemaSnapshot, schemaFingerprint } from "../migrations/verify-schema";
-import { disposablePostgres, type DisposablePostgres } from "./pglite-harness";
+import { disposablePostgres, type DisposablePostgres } from "../disposable-postgres";
 
 const MIGRATIONS_DIR = join(process.cwd(), "drizzle");
 const open: DisposablePostgres[] = [];
@@ -193,4 +194,83 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     expect(plan).toMatchObject({ dryRun: true, applied: [], skipped: [] });
     expect((await captureSchemaSnapshot(db)).tables).toEqual([]);
   });
+});
+
+describe("B16-B §baseline adoption — databases that pre-date the ledger (review finding)", () => {
+  /** A database built through the journaled prefix WITHOUT any ledger — every pre-B16-B Sirkit database. */
+  async function legacyDatabase(count = 27): Promise<{ db: DisposablePostgres; manifest: ReturnType<typeof loadMigrationManifest> }> {
+    const db = await fresh();
+    const manifest = loadMigrationManifest(MIGRATIONS_DIR);
+    await migrateDatabase(db, { manifest: truncateManifest(manifest, count) });
+    await db.exec(`DROP TABLE "${MIGRATION_LEDGER_TABLE}"`);
+    return { db, manifest };
+  }
+  /** What the CLI computes on a disposable instance: the prefix catalog and the tables later migrations add. */
+  async function expectedFor(manifest: ReturnType<typeof loadMigrationManifest>, count: number) {
+    const prefix = await fresh();
+    await migrateDatabase(prefix, { manifest: truncateManifest(manifest, count) });
+    const expected = await captureSchemaSnapshot(prefix);
+    const full = await fresh();
+    await migrateDatabase(full, { manifest });
+    const known = new Set(expected.tables.map((table) => table.name));
+    const laterTables = (await captureSchemaSnapshot(full)).tables.map((table) => table.name).filter((name) => !known.has(name));
+    return { expected, laterTables };
+  }
+  const adoption = (manifest: ReturnType<typeof loadMigrationManifest>, expected: Awaited<ReturnType<typeof expectedFor>>) => ({ manifest, through: "0026_parts_atomic_links", expected: expected.expected, laterTables: expected.laterTables, confirmation: BASELINE_CONFIRMATION, adoptedAt: "2026-09-09T12:00:00.000Z" });
+
+  it("REPRODUCTION: a legacy database (0000–0026 applied by hand, no ledger) cannot be migrated and is misreported as empty", async () => {
+    const { db, manifest } = await legacyDatabase();
+    await expect(migrateDatabase(db, { manifest })).rejects.toThrow(/already exists/);
+    const status = await migrationStatus(db, manifest);
+    expect(status.applied).toHaveLength(0);
+    expect(status.pending).toHaveLength(29);
+    expect((await captureSchemaSnapshot(db)).tables.length).toBeGreaterThan(100);
+  }, 120_000);
+
+  it("verified adoption writes the prefix ledger (marked adopted); the ordinary run then applies exactly 0027/0028 and reaches the clean fingerprint", async () => {
+    const { db, manifest } = await legacyDatabase();
+    await db.exec(`DROP TABLE IF EXISTS "${MIGRATION_LEDGER_TABLE}"`);
+    const expected = await expectedFor(manifest, 27);
+    expect(expected.laterTables).toEqual(["project_members"]);
+    const result = await adoptBaseline(db, adoption(manifest, expected));
+    expect(result.adopted).toHaveLength(27);
+    expect(result.divergences).toEqual([]);
+    const status = await migrationStatus(db, manifest);
+    expect(status.applied.map((row) => row.name)).toEqual(manifest.entries.slice(0, 27).map((entry) => entry.name));
+    expect(status.applied.every((row) => row.runner_version === BASELINE_RUNNER_VERSION)).toBe(true);
+    expect(status.pending.map((entry) => entry.name)).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    const upgrade = await migrateDatabase(db, { manifest });
+    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    const clean = await fresh();
+    await migrateDatabase(clean, { manifest });
+    expect(schemaFingerprint(await captureSchemaSnapshot(db))).toBe(schemaFingerprint(await captureSchemaSnapshot(clean)));
+  }, 180_000);
+
+  it("adoption refuses a wrong confirmation, an unknown baseline, a non-empty ledger, a later table already present, and a missing table", async () => {
+    const { db, manifest } = await legacyDatabase();
+    const expected = await expectedFor(manifest, 27);
+    await expect(adoptBaseline(db, { ...adoption(manifest, expected), confirmation: "yes" as never })).rejects.toMatchObject({ code: "DB_MIGRATION_BASELINE_CONFIRMATION_REQUIRED" });
+    await expect(adoptBaseline(db, { ...adoption(manifest, expected), through: "0099_nope" })).rejects.toMatchObject({ code: "DB_MIGRATION_BASELINE_UNKNOWN" });
+    // a later object present → the database is past the named baseline
+    await db.exec(`CREATE TABLE project_members (membership_id text primary key)`);
+    await expect(adoptBaseline(db, adoption(manifest, expected))).rejects.toMatchObject({ code: "DB_MIGRATION_BASELINE_LATER_OBJECTS_PRESENT" });
+    await db.exec(`DROP TABLE project_members`);
+    // a missing table → mismatch, nothing written
+    await db.exec(`DROP TABLE parts_atomic_links`);
+    await expect(adoptBaseline(db, adoption(manifest, expected))).rejects.toMatchObject({ code: "DB_MIGRATION_BASELINE_MISMATCH" });
+    expect((await migrationStatus(db, manifest)).applied).toHaveLength(0);
+    // a non-empty ledger → never adopt over an existing history
+    const adopted = await fresh();
+    await migrateDatabase(adopted, { manifest: truncateManifest(manifest, 3) });
+    await expect(adoptBaseline(adopted, adoption(manifest, expected))).rejects.toMatchObject({ code: "DB_MIGRATION_BASELINE_LEDGER_NOT_EMPTY" });
+  }, 180_000);
+
+  it("constraint / index divergences (e.g. a db:push-built database) are RECORDED, not refused", async () => {
+    const { db, manifest } = await legacyDatabase();
+    await db.exec(`DROP INDEX parts_atomic_links_revision_idx`);
+    const expected = await expectedFor(manifest, 27);
+    const result = await adoptBaseline(db, adoption(manifest, expected));
+    expect(result.adopted).toHaveLength(27);
+    expect(result.divergences).toEqual(["missing index:parts_atomic_links.parts_atomic_links_revision_idx"]);
+  }, 180_000);
 });

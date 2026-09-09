@@ -5,7 +5,7 @@ Labels: CONFIRMED = observed by running the named test on this machine on 2026-0
 ## Instance under test
 
 - **Default suite (deterministic, no live database):** PGlite `@electric-sql/pglite@0.4.6` — PostgreSQL 17.5 compiled to WASM, in-process, single superuser session — with extensions `vector`, `pg_trgm`, `pgcrypto` loaded and the documented platform shims (`CREATE EXTENSION vector`; schema `auth` + `auth.uid()` reading `request.jwt.claim.sub`; role `authenticated`). Harness: `app/lib/db/__tests__/pglite-harness.ts`.
-- **Real server (opt-in):** `app/lib/db/__tests__/b16-b-postgres-qualification.test.ts` behind `SIRKIT_DB_QUALIFICATION=1` + `SIRKIT_DB_QUALIFICATION_URL`, scratch schema per run, dropped CASCADE afterwards. Status on this machine: **BLOCKED-LIVE-QUALIFICATION** — no disposable PostgreSQL was reachable (Docker Desktop 4.67 fails at engine start with an internal "Inference manager" socket error; the `.env.local` Supabase project no longer resolves; LB-4/LB-6). The gate was proven to open: with the marker set to an unreachable server the suite RUNS and fails with `connect ECONNREFUSED` (CONFIRMED); without the marker it is SKIPPED with the reason logged (CONFIRMED).
+- **Real server (opt-in):** `app/lib/db/__tests__/b16-b-postgres-qualification.test.ts` behind `SIRKIT_DB_QUALIFICATION=1` + `SIRKIT_DB_QUALIFICATION_URL` pointing at an EMPTY disposable database (refused otherwise); the upgrade case needs a second empty database (`SIRKIT_DB_QUALIFICATION_URL_2`). [Corrected after review: the first design used a scratch schema, which the migrations' explicit `"public".` foreign-key references make impossible.] Status on this machine: **BLOCKED-LIVE-QUALIFICATION** — no disposable PostgreSQL was reachable (Docker Desktop 4.67 fails at engine start with an internal "Inference manager" socket error; the `.env.local` Supabase project no longer resolves; LB-4/LB-6). The gate was proven to open: with the marker set to an unreachable server the suite RUNS and fails with `connect ECONNREFUSED` (CONFIRMED); without the marker it is SKIPPED with the reason logged (CONFIRMED).
 
 ## Clean database (CONFIRMED — `b16-b-migrations.test.ts` › "a clean database receives every migration in one run")
 
@@ -18,6 +18,10 @@ Labels: CONFIRMED = observed by running the named test on this machine on 2026-0
 | Public tables | > 100 (142 in the probe), `sirkit_schema_migrations` excluded from every fingerprint |
 | `project_members.relrowsecurity` | `true` |
 | Prerequisite report on a BARE instance (no shims) | refused `DB_MIGRATION_PREREQUISITE_MISSING`; `checkMigrationPrerequisites` = `extension:vector, role:authenticated, function:auth.uid` — nothing created silently |
+
+## Legacy database adoption (CONFIRMED, `b16-b-migrations.test.ts` "baseline adoption")
+
+A database built through `0000`-`0026` WITHOUT a ledger (every pre-B16-B Sirkit database) is reproduced by migrating the prefix and dropping the ledger table: `migrateDatabase` rejects with `relation ... already exists` and status reports 0 applied / 29 pending on 141 tables. `adoptBaseline` with the verified prefix catalog writes 27 ledger rows marked `.../adopted-baseline`; the ordinary run then applies exactly `0027`/`0028` and the fingerprint equals the clean database's. Refusals proven: wrong confirmation, unknown baseline, a later table present (`project_members` created by hand), a missing table (`parts_atomic_links` dropped), a non-empty ledger. A dropped index is RECORDED as `missing index:parts_atomic_links.parts_atomic_links_revision_idx`, not refused.
 
 ## Upgrade from the last supported schema (CONFIRMED — "upgrading from the last journal-covered schema (0000–0026) reaches EXACTLY the clean-database fingerprint")
 
@@ -45,3 +49,4 @@ Labels: CONFIRMED = observed by running the named test on this machine on 2026-0
 
 - No live Supabase or Docker PostgreSQL executed these migrations in this checkpoint (blocked above); the real-server suite is committed, gated and proven to open, but its pass is UNKNOWN until an owner supplies a disposable server.
 - PGlite is a single-user superuser session: concurrency is simulated through the runner's own transaction (the lock re-check path), not with two OS connections.
+- Adversarial review of B16-B: only the transactional-correctness lens completed (six findings, all corrected above); the proof-integrity, gating-and-secrets and delivery-and-ci lenses could not run (subagent usage credits exhausted, 2026-09-09) and are recorded as UNKNOWN, not as passed.
