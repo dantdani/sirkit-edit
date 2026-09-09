@@ -7,6 +7,10 @@ import type { ComponentPhysicalBinding, PhysicalBindingScope, PhysicalBindingTra
 import { validatePhysicalBinding } from "@/app/lib/physical-binding/validation";
 import type { NewPhysicalBindingCandidate } from "@/app/lib/physical-binding/domain";
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
+import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
+import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
+import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
+import { DurableComponentReviewStore, listComponentReviews, REVIEW_REQUESTER_ROLES, REVIEW_RESOLVER_ROLES, requestComponentReview, resolveComponentReview, withdrawComponentReview, type ComponentReviewDeps, type ComponentReviewStatus } from "@/app/lib/physical-binding/review-handoff";
 import { PHYSICAL_BINDING_API_DEADLINE_MS, PHYSICAL_BINDING_API_MAX_BYTES, bindingScopeFromContext, object } from "./_scope";
 
 export const runtime = "nodejs";
@@ -14,11 +18,32 @@ export const runtime = "nodejs";
 const repository = new PostgresPhysicalBindingRepository();
 const service = new PhysicalBindingService(repository);
 
+// [B16-C.2] status codes are truthful: insufficient PERMISSION is 403 (it used to
+// surface as 422, indistinguishable from malformed engineering input); a request
+// in the wrong state is 409; a malformed reason is 400. An editor refused from
+// binding is told the visible handoff that exists for them.
 function errorResponse(error: unknown): Response {
   const message = error instanceof Error ? error.message : "PB_API_UNKNOWN_ERROR";
   const code = message.split(":")[0] || "PB_API_UNKNOWN_ERROR";
-  const status = code.includes("NOT_FOUND") ? 404 : code.includes("CONFLICT") || code.includes("ACTIVE_SELECTION") ? 409 : code.includes("UNAUTHORIZED") || code.includes("HUMAN_REQUIRED") ? 403 : 422;
-  return Response.json({ ok: false, code, error: code }, { status, headers: { "Cache-Control": "no-store" } });
+  const status = code.includes("NOT_FOUND") ? 404
+    : code.includes("CONFLICT") || code.includes("ACTIVE_SELECTION") ? 409
+    : code.includes("UNAUTHORIZED") || code.includes("HUMAN_REQUIRED") || code.includes("REVIEWER_REQUIRED") || code.includes("FORBIDDEN") ? 403
+    : code.endsWith("REASON_INVALID") ? 400
+    : 422;
+  const handoff = code === "PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED" ? { handoff: "request_atomic_review" } : {};
+  return Response.json({ ok: false, code, error: code, ...handoff }, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+const REVIEW_STATUSES: ReadonlySet<string> = new Set(["pending", "approved", "rejected", "withdrawn", "retired"]);
+
+/** [B16-C.2] the review handoff composes the SAME binding service/repository the reviewer's own bind uses. */
+function reviewDeps(): ComponentReviewDeps {
+  return {
+    store: new DurableComponentReviewStore(getDurableWorkflowRepository()),
+    loadSnapshot: loadPublishedPortableSnapshot,
+    membership: resolveMembershipRepository(),
+    bind: (input) => bindAtomicSelection(service, repository, { scope: input.scope, actor: input.actor, boardInstanceId: input.boardInstanceId, componentInstanceId: input.componentInstanceId, atomicPartRevisionId: input.atomicPartRevisionId }),
+  };
 }
 
 function sameScope(candidate: PhysicalBindingScope, scope: { tenantId: string; projectId: string; branchId: string }): boolean {
@@ -113,6 +138,45 @@ export const POST = authenticatedJsonRoute(
       if (!object(body.binding)) return Response.json({ ok: false, code: "PB_API_BINDING_REQUIRED", error: "binding is required." }, { status: 400 });
       const issues = validatePhysicalBinding(body.binding as unknown as ComponentPhysicalBinding);
       return Response.json({ ok: issues.length === 0, issues }, { status: issues.length ? 422 : 200, headers: { "Cache-Control": "no-store" } });
+    }
+    // ── [B16-C.2] component-binding review handoff ─────────────────────────
+    if (operation === "request_atomic_review") {
+      if (typeof body.componentInstanceId !== "string" || typeof body.boardInstanceId !== "string" || typeof body.atomicPartRevisionId !== "string") {
+        return Response.json({ ok: false, code: "PB_API_REVIEW_INPUT_INVALID", error: "componentInstanceId, boardInstanceId, and atomicPartRevisionId are required." }, { status: 400 });
+      }
+      const now = new Date().toISOString();
+      const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason : "Exact component binding requested for reviewer approval.";
+      const { stored, created } = await requestComponentReview(reviewDeps(), {
+        scope, actor: scope.actor, boardInstanceId: body.boardInstanceId, componentInstanceId: body.componentInstanceId, atomicPartRevisionId: body.atomicPartRevisionId,
+        reason, requestedAt: now, requesterMembershipRevision: context.membershipRevision ?? null,
+        idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-request:${body.componentInstanceId}:${body.atomicPartRevisionId}:${now}`,
+      });
+      return Response.json({ ok: true, created, request: stored.request, revision: stored.revision }, { status: created ? 201 : 200, headers: { "Cache-Control": "no-store" } });
+    }
+    if (operation === "list_review_requests") {
+      const status = typeof body.status === "string" && REVIEW_STATUSES.has(body.status) ? (body.status as ComponentReviewStatus) : undefined;
+      const { requests, membershipVerified } = await listComponentReviews(reviewDeps(), { scope, boardInstanceId: typeof body.boardInstanceId === "string" ? body.boardInstanceId : undefined, status, at: new Date().toISOString() });
+      const human = scope.actor.actorKind === "human";
+      return Response.json({
+        ok: true,
+        viewer: { actorId: scope.actor.actorId, role: scope.actor.role, actorKind: scope.actor.actorKind, canRequest: human && REVIEW_REQUESTER_ROLES.has(scope.actor.role), canResolve: human && REVIEW_RESOLVER_ROLES.has(scope.actor.role) },
+        membershipVerified,
+        requests: requests.map((item) => ({ ...item.request, revision: item.revision })),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (operation === "resolve_review_request") {
+      if (typeof body.requestId !== "string" || (body.decision !== "approve" && body.decision !== "reject") || typeof body.reason !== "string") {
+        return Response.json({ ok: false, code: "PB_API_REVIEW_INPUT_INVALID", error: "requestId, decision (approve|reject) and reason are required." }, { status: 400 });
+      }
+      const now = new Date().toISOString();
+      const stored = await resolveComponentReview(reviewDeps(), { scope, actor: scope.actor, requestId: body.requestId, decision: body.decision, reason: body.reason, at: now, idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-resolve:${body.requestId}:${body.decision}:${now}` });
+      return Response.json({ ok: true, request: stored.request, revision: stored.revision }, { headers: { "Cache-Control": "no-store" } });
+    }
+    if (operation === "withdraw_review_request") {
+      if (typeof body.requestId !== "string") return Response.json({ ok: false, code: "PB_API_REVIEW_INPUT_INVALID", error: "requestId is required." }, { status: 400 });
+      const now = new Date().toISOString();
+      const stored = await withdrawComponentReview(reviewDeps(), { scope, actor: scope.actor, requestId: body.requestId, reason: typeof body.reason === "string" ? body.reason : "", at: now, idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-withdraw:${body.requestId}:${now}` });
+      return Response.json({ ok: true, request: stored.request, revision: stored.revision }, { headers: { "Cache-Control": "no-store" } });
     }
     return Response.json({ ok: false, code: "PB_API_OPERATION_UNSUPPORTED", error: "Unsupported physical-binding operation." }, { status: 400 });
   } catch (error) { return errorResponse(error); }

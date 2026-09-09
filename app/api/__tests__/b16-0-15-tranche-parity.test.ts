@@ -69,6 +69,8 @@ vi.mock("@/app/lib/pcb/fab/release-gate", async (orig) => ({ ...(await orig() as
 
 import { POST as qualify } from "../pcb/qualify/route";
 import { POST as release } from "../pcb/release/route";
+import { MANUFACTURING_RULE_PROFILE_SCHEMA } from "@/app/lib/pcb/fab/release-manifest";
+import { ruleProfileExpiry } from "@/app/lib/pcb/fab/rule-profile";
 
 const SEL = { "x-sirkit-tenant-id": "local", "x-sirkit-project-id": "proj-1", "x-sirkit-branch-id": "main" };
 function post(path: string, body: string, headers: Record<string, string> = {}): Request {
@@ -85,7 +87,7 @@ const PINNED = { designId: "d1", boardId: "b1", expectedAuthorityRevision: 1, ex
 // release-time expiry check (366 days) can never make these tests rot.
 const VERIFIED_TODAY = new Date().toISOString().slice(0, 10);
 function storedAuthority(boardRevision: string, boardDigest: string) {
-  return { boardRevision, boardDigest, manufacturingRuleProfile: { evidence: { verifiedAt: VERIFIED_TODAY }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } };
+  return { boardRevision, boardDigest, manufacturingRuleProfile: { schemaVersion: MANUFACTURING_RULE_PROFILE_SCHEMA, evidence: { sourceRefs: ["https://jlcpcb.com/capabilities/pcb-capabilities"], retrievedAt: VERIFIED_TODAY, expiresAt: ruleProfileExpiry(VERIFIED_TODAY), scope: "JLCPCB 1-2 layer rigid FR-4 (test stub)", notes: [] }, profileId: "jlcpcb-2l" }, schematic: { revision: "schematic:1", digest: "sha256:sch" }, componentAuthority: { digest: "component-authority-x" }, qualificationAuthority: { digest: "qualification-authority-x" } };
 }
 
 function authed(role: "viewer" | "commenter" | "editor" | "reviewer" | "admin"): void {

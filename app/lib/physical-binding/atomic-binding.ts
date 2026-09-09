@@ -42,7 +42,7 @@ export interface BindAtomicSelectionResult {
 const VALIDATOR_VERSION = "sirkit.atomic-binding-validator/1";
 
 /** "R_0805_2012Metric" → "0805 (2012 Metric)"; SOIC/headers keep their name. */
-function canonicalPackageName(footprintName: string): { name: string; identitySystem: "metric_imperial_explicit" | "manufacturer"; sourceToken: string } {
+export function canonicalPackageName(footprintName: string): { name: string; identitySystem: "metric_imperial_explicit" | "manufacturer"; sourceToken: string } {
   const chip = /(?:^|_)(0201|0402|0603|0805|1206|1210)_(\d{4})Metric(?:_|$)/.exec(footprintName);
   if (chip) return { name: `${chip[1]} (${chip[2]} Metric)`, identitySystem: "metric_imperial_explicit", sourceToken: chip[1]! };
   return { name: footprintName.replace(/_/g, " "), identitySystem: "manufacturer", sourceToken: footprintName };

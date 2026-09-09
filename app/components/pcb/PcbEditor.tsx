@@ -132,6 +132,8 @@ import { SyncButton } from "./SyncButton";
 import { SyncPlacementDialog } from "./SyncPlacementDialog";
 import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B16.1C §F]
 import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
+import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
+import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { RoutingControls } from "./RoutingControls";
 import { RoutingRulesPanel } from "./RoutingRulesPanel";
 import { AutorouteSetup } from "./AutorouteSetup";
@@ -770,7 +772,12 @@ export default function PcbEditor({
             signal,
           });
           if (res.ok) return { ok: true };
-          const detail = (await res.json().catch(() => null)) as { code?: string } | null;
+          const detail = (await res.json().catch(() => null)) as { code?: string; handoff?: string } | null;
+          // [B16-C.2] an editor cannot publish a binding (403): say what the visible handoff is instead of a bare code.
+          if (res.status === 403 && detail?.handoff === "request_atomic_review") {
+            void componentReview.refresh();
+            return { ok: false, failure: `${k.refDes} (reviewer approval required — use “Request review” in the Component review panel)` };
+          }
           return { ok: false, failure: `${k.refDes} (${detail?.code ?? res.status})` };
         } catch {
           return { ok: false, failure: k.refDes };
@@ -1021,6 +1028,21 @@ export default function PcbEditor({
     },
   });
   const releasing = manufacturing.releasing;
+  // [B16-C.2] the component-binding review handoff: an editor REQUESTS reviewer
+  // approval of each exact candidate; a reviewer approves/rejects against the
+  // server-projected evidence; the durable result survives any refresh.
+  const reviewableComponents = useMemo(
+    () => (schematic.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId).map((k) => ({ id: k.id, refDes: k.refDes, atomicPartRevisionId: k.atomicPartRevisionId! })),
+    [schematic.kicadComponents],
+  );
+  const componentReview = useComponentReview({
+    enabled: !init.demo && Boolean(syncIdentity),
+    scopeHeaders,
+    boardInstanceId: syncIdentity?.boardId ?? null,
+    components: reviewableComponents,
+    refreshToken: manufacturingRefreshToken + hydrateToken,
+    onNotice: setToast,
+  });
   // [B16.1C §C/§F] pre-edit probe P1: a fresh browser remembered NO snapshot
   // revision (localStorage empty → 0) and every publication against an
   // already-published design collided with PS_SNAPSHOT_REVISION_CONFLICT.
@@ -2074,7 +2096,9 @@ export default function PcbEditor({
               retry, and the release result — all reconstructed from the
               server after any refresh. */}
           {!init.demo && syncIdentity && (
-            <div className="absolute bottom-2 left-2 z-30 max-w-2xl">
+            <div className="absolute bottom-2 left-2 z-30 flex max-w-2xl flex-col gap-1">
+              {/* [B16-C.2] the review handoff sits with the manufacturing workflow: request → reviewer decision → resume. */}
+              <ComponentReviewPanel review={componentReview} />
               <ManufacturingWorkflowPanel
                 workflow={manufacturing}
                 qualifying={qualifying}
