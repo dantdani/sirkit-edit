@@ -54,7 +54,8 @@ import type { PcbBoard } from "@/app/lib/pcb/types";
 import { getFabPreset } from "@/app/lib/pcb/fab/presets";
 import { DurableManufacturingAuthorityStore } from "@/app/lib/pcb/fab/authority-store";
 import { authoritativeBoardDigest, manufacturingComponentAuthorityDigest, type ManufacturingReleaseAuthority } from "@/app/lib/pcb/fab/release-gate";
-import { manufacturingRuleProfileDigest, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import type { ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import { buildManufacturingRuleProfile, JLCPCB_2L_RULE_PROFILE_EVIDENCE } from "@/app/lib/pcb/fab/rule-profile";
 import { boundedManufacturingFailure, manufacturingRefusal } from "@/app/lib/pcb/fab/manufacturing-errors";
 import { resolveQualificationComponentAuthority, type QualificationComponentAuthority } from "@/app/lib/pcb/fab/qualification-authority";
 import { commitQualification, qualificationIdempotencyKey } from "@/app/lib/pcb/fab/qualification-commit";
@@ -62,7 +63,6 @@ import { DurableQualificationLease } from "@/app/lib/pcb/fab/qualification-lease
 import { rc01ParityEvidenceDigest, rc02RouteEvidence, rc02RouteEvidenceDigest, rc03CapabilityEvidenceDigest, type SchematicAuthorityIdentity } from "@/app/lib/pcb/fab/qualification-evidence";
 import { buildSchematicParityCertificate } from "@/app/lib/pcb/readiness/parity";
 import { pcbRevisionId } from "@/app/lib/pcb/revision";
-import { mmToNm } from "@/app/lib/pcb/units";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { makeBoardRecord } from "@/app/lib/pcb-sync/board";
 import { snapshotToSourceNetlist } from "@/app/lib/pcb/fab/snapshot-netlist";
@@ -79,43 +79,17 @@ export const maxDuration = 300;
  *  bare board. No other preset is releasable (the release gate structurally
  *  refuses non-two-layer profiles). */
 export const QUALIFIED_FABRICATION_PROFILE_ID = "jlcpcb-2l" as const;
-/** Official capability page the profile limits were re-verified against (B16.1C §D). */
-export const QUALIFIED_FABRICATION_PROFILE_EVIDENCE = Object.freeze({ sourceRef: "https://jlcpcb.com/capabilities/pcb-capabilities", verifiedAt: "2026-09-07" });
+/** [B16-C.4] Source-pinned evidence (URLs, retrieval date, scope, expiry) the qualified profile carries; see fab/rule-profile.ts. */
+export const QUALIFIED_FABRICATION_PROFILE_EVIDENCE = JLCPCB_2L_RULE_PROFILE_EVIDENCE;
 
 /** [B16-A F3] the ONLY keys a qualification request may carry. */
 export const QUALIFY_BODY_KEYS: ReadonlySet<string> = new Set(["boardId", "designId"]);
 /** [B16-A F3] server-owned placement seeds — never a client input. */
 export const QUALIFICATION_PLACEMENT_SEEDS = Object.freeze([101, 202, 303] as const);
 
-/** Conservative JLCPCB-style two-layer rigid prototype profile (bare board). */
+/** Conservative JLCPCB two-layer rigid prototype profile (bare board): limits read from the enforced DRC preset, via and PTH rings split. */
 export function bareBoardRuleProfile(): ManufacturingRuleProfile {
-  const drc = getPreset(QUALIFIED_FABRICATION_PROFILE_ID);
-  const content: Omit<ManufacturingRuleProfile, "digest"> = {
-    schemaVersion: "sirkit.manufacturing-rule-profile.v1",
-    profileId: getFabPreset(QUALIFIED_FABRICATION_PROFILE_ID).id,
-    version: 1,
-    manufacturer: "JLCPCB",
-    processName: "Economy rigid two-layer PTH prototype",
-    evidence: { ...QUALIFIED_FABRICATION_PROFILE_EVIDENCE },
-    construction: { copperLayers: 2, copperThicknessUm: 35, boardThicknessMm: 1.6, material: "FR-4", maxBoardWidthMm: 100, maxBoardHeightMm: 80 },
-    limitsNm: {
-      minTraceWidth: drc.rules.default.minTrackWidthNm,
-      minSpace: drc.rules.default.clearanceNm,
-      minDrill: drc.rules.default.minViaDrillNm,
-      minFinishedHole: drc.rules.default.minViaDrillNm,
-      minAnnularRing: drc.rules.default.minAnnularRingNm,
-      minCopperToEdge: drc.rules.default.minEdgeClearanceNm,
-      minHoleToEdge: drc.rules.default.minEdgeClearanceNm,
-      solderMaskExpansion: mmToNm(0.05),
-      minSolderMaskSliver: mmToNm(0.1),
-      minSilkscreenWidth: mmToNm(0.15),
-      minSilkscreenClearance: drc.rules.default.minSilkPadClearanceNm,
-    },
-    maskPolicy: { componentPads: "explicit_or_profile_opening", defaultViaTenting: "tented" },
-    specialFeatures: { slots: "unsupported", castellations: "unsupported", edgePlating: "unsupported", flex: "unsupported" },
-    assembly: { supported: false },
-  };
-  return { ...content, digest: manufacturingRuleProfileDigest(content) };
+  return buildManufacturingRuleProfile({ presetId: QUALIFIED_FABRICATION_PROFILE_ID, evidence: QUALIFIED_FABRICATION_PROFILE_EVIDENCE });
 }
 
 /**

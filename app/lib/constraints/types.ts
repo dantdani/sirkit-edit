@@ -85,6 +85,7 @@ export type ConstraintKind =
   | "via_diameter"
   | "via_drill"
   | "annular_ring"
+  | "pth_annular_ring"
   | "hole_clearance"
   | "edge_clearance"
   | "mask_clearance"
@@ -375,6 +376,7 @@ export interface LoweredPhysicalRule {
   minViaOuterNm?: number;
   minViaDrillNm?: number;
   minAnnularRingNm?: number;
+  minPthAnnularRingNm?: number;
   minHoleToHoleNm?: number;
   minEdgeClearanceNm?: number;
   minSilkPadClearanceNm?: number;

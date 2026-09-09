@@ -312,7 +312,7 @@ export interface EvaluatePcbReadinessInput {
 
 const FABRICATION_CONSTRAINT_KINDS = new Set<ConstraintKind>([
   "trace_width", "clearance", "same_net_feature", "via_diameter", "via_drill", "annular_ring",
-  "hole_clearance", "edge_clearance", "mask_clearance", "paste_rule", "silk_clearance",
+  "pth_annular_ring", "hole_clearance", "edge_clearance", "mask_clearance", "paste_rule", "silk_clearance",
   "courtyard_clearance", "allowed_layers", "forbidden_layers", "via_type", "via_span", "via_count",
   "zone_connection", "zone_thermal_gap", "zone_thermal_spokes", "zone_island_area", "keepout",
 ]);

@@ -63,6 +63,8 @@ export const MANUFACTURING_PUBLIC_ERRORS = Object.freeze({
   MFG_VIA_SPAN_UNSUPPORTED: { status: 422, message: "Only full through-vias are releasable." },
   MFG_OUTLINE_INVALID: { status: 422, message: "A closed non-zero board outline is required." },
   MFG_RULE_PROFILE_DIGEST_INVALID: { status: 422, message: "The manufacturing rule profile digest is invalid." },
+  MFG_RULE_PROFILE_SCHEMA_RETIRED: { status: 422, message: "The qualification's manufacturing rule profile pre-dates the via / plated-through-hole annular-ring split. Re-qualify the board under the current fabrication profile." },
+  MFG_RULE_PROFILE_EXPIRED: { status: 422, message: "The manufacturing rule profile's evidence has expired. Re-verify the fabrication profile against the manufacturer's current capabilities and re-qualify." },
   MFG_RULE_PROFILE_INCOMPATIBLE: { status: 422, message: "Rule, fabrication, and DRC profile identities differ." },
   MFG_RULE_PROFILE_EVIDENCE_MISSING: { status: 422, message: "The manufacturing profile lacks a controlled source and verification date." },
   MFG_RULE_PROFILE_STALE: { status: 422, message: "The manufacturing profile evidence is future-dated or older than one year." },

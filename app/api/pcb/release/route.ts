@@ -36,6 +36,8 @@ import { DurableManufacturingAuthorityStore } from "@/app/lib/pcb/fab/authority-
 import { authoritativeBoardDigest, releaseManufacturingPackage, type ManufacturingReleaseLocator } from "@/app/lib/pcb/fab/release-gate";
 import { DurableManufacturingReleaseLedger } from "@/app/lib/pcb/fab/release-ledger";
 import { boundedManufacturingFailure, manufacturingRefusal } from "@/app/lib/pcb/fab/manufacturing-errors";
+import { MANUFACTURING_RULE_PROFILE_SCHEMA, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import { ruleProfileEvidenceStatus } from "@/app/lib/pcb/fab/rule-profile";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { PCB_SYNC_API_MAX_BYTES, PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext, pcbSyncForbiddenAuthorityRefusal } from "../../pcb-sync/_scope";
@@ -103,10 +105,14 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
       return manufacturingRefusal("MFG_AUTHORITY_STALE", { correlationId, extra: { authorityBoardRevision: stored.authority.boardRevision, currentBoardRevision: head.record.revision } });
     }
     // Release-time expiration of the fabrication-profile evidence.
-    const verifiedAt = Date.parse(`${stored.authority.manufacturingRuleProfile.evidence.verifiedAt}T00:00:00.000Z`);
-    if (!Number.isFinite(verifiedAt) || Date.now() - verifiedAt > RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS || verifiedAt > Date.now()) {
-      return manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId });
-    }
+    // [B16-C.4] a pre-split (v1) profile is refused distinctly; the v2 evidence carries its own expiry.
+    const storedProfile = stored.authority.manufacturingRuleProfile as { schemaVersion?: string; evidence?: ManufacturingRuleProfile["evidence"] };
+    if (storedProfile.schemaVersion !== MANUFACTURING_RULE_PROFILE_SCHEMA) return manufacturingRefusal("MFG_RULE_PROFILE_SCHEMA_RETIRED", { correlationId });
+    const evidenceStatus = ruleProfileEvidenceStatus(storedProfile.evidence, new Date().toISOString());
+    if (evidenceStatus === "expired") return manufacturingRefusal("MFG_RULE_PROFILE_EXPIRED", { correlationId });
+    if (evidenceStatus !== "ok") return manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId });
+    const retrievedAt = Date.parse(`${storedProfile.evidence!.retrievedAt}T00:00:00.000Z`);
+    if (Date.now() - retrievedAt > RELEASE_PROFILE_EVIDENCE_MAX_AGE_MS) return manufacturingRefusal("MFG_RULE_PROFILE_STALE_AT_RELEASE", { correlationId });
     // The locator pins the exact board identity the release must match; the
     // loader re-reads durable storage and refuses anything that drifted.
     const locator: ManufacturingReleaseLocator = { ...authorityScope, expectedBoardRevision: stored.authority.boardRevision, expectedBoardDigest: stored.authority.boardDigest };

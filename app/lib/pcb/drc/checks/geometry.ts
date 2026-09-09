@@ -97,6 +97,74 @@ export function checkVia(ctx: DrcCheckContext): DrcViolation[] {
   return out;
 }
 
+// ── [B16-C.4] Plated-through-hole annular ring ────────────────────────────────
+//
+// Reproduced ambiguity: `minAnnularRingNm` was documented as the VIA ring and
+// checked only on vias; a component's plated pad with a 0.16 mm ring passed
+// DRC although the manufacturer's stated PTH minimum is higher. The PTH ring
+// is measured per plated pad as the narrowest copper between the hole wall and
+// the pad edge (drill offset and slot dimensions reduce it), in pad-local
+// coordinates (pad and drill rotate together, so no rotation is needed).
+
+/** Narrowest copper between the hole wall and the pad edge, in nm (negative = hole breaks out). */
+export function padAnnularRingNm(pad: FootprintInstance["def"]["pads"][number]): number | null {
+  if (!pad.drill) return null;
+  const drillW = pad.drill.width ?? pad.drill.diameter;
+  const drillH = pad.drill.height ?? pad.drill.diameter;
+  const ox = Math.abs(pad.drill.offset?.x ?? 0);
+  const oy = Math.abs(pad.drill.offset?.y ?? 0);
+  const shape = pad.shape;
+  if (shape.kind === "polygon") {
+    // Exact for any polygon: distance from the hole centre to the nearest edge, minus the hole's larger half-dimension (conservative for slots).
+    const c = { x: pad.drill.offset?.x ?? 0, y: pad.drill.offset?.y ?? 0 };
+    let nearest = Number.POSITIVE_INFINITY;
+    const pts = shape.points;
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const len2 = abx * abx + aby * aby;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((c.x - a.x) * abx + (c.y - a.y) * aby) / len2));
+      const px = a.x + t * abx - c.x, py = a.y + t * aby - c.y;
+      nearest = Math.min(nearest, Math.hypot(px, py));
+    }
+    return Number.isFinite(nearest) ? Math.round(nearest - Math.max(drillW, drillH) / 2) : null;
+  }
+  const width = shape.kind === "circle" ? shape.radius * 2 : shape.width;
+  const height = shape.kind === "circle" ? shape.radius * 2 : shape.height;
+  return Math.round(Math.min((width - drillW) / 2 - ox, (height - drillH) / 2 - oy));
+}
+
+export function checkPthAnnularRing(ctx: DrcCheckContext): DrcViolation[] {
+  const out: DrcViolation[] = [];
+  for (const inst of ctx.board.footprints) {
+    for (const pad of inst.def.pads) {
+      if (pad.type !== "thru_hole" || pad.plated === false || !pad.drill) continue; // NPTH and SMD pads have no plated ring
+      const ring = padAnnularRingNm(pad);
+      if (ring === null) continue;
+      const netId = inst.padNets[pad.number];
+      const threshold = netId === undefined ? ctx.rules.default.minPthAnnularRingNm : ctx.eff(netId).minPthAnnularRingNm;
+      if (ring >= threshold) continue;
+      const items: CopperItemRef[] = [{ kind: "pad", instanceId: inst.id, padNumber: pad.number }];
+      const layer = pad.layers.find((id) => id === "copperTop" || id === "copperBottom") ?? pad.layers[0];
+      out.push({
+        id: violationId("pthAnnularRing", items, ring, threshold),
+        kind: "pthAnnularRing",
+        severity: "error",
+        items,
+        objectIds: [`${inst.id}.${pad.number}`],
+        layer,
+        location: padWorldPosition(inst, pad),
+        measuredNm: ring,
+        thresholdNm: threshold,
+        summary: `${inst.ref}.${pad.number} plated-hole ring is ${fmtMm(ring)} mm; need ≥ ${fmtMm(threshold)} mm.`,
+        detail: `The copper between this plated hole and its pad edge is ${fmtMm(ring)} mm at its narrowest, below the ${fmtMm(threshold)} mm plated-through-hole annular ring this fab requires (a via ring limit does not apply to component holes). Enlarge the pad, reduce the drill, or choose a footprint variant with a wider ring.`,
+      });
+    }
+  }
+  return out;
+}
+
 // ── #6 Hole-to-hole ───────────────────────────────────────────────────────────
 
 interface Hole {

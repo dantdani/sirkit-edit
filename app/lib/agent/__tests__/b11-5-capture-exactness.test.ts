@@ -398,6 +398,24 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream)\s*\(/.test(line)
           && !line.includes("scratchRoot")),
+      // [B16-B] copies the migration folder into `mkdtempSync(join(tmpdir(), "sirkit-manifest-"))`
+      // scratch dirs (`dir`, `dir2`) to reproduce checksum drift / unregistered
+      // files; EVERY write-primitive line must be rooted at one of them.
+      "b16-b-migrations.test.ts": (source) =>
+        source.includes('mkdtempSync(join(tmpdir(), "sirkit-manifest-"))')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream)\s*\(/.test(line)
+          && !/\bdir2?\b/.test(line)),
+      // [B16-B] writes a throwaway drizzle-kit config EXCLUSIVELY under the
+      // git-ignored `node_modules/.cache/sirkit-b16b-export` (the config must
+      // resolve drizzle-kit from the repository's node_modules); never under
+      // app/, lib/, scripts/ or artifacts/. EVERY write-primitive line is rooted
+      // at that cache (`cache`) or the per-run dir inside it (`config`).
+      "b16-b-schema-parity.test.ts": (source) =>
+        source.includes('join(process.cwd(), "node_modules", ".cache", "sirkit-b16b-export")')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream)\s*\(/.test(line)
+          && !/\b(?:cache|config)\b/.test(line)),
     };
 
     const offenders: string[] = [];

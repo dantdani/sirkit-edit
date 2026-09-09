@@ -2,8 +2,9 @@
   "id": "jlcpcb-2l",
   "name": "JLCPCB economy 2-layer",
   "fab": "JLCPCB",
-  "version": 1,
-  "verifiedAt": "2026-07-08",
+  "version": 2,
+  "verifiedAt": "2026-09-09",
+  "pthAnnularRingEvidence": "JLCPCB 1-2 layer capabilities, retrieved 2026-09-09: PTH annular ring (1 oz) recommended 0.25 mm or above, absolute minimum 0.18 mm; via hole/diameter 0.15/0.25 mm; the recommended value is enforced",
   "specUrl": "https://jlcpcb.com/capabilities/pcb-capabilities",
   "rules": {
     "default": {
@@ -12,6 +13,7 @@
       "minViaOuterMm": 0.6,
       "minViaDrillMm": 0.3,
       "minAnnularRingMm": 0.15,
+      "minPthAnnularRingMm": 0.25,
       "minHoleToHoleMm": 0.5,
       "minEdgeClearanceMm": 0.3,
       "minSilkPadClearanceMm": 0.15,

@@ -15,6 +15,7 @@ import { compileManufacturingIr } from "../fab/native/mir";
 import { STRICT_NATIVE_RECIPE } from "../fab/native/recipe";
 import { createManufacturingSnapshot } from "../fab/native/snapshot";
 import { sha256 } from "../fab/native/stable";
+import { manufacturingRuleProfileDigest, type ManufacturingRuleProfile } from "../fab/release-manifest";
 import type { NativeFabCompileInput, NativeFabFile } from "../fab/native/types";
 import { extractAndValidateReleaseArchive, releasePathIssue, validateFabricationFiles } from "../fab/validate-package";
 import { pcbRevisionId } from "../revision";
@@ -54,6 +55,11 @@ function authority(result: AutonomousLayoutQualificationResult): ManufacturingRe
     rc03: { state: "complete", evidenceId: "r05-rc03:golden", digest: "sha256:rc03-golden", boardRevision, boardDigest, declaration: autonomousGoldenDeclaration(), capabilityEvaluation: result.finalCapability },
     componentAuthority: { ...componentContent, digest: manufacturingComponentAuthorityDigest(componentContent) }, fabPreset: getFabPreset("jlcpcb-2l"), drcPreset: getPreset("jlcpcb-2l"), manufacturingRuleProfile: buildAutonomousGoldenManufacturingRuleProfile(), releaseMode: "bare_pcb", sourceDate: AUTONOMOUS_GOLDEN_SOURCE_DATE, actor: "demo-release-agent",
   };
+}
+
+function redigest(profile: ManufacturingRuleProfile): ManufacturingRuleProfile {
+  const { digest: _digest, ...content } = profile; void _digest;
+  return { ...content, digest: manufacturingRuleProfileDigest(content) };
 }
 
 function locator(source: ManufacturingReleaseAuthority): ManufacturingReleaseLocator {
@@ -144,6 +150,13 @@ describe("MFG01 authoritative manufacturing release", () => {
     await expect(releaseManufacturingPackage({ locator: locator(assembled), loadAuthority: loader(assembled) })).rejects.toMatchObject({ code: "MFG_ASSEMBLY_AUTHORITY_UNAVAILABLE" });
     const badRule = structuredClone(source); badRule.manufacturingRuleProfile.digest = "mfg-rule-corrupt";
     await expect(releaseManufacturingPackage({ locator: locator(badRule), loadAuthority: loader(badRule) })).rejects.toMatchObject({ code: "MFG_RULE_PROFILE_DIGEST_INVALID" });
+    // [B16-C.4] a pre-split (v1) profile is refused distinctly from a corrupt digest; expired evidence and a PTH limit that drifted from the enforced preset are refused too.
+    const retired = structuredClone(source); (retired.manufacturingRuleProfile as unknown as { schemaVersion: string }).schemaVersion = "sirkit.manufacturing-rule-profile.v1";
+    await expect(releaseManufacturingPackage({ locator: locator(retired), loadAuthority: loader(retired) })).rejects.toMatchObject({ code: "MFG_RULE_PROFILE_SCHEMA_RETIRED" });
+    const expired = structuredClone(source); expired.manufacturingRuleProfile = redigest({ ...expired.manufacturingRuleProfile, evidence: { ...expired.manufacturingRuleProfile.evidence, retrievedAt: "2025-07-01", expiresAt: "2026-07-01" } });
+    await expect(releaseManufacturingPackage({ locator: locator(expired), loadAuthority: loader(expired) })).rejects.toMatchObject({ code: "MFG_RULE_PROFILE_EXPIRED" });
+    const pthDrift = structuredClone(source); pthDrift.manufacturingRuleProfile = redigest({ ...pthDrift.manufacturingRuleProfile, limitsNm: { ...pthDrift.manufacturingRuleProfile.limitsNm, minPthAnnularRing: 180_000 } });
+    await expect(releaseManufacturingPackage({ locator: locator(pthDrift), loadAuthority: loader(pthDrift) })).rejects.toMatchObject({ code: "MFG_RULE_PROFILE_LIMIT_MISMATCH" });
     const fourBoard = structuredClone(source.board); setBoardStackupProfile(fourBoard, "signal-plane-4");
     const four = reseal(source, fourBoard);
     await expect(releaseManufacturingPackage({ locator: locator(four), loadAuthority: loader(four) })).rejects.toMatchObject({ code: "MFG_RULE_PROFILE_CONSTRUCTION_MISMATCH" });

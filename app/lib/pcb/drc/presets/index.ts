@@ -32,6 +32,7 @@ const REQUIRED_KEYS: (keyof DrcRuleSet)[] = [
   "minViaOuterNm",
   "minViaDrillNm",
   "minAnnularRingNm",
+  "minPthAnnularRingNm",
   "minHoleToHoleNm",
   "minEdgeClearanceNm",
   "minSilkPadClearanceNm",

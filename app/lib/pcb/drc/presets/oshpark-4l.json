@@ -4,6 +4,7 @@
   "fab": "OSH Park",
   "version": 1,
   "verifiedAt": "2026-07-08",
+  "pthAnnularRingEvidence": "not separately verified: inherits the shared annular-ring value this preset enforced before B16-C.4; no new manufacturer claim",
   "specUrl": "https://docs.oshpark.com/services/four-layer/",
   "rules": {
     "default": {
@@ -12,6 +13,7 @@
       "minViaOuterMm": 0.457,
       "minViaDrillMm": 0.254,
       "minAnnularRingMm": 0.1016,
+      "minPthAnnularRingMm": 0.1016,
       "minHoleToHoleMm": 0.508,
       "minEdgeClearanceMm": 0.381,
       "minSilkPadClearanceMm": 0.152,

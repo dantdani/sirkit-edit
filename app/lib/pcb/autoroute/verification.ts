@@ -78,6 +78,7 @@ const ROUTE_BLOCKING_DRC = new Set<DrcViolation["kind"]>([
   "viaOuterDiameter",
   "viaDrill",
   "annularRing",
+  "pthAnnularRing", // [B16-C.4] a plated component hole below the profile ring is unmanufacturable copper, whoever authored it
   "holeToHole",
   "edgeClearance",
   "disabledLayer",

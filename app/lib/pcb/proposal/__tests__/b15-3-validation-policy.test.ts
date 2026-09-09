@@ -118,7 +118,7 @@ describe("B15.3 — the validation policy is sealed and integrity-pinned", () =>
   });
 
   it("a caller-smuggled rules object has NO effect — the sealed policy is registry-derived", () => {
-    const hostileRules = { default: { clearanceNm: 1, minTrackWidthNm: 1, minViaOuterNm: 1, minViaDrillNm: 1, minAnnularRingNm: 1, minHoleToHoleNm: 1, minEdgeClearanceNm: 1, minSilkPadClearanceNm: 1, minCourtyardClearanceNm: 1 }, perClass: {} };
+    const hostileRules = { default: { clearanceNm: 1, minTrackWidthNm: 1, minViaOuterNm: 1, minViaDrillNm: 1, minAnnularRingNm: 1, minPthAnnularRingNm: 1, minHoleToHoleNm: 1, minEdgeClearanceNm: 1, minSilkPadClearanceNm: 1, minCourtyardClearanceNm: 1 }, perClass: {} };
     const smuggled = createSealedPcbEditProposal({
       payload: PAYLOAD, board: board(), validationPolicy: { presetId: DEFAULT_PRESET_ID },
       ...CONTEXT,

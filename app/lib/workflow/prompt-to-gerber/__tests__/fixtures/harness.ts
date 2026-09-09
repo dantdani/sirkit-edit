@@ -27,7 +27,7 @@ import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
 import type { BuildLogicalNetlist, SchematicState } from "@/lib/schematic-types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 
-export const FIXED_NOW = "2026-09-07T12:00:00.000Z";
+export const FIXED_NOW = "2026-09-09T12:00:00.000Z"; // [B16-C.4] at or after the rule-profile evidence retrieval date (2026-09-09), else every release is "not yet valid"
 export const SCOPE = { tenantId: "local", projectId: "b16-1c-blinker", branchId: "main" } as const;
 export const BOARD_ID = pcbBoardInstanceId(SCOPE.projectId);
 export const DESIGN_ID = pcbDesignInstanceId(SCOPE.projectId);

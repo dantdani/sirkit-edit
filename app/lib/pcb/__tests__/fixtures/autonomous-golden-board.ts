@@ -2,11 +2,10 @@ import type { AutonomousDesignDeclaration } from "@/app/lib/pcb/autonomous/capab
 import { createAutonomousRouteExecutor } from "@/app/lib/pcb/autonomous/production-router";
 import type { AutonomousRouteExecutor } from "@/app/lib/pcb/autonomous/qualify-layout";
 import { getPreset } from "@/app/lib/pcb/drc/presets";
-import { getFabPreset } from "@/app/lib/pcb/fab/presets";
-import { manufacturingRuleProfileDigest, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
+import type { ManufacturingRuleProfile, ManufacturingRuleProfileEvidence } from "@/app/lib/pcb/fab/release-manifest";
+import { buildManufacturingRuleProfile, ruleProfileExpiry } from "@/app/lib/pcb/fab/rule-profile";
 import { canonicalEndpointSet, schematicEndpointKey, stableNetIdForEndpoints } from "@/app/lib/pcb/integrity";
 import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
-import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { stableHash } from "@/app/lib/pcb/smart-routing/hash";
 import { setBoardStackupProfile } from "@/app/lib/pcb/stackup";
 import { createEmptyBoard, type FootprintDef, type FootprintInstance, type PcbBoard } from "@/app/lib/pcb/types";
@@ -65,15 +64,14 @@ export function autonomousGoldenNetIdentity(board: PcbBoard): { digest: string; 
   return { digest: `golden-net-identity-${stableHash(JSON.stringify(nets))}`, nets };
 }
 
+/** Golden evidence: a CONTROLLED transcription dated 2026-07-08 (the golden source date 2026-07-21 lies inside its validity window). */
+export const AUTONOMOUS_GOLDEN_RULE_PROFILE_EVIDENCE: ManufacturingRuleProfileEvidence = Object.freeze({
+  sourceRefs: ["controlled:jlcpcb-capabilities-and-kicad-guide:2026-07"], retrievedAt: "2026-07-08", expiresAt: ruleProfileExpiry("2026-07-08"),
+  scope: "JLCPCB 1-2 layer rigid FR-4, 1 oz outer copper, plated-through-hole prototype; bare board (golden fixture)", notes: ["golden fixture transcription; limits are those of the enforced jlcpcb-2l DRC preset"],
+});
+
 export function buildAutonomousGoldenManufacturingRuleProfile(): ManufacturingRuleProfile {
-  const drc = getPreset("jlcpcb-2l");
-  const content: Omit<ManufacturingRuleProfile, "digest"> = {
-    schemaVersion: "sirkit.manufacturing-rule-profile.v1", profileId: getFabPreset("jlcpcb-2l").id, version: 1, manufacturer: "JLCPCB", processName: "Economy rigid two-layer PTH prototype",
-    evidence: { sourceRef: "controlled:jlcpcb-capabilities-and-kicad-guide:2026-07", verifiedAt: "2026-07-08" }, construction: { copperLayers: 2, copperThicknessUm: 35, boardThicknessMm: 1.6, material: "FR-4", maxBoardWidthMm: 100, maxBoardHeightMm: 80 },
-    limitsNm: { minTraceWidth: drc.rules.default.minTrackWidthNm, minSpace: drc.rules.default.clearanceNm, minDrill: drc.rules.default.minViaDrillNm, minFinishedHole: drc.rules.default.minViaDrillNm, minAnnularRing: drc.rules.default.minAnnularRingNm, minCopperToEdge: drc.rules.default.minEdgeClearanceNm, minHoleToEdge: drc.rules.default.minEdgeClearanceNm, solderMaskExpansion: mmToNm(0.05), minSolderMaskSliver: mmToNm(0.1), minSilkscreenWidth: mmToNm(0.15), minSilkscreenClearance: drc.rules.default.minSilkPadClearanceNm },
-    maskPolicy: { componentPads: "explicit_or_profile_opening", defaultViaTenting: "tented" }, specialFeatures: { slots: "unsupported", castellations: "unsupported", edgePlating: "unsupported", flex: "unsupported" }, assembly: { supported: false },
-  };
-  return { ...content, digest: manufacturingRuleProfileDigest(content) };
+  return buildManufacturingRuleProfile({ presetId: "jlcpcb-2l", evidence: AUTONOMOUS_GOLDEN_RULE_PROFILE_EVIDENCE });
 }
 
 export async function createAutonomousGoldenRealRouter(): Promise<AutonomousRouteExecutor> {

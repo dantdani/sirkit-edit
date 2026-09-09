@@ -4,6 +4,7 @@
   "fab": "PCBWay",
   "version": 1,
   "verifiedAt": "2026-07-08",
+  "pthAnnularRingEvidence": "not separately verified: inherits the shared annular-ring value this preset enforced before B16-C.4; no new manufacturer claim",
   "specUrl": "https://www.pcbway.com/capabilities.html",
   "rules": {
     "default": {
@@ -12,6 +13,7 @@
       "minViaOuterMm": 0.45,
       "minViaDrillMm": 0.2,
       "minAnnularRingMm": 0.13,
+      "minPthAnnularRingMm": 0.13,
       "minHoleToHoleMm": 0.5,
       "minEdgeClearanceMm": 0.4,
       "minSilkPadClearanceMm": 0.15,

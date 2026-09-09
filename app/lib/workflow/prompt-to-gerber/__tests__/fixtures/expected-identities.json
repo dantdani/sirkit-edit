@@ -1,22 +1,22 @@
 {
   "schemaVersion": "sirkit.b16-1c.expected-identities.v1",
-  "fixedNow": "2026-09-07T12:00:00.000Z",
+  "fixedNow": "2026-09-09T12:00:00.000Z",
   "qualification": {
-    "boardRevision": "pcb2-bbc76fdb18ec7646",
+    "boardRevision": "pcb2-f2ee7fd78eccae62",
     "authorityRevision": 1,
-    "authorityDigest": "sha256:f648165bd4c3ba415ae494737471bbb1001fd0c74135fdc4dedfbec46737927d",
+    "authorityDigest": "sha256:59d66e96c10e4587798d70d81fecc024bd122945b575da6b443a6737c31f6448",
     "componentAuthorityDigest": "qualification-authority-a959f6fc8f03a4c94e4a08ee95d0e9ad4750af97c025715c499a8a6fb6fb1b42",
-    "rc01Digest": "parity-2505a77edbb56f6812eb50f019b04da14ebdb984c38043f07fc78802fea12a92",
-    "rc02Digest": "route-7581cc8a0cefdd11c9781b0b756d4c0d3f862a12246205a138e5d42ac2d418fc",
-    "rc03Digest": "capability-968567755d657489eea689287acb9268d839d5ca89ceb41cf2c9819ab3dab51c",
+    "rc01Digest": "parity-93649f81b2934daf9fb38a3437c93fe7ff90fe8f5e5e53289551535ce8629f86",
+    "rc02Digest": "route-2caa450ce03f20ad2b576cfb21586c319ad3fad2fef5f4818621f52e671aafd8",
+    "rc03Digest": "capability-a5ea858d009c2a6328ecadff260803903a353812e9b7a5c72ed5fd2b741d70de",
     "routerExecutions": 2
   },
   "release": {
-    "releaseId": "mfg-release-e0bdf91bb6f5d9656ec23c9c6f02a496",
-    "filename": "sirkit-board-b16-1c-blinker-3c9c6f02a496.zip",
-    "archiveSha256": "5cd671810e87cfe805a91d83406fe456c2cc802320ba5b6e9a31341b1667ef66",
-    "archiveByteLength": 40962,
-    "manifestContentDigest": "mfg-manifest-a5592c82a03e0517048404b0177d7f96398463a3d39c242f2c7dc754385d4482",
+    "releaseId": "mfg-release-181d118a5be1bce8f45e27172b33f1cc",
+    "filename": "sirkit-board-b16-1c-blinker-27172b33f1cc.zip",
+    "archiveSha256": "0f9fec3746d444d9ddfc164e79978fe8a3a0aa90c8c6d397eb6e22711c2775cc",
+    "archiveByteLength": 41855,
+    "manifestContentDigest": "mfg-manifest-ffa2ce484d47dfd3ff2fdb0226b4a1dd7feca7a5865572878ae5b05aa104f0d2",
     "counts": {
       "components": 9,
       "pads": 24,
@@ -31,15 +31,51 @@
       "blockingDrcErrors": 0
     },
     "files": [
-      { "path": "gerber/README.txt", "role": "readme", "sha256": "c1955b878255b33034a0735e5d5d1ea05f1c5bc3e1355b4418477cd2a3dea8c5" },
-      { "path": "gerber/board-b16-1c-blinker-pth-1-2.xnc", "role": "pth_drill", "sha256": "534bc3664ee9201e5059eca91e1bc1f6f21cab82ef18bff9cc468d442e024cb8" },
-      { "path": "gerber/board-b16-1c-blinker.GBL", "role": "copper_bottom", "sha256": "5f022bf1934996617ae2463ed187c6f4bf6094f7a5085ad85a44c8540204cbe2" },
-      { "path": "gerber/board-b16-1c-blinker.GBS", "role": "mask_bottom", "sha256": "2ecd6cc5a01c0477e635c1e625d5de0450c59f6e46c2dbc83782815a809c5b72" },
-      { "path": "gerber/board-b16-1c-blinker.GML", "role": "outline", "sha256": "794fabd95fb345765d4e8721b722fefc4de6ac16ad40aa9266666a62a5ff329b" },
-      { "path": "gerber/board-b16-1c-blinker.GTL", "role": "copper_top", "sha256": "77de4bb67730e735161152b5861aae760de65c3a73545740dd0054848a5d0a31" },
-      { "path": "gerber/board-b16-1c-blinker.GTO", "role": "silk_top", "sha256": "7ba2926ef379afaebbb847202dd28b169d0043d775f3e9ba51fbe01ce41c3968" },
-      { "path": "gerber/board-b16-1c-blinker.GTS", "role": "mask_top", "sha256": "d147111b0d04c16b095157b02c5432c73e309ec4d28564d3c1653ce0231381d5" },
-      { "path": "gerber/board-b16-1c-blinker.gbrjob", "role": "gerber_job", "sha256": "4bbbf4ab7a00c1de5749f4990dc00dfc4e9c5922b74b62417e58194e5436d800" }
+      {
+        "path": "gerber/README.txt",
+        "role": "readme",
+        "sha256": "72fffd851b239aaad8087dbff1812266fe56a11e4c8f0ee89a3db57d4a7eadcd"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker-pth-1-2.xnc",
+        "role": "pth_drill",
+        "sha256": "c566d65454d74706f606d3889295f17b93af714f42f06fa6b090c2bb87319144"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GBL",
+        "role": "copper_bottom",
+        "sha256": "abe7811455a4d84669e413428e9d1f15d79c5ef46be06194c66eb650f587fa36"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GBS",
+        "role": "mask_bottom",
+        "sha256": "cbb0c61a759a03cf1d1c20a906b4042f31d6bda274b2a22e829a02bfd493fb5b"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GML",
+        "role": "outline",
+        "sha256": "ea6694d859528405526718bd9892935c5fb0f15d88aa9f9e07293ff0f14484c3"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GTL",
+        "role": "copper_top",
+        "sha256": "7dc0736a6b4233af30152d2a8782e59a1645295b45977bf2b6a5688e7c92ebaf"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GTO",
+        "role": "silk_top",
+        "sha256": "cf13505343dc723a041630bf3aac504ee6f295607ecfb9fab8fc23ea997063bc"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.GTS",
+        "role": "mask_top",
+        "sha256": "7df0ae065dd661d41e441cc04c81e9c5861ee79425e92c4489e6e8aaba8ff65c"
+      },
+      {
+        "path": "gerber/board-b16-1c-blinker.gbrjob",
+        "role": "gerber_job",
+        "sha256": "bd4630a4175de35df384a3b5ea0f1c9aa52ee71345feae9154fa536bdd236fda"
+      }
     ]
   }
 }
