@@ -246,7 +246,7 @@ describe("B16.1B §G — exact invariants", () => {
     }
     return out;
   }
-  it("exactly 153 route methods: 150 canonical wrappers, 3 approved factories, 0 raw handlers; exactly 12 agent-exposed tools", () => {
+  it("exactly 155 route methods: 152 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of routeFiles(join(ROOT, "app", "api"))) {
       const src = readFileSync(file, "utf8");
@@ -258,7 +258,7 @@ describe("B16.1B §G — exact invariants", () => {
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 153, canonical: 150, factories: 3, raw: 0 });
+    expect({ total, canonical, factories, raw }).toEqual({ total: 155, canonical: 152, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy (canonical wrappers; 0 raw stays 0)
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

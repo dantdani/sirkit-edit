@@ -250,6 +250,9 @@ const ALL: RoutePolicy[] = [
   //    freerouting / kicad-cli routes spawn external processes on caller-
   //    supplied data and therefore require active membership + an engineering
   //    role (no bounded public-use case exists for process execution).
+  // ── [B18-A] agent autonomy setting: every member reads; ONLY a project administrator changes it (CSRF, audited CAS) ──
+  ...read("/api/agent/autonomy", ["GET"], "agent autonomy setting + audit trail (trusted project scope; every member)"),
+  ...mutate("/api/agent/autonomy", ["POST"], "agent autonomy setting change (project administrator; compare-and-set on the revision; one audit event per change)", { roles: ADMIN_ONLY }),
   ...read("/api/bom/snapshot", ["GET"], "durable BOM snapshot list (trusted project scope)"),
   ...mutate("/api/bom/snapshot", ["POST"], "durable BOM snapshot create (trusted project scope)", { roles: WRITE_EDITORS }),
   ...read("/api/bom/notifications", ["GET"], "durable BOM notifications list (trusted project scope)"),

@@ -35,6 +35,8 @@ import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
 import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder";
 import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
+import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
+import type { AgentAutonomySetting } from "@/app/lib/engineering/permission-tiers";
 import { createFreeroutingPassExecutor } from "@/app/lib/pcb/autoroute/freerouting-pass-executor";
 
 export const CHAT_PROTOCOL_VERSION = 1;
@@ -243,6 +245,17 @@ export const POST = agentStreamRoute(
     authMethod: context.authMethod,
   };
 
+  // [B18-A] the project's agent autonomy setting is read SERVER-SIDE from the
+  // durable store (never from the body). An unavailable store is a truthful
+  // warning and the run stays proposal-only — unavailability never widens.
+  let autonomy: AgentAutonomySetting | undefined;
+  const autonomyWarnings: string[] = [];
+  try {
+    autonomy = await resolveAgentAutonomyRepository().get({ tenantId: requestScope.tenantId, projectId: requestScope.projectId });
+  } catch {
+    autonomyWarnings.push("The project's agent autonomy setting could not be read; this run is proposal-only.");
+  }
+
   const assembly = assembleAgentRunContext({
     ...requestScope,
     schematic: body.schematicState,
@@ -254,6 +267,7 @@ export const POST = agentStreamRoute(
     pcbProposalBasis: editorPcbProposalBasis,
     verifiedActor,
     view: body.viewContext,
+    autonomy,
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -309,6 +323,7 @@ export const POST = agentStreamRoute(
           componentAuthority: authority,
           verifiedActor,
           view: body.viewContext,
+          autonomy,
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -425,7 +440,7 @@ export const POST = agentStreamRoute(
             context: runContext,
             system: AGENT_SYSTEM_PROMPT,
             emit,
-            contextWarnings: assembly.warnings,
+            contextWarnings: [...assembly.warnings, ...autonomyWarnings],
             trace: traceRecorder,
           },
         );

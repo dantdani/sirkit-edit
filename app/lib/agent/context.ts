@@ -40,6 +40,7 @@ import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../eng
 import type { AgentActor, AgentRunContext, PcbProposalBasis } from "./contracts";
 import { validateCapturedViewContext, viewContextDigest, viewProjectStates, type CapturedViewContext } from "./view-context";
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "../engineering/agent-exposure";
+import { AGENT_AUTONOMY_SCHEMA, defaultAutonomySetting, isAutonomyMode, type AgentAutonomySetting } from "../engineering/permission-tiers";
 import type { ToolSelectionKind } from "../engineering/tool-registry";
 
 /** [B13] SERVER-OWNED authority records — the shape the /api/chat loader
@@ -162,6 +163,11 @@ export interface AssembleAgentContextInput {
    *  identity; absent ⇒ the local-only build actor (production always supplies
    *  it because the local-only path is impossible under production). */
   verifiedActor?: VerifiedRunPrincipal;
+  /** [B18-A] the project's autonomy setting as READ by the route from the
+   *  durable store (server-supplied only; never a body field). A setting that
+   *  does not belong to this run's project, or a malformed one, is ignored
+   *  with a warning and the default (`proposal_only`) applies. */
+  autonomy?: AgentAutonomySetting;
   /** [B17-F] the client-captured view context (`sirkit.view-context.v1`):
    *  the open editor surfaces, each view session's id/revision/bounded state,
    *  the project operation timeline. Exact-key validated and bounded here;
@@ -460,6 +466,17 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   for (const state of viewProjectStates(view)) projectState.push(state);
   const selectedKinds: ToolSelectionKind[] = [...new Set((selection?.refs ?? []).map((ref) => ref.kind))].sort() as ToolSelectionKind[];
 
+  // [B18-A] the autonomy setting — server-read; a foreign or malformed record never widens.
+  let autonomy = defaultAutonomySetting({ tenantId: input.tenantId, projectId: input.projectId });
+  if (input.autonomy !== undefined && input.autonomy !== null) {
+    const supplied = input.autonomy;
+    if (supplied.schema === AGENT_AUTONOMY_SCHEMA && supplied.tenantId === input.tenantId && supplied.projectId === input.projectId && isAutonomyMode(supplied.mode) && Number.isSafeInteger(supplied.revision) && supplied.revision >= 0) {
+      autonomy = structuredClone(supplied);
+    } else {
+      warnings.push("The project's agent autonomy setting did not belong to this run's project or was malformed; this run is proposal-only.");
+    }
+  }
+
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -523,6 +540,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       pcbProposalBasis,
       view,
       viewDigest,
+      autonomy,
     },
     warnings,
   };

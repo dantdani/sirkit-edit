@@ -1,4 +1,6 @@
 method,route,policy_class,access,handler_symbol,verdict,shape,detail
+GET,/api/agent/autonomy,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/agent/autonomy,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/ai/runtime,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/architecture/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/architecture/candidates,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -7,11 +9,11 @@ POST,/api/architecture/problem,auth+csrf,authenticated,authenticatedJsonRoute(�
 POST,/api/architecture/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/assignment-queue/materialize,auth,authenticated,workerJsonRoute(…),load-bearing,wrapper,workerJsonRoute
 POST,/api/assignment-queue/revalidate,auth,authenticated,workerRoute(…),load-bearing,wrapper,workerRoute
-GET,/api/assignment-queue,auth,authenticated,GET,load-bearing,guard-first,assignmentApiScope → !authorized.ok refused (union); dominance holds
-POST,/api/assignment-queue,auth+csrf,authenticated,POST,load-bearing,guard-first,scopedAssignmentJson → !parsed.ok refused (union); dominance holds
-GET,/api/auth/callback,public,public,GET,n/a(public),-,-
+GET,/api/assignment-queue,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/assignment-queue,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/auth/callback,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/auth/signin,public+csrf,public,POST,n/a(public),-,-
-POST,/api/auth/signout,public+csrf,public,POST,n/a(public),-,-
+POST,/api/auth/signout,public+csrf,public,publicRoute(…),n/a(public),-,-
 POST,/api/bom/cart/digikey,public,public,publicJsonRoute(…),n/a(public),-,-
 POST,/api/bom/cart/lcsc,public,public,publicJsonRoute(…),n/a(public),-,-
 POST,/api/bom/cart/mouser,public,public,publicJsonRoute(…),n/a(public),-,-
@@ -32,7 +34,7 @@ POST,/api/calculation/problem,auth+csrf,authenticated,authenticatedJsonRoute(…
 POST,/api/calculation/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/calculation/report,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/calculation/transaction,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
-POST,/api/chat,auth+csrf,authenticated,POST,load-bearing,guard-first,resolveTrustedRequestContext → !trusted.ok refused (union); dominance holds
+POST,/api/chat,auth+csrf,authenticated,agentStreamRoute(…),load-bearing,wrapper,agentStreamRoute
 POST,/api/circuit-knowledge/applicability,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/circuit-knowledge/compile,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/circuit-knowledge/compose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -62,7 +64,7 @@ POST,/api/firmware-bringup/problem,auth+csrf,authenticated,authenticatedJsonRout
 POST,/api/firmware-bringup/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/firmware-bringup/resources,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/footprint-resolution,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
-POST,/api/footprint-resolution,auth+csrf,authenticated,POST,load-bearing,guard-first,scopedResolutionJson → !parsed.ok refused (union); dominance holds
+POST,/api/footprint-resolution,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/run,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/full-flow/transition,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -88,9 +90,9 @@ GET,/api/parts/[id]/alternates,public,public,publicRoute(…),n/a(public),-,-
 GET,/api/parts/[id],public,public,publicRoute(…),n/a(public),-,-
 GET,/api/parts/categories,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/parts/search,public,public,publicJsonRoute(…),n/a(public),-,-
-GET,/api/passive-policy,auth,authenticated,GET,load-bearing,guard-first,passivePolicyApiScope → !authorized.ok refused (union); dominance holds
+GET,/api/passive-policy,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/passive-policy,auth+csrf,authenticated,createPassivePolicyPostHandler(…),load-bearing,factory,createPassivePolicyPostHandler → scopedPassivePolicyJson → !parsed.ok refused (union); dominance holds
-GET,/api/pcb-sync,auth,authenticated,GET,load-bearing,guard-first,pcbSyncScope → !authorized.ok refused (union); dominance holds
+GET,/api/pcb-sync,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/pcb-sync,auth+csrf,authenticated,createPcbSyncPostHandler(…),load-bearing,factory,createPcbSyncPostHandler → scopedPcbSyncJson → !parsed.ok refused (union); dominance holds
 POST,/api/pcb/ai-rules/from-brief,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/apply-authorization,auth+csrf,authenticated,selectorEnvelopeJsonRoute(…),load-bearing,wrapper,selectorEnvelopeJsonRoute
@@ -106,8 +108,8 @@ POST,/api/pcb/placement/preview,public,public,publicJsonRoute(…),n/a(public),-
 POST,/api/pcb/qualify,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/release,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/pcb/repair/agent,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
-GET,/api/physical-bindings,auth,authenticated,GET,load-bearing,guard-first,bindingScope → !authorized.ok refused (union); dominance holds
-POST,/api/physical-bindings,auth+csrf,authenticated,POST,load-bearing,guard-first,scopedBindingJson → !parsed.ok refused (union); dominance holds
+GET,/api/physical-bindings,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/physical-bindings,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/power/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/power/candidates,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/power/compare,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -116,7 +118,7 @@ POST,/api/power/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load
 POST,/api/power/reconcile,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/release-engineering/problem,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/release-engineering/propose,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
-POST,/api/replacement-authority,auth+csrf,authenticated,POST,load-bearing,guard-first,authorizeRequest → !authorized.ok refused (union); dominance holds
+POST,/api/replacement-authority,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/requirements/capabilities,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/requirements/compile,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/requirements/sources,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -138,17 +140,17 @@ POST,/api/schematic/edit,auth+csrf,authenticated,authenticatedJsonRoute(…),loa
 POST,/api/schematic/layout-critic,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/schematic/review,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/schematic,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
-POST,/api/simulate,auth+csrf,authenticated,POST,load-bearing,guard-first,authorizeRequest → !authorized.ok refused (union); dominance holds
-POST,/api/spice/ai,auth+csrf,authenticated,POST,load-bearing,guard-first,authorizeRequest → !authorized.ok refused (union); dominance holds
+POST,/api/simulate,auth+csrf,authenticated,POST,load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/spice/ai,auth+csrf,authenticated,POST,load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/spice/compile,public,public,POST,n/a(public),-,-
-POST,/api/spice/models/import,auth+csrf,authenticated,POST,load-bearing,guard-first,authorizeRequest → !authorized.ok refused (union); dominance holds
-POST,/api/spice/models/smoke-test,auth+csrf,authenticated,POST,load-bearing,guard-first,authorizeRequest → !authorized.ok refused (union); dominance holds
+POST,/api/spice/models/import,auth+csrf,authenticated,POST,load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/spice/models/smoke-test,auth+csrf,authenticated,POST,load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/spice/reports,public,public,POST,n/a(public),-,-
 POST,/api/spice/run-plans/estimate,public,public,POST,n/a(public),-,-
-GET,/api/spice/runs/[id]/bundle,auth,authenticated,GET,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-GET,/api/spice/runs/[id]/events,auth,authenticated,GET,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-GET,/api/spice/runs/[id],auth,authenticated,GET,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-DELETE,/api/spice/runs/[id],auth+csrf,authenticated,DELETE,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-GET,/api/spice/runs/[id]/waveforms,auth,authenticated,GET,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-POST,/api/spice/runs,auth+csrf,authenticated,POST,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
-GET,/api/spice/runs,auth,authenticated,GET,load-bearing,guard-first,spiceRunScope → !scoped.ok refused (union); dominance holds
+GET,/api/spice/runs/[id]/bundle,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+GET,/api/spice/runs/[id]/events,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+GET,/api/spice/runs/[id],auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+DELETE,/api/spice/runs/[id],auth+csrf,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+GET,/api/spice/runs/[id]/waveforms,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/spice/runs,auth+csrf,authenticated,POST,load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/spice/runs,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute

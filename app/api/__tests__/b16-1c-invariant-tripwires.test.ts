@@ -2,7 +2,7 @@
  * B16.1C §I — invariant tripwires. Any of these failing in CI means a
  * regression of a security or truth boundary this stage depends on:
  *
- *  - 153 route methods / 150 canonical wrappers / 3 approved factories / 0 raw;
+ *  - 155 route methods / 152 canonical wrappers / 3 approved factories / 0 raw (B18-A: + GET/POST /api/agent/autonomy);
  *  - exactly 12 agent-exposed tools, none of them qualification or release;
  *  - the manufacturing routes keep their policy rows (qualify: pcb_editor |
  *    project_admin; release: project_admin only) and their bounded envelopes;
@@ -37,7 +37,7 @@ function routeFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe("B16.1C §I — invariant tripwires", () => {
-  it("153 route methods = 150 canonical + 3 factories + 0 raw; exactly 12 agent-exposed tools, none qualification/release", () => {
+  it("155 route methods = 152 canonical + 3 factories + 0 raw (B18-A: + GET/POST /api/agent/autonomy); exactly the intentional agent-exposed tools, none qualification/release", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of routeFiles(join(ROOT, "app", "api"))) {
       const src = readFileSync(file, "utf8");
@@ -47,7 +47,7 @@ describe("B16.1C §I — invariant tripwires", () => {
         if (form === "canonical-wrapper") canonical += 1; else if (form === "factory") factories += 1; else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 153, canonical: 150, factories: 3, raw: 0 });
+    expect({ total, canonical, factories, raw }).toEqual({ total: 155, canonical: 152, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy (canonical wrappers; 0 raw stays 0)
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed.map((descriptor) => descriptor.toolId).sort()).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

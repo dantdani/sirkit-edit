@@ -1,4 +1,6 @@
 path,method,auth_class,identity_source,requires_auth,permitted_roles,required_capability,provider_credit,requires_csrf,authoritative_write,release_or_qualification,evidence
+/api/agent/autonomy,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,agent autonomy setting + audit trail (trusted project scope; every member)
+/api/agent/autonomy,POST,authenticated-mutation,trusted-context,true,project_admin,,false,true,true,false,agent autonomy setting change (project administrator; compare-and-set on the revision; one audit event per change)
 /api/ai/runtime,GET,public,none,false,,,false,false,false,false,static runtime config
 /api/architecture/alternatives,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/architecture/candidates,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,true,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)

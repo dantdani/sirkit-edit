@@ -38,6 +38,7 @@ interface ResourceAnnotation {
 const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // ── durable project data ───────────────────────────────────────────────────
   "/api/bom/snapshot": { durable: "read-write", sensitivity: "project-durable" },
+  "/api/agent/autonomy": { durable: "read-write", sensitivity: "project-durable" }, // [B18-A] durable-workflow aggregate agent.autonomy-settings.v1
   "/api/bom/notifications": { durable: "read-write", sensitivity: "project-durable" },
   "/api/bom/diff": { durable: "read", sensitivity: "project-durable" },
   "/api/pcb-sync": { durable: "read-write", sensitivity: "project-durable" },

@@ -1,4 +1,5 @@
 path,methods,record_id,class
+/api/agent/autonomy,GET;POST,agent.autonomy-setting,mutate
 /api/ai/runtime,GET,ai.runtime-info,read
 /api/architecture/alternatives,POST,cd.architecture.workbench,propose
 /api/architecture/candidates,POST,cd.architecture.workbench,propose

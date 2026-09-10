@@ -139,6 +139,11 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
   } else if (context.componentAuthorityDigest !== null) {
     issues.push("a component-authority digest is claimed without a component-authority resource");
   }
+  // [B18-A] the autonomy setting is server-owned and project-scoped: a setting
+  // for another project (or a malformed one) fails every invocation closed.
+  if (!context.autonomy || context.autonomy.schema !== "sirkit.agent-autonomy-setting.v1" || context.autonomy.tenantId !== context.tenantId || context.autonomy.projectId !== context.projectId) {
+    issues.push("the autonomy setting does not belong to this run's project");
+  }
   // [B17-F] the view context is recomputed against its assembly-time pin, and
   // the surfaces it proves must be the ONLY `*-surface` project states the
   // discovery context advertises (a widened surface list fails closed).

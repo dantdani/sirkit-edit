@@ -30,6 +30,7 @@ import type { SelectionRef } from "../pcb/edit/commands";
 import type { AgentNetlistLogical } from "./netlist-validation";
 import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../engineering/component-authority";
 import type { CapturedViewContext, ViewCommandRequest } from "./view-context";
+import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import type { LayoutCandidate } from "../pcb/candidates/layout-candidate";
 
 // ─── Run identity + context ──────────────────────────────────────────────────
@@ -128,6 +129,13 @@ export interface AgentRunContext {
   view: CapturedViewContext | null;
   /** [B17-F] integrity pin for `view`. */
   viewDigest: string | null;
+  /** [B18-A] the project's agent autonomy setting, read SERVER-SIDE by the
+   *  route from the durable store (never from the request body or the
+   *  model). The default (`proposal_only`, revision 0) when the project never
+   *  wrote one or the store is unavailable — unavailability never widens. It
+   *  decides, with the operation's permission tier and the actor's role,
+   *  whether a Tier 1 operation previews or executes (B18-C). */
+  autonomy: AgentAutonomySetting;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
