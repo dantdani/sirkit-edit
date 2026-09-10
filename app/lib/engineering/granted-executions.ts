@@ -118,10 +118,11 @@ async function withRetry<T extends { ok: boolean; status: number | null }>(call:
   return call();
 }
 
-/** The settle exchange, best-effort with one retry; never throws. */
-async function settleOnServer(input: { transport: ExecutionGrantTransport; scope: ProjectSelectorScope; entry: Pick<AgentExecutionJournalEntry, "grantId" | "grantDigest" | "attemptId" | "commitment">; settlement: TenderSettlement; signal?: AbortSignal }): Promise<boolean> {
+/** The settle exchange, best-effort with one retry; never throws. A successful COMMITTED report marks the journal entry settled (when a journal is given). */
+async function settleOnServer(input: { transport: ExecutionGrantTransport; scope: ProjectSelectorScope; entry: Pick<AgentExecutionJournalEntry, "grantId" | "grantDigest" | "attemptId" | "commitment" | "identityKey">; settlement: TenderSettlement; signal?: AbortSignal; journal?: AgentExecutionJournal }): Promise<boolean> {
   try {
     const result = await withRetry(() => input.transport.settle(input.scope, { grantId: input.entry.grantId, grantDigest: input.entry.grantDigest, attemptId: input.entry.attemptId, commitment: input.entry.commitment, settlement: input.settlement }, input.signal));
+    if (result.ok && input.journal && input.settlement.outcome === "committed") { try { await input.journal.markSettled(input.entry.identityKey); } catch { /* the sweep re-sends an idempotent report */ } }
     return result.ok;
   } catch { return false; }
 }
@@ -131,22 +132,22 @@ const POISONED: TenderSettlement = { outcome: "poisoned", transactionId: null, r
 const committedSettlement = (receipt: ExecutionReceipt, changeSetDigest: string | null): TenderSettlement => ({ outcome: "committed", transactionId: receipt.transactionId, revisionBefore: receipt.pcbRevisionBefore, revisionAfter: receipt.pcbRevisionAfter, headSequenceAfter: receipt.headSequenceAfter, changeSetDigest, receiptDigest: receipt.receiptId, validations: null, undoEligible: true });
 
 /** Adopt a landed commit proven by canonical evidence: committed → adopted → receipt; returns the receipt. */
-async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; detail: string }> {
+async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; kind: "mismatch" | "journal"; detail: string }> {
   const { journal, entry, evidence } = input;
-  if (evidence.provenanceCandidateId !== entry.commitment) return { ok: false, detail: "the canonical record's chain-protected commitment does not match this grant's journal entry" };
-  if (evidence.resultHeadSequence !== null && evidence.resultHeadSequence !== entry.baseHeadSequence + 1) return { ok: false, detail: "the canonical record's result head does not match the expected single advance" };
+  if (evidence.provenanceCandidateId !== entry.commitment) return { ok: false, kind: "mismatch", detail: "the canonical record's chain-protected commitment does not match this grant's journal entry" };
+  if (evidence.resultHeadSequence !== null && evidence.resultHeadSequence !== entry.baseHeadSequence + 1) return { ok: false, kind: "mismatch", detail: "the canonical record's result head does not match the expected single advance" };
   let current = entry;
   if (current.state === "grant-consumed") {
     // The grant pinned the exact revision its operations produce from the base; a proven single advance under this commitment landed exactly that.
     const revisionAfter = entry.grant.binding.proposal.expectedPcbRevisionAfter;
     const marked = await journal.markCommitted(entry.identityKey, { committedAt: input.now, transactionId: evidence.transactionId, pcbRevisionBefore: entry.basePcbRevisionId, pcbRevisionAfter: revisionAfter, headSequenceAfter: entry.baseHeadSequence + 1 });
-    if (!marked.ok) return { ok: false, detail: `the journal could not adopt the proven commit (${marked.reason})` };
+    if (!marked.ok) return { ok: false, kind: "journal", detail: `the journal could not adopt the proven commit (${marked.reason})` };
     current = { ...current, state: "canonical-committed", committedAt: input.now, transactionId: evidence.transactionId, pcbRevisionBefore: entry.basePcbRevisionId, pcbRevisionAfter: revisionAfter, headSequenceAfter: entry.baseHeadSequence + 1 };
   }
-  if (current.transactionId !== evidence.transactionId) return { ok: false, detail: "the journal claims a different transaction than the canonical record proves" };
+  if (current.transactionId !== evidence.transactionId) return { ok: false, kind: "mismatch", detail: "the journal claims a different transaction than the canonical record proves" };
   if (current.state === "canonical-committed") {
     const adopted = await journal.markAdopted(entry.identityKey);
-    if (!adopted.ok) return { ok: false, detail: `the journal could not record the adoption (${adopted.reason})` };
+    if (!adopted.ok) return { ok: false, kind: "journal", detail: `the journal could not record the adoption (${adopted.reason})` };
     current = { ...current, state: "adopted" };
   }
   let receipt = current.receipt;
@@ -158,7 +159,7 @@ async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry:
       authorization: current.authorization, commitment: current.commitment,
     });
     const finalized = await journal.finalizeReceipt(entry.identityKey, receipt);
-    if (!finalized.ok) return { ok: false, detail: `the receipt could not be finalized (${finalized.reason})` };
+    if (!finalized.ok) return { ok: false, kind: "journal", detail: `the receipt could not be finalized (${finalized.reason})` };
   }
   return { ok: true, receipt };
 }
@@ -182,37 +183,48 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
   const identityKey = grant.identityKey;
   const scope: ProjectSelectorScope = { tenantId: b.scope.tenantId, projectId: b.scope.projectId, branchId: b.scope.branchId };
   const base = b.base.pcb;
+  /** An execute_explicit grant refused BEFORE the consume is cancelled durably (best-effort) so the awaiting run is answered at once instead of at the settlement timeout; preview grants stay for the human. */
+  const refuseExplicit = async (code: GrantedExecutionRefusalCode, message: string): Promise<GrantedExecutionOutcome> => {
+    if (b.operation.decision === "execute_explicit") { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: "session_superseded" }, input.signal); } catch { /* the grant expires lazily */ } }
+    return refuse(code, message);
+  };
 
   // 2. Expiry (the server re-checks).
   if (Date.parse(b.expiresAt) <= now()) return refuse("grant-expired", "The execution grant has expired. Ask again. Nothing was changed.");
 
   // 3. Live authority.
-  if (!input.stillCurrent()) return refuse("session-superseded", "The board or project changed while the grant was pending. Nothing was changed.");
-  if (input.interlock.retired) return refuse("session-superseded", "The project is retiring; the execution was refused. Nothing was changed.");
+  if (!input.stillCurrent()) return refuseExplicit("session-superseded", "The board or project changed while the grant was pending. Nothing was changed.");
+  if (input.interlock.retired) return refuseExplicit("session-superseded", "The project is retiring; the execution was refused. Nothing was changed.");
   if (b.scope.tenantId !== tenantId || b.scope.projectId !== input.currentProjectId || b.scope.branchId !== input.currentBranchId
     || (b.scope.boardInstanceId !== null && b.scope.boardInstanceId !== pcbBoardInstanceId(input.currentProjectId))) {
-    return refuse("foreign-scope", "The grant belongs to a different project, branch, or board instance. Nothing was changed.");
+    return refuseExplicit("foreign-scope", "The grant belongs to a different project, branch, or board instance. Nothing was changed.");
   }
   const session = canonicalSessionFor(input.history);
-  if (!session) return refuse("session-superseded", "The board has no active canonical editing session. Nothing was changed.");
+  if (!session) return refuseExplicit("session-superseded", "The board has no active canonical editing session. Nothing was changed.");
 
   // 4. In-memory claim.
   const claim = registry.claim(identityKey);
   if (!claim.ok) {
-    if (claim.code === "already-applied") return { ok: true, status: "already-applied", receipt: claim.receipt, autosaveSettled: true, settled: "settled" };
+    if (claim.code === "already-applied") {
+      // The journal, not memory, says whether the server holds the report; a finalized-but-unsettled entry is re-sent now.
+      const lookup = await input.journal.lookup(identityKey);
+      const finalized = lookup.kind === "entry" && lookup.entry.state === "receipt-finalized" ? lookup.entry : null;
+      const settled = finalized ? await settleOnServer({ transport: input.transport, scope, entry: finalized, settlement: committedSettlement(claim.receipt, null), signal: input.signal, journal: input.journal }) : true;
+      return { ok: true, status: "already-applied", receipt: claim.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
+    }
     if (claim.code === "already-in-flight") return refuse("already-in-flight", "This grant is already being executed. Nothing further was changed.");
     return refuse("identity-poisoned", "A previous execution of this grant could not be verified; it is permanently refused. Ask again.");
   }
 
   let leaseRelease: (() => void) | null = null;
   let committedButUnfinalized = false;
-  let entryForSettle: Pick<AgentExecutionJournalEntry, "grantId" | "grantDigest" | "attemptId" | "commitment"> | null = null;
+  let entryForSettle: Pick<AgentExecutionJournalEntry, "identityKey" | "grantId" | "grantDigest" | "attemptId" | "commitment"> | null = null;
   try {
     // 5. Journal + canonical evidence: the recovery disposition FIRST.
     const lookup = await input.journal.lookup(identityKey);
     const evidence = await session.durableIdempotencyEvidence(grant.grantId);
-    if (lookup.kind === "unavailable" || evidence.kind === "unavailable") { registry.release(identityKey); return refuse("recovery-required", "Durable replay evidence is unavailable; the execution was not attempted. Retry when storage is available."); }
-    if (lookup.kind === "corrupt" || evidence.kind === "corrupt") { registry.release(identityKey); return refuse("recovery-required", "The durable replay records for this grant are corrupt; the execution was refused. Inspect the canonical history."); }
+    if (lookup.kind === "unavailable" || evidence.kind === "unavailable") { registry.release(identityKey); return refuseExplicit("recovery-required", "Durable replay evidence is unavailable; the execution was not attempted. Retry when storage is available."); }
+    if (lookup.kind === "corrupt" || evidence.kind === "corrupt") { registry.release(identityKey); return refuseExplicit("recovery-required", "The durable replay records for this grant are corrupt; the execution was refused. Inspect the canonical history."); }
     let entry: AgentExecutionJournalEntry | null = lookup.kind === "entry" ? lookup.entry : null;
     if (entry) {
       if (entry.grantId !== grant.grantId || entry.grantDigest !== grant.grantDigest || entry.operationsDigest !== b.proposal.operationsDigest
@@ -227,9 +239,15 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
         // grant-consumed / committed / adopted / finalized: the journal claims progress — the canonical history decides.
         if (evidence.kind === "found") {
           const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now() });
-          if (!adopted.ok) { registry.poison(identityKey); await input.journal.poison(identityKey); return refuse("recovery-required", `${adopted.detail}; recovery is refused. Inspect the canonical history.`, { changed: true }); }
+          if (!adopted.ok) {
+            if (adopted.kind === "journal") { registry.release(identityKey); return refuse("recovery-required", `${adopted.detail}; the proven commit stays pending for the recovery sweep. The board HAS changed.`, { changed: true }); }
+            // The ledger holds a transaction under this grant that does not match it: poison AND report it (never "nothing changed").
+            registry.poison(identityKey); await input.journal.poison(identityKey);
+            await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
+            return refuse("recovery-required", `${adopted.detail}; recovery is refused. The board HAS changed — inspect the canonical history.`, { changed: true });
+          }
           registry.consume(identityKey, adopted.receipt);
-          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal });
+          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal, journal: input.journal });
           return { ok: true, status: "already-applied", receipt: adopted.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
         }
         if (entry.state === "grant-consumed") {
@@ -238,12 +256,14 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
           return refuse("already-in-flight", "This grant was consumed and its commit is in flight elsewhere. Nothing further was changed.");
         }
         registry.poison(identityKey); await input.journal.poison(identityKey);
-        return refuse("recovery-required", "The durable journal claims a commit the canonical history cannot prove; the execution is permanently refused for this grant. Inspect the canonical history.");
+        await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
+        return refuse("recovery-required", "The durable journal claims a commit the canonical history cannot prove; the execution is permanently refused for this grant. Inspect the canonical history.", { changed: true });
       }
       if (evidence.kind === "found") {
         // prepared WITH evidence cannot happen truthfully (a commit needs the consume first) — never adopt.
         registry.poison(identityKey); await input.journal.poison(identityKey);
-        return refuse("recovery-required", "A canonical transaction exists for a grant that was never consumed; recovery is refused. Inspect the canonical history.");
+        await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
+        return refuse("recovery-required", "A canonical transaction exists for a grant that was never consumed; recovery is refused. Inspect the canonical history.", { changed: true });
       }
     }
 
@@ -274,10 +294,10 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     // 7. RECOMPILE through the shared builder against the live board; byte-match; kinds inside the family's kernel binding.
     const plan = planOf(grant);
     const built = plan ? buildExecutionOperations(liveBoard, plan) : null;
-    if (!built || !built.ok) { registry.release(identityKey); return refuse("recompile-mismatch", `The grant's operations no longer compile against the live board${built && !built.ok ? ` (${built.code})` : ""}. Ask again. Nothing was changed.`); }
-    if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest) { registry.release(identityKey); return refuse("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
+    if (!built || !built.ok) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The grant's operations no longer compile against the live board${built && !built.ok ? ` (${built.code})` : ""}. Ask again. Nothing was changed.`); }
+    if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
     const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[b.operation.family] ?? [];
-    if (built.operations.some((operation: EngineeringOperation) => !allowed.includes(operation.kind))) { registry.release(identityKey); return refuse("recompile-mismatch", "An operation kind is outside the family's kernel binding. Nothing was changed."); }
+    if (built.operations.some((operation: EngineeringOperation) => !allowed.includes(operation.kind))) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "An operation kind is outside the family's kernel binding. Nothing was changed."); }
 
     // 8. Durable PREPARE (reusing an earlier prepared attempt exactly).
     if (!entry) {
@@ -291,9 +311,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
         authorization: { principalId: b.authorization.principalId, membershipRevision: b.authorization.membershipRevision }, originRunId: input.originRunId,
         operationCount: b.proposal.operationCount, operationsDigest: b.proposal.operationsDigest, previewDigest: b.proposal.previewDigest, grant, preparedAt,
       });
-      if (!prepared.ok) { registry.release(identityKey); return refuse("recovery-required", `The durable journal could not record the prepare (${prepared.reason}); the execution was not attempted. Nothing was changed.`); }
+      if (!prepared.ok) { registry.release(identityKey); return refuseExplicit("recovery-required", `The durable journal could not record the prepare (${prepared.reason}); the execution was not attempted. Nothing was changed.`); }
       const reloaded = await input.journal.lookup(identityKey);
-      if (reloaded.kind !== "entry") { registry.release(identityKey); return refuse("recovery-required", "The prepared journal entry could not be read back; the execution was not attempted. Nothing was changed."); }
+      if (reloaded.kind !== "entry") { registry.release(identityKey); return refuseExplicit("recovery-required", "The prepared journal entry could not be read back; the execution was not attempted. Nothing was changed."); }
       entry = reloaded.entry;
     }
     entryForSettle = entry;
@@ -304,6 +324,12 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       tender: { operationsDigest: b.proposal.operationsDigest, commitment: entry.commitment, confirmation: input.confirmation ? { actionId: input.confirmation.actionId, previewDigest: b.proposal.previewDigest } : null, live: { pcbRevisionId: liveRevision, headSequence: head!.headSequence, lineageId: head!.lineageId ?? null, selectionDigest: liveSelection } },
     };
     const consumed = await withRetry(() => input.transport.tender(scope, tender, input.signal));
+    if (!consumed.ok && consumed.status === null) {
+      // No ANSWER (transport failure twice): the server may hold the consumption under this attempt — the entry stays
+      // prepared and the recovery sweep finishes it (re-tender with the same attempt, or abandon after the window).
+      registry.release(identityKey);
+      return refuse("recovery-required", `The server could not be reached to execute the grant (${consumed.code}); the attempt stays recorded and recovery will finish it. Nothing has been changed by this editor.`, { serverCode: consumed.code });
+    }
     if (!consumed.ok) {
       registry.release(identityKey);
       await input.journal.abandon(identityKey, `consume refused: ${consumed.code}`);
@@ -393,7 +419,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (input.settleAutosave) { try { autosaveSettled = input.settleAutosave() === true; } catch { autosaveSettled = false; } }
 
     // 18. SETTLE on the server from the receipt (best-effort, one retry; the sweep re-settles from the finalized entry).
-    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null), signal: input.signal });
+    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null), signal: input.signal, journal: input.journal });
     return { ok: true, status: "committed", receipt, autosaveSettled, settled: settled ? "settled" : "settle-failed" };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -434,8 +460,17 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
     const push = (action: GrantedExecutionRecoveryResult["action"], detail: string): void => { results.push({ grantId: entry.grantId, state: entry.state, action, detail }); };
     const evidence = await session.durableIdempotencyEvidence(entry.grantId);
     if (evidence.kind === "unavailable" || evidence.kind === "corrupt") { push("unavailable", `canonical evidence ${evidence.kind}`); continue; }
+    if (entry.state === "receipt-finalized" && entry.receipt) {
+      // The commit is finalized locally; only the server's report is missing — re-send it from the receipt (idempotent on the server).
+      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null), signal: input.signal, journal: input.journal });
+      push("settled-from-receipt", settled ? "settled committed from the finalized receipt" : "settle failed; retry later"); continue;
+    }
     if (entry.state === "prepared") {
-      if (evidence.kind === "found") { await input.journal.poison(entry.identityKey); push("refused-poisoned", "a transaction exists for a grant that was never consumed"); continue; }
+      if (evidence.kind === "found") {
+        await input.journal.poison(entry.identityKey);
+        await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
+        push("refused-poisoned", "a transaction exists for a grant that was never consumed"); continue;
+      }
       const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
       if (!remote.ok) { push(remote.status === 404 ? "abandoned-not-committed" : "unavailable", remote.message); if (remote.status === 404) await input.journal.abandon(entry.identityKey, "grant unknown to the server"); continue; }
       const status = remote.body.grant.state.status;
@@ -448,12 +483,21 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
     }
     if (evidence.kind === "found") {
       const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now() });
-      if (!adopted.ok) { await input.journal.poison(entry.identityKey); push("refused-poisoned", adopted.detail); continue; }
-      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal });
+      if (!adopted.ok) {
+        if (adopted.kind === "journal") { push("unavailable", `${adopted.detail}; the proven commit stays pending`); continue; }
+        await input.journal.poison(entry.identityKey);
+        await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
+        push("refused-poisoned", adopted.detail); continue;
+      }
+      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal, journal: input.journal });
       push(entry.state === "grant-consumed" ? "adopted-and-settled" : "settled-from-receipt", settled ? "settled committed" : "settle failed; retry later"); continue;
     }
     // grant-consumed / committed / adopted with NO canonical evidence.
-    if (entry.state !== "grant-consumed") { await input.journal.poison(entry.identityKey); push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue; }
+    if (entry.state !== "grant-consumed") {
+      await input.journal.poison(entry.identityKey);
+      await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
+      push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue;
+    }
     const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
     const deadline = remote.ok && remote.body.grant.state.consumption ? Date.parse(remote.body.grant.state.consumption.commitDeadline) : (entry.consumedAt ?? entry.preparedAt) + 60_000;
     if (now() > deadline + GRANT_SETTLE_GRACE_MS || (remote.ok && remote.body.grant.state.status !== "consumed")) {

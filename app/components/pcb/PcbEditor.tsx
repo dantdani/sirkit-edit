@@ -357,7 +357,8 @@ export default function PcbEditor({
    *  granted-execution ritual (tender = one-shot server burn, then ONE canonical transaction) lives behind this
    *  editor's controller — never the chat page or the agent layer. */
   executionGrantIntake?: { grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null; originRunId: string | null } | null;
-  onExecutionGrantSettled?: (outcome: "committed" | "cancelled" | "retired" | "failed") => void;
+  /** Settle the pending grant BY ID (a later grant that replaced it in the page state is never cleared by an earlier one). */
+  onExecutionGrantSettled?: (grantId: string, outcome: "committed" | "cancelled" | "retired" | "failed") => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
@@ -1507,9 +1508,14 @@ export default function PcbEditor({
   }, [pendingExecutionGrant]);
   const executionGrantGenerationRef = useRef(lifecycleGeneration);
   useEffect(() => {
-    if (executionGrantGenerationRef.current !== lifecycleGeneration && pendingExecutionGrant) onExecutionGrantSettled?.("retired");
+    if (executionGrantGenerationRef.current !== lifecycleGeneration && pendingExecutionGrant) {
+      // The board lifecycle moved under a pending grant: retire it locally AND cancel it durably (best-effort) so it can never be spent later.
+      if (syncIdentity) void cancelGrantedExecution({ grant: pendingExecutionGrant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "session_superseded" }).catch(() => undefined);
+      setToast("The AI change was retired: the board lifecycle changed while it was pending. Nothing was changed.");
+      onExecutionGrantSettled?.(pendingExecutionGrant.grantId, "retired");
+    }
     executionGrantGenerationRef.current = lifecycleGeneration;
-  }, [lifecycleGeneration, pendingExecutionGrant, onExecutionGrantSettled]);
+  }, [lifecycleGeneration, pendingExecutionGrant, onExecutionGrantSettled, syncIdentity]);
   /** null ⇒ the grant may be tendered; otherwise the PRECISE visible reason. The ritual re-verifies all of it again. */
   const executionGrantDisableReason = useMemo((): string | null => {
     const grant = pendingExecutionGrant;
@@ -1543,13 +1549,14 @@ export default function PcbEditor({
     const interlock = currentInterlock?.() ?? null;
     if (!grant || !liveHistory || !interlock || !syncIdentity) {
       setToast("The AI change cannot be made: the editor session or project interlock is unavailable. Nothing was changed.");
-      onExecutionGrantSettled?.("failed");
+      if (grant) onExecutionGrantSettled?.(grant.grantId, "failed");
       return;
     }
     const lifecycleScope = pcbLifecycle.capture();
     setExecutionGrantBusy(true);
     try {
-      const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: syncIdentity.boardId, editor: "pcb" });
+      // The journal is scoped by the lineage ROOT board id — the identity the grant was minted and checked against (a derived board revision keeps the same journal).
+      const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: pcbBoardInstanceId(syncIdentity.projectId), editor: "pcb" });
       const deps = {
         grant, history: liveHistory, interlock, journal,
         stillCurrent: () => lifecycleScope.isCurrent(),
@@ -1572,10 +1579,10 @@ export default function PcbEditor({
           ? `AI change made as ONE canonical transaction (${outcome.receipt.transactionId.slice(0, 18)}…). Undo restores the exact previous board.${outcome.settled === "settled" ? "" : " WARNING: the server settlement did not complete; the assistant may report the outcome as unsettled."}${outcome.autosaveSettled ? "" : " WARNING: the working-copy autosave did not settle — the change is committed canonically but the browser working copy save failed."}`
           : "This AI change was already made; no second transaction was created.");
         if (lifecycleScope.isCurrent()) drc.run();
-        onExecutionGrantSettled?.("committed");
+        onExecutionGrantSettled?.(grant.grantId, "committed");
       } else {
-        setToast(`AI change not made: ${outcome.message}`);
-        onExecutionGrantSettled?.(outcome.changed ? "failed" : "retired");
+        setToast(`${outcome.changed ? "AI change LANDED but could not be verified" : "AI change not made"}: ${outcome.message}`);
+        onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired");
       }
     } finally {
       setExecutionGrantBusy(false);
@@ -1583,10 +1590,10 @@ export default function PcbEditor({
   }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled]);
   const cancelExecutionGrant = useCallback(async () => {
     const grant = pendingExecutionGrant;
-    if (!grant || !syncIdentity) { onExecutionGrantSettled?.("cancelled"); return; }
+    if (!grant || !syncIdentity) { if (grant) onExecutionGrantSettled?.(grant.grantId, "cancelled"); return; }
     const result = await cancelGrantedExecution({ grant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "cancelled_by_user" });
     setToast(result.ok ? "AI change cancelled — nothing was changed." : `The grant could not be cancelled on the server (${result.message}); it expires on its own. Nothing was changed.`);
-    onExecutionGrantSettled?.("cancelled");
+    onExecutionGrantSettled?.(grant.grantId, "cancelled");
   }, [pendingExecutionGrant, syncIdentity, onExecutionGrantSettled]);
   // execute_explicit: run ONCE per grant as soon as the live checks pass (the ritual re-verifies everything at the
   // serialized position). A stale or foreign explicit grant never waits for a human: it is reported and retired.
@@ -1598,12 +1605,17 @@ export default function PcbEditor({
     explicitGrantRanRef.current = grant.grantId;
     const reason = executionGrantDisableReason;
     if (reason !== null) {
-      // Reported asynchronously (never a synchronous setState inside the effect).
-      void Promise.resolve().then(() => { setToast(`AI change not made: ${reason} Nothing was changed.`); onExecutionGrantSettled?.("retired"); });
+      // Reported asynchronously (never a synchronous setState inside the effect), and cancelled DURABLY so the awaiting run is
+      // answered at once instead of at its settlement timeout.
+      void Promise.resolve().then(async () => {
+        if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "session_superseded" }).catch(() => undefined);
+        setToast(`AI change not made: ${reason} Nothing was changed.`);
+        onExecutionGrantSettled?.(grant.grantId, "retired");
+      });
       return;
     }
     void Promise.resolve().then(() => runGrantedExecution("explicit"));
-  }, [pendingExecutionGrant, executionGrantBusy, executionGrantDisableReason, runGrantedExecution, onExecutionGrantSettled]);
+  }, [pendingExecutionGrant, executionGrantBusy, executionGrantDisableReason, runGrantedExecution, onExecutionGrantSettled, syncIdentity]);
   // The hydration sweep (§4.6): finish crashed granted executions from the durable journal once the canonical
   // session is ready — keyed by the journal entry, never a new grant. Never in demo mode.
   const executionRecoveryRef = useRef<string | null>(null);
@@ -1614,7 +1626,7 @@ export default function PcbEditor({
     const key = `${syncIdentity.projectId}:${syncIdentity.branchId}:${lifecycleGeneration}`;
     if (executionRecoveryRef.current === key) return;
     executionRecoveryRef.current = key;
-    const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: syncIdentity.boardId, editor: "pcb" });
+    const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: pcbBoardInstanceId(syncIdentity.projectId), editor: "pcb" });
     void recoverGrantedExecutionsForEditor({ journal, history: liveHistory, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } })
       .then((results) => {
         const notable = results.filter((result) => result.action === "adopted-and-settled" || result.action === "abandoned-not-committed" || result.action === "settled-from-receipt" || result.action === "refused-poisoned");

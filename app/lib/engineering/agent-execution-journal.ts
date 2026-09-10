@@ -10,7 +10,7 @@
  * consumed under, and the exact base the grant was minted against.
  *
  * States: prepared → grant-consumed → canonical-committed → adopted →
- * receipt-finalized, or poisoned (a commit that cannot be verified) or
+ * receipt-finalized → settled (the server holds the report), or poisoned (a commit that cannot be verified) or
  * abandoned (nothing changed: the consume was refused, or a consumed grant
  * had no canonical evidence when the commit window closed).
  *
@@ -28,7 +28,7 @@ export const AGENT_EXECUTION_JOURNAL_ENTRY_SCHEMA = "sirkit.agent-execution-jour
 export const EXECUTION_APPROVAL_ACTORS = ["human:confirmed-preview", "server-grant:execute_explicit"] as const;
 export type ExecutionApprovalActor = (typeof EXECUTION_APPROVAL_ACTORS)[number];
 
-export type AgentExecutionJournalState = "prepared" | "grant-consumed" | "canonical-committed" | "adopted" | "receipt-finalized" | "poisoned" | "abandoned";
+export type AgentExecutionJournalState = "prepared" | "grant-consumed" | "canonical-committed" | "adopted" | "receipt-finalized" | "settled" | "poisoned" | "abandoned";
 
 export interface ExecutionReceipt {
   schema: typeof EXECUTION_RECEIPT_SCHEMA;
@@ -122,7 +122,7 @@ const IMMUTABLE_KEYS = [
 ] as const;
 
 const STATE_ORDER: Record<AgentExecutionJournalState, number> = {
-  prepared: 0, "grant-consumed": 1, "canonical-committed": 2, adopted: 3, "receipt-finalized": 4, poisoned: 4, abandoned: 4,
+  prepared: 0, "grant-consumed": 1, "canonical-committed": 2, adopted: 3, "receipt-finalized": 4, settled: 5, poisoned: 5, abandoned: 5,
 };
 
 function entryIntegrity(entry: Omit<AgentExecutionJournalEntry, "integrity">): string {
@@ -263,7 +263,7 @@ export class AgentExecutionJournal {
     if (!(state in STATE_ORDER)) return "STATE_INVALID";
     if (record.consumedAt !== null && (typeof record.consumedAt !== "number" || !Number.isSafeInteger(record.consumedAt))) return "CONSUMED_AT_INVALID";
     if (state === "prepared" && record.consumedAt !== null) return "PREPARED_CARRIES_CONSUME";
-    if ((state === "grant-consumed" || state === "canonical-committed" || state === "adopted" || state === "receipt-finalized") && record.consumedAt === null) return "CONSUME_FIELDS_MISSING";
+    if ((state === "grant-consumed" || state === "canonical-committed" || state === "adopted" || state === "receipt-finalized" || state === "settled") && record.consumedAt === null) return "CONSUME_FIELDS_MISSING";
     const hasCommit = record.committedAt !== null || record.transactionId !== null || record.pcbRevisionBefore !== null || record.pcbRevisionAfter !== null || record.headSequenceAfter !== null;
     const completeCommit = typeof record.committedAt === "number" && Number.isSafeInteger(record.committedAt)
       && typeof record.transactionId === "string" && record.transactionId.length > 0
@@ -272,7 +272,7 @@ export class AgentExecutionJournal {
       && typeof record.headSequenceAfter === "number" && Number.isSafeInteger(record.headSequenceAfter);
     if ((state === "prepared" || state === "grant-consumed" || state === "abandoned") && (hasCommit || record.receipt !== null)) return "PRE_COMMIT_CARRIES_COMMIT_FIELDS";
     if ((state === "canonical-committed" || state === "adopted") && (!completeCommit || record.receipt !== null)) return "COMMITTED_FIELDS_INCOMPLETE";
-    if (state === "receipt-finalized") {
+    if (state === "receipt-finalized" || state === "settled") {
       if (!completeCommit) return "COMMITTED_FIELDS_INCOMPLETE";
       if (!isExecutionReceiptShaped(record.receipt)) return "RECEIPT_MALFORMED";
       const receipt = record.receipt;
@@ -344,7 +344,7 @@ export class AgentExecutionJournal {
     const loaded = await this.loadDocument();
     if (loaded.kind === "unavailable") return { ok: false, reason: "unavailable" };
     if (loaded.kind === "corrupt") return { ok: false, reason: "corrupt" };
-    const entries = (loaded.document?.entries ?? []).filter((entry) => STATE_ORDER[entry.state] < 4).map((entry) => structuredClone(entry));
+    const entries = (loaded.document?.entries ?? []).filter((entry) => STATE_ORDER[entry.state] < 5).map((entry) => structuredClone(entry));
     return { ok: true, entries };
   }
 
@@ -368,7 +368,7 @@ export class AgentExecutionJournal {
       document.entries = outcome;
       // Bounded: terminal entries age out first, then the oldest.
       while (document.entries.length > EXECUTION_JOURNAL_MAX_ENTRIES) {
-        const terminal = document.entries.findIndex((entry) => STATE_ORDER[entry.state] >= 4);
+        const terminal = document.entries.findIndex((entry) => STATE_ORDER[entry.state] >= 5);
         document.entries.splice(terminal >= 0 ? terminal : 0, 1);
       }
       let saved: boolean;
@@ -423,6 +423,11 @@ export class AgentExecutionJournal {
 
   finalizeReceipt(identityKey: string, receipt: ExecutionReceipt): Promise<ExecutionJournalWrite> {
     return this.transition(identityKey, ["adopted"], (entry) => (entry.state === "receipt-finalized" && entry.receipt?.receiptId === receipt.receiptId ? "idempotent" : { ...entry, state: "receipt-finalized", receipt: structuredClone(receipt) }));
+  }
+
+  /** The server holds the settlement report: the entry leaves the recovery sweep. */
+  markSettled(identityKey: string): Promise<ExecutionJournalWrite> {
+    return this.transition(identityKey, ["receipt-finalized"], (entry) => (entry.state === "settled" ? "idempotent" : { ...entry, state: "settled" }));
   }
 
   poison(identityKey: string): Promise<ExecutionJournalWrite> {

@@ -4553,9 +4553,9 @@ export default function Home() {
             const received = receiveExecutionGrantReadyEvent(event);
             if (received) {
               setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
-              appendActivityStep(logId, received.decision === "execute_explicit"
-                ? `Executing in the PCB editor — ${received.grant.binding.proposal.preview.after} (one canonical transaction, undoable)`
-                : `Change ready for your confirmation in the PCB editor — ${received.grant.binding.proposal.preview.after}; nothing has changed yet`, "done");
+              // An explicit grant is RUNNING until the settlement event says otherwise; a preview grant is done arriving (nothing has changed).
+              if (received.decision === "execute_explicit") appendActivityStep(logId, `Executing in the PCB editor — ${received.grant.binding.proposal.preview.after} (one canonical transaction, undoable) — awaiting the editor's settlement`, "running");
+              else appendActivityStep(logId, `Change ready for your confirmation in the PCB editor — ${received.grant.binding.proposal.preview.after}; nothing has changed yet`, "done");
             }
             return;
           }
@@ -4565,7 +4565,8 @@ export default function Home() {
             if (settled) {
               const committed = settled.status === "settled" && settled.outcome === "committed";
               const text = committed ? "AI change committed by your editor (one canonical transaction, undoable)"
-                : settled.status === "settled" ? `AI change not committed (${settled.outcome ?? "unknown"}) — nothing changed`
+                : settled.status === "settled" && settled.outcome === "poisoned" ? "AI change LANDED but could not be verified — the board may have changed; check the board and the revision history (undo restores it)"
+                : settled.status === "settled" ? "AI change not committed — nothing changed"
                 : settled.status === "retired" ? `AI change not made — the grant was retired (${settled.reason ?? "unknown"})`
                 : "AI change unsettled — the editor did not report the outcome in time; check the board and the revision history";
               appendActivityStep(logId, text, committed ? "done" : "error");
@@ -6307,7 +6308,7 @@ export default function Home() {
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
                     executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
-                    onExecutionGrantSettled={() => setPendingExecutionGrant(null)}
+                    onExecutionGrantSettled={(grantId) => setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current))}
                   />
                 </div>
               )}
