@@ -1,0 +1,274 @@
+/**
+ * [B17-A] UI CONTROL REGISTRY — every actionable control of the application
+ * (as scanned by `control-surface.ts`) is classified here as exactly one of:
+ *
+ *   semantic    — dispatches one registered semantic command (`recordIds` = the
+ *                 B01 action-registry record(s) it reaches);
+ *   dispatcher  — routes to SEVERAL registered commands or to other classified
+ *                 controls (keyboard dispatchers, palettes, generic inspector
+ *                 fields, context-menu items); `recordIds` lists what it reaches;
+ *   view        — presentation-only: opens/closes chrome, switches a tool mode,
+ *                 tab, pane or layer visibility, edits a form DRAFT that only a
+ *                 later semantic control commits, navigates the canvas;
+ *                 `recordIds` names the view record when one exists;
+ *   internal    — explicitly non-callable plumbing (stopPropagation shields,
+ *                 non-dismissable modal backdrops, static pills);
+ *   unavailable — intentionally unavailable with a VISIBLE reason.
+ *
+ * Rules are matched in order (first match wins) against the site's surface,
+ * kind, element, label and handler summary. Exactness comes from two gates:
+ * every scanned site must match a rule and every rule must match at least one
+ * site (no stale rules), and the generated inventory CSV is committed and must
+ * byte-match the render — a new control changes the CSV, so CI fails until
+ * the change is reviewed and regenerated.
+ *
+ * Node-free: safe to import from tests and generators alike.
+ */
+import { ACTION_COVERAGE_REGISTRY } from "./action-registry";
+import type { ControlKind, ControlSite } from "./control-surface";
+
+export const CONTROL_CLASSES = ["semantic", "dispatcher", "view", "internal", "unavailable"] as const;
+export type ControlClass = (typeof CONTROL_CLASSES)[number];
+
+export interface ControlRule {
+  /** Stable rule id (reported in the inventory). */
+  id: string;
+  /** Surface: exact repo path, a directory prefix ending in "/", or a RegExp. */
+  surface: string | RegExp;
+  kind?: ControlKind | readonly ControlKind[];
+  element?: string | RegExp;
+  label?: RegExp;
+  handler?: RegExp;
+  classification: ControlClass;
+  /** B01 action-registry ids reached (required for semantic/dispatcher; optional view record for view). */
+  recordIds?: readonly string[];
+  /** Required for `unavailable`: the reason the control shows. */
+  reason?: string;
+  note?: string;
+}
+
+const rule = (r: ControlRule): ControlRule => Object.freeze(r);
+const PCB = "app/components/pcb/";
+const PAGE = "app/page.tsx";
+const SPICE = "app/components/spice/";
+const BOM = "app/components/bom/BomView.tsx";
+const CD = /^app\/components\/(architecture|circuit-verification|interfaces|model-simulation|power|requirements|schematic-compiler)\//;
+
+export const CONTROL_RULES: readonly ControlRule[] = Object.freeze([
+  // ── universal plumbing ────────────────────────────────────────────────────
+  rule({ id: "internal.stop-propagation", surface: /./, handler: /^(e|event)\.stopPropagation$/, classification: "internal", note: "click shield: keeps a click inside a card/dialog from reaching the backdrop" }),
+  rule({ id: "internal.context-menu-prevent-default", surface: PCB + "ContextMenu.tsx", kind: "context-menu", classification: "internal", note: "suppresses the browser context menu on the custom menu" }),
+  rule({ id: "internal.static-pill", surface: SPICE + "SpiceStudio.tsx", kind: "click", label: /^assigned$/, handler: /^noop$/, classification: "internal", note: "a static status pill rendered as a button; no handler" }),
+  rule({ id: "internal.recovery-modal-not-dismissable", surface: PAGE, kind: "dialog", handler: /^noop$/, classification: "internal", note: "the activation-recovery dialog is deliberately not dismissable; its buttons are classified separately" }),
+
+  // ── keyboard dispatchers (each routes several registered commands) ────────
+  rule({ id: "dispatcher.page-shortcuts", surface: PAGE, kind: "shortcut", classification: "dispatcher", recordIds: ["project.undo-redo", "schematic.delete-component", "schematic.connect", "schematic.move-rotate", "view.canvas-navigation"], note: "schematic keyboard shortcuts (undo/redo, delete, escape/tool keys, rotate, fit)" }),
+  rule({ id: "dispatcher.pcb-editor-shortcuts", surface: PCB + "PcbEditor.tsx", kind: "shortcut", classification: "dispatcher", recordIds: ["pcb.undo-redo-canonical", "pcb.rotate-side-footprint", "pcb.delete-item", "pcb.arrange", "validation.erc-drc", "placement.auto", "routing.autoroute", "view.pcb-3d-control", "view.canvas-navigation"], note: "PCB editor keyboard shortcuts (undo/redo, rotate, tool keys, escape); the palette actions they mirror are classified individually" }),
+  rule({ id: "dispatcher.command-palette", surface: PCB + "CommandPalette.tsx", kind: ["click", "key"], classification: "dispatcher", recordIds: ["pcb.arrange", "pcb.delete-item", "validation.erc-drc", "placement.auto", "routing.autoroute", "pcb.export-kicad", "view.canvas-navigation", "view.pcb-3d-control"], note: "runs the highlighted palette action; every action is a classified `palette` site" }),
+  rule({ id: "dispatcher.context-menu-item", surface: PCB + "ContextMenu.tsx", kind: "click", classification: "dispatcher", recordIds: ["pcb.delete-item", "pcb.arrange", "pcb.protection", "view.canvas-navigation"], note: "runs the menu item's own handler supplied by the editor" }),
+  rule({ id: "dispatcher.empty-state-action", surface: PCB + "EmptyState.tsx", classification: "dispatcher", recordIds: ["pcb.sync-durable"], note: "the empty state's primary action is supplied by the editor (Schematic → PCB)" }),
+  rule({ id: "dispatcher.inspector-generic-field", surface: /^app\/components\/pcb\/inspectors\/fields\//, classification: "dispatcher", recordIds: ["pcb.edit-track", "pcb.edit-via", "pcb.zone", "pcb.silkscreen-text", "pcb.dimension", "pcb.protection"], note: "generic inspector fields commit the owning inspector's edit command; drafts are view state" }),
+  rule({ id: "dispatcher.spice-command-palette", surface: SPICE + "SpiceStudio.tsx", kind: "click", handler: /^executeCommand/, classification: "dispatcher", recordIds: ["spice.workbench"], note: "runs the highlighted SPICE studio command" }),
+  rule({ id: "dispatcher.spice-shortcuts", surface: SPICE + "SpiceStudio.tsx", kind: "shortcut", classification: "dispatcher", recordIds: ["spice.workbench"], note: "SPICE studio keyboard shortcuts (palette, undo/redo)" }),
+  rule({ id: "dispatcher.pcb-context-menu-escape", surface: PCB + "ContextMenu.tsx", kind: "shortcut", classification: "view", note: "Escape closes the menu" }),
+  rule({ id: "dispatcher.manufacturing-retry", surface: PCB + "ManufacturingWorkflowPanel.tsx", label: /^p2g-retry$/, classification: "dispatcher", recordIds: ["pcb.qualify-route", "manufacturing.release"], note: "retries the last failed operation (qualification or release) without resending refused pins" }),
+  rule({ id: "dispatcher.pcb-scene-gestures", surface: "app/lib/pcb/render/scene.ts", kind: "gesture", classification: "dispatcher", recordIds: ["pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.route-copper", "pcb.create-via", "pcb.zone", "pcb.silkscreen-text", "pcb.dimension", "pcb.board-geometry", "view.canvas-navigation"], note: "the PCB canvas emits pointer down/move to the active tool's subscribers (select/move/drag, route + via placement, zone, silk, dimension) and to pan/zoom" }),
+  rule({ id: "view.context-menu-outside-click", surface: PCB + "ContextMenu.tsx", kind: "gesture", classification: "view", note: "a pointer down outside the menu closes it" }),
+  rule({ id: "schematic.drag-end", surface: PAGE, kind: "gesture", label: /^mouseup:/, classification: "semantic", recordIds: ["schematic.move-rotate"], note: "window mouseup ends a drag gesture and commits the move (B07.1)" }),
+  rule({ id: "view.schematic-wheel-zoom", surface: PAGE, kind: "gesture", label: /^wheel:/, classification: "view", recordIds: ["view.canvas-navigation"], note: "wheel zoom/pan on the schematic canvas and the waveform plot" }),
+  rule({ id: "view.document-click-outside", surface: PAGE, kind: "gesture", label: /^mousedown:/, classification: "view", note: "a mouse down outside the open menu closes it" }),
+  rule({ id: "dispatcher.chat-composer", surface: PAGE, handler: /^(handleComposerSubmit|e\.preventDefault,handleComposerSubmit)$/, classification: "dispatcher", recordIds: ["schematic.generate", "schematic.edit-topology", "ai.chat-qa", "pcb.bounded-edit-propose", "schematic.edit-tier1-propose", "schematic.replace-component-propose"], note: "the composer submits a generation, an edit or a chat turn; agent turns may return sealed proposals (tier-1 edits, replacements, bounded PCB edits) that their own classified controls approve" }),
+
+  // ── page.tsx: project / files / recovery ──────────────────────────────────
+  rule({ id: "project.open-file", surface: PAGE, handler: /^(handleImportProjectFile|importInputRef\.current\.click)$/, classification: "semantic", recordIds: ["project.open-file"] }),
+  rule({ id: "project.save-file", surface: PAGE, handler: /^(handleExportProject|downloadRecoveryBackup)$/, classification: "semantic", recordIds: ["project.save-file"] }),
+  rule({ id: "project.delete", surface: PAGE, label: /^Delete project/, classification: "semantic", recordIds: ["project.delete"] }),
+  rule({ id: "project.switch-create", surface: PAGE, handler: /^(createNewProject|switchProject|handleRenameProject)$/, classification: "semantic", recordIds: ["project.switch-create"] }),
+  rule({ id: "project.checkpoint", surface: PAGE, handler: /^restoreCheckpoint$/, classification: "semantic", recordIds: ["project.checkpoint"] }),
+  rule({ id: "project.recovery-resolution", surface: PAGE, handler: /^resolveRecovery(KeepLocal|StartFresh|AdoptCanonical)$/, classification: "semantic", recordIds: ["project.hydrate"], note: "resolves a canonical-history recovery (B07/B12): keep local, start fresh, adopt canonical" }),
+  rule({ id: "project.undo-redo", surface: PAGE, handler: /^(undoSchematic|redoSchematic)$/, classification: "semantic", recordIds: ["project.undo-redo"] }),
+  rule({ id: "view.page-reload", surface: PAGE, handler: /^window\.location\.reload$/, classification: "view", note: "reloads the workspace from durable state" }),
+
+  // ── page.tsx: schematic generation, edits, review ─────────────────────────
+  rule({ id: "schematic.generate", surface: PAGE, handler: /^setPendingReplace,applySchematic\(\)\.then,applySchematic,finishActivityLog$/, classification: "semantic", recordIds: ["schematic.generate"], note: "explicit approval of the generated proposal" }),
+  rule({ id: "schematic.generate-retry", surface: PAGE, label: /^Retry$/, classification: "semantic", recordIds: ["schematic.generate"], note: "retries the last AI request after a provider failure" }),
+  rule({ id: "schematic.tier1-apply", surface: PAGE, handler: /^applyTier1Proposal$/, classification: "semantic", recordIds: ["schematic.edit-tier1-apply"] }),
+  rule({ id: "schematic.apply-suggestions", surface: PAGE, handler: /^handleApplySuggestions$/, classification: "semantic", recordIds: ["schematic.edit-topology"], note: "review suggestions applied through the validated edit path and the review dialog (B16-A F11)" }),
+  rule({ id: "schematic.review-advisory", surface: PAGE, handler: /^setMoreMenuOpen,(handleReview|handleTidyLayout|handleSecondOpinion)$/, classification: "semantic", recordIds: ["schematic.review-advisory"] }),
+  rule({ id: "schematic.replace-propose", surface: PAGE, handler: /^onReplace$/, classification: "semantic", recordIds: ["schematic.replace-component-propose"] }),
+  rule({ id: "schematic.set-property", surface: PAGE, handler: /^(setComponentPropertiesCanonical(,schDisplayRef)?|e\.preventDefault,commit,setDraft)$/, classification: "semantic", recordIds: ["schematic.set-property"] }),
+  rule({ id: "schematic.net-label-commit", surface: PAGE, handler: /^e\.preventDefault,commitLabelDraft,setLabelDraft$/, classification: "semantic", recordIds: ["schematic.connect"] }),
+  rule({ id: "schematic.delete-component", surface: PAGE, label: /^Delete$/, handler: /^onDelete$/, classification: "semantic", recordIds: ["schematic.delete-component"] }),
+  rule({ id: "schematic.rotate", surface: PAGE, handler: /^(onRotate|onRotationChange)$/, classification: "semantic", recordIds: ["schematic.move-rotate"] }),
+  rule({ id: "schematic.export-kicad", surface: PAGE, handler: /^handleExportKicad$/, classification: "semantic", recordIds: ["schematic.import-export-kicad"] }),
+  rule({ id: "schematic.sheet-size", surface: PAGE, handler: /^setPageSize$/, classification: "semantic", recordIds: ["schematic.sheet-size"] }),
+  rule({ id: "schematic.place-part", surface: PAGE, handler: /^undefined\|onPlace$/, classification: "semantic", recordIds: ["schematic.add-component"], note: "disabled parts render without a handler" }),
+  rule({ id: "schematic.pin-wire-gesture", surface: PAGE, kind: "pointer", handler: /^(handlePinClick|handleWireClick)$/, classification: "semantic", recordIds: ["schematic.connect"], note: "starts or completes a wire from a pin / on a wire" }),
+  rule({ id: "schematic.drag-gesture", surface: PAGE, kind: "pointer", element: /^(g|rect|ComponentSymbol|KicadInstanceView|NetLabelGlyph|polyline)$/, classification: "semantic", recordIds: ["schematic.move-rotate"], note: "drag gestures on symbols, instances, labels and wires (B07.1 identity-geometry gestures)" }),
+  rule({ id: "view.schematic-canvas-pointer", surface: PAGE, kind: "pointer", element: "svg", classification: "view", recordIds: ["view.canvas-navigation"], note: "canvas pan / marquee / deselect" }),
+  rule({ id: "view.sim-pane-layout", surface: PAGE, kind: "pointer", element: /^(div|button)$/, classification: "view", note: "waveform pane drag/resize/focus/close" }),
+  rule({ id: "view.schematic-tool-mode", surface: PAGE, kind: "click", handler: /^setTool/, classification: "view", note: "selects the schematic tool mode (select, wire, junction, label, place)" }),
+  rule({ id: "view.schematic-mode", surface: PAGE, kind: "click", handler: /^(setMode|setSimMode)$/, classification: "view", note: "Theory/Build mode and simulation probe/move mode" }),
+  rule({ id: "spice.page-sim", surface: PAGE, handler: /^(onRunSim|setView,handleRunSim|setAnalysisConfig)$/, classification: "semantic", recordIds: ["spice.workbench"], note: "the schematic page's quick simulation (analysis config, run, re-run)" }),
+  rule({ id: "view.workspace-tabs", surface: PAGE, handler: /^(setView|onClick|setChatOpen|toggleLeftPanel|setChatFullscreen|setChartPanelOpen)$/, classification: "view", recordIds: ["view.canvas-navigation"], note: "workspace tabs, activity bar, chat panel, waveform panel" }),
+  rule({ id: "view.schematic-fit", surface: PAGE, handler: /^fitToPage$/, classification: "view", recordIds: ["view.canvas-navigation"] }),
+  rule({ id: "view.page-form-draft", surface: PAGE, kind: ["change", "click"], handler: /^(setInput|setDraft|setLabelDraft|onChange|parseInt,isNaN,onChange|pickType|selectAiBrain|performProviderSwitch|setAiProviderFailure,lastAiRetryRef\.current)$/, classification: "view", note: "form drafts, analysis picker fields, AI provider preference" }),
+  rule({ id: "view.page-dismiss", surface: PAGE, handler: /^(setReplacementReceipt|setTier1Receipt|setToast|setSuggestionsMinimized|setPendingSuggestions,setSuggestionsMinimized|setMoreMenuOpen|setOpen|onAdd|onSelect|e\.stopPropagation,onRemove|refreshCheckpoints,setHistoryOpen|setHistoryOpen|cancelTier1Proposal|finishActivityLog,setPendingReplace|showToast,setSchematicRecovery)$/, classification: "view", note: "dismiss receipts/toasts, open/close menus, panes and dialogs; cancelling an inert proposal changes nothing" }),
+
+  // ── PCB editor ────────────────────────────────────────────────────────────
+  rule({ id: "pcb.sync-durable", surface: /^app\/components\/pcb\/(PcbEditor|SyncButton|SyncPlacementDialog|PcbSyncReadinessPanel|SnapshotConflictDialog)\.tsx$/, handler: /^(handleSync|handleApplySync|onSync|onConfirm|onApply|onRebase)$/, classification: "semantic", recordIds: ["pcb.sync-durable"] }),
+  rule({ id: "pcb.sync-refresh", surface: PCB + "SnapshotConflictDialog.tsx", handler: /^onRefresh$/, classification: "view", note: "re-reads durable truth after a snapshot conflict; publishes nothing" }),
+  rule({ id: "pcb.board-revision", surface: /^app\/components\/pcb\/(PcbEditor|PcbSyncReadinessPanel|BoardRevisionDialog)\.tsx$/, handler: /^(handlePreviewBoardRevision|onDeriveRevision|onDerive)$/, classification: "semantic", recordIds: ["pcb.board-revision"] }),
+  rule({ id: "pcb.qualify-route", surface: /^app\/components\/pcb\/(PcbEditor|ManufacturingWorkflowPanel)\.tsx$/, handler: /^(handleQualify|onQualify)$/, classification: "semantic", recordIds: ["pcb.qualify-route", "pcb.autonomous-layout"], note: "server qualification commits the verified autonomous placement+routing candidate in the same durable transaction" }),
+  rule({ id: "manufacturing.release", surface: /^app\/components\/pcb\/(PcbEditor|ManufacturingWorkflowPanel)\.tsx$/, handler: /^(handleRelease|workflow\.requestRelease|workflow\.authorizeRelease)$/, classification: "semantic", recordIds: ["manufacturing.release"] }),
+  rule({ id: "view.manufacturing-panel", surface: PCB + "ManufacturingWorkflowPanel.tsx", handler: /^(workflow\.cancelRelease|workflow\.refresh)$/, classification: "view", note: "cancel the release confirmation; re-read durable truth" }),
+  rule({ id: "pcb.component-review", surface: PCB + "ComponentReviewPanel.tsx", handler: /^review\.(request|requestAll|resolve,reason\.trim|withdraw)$/, classification: "semantic", recordIds: ["pcb.component-review"] }),
+  rule({ id: "view.component-review-panel", surface: PCB + "ComponentReviewPanel.tsx", classification: "view", note: "refresh listing, expand evidence, reason drafts" }),
+  rule({ id: "pcb.auto-place", surface: /^app\/components\/pcb\/(PcbEditor|PlacementSetup)\.tsx$/, handler: /^(editorRuntime\.getHistory,commitPcbCandidate\(\)\.then,commitPcbCandidate,produce|onApply)$/, element: /^(PlacementSetup|button)$/, classification: "semantic", recordIds: ["pcb.auto-place"] }),
+  rule({ id: "pcb.autoroute-import", surface: PCB + "PcbEditor.tsx", element: "AutorouteSetup", classification: "semantic", recordIds: ["pcb.autoroute-import"] }),
+  rule({ id: "placement.auto", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar)\.tsx$/, handler: /^(autoPlace\.run|onCancelAutoPlace\|onAutoPlace)$/, classification: "semantic", recordIds: ["placement.auto"] }),
+  rule({ id: "routing.autoroute", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar)\.tsx$/, handler: /^(autoroute\.run|onRouteBoard)$/, classification: "semantic", recordIds: ["routing.autoroute"] }),
+  rule({ id: "pcb.rules.routing-preferences", surface: /^app\/components\/pcb\/(PcbEditor|RoutingControls)\.tsx$/, kind: "change", classification: "semantic", recordIds: ["pcb.rules"], note: "routing preferences (width, via preset, mode, posture) are board state" }),
+  rule({ id: "pcb.rules.net-classes", surface: PCB + "RoutingRulesPanel.tsx", handler: /^(netClasses\.applyDelta,setProposal,toast|netClasses\.runAutoClassify,toast|saveManual)$/, classification: "semantic", recordIds: ["pcb.rules"] }),
+  rule({ id: "pcb.ai-rules-brief", surface: PCB + "RoutingRulesPanel.tsx", handler: /^suggest$/, classification: "semantic", recordIds: ["pcb.ai-rules-brief"] }),
+  rule({ id: "view.routing-rules-panel", surface: PCB + "RoutingRulesPanel.tsx", classification: "view", note: "brief/manual-rule drafts, open/close, dismiss proposal" }),
+  rule({ id: "pcb.arrange", surface: /^app\/components\/pcb\/(inspectors\/ArrangeSection|PcbEditor)\.tsx$/, handler: /^(align|commit)$/, label: /^(Align|Distribute|Snap|align-|distribute-|snap-grid)/, classification: "semantic", recordIds: ["pcb.arrange"] }),
+  rule({ id: "pcb.delete-item", surface: /^app\/components\/pcb\/(Inspector|PcbEditor)\.tsx$/, handler: /^(commit,toast|commit,refs\.filter)$/, classification: "semantic", recordIds: ["pcb.delete-item"] }),
+  rule({ id: "pcb.export-kicad", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar)\.tsx$/, handler: /^(exportKicadFromPalette|onExportKicad)$/, classification: "semantic", recordIds: ["pcb.export-kicad"] }),
+  rule({ id: "validation.drc", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar|DrcPanel)\.tsx$/, handler: /^(drc\.run|onRunDrc)$/, classification: "semantic", recordIds: ["validation.erc-drc"] }),
+  rule({ id: "view.drc-panel", surface: PCB + "DrcPanel.tsx", classification: "view", note: "grouping, collapse, constraints toggle, active preset selection (a view-session preference)" }),
+  rule({ id: "pcb.board-geometry", surface: PCB + "PcbToolbar.tsx", handler: /^(applySize|onStackupChange,Number|applyPreset|toggleRoundRect|onAddPlane)$/, classification: "semantic", recordIds: ["pcb.board-geometry", "pcb.zone"], note: "board size/preset/corners/stackup; Add plane creates a zone" }),
+  rule({ id: "pcb.enlarge-board", surface: PCB + "PcbEditor.tsx", handler: /^enlargeBoardToFit$/, classification: "semantic", recordIds: ["pcb.board-geometry"] }),
+  rule({ id: "pcb.undo-redo", surface: PCB + "PcbToolbar.tsx", handler: /^(onUndo|onRedo)$/, classification: "semantic", recordIds: ["pcb.undo-redo-canonical"] }),
+  rule({ id: "view.pcb-tool-mode", surface: PCB + "PcbToolbar.tsx", handler: /^onToolChange$/, classification: "view", note: "select / pan / route / zone / silkscreen / dimension tool mode" }),
+  rule({ id: "view.pcb-3d", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar|PcbPreview3D)\.tsx$/, handler: /^(setPreview3dOpen|onToggle3d|requestPreset|setToggle|setPaletteId)$/, classification: "view", recordIds: ["view.pcb-3d-control"], note: "3D preview open/close, camera presets, layer toggles, finish (component-local until B17-C)" }),
+  rule({ id: "view.pcb-navigation", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar|Inspector|LayerPanel|FabDialog|AutorouteSetup)\.tsx$/, handler: /^(scene\.zoomToFit|onZoomToFit|scene\.centerOn,selectionBBoxCenter|onZoomToViolation|onFocusFailure|dispatch:toggle-grid|onToggleGrid|dispatch:toggle-layer|onActivate|onIsolate|onShowAllCopper|onToggleVisible)$/, classification: "view", recordIds: ["view.canvas-navigation"], note: "zoom/fit/centre, grid, layer visibility and activation (ui-only until B17-D)" }),
+  rule({ id: "view.pcb-selection", surface: PCB + "PcbEditor.tsx", handler: /^selectionStore\.replace,selectSimilar$/, classification: "view", note: "select similar by layer/net/padstack (selection is view-session state)" }),
+  rule({ id: "view.pcb-chrome", surface: /^app\/components\/pcb\/(PcbEditor|PcbToolbar|SyncButton|SyncPlacementDialog|PlacementSetup|AutorouteSetup|PadstackPanel|AssignmentQueuePanel|ShortcutsHelp|BoardRevisionDialog|SnapshotConflictDialog|PcbProposalReviewDialog|PcbSyncReadinessPanel|AssistBox|FabDialog|CommandPalette)\.tsx$/, handler: /^(setAssistOpen|setSyncDialogOpen|setFabDialogOpen|setPadstacksOpen|shortcuts\.show|onShowShortcuts|onTogglePadstacks|onToggleAssignments|onSendToFab|onOptions|onClose|onDiscard|setPlacementWarning|setPending|onDismiss|onCancel|setSelectedId|setQuery|setSpread|setMode|setConfirmedPreflightId|setAcknowledged|onCarryChange|setPreset|updateLayer|updateLayer,Number|onChange,stackupProfile|setOverride|setPresetId|setWaiverReason|setEngine|setText|e\.stopPropagation,onClose)$/, classification: "view", note: "open/close chrome, dismiss, drafts and setup forms that a later semantic control commits" }),
+  rule({ id: "pcb.placement-settings", surface: PCB + "PlacementSetup.tsx", kind: "change", handler: /onChange$/, classification: "semantic", recordIds: ["pcb.placement-settings"] }),
+  rule({ id: "pcb.assist-edit", surface: PCB + "AssistBox.tsx", handler: /^(apply|e\.preventDefault,submit,e\.stopPropagation,\?\.blur)$/, classification: "semantic", recordIds: ["pcb.assist-edit"] }),
+  rule({ id: "pcb.bounded-edit-apply", surface: PCB + "PcbProposalReviewDialog.tsx", handler: /^onApply$/, classification: "semantic", recordIds: ["pcb.bounded-edit-apply"] }),
+  rule({ id: "pcb.board-repair", surface: PCB + "BoardRepairPanel.tsx", handler: /^repair\.(createPlan|previewFixes|applyPreview|undoLast)$/, classification: "semantic", recordIds: ["pcb.board-repair"] }),
+  rule({ id: "view.board-repair-panel", surface: PCB + "BoardRepairPanel.tsx", classification: "view", note: "selection of fixes, execution-mode preference, cancel" }),
+  rule({ id: "pcb.assignment-queue", surface: PCB + "AssignmentQueuePanel.tsx", handler: /^(previewAction|commit|load)$/, classification: "semantic", recordIds: ["pcb.assignment-queue"] }),
+  rule({ id: "view.assignment-queue-panel", surface: PCB + "AssignmentQueuePanel.tsx", classification: "view", note: "filter, drafts, selection, close" }),
+  rule({ id: "pcb.footprint-resolution.verify", surface: /^app\/components\/pcb\/(MappingVerificationPanel|PassivePackagePolicyPanel)\.tsx$/, classification: "semantic", recordIds: ["pcb.footprint-resolution"], note: "read-only verification / policy evaluation" }),
+  rule({ id: "pcb.padstack", surface: PCB + "PadstackPanel.tsx", handler: /^(commit|duplicate|addNew)$/, classification: "semantic", recordIds: ["pcb.padstack"] }),
+  rule({ id: "view.padstack-editor-draft", surface: /^app\/components\/pcb\/padstack\//, classification: "view", note: "padstack editor drafts (staged until Save)" }),
+  rule({ id: "pcb.dimension", surface: /^app\/components\/pcb\/(inspectors\/DimensionInspector\.tsx|hooks\/useDimensionTool\.ts)$/, classification: "semantic", recordIds: ["pcb.dimension"] }),
+  rule({ id: "pcb.route-copper", surface: PCB + "hooks/useRouteTool.ts", classification: "semantic", recordIds: ["pcb.route-copper"] }),
+  rule({ id: "pcb.silkscreen-text", surface: /^app\/components\/pcb\/(hooks\/useSilkTool\.ts|SilkTool\.tsx|inspectors\/TextInspector\.tsx)$/, handler: /^(onKeyDown|onKeyUp|e\.preventDefault,silk\.commitText,silk\.cancelText,silk\.toggleLayer|e\.preventDefault,commitText,inputRef\.current\.blur,e\.stopPropagation)$/, classification: "semantic", recordIds: ["pcb.silkscreen-text"] }),
+  rule({ id: "view.silk-tool-draft", surface: /^app\/components\/pcb\/(SilkTool|inspectors\/TextInspector)\.tsx$/, classification: "view", note: "silk text/stroke/height/layer drafts and mode" }),
+  rule({ id: "view.shortcuts-help", surface: /^app\/components\/pcb\/(ShortcutsHelp\.tsx|hooks\/useShortcutsHelp\.ts)$/, classification: "view", note: "the shortcuts overlay" }),
+  rule({ id: "pcb.zone", surface: /^app\/components\/pcb\/(ZoneTool|inspectors\/ZoneInspector)\.tsx$/, handler: /^(onAdd,onClose|addZone|onRefill|onKey)$/, classification: "semantic", recordIds: ["pcb.zone"] }),
+  rule({ id: "view.zone-tool", surface: PCB + "ZoneTool.tsx", classification: "view", note: "zone appearance/layer/net drafts, cancel" }),
+  rule({ id: "view.via-inspector", surface: PCB + "inspectors/ViaInspector.tsx", classification: "view", note: "'also update other vias' preference for the next edit" }),
+  rule({ id: "manufacturing.export-engineering", surface: PCB + "FabDialog.tsx", handler: /^fab\.start$/, classification: "semantic", recordIds: ["manufacturing.export-engineering"] }),
+
+  // ── BOM ───────────────────────────────────────────────────────────────────
+  rule({ id: "bom.workbench", surface: BOM, handler: /^(refreshPrices|exportCsv|onGenerate,title\.trim|takeSnapshot|sendToDistributor|onSwap|onViewDiff|onMarkAllRead|onChoiceChange|setRefreshNonce|onJump)$/, classification: "semantic", recordIds: ["bom.workbench"] }),
+  rule({ id: "view.bom-chrome", surface: BOM, classification: "view", note: "filters, drafts, sort, expand, dialogs and popovers" }),
+
+  // ── build library / schematic dialogs ─────────────────────────────────────
+  rule({ id: "parts.catalog-read", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^(openCategory|selectPart|backToCategories|loadMore|onRetry)$/, classification: "semantic", recordIds: ["parts.catalog-read"] }),
+  rule({ id: "schematic.add-component", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^onPlace$/, classification: "semantic", recordIds: ["schematic.add-component"] }),
+  rule({ id: "view.build-library", surface: "app/components/editor/BuildLibraryPanel.tsx", classification: "view", note: "search draft, close" }),
+  rule({ id: "schematic.replace-component", surface: "app/components/schematic/ReplacementReviewDialog.tsx", handler: /^onApply$/, classification: "semantic", recordIds: ["schematic.replace-component"] }),
+  rule({ id: "view.replacement-dialog", surface: "app/components/schematic/ReplacementReviewDialog.tsx", classification: "view", note: "cancel changes nothing" }),
+
+  // ── SPICE studio ──────────────────────────────────────────────────────────
+  rule({ id: "view.spice-chrome", surface: /^app\/components\/spice\//, handler: /^(setPaletteQuery|setPaletteOpen|setWorkspace|setAiOpen|props\.setSection|props\.setActiveTestId,props\.setSection|props\.toggleSignal|props\.setLegacyOpen|props\.onClose|props\.onDismiss|props\.setActivePaneId|createId,props\.setPanes,props\.setActivePaneId|onCancel|props\.setCompareRunId|setActiveRunPlanId|onSelect|onSignalFocus|setView|onPointerDown|event\.stopPropagation)$/, classification: "view", note: "palette/query, workspace and section navigation, panes, compare selection, waveform focus/zoom" }),
+  rule({ id: "spice.workbench", surface: /^app\/components\/spice\//, classification: "semantic", recordIds: ["spice.workbench"], note: "testbench setup edits, runs, exports, approvals and AI setup requests are SPICE studio project state" }),
+
+  // ── circuit-design workbenches ────────────────────────────────────────────
+  rule({ id: "cd.architecture", surface: "app/components/architecture/ArchitectureWorkspace.tsx", handler: /^(onSelectCandidate|onGenerateAlternatives)$/, classification: "semantic", recordIds: ["cd.architecture.workbench"] }),
+  rule({ id: "cd.power", surface: "app/components/power/PowerWorkspace.tsx", handler: /^(onSelectCandidate|onGenerateAlternatives)$/, classification: "semantic", recordIds: ["cd.power.workbench"] }),
+  rule({ id: "cd.interfaces", surface: "app/components/interfaces/InterfacePlanningWorkspace.tsx", handler: /^(onSelect|onGenerateAlternatives)$/, classification: "semantic", recordIds: ["cd.interfaces.workbench"] }),
+  rule({ id: "view.cd-workbench-chrome", surface: CD, classification: "view", note: "tabs, filters, candidate/object selection for inspection" }),
+]);
+
+// ─── resolution ───────────────────────────────────────────────────────────────
+
+export interface ClassifiedControl extends ControlSite {
+  ruleId: string;
+  classification: ControlClass;
+  recordIds: readonly string[];
+  reason: string;
+  note: string;
+}
+
+function surfaceMatches(rule: ControlRule, surface: string): boolean {
+  if (rule.surface instanceof RegExp) return rule.surface.test(surface);
+  return rule.surface.endsWith("/") ? surface.startsWith(rule.surface) : surface === rule.surface;
+}
+
+export function matchControlRule(site: ControlSite, rules: readonly ControlRule[] = CONTROL_RULES): ControlRule | null {
+  for (const candidate of rules) {
+    if (!surfaceMatches(candidate, site.surface)) continue;
+    if (candidate.kind && !(Array.isArray(candidate.kind) ? candidate.kind.includes(site.kind) : candidate.kind === site.kind)) continue;
+    if (candidate.element && !(candidate.element instanceof RegExp ? candidate.element.test(site.element) : candidate.element === site.element)) continue;
+    if (candidate.label && !candidate.label.test(site.label)) continue;
+    if (candidate.handler && !candidate.handler.test(site.handler)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+export function classifyControlSites(sites: readonly ControlSite[], rules: readonly ControlRule[] = CONTROL_RULES): { classified: ClassifiedControl[]; unmatched: ControlSite[]; unusedRules: ControlRule[] } {
+  const used = new Set<string>();
+  const classified: ClassifiedControl[] = [];
+  const unmatched: ControlSite[] = [];
+  for (const site of sites) {
+    const matched = matchControlRule(site, rules);
+    if (!matched) { unmatched.push(site); continue; }
+    used.add(matched.id);
+    classified.push({ ...site, ruleId: matched.id, classification: matched.classification, recordIds: matched.recordIds ?? [], reason: matched.reason ?? "", note: matched.note ?? "" });
+  }
+  return { classified, unmatched, unusedRules: rules.filter((candidate) => !used.has(candidate.id)) };
+}
+
+/** Structural validation of the rules themselves (ids, record references, reasons). */
+export function validateControlRules(rules: readonly ControlRule[] = CONTROL_RULES): string[] {
+  const errors: string[] = [];
+  const ids = new Set<string>();
+  const records = new Set(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
+  for (const candidate of rules) {
+    if (ids.has(candidate.id)) errors.push(`${candidate.id}: duplicate rule id`);
+    ids.add(candidate.id);
+    if ((candidate.classification === "semantic" || candidate.classification === "dispatcher") && !(candidate.recordIds && candidate.recordIds.length > 0)) errors.push(`${candidate.id}: ${candidate.classification} rule must name at least one registry record`);
+    if (candidate.classification === "unavailable" && !candidate.reason) errors.push(`${candidate.id}: unavailable rule must state the visible reason`);
+    for (const recordId of candidate.recordIds ?? []) if (!records.has(recordId)) errors.push(`${candidate.id}: unknown registry record ${recordId}`);
+  }
+  return errors;
+}
+
+const csvCell = (value: string | number): string => {
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+};
+
+export function renderControlInventoryCsv(rows: readonly ClassifiedControl[]): string {
+  const header = ["key", "surface", "kind", "element", "label", "handler", "classification", "record_ids", "rule_id", "reason", "note"];
+  const body = [...rows].sort((a, b) => a.key.localeCompare(b.key)).map((row) => [row.key, row.surface, row.kind, row.element, row.label, row.handler, row.classification, row.recordIds.join(";"), row.ruleId, row.reason, row.note]);
+  return [header, ...body].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
+}
+
+export interface ControlInventorySummary {
+  schemaVersion: "sirkit.ui-control-inventory-summary.v1";
+  sites: number;
+  surfaces: number;
+  byKind: Record<string, number>;
+  byClassification: Record<string, number>;
+  recordsReached: string[];
+}
+
+export function summarizeControlInventory(rows: readonly ClassifiedControl[]): ControlInventorySummary {
+  const byKind: Record<string, number> = {}, byClassification: Record<string, number> = {};
+  const reached = new Set<string>();
+  for (const row of rows) {
+    byKind[row.kind] = (byKind[row.kind] ?? 0) + 1;
+    byClassification[row.classification] = (byClassification[row.classification] ?? 0) + 1;
+    for (const id of row.recordIds) reached.add(id);
+  }
+  return { schemaVersion: "sirkit.ui-control-inventory-summary.v1", sites: rows.length, surfaces: new Set(rows.map((row) => row.surface)).size, byKind: Object.fromEntries(Object.entries(byKind).sort()), byClassification: Object.fromEntries(Object.entries(byClassification).sort()), recordsReached: [...reached].sort() };
+}

@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-A",
+  "currentCheckpoint": "B17-B",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17-A: regenerate the UI-action \u2192 handler \u2192 domain-command \u2192 mutation \u2192 validation \u2192 history \u2192 tool-coverage matrix from current code; enumerate every control/shortcut/menu/dialog/gesture/hidden entry; prove each dispatches a registered command, is presentation-only, internal, or intentionally unavailable with a visible reason; CI gates for unregistered controls, handler-less records, retired routes and silent controls; reclassify stale B01 records.",
-  "updatedAt": "2026-09-09T22:15:00-04:00"
+  "nextAction": "B17-B: provider-neutral, non-authoritative view-session command bus (sirkit.view-command.v1 envelope; session/project scoping; stale view revisions refuse or rebase deterministically; retirement on project switch/logout/tab disposal; single settlement, cancellable, returns resulting view state; durable persistence limited to explicit workspace preferences; no engineering undo entry for visual-only actions; redacting trace records) shared by UI, keyboard shortcuts and agent tools.",
+  "updatedAt": "2026-09-09T22:40:00-04:00"
 }
