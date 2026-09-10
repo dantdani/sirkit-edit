@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B18",
-  "currentCheckpoint": "B18-A",
+  "currentCheckpoint": "B18-B",
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-A: reproduce the discovery gaps as counterexamples; define the enforced permission tiers as a mapping onto the existing ApprovalTier vocabulary (Tier 0 read/inspect/measure/view-session direct; Tier 1 reversible edits preview+confirm, project opt-in execute_explicit_tier1; Tier 2 sealed proposal + exact human approval; Tier 3 never agent-executable); server-owned, project-scoped, membership-authorized, revisioned, auditable autonomy settings (default proposal-only) with schema, migration, canonical route and repository; then B18-B server-minted one-shot grants.",
-  "updatedAt": "2026-09-10T03:50:00-04:00"
+  "nextAction": "B18-B: design (independent designs + adversarial verification) and implement the server-minted one-shot execution grant: binds principal + membership revision, project/branch/editor session, operation family, exact object/net scope, max tier, base revisions, proposal/operation digest, issue/expiry, nonce, single use, retirement reasons; minted only by the trusted server boundary; retired on role change, logout, project switch, revision drift, proposal alteration, undo divergence, timeout; consumption + commit close the crash window through the approved-mutation journal protocol.",
+  "updatedAt": "2026-09-10T04:40:00-04:00"
 }

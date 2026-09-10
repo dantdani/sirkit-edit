@@ -7,7 +7,7 @@ Base: `804a08d` (B17 merged normally in PR #7, 2026-09-10 03:20 UTC). Mission: c
 | checkpoint | artifact | state |
 |---|---|---|
 | discovery | `discovery.md` (read-only sweep of registries, executors, approval machinery, agent runtime, chat UX, tests that pin the current boundary) | INFERRED — to be confirmed by reproduction in B18-A |
-| B18-A permission tiers and autonomy settings | `permission-tiers.md` | pending |
+| B18-A permission tiers and autonomy settings | `permission-tiers.md` | CONFIRMED — tiers mapped onto the existing approval vocabulary with a pure fail-closed decision; the project autonomy setting as a server-owned durable-workflow aggregate (revisioned CAS, audit record + outbox event), canonical `GET/POST /api/agent/autonomy` (all-members read; project_admin mutation), the chat run reads it server-side (unavailable = proposal_only); route ratchet 155 = 152 + 3 + 0 |
 | B18-B server-minted intent and approval grants | `execution-grant-contract.md` | pending |
 | B18-C safe mutation tools | `safe-mutation-tools.md` | pending |
 | B18-D chat execution UX | `chat-execution-ux.md` | pending |
