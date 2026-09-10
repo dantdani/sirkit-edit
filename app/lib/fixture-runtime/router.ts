@@ -17,9 +17,23 @@ import { emptyRouteFixture, loadRouteFixture, recordingRouteExecutor, replayRout
 import type { AutonomousRouteExecutor } from "../pcb/autonomous/qualify-layout";
 import { fixtureContainer } from "./container";
 import { fixtureRuntimeEnabled } from "./mode";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { pcbRevisionId, pcbRevisionPayload } from "../pcb/revision";
 
 export const FIXTURE_ROUTER_ENV = "SIRKIT_FIXTURE_ROUTER";
 export const FIXTURE_ROUTER_FIXTURE_ENV = "SIRKIT_FIXTURE_ROUTER_FIXTURE";
+/** Diagnostics only: a directory that receives the canonical revision payload of EVERY board handed to
+ *  the router (`<placed-board revision>.json`), so two runs can be diffed when a replay misses. */
+export const FIXTURE_ROUTER_DUMP_ENV = "SIRKIT_FIXTURE_ROUTER_DUMP";
+
+function dumpRouterInput(board: Parameters<typeof pcbRevisionId>[0]): void {
+  const dir = process.env[FIXTURE_ROUTER_DUMP_ENV]?.trim();
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${pcbRevisionId(board)}.json`), JSON.stringify(pcbRevisionPayload(board), null, 2));
+  } catch { /* diagnostics never fail the run */ }
+}
 export type FixtureRouterMode = "replay" | "record" | "live";
 
 export function fixtureRouterMode(environment: Record<string, string | undefined> = process.env): FixtureRouterMode {
@@ -39,12 +53,13 @@ export async function fixtureRouteExecutor(createReal: () => Promise<AutonomousR
   const path = fixtureRouterPath();
   if (mode === "live") {
     const live = await createReal();
-    return async (input) => { container.routerExecutions.push("live"); return live(input); };
+    return async (input) => { dumpRouterInput(input.board); container.routerExecutions.push("live"); return live(input); };
   }
   if (mode === "record") {
     const sink: RecordedRouteFixture = loadRouteFixture(path) ?? emptyRouteFixture(new Date().toISOString());
     const recording = recordingRouteExecutor(await createReal(), sink);
     return async (input) => {
+      dumpRouterInput(input.board);
       const result = await recording(input);
       container.routerExecutions.push(result.sourceRevision);
       saveRouteFixture(path, sink); // persist after every execution so an interrupted run keeps what it recorded
@@ -53,5 +68,6 @@ export async function fixtureRouteExecutor(createReal: () => Promise<AutonomousR
   }
   const fixture = loadRouteFixture(path);
   if (!fixture) throw new Error(`ROUTE_FIXTURE_MISSING:${path}`);
-  return replayRouteExecutor(fixture, container.routerExecutions, `${FIXTURE_ROUTER_ENV}=record`);
+  const replay = replayRouteExecutor(fixture, container.routerExecutions, `${FIXTURE_ROUTER_ENV}=record`);
+  return async (input) => { dumpRouterInput(input.board); return replay(input); };
 }

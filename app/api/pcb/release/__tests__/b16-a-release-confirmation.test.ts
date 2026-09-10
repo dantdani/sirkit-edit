@@ -20,7 +20,7 @@ const getHead = vi.hoisted(() => vi.fn());
 vi.mock("@/app/lib/pcb/fab/authority-store", async (orig) => ({ ...(await orig() as object), DurableManufacturingAuthorityStore: class { getHead = getHead; loader = () => vi.fn(); } }));
 const ledgerRecord = vi.hoisted(() => vi.fn(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } })));
 vi.mock("@/app/lib/pcb/fab/release-ledger", async (orig) => ({ ...(await orig() as object), DurableManufacturingReleaseLedger: class { record = ledgerRecord; latest = vi.fn(async () => null); list = vi.fn(async () => []); } }));
-vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: () => ({}) }));
+vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: () => ({ loadHead: async () => null }) })); // [B16-C.1] the release route reads the board lineage (none recorded → current)
 const getBoardHead = vi.hoisted(() => vi.fn());
 vi.mock("@/app/api/pcb-sync/route", () => ({ stage3Repository: { getBoardHead }, stage3BindingRepository: { listSelectedPeers: vi.fn(async () => []) } }));
 const releasePackage = vi.hoisted(() => vi.fn());

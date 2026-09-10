@@ -84,12 +84,20 @@ export class ProjectAsyncScopeRegistry {
     this.identity = { ...identity };
   }
 
-  /** Unmount: everything stops; no further scope is ever current. */
+  /** Unmount: everything stops; no further scope is ever current (until `resume`). */
   dispose(): void {
     this.disposed = true;
     this.abortController.abort();
     for (const timer of this.timers) clearTimeout(timer);
     this.timers.clear();
+  }
+
+  /** [B16-C.5] Re-arm a disposed registry for the SAME generation after React
+   *  StrictMode's simulated unmount (see `PcbBoardLifecycleOwner.resume`). */
+  resume(): void {
+    if (!this.disposed) return;
+    this.disposed = false;
+    this.abortController = new AbortController();
   }
 
   /** Capture an invocation scope for the ACTIVE project generation. */

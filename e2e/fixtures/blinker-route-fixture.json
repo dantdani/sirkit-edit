@@ -1,11 +1,11 @@
 {
  "entries": {
-  "pcb2-6e90506687445f57": {
+  "pcb2-4a5fcf0e62b99bef": {
    "acceptedPasses": 1,
    "attempts": [
     {
      "accepted": true,
-     "candidateRevision": "pcb2-3a8d49bed87aac91",
+     "candidateRevision": "pcb2-1a5a595c1b0cd24f",
      "connectivityAfter": {
       "completed": 15,
       "remaining": 2
@@ -27,8 +27,8 @@
      "elapsedMs": 0,
      "engineMaxPasses": 200,
      "evidence": {
-      "dsnDigest": "dsn-46250f55",
-      "dsnSourceRevision": "pcb2-6e90506687445f57",
+      "dsnDigest": "dsn-6dbd441b",
+      "dsnSourceRevision": "pcb2-4a5fcf0e62b99bef",
       "importedTrackCount": 61,
       "importedViaCount": 4,
       "outputFileStatus": "nonempty",
@@ -43,17 +43,17 @@
        "version": "2.2.4"
       },
       "semanticStatus": "success",
-      "sesByteLength": 6417,
-      "sesDigest": "ses-46c163d1"
+      "sesByteLength": 6597,
+      "sesDigest": "ses-59b6410b"
      },
      "pass": 1,
      "phase": "acceptance",
      "rejectionReasons": [],
-     "reportedRouteAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p1-ac6c0082",
-     "reportedSourceRevision": "pcb2-6e90506687445f57",
+     "reportedRouteAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p1-43094de6",
+     "reportedSourceRevision": "pcb2-4a5fcf0e62b99bef",
      "returnedCandidate": true,
-     "routeAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p1-ac6c0082",
-     "sourceRevision": "pcb2-6e90506687445f57",
+     "routeAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p1-43094de6",
+     "sourceRevision": "pcb2-4a5fcf0e62b99bef",
      "targetNetIds": [
       1,
       2,
@@ -80,8 +80,8 @@
      "engineMaxPasses": 300,
      "error": "DSN preflight failed",
      "evidence": {
-      "dsnDigest": "dsn-d60b455b",
-      "dsnSourceRevision": "pcb2-3a8d49bed87aac91",
+      "dsnDigest": "dsn-9d34498f",
+      "dsnSourceRevision": "pcb2-1a5a595c1b0cd24f",
       "outputFileStatus": "not-checked",
       "parserStatus": "not-run",
       "processStatus": "not-started",
@@ -98,13 +98,13 @@
      "pass": 2,
      "phase": "file",
      "rejectionReasons": [],
-     "reportedRouteAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p2-c6ddb8e0",
-     "reportedSourceRevision": "pcb2-3a8d49bed87aac91",
+     "reportedRouteAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p2-7fca8167",
+     "reportedSourceRevision": "pcb2-1a5a595c1b0cd24f",
      "returnedCandidate": false,
-     "routeAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p2-c6ddb8e0",
-     "sourceRevision": "pcb2-3a8d49bed87aac91",
+     "routeAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p2-7fca8167",
+     "sourceRevision": "pcb2-1a5a595c1b0cd24f",
      "targetNetIds": [
-      2
+      3
      ]
     }
    ],
@@ -302,15 +302,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0001",
+      "id": "b16c0000-e2e0-4000-8000-000000000010",
       "padNets": {
-       "1": 2,
-       "2": 7
+       "1": 3,
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0001",
-        "endpointKey": "b16-1c-inst-0001::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000010::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -319,8 +319,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0001",
-        "endpointKey": "b16-1c-inst-0001::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000010::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -333,13 +333,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:7a6233ee48bd98b45e9bb266cbd38d03:r4",
-       "componentInstanceId": "b16-1c-inst-0001",
+       "bindingRevisionId": "physical-binding:fd7256bda8b2c5936d1233449296b73c:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -534,15 +534,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0002",
+      "id": "b16c0000-e2e0-4000-8000-000000000011",
       "padNets": {
        "1": 5,
-       "2": 7
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0002",
-        "endpointKey": "b16-1c-inst-0002::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000011::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -551,8 +551,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0002",
-        "endpointKey": "b16-1c-inst-0002::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000011::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -565,13 +565,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:ba787cace1f8c6704b1ea838ef9d6c39:r4",
-       "componentInstanceId": "b16-1c-inst-0002",
+       "bindingRevisionId": "physical-binding:aed982e1e791fbb6d9a4c26d2c4ea60f:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -766,15 +766,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0003",
+      "id": "b16c0000-e2e0-4000-8000-000000000012",
       "padNets": {
-       "1": 6,
-       "2": 7
+       "1": 1,
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0003",
-        "endpointKey": "b16-1c-inst-0003::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000012::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -783,8 +783,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0003",
-        "endpointKey": "b16-1c-inst-0003::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000012::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -797,13 +797,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:a7e8b48f3200bf4cfbfaf35326e8ea38:r4",
-       "componentInstanceId": "b16-1c-inst-0003",
+       "bindingRevisionId": "physical-binding:83537da56168f83931373e098da46ef7:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_e1d0f88eb70843abb5e25e5530603a2d665098243038ebef89a6d337e90b335c",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -1062,15 +1062,15 @@
       },
       "footprintId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0004",
+      "id": "b16c0000-e2e0-4000-8000-000000000013",
       "padNets": {
-       "1": 7,
-       "2": 3
+       "1": 4,
+       "2": 6
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0004",
-        "endpointKey": "b16-1c-inst-0004::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000013::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -1079,8 +1079,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0004",
-        "endpointKey": "b16-1c-inst-0004::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000013::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -1093,13 +1093,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:1a80847590c1df3a39388d793a103c25:r4",
-       "componentInstanceId": "b16-1c-inst-0004",
+       "bindingRevisionId": "physical-binding:09388f117d9dac7cfb592d6b4abb32a8:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
        "footprintAssetVersionId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
        "footprintContentDigest": "8806125556e590701b13b47a1725dff28fc47fca41a7905c7d78c8312d08cbbd",
        "mappingCertificateId": "map_39648e2d1513ac87e8432501abb2ca02df782fd82b495a7d823bac141be95c29",
        "symbolAssetVersionId": "symbolv_d26c0f7ed3ec1458acaae93c3fd1b766365336a5447afd8daac73609255c865a",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -1408,15 +1408,15 @@
       },
       "footprintId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0005",
+      "id": "b16c0000-e2e0-4000-8000-000000000014",
       "padNets": {
        "1": 5,
-       "2": 7
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0005",
-        "endpointKey": "b16-1c-inst-0005::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000014::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -1425,8 +1425,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0005",
-        "endpointKey": "b16-1c-inst-0005::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000014::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -1439,13 +1439,13 @@
       "rotationDeg": 270,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:5f7d2d761de7a2d971904b631092ddf0:r4",
-       "componentInstanceId": "b16-1c-inst-0005",
+       "bindingRevisionId": "physical-binding:112b1152b898a5cdc9abff6bc5ce4ad5:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
        "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
        "footprintContentDigest": "5301303268f72ba9cc94b7fdbac355951933e6854272ce8d300b679b86b5d45d",
        "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
        "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -1640,15 +1640,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0006",
+      "id": "b16c0000-e2e0-4000-8000-000000000015",
       "padNets": {
        "1": 5,
-       "2": 1
+       "2": 7
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0006",
-        "endpointKey": "b16-1c-inst-0006::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000015::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -1657,8 +1657,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0006",
-        "endpointKey": "b16-1c-inst-0006::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000015::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -1671,13 +1671,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:57595f8f061b7b239016c52e4514c04b:r4",
-       "componentInstanceId": "b16-1c-inst-0006",
+       "bindingRevisionId": "physical-binding:e7cce066365e3093624245ad7eb6d614:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -1872,15 +1872,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0007",
+      "id": "b16c0000-e2e0-4000-8000-000000000016",
       "padNets": {
-       "1": 1,
-       "2": 2
+       "1": 7,
+       "2": 3
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0007",
-        "endpointKey": "b16-1c-inst-0007::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000016::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -1889,8 +1889,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0007",
-        "endpointKey": "b16-1c-inst-0007::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000016::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -1903,13 +1903,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:e1f2abfc5a5c2a446ec37a8b91f8c949:r4",
-       "componentInstanceId": "b16-1c-inst-0007",
+       "bindingRevisionId": "physical-binding:9c766a2fa614869078a11b7d61f48845:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_8faec862de3894af5cbe60b2f13baa5eb0416bfe518d0729ee1f5676acbc018a",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -2104,15 +2104,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0008",
+      "id": "b16c0000-e2e0-4000-8000-000000000017",
       "padNets": {
-       "1": 4,
-       "2": 3
+       "1": 2,
+       "2": 6
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0008",
-        "endpointKey": "b16-1c-inst-0008::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000017::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -2121,8 +2121,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0008",
-        "endpointKey": "b16-1c-inst-0008::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000017::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -2135,13 +2135,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:6843c2ad0cf00d5d96740f899381e4b4:r4",
-       "componentInstanceId": "b16-1c-inst-0008",
+       "bindingRevisionId": "physical-binding:3fd3529a3f07c3e1ec0c9f2c1c2ebcf7:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -2684,21 +2684,21 @@
       },
       "footprintId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0009",
+      "id": "b16c0000-e2e0-4000-8000-000000000018",
       "padNets": {
-       "1": 7,
-       "2": 2,
-       "3": 4,
+       "1": 4,
+       "2": 3,
+       "3": 2,
        "4": 5,
-       "5": 6,
-       "6": 2,
-       "7": 1,
+       "5": 1,
+       "6": 3,
+       "7": 7,
        "8": 5
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -2707,8 +2707,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -2717,8 +2717,8 @@
         "symbolPinNumber": "2"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::3",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::3",
         "mappingKind": "electrical",
         "padNumbers": [
          "3"
@@ -2727,8 +2727,8 @@
         "symbolPinNumber": "3"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::4",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::4",
         "mappingKind": "electrical",
         "padNumbers": [
          "4"
@@ -2737,8 +2737,8 @@
         "symbolPinNumber": "4"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::5",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::5",
         "mappingKind": "electrical",
         "padNumbers": [
          "5"
@@ -2747,8 +2747,8 @@
         "symbolPinNumber": "5"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::6",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::6",
         "mappingKind": "electrical",
         "padNumbers": [
          "6"
@@ -2757,8 +2757,8 @@
         "symbolPinNumber": "6"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::7",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::7",
         "mappingKind": "electrical",
         "padNumbers": [
          "7"
@@ -2767,8 +2767,8 @@
         "symbolPinNumber": "7"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::8",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::8",
         "mappingKind": "electrical",
         "padNumbers": [
          "8"
@@ -2781,13 +2781,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:5a918e3bb390347ea9ddacf11d07cbf6:r4",
-       "componentInstanceId": "b16-1c-inst-0009",
+       "bindingRevisionId": "physical-binding:401941364eecea3e01da3955a5da818c:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
        "footprintAssetVersionId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
        "footprintContentDigest": "074ecb2092b24fa4b4b9cdd7c926fc587b0d7d6d21e7341e57935fd42d36894f",
        "mappingCertificateId": "map_4df236ff05c950644e9d261331704a9583101e1f2fb42245f9d0e9a1996bb8e7",
        "symbolAssetVersionId": "symbolv_c1e1c29563fc7559ae4d110c40b6de98d80b98e32d499d85c1d7df4804d89b6c",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      }
     ],
@@ -2802,76 +2802,76 @@
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0006::2",
-       "b16-1c-inst-0007::1",
-       "b16-1c-inst-0009::7"
+       "b16c0000-e2e0-4000-8000-000000000012::1",
+       "b16c0000-e2e0-4000-8000-000000000018::5"
       ],
       "id": 1,
-      "name": "/root/NET_QFX8",
-      "stableId": "net:049ad2759bfe5db9"
+      "name": "/root/N$5",
+      "stableId": "net:215669dd74b690a1"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0001::1",
-       "b16-1c-inst-0007::2",
-       "b16-1c-inst-0009::2",
-       "b16-1c-inst-0009::6"
+       "b16c0000-e2e0-4000-8000-000000000017::1",
+       "b16c0000-e2e0-4000-8000-000000000018::3"
       ],
       "id": 2,
-      "name": "/root/NET_NEVM",
-      "stableId": "net:2fb7cee4f18b46a0"
+      "name": "/root/N$7",
+      "stableId": "net:26b351d261bb8e76"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0004::2",
-       "b16-1c-inst-0008::2"
+       "b16c0000-e2e0-4000-8000-000000000010::1",
+       "b16c0000-e2e0-4000-8000-000000000016::2",
+       "b16c0000-e2e0-4000-8000-000000000018::2",
+       "b16c0000-e2e0-4000-8000-000000000018::6"
       ],
       "id": 3,
-      "name": "/root/N$6",
-      "stableId": "net:4a1ccb5b061ad7df"
+      "name": "/root/NET_NEVM",
+      "stableId": "net:4b78348020ec410c"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0008::1",
-       "b16-1c-inst-0009::3"
+       "b16c0000-e2e0-4000-8000-000000000010::2",
+       "b16c0000-e2e0-4000-8000-000000000011::2",
+       "b16c0000-e2e0-4000-8000-000000000012::2",
+       "b16c0000-e2e0-4000-8000-000000000013::1",
+       "b16c0000-e2e0-4000-8000-000000000014::2",
+       "b16c0000-e2e0-4000-8000-000000000018::1"
       ],
       "id": 4,
-      "name": "/root/N$7",
-      "stableId": "net:6b836314534dc9e0"
+      "name": "/root/GND",
+      "stableId": "net:7fc7761f07e69fa3"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0002::1",
-       "b16-1c-inst-0005::1",
-       "b16-1c-inst-0006::1",
-       "b16-1c-inst-0009::4",
-       "b16-1c-inst-0009::8"
+       "b16c0000-e2e0-4000-8000-000000000011::1",
+       "b16c0000-e2e0-4000-8000-000000000014::1",
+       "b16c0000-e2e0-4000-8000-000000000015::1",
+       "b16c0000-e2e0-4000-8000-000000000018::4",
+       "b16c0000-e2e0-4000-8000-000000000018::8"
       ],
       "id": 5,
       "name": "/root/VCC",
-      "stableId": "net:ce763183d26e0c87"
+      "stableId": "net:bb37a383393d6427"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0003::1",
-       "b16-1c-inst-0009::5"
+       "b16c0000-e2e0-4000-8000-000000000013::2",
+       "b16c0000-e2e0-4000-8000-000000000017::2"
       ],
       "id": 6,
-      "name": "/root/N$5",
-      "stableId": "net:f3544a711b2e85f5"
+      "name": "/root/N$6",
+      "stableId": "net:d912389fdad1ad03"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0001::2",
-       "b16-1c-inst-0002::2",
-       "b16-1c-inst-0003::2",
-       "b16-1c-inst-0004::1",
-       "b16-1c-inst-0005::2",
-       "b16-1c-inst-0009::1"
+       "b16c0000-e2e0-4000-8000-000000000015::2",
+       "b16c0000-e2e0-4000-8000-000000000016::1",
+       "b16c0000-e2e0-4000-8000-000000000018::7"
       ],
       "id": 7,
-      "name": "/root/GND",
-      "stableId": "net:f4ea701350f3574f"
+      "name": "/root/NET_QFX8",
+      "stableId": "net:e6014a6bce88377f"
      }
     ],
     "outline": {
@@ -2889,151 +2889,196 @@
     "tracks": [
      {
       "end": {
-       "x": 11755000,
-       "y": 8000000
+       "x": 13330000,
+       "y": 14933000
       },
-      "id": "ar-t-6786e30e",
+      "id": "ar-t-120b5438",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 12730000,
-       "y": 7026000
+       "x": 13458000,
+       "y": 14805000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 10413000,
-       "y": 8000000
+       "x": 12867000,
+       "y": 14933000
       },
-      "id": "ar-t-4455a2e1",
+      "id": "ar-t-afaadc5f",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 11755000,
-       "y": 8000000
+       "x": 13330000,
+       "y": 14933000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 13146000,
-       "y": 3758000
+       "x": 7509000,
+       "y": 9575000
       },
-      "id": "ar-t-87d0b6ee",
-      "layer": "copperTop",
+      "id": "ar-t-13015e2e",
+      "layer": "copperBottom",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 10988000,
-       "y": 1600000
+       "x": 7509000,
+       "y": 3163000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 13596000,
-       "y": 3758000
+       "x": 12867000,
+       "y": 14933000
       },
-      "id": "ar-t-bb19d9b8",
-      "layer": "copperTop",
+      "id": "ar-t-2dca0946",
+      "layer": "copperBottom",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 13146000,
-       "y": 3758000
+       "x": 7509000,
+       "y": 9575000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 13668000,
-       "y": 3830000
+       "x": 13458000,
+       "y": 14805000
       },
-      "id": "ar-t-32dccb18",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 13596000,
-       "y": 3758000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13668000,
-       "y": 6087000
-      },
-      "id": "ar-t-ec9153b2",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 13668000,
-       "y": 3830000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12730000,
-       "y": 7026000
-      },
-      "id": "ar-t-dd6c0d02",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 13668000,
-       "y": 6087000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16092000,
-       "y": 10388000
-      },
-      "id": "ar-t-8537f317",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 12730000,
-       "y": 7026000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16092000,
-       "y": 12265000
-      },
-      "id": "ar-t-85332ae1",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 16092000,
-       "y": 10388000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16092000,
-       "y": 12265000
-      },
-      "id": "ar-t-8b522de1",
+      "id": "ar-t-97fea41e",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
        "x": 14775000,
-       "y": 12265000
+       "y": 14805000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 7850000,
+       "y": 2822000
+      },
+      "id": "ar-t-35851c63",
+      "layer": "copperTop",
+      "netId": 1,
+      "source": "autorouter",
+      "start": {
+       "x": 7509000,
+       "y": 3163000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 7850000,
+       "y": 1600000
+      },
+      "id": "ar-t-ab4a668a",
+      "layer": "copperTop",
+      "netId": 1,
+      "source": "autorouter",
+      "start": {
+       "x": 7850000,
+       "y": 2822000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12813000,
+       "y": 5842000
+      },
+      "id": "ar-t-cfdbab11",
+      "layer": "copperTop",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 12813000,
+       "y": 4800000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12606000,
+       "y": 5842000
+      },
+      "id": "ar-t-e638e040",
+      "layer": "copperTop",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 12813000,
+       "y": 5842000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12325000,
+       "y": 6123000
+      },
+      "id": "ar-t-8569189b",
+      "layer": "copperTop",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 12606000,
+       "y": 5842000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12325000,
+       "y": 6123000
+      },
+      "id": "ar-t-390cd387",
+      "layer": "copperBottom",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 12325000,
+       "y": 12383000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 11173000,
+       "y": 13535000
+      },
+      "id": "ar-t-c033c8ff",
+      "layer": "copperTop",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 9825000,
+       "y": 13535000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12325000,
+       "y": 12383000
+      },
+      "id": "ar-t-fb2224b8",
+      "layer": "copperTop",
+      "netId": 2,
+      "source": "autorouter",
+      "start": {
+       "x": 11173000,
+       "y": 13535000
       },
       "width": 250000
      },
@@ -3042,9 +3087,9 @@
        "x": 2192000,
        "y": 1600000
       },
-      "id": "ar-t-9f70d00d",
+      "id": "ar-t-421c36ea",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 1350000,
@@ -3057,9 +3102,9 @@
        "x": 11959000,
        "y": 1600000
       },
-      "id": "ar-t-2ce466a0",
+      "id": "ar-t-a0818853",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 12813000,
@@ -3072,9 +3117,9 @@
        "x": 11959000,
        "y": 746000
       },
-      "id": "ar-t-1c65e8a6",
+      "id": "ar-t-2ce3cbf1",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 11959000,
@@ -3087,9 +3132,9 @@
        "x": 11746000,
        "y": 533000
       },
-      "id": "ar-t-c083cdc2",
+      "id": "ar-t-e3304d6d",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 11959000,
@@ -3102,9 +3147,9 @@
        "x": 2417000,
        "y": 533000
       },
-      "id": "ar-t-30e21cb9",
+      "id": "ar-t-d194b8ae",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 11746000,
@@ -3117,9 +3162,9 @@
        "x": 2192000,
        "y": 758000
       },
-      "id": "ar-t-c0b41d0b",
+      "id": "ar-t-881dc1b8",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 2417000,
@@ -3132,478 +3177,13 @@
        "x": 2192000,
        "y": 1600000
       },
-      "id": "ar-t-8cec9089",
+      "id": "ar-t-0a6dac7e",
       "layer": "copperTop",
-      "netId": 2,
+      "netId": 3,
       "source": "autorouter",
       "start": {
        "x": 2192000,
        "y": 758000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 8568000,
-       "y": 4700000
-      },
-      "id": "ar-t-ba78573f",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 7738000,
-       "y": 4700000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 8668000,
-       "y": 4800000
-      },
-      "id": "ar-t-5262bc89",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 10988000,
-       "y": 4800000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 8568000,
-       "y": 4700000
-      },
-      "id": "ar-t-86fbd87f",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 8668000,
-       "y": 4800000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12813000,
-       "y": 5842000
-      },
-      "id": "ar-t-9d08fa2d",
-      "layer": "copperTop",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 12813000,
-       "y": 4800000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12606000,
-       "y": 5842000
-      },
-      "id": "ar-t-cb2e080c",
-      "layer": "copperTop",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 12813000,
-       "y": 5842000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12325000,
-       "y": 6123000
-      },
-      "id": "ar-t-5e11e6f7",
-      "layer": "copperTop",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 12606000,
-       "y": 5842000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12325000,
-       "y": 6123000
-      },
-      "id": "ar-t-6e2afff3",
-      "layer": "copperBottom",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 12325000,
-       "y": 12383000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 11173000,
-       "y": 13535000
-      },
-      "id": "ar-t-519fd1eb",
-      "layer": "copperTop",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 9825000,
-       "y": 13535000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12325000,
-       "y": 12383000
-      },
-      "id": "ar-t-3a77c508",
-      "layer": "copperTop",
-      "netId": 4,
-      "source": "autorouter",
-      "start": {
-       "x": 11173000,
-       "y": 13535000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13458000,
-       "y": 12489000
-      },
-      "id": "ar-t-41716839",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 11142000,
-       "y": 14805000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13458000,
-       "y": 10995000
-      },
-      "id": "ar-t-2e596955",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 13458000,
-       "y": 12489000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 11142000,
-       "y": 14805000
-      },
-      "id": "ar-t-9c744190",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 9825000,
-       "y": 14805000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9443000,
-       "y": 8000000
-      },
-      "id": "ar-t-26c0b0f2",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 8588000,
-       "y": 8000000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13458000,
-       "y": 10995000
-      },
-      "id": "ar-t-d4779a08",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 14775000,
-       "y": 10995000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12816000,
-       "y": 10353000
-      },
-      "id": "ar-t-04c0ca40",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 13458000,
-       "y": 10995000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 10941000,
-       "y": 10353000
-      },
-      "id": "ar-t-80f5a062",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 12816000,
-       "y": 10353000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9443000,
-       "y": 8855000
-      },
-      "id": "ar-t-31612d0c",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 10941000,
-       "y": 10353000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9443000,
-       "y": 8000000
-      },
-      "id": "ar-t-4f874d4b",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 9443000,
-       "y": 8855000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4092000,
-       "y": 4700000
-      },
-      "id": "ar-t-711d861e",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 3250000,
-       "y": 4700000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4092000,
-       "y": 5200000
-      },
-      "id": "ar-t-c37b0f24",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 6892000,
-       "y": 8000000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4092000,
-       "y": 4700000
-      },
-      "id": "ar-t-229e6383",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 4092000,
-       "y": 5200000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6892000,
-       "y": 8000000
-      },
-      "id": "ar-t-34f438ef",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 8588000,
-       "y": 8000000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6092000,
-       "y": 8800000
-      },
-      "id": "ar-t-688fe341",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 6892000,
-       "y": 8000000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6092000,
-       "y": 8800000
-      },
-      "id": "ar-t-7a68bb47",
-      "layer": "copperTop",
-      "netId": 5,
-      "source": "autorouter",
-      "start": {
-       "x": 4900000,
-       "y": 8800000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13330000,
-       "y": 14933000
-      },
-      "id": "ar-t-fa4cc1b1",
-      "layer": "copperTop",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 13458000,
-       "y": 14805000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12867000,
-       "y": 14933000
-      },
-      "id": "ar-t-47cf64d2",
-      "layer": "copperTop",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 13330000,
-       "y": 14933000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 7509000,
-       "y": 9575000
-      },
-      "id": "ar-t-e3f668cf",
-      "layer": "copperBottom",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 7509000,
-       "y": 3163000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12867000,
-       "y": 14933000
-      },
-      "id": "ar-t-4df1ad6b",
-      "layer": "copperBottom",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 7509000,
-       "y": 9575000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 13458000,
-       "y": 14805000
-      },
-      "id": "ar-t-4e6b90bf",
-      "layer": "copperTop",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 14775000,
-       "y": 14805000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 7850000,
-       "y": 2822000
-      },
-      "id": "ar-t-5cd2b29e",
-      "layer": "copperTop",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 7509000,
-       "y": 3163000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 7850000,
-       "y": 1600000
-      },
-      "id": "ar-t-53a2a1ef",
-      "layer": "copperTop",
-      "netId": 6,
-      "source": "autorouter",
-      "start": {
-       "x": 7850000,
-       "y": 2822000
       },
       "width": 250000
      },
@@ -3612,9 +3192,9 @@
        "x": 4555000,
        "y": 10995000
       },
-      "id": "ar-t-1a1f178a",
+      "id": "ar-t-1e119917",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 9825000,
@@ -3627,9 +3207,9 @@
        "x": 2360000,
        "y": 8800000
       },
-      "id": "ar-t-d807f12f",
+      "id": "ar-t-64482e2e",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 4555000,
@@ -3642,9 +3222,9 @@
        "x": 5950000,
        "y": 1600000
       },
-      "id": "ar-t-dd04ff68",
+      "id": "ar-t-ca4ee8ed",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 3250000,
@@ -3657,9 +3237,9 @@
        "x": 2264000,
        "y": 3633000
       },
-      "id": "ar-t-0f6e6d21",
+      "id": "ar-t-42f09260",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 3250000,
@@ -3672,9 +3252,9 @@
        "x": 2192000,
        "y": 3705000
       },
-      "id": "ar-t-0382ba1d",
+      "id": "ar-t-1a8672b4",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 2264000,
@@ -3687,9 +3267,9 @@
        "x": 2192000,
        "y": 4700000
       },
-      "id": "ar-t-88194f6b",
+      "id": "ar-t-3deb96ee",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 2192000,
@@ -3702,9 +3282,9 @@
        "x": 3967000,
        "y": 3633000
       },
-      "id": "ar-t-913729b0",
+      "id": "ar-t-c19f07c1",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 5034000,
@@ -3717,9 +3297,9 @@
        "x": 3250000,
        "y": 3633000
       },
-      "id": "ar-t-c923196c",
+      "id": "ar-t-356fc87d",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 3967000,
@@ -3732,9 +3312,9 @@
        "x": 3250000,
        "y": 1600000
       },
-      "id": "ar-t-11d899cb",
+      "id": "ar-t-560b3fee",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 3250000,
@@ -3747,9 +3327,9 @@
        "x": 5034000,
        "y": 4700000
       },
-      "id": "ar-t-f88374d7",
+      "id": "ar-t-80db86b2",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 5863000,
@@ -3762,9 +3342,9 @@
        "x": 2192000,
        "y": 4700000
       },
-      "id": "ar-t-4b098e88",
+      "id": "ar-t-3298c299",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 1350000,
@@ -3777,9 +3357,9 @@
        "x": 1350000,
        "y": 7790000
       },
-      "id": "ar-t-d6fcad3c",
+      "id": "ar-t-f23dd399",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 2360000,
@@ -3792,13 +3372,433 @@
        "x": 1350000,
        "y": 4700000
       },
-      "id": "ar-t-eb4fd9d9",
+      "id": "ar-t-d541d7f0",
       "layer": "copperTop",
-      "netId": 7,
+      "netId": 4,
       "source": "autorouter",
       "start": {
        "x": 1350000,
        "y": 7790000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13458000,
+       "y": 12489000
+      },
+      "id": "ar-t-a1a07bb7",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 11142000,
+       "y": 14805000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13458000,
+       "y": 10995000
+      },
+      "id": "ar-t-92e30c4b",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 13458000,
+       "y": 12489000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 11142000,
+       "y": 14805000
+      },
+      "id": "ar-t-429a9e9e",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 9825000,
+       "y": 14805000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9443000,
+       "y": 8000000
+      },
+      "id": "ar-t-92c988c8",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 8588000,
+       "y": 8000000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13458000,
+       "y": 10995000
+      },
+      "id": "ar-t-f25aa99e",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 14775000,
+       "y": 10995000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12816000,
+       "y": 10353000
+      },
+      "id": "ar-t-7887b036",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 13458000,
+       "y": 10995000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 10941000,
+       "y": 10353000
+      },
+      "id": "ar-t-e4e5e10c",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 12816000,
+       "y": 10353000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9443000,
+       "y": 8855000
+      },
+      "id": "ar-t-31056a0a",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 10941000,
+       "y": 10353000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9443000,
+       "y": 8000000
+      },
+      "id": "ar-t-40f5ce05",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 9443000,
+       "y": 8855000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4092000,
+       "y": 4700000
+      },
+      "id": "ar-t-1be61b64",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 3250000,
+       "y": 4700000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4092000,
+       "y": 5200000
+      },
+      "id": "ar-t-5249a3c6",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 6892000,
+       "y": 8000000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4092000,
+       "y": 4700000
+      },
+      "id": "ar-t-ab0a53f5",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 4092000,
+       "y": 5200000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 6892000,
+       "y": 8000000
+      },
+      "id": "ar-t-fe1fe2e1",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 8588000,
+       "y": 8000000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 6092000,
+       "y": 8800000
+      },
+      "id": "ar-t-b02b681b",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 6892000,
+       "y": 8000000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 6092000,
+       "y": 8800000
+      },
+      "id": "ar-t-adfa8401",
+      "layer": "copperTop",
+      "netId": 5,
+      "source": "autorouter",
+      "start": {
+       "x": 4900000,
+       "y": 8800000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 8568000,
+       "y": 4700000
+      },
+      "id": "ar-t-c51fc1dc",
+      "layer": "copperTop",
+      "netId": 6,
+      "source": "autorouter",
+      "start": {
+       "x": 7738000,
+       "y": 4700000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 8668000,
+       "y": 4800000
+      },
+      "id": "ar-t-6cfcd6c2",
+      "layer": "copperTop",
+      "netId": 6,
+      "source": "autorouter",
+      "start": {
+       "x": 10988000,
+       "y": 4800000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 8568000,
+       "y": 4700000
+      },
+      "id": "ar-t-9a254d04",
+      "layer": "copperTop",
+      "netId": 6,
+      "source": "autorouter",
+      "start": {
+       "x": 8668000,
+       "y": 4800000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 11755000,
+       "y": 8000000
+      },
+      "id": "ar-t-9e5d1d46",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 12730000,
+       "y": 7026000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 10413000,
+       "y": 8000000
+      },
+      "id": "ar-t-01269459",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 11755000,
+       "y": 8000000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13146000,
+       "y": 3758000
+      },
+      "id": "ar-t-c7a6f0d6",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 10988000,
+       "y": 1600000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13596000,
+       "y": 3758000
+      },
+      "id": "ar-t-4e506308",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 13146000,
+       "y": 3758000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13668000,
+       "y": 3830000
+      },
+      "id": "ar-t-437cb814",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 13596000,
+       "y": 3758000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 13668000,
+       "y": 6087000
+      },
+      "id": "ar-t-182fadc6",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 13668000,
+       "y": 3830000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12730000,
+       "y": 7026000
+      },
+      "id": "ar-t-9913c282",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 13668000,
+       "y": 6087000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16092000,
+       "y": 10388000
+      },
+      "id": "ar-t-ee4bd69b",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 12730000,
+       "y": 7026000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16092000,
+       "y": 12265000
+      },
+      "id": "ar-t-6ee1d3a1",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 16092000,
+       "y": 10388000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16092000,
+       "y": 12265000
+      },
+      "id": "ar-t-3c597819",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 14775000,
+       "y": 12265000
       },
       "width": 250000
      }
@@ -3806,46 +3806,16 @@
     "vias": [
      {
       "at": {
-       "x": 12325000,
-       "y": 6123000
-      },
-      "drill": 400000,
-      "id": "ar-v-87ab445a",
-      "layers": [
-       "copperTop",
-       "copperBottom"
-      ],
-      "netId": 4,
-      "size": 800000,
-      "source": "autorouter"
-     },
-     {
-      "at": {
-       "x": 12325000,
-       "y": 12383000
-      },
-      "drill": 400000,
-      "id": "ar-v-baefd33f",
-      "layers": [
-       "copperTop",
-       "copperBottom"
-      ],
-      "netId": 4,
-      "size": 800000,
-      "source": "autorouter"
-     },
-     {
-      "at": {
        "x": 7509000,
        "y": 3163000
       },
       "drill": 400000,
-      "id": "ar-v-abee19bb",
+      "id": "ar-v-466331ec",
       "layers": [
        "copperTop",
        "copperBottom"
       ],
-      "netId": 6,
+      "netId": 1,
       "size": 800000,
       "source": "autorouter"
      },
@@ -3855,12 +3825,42 @@
        "y": 14933000
       },
       "drill": 400000,
-      "id": "ar-v-0bfbb7ef",
+      "id": "ar-v-fbc5b5f4",
       "layers": [
        "copperTop",
        "copperBottom"
       ],
-      "netId": 6,
+      "netId": 1,
+      "size": 800000,
+      "source": "autorouter"
+     },
+     {
+      "at": {
+       "x": 12325000,
+       "y": 6123000
+      },
+      "drill": 400000,
+      "id": "ar-v-d67b113e",
+      "layers": [
+       "copperTop",
+       "copperBottom"
+      ],
+      "netId": 2,
+      "size": 800000,
+      "source": "autorouter"
+     },
+     {
+      "at": {
+       "x": 12325000,
+       "y": 12383000
+      },
+      "drill": 400000,
+      "id": "ar-v-cd936b43",
+      "layers": [
+       "copperTop",
+       "copperBottom"
+      ],
+      "netId": 2,
       "size": 800000,
       "source": "autorouter"
      }
@@ -3872,7 +3872,7 @@
     {
      "failure": "No legal path found without regressing existing connectivity or DRC.",
      "from": {
-      "footprintId": "b16-1c-inst-0007",
+      "footprintId": "b16c0000-e2e0-4000-8000-000000000016",
       "padNumber": "2",
       "reference": "R2"
      },
@@ -3880,7 +3880,7 @@
       "x": 10892000,
       "y": 6932500
      },
-     "netId": 2,
+     "netId": 3,
      "netName": "/root/NET_NEVM",
      "primaryBlockers": [
       "22 unrouted connection crossing(s) indicate congestion."
@@ -3889,7 +3889,7 @@
       "Inspect the highlighted airwire corridor, via landing area, keepouts, and protected copper before retrying this net."
      ],
      "to": {
-      "footprintId": "b16-1c-inst-0009",
+      "footprintId": "b16c0000-e2e0-4000-8000-000000000018",
       "padNumber": "2",
       "reference": "U1"
      }
@@ -3897,7 +3897,7 @@
     {
      "failure": "No legal path found without regressing existing connectivity or DRC.",
      "from": {
-      "footprintId": "b16-1c-inst-0009",
+      "footprintId": "b16c0000-e2e0-4000-8000-000000000018",
       "padNumber": "2",
       "reference": "U1"
      },
@@ -3905,7 +3905,7 @@
       "x": 12300000,
       "y": 12900000
      },
-     "netId": 2,
+     "netId": 3,
      "netName": "/root/NET_NEVM",
      "primaryBlockers": [
       "22 unrouted connection crossing(s) indicate congestion."
@@ -3914,7 +3914,7 @@
       "Inspect the highlighted airwire corridor, via landing area, keepouts, and protected copper before retrying this net."
      ],
      "to": {
-      "footprintId": "b16-1c-inst-0009",
+      "footprintId": "b16c0000-e2e0-4000-8000-000000000018",
       "padNumber": "6",
       "reference": "U1"
      }
@@ -3923,7 +3923,7 @@
    "passes": [
     {
      "accepted": true,
-     "candidateRevision": "pcb2-3a8d49bed87aac91",
+     "candidateRevision": "pcb2-1a5a595c1b0cd24f",
      "completedAfter": 15,
      "completedBefore": 0,
      "effort": "high",
@@ -3941,9 +3941,9 @@
      "reason": "Completed 15 additional connection(s).",
      "remainingAfter": 2,
      "remainingBefore": 17,
-     "routeAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p1-ac6c0082",
+     "routeAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p1-43094de6",
      "scope": "all_incomplete",
-     "sourceRevision": "pcb2-6e90506687445f57",
+     "sourceRevision": "pcb2-4a5fcf0e62b99bef",
      "targetNetIds": [
       1,
       2,
@@ -3973,11 +3973,11 @@
      "reason": "DSN preflight failed",
      "remainingAfter": 2,
      "remainingBefore": 2,
-     "routeAttemptId": "e2e-placement-candidate:05029a6c614f34fb58f166aa-p2-c6ddb8e0",
+     "routeAttemptId": "e2e-placement-candidate:668a7e95133d2e8e60abbabb-p2-7fca8167",
      "scope": "selected_incomplete",
-     "sourceRevision": "pcb2-3a8d49bed87aac91",
+     "sourceRevision": "pcb2-1a5a595c1b0cd24f",
      "targetNetIds": [
-      2
+      3
      ]
     }
    ],
@@ -3996,7 +3996,7 @@
    "totalElapsedMs": 0,
    "verification": {
     "completedConnections": 15,
-    "designRevision": "pcb2-3a8d49bed87aac91",
+    "designRevision": "pcb2-1a5a595c1b0cd24f",
     "drcErrors": 1,
     "layerUsage": {
      "copperBottom": {
@@ -4013,7 +4013,7 @@
       "filledAreaNm2": 0,
       "segments": 58,
       "stableNetIds": [],
-      "trackLengthNm": 89718602.42099012,
+      "trackLengthNm": 89718602.42099014,
       "viaAccessCount": 4,
       "zoneIds": []
      }
@@ -4023,149 +4023,205 @@
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0006",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0006:2:38451785:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0007",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000012",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0007:1:b23682a5:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000012:1:d6119796:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
-         "padIndex": 6,
-         "padInstanceId": "pad:b16-1c-inst-0009:7:4d500c57:1",
-         "padNumber": "7"
+         "padIndex": 4,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:5:fe0c7063:1",
+         "padNumber": "5"
         },
         {
-         "id": "ar-t-6786e30e",
+         "id": "ar-t-120b5438",
          "kind": "track"
         },
         {
-         "id": "ar-t-4455a2e1",
+         "id": "ar-t-afaadc5f",
          "kind": "track"
         },
         {
-         "id": "ar-t-87d0b6ee",
+         "id": "ar-t-13015e2e",
          "kind": "track"
         },
         {
-         "id": "ar-t-bb19d9b8",
+         "id": "ar-t-2dca0946",
          "kind": "track"
         },
         {
-         "id": "ar-t-32dccb18",
+         "id": "ar-t-97fea41e",
          "kind": "track"
         },
         {
-         "id": "ar-t-ec9153b2",
+         "id": "ar-t-35851c63",
          "kind": "track"
         },
         {
-         "id": "ar-t-dd6c0d02",
+         "id": "ar-t-ab4a668a",
          "kind": "track"
         },
         {
-         "id": "ar-t-8537f317",
-         "kind": "track"
+         "id": "ar-v-466331ec",
+         "kind": "via"
         },
         {
-         "id": "ar-t-85332ae1",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-8b522de1",
-         "kind": "track"
+         "id": "ar-v-fbc5b5f4",
+         "kind": "via"
         }
        ]
       ],
       "complete": true,
-      "completedConnections": 2,
+      "completedConnections": 1,
       "electricalState": "proven",
       "endpointKeys": [
-       "b16-1c-inst-0006::2",
-       "b16-1c-inst-0007::1",
-       "b16-1c-inst-0009::7"
+       "b16c0000-e2e0-4000-8000-000000000012::1",
+       "b16c0000-e2e0-4000-8000-000000000018::5"
       ],
       "netId": 1,
-      "netName": "/root/NET_QFX8",
-      "padCount": 3,
+      "netName": "/root/N$5",
+      "padCount": 2,
       "remainingConnections": 0,
-      "requiredConnections": 2,
-      "stableNetId": "net:049ad2759bfe5db9",
+      "requiredConnections": 1,
+      "stableNetId": "net:215669dd74b690a1",
       "terminalGroupIds": [
-       "terminal:net:049ad2759bfe5db9:3948a8ed",
-       "terminal:net:049ad2759bfe5db9:69a71f3d",
-       "terminal:net:049ad2759bfe5db9:b75f67f1"
+       "terminal:net:215669dd74b690a1:8ca35bbb",
+       "terminal:net:215669dd74b690a1:dd3792b9"
       ]
      },
      {
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0001",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000017",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0001:1:d6119796:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000017:1:b23682a5:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0007",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 2,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:3:ff265eb5:1",
+         "padNumber": "3"
+        },
+        {
+         "id": "ar-t-cfdbab11",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-e638e040",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-8569189b",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-390cd387",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-c033c8ff",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-fb2224b8",
+         "kind": "track"
+        },
+        {
+         "id": "ar-v-d67b113e",
+         "kind": "via"
+        },
+        {
+         "id": "ar-v-cd936b43",
+         "kind": "via"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 1,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000017::1",
+       "b16c0000-e2e0-4000-8000-000000000018::3"
+      ],
+      "netId": 2,
+      "netName": "/root/N$7",
+      "padCount": 2,
+      "remainingConnections": 0,
+      "requiredConnections": 1,
+      "stableNetId": "net:26b351d261bb8e76",
+      "terminalGroupIds": [
+       "terminal:net:26b351d261bb8e76:0222aba4",
+       "terminal:net:26b351d261bb8e76:92a3652d"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000010",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000010:1:d6119796:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000016",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0007:2:38451785:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000016:2:38451785:1",
          "padNumber": "2"
         },
         {
-         "id": "ar-t-9f70d00d",
+         "id": "ar-t-421c36ea",
          "kind": "track"
         },
         {
-         "id": "ar-t-2ce466a0",
+         "id": "ar-t-a0818853",
          "kind": "track"
         },
         {
-         "id": "ar-t-1c65e8a6",
+         "id": "ar-t-2ce3cbf1",
          "kind": "track"
         },
         {
-         "id": "ar-t-c083cdc2",
+         "id": "ar-t-e3304d6d",
          "kind": "track"
         },
         {
-         "id": "ar-t-30e21cb9",
+         "id": "ar-t-d194b8ae",
          "kind": "track"
         },
         {
-         "id": "ar-t-c0b41d0b",
+         "id": "ar-t-881dc1b8",
          "kind": "track"
         },
         {
-         "id": "ar-t-8cec9089",
+         "id": "ar-t-0a6dac7e",
          "kind": "track"
         }
        ],
        [
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0009:2:b85acb9f:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:2:b85acb9f:1",
          "padNumber": "2"
         }
        ],
        [
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 5,
-         "padInstanceId": "pad:b16-1c-inst-0009:6:6c403b77:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:6:6c403b77:1",
          "padNumber": "6"
         }
        ]
@@ -4174,434 +4230,119 @@
       "completedConnections": 1,
       "electricalState": "failed",
       "endpointKeys": [
-       "b16-1c-inst-0001::1",
-       "b16-1c-inst-0007::2",
-       "b16-1c-inst-0009::2",
-       "b16-1c-inst-0009::6"
+       "b16c0000-e2e0-4000-8000-000000000010::1",
+       "b16c0000-e2e0-4000-8000-000000000016::2",
+       "b16c0000-e2e0-4000-8000-000000000018::2",
+       "b16c0000-e2e0-4000-8000-000000000018::6"
       ],
-      "netId": 2,
+      "netId": 3,
       "netName": "/root/NET_NEVM",
       "padCount": 4,
       "remainingConnections": 2,
       "requiredConnections": 3,
-      "stableNetId": "net:2fb7cee4f18b46a0",
+      "stableNetId": "net:4b78348020ec410c",
       "terminalGroupIds": [
-       "terminal:net:2fb7cee4f18b46a0:66a71a84",
-       "terminal:net:2fb7cee4f18b46a0:8fa7075f",
-       "terminal:net:2fb7cee4f18b46a0:b65f665e",
-       "terminal:net:2fb7cee4f18b46a0:ba5f6caa"
+       "terminal:net:4b78348020ec410c:3f2845f4",
+       "terminal:net:4b78348020ec410c:8da35d4e",
+       "terminal:net:4b78348020ec410c:91a3639a",
+       "terminal:net:4b78348020ec410c:da44a3cf"
       ]
      },
      {
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0004",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000010",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0004:2:51964451:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000010:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0008",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000011",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0008:2:38451785:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000011:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "id": "ar-t-ba78573f",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-5262bc89",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-86fbd87f",
-         "kind": "track"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0004::2",
-       "b16-1c-inst-0008::2"
-      ],
-      "netId": 3,
-      "netName": "/root/N$6",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:4a1ccb5b061ad7df",
-      "terminalGroupIds": [
-       "terminal:net:4a1ccb5b061ad7df:0e1a3c83",
-       "terminal:net:4a1ccb5b061ad7df:15b9eb5f"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0008",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0008:1:b23682a5:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 2,
-         "padInstanceId": "pad:b16-1c-inst-0009:3:ff265eb5:1",
-         "padNumber": "3"
-        },
-        {
-         "id": "ar-t-9d08fa2d",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-cb2e080c",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-5e11e6f7",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-6e2afff3",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-519fd1eb",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-3a77c508",
-         "kind": "track"
-        },
-        {
-         "id": "ar-v-87ab445a",
-         "kind": "via"
-        },
-        {
-         "id": "ar-v-baefd33f",
-         "kind": "via"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0008::1",
-       "b16-1c-inst-0009::3"
-      ],
-      "netId": 4,
-      "netName": "/root/N$7",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:6b836314534dc9e0",
-      "terminalGroupIds": [
-       "terminal:net:6b836314534dc9e0:0f1a3e16",
-       "terminal:net:6b836314534dc9e0:bb5f6e3d"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0002",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0002:1:d6119796:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0005",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0005:1:f7ff8d63:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0006",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0006:1:b23682a5:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 3,
-         "padInstanceId": "pad:b16-1c-inst-0009:4:a18fc81f:1",
-         "padNumber": "4"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 7,
-         "padInstanceId": "pad:b16-1c-inst-0009:8:f230c3b9:1",
-         "padNumber": "8"
-        },
-        {
-         "id": "ar-t-41716839",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-2e596955",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-9c744190",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-26c0b0f2",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-d4779a08",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-04c0ca40",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-80f5a062",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-31612d0c",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-4f874d4b",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-711d861e",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-c37b0f24",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-229e6383",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-34f438ef",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-688fe341",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-7a68bb47",
-         "kind": "track"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 4,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0002::1",
-       "b16-1c-inst-0005::1",
-       "b16-1c-inst-0006::1",
-       "b16-1c-inst-0009::4",
-       "b16-1c-inst-0009::8"
-      ],
-      "netId": 5,
-      "netName": "/root/VCC",
-      "padCount": 5,
-      "remainingConnections": 0,
-      "requiredConnections": 4,
-      "stableNetId": "net:ce763183d26e0c87",
-      "terminalGroupIds": [
-       "terminal:net:ce763183d26e0c87:03b35d20",
-       "terminal:net:ce763183d26e0c87:3648a434",
-       "terminal:net:ce763183d26e0c87:a0d7d823",
-       "terminal:net:ce763183d26e0c87:b05f5cec",
-       "terminal:net:ce763183d26e0c87:b45f6338"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0003",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0003:1:d6119796:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 4,
-         "padInstanceId": "pad:b16-1c-inst-0009:5:fe0c7063:1",
-         "padNumber": "5"
-        },
-        {
-         "id": "ar-t-fa4cc1b1",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-47cf64d2",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-e3f668cf",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-4df1ad6b",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-4e6b90bf",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-5cd2b29e",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-53a2a1ef",
-         "kind": "track"
-        },
-        {
-         "id": "ar-v-abee19bb",
-         "kind": "via"
-        },
-        {
-         "id": "ar-v-0bfbb7ef",
-         "kind": "via"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0003::1",
-       "b16-1c-inst-0009::5"
-      ],
-      "netId": 6,
-      "netName": "/root/N$5",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:f3544a711b2e85f5",
-      "terminalGroupIds": [
-       "terminal:net:f3544a711b2e85f5:129abfc9",
-       "terminal:net:f3544a711b2e85f5:b55f64cb"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0001",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000012",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0001:2:9e3e35d6:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000012:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0002",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0002:2:9e3e35d6:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0003",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0003:2:9e3e35d6:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0004",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000013",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0004:1:efa39d55:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000013:1:efa39d55:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0005",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000014",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0005:2:957b37f3:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000014:2:957b37f3:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0009:1:853288b3:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:1:853288b3:1",
          "padNumber": "1"
         },
         {
-         "id": "ar-t-1a1f178a",
+         "id": "ar-t-1e119917",
          "kind": "track"
         },
         {
-         "id": "ar-t-d807f12f",
+         "id": "ar-t-64482e2e",
          "kind": "track"
         },
         {
-         "id": "ar-t-dd04ff68",
+         "id": "ar-t-ca4ee8ed",
          "kind": "track"
         },
         {
-         "id": "ar-t-0f6e6d21",
+         "id": "ar-t-42f09260",
          "kind": "track"
         },
         {
-         "id": "ar-t-0382ba1d",
+         "id": "ar-t-1a8672b4",
          "kind": "track"
         },
         {
-         "id": "ar-t-88194f6b",
+         "id": "ar-t-3deb96ee",
          "kind": "track"
         },
         {
-         "id": "ar-t-913729b0",
+         "id": "ar-t-c19f07c1",
          "kind": "track"
         },
         {
-         "id": "ar-t-c923196c",
+         "id": "ar-t-356fc87d",
          "kind": "track"
         },
         {
-         "id": "ar-t-11d899cb",
+         "id": "ar-t-560b3fee",
          "kind": "track"
         },
         {
-         "id": "ar-t-f88374d7",
+         "id": "ar-t-80db86b2",
          "kind": "track"
         },
         {
-         "id": "ar-t-4b098e88",
+         "id": "ar-t-3298c299",
          "kind": "track"
         },
         {
-         "id": "ar-t-d6fcad3c",
+         "id": "ar-t-f23dd399",
          "kind": "track"
         },
         {
-         "id": "ar-t-eb4fd9d9",
+         "id": "ar-t-d541d7f0",
          "kind": "track"
         }
        ]
@@ -4610,26 +4351,285 @@
       "completedConnections": 5,
       "electricalState": "proven",
       "endpointKeys": [
-       "b16-1c-inst-0001::2",
-       "b16-1c-inst-0002::2",
-       "b16-1c-inst-0003::2",
-       "b16-1c-inst-0004::1",
-       "b16-1c-inst-0005::2",
-       "b16-1c-inst-0009::1"
+       "b16c0000-e2e0-4000-8000-000000000010::2",
+       "b16c0000-e2e0-4000-8000-000000000011::2",
+       "b16c0000-e2e0-4000-8000-000000000012::2",
+       "b16c0000-e2e0-4000-8000-000000000013::1",
+       "b16c0000-e2e0-4000-8000-000000000014::2",
+       "b16c0000-e2e0-4000-8000-000000000018::1"
       ],
-      "netId": 7,
+      "netId": 4,
       "netName": "/root/GND",
       "padCount": 6,
       "remainingConnections": 0,
       "requiredConnections": 5,
-      "stableNetId": "net:f4ea701350f3574f",
+      "stableNetId": "net:7fc7761f07e69fa3",
       "terminalGroupIds": [
-       "terminal:net:f4ea701350f3574f:06b361d9",
-       "terminal:net:f4ea701350f3574f:0f9abb10",
-       "terminal:net:f4ea701350f3574f:16b9ecf2",
-       "terminal:net:f4ea701350f3574f:90a708f2",
-       "terminal:net:f4ea701350f3574f:a1d7d9b6",
-       "terminal:net:f4ea701350f3574f:b95f6b17"
+       "terminal:net:7fc7761f07e69fa3:4effa79b",
+       "terminal:net:7fc7761f07e69fa3:4f8e2e10",
+       "terminal:net:7fc7761f07e69fa3:6db1e126",
+       "terminal:net:7fc7761f07e69fa3:90a36207",
+       "terminal:net:7fc7761f07e69fa3:da378e00",
+       "terminal:net:7fc7761f07e69fa3:db44a562"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000011",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000011:1:d6119796:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000014",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000014:1:f7ff8d63:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000015",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000015:1:b23682a5:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 3,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:4:a18fc81f:1",
+         "padNumber": "4"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 7,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:8:f230c3b9:1",
+         "padNumber": "8"
+        },
+        {
+         "id": "ar-t-a1a07bb7",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-92e30c4b",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-429a9e9e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-92c988c8",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-f25aa99e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-7887b036",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-e4e5e10c",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-31056a0a",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-40f5ce05",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-1be61b64",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-5249a3c6",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-ab0a53f5",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-fe1fe2e1",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-b02b681b",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-adfa8401",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 4,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000011::1",
+       "b16c0000-e2e0-4000-8000-000000000014::1",
+       "b16c0000-e2e0-4000-8000-000000000015::1",
+       "b16c0000-e2e0-4000-8000-000000000018::4",
+       "b16c0000-e2e0-4000-8000-000000000018::8"
+      ],
+      "netId": 5,
+      "netName": "/root/VCC",
+      "padCount": 5,
+      "remainingConnections": 0,
+      "requiredConnections": 4,
+      "stableNetId": "net:bb37a383393d6427",
+      "terminalGroupIds": [
+       "terminal:net:bb37a383393d6427:4fffa92e",
+       "terminal:net:bb37a383393d6427:6294bde2",
+       "terminal:net:bb37a383393d6427:6cb1df93",
+       "terminal:net:bb37a383393d6427:87a353dc",
+       "terminal:net:bb37a383393d6427:8ba35a28"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000013",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000013:2:51964451:1",
+         "padNumber": "2"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000017",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000017:2:38451785:1",
+         "padNumber": "2"
+        },
+        {
+         "id": "ar-t-c51fc1dc",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-6cfcd6c2",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-9a254d04",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 1,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000013::2",
+       "b16c0000-e2e0-4000-8000-000000000017::2"
+      ],
+      "netId": 6,
+      "netName": "/root/N$6",
+      "padCount": 2,
+      "remainingConnections": 0,
+      "requiredConnections": 1,
+      "stableNetId": "net:d912389fdad1ad03",
+      "terminalGroupIds": [
+       "terminal:net:d912389fdad1ad03:0522b05d",
+       "terminal:net:d912389fdad1ad03:528e32c9"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000015",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000015:2:38451785:1",
+         "padNumber": "2"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000016",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000016:1:b23682a5:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 6,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:7:4d500c57:1",
+         "padNumber": "7"
+        },
+        {
+         "id": "ar-t-9e5d1d46",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-01269459",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-c7a6f0d6",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-4e506308",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-437cb814",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-182fadc6",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-9913c282",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-ee4bd69b",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-6ee1d3a1",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-3c597819",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 2,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000015::2",
+       "b16c0000-e2e0-4000-8000-000000000016::1",
+       "b16c0000-e2e0-4000-8000-000000000018::7"
+      ],
+      "netId": 7,
+      "netName": "/root/NET_QFX8",
+      "padCount": 3,
+      "remainingConnections": 0,
+      "requiredConnections": 2,
+      "stableNetId": "net:e6014a6bce88377f",
+      "terminalGroupIds": [
+       "terminal:net:e6014a6bce88377f:42284aad",
+       "terminal:net:e6014a6bce88377f:6194bc4f",
+       "terminal:net:e6014a6bce88377f:8ea35ee1"
       ]
      }
     ],
@@ -4639,7 +4639,7 @@
        "x": 11959000,
        "y": 1600000
       },
-      "netId": 2,
+      "netId": 3,
       "to": {
        "x": 9825000,
        "y": 12265000
@@ -4650,7 +4650,7 @@
        "x": 9825000,
        "y": 12265000
       },
-      "netId": 2,
+      "netId": 3,
       "to": {
        "x": 14775000,
        "y": 13535000
@@ -4670,16 +4670,16 @@
     "violations": [
      {
       "constraintIds": [
-       "manufacturing-rule:725541805a8c985dd16b5da64ed0980b"
+       "manufacturing-rule:27cd770faea13058971defb14c6ec402"
       ],
       "detail": "/root/NET_NEVM still has 3 disconnected terminal groups across C1.1, R2.2, U1.2, U1.6. Finish the highlighted airwire connections before manufacturing.",
-      "id": "drc_1ef57be2",
+      "id": "drc_72ecd776",
       "items": [
        {
-        "instanceId": "b16-1c-inst-0001",
+        "instanceId": "b16c0000-e2e0-4000-8000-000000000010",
         "kind": "pad",
         "padIndex": 0,
-        "padInstanceId": "pad:b16-1c-inst-0001:1:d6119796:1",
+        "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000010:1:d6119796:1",
         "padNumber": "1"
        }
       ],
@@ -4689,7 +4689,7 @@
        "y": 6932500
       },
       "measuredNm": 2,
-      "ruleResolutionHash": "c6-78838f3ac4340fc777d7532ca2f27661",
+      "ruleResolutionHash": "c6-01aaf2e8d12033ddc550623efa77d663",
       "severity": "error",
       "summary": "/root/NET_NEVM is incomplete: 2 connections remain.",
       "thresholdNm": 0
@@ -4697,12 +4697,12 @@
     ]
    }
   },
-  "pcb2-ff0d074eb025cdff": {
+  "pcb2-b2d4a6209fb553f5": {
    "acceptedPasses": 1,
    "attempts": [
     {
      "accepted": true,
-     "candidateRevision": "pcb2-bbc76fdb18ec7646",
+     "candidateRevision": "pcb2-90a18cce0804e2c7",
      "connectivityAfter": {
       "completed": 17,
       "remaining": 0
@@ -4724,8 +4724,8 @@
      "elapsedMs": 0,
      "engineMaxPasses": 200,
      "evidence": {
-      "dsnDigest": "dsn-b3b0973a",
-      "dsnSourceRevision": "pcb2-ff0d074eb025cdff",
+      "dsnDigest": "dsn-15644f18",
+      "dsnSourceRevision": "pcb2-b2d4a6209fb553f5",
       "importedTrackCount": 80,
       "importedViaCount": 2,
       "outputFileStatus": "nonempty",
@@ -4740,17 +4740,17 @@
        "version": "2.2.4"
       },
       "semanticStatus": "success",
-      "sesByteLength": 7202,
-      "sesDigest": "ses-68656cbd"
+      "sesByteLength": 7382,
+      "sesDigest": "ses-a369c8d1"
      },
      "pass": 1,
      "phase": "acceptance",
      "rejectionReasons": [],
-     "reportedRouteAttemptId": "e2e-placement-candidate:812d000c70f0561f855ef92e-p1-5b94426b",
-     "reportedSourceRevision": "pcb2-ff0d074eb025cdff",
+     "reportedRouteAttemptId": "e2e-placement-candidate:a320231f9aa5df5001842edd-p1-ae71496f",
+     "reportedSourceRevision": "pcb2-b2d4a6209fb553f5",
      "returnedCandidate": true,
-     "routeAttemptId": "e2e-placement-candidate:812d000c70f0561f855ef92e-p1-5b94426b",
-     "sourceRevision": "pcb2-ff0d074eb025cdff",
+     "routeAttemptId": "e2e-placement-candidate:a320231f9aa5df5001842edd-p1-ae71496f",
+     "sourceRevision": "pcb2-b2d4a6209fb553f5",
      "targetNetIds": [
       1,
       2,
@@ -4956,15 +4956,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0001",
+      "id": "b16c0000-e2e0-4000-8000-000000000010",
       "padNets": {
-       "1": 2,
-       "2": 7
+       "1": 3,
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0001",
-        "endpointKey": "b16-1c-inst-0001::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000010::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -4973,8 +4973,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0001",
-        "endpointKey": "b16-1c-inst-0001::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000010::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -4987,13 +4987,13 @@
       "rotationDeg": 90,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:7a6233ee48bd98b45e9bb266cbd38d03:r4",
-       "componentInstanceId": "b16-1c-inst-0001",
+       "bindingRevisionId": "physical-binding:fd7256bda8b2c5936d1233449296b73c:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000010",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_340ce951b0a0b3bd0815551d088275a28f14e8d805a4ee2fce96c58088aa4890",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -5188,15 +5188,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0002",
+      "id": "b16c0000-e2e0-4000-8000-000000000011",
       "padNets": {
        "1": 5,
-       "2": 7
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0002",
-        "endpointKey": "b16-1c-inst-0002::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000011::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -5205,8 +5205,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0002",
-        "endpointKey": "b16-1c-inst-0002::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000011::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -5219,13 +5219,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:ba787cace1f8c6704b1ea838ef9d6c39:r4",
-       "componentInstanceId": "b16-1c-inst-0002",
+       "bindingRevisionId": "physical-binding:aed982e1e791fbb6d9a4c26d2c4ea60f:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000011",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_6f2de14ec76a2c610e063a5de4216ee6e2347aacf5de118c397b8a78619fad9e",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -5420,15 +5420,15 @@
       },
       "footprintId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0003",
+      "id": "b16c0000-e2e0-4000-8000-000000000012",
       "padNets": {
-       "1": 6,
-       "2": 7
+       "1": 1,
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0003",
-        "endpointKey": "b16-1c-inst-0003::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000012::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -5437,8 +5437,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0003",
-        "endpointKey": "b16-1c-inst-0003::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000012::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -5451,13 +5451,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:a7e8b48f3200bf4cfbfaf35326e8ea38:r4",
-       "componentInstanceId": "b16-1c-inst-0003",
+       "bindingRevisionId": "physical-binding:83537da56168f83931373e098da46ef7:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000012",
        "footprintAssetVersionId": "footprintv_745f6dbb918678475dd9076c11793e3e780261a43959d8866dbbe99f6fa71697",
        "footprintContentDigest": "62775a51fe74ba7f1b572de327bdbd3fc92582721b2abcaa47787865590d89cb",
        "mappingCertificateId": "map_e1d0f88eb70843abb5e25e5530603a2d665098243038ebef89a6d337e90b335c",
        "symbolAssetVersionId": "symbolv_3bd18f165e1a852d76f834ae60b14fbb9575b148df86d00ec63d9a5cdebf3b05",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -5716,15 +5716,15 @@
       },
       "footprintId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0004",
+      "id": "b16c0000-e2e0-4000-8000-000000000013",
       "padNets": {
-       "1": 7,
-       "2": 3
+       "1": 4,
+       "2": 6
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0004",
-        "endpointKey": "b16-1c-inst-0004::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000013::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -5733,8 +5733,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0004",
-        "endpointKey": "b16-1c-inst-0004::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000013::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -5747,13 +5747,13 @@
       "rotationDeg": 90,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:1a80847590c1df3a39388d793a103c25:r4",
-       "componentInstanceId": "b16-1c-inst-0004",
+       "bindingRevisionId": "physical-binding:09388f117d9dac7cfb592d6b4abb32a8:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000013",
        "footprintAssetVersionId": "footprintv_6d13b18971a1582bb2e14eaba3e2e0b33e634f39514e25fbfe173f6b3c93fc7c",
        "footprintContentDigest": "8806125556e590701b13b47a1725dff28fc47fca41a7905c7d78c8312d08cbbd",
        "mappingCertificateId": "map_39648e2d1513ac87e8432501abb2ca02df782fd82b495a7d823bac141be95c29",
        "symbolAssetVersionId": "symbolv_d26c0f7ed3ec1458acaae93c3fd1b766365336a5447afd8daac73609255c865a",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -6062,15 +6062,15 @@
       },
       "footprintId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0005",
+      "id": "b16c0000-e2e0-4000-8000-000000000014",
       "padNets": {
        "1": 5,
-       "2": 7
+       "2": 4
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0005",
-        "endpointKey": "b16-1c-inst-0005::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000014::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -6079,8 +6079,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0005",
-        "endpointKey": "b16-1c-inst-0005::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000014::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -6093,13 +6093,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:5f7d2d761de7a2d971904b631092ddf0:r4",
-       "componentInstanceId": "b16-1c-inst-0005",
+       "bindingRevisionId": "physical-binding:112b1152b898a5cdc9abff6bc5ce4ad5:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000014",
        "footprintAssetVersionId": "footprintv_49af44e6db865d518a68460cddd4f3682566df2b4b26f0cff750768f140942d6",
        "footprintContentDigest": "5301303268f72ba9cc94b7fdbac355951933e6854272ce8d300b679b86b5d45d",
        "mappingCertificateId": "map_a11ab74e4c65deeed36c157d12fc8ac2d2d32b1388c2a7d7aa58284b059c224e",
        "symbolAssetVersionId": "symbolv_8cb1b3c3bcd9c11ff8a6ac717053e986782cfe0c0ae63bb81f4b5b13dc02807b",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -6294,15 +6294,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0006",
+      "id": "b16c0000-e2e0-4000-8000-000000000015",
       "padNets": {
        "1": 5,
-       "2": 1
+       "2": 7
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0006",
-        "endpointKey": "b16-1c-inst-0006::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000015::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -6311,8 +6311,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0006",
-        "endpointKey": "b16-1c-inst-0006::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000015::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -6325,13 +6325,13 @@
       "rotationDeg": 270,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:57595f8f061b7b239016c52e4514c04b:r4",
-       "componentInstanceId": "b16-1c-inst-0006",
+       "bindingRevisionId": "physical-binding:e7cce066365e3093624245ad7eb6d614:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000015",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_59f66086395063c60395ae0a5b69ef8bce8e163b8467fe8455cfd3e96e06b60d",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -6526,15 +6526,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0007",
+      "id": "b16c0000-e2e0-4000-8000-000000000016",
       "padNets": {
-       "1": 1,
-       "2": 2
+       "1": 7,
+       "2": 3
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0007",
-        "endpointKey": "b16-1c-inst-0007::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000016::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -6543,8 +6543,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0007",
-        "endpointKey": "b16-1c-inst-0007::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000016::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -6557,13 +6557,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:e1f2abfc5a5c2a446ec37a8b91f8c949:r4",
-       "componentInstanceId": "b16-1c-inst-0007",
+       "bindingRevisionId": "physical-binding:9c766a2fa614869078a11b7d61f48845:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000016",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_8faec862de3894af5cbe60b2f13baa5eb0416bfe518d0729ee1f5676acbc018a",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -6758,15 +6758,15 @@
       },
       "footprintId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0008",
+      "id": "b16c0000-e2e0-4000-8000-000000000017",
       "padNets": {
-       "1": 4,
-       "2": 3
+       "1": 2,
+       "2": 6
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0008",
-        "endpointKey": "b16-1c-inst-0008::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000017::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -6775,8 +6775,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0008",
-        "endpointKey": "b16-1c-inst-0008::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000017::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -6789,13 +6789,13 @@
       "rotationDeg": 180,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:6843c2ad0cf00d5d96740f899381e4b4:r4",
-       "componentInstanceId": "b16-1c-inst-0008",
+       "bindingRevisionId": "physical-binding:3fd3529a3f07c3e1ec0c9f2c1c2ebcf7:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000017",
        "footprintAssetVersionId": "footprintv_0ecbc2c878a8084e7c3d45a6386e3c286fa0e52ae0f0663a4afd2edb1975f967",
        "footprintContentDigest": "f050b6a50cc7e6f86291fb7aa8f87b0d02255e21cfbddf291cdccc87e5889794",
        "mappingCertificateId": "map_05426d48cb5bca4546f9f876c4b2c85e8eea7964994b02404bbd8a28a73f02f9",
        "symbolAssetVersionId": "symbolv_db8b00243f04dc529af17aca2c057a6cfbdbada7fdc4370402c8c97e7f44a146",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      },
      {
@@ -7338,21 +7338,21 @@
       },
       "footprintId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
       "footprintPadClassifications": {},
-      "id": "b16-1c-inst-0009",
+      "id": "b16c0000-e2e0-4000-8000-000000000018",
       "padNets": {
-       "1": 7,
-       "2": 2,
-       "3": 4,
+       "1": 4,
+       "2": 3,
+       "3": 2,
        "4": 5,
-       "5": 6,
-       "6": 2,
-       "7": 1,
+       "5": 1,
+       "6": 3,
+       "7": 7,
        "8": 5
       },
       "pinPadMappings": [
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::1",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::1",
         "mappingKind": "electrical",
         "padNumbers": [
          "1"
@@ -7361,8 +7361,8 @@
         "symbolPinNumber": "1"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::2",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::2",
         "mappingKind": "electrical",
         "padNumbers": [
          "2"
@@ -7371,8 +7371,8 @@
         "symbolPinNumber": "2"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::3",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::3",
         "mappingKind": "electrical",
         "padNumbers": [
          "3"
@@ -7381,8 +7381,8 @@
         "symbolPinNumber": "3"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::4",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::4",
         "mappingKind": "electrical",
         "padNumbers": [
          "4"
@@ -7391,8 +7391,8 @@
         "symbolPinNumber": "4"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::5",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::5",
         "mappingKind": "electrical",
         "padNumbers": [
          "5"
@@ -7401,8 +7401,8 @@
         "symbolPinNumber": "5"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::6",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::6",
         "mappingKind": "electrical",
         "padNumbers": [
          "6"
@@ -7411,8 +7411,8 @@
         "symbolPinNumber": "6"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::7",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::7",
         "mappingKind": "electrical",
         "padNumbers": [
          "7"
@@ -7421,8 +7421,8 @@
         "symbolPinNumber": "7"
        },
        {
-        "componentInstanceId": "b16-1c-inst-0009",
-        "endpointKey": "b16-1c-inst-0009::8",
+        "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
+        "endpointKey": "b16c0000-e2e0-4000-8000-000000000018::8",
         "mappingKind": "electrical",
         "padNumbers": [
          "8"
@@ -7435,13 +7435,13 @@
       "rotationDeg": 0,
       "side": "top",
       "syncIdentity": {
-       "bindingRevisionId": "physical-binding:5a918e3bb390347ea9ddacf11d07cbf6:r4",
-       "componentInstanceId": "b16-1c-inst-0009",
+       "bindingRevisionId": "physical-binding:401941364eecea3e01da3955a5da818c:r4",
+       "componentInstanceId": "b16c0000-e2e0-4000-8000-000000000018",
        "footprintAssetVersionId": "footprintv_1427431314d9755c85e26cc0a6f5aa86083c9c173d6ff716e00aec2af97c72dc",
        "footprintContentDigest": "074ecb2092b24fa4b4b9cdd7c926fc587b0d7d6d21e7341e57935fd42d36894f",
        "mappingCertificateId": "map_4df236ff05c950644e9d261331704a9583101e1f2fb42245f9d0e9a1996bb8e7",
        "symbolAssetVersionId": "symbolv_c1e1c29563fc7559ae4d110c40b6de98d80b98e32d499d85c1d7df4804d89b6c",
-       "syncPlanId": "pcb-sync-plan:b41659b59d2a71a625df2b4aa38ecf81"
+       "syncPlanId": "pcb-sync-plan:5cbaff7005ee0b1b732304c3e48306ee"
       }
      }
     ],
@@ -7456,76 +7456,76 @@
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0006::2",
-       "b16-1c-inst-0007::1",
-       "b16-1c-inst-0009::7"
+       "b16c0000-e2e0-4000-8000-000000000012::1",
+       "b16c0000-e2e0-4000-8000-000000000018::5"
       ],
       "id": 1,
-      "name": "/root/NET_QFX8",
-      "stableId": "net:049ad2759bfe5db9"
+      "name": "/root/N$5",
+      "stableId": "net:215669dd74b690a1"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0001::1",
-       "b16-1c-inst-0007::2",
-       "b16-1c-inst-0009::2",
-       "b16-1c-inst-0009::6"
+       "b16c0000-e2e0-4000-8000-000000000017::1",
+       "b16c0000-e2e0-4000-8000-000000000018::3"
       ],
       "id": 2,
-      "name": "/root/NET_NEVM",
-      "stableId": "net:2fb7cee4f18b46a0"
+      "name": "/root/N$7",
+      "stableId": "net:26b351d261bb8e76"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0004::2",
-       "b16-1c-inst-0008::2"
+       "b16c0000-e2e0-4000-8000-000000000010::1",
+       "b16c0000-e2e0-4000-8000-000000000016::2",
+       "b16c0000-e2e0-4000-8000-000000000018::2",
+       "b16c0000-e2e0-4000-8000-000000000018::6"
       ],
       "id": 3,
-      "name": "/root/N$6",
-      "stableId": "net:4a1ccb5b061ad7df"
+      "name": "/root/NET_NEVM",
+      "stableId": "net:4b78348020ec410c"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0008::1",
-       "b16-1c-inst-0009::3"
+       "b16c0000-e2e0-4000-8000-000000000010::2",
+       "b16c0000-e2e0-4000-8000-000000000011::2",
+       "b16c0000-e2e0-4000-8000-000000000012::2",
+       "b16c0000-e2e0-4000-8000-000000000013::1",
+       "b16c0000-e2e0-4000-8000-000000000014::2",
+       "b16c0000-e2e0-4000-8000-000000000018::1"
       ],
       "id": 4,
-      "name": "/root/N$7",
-      "stableId": "net:6b836314534dc9e0"
+      "name": "/root/GND",
+      "stableId": "net:7fc7761f07e69fa3"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0002::1",
-       "b16-1c-inst-0005::1",
-       "b16-1c-inst-0006::1",
-       "b16-1c-inst-0009::4",
-       "b16-1c-inst-0009::8"
+       "b16c0000-e2e0-4000-8000-000000000011::1",
+       "b16c0000-e2e0-4000-8000-000000000014::1",
+       "b16c0000-e2e0-4000-8000-000000000015::1",
+       "b16c0000-e2e0-4000-8000-000000000018::4",
+       "b16c0000-e2e0-4000-8000-000000000018::8"
       ],
       "id": 5,
       "name": "/root/VCC",
-      "stableId": "net:ce763183d26e0c87"
+      "stableId": "net:bb37a383393d6427"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0003::1",
-       "b16-1c-inst-0009::5"
+       "b16c0000-e2e0-4000-8000-000000000013::2",
+       "b16c0000-e2e0-4000-8000-000000000017::2"
       ],
       "id": 6,
-      "name": "/root/N$5",
-      "stableId": "net:f3544a711b2e85f5"
+      "name": "/root/N$6",
+      "stableId": "net:d912389fdad1ad03"
      },
      {
       "endpointKeys": [
-       "b16-1c-inst-0001::2",
-       "b16-1c-inst-0002::2",
-       "b16-1c-inst-0003::2",
-       "b16-1c-inst-0004::1",
-       "b16-1c-inst-0005::2",
-       "b16-1c-inst-0009::1"
+       "b16c0000-e2e0-4000-8000-000000000015::2",
+       "b16c0000-e2e0-4000-8000-000000000016::1",
+       "b16c0000-e2e0-4000-8000-000000000018::7"
       ],
       "id": 7,
-      "name": "/root/GND",
-      "stableId": "net:f4ea701350f3574f"
+      "name": "/root/NET_QFX8",
+      "stableId": "net:e6014a6bce88377f"
      }
     ],
     "outline": {
@@ -7543,466 +7543,91 @@
     "tracks": [
      {
       "end": {
-       "x": 18900000,
-       "y": 18759000
+       "x": 12864000,
+       "y": 4033000
       },
-      "id": "ar-t-e08417a4",
+      "id": "ar-t-f3590586",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 18900000,
-       "y": 19613000
+       "x": 11692000,
+       "y": 5205000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 19213000,
-       "y": 15942000
+       "x": 14192000,
+       "y": 4033000
       },
-      "id": "ar-t-7d2ddbb3",
+      "id": "ar-t-4c784e04",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 19213000,
-       "y": 14900000
+       "x": 12864000,
+       "y": 4033000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 19942000,
-       "y": 16671000
+       "x": 14608000,
+       "y": 4449000
       },
-      "id": "ar-t-1d55af29",
+      "id": "ar-t-8f576ea7",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 19213000,
-       "y": 15942000
+       "x": 14192000,
+       "y": 4033000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 19942000,
-       "y": 18571000
+       "x": 14608000,
+       "y": 5100000
       },
-      "id": "ar-t-12788b8f",
+      "id": "ar-t-ca62cc7b",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 19942000,
-       "y": 16671000
+       "x": 14608000,
+       "y": 4449000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 19754000,
-       "y": 18759000
+       "x": 14608000,
+       "y": 5100000
       },
-      "id": "ar-t-2d5c4533",
+      "id": "ar-t-82b39492",
       "layer": "copperTop",
       "netId": 1,
       "source": "autorouter",
       "start": {
-       "x": 19942000,
-       "y": 18571000
+       "x": 15450000,
+       "y": 5100000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 18900000,
-       "y": 18759000
+       "x": 11692000,
+       "y": 5205000
       },
-      "id": "ar-t-3f3fe426",
+      "id": "ar-t-410b2257",
       "layer": "copperTop",
       "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 19754000,
-       "y": 18759000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 18359000,
-       "y": 14046000
-      },
-      "id": "ar-t-49eeb361",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 18359000,
-       "y": 14900000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 18228000,
-       "y": 13915000
-      },
-      "id": "ar-t-0e5a11ed",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 18359000,
-       "y": 14046000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 18228000,
-       "y": 5918000
-      },
-      "id": "ar-t-9963fdec",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 18228000,
-       "y": 13915000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 14975000,
-       "y": 2665000
-      },
-      "id": "ar-t-802ab307",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 18228000,
-       "y": 5918000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 10375000,
-       "y": 2665000
-      },
-      "id": "ar-t-ec17f19c",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 14975000,
-       "y": 2665000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 18359000,
-       "y": 14900000
-      },
-      "id": "ar-t-25dc6994",
-      "layer": "copperTop",
-      "netId": 1,
-      "source": "autorouter",
-      "start": {
-       "x": 19213000,
-       "y": 14900000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4108000,
-       "y": 953000
-      },
-      "id": "ar-t-2cf18d1b",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 4108000,
-       "y": 2665000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4368000,
-       "y": 693000
-      },
-      "id": "ar-t-786e8fb6",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 4108000,
-       "y": 953000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6504000,
-       "y": 693000
-      },
-      "id": "ar-t-6b5efbe7",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 4368000,
-       "y": 693000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9058000,
-       "y": 3247000
-      },
-      "id": "ar-t-5d6d1592",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 6504000,
-       "y": 693000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9058000,
-       "y": 3935000
-      },
-      "id": "ar-t-3426925f",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 9058000,
-       "y": 3247000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16534000,
-       "y": 14900000
-      },
-      "id": "ar-t-6034d6e3",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 17388000,
-       "y": 14900000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9867000,
-       "y": 16150000
-      },
-      "id": "ar-t-302e540b",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 8800000,
-       "y": 16150000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 10645000,
-       "y": 15372000
-      },
-      "id": "ar-t-5586753e",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 9867000,
-       "y": 16150000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16062000,
-       "y": 15372000
-      },
-      "id": "ar-t-db34c92a",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 10645000,
-       "y": 15372000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 16534000,
-       "y": 14900000
-      },
-      "id": "ar-t-34856f8d",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 16062000,
-       "y": 15372000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 3641000,
-       "y": 12058000
-      },
-      "id": "ar-t-29ce1602",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 7733000,
-       "y": 16150000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 3641000,
-       "y": 3132000
-      },
-      "id": "ar-t-c80d41f6",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 3641000,
-       "y": 12058000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4108000,
-       "y": 2665000
-      },
-      "id": "ar-t-7c8e717e",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 3641000,
-       "y": 3132000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 7733000,
-       "y": 16150000
-      },
-      "id": "ar-t-8a11af91",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 8800000,
-       "y": 16150000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 4108000,
-       "y": 2665000
-      },
-      "id": "ar-t-8d92bf5c",
-      "layer": "copperTop",
-      "netId": 2,
-      "source": "autorouter",
-      "start": {
-       "x": 5425000,
-       "y": 2665000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9058000,
-       "y": 3935000
-      },
-      "id": "ar-t-10c6dbf9",
-      "layer": "copperTop",
-      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 10375000,
-       "y": 3935000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6742000,
-       "y": 10363000
-      },
-      "id": "ar-t-74ae1bb7",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 5700000,
-       "y": 10363000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6905000,
-       "y": 10200000
-      },
-      "id": "ar-t-b3e02155",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 10088000,
-       "y": 10200000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6742000,
-       "y": 10363000
-      },
-      "id": "ar-t-6c75ffe3",
-      "layer": "copperTop",
-      "netId": 3,
-      "source": "autorouter",
-      "start": {
-       "x": 6905000,
-       "y": 10200000
+       "y": 5205000
       },
       "width": 250000
      },
@@ -8011,9 +7636,9 @@
        "x": 4108000,
        "y": 3935000
       },
-      "id": "ar-t-9fa6b59a",
+      "id": "ar-t-eb2d675e",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 5425000,
@@ -8026,9 +7651,9 @@
        "x": 11059000,
        "y": 10200000
       },
-      "id": "ar-t-099805be",
+      "id": "ar-t-832b9792",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 11913000,
@@ -8041,9 +7666,9 @@
        "x": 4108000,
        "y": 5682000
       },
-      "id": "ar-t-fae15160",
+      "id": "ar-t-2f36a3a4",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 4108000,
@@ -8056,9 +7681,9 @@
        "x": 6901000,
        "y": 8475000
       },
-      "id": "ar-t-6ccffdad",
+      "id": "ar-t-1b8f2499",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 4108000,
@@ -8071,9 +7696,9 @@
        "x": 10188000,
        "y": 8475000
       },
-      "id": "ar-t-035402a7",
+      "id": "ar-t-f2d25f87",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 6901000,
@@ -8086,9 +7711,9 @@
        "x": 11059000,
        "y": 9346000
       },
-      "id": "ar-t-14cfd4fb",
+      "id": "ar-t-d431f407",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 10188000,
@@ -8101,9 +7726,9 @@
        "x": 11059000,
        "y": 10200000
       },
-      "id": "ar-t-5556f990",
+      "id": "ar-t-b1565874",
       "layer": "copperTop",
-      "netId": 4,
+      "netId": 2,
       "source": "autorouter",
       "start": {
        "x": 11059000,
@@ -8113,10 +7738,505 @@
      },
      {
       "end": {
+       "x": 4108000,
+       "y": 953000
+      },
+      "id": "ar-t-b1af324c",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 4108000,
+       "y": 2665000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4368000,
+       "y": 693000
+      },
+      "id": "ar-t-f2e5a811",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 4108000,
+       "y": 953000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 6504000,
+       "y": 693000
+      },
+      "id": "ar-t-99078028",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 4368000,
+       "y": 693000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9058000,
+       "y": 3247000
+      },
+      "id": "ar-t-4530360d",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 6504000,
+       "y": 693000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9058000,
+       "y": 3935000
+      },
+      "id": "ar-t-acf0fb78",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 9058000,
+       "y": 3247000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16534000,
+       "y": 14900000
+      },
+      "id": "ar-t-cb585808",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 17388000,
+       "y": 14900000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9867000,
+       "y": 16150000
+      },
+      "id": "ar-t-f17460c0",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 8800000,
+       "y": 16150000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 10645000,
+       "y": 15372000
+      },
+      "id": "ar-t-ece93b7d",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 9867000,
+       "y": 16150000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16062000,
+       "y": 15372000
+      },
+      "id": "ar-t-514333f1",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 10645000,
+       "y": 15372000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 16534000,
+       "y": 14900000
+      },
+      "id": "ar-t-3247e06a",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 16062000,
+       "y": 15372000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 3641000,
+       "y": 12058000
+      },
+      "id": "ar-t-adfc4b11",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 7733000,
+       "y": 16150000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 3641000,
+       "y": 3132000
+      },
+      "id": "ar-t-b022ff09",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 3641000,
+       "y": 12058000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4108000,
+       "y": 2665000
+      },
+      "id": "ar-t-35e740dd",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 3641000,
+       "y": 3132000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 7733000,
+       "y": 16150000
+      },
+      "id": "ar-t-6bc0df76",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 8800000,
+       "y": 16150000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 4108000,
+       "y": 2665000
+      },
+      "id": "ar-t-8df2f9c7",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 5425000,
+       "y": 2665000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9058000,
+       "y": 3935000
+      },
+      "id": "ar-t-71e444a2",
+      "layer": "copperTop",
+      "netId": 3,
+      "source": "autorouter",
+      "start": {
+       "x": 10375000,
+       "y": 3935000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 15808000,
+       "y": 8200000
+      },
+      "id": "ar-t-d8c80136",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 17250000,
+       "y": 8200000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12708000,
+       "y": 5100000
+      },
+      "id": "ar-t-30d4990d",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 15808000,
+       "y": 8200000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 5956000,
+       "y": 1395000
+      },
+      "id": "ar-t-b9c2a64e",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 5425000,
+       "y": 1395000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 8580000,
+       "y": 4019000
+      },
+      "id": "ar-t-b0fb874d",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 5956000,
+       "y": 1395000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 8580000,
+       "y": 5380000
+      },
+      "id": "ar-t-2653f225",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 8580000,
+       "y": 4019000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9142000,
+       "y": 5942000
+      },
+      "id": "ar-t-3b4edfac",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 8580000,
+       "y": 5380000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 11866000,
+       "y": 5942000
+      },
+      "id": "ar-t-bd6c7859",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 9142000,
+       "y": 5942000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12708000,
+       "y": 5100000
+      },
+      "id": "ar-t-3f984987",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 11866000,
+       "y": 5942000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 12708000,
+       "y": 5100000
+      },
+      "id": "ar-t-7b15c509",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 13550000,
+       "y": 5100000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 17250000,
+       "y": 10510000
+      },
+      "id": "ar-t-b12f0d65",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 13700000,
+       "y": 14060000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 17250000,
+       "y": 8200000
+      },
+      "id": "ar-t-0fe9fe0e",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 17250000,
+       "y": 10510000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9867000,
+       "y": 14250000
+      },
+      "id": "ar-t-88237af9",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 8800000,
+       "y": 14250000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 10057000,
+       "y": 14060000
+      },
+      "id": "ar-t-cc6b6e1d",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 13700000,
+       "y": 14060000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 9867000,
+       "y": 14250000
+      },
+      "id": "ar-t-2bdb4489",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 10057000,
+       "y": 14060000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 5700000,
+       "y": 13068000
+      },
+      "id": "ar-t-fc6505f5",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 5700000,
+       "y": 12238000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 6882000,
+       "y": 14250000
+      },
+      "id": "ar-t-8b06acb7",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 8800000,
+       "y": 14250000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 5700000,
+       "y": 13068000
+      },
+      "id": "ar-t-b98c8e71",
+      "layer": "copperTop",
+      "netId": 4,
+      "source": "autorouter",
+      "start": {
+       "x": 6882000,
+       "y": 14250000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
        "x": 14624000,
        "y": 1395000
       },
-      "id": "ar-t-edde4ce1",
+      "id": "ar-t-83501a5f",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8131,7 +8251,7 @@
        "x": 19150000,
        "y": 5921000
       },
-      "id": "ar-t-ac2cae6c",
+      "id": "ar-t-f815f7aa",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8146,7 +8266,7 @@
        "x": 19150000,
        "y": 8200000
       },
-      "id": "ar-t-f372363f",
+      "id": "ar-t-0327c51d",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8161,7 +8281,7 @@
        "x": 18900000,
        "y": 16934000
       },
-      "id": "ar-t-677825f4",
+      "id": "ar-t-fa03f6e2",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8176,7 +8296,7 @@
        "x": 18566000,
        "y": 16600000
       },
-      "id": "ar-t-62da2427",
+      "id": "ar-t-e994ce45",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8191,7 +8311,7 @@
        "x": 18900000,
        "y": 16934000
       },
-      "id": "ar-t-2e7aa2be",
+      "id": "ar-t-2e31edbc",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8206,7 +8326,7 @@
        "x": 6944000,
        "y": 5407000
       },
-      "id": "ar-t-1dce4e72",
+      "id": "ar-t-e492cce4",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8221,7 +8341,7 @@
        "x": 6742000,
        "y": 5205000
       },
-      "id": "ar-t-3380b96c",
+      "id": "ar-t-ac1ea722",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8236,7 +8356,7 @@
        "x": 7192000,
        "y": 5407000
       },
-      "id": "ar-t-22dc88fc",
+      "id": "ar-t-a5c82e3e",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8251,7 +8371,7 @@
        "x": 9058000,
        "y": 1395000
       },
-      "id": "ar-t-38deee76",
+      "id": "ar-t-41396bb0",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8266,7 +8386,7 @@
        "x": 8789000,
        "y": 1126000
       },
-      "id": "ar-t-ede533e8",
+      "id": "ar-t-cdc21d9a",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8281,7 +8401,7 @@
        "x": 9058000,
        "y": 1395000
       },
-      "id": "ar-t-2246d6c6",
+      "id": "ar-t-797fe20c",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8296,7 +8416,7 @@
        "x": 8334000,
        "y": 4281000
       },
-      "id": "ar-t-bbf71a64",
+      "id": "ar-t-bdacec76",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8311,7 +8431,7 @@
        "x": 8334000,
        "y": 1126000
       },
-      "id": "ar-t-824ce981",
+      "id": "ar-t-2fe84f47",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8326,7 +8446,7 @@
        "x": 12508000,
        "y": 15408000
       },
-      "id": "ar-t-19bf116f",
+      "id": "ar-t-7d0e440d",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8341,7 +8461,7 @@
        "x": 7208000,
        "y": 10108000
       },
-      "id": "ar-t-b616e659",
+      "id": "ar-t-5f66d41b",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8356,7 +8476,7 @@
        "x": 7208000,
        "y": 5407000
       },
-      "id": "ar-t-1b4e23bc",
+      "id": "ar-t-1f88002e",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8371,7 +8491,7 @@
        "x": 6742000,
        "y": 5205000
       },
-      "id": "ar-t-709c768d",
+      "id": "ar-t-d0c45f53",
       "layer": "copperTop",
       "netId": 5,
       "source": "autorouter",
@@ -8386,7 +8506,7 @@
        "x": 13700000,
        "y": 15408000
       },
-      "id": "ar-t-337bb273",
+      "id": "ar-t-26784d65",
       "layer": "copperBottom",
       "netId": 5,
       "source": "autorouter",
@@ -8398,346 +8518,226 @@
      },
      {
       "end": {
-       "x": 12864000,
-       "y": 4033000
+       "x": 6742000,
+       "y": 10363000
       },
-      "id": "ar-t-00b81b3b",
+      "id": "ar-t-670ef198",
       "layer": "copperTop",
       "netId": 6,
       "source": "autorouter",
       "start": {
-       "x": 11692000,
-       "y": 5205000
+       "x": 5700000,
+       "y": 10363000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 14192000,
-       "y": 4033000
+       "x": 6905000,
+       "y": 10200000
       },
-      "id": "ar-t-9a3b5515",
+      "id": "ar-t-53d4f88e",
       "layer": "copperTop",
       "netId": 6,
       "source": "autorouter",
       "start": {
-       "x": 12864000,
-       "y": 4033000
+       "x": 10088000,
+       "y": 10200000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 14608000,
-       "y": 4449000
+       "x": 6742000,
+       "y": 10363000
       },
-      "id": "ar-t-daa91336",
+      "id": "ar-t-6afefc24",
       "layer": "copperTop",
       "netId": 6,
       "source": "autorouter",
       "start": {
-       "x": 14192000,
-       "y": 4033000
+       "x": 6905000,
+       "y": 10200000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 14608000,
-       "y": 5100000
+       "x": 18900000,
+       "y": 18759000
       },
-      "id": "ar-t-1b4369c2",
+      "id": "ar-t-ae89b024",
       "layer": "copperTop",
-      "netId": 6,
+      "netId": 7,
       "source": "autorouter",
       "start": {
-       "x": 14608000,
-       "y": 4449000
+       "x": 18900000,
+       "y": 19613000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 14608000,
-       "y": 5100000
+       "x": 19213000,
+       "y": 15942000
       },
-      "id": "ar-t-bfd2b967",
+      "id": "ar-t-bde3a05f",
       "layer": "copperTop",
-      "netId": 6,
+      "netId": 7,
       "source": "autorouter",
       "start": {
-       "x": 15450000,
-       "y": 5100000
+       "x": 19213000,
+       "y": 14900000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 11692000,
-       "y": 5205000
+       "x": 19942000,
+       "y": 16671000
       },
-      "id": "ar-t-d25b7756",
+      "id": "ar-t-054de9d1",
       "layer": "copperTop",
-      "netId": 6,
+      "netId": 7,
       "source": "autorouter",
       "start": {
+       "x": 19213000,
+       "y": 15942000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 19942000,
+       "y": 18571000
+      },
+      "id": "ar-t-d87eda07",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 19942000,
+       "y": 16671000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 19754000,
+       "y": 18759000
+      },
+      "id": "ar-t-c44be0e3",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 19942000,
+       "y": 18571000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 18900000,
+       "y": 18759000
+      },
+      "id": "ar-t-d97e0f62",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 19754000,
+       "y": 18759000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 18359000,
+       "y": 14046000
+      },
+      "id": "ar-t-8bee3df1",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 18359000,
+       "y": 14900000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 18228000,
+       "y": 13915000
+      },
+      "id": "ar-t-53b72b2d",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 18359000,
+       "y": 14046000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 18228000,
+       "y": 5918000
+      },
+      "id": "ar-t-ca63a148",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 18228000,
+       "y": 13915000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
+       "x": 14975000,
+       "y": 2665000
+      },
+      "id": "ar-t-3f0ce457",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 18228000,
+       "y": 5918000
+      },
+      "width": 250000
+     },
+     {
+      "end": {
        "x": 10375000,
-       "y": 5205000
+       "y": 2665000
+      },
+      "id": "ar-t-12e06844",
+      "layer": "copperTop",
+      "netId": 7,
+      "source": "autorouter",
+      "start": {
+       "x": 14975000,
+       "y": 2665000
       },
       "width": 250000
      },
      {
       "end": {
-       "x": 15808000,
-       "y": 8200000
+       "x": 18359000,
+       "y": 14900000
       },
-      "id": "ar-t-666c613b",
+      "id": "ar-t-2d88fa2c",
       "layer": "copperTop",
       "netId": 7,
       "source": "autorouter",
       "start": {
-       "x": 17250000,
-       "y": 8200000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12708000,
-       "y": 5100000
-      },
-      "id": "ar-t-cdb81f40",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 15808000,
-       "y": 8200000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 5956000,
-       "y": 1395000
-      },
-      "id": "ar-t-3abb3f5b",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 5425000,
-       "y": 1395000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 8580000,
-       "y": 4019000
-      },
-      "id": "ar-t-59684b4c",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 5956000,
-       "y": 1395000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 8580000,
-       "y": 5380000
-      },
-      "id": "ar-t-d389d0f0",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 8580000,
-       "y": 4019000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9142000,
-       "y": 5942000
-      },
-      "id": "ar-t-7d7b81c1",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 8580000,
-       "y": 5380000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 11866000,
-       "y": 5942000
-      },
-      "id": "ar-t-d80387c8",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 9142000,
-       "y": 5942000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12708000,
-       "y": 5100000
-      },
-      "id": "ar-t-f66144e6",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 11866000,
-       "y": 5942000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 12708000,
-       "y": 5100000
-      },
-      "id": "ar-t-b85c3894",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 13550000,
-       "y": 5100000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 17250000,
-       "y": 10510000
-      },
-      "id": "ar-t-47626c30",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 13700000,
-       "y": 14060000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 17250000,
-       "y": 8200000
-      },
-      "id": "ar-t-5fa78fa3",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 17250000,
-       "y": 10510000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9867000,
-       "y": 14250000
-      },
-      "id": "ar-t-90482a70",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 8800000,
-       "y": 14250000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 10057000,
-       "y": 14060000
-      },
-      "id": "ar-t-07eb0e78",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 13700000,
-       "y": 14060000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 9867000,
-       "y": 14250000
-      },
-      "id": "ar-t-64dfd6e8",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 10057000,
-       "y": 14060000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 5700000,
-       "y": 13068000
-      },
-      "id": "ar-t-476fb910",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 5700000,
-       "y": 12238000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 6882000,
-       "y": 14250000
-      },
-      "id": "ar-t-ce482752",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 8800000,
-       "y": 14250000
-      },
-      "width": 250000
-     },
-     {
-      "end": {
-       "x": 5700000,
-       "y": 13068000
-      },
-      "id": "ar-t-38364720",
-      "layer": "copperTop",
-      "netId": 7,
-      "source": "autorouter",
-      "start": {
-       "x": 6882000,
-       "y": 14250000
+       "x": 19213000,
+       "y": 14900000
       },
       "width": 250000
      }
@@ -8749,7 +8749,7 @@
        "y": 1126000
       },
       "drill": 400000,
-      "id": "ar-v-fea60f3d",
+      "id": "ar-v-f36d9d57",
       "layers": [
        "copperTop",
        "copperBottom"
@@ -8764,7 +8764,7 @@
        "y": 5407000
       },
       "drill": 400000,
-      "id": "ar-v-1752cb70",
+      "id": "ar-v-e0400c3e",
       "layers": [
        "copperTop",
        "copperBottom"
@@ -8780,7 +8780,7 @@
    "passes": [
     {
      "accepted": true,
-     "candidateRevision": "pcb2-bbc76fdb18ec7646",
+     "candidateRevision": "pcb2-90a18cce0804e2c7",
      "completedAfter": 17,
      "completedBefore": 0,
      "effort": "high",
@@ -8798,9 +8798,9 @@
      "reason": "Completed 17 additional connection(s).",
      "remainingAfter": 0,
      "remainingBefore": 17,
-     "routeAttemptId": "e2e-placement-candidate:812d000c70f0561f855ef92e-p1-5b94426b",
+     "routeAttemptId": "e2e-placement-candidate:a320231f9aa5df5001842edd-p1-ae71496f",
      "scope": "all_incomplete",
-     "sourceRevision": "pcb2-ff0d074eb025cdff",
+     "sourceRevision": "pcb2-b2d4a6209fb553f5",
      "targetNetIds": [
       1,
       2,
@@ -8827,7 +8827,7 @@
    "totalElapsedMs": 0,
    "verification": {
     "completedConnections": 17,
-    "designRevision": "pcb2-bbc76fdb18ec7646",
+    "designRevision": "pcb2-90a18cce0804e2c7",
     "drcErrors": 0,
     "layerUsage": {
      "copperBottom": {
@@ -8844,7 +8844,7 @@
       "filledAreaNm2": 0,
       "segments": 73,
       "stableNetIds": [],
-      "trackLengthNm": 142646708.447967,
+      "trackLengthNm": 142646708.44796696,
       "viaAccessCount": 2,
       "zoneIds": []
      }
@@ -8854,189 +8854,221 @@
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0006",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0006:2:38451785:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0007",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000012",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0007:1:b23682a5:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000012:1:d6119796:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
-         "padIndex": 6,
-         "padInstanceId": "pad:b16-1c-inst-0009:7:4d500c57:1",
-         "padNumber": "7"
+         "padIndex": 4,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:5:fe0c7063:1",
+         "padNumber": "5"
         },
         {
-         "id": "ar-t-e08417a4",
+         "id": "ar-t-f3590586",
          "kind": "track"
         },
         {
-         "id": "ar-t-7d2ddbb3",
+         "id": "ar-t-4c784e04",
          "kind": "track"
         },
         {
-         "id": "ar-t-1d55af29",
+         "id": "ar-t-8f576ea7",
          "kind": "track"
         },
         {
-         "id": "ar-t-12788b8f",
+         "id": "ar-t-ca62cc7b",
          "kind": "track"
         },
         {
-         "id": "ar-t-2d5c4533",
+         "id": "ar-t-82b39492",
          "kind": "track"
         },
         {
-         "id": "ar-t-3f3fe426",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-49eeb361",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-0e5a11ed",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-9963fdec",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-802ab307",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-ec17f19c",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-25dc6994",
+         "id": "ar-t-410b2257",
          "kind": "track"
         }
        ]
       ],
       "complete": true,
-      "completedConnections": 2,
+      "completedConnections": 1,
       "electricalState": "proven",
       "endpointKeys": [
-       "b16-1c-inst-0006::2",
-       "b16-1c-inst-0007::1",
-       "b16-1c-inst-0009::7"
+       "b16c0000-e2e0-4000-8000-000000000012::1",
+       "b16c0000-e2e0-4000-8000-000000000018::5"
       ],
       "netId": 1,
-      "netName": "/root/NET_QFX8",
-      "padCount": 3,
+      "netName": "/root/N$5",
+      "padCount": 2,
       "remainingConnections": 0,
-      "requiredConnections": 2,
-      "stableNetId": "net:049ad2759bfe5db9",
+      "requiredConnections": 1,
+      "stableNetId": "net:215669dd74b690a1",
       "terminalGroupIds": [
-       "terminal:net:049ad2759bfe5db9:3948a8ed",
-       "terminal:net:049ad2759bfe5db9:69a71f3d",
-       "terminal:net:049ad2759bfe5db9:b75f67f1"
+       "terminal:net:215669dd74b690a1:8ca35bbb",
+       "terminal:net:215669dd74b690a1:dd3792b9"
       ]
      },
      {
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0001",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000017",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0001:1:d6119796:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000017:1:b23682a5:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0007",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 2,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:3:ff265eb5:1",
+         "padNumber": "3"
+        },
+        {
+         "id": "ar-t-eb2d675e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-832b9792",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-2f36a3a4",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-1b8f2499",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-f2d25f87",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-d431f407",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-b1565874",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 1,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000017::1",
+       "b16c0000-e2e0-4000-8000-000000000018::3"
+      ],
+      "netId": 2,
+      "netName": "/root/N$7",
+      "padCount": 2,
+      "remainingConnections": 0,
+      "requiredConnections": 1,
+      "stableNetId": "net:26b351d261bb8e76",
+      "terminalGroupIds": [
+       "terminal:net:26b351d261bb8e76:0222aba4",
+       "terminal:net:26b351d261bb8e76:92a3652d"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000010",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000010:1:d6119796:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000016",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0007:2:38451785:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000016:2:38451785:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0009:2:b85acb9f:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:2:b85acb9f:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 5,
-         "padInstanceId": "pad:b16-1c-inst-0009:6:6c403b77:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:6:6c403b77:1",
          "padNumber": "6"
         },
         {
-         "id": "ar-t-2cf18d1b",
+         "id": "ar-t-b1af324c",
          "kind": "track"
         },
         {
-         "id": "ar-t-786e8fb6",
+         "id": "ar-t-f2e5a811",
          "kind": "track"
         },
         {
-         "id": "ar-t-6b5efbe7",
+         "id": "ar-t-99078028",
          "kind": "track"
         },
         {
-         "id": "ar-t-5d6d1592",
+         "id": "ar-t-4530360d",
          "kind": "track"
         },
         {
-         "id": "ar-t-3426925f",
+         "id": "ar-t-acf0fb78",
          "kind": "track"
         },
         {
-         "id": "ar-t-6034d6e3",
+         "id": "ar-t-cb585808",
          "kind": "track"
         },
         {
-         "id": "ar-t-302e540b",
+         "id": "ar-t-f17460c0",
          "kind": "track"
         },
         {
-         "id": "ar-t-5586753e",
+         "id": "ar-t-ece93b7d",
          "kind": "track"
         },
         {
-         "id": "ar-t-db34c92a",
+         "id": "ar-t-514333f1",
          "kind": "track"
         },
         {
-         "id": "ar-t-34856f8d",
+         "id": "ar-t-3247e06a",
          "kind": "track"
         },
         {
-         "id": "ar-t-29ce1602",
+         "id": "ar-t-adfc4b11",
          "kind": "track"
         },
         {
-         "id": "ar-t-c80d41f6",
+         "id": "ar-t-b022ff09",
          "kind": "track"
         },
         {
-         "id": "ar-t-7c8e717e",
+         "id": "ar-t-35e740dd",
          "kind": "track"
         },
         {
-         "id": "ar-t-8a11af91",
+         "id": "ar-t-6bc0df76",
          "kind": "track"
         },
         {
-         "id": "ar-t-8d92bf5c",
+         "id": "ar-t-8df2f9c7",
          "kind": "track"
         },
         {
-         "id": "ar-t-10c6dbf9",
+         "id": "ar-t-71e444a2",
          "kind": "track"
         }
        ]
@@ -9045,458 +9077,135 @@
       "completedConnections": 3,
       "electricalState": "proven",
       "endpointKeys": [
-       "b16-1c-inst-0001::1",
-       "b16-1c-inst-0007::2",
-       "b16-1c-inst-0009::2",
-       "b16-1c-inst-0009::6"
+       "b16c0000-e2e0-4000-8000-000000000010::1",
+       "b16c0000-e2e0-4000-8000-000000000016::2",
+       "b16c0000-e2e0-4000-8000-000000000018::2",
+       "b16c0000-e2e0-4000-8000-000000000018::6"
       ],
-      "netId": 2,
+      "netId": 3,
       "netName": "/root/NET_NEVM",
       "padCount": 4,
       "remainingConnections": 0,
       "requiredConnections": 3,
-      "stableNetId": "net:2fb7cee4f18b46a0",
+      "stableNetId": "net:4b78348020ec410c",
       "terminalGroupIds": [
-       "terminal:net:2fb7cee4f18b46a0:66a71a84",
-       "terminal:net:2fb7cee4f18b46a0:8fa7075f",
-       "terminal:net:2fb7cee4f18b46a0:b65f665e",
-       "terminal:net:2fb7cee4f18b46a0:ba5f6caa"
+       "terminal:net:4b78348020ec410c:3f2845f4",
+       "terminal:net:4b78348020ec410c:8da35d4e",
+       "terminal:net:4b78348020ec410c:91a3639a",
+       "terminal:net:4b78348020ec410c:da44a3cf"
       ]
      },
      {
       "clusters": [
        [
         {
-         "instanceId": "b16-1c-inst-0004",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000010",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0004:2:51964451:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000010:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0008",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000011",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0008:2:38451785:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000011:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "id": "ar-t-74ae1bb7",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-b3e02155",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-6c75ffe3",
-         "kind": "track"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0004::2",
-       "b16-1c-inst-0008::2"
-      ],
-      "netId": 3,
-      "netName": "/root/N$6",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:4a1ccb5b061ad7df",
-      "terminalGroupIds": [
-       "terminal:net:4a1ccb5b061ad7df:0e1a3c83",
-       "terminal:net:4a1ccb5b061ad7df:15b9eb5f"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0008",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0008:1:b23682a5:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 2,
-         "padInstanceId": "pad:b16-1c-inst-0009:3:ff265eb5:1",
-         "padNumber": "3"
-        },
-        {
-         "id": "ar-t-9fa6b59a",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-099805be",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-fae15160",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-6ccffdad",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-035402a7",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-14cfd4fb",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-5556f990",
-         "kind": "track"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0008::1",
-       "b16-1c-inst-0009::3"
-      ],
-      "netId": 4,
-      "netName": "/root/N$7",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:6b836314534dc9e0",
-      "terminalGroupIds": [
-       "terminal:net:6b836314534dc9e0:0f1a3e16",
-       "terminal:net:6b836314534dc9e0:bb5f6e3d"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0002",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0002:1:d6119796:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0005",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0005:1:f7ff8d63:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0006",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0006:1:b23682a5:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 3,
-         "padInstanceId": "pad:b16-1c-inst-0009:4:a18fc81f:1",
-         "padNumber": "4"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 7,
-         "padInstanceId": "pad:b16-1c-inst-0009:8:f230c3b9:1",
-         "padNumber": "8"
-        },
-        {
-         "id": "ar-t-edde4ce1",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-ac2cae6c",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-f372363f",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-677825f4",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-62da2427",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-2e7aa2be",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-1dce4e72",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-3380b96c",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-22dc88fc",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-38deee76",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-ede533e8",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-2246d6c6",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-bbf71a64",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-824ce981",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-19bf116f",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-b616e659",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-1b4e23bc",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-709c768d",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-337bb273",
-         "kind": "track"
-        },
-        {
-         "id": "ar-v-fea60f3d",
-         "kind": "via"
-        },
-        {
-         "id": "ar-v-1752cb70",
-         "kind": "via"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 4,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0002::1",
-       "b16-1c-inst-0005::1",
-       "b16-1c-inst-0006::1",
-       "b16-1c-inst-0009::4",
-       "b16-1c-inst-0009::8"
-      ],
-      "netId": 5,
-      "netName": "/root/VCC",
-      "padCount": 5,
-      "remainingConnections": 0,
-      "requiredConnections": 4,
-      "stableNetId": "net:ce763183d26e0c87",
-      "terminalGroupIds": [
-       "terminal:net:ce763183d26e0c87:03b35d20",
-       "terminal:net:ce763183d26e0c87:3648a434",
-       "terminal:net:ce763183d26e0c87:a0d7d823",
-       "terminal:net:ce763183d26e0c87:b05f5cec",
-       "terminal:net:ce763183d26e0c87:b45f6338"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0003",
-         "kind": "pad",
-         "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0003:1:d6119796:1",
-         "padNumber": "1"
-        },
-        {
-         "instanceId": "b16-1c-inst-0009",
-         "kind": "pad",
-         "padIndex": 4,
-         "padInstanceId": "pad:b16-1c-inst-0009:5:fe0c7063:1",
-         "padNumber": "5"
-        },
-        {
-         "id": "ar-t-00b81b3b",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-9a3b5515",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-daa91336",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-1b4369c2",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-bfd2b967",
-         "kind": "track"
-        },
-        {
-         "id": "ar-t-d25b7756",
-         "kind": "track"
-        }
-       ]
-      ],
-      "complete": true,
-      "completedConnections": 1,
-      "electricalState": "proven",
-      "endpointKeys": [
-       "b16-1c-inst-0003::1",
-       "b16-1c-inst-0009::5"
-      ],
-      "netId": 6,
-      "netName": "/root/N$5",
-      "padCount": 2,
-      "remainingConnections": 0,
-      "requiredConnections": 1,
-      "stableNetId": "net:f3544a711b2e85f5",
-      "terminalGroupIds": [
-       "terminal:net:f3544a711b2e85f5:129abfc9",
-       "terminal:net:f3544a711b2e85f5:b55f64cb"
-      ]
-     },
-     {
-      "clusters": [
-       [
-        {
-         "instanceId": "b16-1c-inst-0001",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000012",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0001:2:9e3e35d6:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000012:2:9e3e35d6:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0002",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0002:2:9e3e35d6:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0003",
-         "kind": "pad",
-         "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0003:2:9e3e35d6:1",
-         "padNumber": "2"
-        },
-        {
-         "instanceId": "b16-1c-inst-0004",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000013",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0004:1:efa39d55:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000013:1:efa39d55:1",
          "padNumber": "1"
         },
         {
-         "instanceId": "b16-1c-inst-0005",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000014",
          "kind": "pad",
          "padIndex": 1,
-         "padInstanceId": "pad:b16-1c-inst-0005:2:957b37f3:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000014:2:957b37f3:1",
          "padNumber": "2"
         },
         {
-         "instanceId": "b16-1c-inst-0009",
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
          "kind": "pad",
          "padIndex": 0,
-         "padInstanceId": "pad:b16-1c-inst-0009:1:853288b3:1",
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:1:853288b3:1",
          "padNumber": "1"
         },
         {
-         "id": "ar-t-666c613b",
+         "id": "ar-t-d8c80136",
          "kind": "track"
         },
         {
-         "id": "ar-t-cdb81f40",
+         "id": "ar-t-30d4990d",
          "kind": "track"
         },
         {
-         "id": "ar-t-3abb3f5b",
+         "id": "ar-t-b9c2a64e",
          "kind": "track"
         },
         {
-         "id": "ar-t-59684b4c",
+         "id": "ar-t-b0fb874d",
          "kind": "track"
         },
         {
-         "id": "ar-t-d389d0f0",
+         "id": "ar-t-2653f225",
          "kind": "track"
         },
         {
-         "id": "ar-t-7d7b81c1",
+         "id": "ar-t-3b4edfac",
          "kind": "track"
         },
         {
-         "id": "ar-t-d80387c8",
+         "id": "ar-t-bd6c7859",
          "kind": "track"
         },
         {
-         "id": "ar-t-f66144e6",
+         "id": "ar-t-3f984987",
          "kind": "track"
         },
         {
-         "id": "ar-t-b85c3894",
+         "id": "ar-t-7b15c509",
          "kind": "track"
         },
         {
-         "id": "ar-t-47626c30",
+         "id": "ar-t-b12f0d65",
          "kind": "track"
         },
         {
-         "id": "ar-t-5fa78fa3",
+         "id": "ar-t-0fe9fe0e",
          "kind": "track"
         },
         {
-         "id": "ar-t-90482a70",
+         "id": "ar-t-88237af9",
          "kind": "track"
         },
         {
-         "id": "ar-t-07eb0e78",
+         "id": "ar-t-cc6b6e1d",
          "kind": "track"
         },
         {
-         "id": "ar-t-64dfd6e8",
+         "id": "ar-t-2bdb4489",
          "kind": "track"
         },
         {
-         "id": "ar-t-476fb910",
+         "id": "ar-t-fc6505f5",
          "kind": "track"
         },
         {
-         "id": "ar-t-ce482752",
+         "id": "ar-t-8b06acb7",
          "kind": "track"
         },
         {
-         "id": "ar-t-38364720",
+         "id": "ar-t-b98c8e71",
          "kind": "track"
         }
        ]
@@ -9505,26 +9214,317 @@
       "completedConnections": 5,
       "electricalState": "proven",
       "endpointKeys": [
-       "b16-1c-inst-0001::2",
-       "b16-1c-inst-0002::2",
-       "b16-1c-inst-0003::2",
-       "b16-1c-inst-0004::1",
-       "b16-1c-inst-0005::2",
-       "b16-1c-inst-0009::1"
+       "b16c0000-e2e0-4000-8000-000000000010::2",
+       "b16c0000-e2e0-4000-8000-000000000011::2",
+       "b16c0000-e2e0-4000-8000-000000000012::2",
+       "b16c0000-e2e0-4000-8000-000000000013::1",
+       "b16c0000-e2e0-4000-8000-000000000014::2",
+       "b16c0000-e2e0-4000-8000-000000000018::1"
       ],
-      "netId": 7,
+      "netId": 4,
       "netName": "/root/GND",
       "padCount": 6,
       "remainingConnections": 0,
       "requiredConnections": 5,
-      "stableNetId": "net:f4ea701350f3574f",
+      "stableNetId": "net:7fc7761f07e69fa3",
       "terminalGroupIds": [
-       "terminal:net:f4ea701350f3574f:06b361d9",
-       "terminal:net:f4ea701350f3574f:0f9abb10",
-       "terminal:net:f4ea701350f3574f:16b9ecf2",
-       "terminal:net:f4ea701350f3574f:90a708f2",
-       "terminal:net:f4ea701350f3574f:a1d7d9b6",
-       "terminal:net:f4ea701350f3574f:b95f6b17"
+       "terminal:net:7fc7761f07e69fa3:4effa79b",
+       "terminal:net:7fc7761f07e69fa3:4f8e2e10",
+       "terminal:net:7fc7761f07e69fa3:6db1e126",
+       "terminal:net:7fc7761f07e69fa3:90a36207",
+       "terminal:net:7fc7761f07e69fa3:da378e00",
+       "terminal:net:7fc7761f07e69fa3:db44a562"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000011",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000011:1:d6119796:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000014",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000014:1:f7ff8d63:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000015",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000015:1:b23682a5:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 3,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:4:a18fc81f:1",
+         "padNumber": "4"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 7,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:8:f230c3b9:1",
+         "padNumber": "8"
+        },
+        {
+         "id": "ar-t-83501a5f",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-f815f7aa",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-0327c51d",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-fa03f6e2",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-e994ce45",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-2e31edbc",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-e492cce4",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-ac1ea722",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-a5c82e3e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-41396bb0",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-cdc21d9a",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-797fe20c",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-bdacec76",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-2fe84f47",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-7d0e440d",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-5f66d41b",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-1f88002e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-d0c45f53",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-26784d65",
+         "kind": "track"
+        },
+        {
+         "id": "ar-v-f36d9d57",
+         "kind": "via"
+        },
+        {
+         "id": "ar-v-e0400c3e",
+         "kind": "via"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 4,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000011::1",
+       "b16c0000-e2e0-4000-8000-000000000014::1",
+       "b16c0000-e2e0-4000-8000-000000000015::1",
+       "b16c0000-e2e0-4000-8000-000000000018::4",
+       "b16c0000-e2e0-4000-8000-000000000018::8"
+      ],
+      "netId": 5,
+      "netName": "/root/VCC",
+      "padCount": 5,
+      "remainingConnections": 0,
+      "requiredConnections": 4,
+      "stableNetId": "net:bb37a383393d6427",
+      "terminalGroupIds": [
+       "terminal:net:bb37a383393d6427:4fffa92e",
+       "terminal:net:bb37a383393d6427:6294bde2",
+       "terminal:net:bb37a383393d6427:6cb1df93",
+       "terminal:net:bb37a383393d6427:87a353dc",
+       "terminal:net:bb37a383393d6427:8ba35a28"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000013",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000013:2:51964451:1",
+         "padNumber": "2"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000017",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000017:2:38451785:1",
+         "padNumber": "2"
+        },
+        {
+         "id": "ar-t-670ef198",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-53d4f88e",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-6afefc24",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 1,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000013::2",
+       "b16c0000-e2e0-4000-8000-000000000017::2"
+      ],
+      "netId": 6,
+      "netName": "/root/N$6",
+      "padCount": 2,
+      "remainingConnections": 0,
+      "requiredConnections": 1,
+      "stableNetId": "net:d912389fdad1ad03",
+      "terminalGroupIds": [
+       "terminal:net:d912389fdad1ad03:0522b05d",
+       "terminal:net:d912389fdad1ad03:528e32c9"
+      ]
+     },
+     {
+      "clusters": [
+       [
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000015",
+         "kind": "pad",
+         "padIndex": 1,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000015:2:38451785:1",
+         "padNumber": "2"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000016",
+         "kind": "pad",
+         "padIndex": 0,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000016:1:b23682a5:1",
+         "padNumber": "1"
+        },
+        {
+         "instanceId": "b16c0000-e2e0-4000-8000-000000000018",
+         "kind": "pad",
+         "padIndex": 6,
+         "padInstanceId": "pad:b16c0000-e2e0-4000-8000-000000000018:7:4d500c57:1",
+         "padNumber": "7"
+        },
+        {
+         "id": "ar-t-ae89b024",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-bde3a05f",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-054de9d1",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-d87eda07",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-c44be0e3",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-d97e0f62",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-8bee3df1",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-53b72b2d",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-ca63a148",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-3f0ce457",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-12e06844",
+         "kind": "track"
+        },
+        {
+         "id": "ar-t-2d88fa2c",
+         "kind": "track"
+        }
+       ]
+      ],
+      "complete": true,
+      "completedConnections": 2,
+      "electricalState": "proven",
+      "endpointKeys": [
+       "b16c0000-e2e0-4000-8000-000000000015::2",
+       "b16c0000-e2e0-4000-8000-000000000016::1",
+       "b16c0000-e2e0-4000-8000-000000000018::7"
+      ],
+      "netId": 7,
+      "netName": "/root/NET_QFX8",
+      "padCount": 3,
+      "remainingConnections": 0,
+      "requiredConnections": 2,
+      "stableNetId": "net:e6014a6bce88377f",
+      "terminalGroupIds": [
+       "terminal:net:e6014a6bce88377f:42284aad",
+       "terminal:net:e6014a6bce88377f:6194bc4f",
+       "terminal:net:e6014a6bce88377f:8ea35ee1"
       ]
      }
     ],
@@ -9544,10 +9544,10 @@
   }
  },
  "order": [
-  "pcb2-6e90506687445f57",
-  "pcb2-ff0d074eb025cdff"
+  "pcb2-4a5fcf0e62b99bef",
+  "pcb2-b2d4a6209fb553f5"
  ],
- "recordedAt": "2026-09-07T12:00:00.000Z",
+ "recordedAt": "2026-09-09T12:00:00.000Z",
  "router": {
   "engine": "Freerouting",
   "runtimes": [

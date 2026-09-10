@@ -69,6 +69,67 @@ describe("B16-C §5 — fixture runtime mode", () => {
     expect(getDurableWorkflowRepository()).not.toBeInstanceOf(InMemoryDurableWorkflowRepository);
   });
 
+  it("the parts route serves a committed catalog part by its stable (non-UUID) id when on, and null when off — no database either way", async () => {
+    const { GET } = await import("@/app/api/parts/[id]/route");
+    const ctx = { params: Promise.resolve({ id: "b16-1c-part-c" }) };
+    const request = () => new Request("http://localhost/api/parts/b16-1c-part-c", { method: "GET" });
+    on();
+    const served = (await (await GET(request(), ctx)).json()) as { ok: boolean; part: { id: string; pins: unknown[]; atomicAssignments?: unknown } | null };
+    expect(served.ok).toBe(true);
+    expect(served.part?.id).toBe("b16-1c-part-c"); // the browser proof found this id refused by the UUID shape check first
+    expect(served.part?.pins.length).toBeGreaterThan(0);
+    expect(served.part?.atomicAssignments).toBeDefined();
+    const unknown = (await (await GET(new Request("http://localhost/api/parts/b16-1c-part-none", { method: "GET" }), { params: Promise.resolve({ id: "b16-1c-part-none" }) })).json()) as { ok: boolean; part: unknown };
+    expect(unknown).toEqual({ ok: true, part: null });
+    vi.stubEnv(FIXTURE_RUNTIME_ENV, "");
+    const off = (await (await GET(request(), ctx)).json()) as { ok: boolean; part: unknown };
+    expect(off).toEqual({ ok: true, part: null }); // malformed-id path, zero database work
+  });
+
+  it("the provider seam answers only the build planner; every other provider request is the bounded provider_unavailable failure (never 500, never a live SDK)", async () => {
+    const { LLMRouter } = await import("../../llm/router");
+    const { LLMProviderError } = await import("../../llm/errors");
+    on();
+    const router = new LLMRouter([]); // no provider implementation at all: a live call would throw a different error
+    const base = { provider: "openai" as const, maxTokens: 16, system: "s", messages: [{ role: "user" as const, content: "x" }] };
+    await expect(router.generate({ ...base, toolChoice: { name: "submit_plan" } })).resolves.toMatchObject({ model: "fixture-provider", toolCalls: [] });
+    const review = router.generate({ ...base, toolChoice: { name: "report_findings" } });
+    await expect(review).rejects.toBeInstanceOf(LLMProviderError);
+    await expect(review).rejects.toMatchObject({ code: "provider_unavailable", reason: "missing_credentials" });
+    expect(() => router.stream(base)).toThrow(LLMProviderError);
+  });
+
+  it("the frozen clock: installed only when on, idempotent, Date.now()/new Date() answer the fixed instant, explicit dates and parsing are untouched, uninstall restores", async () => {
+    const { FIXTURE_CLOCK_DEFAULT, fixtureClockInstalled, fixtureClockInstant, installFixtureClock, uninstallFixtureClock } = await import("../clock");
+    uninstallFixtureClock(); // an earlier container test may have installed it
+    const realDate = Date;
+    try {
+      vi.stubEnv(FIXTURE_RUNTIME_ENV, "");
+      expect(installFixtureClock()).toBeNull();
+      expect(Date).toBe(realDate);
+      on();
+      expect(fixtureClockInstant({})).toBe(FIXTURE_CLOCK_DEFAULT);
+      expect(fixtureClockInstant({ SIRKIT_FIXTURE_CLOCK: "2026-09-10T00:00:00Z" })).toBe("2026-09-10T00:00:00.000Z");
+      expect(fixtureClockInstant({ SIRKIT_FIXTURE_CLOCK: "not a date" })).toBe(FIXTURE_CLOCK_DEFAULT);
+      expect(installFixtureClock()).toBe(FIXTURE_CLOCK_DEFAULT);
+      expect(installFixtureClock()).toBe(FIXTURE_CLOCK_DEFAULT); // idempotent
+      expect(fixtureClockInstalled()).toBe(FIXTURE_CLOCK_DEFAULT);
+      expect(Date.now()).toBe(realDate.parse(FIXTURE_CLOCK_DEFAULT));
+      expect(new Date().toISOString()).toBe(FIXTURE_CLOCK_DEFAULT);
+      expect(new Date("2020-01-02T03:04:05.000Z").toISOString()).toBe("2020-01-02T03:04:05.000Z");
+      expect(new Date(0).getTime()).toBe(0);
+      expect(Date.parse("2020-01-02T03:04:05.000Z")).toBe(1577934245000);
+      expect(Date.UTC(2020, 0, 1)).toBe(1577836800000);
+      expect(new Date() instanceof Date).toBe(true);
+      expect(typeof Date()).toBe("string");
+    } finally {
+      uninstallFixtureClock();
+    }
+    expect(Date).toBe(realDate);
+    expect(fixtureClockInstalled()).toBeNull();
+    expect(Math.abs(Date.now() - realDate.now())).toBeLessThan(1000);
+  });
+
   it("router mode defaults to replay with the committed e2e fixture path; record/live are explicit", () => {
     expect(fixtureRouterMode({})).toBe("replay");
     expect(fixtureRouterMode({ SIRKIT_FIXTURE_ROUTER: "record" })).toBe("record");

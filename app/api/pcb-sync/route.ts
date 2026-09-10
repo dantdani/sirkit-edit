@@ -1,4 +1,5 @@
 import { PostgresPhysicalBindingRepository } from "@/app/lib/physical-binding/server-repository";
+import { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { createProductionFootprintResolutionService, PRODUCTION_FOOTPRINT_RESOLVER_CAPABILITIES } from "@/app/lib/footprint-resolver/service";
 import { AtomicPcbSyncResourceProvider } from "@/app/lib/pcb-sync/providers";
@@ -25,11 +26,11 @@ export const stage3Telemetry = new PcbSyncTelemetry();
  *  authority a qualification reads is exactly what synchronization committed. */
 export const stage3BindingRepository = new PostgresPhysicalBindingRepository();
 export const stage3FootprintResolver = createProductionFootprintResolutionService({ repository: stage3BindingRepository });
-const service = new PcbSynchronizationService({ snapshotProvider: stage3SnapshotProvider, resolver: stage3FootprintResolver, resourceProvider: new AtomicPcbSyncResourceProvider(), repository: stage3Repository, telemetry: stage3Telemetry });
+const service = new PcbSynchronizationService({ snapshotProvider: stage3SnapshotProvider, resolver: stage3FootprintResolver, resourceProvider: new AtomicPcbSyncResourceProvider(), repository: stage3Repository, lineage: { workflow }, telemetry: stage3Telemetry });
 // [B16.1C §C] reload-time manufacturing truth (qualification authority head +
 // latest ledgered release) over the SAME durable workflow repository, so what a
 // browser reconstructs after refresh is exactly what the server committed.
-const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState, createManufacturingSummaryReader(workflow));
+const boardGet = createPcbSyncBoardGetCore(stage3Repository, pcbSyncFeatureState, createManufacturingSummaryReader(workflow), new DurableBoardLineageStore(workflow));
 
 // [B16.0.22] canonical wrapper — authorization inside the wrapper (all-members
 // read, no CSRF per the exact policy row). The `boardId` dispatch and the

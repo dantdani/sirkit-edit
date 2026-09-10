@@ -14,6 +14,12 @@ import {
   type PcbSyncPreflightResult,
   type PcbSyncSnapshotPublicationResult,
   type PcbSyncSnapshotRevisionConflictDetails,
+  PCB_SYNC_BOARD_REVISION_DERIVE_VERSION,
+  PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION,
+  type PcbSyncBoardRevisionDeriveRequest,
+  type PcbSyncBoardRevisionDeriveResult,
+  type PcbSyncBoardRevisionPreviewResult,
+  type PcbSyncBoardRevisionRequest,
 } from "./types";
 import type { PcbBoard } from "../pcb/types";
 
@@ -39,6 +45,8 @@ export interface PcbSyncManufacturingTruth {
 }
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
+function boardRevisionPreview(value: unknown): value is PcbSyncBoardRevisionPreviewResult { return object(value) && value.resultSchemaVersion === PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION && (value.status === "ready_to_derive" || value.status === "blocked") && object(value.revisionPlan) && typeof (value.revisionPlan as { planDigest?: unknown }).planDigest === "string" && object(value.derivedPreflight) && object(value.parentPreflight); }
+function boardRevisionDerive(value: unknown): value is PcbSyncBoardRevisionDeriveResult { return object(value) && value.resultSchemaVersion === PCB_SYNC_BOARD_REVISION_DERIVE_VERSION && (value.status === "derived" || value.status === "idempotent_replay") && typeof value.derivedBoardId === "string" && typeof value.boardRevision === "string" && object(value.lineage); }
 /** [B16-C.3] the server's snapshot-revision conflict details, accepted only in their exact shape. */
 function snapshotConflict(value: unknown): value is PcbSyncSnapshotRevisionConflictDetails {
   return object(value) && value.kind === "snapshot_revision" && Number.isSafeInteger(value.expectedRevision) && Number.isSafeInteger(value.currentRevision)
@@ -100,6 +108,10 @@ export class PcbSyncClient {
   /** Preflight is cancelable — its plan is inert until an explicit apply. */
   preflight(request: Omit<PcbSyncPreflightRequest, "tenantId" | "projectId" | "branchId" | "actorContext">, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<PcbSyncPreflightResult>> { return this.post("preflight", request, preflight, {}, options); }
   apply(request: Omit<PcbSyncApplyRequest, "tenantId" | "projectId" | "branchId" | "actorContext">): Promise<PcbSyncClientResult<PcbSyncApplyResult>> { return this.post("apply", request, applyResult, { "x-sirkit-pcb-sync-opt-in": "true" }); }
+  /** [B16-C.1] the reviewable rework plan for a NEW board revision; writes nothing, cancelable. */
+  previewBoardRevision(request: Omit<PcbSyncBoardRevisionRequest, "tenantId" | "projectId" | "branchId" | "actorContext">, options?: { signal?: AbortSignal }): Promise<PcbSyncClientResult<PcbSyncBoardRevisionPreviewResult>> { return this.post("preview_board_revision", request, boardRevisionPreview, {}, options); }
+  /** [B16-C.1] derive the reviewed revision — commits durable state, so no AbortSignal (same posture as apply). */
+  deriveBoardRevision(request: Omit<PcbSyncBoardRevisionDeriveRequest, "tenantId" | "projectId" | "branchId" | "actorContext">): Promise<PcbSyncClientResult<PcbSyncBoardRevisionDeriveResult>> { return this.post("derive_board_revision", request, boardRevisionDerive, { "x-sirkit-pcb-sync-opt-in": "true" }); }
   /**
    * [B16.1C §C/§F] fresh-browser hydration: the authoritative board (or
    * `not_found`) PLUS the server-owned manufacturing truth — the durable

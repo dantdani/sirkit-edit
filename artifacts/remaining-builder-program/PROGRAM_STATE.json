@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B16",
-  "currentCheckpoint": "B16-B",
+  "currentCheckpoint": "B16 final gate",
   "status": "in_progress",
   "baseSha": "62ea4a65327510a842be46afe97bda0147aac15a",
   "branch": "chapter/b16-foundation-closeout",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B16-B: audit the Drizzle journal/migrations (0027/0028 unjournaled), provide one supported migration mechanism with a transactional applied-migration ledger, disposable-PostgreSQL clean/upgrade/interrupted tests when available, make every DB-backed test opt-in by an explicit marker.",
-  "updatedAt": "2026-09-07T20:55:00-04:00"
+  "nextAction": "B16 final gate: push chapter/b16-foundation-closeout, mark PR #6 ready, wait for CI (prompt-to-gerber, database-delivery, page-browser-e2e, benchmark-quality), merge normally when green, fast-forward main, update the ledger, continue to B17-A.",
+  "updatedAt": "2026-09-09T22:05:00-04:00"
 }

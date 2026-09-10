@@ -222,6 +222,14 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     const resumed = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "request_atomic_review", componentInstanceId: instances[0]!.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instances[0]!.atomicPartRevisionId }));
     expect(resumed.status).toBe(200);
     expect((await readJson<{ request: { status: string } }>(resumed)).request.status).toBe("approved");
+    // [B16-C.5] and the editor's own Schematic → PCB re-binds every instance: an approved identical selection replays (200, nothing written) instead of a second refusal.
+    for (const instance of instances) {
+      const replay = await physicalBindings(jsonRequest("/api/physical-bindings", { operation: "bind_atomic_selection", componentInstanceId: instance.id, boardInstanceId: BOARD_ID, atomicPartRevisionId: instance.atomicPartRevisionId }));
+      const replayBody = await readJson<{ ok: boolean; alreadyBound: boolean; bindingRevisionId: string }>(replay);
+      expect(replay.status, `${instance.refDes}: ${JSON.stringify(replayBody).slice(0, 200)}`).toBe(200);
+      expect(replayBody.alreadyBound).toBe(true);
+      expect(replayBody.bindingRevisionId).toBe(bound.find((item) => item.ref === instance.refDes)!.bindingRevisionId);
+    }
   });
 
   it("5. schematic → PCB: publish (against the hydrated snapshot revision) → preflight → apply through the canonical route", async () => {
@@ -289,6 +297,10 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
 
     const load = await readJson<BoardLoad>(await pcbSyncGet(boardQuery()));
     expect(load.result.record!.revision).toBe(body.boardRevision);
+    // [B16-C.5] the response names the committed RECORD's digest (what the browser reloads and verifies against), distinct from the authority's board digest.
+    expect(body).toMatchObject({ committedBoardRevision: load.result.record!.revision, committedBoardDigest: load.result.record!.digest });
+    expect(body.boardDigest).toMatch(/^pcb-authority-/);
+    expect(body.committedBoardDigest).not.toBe(body.boardDigest);
     expect(load.manufacturing!.authority).toMatchObject({ revision: body.authorityRevision, recordDigest: body.authorityDigest, boardRevision: body.boardRevision, current: true, fabricationProfileId: "jlcpcb-2l", actor: USERS.editor });
     routedBoard = load.result.record!.board;
     const routing = verifyBlinkerRouting(routedBoard);

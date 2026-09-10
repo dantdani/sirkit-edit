@@ -8,6 +8,7 @@ import { validatePhysicalBinding } from "@/app/lib/physical-binding/validation";
 import type { NewPhysicalBindingCandidate } from "@/app/lib/physical-binding/domain";
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
+import { pcbBoardLineageOf } from "@/app/lib/pcb/board-identity";
 import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { DurableComponentReviewStore, listComponentReviews, REVIEW_REQUESTER_ROLES, REVIEW_RESOLVER_ROLES, requestComponentReview, resolveComponentReview, withdrawComponentReview, type ComponentReviewDeps, type ComponentReviewStatus } from "@/app/lib/physical-binding/review-handoff";
@@ -118,7 +119,7 @@ export const POST = authenticatedJsonRoute(
       const result = await bindAtomicSelection(service, repository, {
         scope,
         actor: scope.actor,
-        boardInstanceId: body.boardInstanceId,
+        boardInstanceId: pcbBoardLineageOf(body.boardInstanceId).rootBoardId, // [B16-C.1] bindings are per lineage, not per revision
         componentInstanceId: body.componentInstanceId,
         atomicPartRevisionId: body.atomicPartRevisionId,
         hierarchyPath: Array.isArray(body.hierarchyPath) ? (body.hierarchyPath as string[]) : undefined,
@@ -147,7 +148,7 @@ export const POST = authenticatedJsonRoute(
       const now = new Date().toISOString();
       const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason : "Exact component binding requested for reviewer approval.";
       const { stored, created } = await requestComponentReview(reviewDeps(), {
-        scope, actor: scope.actor, boardInstanceId: body.boardInstanceId, componentInstanceId: body.componentInstanceId, atomicPartRevisionId: body.atomicPartRevisionId,
+        scope, actor: scope.actor, boardInstanceId: pcbBoardLineageOf(body.boardInstanceId).rootBoardId, componentInstanceId: body.componentInstanceId, atomicPartRevisionId: body.atomicPartRevisionId,
         reason, requestedAt: now, requesterMembershipRevision: context.membershipRevision ?? null,
         idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-request:${body.componentInstanceId}:${body.atomicPartRevisionId}:${now}`,
       });
@@ -155,7 +156,7 @@ export const POST = authenticatedJsonRoute(
     }
     if (operation === "list_review_requests") {
       const status = typeof body.status === "string" && REVIEW_STATUSES.has(body.status) ? (body.status as ComponentReviewStatus) : undefined;
-      const { requests, membershipVerified } = await listComponentReviews(reviewDeps(), { scope, boardInstanceId: typeof body.boardInstanceId === "string" ? body.boardInstanceId : undefined, status, at: new Date().toISOString() });
+      const { requests, membershipVerified } = await listComponentReviews(reviewDeps(), { scope, boardInstanceId: typeof body.boardInstanceId === "string" ? pcbBoardLineageOf(body.boardInstanceId).rootBoardId : undefined, status, at: new Date().toISOString() });
       const human = scope.actor.actorKind === "human";
       return Response.json({
         ok: true,

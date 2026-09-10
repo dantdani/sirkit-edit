@@ -43,7 +43,7 @@ import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { arrangeStagedFootprints } from "@/app/lib/pcb/autoplace/arrange-staged";
 import { BOARD_RESTORE_EVENT, consumePendingBoardRestore } from "@/app/lib/pcb/board-restore";
 import { PcbSyncClient } from "@/app/lib/pcb-sync/client";
-import { PCB_SYNC_APPLY_REQUEST_VERSION, PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, PCB_SYNC_REQUEST_VERSION, type PcbSyncBoardRecord, type PcbSyncPreflightResult } from "@/app/lib/pcb-sync/types";
+import { PCB_SYNC_APPLY_REQUEST_VERSION, PCB_SYNC_DEMO_PUBLICATION_REQUEST_VERSION, PCB_SYNC_REQUEST_VERSION, type PcbSyncBoardRecord, type PcbSyncBoardRevisionPreviewResult, type PcbSyncPreflightResult } from "@/app/lib/pcb-sync/types";
 import { createHistory, type PcbHistory, type PcbHistoryRecord } from "@/app/lib/pcb/history";
 import {
   createSelectMoveTool,
@@ -135,6 +135,8 @@ import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // 
 import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
+import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
+import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
 import type { PcbSyncSnapshotRevisionConflictDetails } from "@/app/lib/pcb-sync/types";
 import { RoutingControls } from "./RoutingControls";
 import { RoutingRulesPanel } from "./RoutingRulesPanel";
@@ -374,7 +376,16 @@ export default function PcbEditor({
   const [pendingPreflight, setPendingPreflight] = useState<PcbSyncPreflightResult | null>(null);
   const [authoritativeRecord, setAuthoritativeRecord] = useState<PcbSyncBoardRecord | null>(null);
   const authorityRef = useRef<PcbSyncBoardRecord | null>(null);
-  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: pcbDesignInstanceId(init.scope.projectId), boardId: pcbBoardInstanceId(init.scope.projectId), assemblyVariantId: PCB_BOARD_ASSEMBLY_VARIANT_ID } : null, [init.scope]);
+  // [B16-C.1] the board this session works on: the lineage ROOT (`board:<project>`) until the server's lineage says a
+  // derived revision is current — then the editor follows it (a fresh browser learns this from the board load).
+  const [currentBoardId, setCurrentBoardId] = useState<string | null>(null);
+  const syncIdentity = useMemo(() => init.scope ? { ...init.scope, designId: pcbDesignInstanceId(init.scope.projectId), boardId: currentBoardId ?? pcbBoardInstanceId(init.scope.projectId), assemblyVariantId: PCB_BOARD_ASSEMBLY_VARIANT_ID } : null, [init.scope, currentBoardId]);
+  // [B16-C.1] the rework plan for a NEW board revision (preview → human review → derive).
+  const [boardRevisionOpen, setBoardRevisionOpen] = useState(false);
+  const [boardRevisionPreview, setBoardRevisionPreview] = useState<PcbSyncBoardRevisionPreviewResult | null>(null);
+  const [boardRevisionCarry, setBoardRevisionCarry] = useState<BoardRevisionCarry>({ copper: true, placement: true, constraints: true });
+  const [boardRevisionBusy, setBoardRevisionBusy] = useState(false);
+  const [boardRevisionError, setBoardRevisionError] = useState<string | null>(null);
   // B16.0: the client no longer asserts an actor/role — identity is derived
   // server-side from the authenticated session and project membership.
   const client = useMemo(() => syncIdentity ? new PcbSyncClient({ tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }) : null, [syncIdentity]);
@@ -396,7 +407,8 @@ export default function PcbEditor({
     return owner;
   });
   const [ownedOps] = useState(() => new PcbOwnedOperationRegistry(pcbLifecycle));
-  useEffect(() => () => pcbLifecycle.dispose(), [pcbLifecycle]);
+  // [B16-C.5] mount re-arms (StrictMode runs this cleanup once and mounts again), unmount disposes.
+  useEffect(() => { pcbLifecycle.resume(); return () => pcbLifecycle.dispose(); }, [pcbLifecycle]);
   // B08.3 — busy state derives from the registry (request-owned records,
   // retired synchronously by lifecycle adoption) — never ambient booleans.
   const [ownedBusy, setOwnedBusy] = useState({ syncing: false, applying: false, qualifying: false });
@@ -540,6 +552,12 @@ export default function PcbEditor({
     const scope = pcbLifecycle.capture();
     void client.loadBoard(syncIdentity.boardId).then((loaded) => {
       if (cancelled || !scope.isCurrent()) return;
+      // [B16-C.1] a superseded board revision is history: follow the lineage to the current revision before adopting anything.
+      if (loaded.ok && loaded.value.lineage && loaded.value.lineage.currentBoardId !== syncIdentity.boardId) {
+        setToast(`Board ${syncIdentity.boardId} was superseded by revision ${loaded.value.lineage.currentBoardId}; opening the current revision. The earlier board and its releases are kept as history.`);
+        setCurrentBoardId(loaded.value.lineage.currentBoardId);
+        return;
+      }
       const restored = consumePendingBoardRestore();
       if (restored) {
         if (loaded.ok && loaded.value.status === "found" && loaded.value.record) {
@@ -781,7 +799,7 @@ export default function PcbEditor({
     // transaction; the small concurrency cap overlaps latency without
     // crowding the database pooler, and replays of already-bound parts are
     // fast and idempotent, so restarting Sync after an interruption resumes.
-    await runOwnedSyncPreparation(ownedOps, {
+    const run = await runOwnedSyncPreparation(ownedOps, {
       instances: atomicInstances,
       concurrency: 3,
       // Part catalog data must be in the cache before buildNetlist runs.
@@ -857,6 +875,10 @@ export default function PcbEditor({
         settleStaleServerCommit(settlement);
       },
     });
+    // [B16-C.5] a click must never do nothing silently: a refused (already running) or a
+    // stale-before-any-server-call run says so; every other outcome already spoke.
+    if (run.status === "refused-busy") setToast("Schematic → PCB is already running — wait for it to finish.");
+    else if (run.status === "stale" && run.stage === "none") setToast("Schematic → PCB was not started: the board changed while it was starting. Try again.");
   }, [client, syncIdentity, gateSchematicSync, settleStaleServerCommit, ownedOps, pcbLifecycle, componentReview]);
 
   const handleApplySync = useCallback(async () => {
@@ -1094,6 +1116,40 @@ export default function PcbEditor({
     await handleSync(lastSyncPlacementRef.current);
   }, [snapshotConflict, syncIdentity, handleSync]);
 
+  // [B16-C.1] derive a new board revision: preview the rework plan (pure, server-computed), review it, derive it.
+  const boardRevisionRequest = useCallback((carry: BoardRevisionCarry) => {
+    if (!syncIdentity || !pendingPreflight || !authoritativeRecord) return null;
+    return {
+      requestSchemaVersion: "sirkit.pcb-board-revision-request.v1" as const, requestId: `board-revision:${pendingPreflight.preflightId}:${carry.copper ? "c" : "-"}${carry.placement ? "p" : "-"}${carry.constraints ? "k" : "-"}`,
+      designId: syncIdentity.designId, schematicRevision: pendingPreflight.snapshot.schematicRevision, assemblyVariantId: syncIdentity.assemblyVariantId,
+      parent: { boardId: syncIdentity.boardId, expectedBoardRevision: authoritativeRecord.revision }, carry,
+      resolutionPolicyId: "sirkit.default-footprint-resolution", resolutionPolicyVersion: "1.0.0", syncPolicyId: "sirkit.safe-pcb-sync", syncPolicyVersion: "1.0.0", requestedAt: new Date().toISOString(),
+    };
+  }, [syncIdentity, pendingPreflight, authoritativeRecord]);
+  const handlePreviewBoardRevision = useCallback(async (carry: BoardRevisionCarry = boardRevisionCarry) => {
+    const request = boardRevisionRequest(carry);
+    if (!client || !request) { setToast("A derived revision needs a durable board and a refused sync preflight to start from."); return; }
+    setBoardRevisionOpen(true); setBoardRevisionBusy(true); setBoardRevisionError(null); setBoardRevisionPreview(null);
+    const result = await client.previewBoardRevision(request);
+    setBoardRevisionBusy(false);
+    if (!result.ok) { setBoardRevisionError(`The rework plan could not be computed: ${result.code}${result.detail ? ` — ${result.detail}` : ""}`); return; }
+    setBoardRevisionPreview(result.value);
+  }, [client, boardRevisionRequest, boardRevisionCarry]);
+  const handleBoardRevisionCarryChange = useCallback((carry: BoardRevisionCarry) => { setBoardRevisionCarry(carry); void handlePreviewBoardRevision(carry); }, [handlePreviewBoardRevision]);
+  const handleDeriveBoardRevision = useCallback(async () => {
+    const preview = boardRevisionPreview, request = boardRevisionRequest(boardRevisionCarry);
+    if (!client || !preview || !request || !syncIdentity) return;
+    setBoardRevisionBusy(true); setBoardRevisionError(null);
+    const result = await client.deriveBoardRevision({ ...request, requestId: `${request.requestId}:derive`, planId: preview.revisionPlan.planId, planDigest: preview.revisionPlan.planDigest, syncPlanDigest: preview.derivedPreflight.planDigest, confirmation: "derive_board_revision", idempotencyKey: `derive:${preview.revisionPlan.planDigest}` });
+    setBoardRevisionBusy(false);
+    if (!result.ok) { setBoardRevisionError(`Derivation refused: ${result.code}${result.detail ? ` — ${result.detail}` : ""}`); return; }
+    setBoardRevisionOpen(false); setBoardRevisionPreview(null); setPendingPreflight(null);
+    setToast(`Derived board revision ${result.value.derivedBoardId} (generation ${result.value.generation}). The previous board and its releases are kept as history; place, route and qualify the new revision before releasing.`);
+    setCurrentBoardId(result.value.derivedBoardId); // the load effect adopts the derived board and re-hydrates its (empty) manufacturing truth
+    bumpManufacturingTruth();
+  }, [client, boardRevisionPreview, boardRevisionRequest, boardRevisionCarry, syncIdentity, bumpManufacturingTruth]);
+  const syncBlockedByProtectedCopper = Boolean(pendingPreflight && pendingPreflight.blockers.length > 0 && preflightBlockedByProtectedCopper(pendingPreflight.blockers));
+
   const handleQualify = useCallback(async () => {
     if (!syncIdentity || !client) return;
     if (!authorityRef.current) { setToast("Qualification needs an applied durable board — run Schematic → PCB and apply the sync plan first."); return; }
@@ -1109,9 +1165,10 @@ export default function PcbEditor({
       commit: async () => {
         try {
           const res = await fetch("/api/pcb/qualify", { method: "POST", headers: scopeHeaders(), body: JSON.stringify({ boardId: syncIdentity.boardId, designId: syncIdentity.designId }) });
-          const body = (await res.json().catch(() => null)) as { ok?: boolean; code?: string; error?: string; rc02?: { remainingConnections: number; shorts: number; routeBlockingDrcErrors: number }; boardRevision?: string; boardDigest?: string } | null;
+          const body = (await res.json().catch(() => null)) as { ok?: boolean; code?: string; error?: string; rc02?: { remainingConnections: number; shorts: number; routeBlockingDrcErrors: number }; boardRevision?: string; boardDigest?: string; committedBoardRevision?: string; committedBoardDigest?: string } | null;
           if (!res.ok || !body?.ok) return { committed: false, message: `Qualification failed: ${body?.code ?? res.status}${body?.error ? ` — ${body.error}` : ""}` };
-          return { committed: true, value: body, expected: { revision: body.boardRevision ?? "", digest: body.boardDigest ?? "" } };
+          // [B16-C.5] verify against the committed board RECORD's revision/digest (what the reload returns) — never the authority's own digest.
+          return { committed: true, value: body, expected: { revision: body.committedBoardRevision ?? body.boardRevision ?? "", digest: body.committedBoardDigest ?? "" } };
         } catch (error) {
           return { committed: false, message: `Qualification failed: ${error instanceof Error ? error.message : String(error)}` };
         }
@@ -1972,7 +2029,7 @@ export default function PcbEditor({
   if (!state.board) {
     return (
       <>
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-950">
+        <div className="absolute inset-0 flex flex-col items-center justify-center overflow-auto bg-zinc-950" data-testid="pcb-empty-state">
           <div className="flex flex-col items-center text-center max-w-sm">
           <CircuitBoard className="size-10 text-zinc-700" />
           <p className="mt-3 text-sm font-medium text-zinc-300">No board yet</p>
@@ -1984,6 +2041,7 @@ export default function PcbEditor({
             type="button"
             onClick={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             disabled={syncing}
+            data-testid="sync-schematic-to-pcb"
             className="mt-4 flex items-center gap-2 px-3 py-1.5 rounded bg-teal-600 text-sm text-white hover:bg-teal-500 transition-colors disabled:opacity-50"
           >
             {syncing && <Loader2 className="size-3.5 animate-spin" />}
@@ -1997,9 +2055,18 @@ export default function PcbEditor({
           >
             Placement options
           </button>
-          {pendingPreflight?.plan && <button type="button" onClick={() => void handleApplySync()} disabled={applying} className="mt-3 rounded border border-teal-500 px-3 py-1.5 text-xs text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply verified plan"}</button>}
+          {syncBlockedByProtectedCopper && <button type="button" onClick={() => void handlePreviewBoardRevision()} disabled={syncing || applying || boardRevisionBusy} data-testid="derive-board-revision" className="mt-3 rounded border border-amber-500 px-3 py-1.5 text-xs text-amber-200 disabled:opacity-50">Protected copper blocks this sync — derive a new board revision…</button>}
+          {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan" onClick={() => void handleApplySync()} disabled={applying} className="mt-3 rounded border border-teal-500 px-3 py-1.5 text-xs text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply verified plan"}</button>}
           {toast && <p className="mt-3 text-xs text-zinc-400">{toast}</p>}
           </div>
+          {/* [B16-C.2/C.5] the review handoff is reachable BEFORE any board exists: an editor's first
+              Schematic → PCB stops at binding here, and the reviewer decides here too. It sits in the
+              flow below the call to action (an overlay covered the button on a small viewport). */}
+          {!init.demo && syncIdentity && (
+            <div className="mt-6 w-full max-w-2xl px-4">
+              <ComponentReviewPanel review={componentReview} />
+            </div>
+          )}
         </div>
         <SyncPlacementDialog
           open={syncDialogOpen}
@@ -2090,7 +2157,8 @@ export default function PcbEditor({
             onSync={() => void handleSync({ centerNewParts: true, spreadOverlaps: true })}
             onOptions={() => setSyncDialogOpen(true)}
           />
-          {pendingPreflight?.plan && <button type="button" onClick={() => void handleApplySync()} disabled={applying} className="ml-2 rounded border border-teal-500 px-2 py-1 text-[11px] text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply sync plan"}</button>}
+          {syncBlockedByProtectedCopper && <button type="button" onClick={() => void handlePreviewBoardRevision()} disabled={syncing || applying || boardRevisionBusy} data-testid="derive-board-revision" className="ml-2 rounded border border-amber-500 px-2 py-1 text-[11px] text-amber-200 disabled:opacity-50">Derive new board revision…</button>}
+          {pendingPreflight?.plan && <button type="button" data-testid="apply-sync-plan-toolbar" onClick={() => void handleApplySync()} disabled={applying} className="ml-2 rounded border border-teal-500 px-2 py-1 text-[11px] text-teal-200 disabled:opacity-50">{applying ? "Applying…" : "Apply sync plan"}</button>}
           {!init.demo && syncIdentity && (
             <>
               <button
@@ -2148,6 +2216,9 @@ export default function PcbEditor({
           )}
           {!init.demo && (
             <SnapshotConflictDialog conflict={snapshotConflict} busy={syncing} onRefresh={handleSnapshotConflictRefresh} onRebase={() => void handleSnapshotConflictRebase()} onDismiss={() => setSnapshotConflict(null)} />
+          )}
+          {!init.demo && (
+            <BoardRevisionDialog open={boardRevisionOpen} preview={boardRevisionPreview} carry={boardRevisionCarry} busy={boardRevisionBusy} error={boardRevisionError} onCarryChange={handleBoardRevisionCarryChange} onDerive={() => void handleDeriveBoardRevision()} onDismiss={() => { if (!boardRevisionBusy) setBoardRevisionOpen(false); }} />
           )}
           {/* B08.2 — divergence notice from the reconciliation boundary:
               display-only, and self-retiring — any later lifecycle adoption

@@ -1,4 +1,5 @@
 import type { DurableAggregateRecord, DurableAppendOperation, DurableWorkflowRepository, DurableWorkflowScope } from "../durable-workflow/types";
+import type { EngineeringActor } from "../engineering/types";
 import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "../durable-workflow/stable";
 import { makeBoardRecord } from "./board";
 import type { PcbBoard } from "../pcb/types";
@@ -37,6 +38,27 @@ export function boardPublicationOperation(record: PcbSyncBoardRecord, expectedRe
   const rebuilt = makeBoardRecord({ ...scope, board: record.board, updatedAt: record.updatedAt });
   if (rebuilt.revision !== record.revision || rebuilt.digest !== record.digest) throw new Error("PS_BOARD_RECORD_DIGEST_MISMATCH");
   return { aggregateType: BOARD, aggregateKey: boardKey(scope), expectedRevision, payload: structuredClone(record), recordDigest: record.digest };
+}
+
+/**
+ * [B16-C.1] The records an ordinary apply writes beside the board — the APPLIED
+ * plan and the committed audit — as append operations for a board scope that
+ * has none yet (a freshly derived revision), so the derived board carries its
+ * own "applied schematic synchronization" evidence in the same commit and
+ * qualification finds it exactly as it would after an ordinary apply.
+ */
+export function synchronizationRecordOperations(input: { scope: PcbSyncRepositoryScope; plan: PcbSyncPlan; actor: EngineeringActor; record: PcbSyncBoardRecord; originalBoardRevision: string | null; completedAt: string; idempotencyKey: string }): { operations: Array<DurableAppendOperation<object>>; audit: PcbSyncAuditRecord } {
+  assertPlanDigest(input.plan);
+  const nextPlan = { ...input.plan, lifecycle: "applied" as const };
+  const auditBase = { schemaVersion: PCB_SYNC_AUDIT_VERSION, auditId: pcbSyncId("pcb-sync-audit", { plan: input.plan.planDigest, board: input.record.revision, key: input.idempotencyKey }), planId: input.plan.planId, planDigest: input.plan.planDigest, scope: input.plan.scope, actor: structuredClone(input.actor), operationIds: input.plan.operations.map((item) => item.operationId), originalBoardRevision: input.originalBoardRevision, committedBoardRevision: input.record.revision, committedBoardDigest: input.record.digest, idempotencyKey: input.idempotencyKey, outcome: "committed" as const, occurredAt: input.completedAt };
+  const audit: PcbSyncAuditRecord = { ...auditBase, auditDigest: pcbSyncDigest(auditBase) };
+  return {
+    audit,
+    operations: [
+      { aggregateType: PLAN, aggregateKey: planKey(input.scope, input.plan.planId), expectedRevision: 0, payload: storedPlan(nextPlan), recordDigest: pcbSyncDigest({ planDigest: nextPlan.planDigest, lifecycle: nextPlan.lifecycle }) },
+      { aggregateType: AUDIT, aggregateKey: auditKey(input.scope), expectedRevision: 0, payload: { audits: [audit] }, recordDigest: pcbSyncDigest([audit.auditDigest]) },
+    ],
+  };
 }
 
 /** [B16-C.3] `PS_SNAPSHOT_REVISION_CONFLICT` with the current and expected revisions attached (message unchanged for every existing catch). */

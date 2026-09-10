@@ -69,12 +69,10 @@ type AtomicAssignment = {
 export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Promise<Response> => {
   const id = params!.id;
 
-  if (!UUID_RE.test(id)) {
-    return Response.json({ ok: true, part: null });
-  }
-
   // [B16-C §5] fixture runtime: serve the committed blinker catalog part exactly as the
-  // browser cache expects it (no database). Unknown ids are `null`, as in production.
+  // browser cache expects it (no database). Catalog ids are stable names, not database
+  // UUIDs, so the catalog is consulted BEFORE the UUID shape check (the browser proof
+  // found every part reported "not found" behind it). Unknown ids are `null`, as in production.
   if (fixtureRuntimeEnabled()) {
     const cached = fixtureContainer().catalog.cachedParts.get(id);
     if (!cached) return Response.json({ ok: true, part: null });
@@ -85,6 +83,10 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
       ...(cached.atomicAssignments ? { atomicAssignments: cached.atomicAssignments as PartDetail["atomicAssignments"] } : {}),
     };
     return Response.json({ ok: true, part });
+  }
+
+  if (!UUID_RE.test(id)) {
+    return Response.json({ ok: true, part: null });
   }
 
   try {

@@ -91,10 +91,26 @@ export class PcbBoardLifecycleOwner {
     this.identity = { ...identity };
   }
 
-  /** Unmount: everything stops; no further scope is ever current. */
+  /** Unmount: everything stops; no further scope is ever current (until `resume`). */
   dispose(): void {
     this.disposedFlag = true;
     this.abortController.abort();
+  }
+
+  /**
+   * [B16-C.5] Re-arm a disposed owner for the SAME generation. React StrictMode
+   * (development) runs every effect's cleanup once and mounts the effect again
+   * without re-rendering; an owner disposed by that simulated unmount stayed
+   * dead for the component's whole life, so every request-owned workflow
+   * (Schematic → PCB, apply, qualification) ended "stale" before its first
+   * server call and the click did nothing — found by the page-level browser
+   * proof against `next dev`. A live owner is left untouched; a real unmount
+   * disposes it again.
+   */
+  resume(): void {
+    if (!this.disposedFlag) return;
+    this.disposedFlag = false;
+    this.abortController = new AbortController();
   }
 
   /** Capture an invocation scope for the ACTIVE lifecycle generation. */

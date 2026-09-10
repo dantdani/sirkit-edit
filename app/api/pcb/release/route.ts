@@ -39,6 +39,7 @@ import { boundedManufacturingFailure, manufacturingRefusal } from "@/app/lib/pcb
 import { MANUFACTURING_RULE_PROFILE_SCHEMA, type ManufacturingRuleProfile } from "@/app/lib/pcb/fab/release-manifest";
 import { ruleProfileEvidenceStatus } from "@/app/lib/pcb/fab/rule-profile";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
+import { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { PCB_SYNC_API_MAX_BYTES, PCB_SYNC_API_DEADLINE_MS, pcbSyncScopeFromContext, pcbSyncForbiddenAuthorityRefusal } from "../../pcb-sync/_scope";
 import { stage3Repository } from "../../pcb-sync/route";
@@ -100,6 +101,10 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
     }
     // The authority must describe the board's CURRENT durable revision.
     const head = await stage3Repository.getBoardHead({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId, boardId });
+    // [B16-C.1] an old revision's release can never become current again: releases run only on the current board of a lineage.
+    const lineageStore = new DurableBoardLineageStore(getDurableWorkflowRepository());
+    const lineage = await lineageStore.describe({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId);
+    if (lineage.state === "superseded") return manufacturingRefusal("MFG_BOARD_SUPERSEDED", { correlationId, extra: { supersededBy: lineage.supersededBy?.boardId ?? null, currentBoardId: (await lineageStore.resolveCurrent({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId }, boardId)).currentBoardId } });
     if (!head) return manufacturingRefusal("MFG_AUTHORITATIVE_BOARD_NOT_FOUND", { correlationId });
     if (head.record.revision !== stored.authority.boardRevision || authoritativeBoardDigest(head.record.board) !== stored.authority.boardDigest) {
       return manufacturingRefusal("MFG_AUTHORITY_STALE", { correlationId, extra: { authorityBoardRevision: stored.authority.boardRevision, currentBoardRevision: head.record.revision } });

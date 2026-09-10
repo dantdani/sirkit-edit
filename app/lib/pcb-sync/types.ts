@@ -209,6 +209,8 @@ export interface PcbSyncBoardLoadResult {
   status: "found" | "not_found" | "not_modified";
   scope: { tenantId: string; projectId: string; branchId: string; boardId: string };
   record?: PcbSyncBoardRecord;
+  /** [B16-C.1] the board's place in its lineage (current / superseded → where the current revision is). */
+  lineage?: import("./board-lineage").PcbBoardLineageSummary;
 }
 
 export interface VerifiedPinPadMappingEntry {
@@ -622,6 +624,10 @@ export interface PcbSyncPreflightContext {
   materializations: PcbSyncFootprintMaterialization[];
   policy: PcbSyncPolicy;
   contextIssues: PcbSyncIssue[];
+  /** [B16-C.1] present ONLY while synchronizing a freshly DERIVED board revision: every copper object on it survived the
+   *  semantic-equivalence proof, so structural changes are protected per NET (a footprint on a retained net stays
+   *  protected) instead of per board class. Never set for an ordinary target. */
+  derivation?: { retainedNetIds: number[]; planDigest: string };
 }
 
 export interface PcbSyncSnapshotProvider {
@@ -668,4 +674,66 @@ export interface PcbSyncSnapshotRevisionConflictDetails {
   currentSchematicDigest: string;
   attemptedSchematicRevision: string;
   attemptedSnapshotDigest: string;
+}
+
+// ── [B16-C.1] routed-board revision lifecycle ─────────────────────────────────
+
+export const PCB_SYNC_BOARD_REVISION_REQUEST_VERSION = "sirkit.pcb-board-revision-request.v1" as const;
+export const PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION = "sirkit.pcb-board-revision-preview.v1" as const;
+export const PCB_SYNC_BOARD_REVISION_DERIVE_VERSION = "sirkit.pcb-board-revision-derive.v1" as const;
+
+/** Preview (and, with the pins below, derive) a NEW board revision from the parent board and the CURRENT schematic snapshot. */
+export interface PcbSyncBoardRevisionRequest {
+  requestSchemaVersion: typeof PCB_SYNC_BOARD_REVISION_REQUEST_VERSION;
+  requestId: string;
+  tenantId: string;
+  projectId: string;
+  branchId: string;
+  designId: string;
+  schematicRevision: string;
+  assemblyVariantId: string;
+  parent: { boardId: string; expectedBoardRevision: string };
+  carry: import("./board-revision").BoardRevisionCarry;
+  outline?: import("../pcb/types").BoardOutline;
+  resolutionPolicyId: string;
+  resolutionPolicyVersion: string;
+  syncPolicyId: string;
+  syncPolicyVersion: string;
+  actorContext: EngineeringActor;
+  requestedAt: string;
+}
+
+export interface PcbSyncBoardRevisionDeriveRequest extends PcbSyncBoardRevisionRequest {
+  /** The reviewed rework plan (from the preview) — recomputed and matched before anything is written. */
+  planId: string;
+  planDigest: string;
+  /** The sync plan the derived board is synchronized with in the same commit (null when the derived board needs no operations). */
+  syncPlanDigest: string | null;
+  confirmation: "derive_board_revision";
+  idempotencyKey: string;
+}
+
+export interface PcbSyncBoardRevisionPreviewResult {
+  resultSchemaVersion: typeof PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION;
+  requestId: string;
+  status: "ready_to_derive" | "blocked";
+  revisionPlan: import("./board-revision").BoardRevisionPlan;
+  /** The ordinary preflight against the PARENT (why a derivation is needed: Stage 8 blockers). */
+  parentPreflight: { status: PcbSyncPreflightStatus; blockers: PcbSyncIssue[]; stage8Blocked: boolean };
+  /** The ordinary preflight against the STRIPPED derived board — the structural operations the derivation will apply. */
+  derivedPreflight: { status: PcbSyncPreflightStatus; blockers: PcbSyncIssue[]; planId: string | null; planDigest: string | null; operations: Array<{ kind: string; targetStableId: string; risk: PcbSyncRiskClass }> };
+  evaluatedAt: string;
+}
+
+export interface PcbSyncBoardRevisionDeriveResult {
+  resultSchemaVersion: typeof PCB_SYNC_BOARD_REVISION_DERIVE_VERSION;
+  requestId: string;
+  status: "derived" | "idempotent_replay";
+  derivedBoardId: string;
+  boardRevision: string;
+  boardDigest: string;
+  parent: { boardId: string; revision: string; digest: string };
+  generation: number;
+  lineage: import("./board-lineage").PcbBoardLineageSummary;
+  completedAt: string;
 }

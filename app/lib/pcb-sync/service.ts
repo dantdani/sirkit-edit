@@ -1,4 +1,10 @@
 import { FootprintResolutionService } from "../footprint-resolver/service";
+import type { DurableWorkflowRepository } from "../durable-workflow/types";
+import { DurableBoardLineageStore, deriveBoardRevision as commitBoardRevision, replayBoardDerivation } from "./board-lineage";
+import { BOARD_REVISION_CONFIRMATION, previewBoardRevision, STAGE8_BLOCKER_CODES } from "./board-revision";
+import { makeBoardRecord } from "./board";
+import { pcbBoardLineageOf } from "../pcb/board-identity";
+import { PCB_SYNC_BOARD_REVISION_DERIVE_VERSION, PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION, PCB_SYNC_BOARD_REVISION_REQUEST_VERSION, PCB_SYNC_REQUEST_VERSION, type PcbSyncBoardRecord, type PcbSyncBoardRevisionDeriveRequest, type PcbSyncBoardRevisionDeriveResult, type PcbSyncBoardRevisionPreviewResult, type PcbSyncBoardRevisionRequest, type PcbSyncTargetExistingBoard } from "./types";
 import { FOOTPRINT_RESOLUTION_REQUEST_VERSION, type FootprintResolutionBatchResult, type FootprintResolutionRequest, type FootprintResolutionStatus } from "../footprint-resolver/types";
 import { inspectBoard } from "./board";
 import { PcbSyncPreflightEngine } from "./engine";
@@ -97,6 +103,8 @@ export interface PcbSynchronizationServiceOptions {
   faultInjector?: PcbSyncFaultInjector;
   telemetry?: PcbSyncTelemetry;
   clock?: PcbSyncTrustedClock;
+  /** [B16-C.1] the durable workflow the board lineage lives in; absent = derivation unavailable and no superseded guard (in-memory harnesses). */
+  lineage?: { workflow: DurableWorkflowRepository };
 }
 
 export class PcbSynchronizationService {
@@ -116,7 +124,7 @@ export class PcbSynchronizationService {
   private scope(request: PcbSyncPreflightRequest | PcbSyncApplyRequest): PcbSyncRepositoryScope { return { tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId, boardId: "target" in request ? request.target.boardId : request.boardId }; }
 
   private resolverRequest(request: PcbSyncPreflightRequest, component: Awaited<ReturnType<PcbSyncSnapshotProvider["acquire"]>>["components"][number]): FootprintResolutionRequest {
-    return { schemaVersion: FOOTPRINT_RESOLUTION_REQUEST_VERSION, requestId: `pcb-sync-${request.requestId}-${component.componentInstanceId}`, tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId, boardInstanceId: request.target.boardId, componentId: component.componentInstanceId, hierarchyPath: [...component.hierarchyPath], assemblyVariantId: request.assemblyVariantId, purpose: "layout_transfer", expectedComponentRevision: component.componentRevision, policyId: request.resolutionPolicyId, policyVersion: request.resolutionPolicyVersion, requestedAt: request.requestedAt, actorContext: structuredClone(request.actorContext), traceLevel: request.traceLevel };
+    return { schemaVersion: FOOTPRINT_RESOLUTION_REQUEST_VERSION, requestId: `pcb-sync-${request.requestId}-${component.componentInstanceId}`, tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId, boardInstanceId: pcbBoardLineageOf(request.target.boardId).rootBoardId /* [B16-C.1] bindings are per lineage, not per revision */, componentId: component.componentInstanceId, hierarchyPath: [...component.hierarchyPath], assemblyVariantId: request.assemblyVariantId, purpose: "layout_transfer", expectedComponentRevision: component.componentRevision, policyId: request.resolutionPolicyId, policyVersion: request.resolutionPolicyVersion, requestedAt: request.requestedAt, actorContext: structuredClone(request.actorContext), traceLevel: request.traceLevel };
   }
 
   private async resolveApplicable(request: PcbSyncPreflightRequest, components: Awaited<ReturnType<PcbSyncSnapshotProvider["acquire"]>>["components"], signal?: AbortSignal): Promise<FootprintResolutionBatchResult> {
@@ -140,7 +148,7 @@ export class PcbSynchronizationService {
     return { schemaVersion: "sirkit.footprint-resolution-batch-result.v1", batchId: `pcb-sync-${request.requestId}`, policyId: request.resolutionPolicyId, policyVersion: request.resolutionPolicyVersion, results, summary, dependencyDigest: pcbSyncDigest(results.map((result) => result.inputSnapshot.dependencyDigest)), evaluatedAt: request.requestedAt };
   }
 
-  private async buildContext(request: PcbSyncPreflightRequest, signal?: AbortSignal): Promise<PcbSyncPreflightContext> {
+  private async buildContext(request: PcbSyncPreflightRequest, signal?: AbortSignal, override?: { boardRecord: PcbSyncBoardRecord; derivation: NonNullable<PcbSyncPreflightContext["derivation"]> }): Promise<PcbSyncPreflightContext> {
     const requestIssues = validatePreflightRequest(request);
     if (requestIssues.length) throw new Error(requestIssues[0]!.code);
     const authorization = await this.authorizer.authorizePreflight(request);
@@ -164,7 +172,12 @@ export class PcbSynchronizationService {
     if (new Set(pinInstanceIds).size !== pinInstanceIds.length || snapshot.components.some((component) => new Set(component.pins.map((pin) => pin.number)).size !== component.pins.length)) contextIssues.push(pcbSyncIssue({ code: "PS_PIN_IDENTITY_DUPLICATE", scope: "component", message: "Snapshot contains duplicate pin identities." }));
     if (new Set(snapshot.nets.map((item) => item.stableNetId)).size !== snapshot.nets.length) contextIssues.push(pcbSyncIssue({ code: "PS_NET_IDENTITY_DUPLICATE", scope: "net", message: "Snapshot contains duplicate stable net identities." }));
     const scope = this.scope(request);
-    const boardRecord = await this.options.repository.getBoard(scope);
+    const boardRecord = override ? structuredClone(override.boardRecord) : await this.options.repository.getBoard(scope);
+    // [B16-C.1] a superseded board revision is never a synchronization target: its copper, authority and releases are frozen history.
+    if (!override && request.target.kind === "existing_board" && this.options.lineage) {
+      const lineage = await new DurableBoardLineageStore(this.options.lineage.workflow).describe(scope, request.target.boardId);
+      if (lineage.state === "superseded") contextIssues.push(pcbSyncIssue({ code: "PS_BOARD_SUPERSEDED", scope: "board", message: `Board ${request.target.boardId} was superseded by ${lineage.supersededBy?.boardId ?? "a newer revision"}; synchronize the current revision instead.`, retryability: "after_refresh" }));
+    }
     if (request.target.kind === "existing_board") {
       if (!boardRecord) contextIssues.push(pcbSyncIssue({ code: "PS_BOARD_NOT_FOUND", scope: "board", message: "Existing target board was not found." }));
       else if (boardRecord.revision !== request.target.expectedBoardRevision) contextIssues.push(pcbSyncIssue({ code: "PS_BOARD_REVISION_MISMATCH", scope: "board", message: "Target board changed since the expected revision.", retryability: "after_refresh" }));
@@ -220,7 +233,7 @@ export class PcbSynchronizationService {
       if (component) contextIssues.push(...validateMaterializationAuthority(component, snapshot, materialization));
     }
     contextIssues.push(...boardIdentityIssues);
-    return { request: structuredClone(request), snapshot, boardRecord, boardAssessment, resolverBatch, resolutionByComponent, materializations: materializations.sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)), policy, contextIssues: contextIssues.sort((a, b) => compareCodePoints(a.code, b.code)) };
+    return { request: structuredClone(request), snapshot, boardRecord, boardAssessment, resolverBatch, resolutionByComponent, materializations: materializations.sort((a, b) => compareCodePoints(a.componentInstanceId, b.componentInstanceId)), policy, contextIssues: contextIssues.sort((a, b) => compareCodePoints(a.code, b.code)), ...(override ? { derivation: structuredClone(override.derivation) } : {}) };
   }
 
   private async runPreflight(request: PcbSyncPreflightRequest, persistPlan: boolean, signal?: AbortSignal): Promise<PcbSyncPreflightResult> {
@@ -237,6 +250,98 @@ export class PcbSynchronizationService {
   }
 
   async preflight(request: PcbSyncPreflightRequest, signal?: AbortSignal): Promise<PcbSyncPreflightResult> { return this.runPreflight(request, true, signal); }
+
+  // ── [B16-C.1] routed-board revision lifecycle ───────────────────────────────
+
+  private revisionPreflightRequest(request: PcbSyncBoardRevisionRequest, target: PcbSyncTargetExistingBoard, suffix: string): PcbSyncPreflightRequest {
+    return {
+      requestSchemaVersion: PCB_SYNC_REQUEST_VERSION, requestId: `${request.requestId}:${suffix}`, tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId, designId: request.designId,
+      schematicRevision: request.schematicRevision, assemblyVariantId: request.assemblyVariantId, target, resolutionPolicyId: request.resolutionPolicyId, resolutionPolicyVersion: request.resolutionPolicyVersion,
+      syncPolicyId: request.syncPolicyId, syncPolicyVersion: request.syncPolicyVersion, actorContext: request.actorContext, requestedAt: request.requestedAt, mode: "preview",
+    };
+  }
+
+  private validateRevisionRequest(request: PcbSyncBoardRevisionRequest): void {
+    if (request?.requestSchemaVersion !== PCB_SYNC_BOARD_REVISION_REQUEST_VERSION) throw new Error("PS_REQUEST_SCHEMA_UNSUPPORTED");
+    const carry = request.carry;
+    if (!carry || typeof carry.copper !== "boolean" || typeof carry.placement !== "boolean" || typeof carry.constraints !== "boolean") throw new Error("PS_BOARD_REVISION_CARRY_INVALID");
+    if (!request.parent || typeof request.parent.boardId !== "string" || typeof request.parent.expectedBoardRevision !== "string") throw new Error("PS_BOARD_REVISION_PARENT_INVALID");
+    if (!["pcb_editor", "project_admin"].includes(request.actorContext?.role)) throw new Error("PS_BOARD_DERIVATION_AUTHORIZATION_DENIED");
+  }
+
+  /** Everything both preview and derive compute — deterministic for the same inputs (the clock is used only for `evaluatedAt`). */
+  private async computeBoardRevision(request: PcbSyncBoardRevisionRequest, signal?: AbortSignal) {
+    this.validateRevisionRequest(request);
+    const parentRequest = this.revisionPreflightRequest(request, { kind: "existing_board", boardId: request.parent.boardId, expectedBoardRevision: request.parent.expectedBoardRevision }, "parent");
+    const parentContext = await this.buildContext(parentRequest, signal);
+    const parent = parentContext.boardRecord;
+    if (!parent) throw new Error("PS_BOARD_NOT_FOUND");
+    if (parent.revision !== request.parent.expectedBoardRevision) throw new Error("PS_BOARD_REVISION_MISMATCH");
+    const superseded = parentContext.contextIssues.find((issue) => issue.code === "PS_BOARD_SUPERSEDED");
+    if (superseded) throw new Error("PS_BOARD_SUPERSEDED");
+    const parentResult = this.engine.evaluate(parentContext);
+    const preview = previewBoardRevision({ parent, snapshot: parentContext.snapshot, assessments: parentResult.components, carry: request.carry, outline: request.outline });
+    const strippedRecord = makeBoardRecord({ tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId, boardId: preview.plan.derivedBoardId, board: preview.derivedBoard, updatedAt: request.requestedAt });
+    const copperNetIds = new Set<number>([...preview.derivedBoard.tracks, ...preview.derivedBoard.vias, ...preview.derivedBoard.zones].map((item) => item.netId).filter((id) => id !== 0));
+    const retainedNetIds = [...copperNetIds].sort((a, b) => a - b);
+    const derivedRequest = this.revisionPreflightRequest(request, { kind: "existing_board", boardId: strippedRecord.boardId, expectedBoardRevision: strippedRecord.revision }, "derived");
+    const derivedContext = await this.buildContext(derivedRequest, signal, { boardRecord: strippedRecord, derivation: { retainedNetIds, planDigest: preview.plan.planDigest } });
+    const derivedResult = this.engine.evaluate(derivedContext);
+    const stage8Blocked = parentResult.blockers.some((issue) => STAGE8_BLOCKER_CODES.has(issue.code) || issue.code === "PS_STRUCTURAL_ADD_REQUIRES_UNROUTED_BOARD" || issue.code === "PS_ROUTED_COMPONENT_REMOVAL_REQUIRES_STAGE8" || issue.code === "PS_REMOVED_NET_PROTECTED");
+    const derivable = derivedResult.status === "ready_to_apply" || derivedResult.status === "ready_no_changes";
+    const result: PcbSyncBoardRevisionPreviewResult = {
+      resultSchemaVersion: PCB_SYNC_BOARD_REVISION_PREVIEW_VERSION, requestId: request.requestId, status: derivable ? "ready_to_derive" : "blocked", revisionPlan: preview.plan,
+      parentPreflight: { status: parentResult.status, blockers: parentResult.blockers, stage8Blocked },
+      derivedPreflight: { status: derivedResult.status, blockers: derivedResult.blockers, planId: derivedResult.plan?.planId ?? null, planDigest: derivedResult.plan?.planDigest ?? null, operations: (derivedResult.plan?.operations ?? []).map((item) => ({ kind: item.kind, targetStableId: item.targetStableId, risk: item.risk })) },
+      evaluatedAt: this.clock(),
+    };
+    return { result, preview, strippedRecord, derivedResult, parent };
+  }
+
+  /** The reviewable rework plan: what is kept, stripped, added, removed — and the structural sync the derivation would apply. Writes nothing. */
+  async previewBoardRevision(request: PcbSyncBoardRevisionRequest, signal?: AbortSignal): Promise<PcbSyncBoardRevisionPreviewResult> {
+    return (await this.computeBoardRevision(request, signal)).result;
+  }
+
+  /** ONE atomic derivation: recompute the reviewed plan, refuse any drift, execute the structural sync on the stripped board, then commit the derived board + lineage together. */
+  async deriveBoardRevision(request: PcbSyncBoardRevisionDeriveRequest, signal?: AbortSignal): Promise<PcbSyncBoardRevisionDeriveResult> {
+    if (!this.options.lineage) throw new Error("PS_BOARD_DERIVATION_UNAVAILABLE");
+    if (request.confirmation !== BOARD_REVISION_CONFIRMATION) throw new Error("PS_BOARD_DERIVATION_CONFIRMATION_REQUIRED");
+    if (request.actorContext?.actorKind !== "human") throw new Error("PS_BOARD_DERIVATION_HUMAN_REQUIRED");
+    if (typeof request.idempotencyKey !== "string" || !request.idempotencyKey.trim()) throw new Error("PS_BOARD_DERIVATION_IDEMPOTENCY_REQUIRED");
+    this.validateRevisionRequest(request);
+    // A retry of an already-committed derivation replays its result: the parent is superseded by now, so recomputing would refuse it.
+    const lineageScope = { tenantId: request.tenantId, projectId: request.projectId, branchId: request.branchId };
+    const replayed = await replayBoardDerivation(this.options.lineage.workflow, lineageScope, request.parent.boardId, request.idempotencyKey);
+    if (replayed) {
+      const record = await this.options.repository.getBoard({ ...lineageScope, boardId: replayed.boardId });
+      if (!record || record.revision !== replayed.revision) throw new Error("PS_BOARD_REVISION_IDEMPOTENCY_CONFLICT");
+      const lineage = await new DurableBoardLineageStore(this.options.lineage.workflow).resolveCurrent(lineageScope, replayed.boardId);
+      const parentRecord = await this.options.repository.getBoard({ ...lineageScope, boardId: request.parent.boardId });
+      return { resultSchemaVersion: PCB_SYNC_BOARD_REVISION_DERIVE_VERSION, requestId: request.requestId, status: "idempotent_replay", derivedBoardId: record.boardId, boardRevision: record.revision, boardDigest: record.digest, parent: { boardId: request.parent.boardId, revision: request.parent.expectedBoardRevision, digest: parentRecord?.digest ?? "" }, generation: lineage.generation, lineage, completedAt: this.clock() };
+    }
+    const computed = await this.computeBoardRevision(request, signal);
+    if (computed.result.status !== "ready_to_derive") throw new Error("PS_BOARD_DERIVATION_BLOCKED");
+    const syncPlan = computed.derivedResult.plan ?? null;
+    if (computed.preview.plan.planId !== request.planId || computed.preview.plan.planDigest !== request.planDigest || (syncPlan?.planDigest ?? null) !== request.syncPlanDigest) throw new Error("PS_BOARD_DERIVATION_PLAN_MISMATCH");
+    let finalBoard = computed.preview.derivedBoard;
+    if (syncPlan && computed.derivedResult.status === "ready_to_apply") {
+      const applying = { ...syncPlan, lifecycle: "applying" as const };
+      const executed = executePcbSyncPlan(finalBoard, applying);
+      const reparsed = JSON.parse(JSON.stringify(executed.board)) as typeof executed.board;
+      const validation = validateStagedBoard(reparsed, finalBoard, applying);
+      if (validation.length) throw new Error(validation[0]!.code);
+      finalBoard = reparsed;
+    }
+    const at = this.clock();
+    const outcome = await commitBoardRevision(this.options.lineage.workflow, { plan: computed.preview.plan, strippedBoard: computed.preview.derivedBoard, finalBoard, parent: computed.parent, actor: request.actorContext, at, idempotencyKey: request.idempotencyKey, syncPlan: syncPlan && computed.derivedResult.status === "ready_to_apply" ? { ...syncPlan, lifecycle: "applying" as const } : null });
+    const lineage = await new DurableBoardLineageStore(this.options.lineage.workflow).resolveCurrent(computed.parent, outcome.derived.boardId);
+    return {
+      resultSchemaVersion: PCB_SYNC_BOARD_REVISION_DERIVE_VERSION, requestId: request.requestId, status: outcome.idempotent ? "idempotent_replay" : "derived",
+      derivedBoardId: outcome.derived.boardId, boardRevision: outcome.derived.revision, boardDigest: outcome.derived.digest,
+      parent: { boardId: computed.parent.boardId, revision: computed.parent.revision, digest: computed.parent.digest }, generation: computed.preview.plan.generation, lineage, completedAt: at,
+    };
+  }
 
   async getPlan(planId: string, scope: PcbSyncRepositoryScope, actor: PcbSyncPreflightRequest["actorContext"]): Promise<PcbSyncPlan | null> {
     if (!planId || !["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"].includes(actor.role)) throw new Error("PS_PLAN_READ_AUTHORIZATION_DENIED");

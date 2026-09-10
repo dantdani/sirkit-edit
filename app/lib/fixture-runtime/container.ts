@@ -12,6 +12,7 @@
 import { InMemoryDurableWorkflowRepository } from "../durable-workflow/repository";
 import { InMemoryPhysicalBindingRepository } from "../physical-binding/repository";
 import { fixtureRuntimeEnabled } from "./mode";
+import { installFixtureClock, uninstallFixtureClock } from "./clock";
 import { blinkerCatalog, type BlinkerCatalog } from "./blinker/catalog";
 
 interface FixtureContainer {
@@ -26,6 +27,7 @@ interface FixtureContainer {
 const KEY = "__sirkitFixtureRuntimeContainer__" as const;
 
 function create(): FixtureContainer {
+  installFixtureClock(); // [B16-C.5] frozen clock before the first durable identity (idempotent; instrumentation.ts installs it at start-up)
   return {
     durableRepository: new InMemoryDurableWorkflowRepository(),
     physicalBindingRepository: new InMemoryPhysicalBindingRepository(),
@@ -46,4 +48,5 @@ export function fixtureContainer(): FixtureContainer {
 export function resetFixtureContainer(): void {
   const host = globalThis as unknown as Record<string, FixtureContainer | undefined>;
   delete host[KEY];
+  uninstallFixtureClock(); // a fresh container is a fresh runtime: the clock follows it (tests)
 }

@@ -57,7 +57,7 @@ vi.mock("@/app/lib/pcb/fab/authority-store", async (orig) => ({
 const ledgerRecord = vi.hoisted(() => vi.fn<(scope: unknown, input: Record<string, unknown>) => Promise<{ created: boolean; record: { releaseId: string } }>>(async () => ({ created: true, record: { releaseId: "rel-abcdef123456" } })));
 vi.mock("@/app/lib/pcb/fab/release-ledger", async (orig) => ({ ...(await orig() as object), DurableManufacturingReleaseLedger: class { record = ledgerRecord; latest = vi.fn(async () => null); list = vi.fn(async () => []); } }));
 
-const getWorkflowRepo = vi.hoisted(() => vi.fn(() => ({})));
+const getWorkflowRepo = vi.hoisted(() => vi.fn(() => ({ loadHead: async () => null }))); // [B16-C.1] both routes read the board lineage first (none recorded → current)
 vi.mock("@/app/lib/durable-workflow/runtime", () => ({ getDurableWorkflowRepository: getWorkflowRepo }));
 // [B16-A F7] the durable single-flight lease is a seam here (the workflow repository above is an empty stub); its own behaviour is covered by b16-a-qualification-commit.test.ts.
 const leaseAcquire = vi.hoisted(() => vi.fn(async () => ({ ok: true as const, token: "lease-token", revision: 1, expiresAt: "2999-01-01T00:00:00.000Z" })));
@@ -126,7 +126,7 @@ afterEach(() => {
   createRouter.mockImplementation(async () => ({}));
   authoritySave.mockImplementation(async () => ({ revision: 1, recordDigest: "sha256:auth" }));
   authorityLoader.mockImplementation(() => vi.fn());
-  getWorkflowRepo.mockImplementation(() => ({}));
+  getWorkflowRepo.mockImplementation(() => ({ loadHead: async () => null })); // [B16-C.1] both routes read the board lineage first (none recorded → current)
 });
 
 const ROUTES = [

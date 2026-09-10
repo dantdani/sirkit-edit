@@ -56,6 +56,13 @@ jobs:
           app/lib/pcb/__tests__/b16-a-locale-independent-identities.test.ts
           app/lib/auth/__tests__/b16-a-correlation-id.test.ts
           app/components/pcb/__tests__/manufacturing-workflow-panel.test.tsx
+          app/api/physical-bindings/__tests__
+          app/lib/pcb/__tests__/b16-c-fabrication-rule-authority.test.ts
+          app/lib/fixture-runtime
+          app/components/pcb/__tests__/component-review-panel.test.tsx
+          app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx
+          app/components/pcb/__tests__/board-revision-dialog.test.tsx
+          app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
@@ -96,5 +103,36 @@ jobs:
         with:
           name: database-delivery-diagnostics
           path: vitest-database-delivery.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # [B16-C.5] The page-level browser proof: a real Chromium drives the real
+  # Next.js application under the env-gated fixture runtime (in-memory stores,
+  # recorded provider design, recorded router replay, dev-only role cookie).
+  # No database, no credits, no live router; live provider/auth variations stay
+  # opt-in elsewhere.
+  page-browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.2.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-browser-e2e-report
+          path: playwright-report
           if-no-files-found: ignore
           retention-days: 14

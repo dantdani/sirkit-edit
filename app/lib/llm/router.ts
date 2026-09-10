@@ -18,9 +18,18 @@ export class LLMRouter {
   }
 
   generate(request: LLMRequest): Promise<LLMResponse> {
-    // [B16-C §5] fixture runtime: no provider is ever called (zero credits); the planner
-    // answers "no decomposition" so the (fixture) build loop runs — never a live SDK.
-    if (fixtureRuntimeEnabled()) return Promise.resolve({ provider: request.provider, model: "fixture-provider", text: "", toolCalls: [], stopReason: "end_turn" });
+    // [B16-C §5] fixture runtime: no provider is ever called (zero credits). The build
+    // planner answers "no decomposition" so the (fixture) build loop runs; EVERY other
+    // provider request (review, tidy, second opinion, edits) is the bounded
+    // `provider_unavailable` failure (503, `missing_credentials`) — the browser proof found
+    // the review route answering 500 "no review returned" behind an empty fixture answer.
+    if (fixtureRuntimeEnabled()) {
+      const choice = request.toolChoice;
+      if (typeof choice === "object" && choice !== null && choice.name === "submit_plan") {
+        return Promise.resolve({ provider: request.provider, model: "fixture-provider", text: "", toolCalls: [], stopReason: "end_turn" });
+      }
+      return Promise.reject(new LLMProviderError(request.provider, "missing_credentials"));
+    }
     return this.resolve(request.provider).generate(request);
   }
 

@@ -136,7 +136,7 @@ describe("B16-C.2 component-binding review handoff (real route, isolated stores)
     expect(approvedBody.request.decision).toMatchObject({ decidedBy: { actorId: USERS.reviewer, role: "reviewer" }, lifecycleState: "selected" });
     expect(approvedBody.request.decision?.bindingRevisionId).toBeTruthy();
     // The binding set really exists and is approved.
-    const set = await json<{ ok: boolean; set: { effectiveSelectedRevisionId: string }; bindings: Array<{ revisionId: string; approval: { state: string; decidedBy?: { actorId: string } }; createdBy: { actorId: string } }> }>(await bindingsGet(get(`/api/physical-bindings?setId=${encodeURIComponent(approvedBody.request.decision!.bindingSetId!)}`)));
+    const set = await json<{ ok: boolean; set: { setId: string; effectiveSelectedRevisionId: string }; bindings: Array<{ revisionId: string; approval: { state: string; decidedBy?: { actorId: string } }; createdBy: { actorId: string } }> }>(await bindingsGet(get(`/api/physical-bindings?setId=${encodeURIComponent(approvedBody.request.decision!.bindingSetId!)}`)));
     expect(set.ok).toBe(true);
     const selected = set.bindings.find((item) => item.revisionId === set.set.effectiveSelectedRevisionId)!;
     expect(selected.approval.state).toBe("approved");
@@ -150,6 +150,18 @@ describe("B16-C.2 component-binding review handoff (real route, isolated stores)
     const resumed = await physicalBindings(post({ operation: "request_atomic_review", componentInstanceId: "c-1", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_A }));
     expect(resumed.status).toBe(200);
     expect((await json<{ request: ComponentReviewRequest }>(resumed)).request.status).toBe("approved");
+    // [B16-C.5] the editor's own Schematic → PCB re-binds the instance: the approved identical selection REPLAYS
+    // (200, alreadyBound, the reviewer's revision, nothing written) — the browser proof found it refused 403 again.
+    const replay = await physicalBindings(post({ operation: "bind_atomic_selection", componentInstanceId: "c-1", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_A }));
+    const replayBody = await json<{ ok: boolean; alreadyBound: boolean; bindingRevisionId: string }>(replay);
+    expect(replay.status, JSON.stringify(replayBody).slice(0, 300)).toBe(200);
+    expect(replayBody).toMatchObject({ ok: true, alreadyBound: true, bindingRevisionId: approvedBody.request.decision?.bindingRevisionId });
+    const afterReplay = await json<{ bindings: unknown[] }>(await bindingsGet(get(`/api/physical-bindings?setId=${encodeURIComponent(set.set.setId)}`)));
+    expect(afterReplay.bindings).toHaveLength(set.bindings.length); // a read, never a write
+    // A DIFFERENT candidate for the same instance is still a publication: refused for the editor, handoff named.
+    const other = await physicalBindings(post({ operation: "bind_atomic_selection", componentInstanceId: "c-1", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_B }));
+    expect(other.status).toBe(403);
+    expect(await json(other)).toMatchObject({ code: "PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED", handoff: "request_atomic_review" });
   });
 
   it("4. reject names the reason; the editor can ask again (a NEW pending request); withdraw is the requester's own act", async () => {
