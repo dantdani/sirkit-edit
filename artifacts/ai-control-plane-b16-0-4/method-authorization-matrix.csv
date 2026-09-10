@@ -1,6 +1,9 @@
 method,route,policy_class,access,handler_symbol,verdict,shape,detail
 GET,/api/agent/autonomy,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/agent/autonomy,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/agent/execution-grant,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/agent/execution-grant,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+POST,/api/agent/execution-grant/settle,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/ai/runtime,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/architecture/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/architecture/candidates,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute

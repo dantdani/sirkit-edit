@@ -1,6 +1,9 @@
 method,route,policy_class,access,handler_symbol,media_type,max_wire_bytes,deadline_ms,authorization_ordering,parser,downstream,evidence_test
 GET,/api/agent/autonomy,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/agent/autonomy,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,4096,5000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+GET,/api/agent/execution-grant,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/agent/execution-grant,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,65536,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/agent/execution-grant/settle,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16384,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/ai/runtime,public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/architecture/alternatives,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/architecture/candidates,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

@@ -1,6 +1,9 @@
 method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
 GET,/api/agent/autonomy,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
 POST,/api/agent/autonomy,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+GET,/api/agent/execution-grant,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
+POST,/api/agent/execution-grant,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
+POST,/api/agent/execution-grant/settle,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/ai/runtime,public,canonical-wrapper,publicRoute,(adopted),adopted
 POST,/api/architecture/alternatives,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/architecture/candidates,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted

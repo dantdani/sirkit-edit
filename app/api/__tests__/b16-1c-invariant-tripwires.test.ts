@@ -47,7 +47,7 @@ describe("B16.1C §I — invariant tripwires", () => {
         if (form === "canonical-wrapper") canonical += 1; else if (form === "factory") factories += 1; else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 155, canonical: 152, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy (canonical wrappers; 0 raw stays 0)
+    expect({ total, canonical, factories, raw }).toEqual({ total: 158, canonical: 155, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle (canonical wrappers; 0 raw stays 0)
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed.map((descriptor) => descriptor.toolId).sort()).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

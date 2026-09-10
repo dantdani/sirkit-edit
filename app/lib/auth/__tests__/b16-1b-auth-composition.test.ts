@@ -258,7 +258,7 @@ describe("B16.1B §G — exact invariants", () => {
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 155, canonical: 152, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy (canonical wrappers; 0 raw stays 0)
+    expect({ total, canonical, factories, raw }).toEqual({ total: 158, canonical: 155, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle (canonical wrappers; 0 raw stays 0)
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

@@ -1,5 +1,7 @@
 path,methods,auth_class,identity_source,migrated
 /api/agent/autonomy,GET;POST,authenticated-mutation,trusted-context,yes
+/api/agent/execution-grant,GET;POST,authenticated-mutation,trusted-context,yes
+/api/agent/execution-grant/settle,POST,authenticated-mutation,trusted-context,yes
 /api/ai/runtime,GET,public,none,no
 /api/architecture/alternatives,POST,authenticated-propose,trusted-context,yes
 /api/architecture/candidates,POST,authenticated-propose,trusted-context,yes
