@@ -40,7 +40,7 @@ import { handlePcbProposeTool } from "../pcb/proposal/pcb-propose-tool-handler";
 import { buildAgentResourceBundle } from "./context";
 import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
 import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
-import type { AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
+import type { AgentExecutionGrantMinter, AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
 
 export const AGENT_PROPOSAL_TOOL_ID = "sirkit.schematic.propose-tier1-edit";
 /** [B09.2] the V2 scope/head proposal contract ships as descriptor 1.1.0. */
@@ -427,6 +427,12 @@ export interface AgentGatewayOptions {
    *  absent ⇒ the routing proposal refuses truthfully. */
   routingExecutor?: RoutingExecutorFactory;
   layoutProposalService?: LayoutProposalService;
+  /** [B18-B] the server composition root's execution-grant minter (a
+   *  closure over the trusted request context). Absent ⇒ no Tier 1
+   *  execution can be granted in this run. The gateway dispatch branch that
+   *  seals a mutation intent and mints through it lands with the exposure
+   *  lift (B18-C); until then every mutation class stays not_callable. */
+  executionGrants?: AgentExecutionGrantMinter;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {

@@ -66,8 +66,13 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/export/kicad": { sensitivity: "caller-supplied-only" },
   // [B16.0.3 §C] chat READS durable, project-scoped component authority + pin
   // facts for the agent's replacement-facts path (same durable sources as
-  // /api/replacement-authority), so its durable access is truthfully "read".
-  "/api/chat": { durable: "read", sensitivity: "session-identity" },
+  // /api/replacement-authority). [B18-B] it also MINTS execution grants
+  // (durable-workflow aggregates bound to the session identity) through the
+  // composition-root minter, so its durable access is truthfully read-write.
+  // The grant is not an engineering write: the commit stays in the browser's
+  // canonical editor session, so the policy row stays authenticated-propose
+  // (authoritativeWrite: false) — recorded as an owner decision in B18-B.
+  "/api/chat": { durable: "read-write", sensitivity: "session-identity" },
   // [B16.0.3 §C] the replacement REAUTHORIZATION exchange READS durable,
   // project-scoped component authority + published pin facts
   // (resolveComponentAuthoritySource / loadRunComponentAuthority /

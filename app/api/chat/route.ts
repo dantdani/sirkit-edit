@@ -36,6 +36,8 @@ import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trac
 import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder";
 import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
 import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
+import { createExecutionGrantMinter } from "@/app/lib/execution-grant/mint";
+import type { AgentExecutionGrantMinter } from "@/app/lib/agent/contracts";
 import type { AgentAutonomySetting } from "@/app/lib/engineering/permission-tiers";
 import { createFreeroutingPassExecutor } from "@/app/lib/pcb/autoroute/freerouting-pass-executor";
 
@@ -62,6 +64,8 @@ const AUTHORITY_CLAIM_KEYS = new Set([
   "actor", "actorId", "actorRole", "role", "capability", "capabilities",
   "authority", "authoritySource", "approvals", "approval", "release",
   "durableBoard", "durable-board", "idempotency", "idempotencyKey",
+  // [B18-B] grant-, attempt-, decision- and explicitness-shaped claims
+  "executionGrant", "grant", "grantId", "nonce", "attemptId", "consumption", "explicit", "explicitUserRequest", "autonomy", "decision", "tier",
 ]);
 
 /** [B10.1] reusable EXACT-KEY validation for nested control objects: every
@@ -333,11 +337,37 @@ export const POST = agentStreamRoute(
 
   const runId = `run-${randomUUID()}`;
   const registry = sirkitToolRegistry();
+  // [B18-B] the execution-grant MINTER — the only place a grant is created —
+  // is built HERE from the trusted request context (verified principal, role,
+  // membership revision, session identity, validated scope, the server-read
+  // autonomy setting, the literal user instruction) and handed to the gateway
+  // and the loop as a closure: the agent layer never sees an instruction, a
+  // nonce or a store. Only a human session principal with a readable autonomy
+  // setting can be granted anything; otherwise execution is simply unavailable
+  // for the run (proposals unaffected — unavailability never widens).
+  let executionGrants: AgentExecutionGrantMinter | undefined;
+  if (autonomy && context.actor.actorKind === "human" && (context.authMethod === "supabase_cookie" || context.authMethod === "local_dev")) {
+    executionGrants = createExecutionGrantMinter({
+      principalId: context.principalId,
+      role: context.actor.role,
+      membershipRevision: context.membershipRevision,
+      authClass: context.authMethod,
+      sessionIdentity: context.sessionIdentity,
+      correlationId: context.correlationId,
+      scope: requestScope,
+      boardInstanceId: pcbBoardInstanceId(requestScope.projectId),
+      autonomy,
+      userMessage,
+      runId,
+      provider,
+    });
+  }
   // [B14 §B] SERVER-OWNED published pin facts for the replacement proposal
   // path: production cancellable reads (DATABASE_URL-gated), each wrapped in
   // the abort/deadline settlement machine bound to THIS request's signal.
   const replacementFactsSource = resolveReplacementPinFactsSource();
   const gateway = createAgentToolGateway(registry, {
+    ...(executionGrants ? { executionGrants } : {}),
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
       : {}),
@@ -442,6 +472,7 @@ export const POST = agentStreamRoute(
             emit,
             contextWarnings: [...assembly.warnings, ...autonomyWarnings],
             trace: traceRecorder,
+            ...(executionGrants ? { executionGrants } : {}),
           },
         );
         // [B11] finalize + validate the trace. A trace/sink failure is

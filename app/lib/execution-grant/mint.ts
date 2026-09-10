@@ -18,53 +18,22 @@ import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import { decideAgentExecution } from "../engineering/permission-tiers";
 import { proveExplicitUserRequest } from "../engineering/explicit-request";
 import {
-  EXECUTION_GRANT_SCHEMA, MAX_INSTRUCTION_EXCERPT, grantDigestFor, grantIdentityKey, lazyExpiryTransition, publicExecutionGrant, ttlForDecision, userInstructionDigest,
-  type ExecutionDecisionMode, type ExecutionGrantBase, type ExecutionGrantBinding, type ExecutionGrantRecord, type ExecutionGrantSession, type PublicExecutionGrant, type RetirementReason,
+  EXECUTION_GRANT_SCHEMA, MAX_INSTRUCTION_EXCERPT, grantDigestFor, grantIdentityKey, publicExecutionGrant, ttlForDecision, userInstructionDigest,
+  type ExecutionDecisionMode, type ExecutionGrantBinding, type ExecutionGrantRecord,
 } from "../engineering/execution-grant";
-import type { PcbBoard } from "../pcb/types";
 import type { ProjectRole } from "../engineering/types";
 import type { LLMProviderId } from "../llm/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
 import { resolveExecutionGrantStore, type ExecutionGrantStore } from "./store";
+import type { AgentExecutionGrantMinter, AgentExecutionGrantOutcome, AgentExecutionGrantRequest, AgentExecutionPlan, AgentExecutionSettlement } from "../agent/contracts";
 
-/** What the seal hands the minter (the agent's data-only plan). */
-export interface MintablePlan {
-  family: ExecutionGrantBinding["operation"]["family"];
-  toolId: string;
-  toolVersion: string;
-  capability: ExecutionGrantBinding["operation"]["capability"];
-  operations: ExecutionGrantBinding["proposal"]["operations"];
-  operationsDigest: string;
-  operationCount: number;
-  targets: ExecutionGrantBinding["targets"];
-  preview: ExecutionGrantBinding["proposal"]["preview"];
-  previewDigest: string;
-}
-
-export interface MintRequest {
-  plan: MintablePlan;
-  board: PcbBoard;
-  base: ExecutionGrantBase;
-  session: ExecutionGrantSession;
-  origin: { callId: string; registryDigest: string; promptVersion: string };
-}
-
-export type MintOutcome =
-  | { ok: true; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
-  | { ok: false; reason: "execution_not_permitted" | "grant_unavailable"; diagnostics: string[] };
-
-export interface SettlementWait {
-  status: "settled" | "retired" | "in_flight" | "unsettled";
-  grant: PublicExecutionGrant | null;
-}
-
-export interface ExecutionGrantMinter {
-  mint(request: MintRequest): Promise<MintOutcome>;
-  /** Retire this minter's still-issued grants (run abort ⇒ `run_cancelled`; settlement wait expiry ⇒ `run_unsettled`). */
-  retireIssued(reason: Extract<RetirementReason, "run_cancelled" | "run_unsettled">, onlyExplicit: boolean): Promise<string[]>;
-  /** Await the browser's settlement of an execute_explicit grant (poll the store; timer-based). */
-  awaitSettlement(grantId: string, options: { timeoutMs: number; signal?: AbortSignal; pollMs?: number }): Promise<SettlementWait>;
-}
+/** What the seal hands the minter (the agent's data-only plan) — the agent-layer contract, re-exported for the server. */
+export type MintablePlan = AgentExecutionPlan;
+export type MintRequest = AgentExecutionGrantRequest;
+export type MintOutcome = AgentExecutionGrantOutcome;
+export type SettlementWait = AgentExecutionSettlement;
+/** The server implementation of the agent's closure contract. */
+export type ExecutionGrantMinter = AgentExecutionGrantMinter;
 
 export interface MinterContext {
   principalId: string;
@@ -166,7 +135,6 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
           const status = loaded.record.state.status;
           if (status === "settled") return { status: "settled", grant: publicExecutionGrant(loaded.record) };
           if (status === "retired") return { status: "retired", grant: publicExecutionGrant(loaded.record) };
-          void lazyExpiryTransition; // expiry is applied by the store on load
         }
         if (options.signal?.aborted || now() - started >= options.timeoutMs) {
           return { status: loaded?.record.state.status === "consumed" ? "in_flight" : "unsettled", grant: loaded ? publicExecutionGrant(loaded.record) : null };

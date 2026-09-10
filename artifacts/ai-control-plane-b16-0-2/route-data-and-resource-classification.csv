@@ -37,7 +37,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/calculation/propose,POST,false,none,caller-supplied-only,true,,false,false,false,false
 /api/calculation/report,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/calculation/transaction,POST,false,write,project-durable,false,,false,true,false,false
-/api/chat,POST,false,read,session-identity,true,,false,false,false,false
+/api/chat,POST,false,read-write,session-identity,true,,false,false,false,false
 /api/circuit-knowledge/applicability,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/circuit-knowledge/compile,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/circuit-knowledge/compose,POST,false,none,caller-supplied-only,false,,false,false,false,false

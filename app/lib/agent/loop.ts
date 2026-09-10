@@ -28,6 +28,8 @@ import {
   strictCompatibility,
 } from "./provider-tools";
 import type {
+  AgentExecutionGrantMinter,
+  AgentExecutionSettlement,
   AgentRunContext,
   AgentRunEvent,
   AgentRunRequest,
@@ -57,6 +59,12 @@ export interface AgentLoopDeps {
    *  it observes normalized events only and can never alter tool
    *  authorization, execution outcomes, or terminal semantics. */
   trace?: AgentTraceRecorder;
+  /** [B18-B] the composition root's execution-grant minter. The loop uses
+   *  it ONLY to await the browser's settlement of an execute_explicit grant
+   *  (read from the durable record, never from the browser directly) and to
+   *  retire this run's still-issued explicit grants when the run ends without
+   *  them. Minting itself happens in the gateway. */
+  executionGrants?: AgentExecutionGrantMinter;
 }
 
 function resultText(payload: Record<string, unknown>): string {
@@ -188,6 +196,8 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
   let toolCallsUsed = 0;
   let anyToolExecuted = false;
   let proposalIssued = false;
+  let executionIssued = false;
+  let completedNormally = false;
   const identicalCalls = new Map<string, number>();
 
   const trace = deps.trace;
@@ -285,6 +295,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
       if (step.text) emitOnce({ type: "text_delta", runId: request.runId, text: step.text });
 
       if (step.toolCalls.length === 0) {
+        completedNormally = true;
         emitOnce({ type: "run_completed", runId: request.runId, finalText: step.text, steps, toolCalls: toolCallsUsed, usage, model: step.model });
         return { runId: request.runId, status: "completed", finalText: step.text, steps, toolCalls: toolCallsUsed };
       }
@@ -338,9 +349,17 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         }
         // Proposal single-flight: never two proposal artifacts per run — a
         // provider/network retry can never double-issue a side-effecting call.
+        // [B18-B] an execution grant is the run's ONE side-effecting artifact
+        // too: after a grant no proposal is sealed and no second grant is
+        // minted (execution_exists); after a proposal no grant is minted.
         const isProposal = descriptor?.operationClass === "propose";
-        if (isProposal && proposalIssued) {
-          results.push(errorResult("proposal_exists", "A sealed proposal already exists for this run; ask the user to review it."));
+        const isExecution = descriptor?.operationClass === "mutate";
+        if (isProposal && (proposalIssued || executionIssued)) {
+          results.push(errorResult("proposal_exists", proposalIssued ? "A sealed proposal already exists for this run; ask the user to review it." : "An execution grant was already issued in this run; report its outcome before proposing more."));
+          continue;
+        }
+        if (isExecution && (executionIssued || proposalIssued)) {
+          results.push(errorResult("execution_exists", executionIssued ? "An execution grant was already issued in this run; its outcome has not changed." : "A sealed proposal already exists for this run; nothing executes beside it."));
           continue;
         }
 
@@ -373,7 +392,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         anyToolExecuted = true;
         // [B11] bounded metadata: identities, argument/output DIGESTS, the
         // closed-vocabulary outcome class, and the verification state.
-        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused" | "view_command" | "layout_candidate", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null }): void => {
+        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused" | "view_command" | "layout_candidate" | "execution_grant", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null }): void => {
           try {
             trace?.recordTool({
               callId: call.callId, toolId: resolved.toolId, version: resolved.version,
@@ -438,6 +457,78 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             }),
             isError: false,
           });
+        } else if (outcome.kind === "execution-grant" && outcome.ok) {
+          executionIssued = true;
+          // [B18-B] the server-minted grant. The trace stores the grant identity
+          // and the operations digest only; the model learns the decision and —
+          // for execute_explicit — ONLY what the durable record says afterwards.
+          const grant = outcome.grant;
+          const explicit = outcome.decision === "execute_explicit";
+          const issuedStatus = explicit ? "execution_grant_issued" : "execution_preview_issued";
+          recordTrace("execution_grant", issuedStatus, { verification: `grant ${grant.grantId} (${outcome.decision}) expires ${grant.binding.expiresAt}`, proposal: { proposalId: grant.grantId, operationsDigest: grant.binding.proposal.operationsDigest } });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: issuedStatus });
+          emitOnce({ type: "execution_grant_ready", runId: request.runId, toolId: resolved.toolId, grant, decision: outcome.decision, note: outcome.note });
+          if (!explicit) {
+            results.push({
+              callId: call.callId,
+              outputText: resultText({
+                ok: true,
+                status: "execution_preview_issued",
+                grantId: grant.grantId,
+                expiresAt: grant.binding.expiresAt,
+                preview: grant.binding.proposal.preview,
+                ...(outcome.note ? { note: outcome.note } : {}),
+                guidance: "The exact change is shown to the user for confirmation — NOTHING has changed. Tell the user to confirm or cancel it in the editor; never claim the edit happened.",
+              }),
+              isError: false,
+            });
+          } else {
+            // Await the browser-attested settlement from the DURABLE record,
+            // bounded by the settlement budget and the remaining run deadline.
+            const waitMs = Math.max(0, Math.min(request.budget.executionSettlementTimeoutMs, request.budget.runDeadlineMs - (now() - startedAt)));
+            let settled: AgentExecutionSettlement = { status: "unsettled", grant: null };
+            if (deps.executionGrants) {
+              try {
+                const raced = await guard(deps.executionGrants.awaitSettlement(grant.grantId, { timeoutMs: waitMs, signal: runSignal }));
+                if (raced === BOUNDARY) return boundaryFailure();
+                settled = raced;
+              } catch {
+                settled = { status: "unsettled", grant: null };
+              }
+            }
+            const settlement = settled.grant?.state.settlement ?? null;
+            const retirement = settled.grant?.state.retirement ?? null;
+            emitOnce({ type: "execution_settled", runId: request.runId, toolId: resolved.toolId, grantId: grant.grantId, status: settled.status, outcome: settlement?.outcome ?? null, reason: retirement?.reason ?? null });
+            if (settled.status === "settled" && settlement?.outcome === "committed") {
+              results.push({
+                callId: call.callId,
+                outputText: resultText({
+                  ok: true,
+                  status: "executed",
+                  grantId: grant.grantId,
+                  transactionId: settlement.transactionId,
+                  revisionAfter: settlement.revisionAfter,
+                  undoEligible: settlement.undoEligible,
+                  drc: settlement.validations?.drc ?? null,
+                  note: "The user's editor committed exactly this change through its canonical session (one transaction, one undo entry). Say what changed and that it can be undone; never call the board safe or manufacturing-ready.",
+                }),
+                isError: false,
+              });
+            } else if (settled.status === "settled") {
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_not_committed", grantId: grant.grantId, outcome: settlement?.outcome ?? null, note: "The user's editor did NOT commit the change (it refused or the commit failed). Nothing changed; say so." }), isError: true });
+            } else if (settled.status === "retired") {
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_retired", grantId: grant.grantId, reason: retirement?.reason ?? null, note: "The grant was retired before the change was committed. Nothing changed; say so and, if the user still wants it, ask them to repeat the request." }), isError: true });
+            } else {
+              // Still issued (never tendered) or consumed but unsettled: the run
+              // does not wait longer. An untendered grant is retired so it can
+              // never be spent after this run answered; a consumed one settles
+              // late on its own and the record keeps the truth.
+              if (settled.status === "unsettled" && deps.executionGrants) {
+                try { await deps.executionGrants.retireIssued("run_unsettled", true); } catch { /* the grant expires lazily */ }
+              }
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_unsettled", grantId: grant.grantId, note: "The user's editor did not report the outcome in time. Do NOT claim the change happened; tell the user to check the board and the revision history." }), isError: true });
+            }
+          }
         } else if (outcome.kind === "pcb-proposal" && outcome.ok) {
           proposalIssued = true;
           // [B15.3] the sealed bounded PCB edit — DISTINCT event, never the
@@ -532,5 +623,12 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
     // [B09.1] deterministic cleanup on EVERY exit path.
     clearTimeout(deadlineTimer);
     request.signal?.removeEventListener("abort", onExternalAbort);
+    // [B18-B] a run that ends without completing (cancelled, deadline,
+    // provider or internal failure) retires its still-issued explicit grants
+    // so an abandoned run's grant can never be spent later; preview grants
+    // stay for the human to confirm or cancel.
+    if (executionIssued && !completedNormally && deps.executionGrants) {
+      try { await deps.executionGrants.retireIssued("run_cancelled", true); } catch { /* the grant expires lazily */ }
+    }
   }
 }

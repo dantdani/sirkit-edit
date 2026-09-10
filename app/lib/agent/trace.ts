@@ -49,7 +49,7 @@ export const TRACE_BOUNDS = Object.freeze({
   maxScanDepth: 32,
 });
 
-export const TRACE_OUTCOME_CLASSES = ["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate"] as const;
+export const TRACE_OUTCOME_CLASSES = ["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant"] as const;
 export type TraceOutcomeClass = (typeof TRACE_OUTCOME_CLASSES)[number];
 
 export const TRACE_TERMINAL_OUTCOMES = ["completed", "failed", "cancelled"] as const;
