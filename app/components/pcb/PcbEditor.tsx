@@ -60,6 +60,11 @@ import { ApprovedPcbMutationJournal } from "@/app/lib/engineering/approved-pcb-m
 import { IndexedDbApprovedPcbMutationJournalStore } from "@/app/lib/engineering/approved-pcb-mutation-journal-idb";
 import { approveAndApplyPcbEdit } from "@/app/lib/project/pcb-edit-approval-controller.internal";
 import { createPcbApplyReauthorizer } from "@/app/lib/project/pcb-apply-reauthorization";
+import { IndexedDbAgentExecutionJournalStore } from "@/app/lib/engineering/agent-execution-journal-idb"; // [B18-B]
+import { AgentExecutionJournal } from "@/app/lib/engineering/agent-execution-journal"; // [B18-B]
+import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, tenderConfirmedExecution, tenderExplicitExecution } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]
+import { verifyPublicGrantCoherence, type ExecutionDecisionMode, type PublicExecutionGrant } from "@/app/lib/engineering/execution-grant"; // [B18-B]
+import { GrantedExecutionDialog } from "./GrantedExecutionDialog"; // [B18-B]
 import { isPcbEditProposalExpired, verifySealedPcbEditProposalIntegrity, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
 import { PcbProposalReviewDialog } from "./PcbProposalReviewDialog";
 import type { ProjectCommitInterlock } from "@/app/lib/engineering/project-commit-interlock";
@@ -310,6 +315,8 @@ export default function PcbEditor({
   viewSessionBridge,
   layoutCandidateIntake,
   onLayoutCandidateSettled,
+  executionGrantIntake,
+  onExecutionGrantSettled,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -346,6 +353,11 @@ export default function PcbEditor({
    *  a stale candidate is refused with a visible reason. Apply stays the human's explicit action. */
   layoutCandidateIntake?: { candidate: LayoutCandidate; originRunId: string | null } | null;
   onLayoutCandidateSettled?: () => void;
+  /** [B18-B] a server-minted execution grant narrowed by the page's SAFE receiver. Display grants nothing; the
+   *  granted-execution ritual (tender = one-shot server burn, then ONE canonical transaction) lives behind this
+   *  editor's controller — never the chat page or the agent layer. */
+  executionGrantIntake?: { grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null; originRunId: string | null } | null;
+  onExecutionGrantSettled?: (outcome: "committed" | "cancelled" | "retired" | "failed") => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
@@ -1474,6 +1486,142 @@ export default function PcbEditor({
       setPcbProposalBusy(false);
     }
   }, [pendingPcbProposal, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, pcbProposalIntake, onPcbProposalSettled]);
+
+  // ── [B18-B] server-minted execution grants: the granted-execution ritual ──
+  // The page's SAFE receiver narrowed the event; nothing here holds authority
+  // beyond this editor's own composition (live board, canonical session,
+  // interlock, durable journal). A preview_then_confirm grant waits for the
+  // human's explicit Confirm; an execute_explicit grant runs the ritual once;
+  // the SERVER answers the awaiting run from the settled record — never this
+  // editor.
+  const pendingExecutionGrant = executionGrantIntake?.grant ?? null;
+  const [executionGrantBusy, setExecutionGrantBusy] = useState(false);
+  // Expiry is time-based: the clock sample is state (never read impurely during render) and ticks while a grant is open.
+  const [executionGrantNow, setExecutionGrantNow] = useState(() => Date.now());
+  const executionJournalStoreRef = useRef<IndexedDbAgentExecutionJournalStore | null>(null);
+  if (executionJournalStoreRef.current === null) executionJournalStoreRef.current = new IndexedDbAgentExecutionJournalStore();
+  useEffect(() => {
+    if (!pendingExecutionGrant) return;
+    const timer = setInterval(() => setExecutionGrantNow(Date.now()), 5_000);
+    return () => clearInterval(timer);
+  }, [pendingExecutionGrant]);
+  const executionGrantGenerationRef = useRef(lifecycleGeneration);
+  useEffect(() => {
+    if (executionGrantGenerationRef.current !== lifecycleGeneration && pendingExecutionGrant) onExecutionGrantSettled?.("retired");
+    executionGrantGenerationRef.current = lifecycleGeneration;
+  }, [lifecycleGeneration, pendingExecutionGrant, onExecutionGrantSettled]);
+  /** null ⇒ the grant may be tendered; otherwise the PRECISE visible reason. The ritual re-verifies all of it again. */
+  const executionGrantDisableReason = useMemo((): string | null => {
+    const grant = pendingExecutionGrant;
+    if (!grant) return null;
+    const coherence = verifyPublicGrantCoherence(grant);
+    if (!coherence.ok) return `the grant failed integrity verification (${coherence.reason}).`;
+    if (grant.state.status !== "issued") return `the grant is ${grant.state.status}.`;
+    if (Date.parse(grant.binding.expiresAt) <= executionGrantNow) return "the grant has expired — ask again.";
+    if (init.demo || !syncIdentity) return "demo boards have no durable project scope; grants cannot be executed here.";
+    const base = grant.binding.base.pcb;
+    if (!base || grant.binding.session.editor !== "pcb") return "the grant is not a PCB grant.";
+    if (grant.binding.scope.tenantId !== syncIdentity.tenantId || grant.binding.scope.projectId !== syncIdentity.projectId || grant.binding.scope.branchId !== syncIdentity.branchId) {
+      return "the grant belongs to a different project or branch — ask again.";
+    }
+    if (currentInterlock?.()?.retired) return "the project is retiring; no further executions are accepted.";
+    const liveHistory = editorRuntime.getHistory();
+    const board = state.board;
+    if (!liveHistory || !board) return "the editor session is still loading (revalidation has not completed).";
+    if (pcbRevisionId(board) !== base.pcbRevisionId) return "the live board changed since the grant was issued — ask again.";
+    const head = canonicalSessionFor(liveHistory)?.headMetadataFor(board) ?? null;
+    if (!head) return "the canonical editing session cannot prove the current board is its head (revalidation has not completed).";
+    if (head.headSequence !== base.headSequence) return "the board history advanced since the grant was issued — ask again.";
+    if (head.lineageId !== base.lineageId) return "the editing session lineage changed since the grant was issued.";
+    if (drc.activePresetId !== base.validationPolicy.presetId) return `the active DRC preset (${drc.activePresetId}) differs from the grant's validation policy (${base.validationPolicy.presetId}) — ask again.`;
+    if (executionGrantBusy) return "an execution is already in progress.";
+    return null;
+  }, [pendingExecutionGrant, executionGrantNow, init.demo, syncIdentity, currentInterlock, editorRuntime, state.board, drc.activePresetId, executionGrantBusy]);
+  const runGrantedExecution = useCallback(async (mode: "confirm" | "explicit") => {
+    const grant = pendingExecutionGrant;
+    const liveHistory = editorRuntime.getHistory();
+    const interlock = currentInterlock?.() ?? null;
+    if (!grant || !liveHistory || !interlock || !syncIdentity) {
+      setToast("The AI change cannot be made: the editor session or project interlock is unavailable. Nothing was changed.");
+      onExecutionGrantSettled?.("failed");
+      return;
+    }
+    const lifecycleScope = pcbLifecycle.capture();
+    setExecutionGrantBusy(true);
+    try {
+      const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: syncIdentity.boardId, editor: "pcb" });
+      const deps = {
+        grant, history: liveHistory, interlock, journal,
+        stillCurrent: () => lifecycleScope.isCurrent(),
+        currentProjectId: syncIdentity.projectId, currentBranchId: syncIdentity.branchId, tenantId: syncIdentity.tenantId,
+        activeDrcPresetId: drc.activePresetId,
+        originRunId: executionGrantIntake?.originRunId ?? null,
+        // Flush the working copy (with the canonical head claim) BEFORE final success is reported; failures are truthful.
+        settleAutosave: () => {
+          const settledHistory = editorRuntime.getHistory();
+          const settledBoard = settledHistory?.committedPresent ?? null;
+          if (!settledHistory || !settledBoard) return false;
+          const base = authorityRef.current ? { revision: authorityRef.current.revision, digest: authorityRef.current.digest } : null;
+          const canonicalHead = canonicalSessionFor(settledHistory)?.headMetadataFor(settledBoard) ?? null;
+          return saveWorkingCopy(syncIdentity.projectId, settledBoard, base, canonicalHead);
+        },
+      };
+      const outcome = mode === "confirm" ? await tenderConfirmedExecution(deps) : await tenderExplicitExecution(deps);
+      if (outcome.ok) {
+        setToast(outcome.status === "committed"
+          ? `AI change made as ONE canonical transaction (${outcome.receipt.transactionId.slice(0, 18)}…). Undo restores the exact previous board.${outcome.settled === "settled" ? "" : " WARNING: the server settlement did not complete; the assistant may report the outcome as unsettled."}${outcome.autosaveSettled ? "" : " WARNING: the working-copy autosave did not settle — the change is committed canonically but the browser working copy save failed."}`
+          : "This AI change was already made; no second transaction was created.");
+        if (lifecycleScope.isCurrent()) drc.run();
+        onExecutionGrantSettled?.("committed");
+      } else {
+        setToast(`AI change not made: ${outcome.message}`);
+        onExecutionGrantSettled?.(outcome.changed ? "failed" : "retired");
+      }
+    } finally {
+      setExecutionGrantBusy(false);
+    }
+  }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled]);
+  const cancelExecutionGrant = useCallback(async () => {
+    const grant = pendingExecutionGrant;
+    if (!grant || !syncIdentity) { onExecutionGrantSettled?.("cancelled"); return; }
+    const result = await cancelGrantedExecution({ grant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "cancelled_by_user" });
+    setToast(result.ok ? "AI change cancelled — nothing was changed." : `The grant could not be cancelled on the server (${result.message}); it expires on its own. Nothing was changed.`);
+    onExecutionGrantSettled?.("cancelled");
+  }, [pendingExecutionGrant, syncIdentity, onExecutionGrantSettled]);
+  // execute_explicit: run ONCE per grant as soon as the live checks pass (the ritual re-verifies everything at the
+  // serialized position). A stale or foreign explicit grant never waits for a human: it is reported and retired.
+  const explicitGrantRanRef = useRef<string | null>(null);
+  useEffect(() => {
+    const grant = pendingExecutionGrant;
+    if (!grant || grant.binding.operation.decision !== "execute_explicit" || executionGrantBusy) return;
+    if (explicitGrantRanRef.current === grant.grantId) return;
+    explicitGrantRanRef.current = grant.grantId;
+    const reason = executionGrantDisableReason;
+    if (reason !== null) {
+      // Reported asynchronously (never a synchronous setState inside the effect).
+      void Promise.resolve().then(() => { setToast(`AI change not made: ${reason} Nothing was changed.`); onExecutionGrantSettled?.("retired"); });
+      return;
+    }
+    void Promise.resolve().then(() => runGrantedExecution("explicit"));
+  }, [pendingExecutionGrant, executionGrantBusy, executionGrantDisableReason, runGrantedExecution, onExecutionGrantSettled]);
+  // The hydration sweep (§4.6): finish crashed granted executions from the durable journal once the canonical
+  // session is ready — keyed by the journal entry, never a new grant. Never in demo mode.
+  const executionRecoveryRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (init.demo || !syncIdentity) return;
+    const liveHistory = editorRuntime.getHistory();
+    if (!liveHistory || !state.board || !canonicalSessionFor(liveHistory)) return;
+    const key = `${syncIdentity.projectId}:${syncIdentity.branchId}:${lifecycleGeneration}`;
+    if (executionRecoveryRef.current === key) return;
+    executionRecoveryRef.current = key;
+    const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: syncIdentity.boardId, editor: "pcb" });
+    void recoverGrantedExecutionsForEditor({ journal, history: liveHistory, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } })
+      .then((results) => {
+        const notable = results.filter((result) => result.action === "adopted-and-settled" || result.action === "abandoned-not-committed" || result.action === "settled-from-receipt" || result.action === "refused-poisoned");
+        if (notable.length > 0) setToast(`AI execution recovery: ${notable.map((result) => `${result.grantId.slice(0, 12)}… ${result.action}`).join("; ")}.`);
+      })
+      .catch(() => undefined);
+  }, [init.demo, syncIdentity, editorRuntime, state.board, lifecycleGeneration]);
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
@@ -2619,6 +2767,16 @@ export default function PcbEditor({
         disableReason={pcbProposalDisableReason}
         onApply={() => void applyPcbProposal()}
         onCancel={() => onPcbProposalSettled?.("cancelled")}
+      />
+      {/* [B18-B] the human-gated confirmation of a preview_then_confirm execution grant — display grants nothing;
+          only the explicit Confirm click reaches the controller. An execute_explicit grant runs the ritual itself. */}
+      <GrantedExecutionDialog
+        grant={pendingExecutionGrant && pendingExecutionGrant.binding.operation.decision === "preview_then_confirm" ? pendingExecutionGrant : null}
+        note={executionGrantIntake?.note ?? null}
+        busy={executionGrantBusy}
+        disableReason={executionGrantDisableReason}
+        onConfirm={() => void runGrantedExecution("confirm")}
+        onCancel={() => void cancelExecutionGrant()}
       />
 
       <ShortcutsHelp open={shortcuts.open} onClose={shortcuts.hide} /> {/* Stage 16 */}

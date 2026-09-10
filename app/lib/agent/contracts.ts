@@ -273,6 +273,7 @@ export interface AgentExecutionPlan {
   targets: ExecutionGrantTargets;
   preview: ExecutionGrantPreview;
   previewDigest: string;
+  expectedPcbRevisionAfter: string;
 }
 
 export interface AgentExecutionGrantRequest {

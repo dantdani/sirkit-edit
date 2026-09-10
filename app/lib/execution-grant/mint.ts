@@ -96,7 +96,7 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
           operation: { family: plan.family, tier: 1, capability: plan.capability, decision, requiresHumanApproval: decision === "preview_then_confirm", autonomy: { mode: ctx.autonomy.mode, revision: ctx.autonomy.revision } },
           targets: structuredClone(plan.targets),
           base: structuredClone(request.base),
-          proposal: { operations: structuredClone(plan.operations), operationsDigest: plan.operationsDigest, operationCount: plan.operationCount, preview: structuredClone(plan.preview), previewDigest: plan.previewDigest },
+          proposal: { operations: structuredClone(plan.operations), operationsDigest: plan.operationsDigest, operationCount: plan.operationCount, preview: structuredClone(plan.preview), previewDigest: plan.previewDigest, expectedPcbRevisionAfter: plan.expectedPcbRevisionAfter },
           instruction: { userMessageDigest, excerpt: proof.excerpt.slice(0, MAX_INSTRUCTION_EXCERPT), explicit: { proven: proof.proven && decision === "execute_explicit", grammarId: proof.grammarId, grammarVersion: proof.grammarVersion, coverage: proof.proven && decision === "execute_explicit" ? "whole-message" : "unproven", derivedOperationsDigest: proof.derivedOperationsDigest } },
           issuedAt, expiresAt: new Date(issuedMs + ttlMs).toISOString(), ttlMs,
         };

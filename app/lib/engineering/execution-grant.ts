@@ -134,6 +134,8 @@ export interface ExecutionGrantProposal {
   operationCount: number;
   preview: ExecutionGrantPreview;
   previewDigest: string;
+  /** The exact PCB semantic revision the operations produce from the base — the browser's postcondition and recovery anchor. */
+  expectedPcbRevisionAfter: string;
 }
 
 export interface ExecutionGrantExplicitness {
@@ -218,7 +220,8 @@ export interface PublicExecutionGrant {
 /** The per-(principal, editor) index aggregate: at most one live grant per principal/editor; a bounded retry-guard tail. */
 export interface ExecutionGrantIndex {
   live: string[];
-  recent: Array<{ grantId: string; userMessageDigest: string; family: ExecutionFamily; targetsDigest: string; status: GrantStatus; at: string }>;
+  /** `outcome`: the settlement outcome once settled (the retry guard counts only committed executions and in-flight consumptions). */
+  recent: Array<{ grantId: string; userMessageDigest: string; family: ExecutionFamily; targetsDigest: string; status: GrantStatus; outcome: SettlementOutcome | null; at: string }>;
 }
 
 // ── digests (every formula pinned by tests; the browser recomputes the first five) ──
@@ -343,7 +346,7 @@ export function parsePublicExecutionGrant(raw: unknown): PublicExecutionGrant | 
   if (!isObject(scope) || !str(scope.tenantId) || !str(scope.projectId) || !str(scope.branchId)) return null;
   if (!isObject(session) || (session.editor !== "pcb" && session.editor !== "schematic") || !str(session.lineageId) || !str(session.runId)) return null;
   if (!isObject(operation) || !isExecutionFamily(operation.family) || operation.tier !== 1 || !(TIER1_GRANTABLE_CAPABILITIES as readonly string[]).includes(operation.capability as string) || !(EXECUTION_DECISION_MODES as readonly string[]).includes(operation.decision as string) || typeof operation.requiresHumanApproval !== "boolean") return null;
-  if (!isObject(proposal) || !Array.isArray(proposal.operations) || proposal.operations.length === 0 || proposal.operations.length > MAX_GRANT_OPERATIONS || !str(proposal.operationsDigest, 64) || !str(proposal.previewDigest, 64) || proposal.operationCount !== proposal.operations.length) return null;
+  if (!isObject(proposal) || !Array.isArray(proposal.operations) || proposal.operations.length === 0 || proposal.operations.length > MAX_GRANT_OPERATIONS || !str(proposal.operationsDigest, 64) || !str(proposal.previewDigest, 64) || !str(proposal.expectedPcbRevisionAfter, 160) || proposal.operationCount !== proposal.operations.length) return null;
   if (!isObject(instruction) || !str(instruction.userMessageDigest, 64) || typeof instruction.excerpt !== "string" || instruction.excerpt.length > MAX_INSTRUCTION_EXCERPT || !isObject(instruction.explicit)) return null;
   if (!isObject(targets) || !Array.isArray(targets.objectIds) || !Array.isArray(targets.netIds) || !Array.isArray(targets.kinds) || !str(targets.targetsDigest, 64)) return null;
   if (!str(binding.issuedAt, 64) || !str(binding.expiresAt, 64) || typeof binding.ttlMs !== "number") return null;

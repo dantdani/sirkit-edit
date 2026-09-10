@@ -41,7 +41,7 @@ const board = makeBoard(40, 30, [makeInstance("r3", makeResistorDef(), { x: 5, y
 const R3 = board.footprints.find((f) => f.ref === "R3")!;
 const built = buildExecutionOperations(board, { family: "pcb.move-footprint", moves: [{ footprintId: R3.id, x: R3.at.x + mmToNm(2), y: R3.at.y }] });
 if (!built.ok) throw new Error(built.message);
-const PLAN: MintablePlan = { family: "pcb.move-footprint", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.0.0", capability: "edit_placement", operations: built.operations, operationsDigest: built.operationsDigest, operationCount: built.operations.length, targets: built.targets, preview: built.preview, previewDigest: built.previewDigest };
+const PLAN: MintablePlan = { family: "pcb.move-footprint", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.0.0", capability: "edit_placement", operations: built.operations, operationsDigest: built.operationsDigest, operationCount: built.operations.length, targets: built.targets, preview: built.preview, previewDigest: built.previewDigest, expectedPcbRevisionAfter: built.resultRevision };
 const LINEAGE = "lin1-0000000000000001";
 const BASE = { canonicalRevisionDigest: "eng1-canon", pcb: { pcbRevisionId: "pcb2-abc", boardDigest: "eng1-board", headSequence: 4, lineageId: LINEAGE, validationPolicy: { presetId: "jlcpcb-2l", presetVersion: "2", rulesDigest: "eng1-rules" } }, schematic: null };
 const setting = (mode: AgentAutonomySetting["mode"], revision: number): AgentAutonomySetting => ({ schema: AGENT_AUTONOMY_SCHEMA, tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, mode, revision, updatedAt: null, updatedBy: null });

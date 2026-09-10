@@ -37,6 +37,7 @@ export interface SealedExecutionPlan {
   targets: ExecutionGrantTargets;
   preview: ExecutionGrantPreview;
   previewDigest: string;
+  expectedPcbRevisionAfter: string;
 }
 
 export type SealOutcome =
@@ -93,7 +94,7 @@ export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: R
     plan: {
       family, toolId: descriptor.toolId, toolVersion: descriptor.version, capability: descriptor.requiredCapability as GrantableCapability,
       plan: parsed.plan, commands: built.commands, operations: built.operations, operationsDigest: built.operationsDigest, operationCount: built.operations.length,
-      targets: built.targets, preview: built.preview, previewDigest: built.previewDigest,
+      targets: built.targets, preview: built.preview, previewDigest: built.previewDigest, expectedPcbRevisionAfter: built.resultRevision,
     },
   };
 }

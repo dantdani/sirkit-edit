@@ -54,7 +54,7 @@ function grantOf(decision: "execute_explicit" | "preview_then_confirm"): PublicE
     operation: { family: "pcb.move-footprint", tier: 1, capability: "edit_placement", decision, requiresHumanApproval: decision === "preview_then_confirm", autonomy: { mode: "execute_explicit_tier1", revision: 1 } },
     targets: built.targets,
     base: { canonicalRevisionDigest: "eng1-canon", pcb: { pcbRevisionId: "pcb2-abc", boardDigest: "eng1-board", headSequence: 4, lineageId: "lin1-0000000000000001", validationPolicy: { presetId: "jlcpcb-2l", presetVersion: "2", rulesDigest: "eng1-rules" } }, schematic: null },
-    proposal: { operations: built.operations, operationsDigest: built.operationsDigest, operationCount: 1, preview: built.preview, previewDigest: built.previewDigest },
+    proposal: { operations: built.operations, operationsDigest: built.operationsDigest, operationCount: 1, preview: built.preview, previewDigest: built.previewDigest, expectedPcbRevisionAfter: built.resultRevision },
     instruction: { userMessageDigest: userInstructionDigest("Move R3 2 mm to the right."), excerpt: "Move R3 2 mm to the right.", explicit: decision === "execute_explicit" ? { proven: true, grammarId: "pcb.move-footprint", grammarVersion: "1.0.0", coverage: "whole-message", derivedOperationsDigest: built.operationsDigest } : { proven: false, grammarId: "pcb.move-footprint", grammarVersion: "1.0.0", coverage: "unproven", derivedOperationsDigest: null } },
     issuedAt: T0, expiresAt: new Date(Date.parse(T0) + ttlMs).toISOString(), ttlMs,
   };

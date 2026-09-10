@@ -88,7 +88,7 @@ export class ExecutionGrantStore {
     const live = index.live.filter((id) => id !== record.grantId);
     if (record.state.status === "issued" || record.state.status === "consumed") live.push(record.grantId);
     const recent = index.recent.filter((entry) => entry.grantId !== record.grantId);
-    recent.push({ grantId: record.grantId, userMessageDigest: record.binding.instruction.userMessageDigest, family: record.binding.operation.family, targetsDigest: record.binding.targets.targetsDigest, status: record.state.status, at });
+    recent.push({ grantId: record.grantId, userMessageDigest: record.binding.instruction.userMessageDigest, family: record.binding.operation.family, targetsDigest: record.binding.targets.targetsDigest, status: record.state.status, outcome: record.state.settlement?.outcome ?? null, at });
     while (recent.length > MAX_INDEX_RECENT) recent.shift();
     return { live, recent };
   }
@@ -188,7 +188,9 @@ export class ExecutionGrantStore {
     const { index } = await this.index(scope, principalId, editor);
     for (const entry of [...index.recent].reverse()) {
       if (entry.userMessageDigest !== probe.userMessageDigest || entry.family !== probe.family || entry.targetsDigest !== probe.targetsDigest) continue;
-      if (entry.status !== "consumed" && entry.status !== "settled") continue;
+      // Only an execution that is in flight (consumed) or actually COMMITTED guards a retry; a settlement that
+      // committed nothing (not-committed / poisoned) leaves nothing to double-execute.
+      if (entry.status !== "consumed" && !(entry.status === "settled" && entry.outcome === "committed")) continue;
       if (now - Date.parse(entry.at) <= RETRY_GUARD_WINDOW_MS) return { grantId: entry.grantId, at: entry.at };
     }
     return null;

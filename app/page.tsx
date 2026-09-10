@@ -58,6 +58,7 @@ import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // 
 import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
+import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -2687,6 +2688,9 @@ export default function Home() {
   // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
   // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
   const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
+  // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
+  // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
+  const [pendingExecutionGrant, setPendingExecutionGrant] = useState<{ grant: ReceivedExecutionGrant["grant"]; decision: ReceivedExecutionGrant["decision"]; note: string | null; originRunId: string | null } | null>(null);
 
   // B06.2/B07.2: pending schematic-history recovery decision (projection
   // conflict, corrupt durable history, or an identity-invalid projection
@@ -4542,6 +4546,32 @@ export default function Home() {
             }
             return;
           }
+          case "execution_grant_ready": {
+            // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
+            // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
+            // explicit grants execute once and settle back to the server. Receiving it changes nothing.
+            const received = receiveExecutionGrantReadyEvent(event);
+            if (received) {
+              setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
+              appendActivityStep(logId, received.decision === "execute_explicit"
+                ? `Executing in the PCB editor — ${received.grant.binding.proposal.preview.after} (one canonical transaction, undoable)`
+                : `Change ready for your confirmation in the PCB editor — ${received.grant.binding.proposal.preview.after}; nothing has changed yet`, "done");
+            }
+            return;
+          }
+          case "execution_settled": {
+            // [B18-B] what the run learned from the DURABLE record (display only — never a claim of its own).
+            const settled = receiveExecutionSettledEvent(event);
+            if (settled) {
+              const committed = settled.status === "settled" && settled.outcome === "committed";
+              const text = committed ? "AI change committed by your editor (one canonical transaction, undoable)"
+                : settled.status === "settled" ? `AI change not committed (${settled.outcome ?? "unknown"}) — nothing changed`
+                : settled.status === "retired" ? `AI change not made — the grant was retired (${settled.reason ?? "unknown"})`
+                : "AI change unsettled — the editor did not report the outcome in time; check the board and the revision history";
+              appendActivityStep(logId, text, committed ? "done" : "error");
+            }
+            return;
+          }
           case "warning": {
             if (typeof event.message === "string") appendActivityStep(logId, event.message, "done");
             return;
@@ -6276,6 +6306,8 @@ export default function Home() {
                     viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
+                    executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
+                    onExecutionGrantSettled={() => setPendingExecutionGrant(null)}
                   />
                 </div>
               )}

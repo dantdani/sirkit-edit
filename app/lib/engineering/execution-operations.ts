@@ -9,6 +9,7 @@
  * No parallel mutation code exists here: a plan is a list of edit commands.
  */
 import { compileEdits } from "../pcb/edit/apply";
+import { pcbRevisionId } from "../pcb/revision";
 import type { EditCommand, SelectionRef } from "../pcb/edit/commands";
 import type { PcbBoard } from "../pcb/types";
 import { nmToMm } from "../pcb/units";
@@ -30,6 +31,8 @@ export interface BuiltExecution {
   previewDigest: string;
   /** The edit commands the operations were compiled from (the browser recompiles the same commands). */
   commands: EditCommand[];
+  /** The PCB semantic revision of the board AFTER the operations — the grant pins it as the exact expected result. */
+  resultRevision: string;
 }
 export interface BuildRefusal { ok: false; code: "empty" | "too_many" | "unknown_target" | "locked_target" | "invalid_geometry" | "compile_failed" | "no_change" | "unsupported_family"; message: string }
 
@@ -67,5 +70,5 @@ export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): 
   targets.targetsDigest = executionTargetsDigest(targets);
   const preview: ExecutionGrantPreview = { before: before.join("; "), after: after.join("; "), warnings: compiled.diagnostics.map((diagnostic) => diagnostic.summary).slice(0, 8) };
   const operationsDigest = executionOperationsDigest(plan.family, operations);
-  return { ok: true, family: plan.family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands };
+  return { ok: true, family: plan.family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(compiled.result) };
 }
