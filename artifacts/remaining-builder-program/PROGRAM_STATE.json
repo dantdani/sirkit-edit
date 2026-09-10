@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-B",
+  "currentCheckpoint": "B17-C",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17-B: provider-neutral, non-authoritative view-session command bus (sirkit.view-command.v1 envelope; session/project scoping; stale view revisions refuse or rebase deterministically; retirement on project switch/logout/tab disposal; single settlement, cancellable, returns resulting view state; durable persistence limited to explicit workspace preferences; no engineering undo entry for visual-only actions; redacting trace records) shared by UI, keyboard shortcuts and agent tools.",
-  "updatedAt": "2026-09-09T22:40:00-04:00"
+  "nextAction": "B17-C: replace PcbPreview3D's component-local control with pcb3d view-session commands (open/close, top/bottom/iso presets, fit, reset, focus by component/selection/net, top and bottom silkscreen independently, mask/copper/zones/vias/footprints/refdes/substrate toggles, finish, read state, bounded model/geometry-unavailable); prove the acceptance phrase through the semantic bus with a browser check of the visible effect.",
+  "updatedAt": "2026-09-09T23:05:00-04:00"
 }
