@@ -12,17 +12,26 @@ export type FixtureRole = "editor" | "reviewer" | "admin" | "viewer";
 export const REFS = ["U1", "R1", "R2", "R3", "C1", "C2", "C3", "D1", "J1"] as const;
 export const FIXTURE_CLOCK = process.env.SIRKIT_FIXTURE_CLOCK?.trim() || FIXTURE_CLOCK_DEFAULT;
 
-export async function installDeterministicBrowser(page: Page, context: BrowserContext): Promise<void> {
-  await context.addInitScript(() => {
+/**
+ * Deterministic browser ids: `crypto.randomUUID()` yields a numbered sequence
+ * persisted in localStorage (so reloads continue it). Every spec that shares a
+ * dev server passes its OWN `uuidNamespace` so two journeys never mint the same
+ * project/board ids (the B17-C CI run found the prompt-to-Gerber spec landing
+ * on the 3D spec's board: same server, same ids); the placed-board revision the
+ * router recording is keyed by is content-derived, so the namespace does not
+ * change which recording replays.
+ */
+export async function installDeterministicBrowser(page: Page, context: BrowserContext, uuidNamespace = "b16c0000"): Promise<void> {
+  await context.addInitScript((namespace: string) => {
     const next = (): string => {
       let n = 0;
       try { n = Number(window.localStorage.getItem("sirkit-e2e-uuid-seq") ?? "0"); } catch { n = 0; }
       n += 1;
       try { window.localStorage.setItem("sirkit-e2e-uuid-seq", String(n)); } catch { /* storage unavailable */ }
-      return `b16c0000-e2e0-4000-8000-${String(n).padStart(12, "0")}`;
+      return `${namespace}-e2e0-4000-8000-${String(n).padStart(12, "0")}`;
     };
     Object.defineProperty(crypto, "randomUUID", { value: next, configurable: true });
-  });
+  }, uuidNamespace);
   await page.clock.setFixedTime(new Date(FIXTURE_CLOCK));
 }
 
@@ -54,8 +63,8 @@ export async function expectWorkflowState(page: Page, state: string, timeout = 6
 }
 
 /** Prompt → approval → review handoff → sync → explicit apply; ends as the EDITOR on the synchronized board. */
-export async function bootstrapSynchronizedBoard(page: Page, context: BrowserContext, origin: string): Promise<void> {
-  await installDeterministicBrowser(page, context);
+export async function bootstrapSynchronizedBoard(page: Page, context: BrowserContext, origin: string, uuidNamespace: string): Promise<void> {
+  await installDeterministicBrowser(page, context, uuidNamespace);
   await actAs(context, "editor", origin);
   await page.goto("/");
   await expect(page.getByTestId("fixture-runtime-banner")).toBeVisible();

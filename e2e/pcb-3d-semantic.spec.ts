@@ -18,7 +18,7 @@ test.describe.configure({ mode: "serial" });
 test.setTimeout(300_000);
 
 test("3D acceptance: open → hide top silkscreen → focus J1 → isometric, through pcb3d view commands", async ({ page, context, baseURL }) => {
-  await bootstrapSynchronizedBoard(page, context, baseURL!);
+  await bootstrapSynchronizedBoard(page, context, baseURL!, "b17c0000");
 
   // Open the 3D view (toolbar → pcb3d.open).
   await page.getByRole("button", { name: "3D preview" }).click();
