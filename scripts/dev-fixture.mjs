@@ -12,6 +12,7 @@ const env = {
   SIRKIT_AUTH_MODE: "local_dev",
   SIRKIT_FIXTURE_RUNTIME: "blinker",
   SIRKIT_FIXTURE_ROUTER: process.env.SIRKIT_FIXTURE_ROUTER ?? "replay",
+  SIRKIT_PCB_SYNC_STAGE3: "opt_in",
   DATABASE_URL: "",
 };
 const child = spawn(process.platform === "win32" ? "pnpm.cmd" : "pnpm", ["exec", "next", "dev", "--port", port], { stdio: "inherit", env, shell: process.platform === "win32" });

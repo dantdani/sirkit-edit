@@ -15,6 +15,7 @@ Host: Windows 11 Pro 10.0.26200, Node 24, pnpm 11.2.2, Chromium 1243 (Playwright
 | Page-level browser proof (router RECORD, bundled FreeRouting) | `SIRKIT_FIXTURE_ROUTER=record pnpm exec playwright test` | the recording was written (2 router executions, 69 s of routing); that run's later steps were disturbed by a source edit made during the run (dev-server reload) and are proven by the replay runs |
 | ESLint on the change set | `pnpm exec eslint <changed .ts/.tsx>` | 0 new errors; page.tsx 14 and PcbEditor.tsx 1 pre-existing errors are byte-identical to HEAD (`react-hooks/refs`, `set-state-in-effect`, `purity`); CI does not run eslint |
 | Staged-content secret scan | before every push (runbook non-negotiable) | see the ledger entry of each push |
+| CI (`deterministic-manufacturing`, `benchmark-quality`) at `f6b9390` | GitHub Actions on PR #6 | `prompt-to-gerber` pass (2m04s), `database-delivery` pass (1m34s), `benchmark-core` pass (1m45s), `page-browser-e2e` FAIL — `PS_STAGE3_DISABLED` 503 at publication because the Stage 3 rollout flag lived only in the local `.env.local`; fixed in the follow-up commit (the fixture runtime declares `SIRKIT_PCB_SYNC_STAGE3=opt_in`); the green run is recorded in the ledger's B16 final-gate entry |
 
 ## 2. Per-checkpoint measurements (RECORDED from the ledger)
 

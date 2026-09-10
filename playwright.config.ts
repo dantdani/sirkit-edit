@@ -25,7 +25,9 @@ export default defineConfig({
   timeout: 180_000,
   expect: { timeout: 20_000 },
   reporter: process.env.CI ? [["list"], ["junit", { outputFile: "playwright-report/junit.xml" }], ["html", { open: "never" }]] : [["list"], ["html", { open: "never" }]],
-  outputDir: "playwright-report/test-results",
+  // Failure artifacts (screenshots, traces, error context) live OUTSIDE the HTML reporter's folder:
+  // the HTML reporter clears its own output directory, so a shared folder loses the evidence.
+  outputDir: "test-results",
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
@@ -48,6 +50,10 @@ export default defineConfig({
       SIRKIT_AUTH_MODE: "local_dev",
       SIRKIT_FIXTURE_RUNTIME: "blinker",
       SIRKIT_FIXTURE_ROUTER: process.env.SIRKIT_FIXTURE_ROUTER ?? "replay",
+      // The Stage 3 synchronization rollout is OFF unless declared (the first CI run answered
+      // PS_STAGE3_DISABLED 503 where the local .env.local had set it): the fixture runtime declares
+      // the same state the deterministic pipelines use.
+      SIRKIT_PCB_SYNC_STAGE3: "opt_in",
       // Never let a developer's .env.local database leak into the proof.
       DATABASE_URL: "",
     },

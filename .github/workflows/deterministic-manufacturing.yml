@@ -133,6 +133,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: page-browser-e2e-report
-          path: playwright-report
+          path: |
+            playwright-report
+            test-results
           if-no-files-found: ignore
           retention-days: 14
