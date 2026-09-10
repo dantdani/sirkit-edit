@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-C",
+  "currentCheckpoint": "B17-D",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17-C: replace PcbPreview3D's component-local control with pcb3d view-session commands (open/close, top/bottom/iso presets, fit, reset, focus by component/selection/net, top and bottom silkscreen independently, mask/copper/zones/vias/footprints/refdes/substrate toggles, finish, read state, bounded model/geometry-unavailable); prove the acceptance phrase through the semantic bus with a browser check of the visible effect.",
-  "updatedAt": "2026-09-09T23:05:00-04:00"
+  "nextAction": "B17-D: canvas navigation and selection commands on the view-session bus for the schematic and PCB editors (fit/zoom/pan/center-on, select/deselect/focus by refdes, id or net); resolve 'this component' from the trusted editor context selection (sirkit.editor-context.v1) and refuse a stale or absent selection; re-baseline view.canvas-navigation; browser proof of the visible effect.",
+  "updatedAt": "2026-09-09T23:20:00-04:00"
 }

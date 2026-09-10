@@ -26,9 +26,14 @@ const REBUILD_THROTTLE_MS = 100;
 export interface SceneToggles {
   showMask: boolean;
   showSilk: boolean;
+  showSilkTop: boolean;
+  showSilkBottom: boolean;
   showZones: boolean;
   showFootprints: boolean;
   showRefdes: boolean;
+  showCopper: boolean;
+  showVias: boolean;
+  showSubstrate: boolean;
 }
 
 export interface Pcb3dHandle {
@@ -39,15 +44,25 @@ export interface Pcb3dHandle {
   setPaletteId(id: PaletteId): void;
 }
 
-export function usePcb3d(board: PcbBoard): Pcb3dHandle {
-  const [paletteId, setPaletteId] = useState<PaletteId>(DEFAULT_PALETTE_ID);
-  const [toggles, setToggles] = useState<SceneToggles>({
+/** [B17-C] The scene follows VIEW state supplied by the caller (the pcb3d view-session bus) when given. */
+export interface Pcb3dViewInput { toggles: SceneToggles; paletteId: PaletteId }
+
+export function usePcb3d(board: PcbBoard, view?: Pcb3dViewInput): Pcb3dHandle {
+  const [localPaletteId, setPaletteId] = useState<PaletteId>(DEFAULT_PALETTE_ID);
+  const [localToggles, setToggles] = useState<SceneToggles>({
     showMask: true,
     showSilk: true,
+    showSilkTop: true,
+    showSilkBottom: true,
     showZones: true,
     showFootprints: true,
     showRefdes: true,
+    showCopper: true,
+    showVias: true,
+    showSubstrate: true,
   });
+  const paletteId = view?.paletteId ?? localPaletteId;
+  const toggles = view?.toggles ?? localToggles;
 
   // Throttle: adopt a new board at most every 100 ms.
   const [displayBoard, setDisplayBoard] = useState(board);

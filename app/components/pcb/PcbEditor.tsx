@@ -134,6 +134,7 @@ import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B
 import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
 import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
+import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
 import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
@@ -1410,7 +1411,10 @@ export default function PcbEditor({
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
-  const [preview3dOpen, setPreview3dOpen] = useState(false);
+  // [B17-C] the 3D preview is VIEW state on the pcb3d view-session bus (open/close, camera, focus, layers, finish);
+  // every entry point (toolbar, palette, Ctrl+3, Escape, the preview's own controls) issues the same command.
+  const pcb3d = usePcb3dViewSession({ projectId: init.scope?.projectId ?? (init.demo ? "demo" : "local"), branchId: init.scope?.branchId ?? "main", board: state.board, actorId: init.scope ? "trusted-session" : "local", demo: init.demo });
+  const preview3dOpen = pcb3d.view.open;
 
   // ── Stage 17: padstack library panel (right column, not a modal) ───────────
   const [padstacksOpen, setPadstacksOpen] = useState(false);
@@ -1681,6 +1685,7 @@ export default function PcbEditor({
     autoroute: () => {},
     runDrc: () => {},
     toggle3d: () => {},
+    close3d: () => {},
     openFab: () => {},
   });
   useEffect(() => {
@@ -1688,7 +1693,8 @@ export default function PcbEditor({
       autoPlace: () => void autoPlace.run(),
       autoroute: () => void autoroute.run(),
       runDrc: () => void drc.run(),
-      toggle3d: () => setPreview3dOpen((o) => !o),
+      toggle3d: () => pcb3d.toggle(), // [B17-C] pcb3d.open / pcb3d.close on the view-session bus
+      close3d: () => pcb3d.setOpen(false),
       openFab: () => setFabDialogOpen(true),
     };
   });
@@ -1715,7 +1721,7 @@ export default function PcbEditor({
         (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable);
       if (e.key === "Escape" && modalGuardRef.current.preview3dOpen) {
         e.preventDefault();
-        setPreview3dOpen(false);
+        globalActionsRef.current.close3d(); // [B17-C] pcb3d.close through the same ref as the other global actions
         return;
       }
       // Undo/redo are editor-global. Route/zone/silk own their drawing keys,
@@ -1939,7 +1945,7 @@ export default function PcbEditor({
       { id: "run-drc", title: "Run design rule check", hint: "Ctrl+D", run: () => void drc.run() },
       { id: "autoplace", title: "Auto-place components", hint: "Ctrl+P", run: () => void autoPlace.run() },
       { id: "autoroute", title: "Autoroute board", hint: "Ctrl+E", run: () => void autoroute.run() },
-      { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => setPreview3dOpen((o) => !o) },
+      { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => pcb3d.toggle() },
       { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
       { id: "export-kicad", title: "Export .kicad_pcb", run: exportKicadFromPalette },
       { id: "padstacks", title: "Open padstack library", run: () => setPadstacksOpen(true) },
@@ -2132,7 +2138,7 @@ export default function PcbEditor({
           drcRunning={drc.state === "running"}
           onAddPlane={() => setPlaneDialogOpen(true)} // Stage 11
           zoneFilling={zoneFills.isFilling} // Stage 11
-          onToggle3d={() => setPreview3dOpen((o) => !o)} // Stage 15
+          onToggle3d={() => pcb3d.toggle()} // Stage 15 / [B17-C] via the pcb3d view-session bus
           preview3dOpen={preview3dOpen} // Stage 15
           onTogglePadstacks={() => setPadstacksOpen((o) => !o)} // Stage 17
           padstacksOpen={padstacksOpen} // Stage 17
@@ -2261,14 +2267,14 @@ export default function PcbEditor({
                 <button
                   type="button"
                   aria-label="Close 3D preview"
-                  onClick={() => setPreview3dOpen(false)}
+                  onClick={() => pcb3d.setOpen(false)}
                   className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
                 >
                   <X className="size-3.5" />
                 </button>
               </div>
               <div className="flex-1 min-h-0">
-                <PcbPreview3D board={state.board} />
+                <PcbPreview3D board={state.board} view={pcb3d.view} command={pcb3d.command} />
               </div>
             </div>
           )}

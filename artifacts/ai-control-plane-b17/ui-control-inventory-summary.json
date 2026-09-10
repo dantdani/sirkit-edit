@@ -1,10 +1,10 @@
 {
   "schemaVersion": "sirkit.ui-control-inventory-summary.v1",
-  "sites": 554,
+  "sites": 558,
   "surfaces": 58,
   "byKind": {
-    "change": 149,
-    "click": 313,
+    "change": 150,
+    "click": 315,
     "context-menu": 1,
     "dialog": 10,
     "double-click": 1,
@@ -12,13 +12,14 @@
     "key": 10,
     "palette": 21,
     "pointer": 24,
-    "shortcut": 13
+    "shortcut": 13,
+    "submit": 1
   },
   "byClassification": {
     "dispatcher": 21,
     "internal": 8,
     "semantic": 253,
-    "view": 272
+    "view": 276
   },
   "recordsReached": [
     "ai.chat-qa",

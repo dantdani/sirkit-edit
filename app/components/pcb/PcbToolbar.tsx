@@ -153,7 +153,7 @@ export function PcbToolbar({
   };
 
   return (
-    <div className="flex items-center gap-1 px-2 h-9 shrink-0 border-b border-zinc-800 bg-zinc-900/50 text-xs select-none">
+    <div className="flex flex-wrap items-center gap-1 px-2 min-h-9 py-0.5 shrink-0 min-w-0 border-b border-zinc-800 bg-zinc-900/50 text-xs select-none" data-testid="pcb-toolbar">
       {children && <div className="flex shrink-0 items-center gap-1">{children}</div>}
       {children && <div className="w-px h-4 bg-zinc-800 mx-1" />}
       <button
