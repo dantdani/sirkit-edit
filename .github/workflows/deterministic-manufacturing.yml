@@ -75,6 +75,10 @@ jobs:
           app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts
           app/lib/agent/__tests__/b17-f-view-tools.test.ts
           app/lib/agent/__tests__/b17-f-view-session-bridge.test.ts
+          app/lib/engineering/__tests__/b18-a-permission-tiers.test.ts
+          app/lib/agent/__tests__/b18-a-autonomy-settings.test.ts
+          app/lib/agent/__tests__/b18-a-autonomy-store.test.ts
+          app/api/agent/__tests__/b18-a-autonomy-route.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
