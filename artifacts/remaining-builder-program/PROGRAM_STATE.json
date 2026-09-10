@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "804a08d",
+  "lastGreenSha": "d33b255",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-B: design (independent designs + adversarial verification) and implement the server-minted one-shot execution grant: binds principal + membership revision, project/branch/editor session, operation family, exact object/net scope, max tier, base revisions, proposal/operation digest, issue/expiry, nonce, single use, retirement reasons; minted only by the trusted server boundary; retired on role change, logout, project switch, revision drift, proposal alteration, undo divergence, timeout; consumption + commit close the crash window through the approved-mutation journal protocol.",
-  "updatedAt": "2026-09-10T04:40:00-04:00"
+  "nextAction": "B18-B closeout: adversarial review workflow of the server and browser halves (act on confirmed findings), then B18-C: the gateway dispatch branch (seal -> mint through the injected closure, discovery recheck), the B04 exposure lift for pcb.move-footprint with every pinned invariant re-derived (tool-registry, tool-discovery, agent-exposure, loop filter, b09/b04/b17-f/b16-1c INTENTIONAL list), the system prompt 1.1.0, the undo/redo sub-design (OD-14), then B18-D chat execution UX and B18-E scenarios.",
+  "updatedAt": "2026-09-10T06:45:00-04:00"
 }
