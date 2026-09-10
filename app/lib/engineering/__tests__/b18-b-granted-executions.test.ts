@@ -306,7 +306,7 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     c.clock.now = T0 + GRANT_COMMIT_WINDOW_MS + GRANT_SETTLE_GRACE_MS + 1;
     expect(await recoverGrantedExecutionsForEditor({ journal: c.journal, history: c.history, transport: transportD, scope: SCOPE, now: () => c.clock.now })).toMatchObject([{ grantId: d.grant.grantId, action: "abandoned-not-committed" }]);
     expect(await c.journal.lookupByGrant(d.grant.grantId)).toMatchObject({ kind: "entry", entry: { state: "abandoned" } });
-    expect((await serverState(c, d.grant.grantId)).status).toBe("retired"); // lazily consumed_unsettled: nothing was committed
+    expect(await serverState(c, d.grant.grantId)).toMatchObject({ status: "settled", settlement: { outcome: "not-committed", late: true } }); // lazily consumed_unsettled, then the truthful late report: nothing was committed
     expect(headOf(c).headSequence).toBe(before + 1);
   });
 });

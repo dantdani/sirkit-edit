@@ -86,7 +86,7 @@ describe("B18-B §1 — digests and projections", () => {
 });
 
 describe("B18-B §2 — the state machine is monotonic and fail-closed", () => {
-  it("issued → consumed → settled; issued → retired; consumed retires only with the commit/recovery reasons; settled is terminal; a late committed settlement after consumed_unsettled is recorded", () => {
+  it("issued → consumed → settled; issued → retired; consumed retires only with the commit/recovery reasons; settled is terminal; a late truthful settlement after consumed_unsettled is recorded", () => {
     const consumed = transitionGrant(issued, { type: "consume", consumption });
     expect(consumed).toMatchObject({ ok: true, state: { status: "consumed" } });
     if (!consumed.ok) throw new Error("consume");
@@ -103,7 +103,9 @@ describe("B18-B §2 — the state machine is monotonic and fail-closed", () => {
     const unsettled = transitionGrant(consumed.state, { type: "retire", retirement: { reason: "consumed_unsettled", detail: "", at: T0, observedBy: "server" } });
     if (!unsettled.ok) throw new Error("retire");
     expect(transitionGrant(unsettled.state, { type: "settle", settlement })).toMatchObject({ ok: true, state: { status: "settled", settlement: { late: true } } });
-    expect(transitionGrant(unsettled.state, { type: "settle", settlement: { ...settlement, outcome: "not-committed" } })).toMatchObject({ ok: false });
+    // Any TRUTHFUL late report is recorded (committed, not-committed, poisoned): "outcome unknown" is never the final word when the browser knows.
+    expect(transitionGrant(unsettled.state, { type: "settle", settlement: { ...settlement, outcome: "not-committed", transactionId: null, revisionAfter: null, undoEligible: false } })).toMatchObject({ ok: true, state: { status: "settled", settlement: { outcome: "not-committed", late: true } } });
+    expect(transitionGrant(unsettled.state, { type: "retire", retirement: { reason: "proposal_altered", detail: "", at: T0, observedBy: "server" } })).toMatchObject({ ok: false });
     expect([...RETIREMENT_REASONS]).toHaveLength(23);
     expect([...EXECUTION_FAMILIES]).toEqual(["pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "schematic.set-property", "schematic.move-rotate"]);
   });

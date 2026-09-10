@@ -59,12 +59,12 @@ describe("B18-B — the durable execution-grant store", () => {
     const workflow = new InMemoryDurableWorkflowRepository();
     const store = new ExecutionGrantStore(workflow);
     const first = record();
-    expect(await store.mint(SCOPE, first, { idempotencyKey: "mint-1", now: T0 })).toEqual({ revision: 1, superseded: [], idempotent: false });
+    expect(await store.mint(SCOPE, first, { idempotencyKey: "mint-1", now: T0 })).toEqual({ grantId: first.grantId, revision: 1, superseded: [], idempotent: false });
     expect((await store.index(SCOPE, "u-1", "pcb")).index).toMatchObject({ live: [first.grantId], recent: [{ grantId: first.grantId, status: "issued" }] });
     expect(await workflow.listOutbox({ topic: "agent.execution-grant-issued" })).toHaveLength(1);
     const second = record();
     const minted = await store.mint(SCOPE, second, { idempotencyKey: "mint-2", now: iso(1_000) });
-    expect(minted).toEqual({ revision: 1, superseded: [first.grantId], idempotent: false });
+    expect(minted).toEqual({ grantId: second.grantId, revision: 1, superseded: [first.grantId], idempotent: false });
     expect((await store.load(SCOPE, first.grantId, at(1_000)))?.record.state).toMatchObject({ status: "retired", retirement: { reason: "superseded_by_new_grant" } });
     expect((await store.index(SCOPE, "u-1", "pcb")).index.live).toEqual([second.grantId]);
     expect(await workflow.listOutbox({ topic: "agent.execution-grant-retired" })).toHaveLength(1);
@@ -166,5 +166,34 @@ describe("B18-B — the durable execution-grant store", () => {
     expect(resolveExecutionGrantStore()).toBe(store);
     resetExecutionGrantStoreFactory();
     expect(resolveExecutionGrantStore()).toBeInstanceOf(ExecutionGrantStore);
+  });
+
+  it("the retry guard ignores a settlement that committed nothing (R18-3 regression), a replayed mint answers with the grant the first commit minted, and a late not-committed report after consumed_unsettled is recorded late", async () => {
+    const workflow = new InMemoryDurableWorkflowRepository();
+    const store = new ExecutionGrantStore(workflow);
+    const probe = { userMessageDigest: userInstructionDigest("Move R3 2 mm to the right."), family: "pcb.move-footprint", targetsDigest: built.targets.targetsDigest };
+    const first = record({ decision: "execute_explicit" });
+    await store.mint(SCOPE, first, { idempotencyKey: "mint-a", now: T0 });
+    const loaded = (await store.load(SCOPE, first.grantId, at(0)))!;
+    const consumed = await store.consume(SCOPE, loaded, consumption(), iso(1));
+    if (!consumed.ok) throw new Error("consume");
+    expect(await store.recentIdenticalExecution(SCOPE, "u-1", "pcb", probe, at(2))).toMatchObject({ grantId: first.grantId }); // in flight guards
+    const notCommitted = await store.settle(SCOPE, consumed.grant, { ...settlement, outcome: "not-committed", transactionId: null, revisionAfter: null, undoEligible: false }, iso(3));
+    expect(notCommitted.ok).toBe(true);
+    expect(await store.recentIdenticalExecution(SCOPE, "u-1", "pcb", probe, at(4))).toBeNull(); // nothing to double-execute
+    // A replayed mint (same idempotency key, a NEW random record) answers with the FIRST grant, never a phantom id.
+    const second = record({ decision: "execute_explicit" });
+    const minted = await store.mint(SCOPE, second, { idempotencyKey: "mint-b", now: iso(5) });
+    const replayed = await store.mint(SCOPE, record({ decision: "execute_explicit" }), { idempotencyKey: "mint-b", now: iso(6) });
+    expect(replayed).toMatchObject({ idempotent: true, grantId: second.grantId });
+    expect(minted.grantId).toBe(second.grantId);
+    // A consumed grant lazily retired consumed_unsettled still records a truthful late not-committed report.
+    const live = (await store.load(SCOPE, second.grantId, at(6)))!;
+    const consumedSecond = await store.consume(SCOPE, live, consumption("b".repeat(32)), iso(7));
+    if (!consumedSecond.ok) throw new Error("consume");
+    const overdue = (await store.load(SCOPE, second.grantId, at(7 + GRANT_COMMIT_WINDOW_MS + GRANT_SETTLE_GRACE_MS + 1)))!;
+    expect(overdue.record.state).toMatchObject({ status: "retired", retirement: { reason: "consumed_unsettled" } });
+    const lateReport = await store.settle(SCOPE, overdue, { ...settlement, outcome: "not-committed", transactionId: null, revisionAfter: null, undoEligible: false }, iso(8));
+    expect(lateReport.ok && lateReport.grant.record.state.settlement).toMatchObject({ outcome: "not-committed", late: true });
   });
 });

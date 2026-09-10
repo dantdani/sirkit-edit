@@ -17,7 +17,7 @@ import { evaluateMembershipReauthorization } from "../project/membership-reautho
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { ACTION_COVERAGE_REGISTRY } from "../engineering/action-registry";
 import { permissionTierOfAction, TIER1_EXECUTE_ROLES, type AgentAutonomySetting } from "../engineering/permission-tiers";
-import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantConsumption, type PublicExecutionGrant, type RetirementReason } from "../engineering/execution-grant";
+import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantConsumption, type ExecutionGrantState, type PublicExecutionGrant, type RetirementReason } from "../engineering/execution-grant";
 import type { ProjectRole } from "../engineering/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
 import type { ExecutionGrantStore, LoadedGrant } from "./store";
@@ -52,9 +52,16 @@ export async function consumeExecutionGrant(input: { store: ExecutionGrantStore;
   const { store, scope, principal, request } = input;
   const nowIso = new Date(input.now).toISOString();
   if (!isGrantId(request.grantId) || typeof request.grantDigest !== "string") return { ok: false, status: "forged", reason: null, message: "Unknown grant.", grant: null };
-  // 3. The head (lazy expiry applied): absent, wrong digest or another principal ⇒ forged, ZERO writes.
+  // 3. The RAW head first (no expiry pass, so a forged handle writes NOTHING): absent, wrong digest or another
+  //    principal ⇒ forged. Only the bound principal's own grant then takes the lazy-expiry pass.
   let loaded: LoadedGrant | null;
-  try { loaded = await store.load(scope, request.grantId, input.now); } catch (error) {
+  try {
+    const raw = await store.peek(scope, request.grantId);
+    if (!raw || raw.record.grantDigest !== request.grantDigest || raw.record.binding.authorization.principalId !== principal.principalId) {
+      return { ok: false, status: "forged", reason: null, message: "Unknown grant.", grant: null };
+    }
+    loaded = await store.load(scope, request.grantId, input.now);
+  } catch (error) {
     return { ok: false, status: "record_mismatch", reason: null, message: error instanceof Error ? error.message : "record mismatch", grant: null };
   }
   if (!loaded || loaded.record.grantDigest !== request.grantDigest || loaded.record.binding.authorization.principalId !== principal.principalId) {
@@ -80,14 +87,17 @@ export async function consumeExecutionGrant(input: { store: ExecutionGrantStore;
   if (status === "settled") return { ok: false, status: "terminal", reason: null, message: "The grant is settled.", grant: view(loaded) };
   if (status === "retired") return { ok: false, status: "retired", reason: record.state.retirement?.reason ?? null, message: `The grant was retired (${record.state.retirement?.reason}).`, grant: view(loaded) };
 
-  // 5. From here every failure on an ISSUED grant burns it with its exact reason.
+  // 5. From here every failure on an ISSUED grant burns it with its exact reason. A burn that loses its
+  //    compare-and-set answers from the HEAD (another attempt may have consumed it first), never a local guess.
   const burn = async (reason: RetirementReason, detail: string): Promise<ConsumeOutcome> => {
     const result = await store.retire(scope, loaded!, { reason, detail, at: nowIso, observedBy: "server" });
-    const grant = result.ok ? publicExecutionGrant(result.grant.record) : view(result.grant);
-    return { ok: false, status: "retired", reason, message: detail, grant };
+    if (result.ok) return { ok: false, status: "retired", reason, message: detail, grant: publicExecutionGrant(result.grant.record) };
+    return answerFromHead(result.grant?.record.state ?? null, result.grant, request.attemptId, result.message);
   };
   const b = record.binding;
   const tender = request.tender;
+  // The expiry is checked HERE too (the lazy expiry write above can lose a compare-and-set to a sibling grant's transition).
+  if (input.now >= Date.parse(b.expiresAt)) return burn("expired", `The grant expired at ${b.expiresAt}.`);
   if (principal.actorKind !== "human") return burn("principal_changed", "Only a human session principal may tender a grant.");
   if (principal.sessionIdentity !== b.authorization.sessionIdentity) return burn("session_changed", "The browser session changed since the grant was issued (sign-in, sign-out or a new session).");
   const denial = evaluateMembershipReauthorization(
@@ -132,9 +142,20 @@ export async function consumeExecutionGrant(input: { store: ExecutionGrantStore;
   return { ok: false, status: "conflict", reason: head?.record.state.retirement?.reason ?? null, message: result.message, grant: view(head) };
 }
 
-/** The caller's OWN grant (public projection, expiry applied) — a foreign or unknown id is simply null. */
+/** Answer a tender from the head when a transition lost its compare-and-set. */
+function answerFromHead(state: ExecutionGrantState | null, head: LoadedGrant | null, attemptId: string, message: string): ConsumeOutcome {
+  if (state?.status === "consumed" && state.consumption?.attemptId === attemptId) return { ok: true, grant: publicExecutionGrant(head!.record), consumption: state.consumption, live: state.consumption.live, idempotent: true };
+  if (state?.status === "consumed") return { ok: false, status: "replayed", reason: null, message: "The grant was consumed by another attempt.", grant: view(head) };
+  if (state?.status === "retired") return { ok: false, status: "retired", reason: state.retirement?.reason ?? null, message: `The grant was retired (${state.retirement?.reason}).`, grant: view(head) };
+  if (state?.status === "settled") return { ok: false, status: "terminal", reason: null, message: "The grant is settled.", grant: view(head) };
+  return { ok: false, status: "conflict", reason: null, message, grant: view(head) };
+}
+
+/** The caller's OWN grant (public projection, expiry applied) — a foreign or unknown id is simply null and writes nothing. */
 export async function loadOwnGrant(store: ExecutionGrantStore, scope: DurableWorkflowScope, principalId: string, grantId: string, now: number): Promise<PublicExecutionGrant | null> {
   if (!isGrantId(grantId)) return null;
+  const raw = await store.peek(scope, grantId);
+  if (!raw || raw.record.binding.authorization.principalId !== principalId) return null;
   const loaded = await store.load(scope, grantId, now);
   if (!loaded || loaded.record.binding.authorization.principalId !== principalId) return null;
   return publicExecutionGrant(loaded.record);

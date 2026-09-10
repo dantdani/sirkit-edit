@@ -514,6 +514,9 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
                 }),
                 isError: false,
               });
+            } else if (settled.status === "settled" && settlement?.outcome === "poisoned") {
+              // A transaction LANDED but could not be verified against the grant: the board may have changed. Never "nothing changed".
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_poisoned", grantId: grant.grantId, outcome: "poisoned", note: "A transaction LANDED in the user's editor under this grant but could NOT be verified against it; the board may have changed and this grant is permanently refused. Do NOT say nothing changed: tell the user to inspect the board and the revision history, undo the last AI transaction if it is wrong, and repeat the request if they still want it." }), isError: true });
             } else if (settled.status === "settled") {
               results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_not_committed", grantId: grant.grantId, outcome: settlement?.outcome ?? null, note: "The user's editor did NOT commit the change (it refused or the commit failed). Nothing changed; say so." }), isError: true });
             } else if (settled.status === "retired") {
@@ -627,7 +630,9 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
     // provider or internal failure) retires its still-issued explicit grants
     // so an abandoned run's grant can never be spent later; preview grants
     // stay for the human to confirm or cancel.
-    if (executionIssued && !completedNormally && deps.executionGrants) {
+    // Not gated on a consumed outcome: a grant minted while the run boundary discarded the gateway's answer is still this
+    // minter's grant, and retireIssued is a no-op when nothing was minted.
+    if (!completedNormally && deps.executionGrants) {
       try { await deps.executionGrants.retireIssued("run_cancelled", true); } catch { /* the grant expires lazily */ }
     }
   }

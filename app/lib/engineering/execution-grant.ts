@@ -294,7 +294,8 @@ export function transitionGrant(state: ExecutionGrantState, transition: GrantTra
       if (state.status !== "issued") return refuse(`only an issued grant can be consumed (status ${state.status})`);
       return { ok: true, state: { status: "consumed", consumption: structuredClone(transition.consumption), settlement: null, retirement: null } };
     case "settle": {
-      const late = state.status === "retired" && state.retirement?.reason === "consumed_unsettled" && transition.settlement.outcome === "committed";
+      // A consumed grant lazily retired `consumed_unsettled` ("outcome unknown") still accepts the browser's truthful late report — committed, not-committed or poisoned.
+      const late = state.status === "retired" && state.retirement?.reason === "consumed_unsettled";
       if (state.status !== "consumed" && !late) return refuse(`only a consumed grant settles (status ${state.status}${state.retirement ? `, retired ${state.retirement.reason}` : ""})`);
       return { ok: true, state: { ...state, status: "settled", settlement: { ...structuredClone(transition.settlement), late } } };
     }

@@ -102,7 +102,14 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
         };
         const nonce = random();
         const record: ExecutionGrantRecord = { schema: EXECUTION_GRANT_SCHEMA, grantId: `xg-${random()}`, nonce, binding, identityKey: grantIdentityKey(binding), grantDigest: grantDigestFor(nonce, binding), state: { status: "issued", consumption: null, settlement: null, retirement: null } };
-        await store.mint(scope, record, { idempotencyKey: `grant-mint:${ctx.runId}:${request.origin.callId}`, now: issuedAt });
+        const minted_ = await store.mint(scope, record, { idempotencyKey: `grant-mint:${ctx.runId}:${request.origin.callId}`, now: issuedAt });
+        if (minted_.idempotent && minted_.grantId !== record.grantId) {
+          // The same run + call already minted: answer with THAT grant (the durable truth), never a phantom.
+          const existing = await store.load(scope, minted_.grantId, issuedMs);
+          if (!existing) return { ok: false, reason: "grant_unavailable", diagnostics: ["The execution grant store replayed a mint whose grant could not be read; nothing was minted and nothing changed."] };
+          if (!minted.includes(minted_.grantId)) minted.push(minted_.grantId);
+          return { ok: true, grant: publicExecutionGrant(existing.record), decision: existing.record.binding.operation.decision, note };
+        }
         minted.push(record.grantId);
         return { ok: true, grant: publicExecutionGrant(record), decision, note };
       } catch (error) {

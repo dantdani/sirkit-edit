@@ -62,7 +62,7 @@ function grantOf(decision: "execute_explicit" | "preview_then_confirm"): PublicE
   const record: ExecutionGrantRecord = { schema: "sirkit.agent-execution-grant.v1", grantId: `xg-${"1".repeat(32)}`, nonce, binding, identityKey: grantIdentityKey(binding), grantDigest: grantDigestFor(nonce, binding), state: { status: "issued", consumption: null, settlement: null, retirement: null } };
   return publicExecutionGrant(record);
 }
-const settledGrant = (grant: PublicExecutionGrant, outcome: "committed" | "not-committed"): PublicExecutionGrant => ({ ...grant, state: { status: "settled", consumption: { attemptId: "eng1-0000000000000001", consumedAt: T0, commitDeadline: T0, commitment: "eng1-0000000000000002", live: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" } }, settlement: { outcome, attestation: "browser-attested", transactionId: outcome === "committed" ? "tx:7" : null, revisionBefore: "pcb2-abc", revisionAfter: outcome === "committed" ? "pcb2-def" : null, headSequenceAfter: 5, changeSetDigest: null, receiptDigest: null, validations: { drc: { ran: true, violations: 0 } }, undoEligible: outcome === "committed", late: false, at: T0 }, retirement: null } });
+const settledGrant = (grant: PublicExecutionGrant, outcome: "committed" | "not-committed" | "poisoned"): PublicExecutionGrant => ({ ...grant, state: { status: "settled", consumption: { attemptId: "eng1-0000000000000001", consumedAt: T0, commitDeadline: T0, commitment: "eng1-0000000000000002", live: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" } }, settlement: { outcome, attestation: "browser-attested", transactionId: outcome === "committed" ? "tx:7" : null, revisionBefore: "pcb2-abc", revisionAfter: outcome === "committed" ? "pcb2-def" : null, headSequenceAfter: 5, changeSetDigest: null, receiptDigest: null, validations: { drc: { ran: true, violations: 0 } }, undoEligible: outcome === "committed", late: false, at: T0 }, retirement: null } });
 const retiredGrant = (grant: PublicExecutionGrant): PublicExecutionGrant => ({ ...grant, state: { status: "retired", consumption: null, settlement: null, retirement: { reason: "session_changed", detail: "x", at: T0, observedBy: "server" } } });
 const consumedGrant = (grant: PublicExecutionGrant): PublicExecutionGrant => ({ ...grant, state: { status: "consumed", consumption: { attemptId: "eng1-0000000000000001", consumedAt: T0, commitDeadline: T0, commitment: "eng1-0000000000000002", live: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" } }, settlement: null, retirement: null } });
 
@@ -154,6 +154,8 @@ describe("B18-B — the loop and a server-minted execution grant", () => {
     const grant = grantOf("execute_explicit");
     const cases: Array<[AgentExecutionSettlement, Record<string, unknown>, Array<[string, boolean]>]> = [
       [{ status: "settled", grant: settledGrant(grant, "not-committed") }, { ok: false, status: "execution_not_committed", outcome: "not-committed" }, []],
+      // A LANDED but unverifiable commit is never "nothing changed".
+      [{ status: "settled", grant: settledGrant(grant, "poisoned") }, { ok: false, status: "execution_poisoned", outcome: "poisoned" }, []],
       [{ status: "retired", grant: retiredGrant(grant) }, { ok: false, status: "execution_retired", reason: "session_changed" }, []],
       [{ status: "in_flight", grant: consumedGrant(grant) }, { ok: false, status: "execution_unsettled" }, []],
       [{ status: "unsettled", grant }, { ok: false, status: "execution_unsettled" }, [["run_unsettled", true]]],
@@ -165,6 +167,9 @@ describe("B18-B — the loop and a server-minted execution grant", () => {
       expect(events.find((e) => e.type === "execution_settled"), settlement.status).toMatchObject({ status: settlement.status });
       expect(resultsOf(adapter)[0], settlement.status).toMatchObject(expected);
       expect(minter.retired, settlement.status).toEqual(retired);
+      const note = String(resultsOf(adapter)[0]!.note ?? "");
+      if (expected.status === "execution_poisoned") { expect(note).not.toContain("Nothing changed"); expect(note).toMatch(/LANDED|may have changed/); }
+      if (expected.status === "execution_not_committed") expect(note).toContain("Nothing changed");
     }
     // No minter at all (execution unavailable for the run): the loop still answers unsettled and never claims execution.
     const { result, adapter } = await run([() => ({ toolCalls: [call("c1", READ.providerName)] }), () => ({ text: "done" })], gatewayDouble([grantOutcome(grant, "execute_explicit")]));
@@ -187,6 +192,14 @@ describe("B18-B — the loop and a server-minted execution grant", () => {
     const quiet = minterDouble(async () => ({ status: "settled", grant: settledGrant(grant, "committed") }));
     await run([() => ({ toolCalls: [call("c1", READ.providerName)] }), () => ({ text: "done" })], gatewayDouble([grantOutcome(grant, "execute_explicit")]), { minter: quiet });
     expect(quiet.retired).toEqual([]);
+    // A gateway answer DISCARDED by the run boundary (the mint may still have landed durably): the finally path retires anyway.
+    const hanging: AgentToolInvocationGateway = { invoke: (input) => new Promise((resolve) => input.signal?.addEventListener("abort", () => resolve({ kind: "refused", ok: false, toolId: input.toolId, status: "aborted", diagnostics: [] }), { once: true })) };
+    const orphan = minterDouble(async () => ({ status: "unsettled", grant: null }));
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 20);
+    const discarded = await run([() => ({ toolCalls: [call("c1", READ.providerName)] }), () => ({ text: "never" })], hanging, { minter: orphan, signal: ctl.signal });
+    expect(discarded.result.status).toBe("cancelled");
+    expect(orphan.retired).toEqual([["run_cancelled", true]]);
   });
 
   it("the grant is the run's ONE side-effecting artifact: a proposal requested after it is refused proposal_exists without reaching the gateway", async () => {

@@ -94,11 +94,11 @@ export class ExecutionGrantStore {
   }
 
   /** Persist a freshly ISSUED record; the same commit updates the principal's index and retires every earlier live ISSUED grant of that editor (`superseded_by_new_grant`). */
-  async mint(scope: DurableWorkflowScope, record: ExecutionGrantRecord, input: { idempotencyKey: string; now: string }): Promise<{ revision: number; superseded: string[]; idempotent: boolean }> {
+  async mint(scope: DurableWorkflowScope, record: ExecutionGrantRecord, input: { idempotencyKey: string; now: string }): Promise<{ grantId: string; revision: number; superseded: string[]; idempotent: boolean }> {
     if (record.state.status !== "issued") throw new Error("EXECUTION_GRANT_MINT_NOT_ISSUED");
     const principalId = record.binding.authorization.principalId, editor = record.binding.session.editor;
     const existing = await this.head(scope, record.grantId);
-    if (existing) return { revision: existing.revision, superseded: [], idempotent: true };
+    if (existing) return { grantId: record.grantId, revision: existing.revision, superseded: [], idempotent: true };
     const current = await this.index(scope, principalId, editor);
     const operations: Array<DurableAppendOperation<object>> = [];
     const effects: DurableOutboxEffect[] = [];
@@ -120,19 +120,34 @@ export class ExecutionGrantStore {
     operations.push(this.indexOperation(scope, principalId, editor, current, index));
     effects.push(outbox(record, "agent.execution-grant-issued", { ttlMs: record.binding.ttlMs, explicit: record.binding.instruction.explicit.proven }));
     const committed = await this.workflow.commit({ scope, scopeKey: scopeKeyFor(scope), idempotencyKey: input.idempotencyKey, operations, outbox: effects, result: { grantId: record.grantId, superseded }, committedAt: input.now });
-    const head = await this.head(scope, record.grantId);
+    // A replayed mint (the same run + call) answers with the grant the FIRST commit minted — never a phantom id.
+    const replayed = committed.idempotent ? (committed.result as { grantId?: string; superseded?: string[] }) : null;
+    const grantId = replayed?.grantId ?? record.grantId;
+    const head = await this.head(scope, grantId);
     if (!head) throw new Error("EXECUTION_GRANT_MINT_UNVERIFIED");
-    return { revision: head.revision, superseded, idempotent: committed.idempotent };
+    return { grantId, revision: head.revision, superseded: replayed?.superseded ?? superseded, idempotent: committed.idempotent };
   }
 
   /** The grant with lazy expiry applied (an expiry is itself a durable transition). */
+  /** The raw head WITHOUT the expiry pass — for the forgery checks that must write nothing (digest- and grant-digest-verified). */
+  peek(scope: DurableWorkflowScope, grantId: string): Promise<LoadedGrant | null> {
+    return this.head(scope, grantId);
+  }
+
   async load(scope: DurableWorkflowScope, grantId: string, now: number): Promise<LoadedGrant | null> {
-    const loaded = await this.head(scope, grantId);
+    let loaded = await this.head(scope, grantId);
     if (!loaded) return null;
-    const expiry = lazyExpiryTransition(loaded.record, now);
-    if (!expiry) return loaded;
-    const applied = await this.transition(scope, loaded, expiry, { idempotencyKey: `grant-expire:${grantId}:${loaded.revision}`, now: new Date(now).toISOString() });
-    return applied.ok ? applied.grant : (applied.grant ?? loaded);
+    // The lazy expiry is itself a durable transition; a lost compare-and-set (a sibling grant's transition moved the
+    // principal's index) is retried once against the fresh head so an overdue grant is never handed back as live.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const expiry = lazyExpiryTransition(loaded.record, now);
+      if (!expiry) return loaded;
+      const applied = await this.transition(scope, loaded, expiry, { idempotencyKey: `grant-expire:${grantId}:${loaded.revision}`, now: new Date(now).toISOString() });
+      if (applied.ok) return applied.grant;
+      if (!applied.grant) return loaded;
+      loaded = applied.grant;
+    }
+    return loaded;
   }
 
   /** ONE compare-and-set transition; a conflict re-loads the head and reports it (the caller decides idempotency). */

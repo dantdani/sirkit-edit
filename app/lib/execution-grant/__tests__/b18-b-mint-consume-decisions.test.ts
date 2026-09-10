@@ -139,6 +139,14 @@ describe("B18-B §4.1 — the minter", () => {
     const viewer = await h.minter({ role: "viewer", runId: "run-4" }).mint({ plan: seal(), board, base: BASE, session: { editor: "pcb", lineageId: LINEAGE, runId: "run-4", viewSessionId: null }, origin: { callId: "call-4", registryDigest: "eng1-registry", promptVersion: "1.0.0" } });
     expect(viewer).toMatchObject({ ok: false, reason: "execution_not_permitted" });
     expect(await h.workflow.listOutbox({ topic: "agent.execution-grant-issued" })).toHaveLength(before);
+    // The same run + call minted twice (a route-level replay) answers with the FIRST grant, never a phantom.
+    const once = h.minter({ runId: "run-replay" });
+    const requestOnce = { plan: seal(), board, base: BASE, session: { editor: "pcb" as const, lineageId: LINEAGE, runId: "run-replay", viewSessionId: null }, origin: { callId: "call-r", registryDigest: "eng1-registry", promptVersion: "1.0.0" } };
+    const firstMint = await once.mint(requestOnce);
+    const secondMint = await once.mint(requestOnce);
+    if (!firstMint.ok || !secondMint.ok) throw new Error("mint");
+    expect(secondMint.grant.grantId).toBe(firstMint.grant.grantId);
+    expect((await h.store.index(SCOPE, "u-1", "pcb")).index.live).toEqual([firstMint.grant.grantId]);
     // Storage failure mints nothing and says so.
     const broken = new ExecutionGrantStore({ ...h.workflow, commit: async () => { throw new Error("DATABASE_URL is not set"); } } as never);
     const failed = await h.minter({ store: broken, runId: "run-5" }).mint({ plan: seal(), board, base: BASE, session: { editor: "pcb", lineageId: LINEAGE, runId: "run-5", viewSessionId: null }, origin: { callId: "call-5", registryDigest: "eng1-registry", promptVersion: "1.0.0" } });
@@ -201,7 +209,19 @@ describe("B18-B §4.2 — consumption, in order", () => {
     expect(await consume(h, preview, { tender: { confirmation: null } })).toMatchObject({ ok: false, status: "retired", reason: "confirmation_missing" });
     const stale = await mintOk(h, { runId: "run-stale" });
     h.clock.now = at(GRANT_EXPLICIT_TTL_MS + 1);
+    // A forged handle for an OVERDUE grant writes nothing - not even the lazy expiry (the raw head stays issued at its revision).
+    const overdueRevision = (await h.store.peek(SCOPE, stale.grantId))!.revision;
+    expect(await consume(h, stale, { digest: "eng1-forged" })).toMatchObject({ ok: false, status: "forged" });
+    expect(await consume(h, stale, { principal: { principalId: "u-2" } })).toMatchObject({ ok: false, status: "forged" });
+    expect(await loadOwnGrant(h.store, SCOPE, "u-2", stale.grantId, h.clock.now)).toBeNull();
+    expect(await h.store.peek(SCOPE, stale.grantId)).toMatchObject({ revision: overdueRevision, record: { state: { status: "issued" } } });
     expect(await consume(h, stale)).toMatchObject({ ok: false, status: "retired", reason: "expired" });
+    // consume's OWN expiry gate: a store whose lazy expiry lost its compare-and-set hands back the overdue issued head - still burned `expired`.
+    const stuck = await mintOk(h, { runId: "run-stuck" }); // issued at the current (already advanced) clock
+    h.clock.now = at(2 * GRANT_EXPLICIT_TTL_MS + 2);
+    const noExpiry = new Proxy(h.store, { get(target, key, receiver) { return key === "load" ? (scope: DurableWorkflowScope, grantId: string) => target.peek(scope, grantId) : Reflect.get(target, key, receiver); } });
+    const gated = await consumeExecutionGrant({ store: noExpiry, scope: SCOPE, principal: PRINCIPAL, autonomy: async () => setting("execute_explicit_tier1"), now: h.clock.now, request: { kind: "tender", grantId: stuck.grantId, grantDigest: stuck.grantDigest, attemptId: attempt(), tender: tenderFor(stuck) } });
+    expect(gated).toMatchObject({ ok: false, status: "retired", reason: "expired" });
   });
 
   it("the success path is ONE burn issued → consumed with attempt, deadline, commitment and the live membership; the same attempt replays idempotently, a different attempt is refused, and cancellation retires only an issued grant", async () => {

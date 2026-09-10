@@ -240,7 +240,7 @@ describe("B18-B — the grant lifecycle through the routes", () => {
     authed("admin", "sess-9");
     const membershipRes = await POST(post(tenderOf(membershipGrant)));
     expect(membershipRes.status).toBe(409);
-    expect(["membership_changed", "role_changed"]).toContain((await json(membershipRes)).reason);
+    expect(await json(membershipRes)).toMatchObject({ code: "EXECUTION_GRANT_RETIRED", reason: "membership_changed" }); // principal and scope agree; project_admin satisfies the apply role; the revision moved
     // Confirmation missing on a preview grant.
     authed("editor", "sess-9");
     const preview = await mintFor("proposal_only");

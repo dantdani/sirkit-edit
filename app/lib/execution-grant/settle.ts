@@ -6,7 +6,7 @@
  * run from the settled record only, and accepts a truthful late `committed`
  * after a lazy `consumed_unsettled` retirement.
  */
-import { SETTLEMENT_OUTCOMES, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantSettlement, type PublicExecutionGrant } from "../engineering/execution-grant";
+import { GRANT_SETTLE_GRACE_MS, SETTLEMENT_OUTCOMES, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantSettlement, type PublicExecutionGrant } from "../engineering/execution-grant";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
 import type { ExecutionGrantStore, LoadedGrant } from "./store";
 
@@ -31,7 +31,17 @@ export async function settleExecutionGrant(input: { store: ExecutionGrantStore; 
   if (!settlement || !(SETTLEMENT_OUTCOMES as readonly string[]).includes(settlement.outcome) || typeof settlement.undoEligible !== "boolean") return { ok: false, status: "invalid_settlement", message: "The settlement is malformed.", grant: null };
   if (settlement.outcome === "committed" && (typeof settlement.transactionId !== "string" || typeof settlement.revisionAfter !== "string")) return { ok: false, status: "invalid_settlement", message: "A committed settlement must name the transaction and the revision after.", grant: null };
   let loaded: LoadedGrant | null;
-  try { loaded = await store.load(scope, request.grantId, input.now); } catch (error) {
+  try {
+    const raw = await store.peek(scope, request.grantId);
+    if (!raw || raw.record.grantDigest !== request.grantDigest || raw.record.binding.authorization.principalId !== input.principalId) return { ok: false, status: "forged", message: "Unknown grant.", grant: null };
+    loaded = await store.load(scope, request.grantId, input.now);
+    // An overdue consumed grant is lazily retired `consumed_unsettled` before a report is recorded, so the report is truthfully `late`
+    // even when the expiry write lost a compare-and-set inside `load` (it retries once there; this is the last resort).
+    if (loaded?.record.state.status === "consumed" && loaded.record.state.consumption && input.now > Date.parse(loaded.record.state.consumption.commitDeadline) + GRANT_SETTLE_GRACE_MS) {
+      const retired = await store.retire(scope, loaded, { reason: "consumed_unsettled", detail: "the commit window and grace elapsed before a settlement", at: new Date(input.now).toISOString(), observedBy: "server" });
+      loaded = retired.ok ? retired.grant : (retired.grant ?? loaded);
+    }
+  } catch (error) {
     return { ok: false, status: "record_mismatch", message: error instanceof Error ? error.message : "record mismatch", grant: null };
   }
   if (!loaded || loaded.record.grantDigest !== request.grantDigest || loaded.record.binding.authorization.principalId !== input.principalId) return { ok: false, status: "forged", message: "Unknown grant.", grant: null };
@@ -41,8 +51,8 @@ export async function settleExecutionGrant(input: { store: ExecutionGrantStore; 
     const same = record.state.settlement?.outcome === settlement.outcome && consumption?.attemptId === request.attemptId;
     return same ? { ok: true, grant: view(loaded)!, idempotent: true, late: record.state.settlement?.late ?? false } : { ok: false, status: "terminal", message: "The grant is already settled with a different outcome.", grant: view(loaded) };
   }
-  const lateCommitted = record.state.status === "retired" && record.state.retirement?.reason === "consumed_unsettled" && settlement.outcome === "committed";
-  if (record.state.status !== "consumed" && !lateCommitted) return { ok: false, status: "not_consumed", message: `The grant is ${record.state.status}; only a consumed grant settles.`, grant: view(loaded) };
+  const lateReport = record.state.status === "retired" && record.state.retirement?.reason === "consumed_unsettled";
+  if (record.state.status !== "consumed" && !lateReport) return { ok: false, status: "not_consumed", message: `The grant is ${record.state.status}; only a consumed grant settles.`, grant: view(loaded) };
   if (!consumption || consumption.attemptId !== request.attemptId) return { ok: false, status: "wrong_attempt", message: "The settlement does not belong to the consumed attempt.", grant: view(loaded) };
   if (consumption.commitment !== request.commitment) return { ok: false, status: "wrong_commitment", message: "The settlement's commitment is not the one tendered at consumption.", grant: view(loaded) };
   const result = await store.settle(scope, loaded, { ...structuredClone(settlement), attestation: "browser-attested", at: new Date(input.now).toISOString() }, new Date(input.now).toISOString());
