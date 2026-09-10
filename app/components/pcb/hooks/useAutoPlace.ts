@@ -1,7 +1,13 @@
-/** Cancellable worker-backed one-click auto-placement. */
+/** Cancellable worker-backed one-click auto-placement.
+ *
+ * [B17-E] The result is the SHARED layout candidate (`sirkit.layout-candidate.v1`)
+ * registered in the editor's candidate store — the same artifact the agent's
+ * placement preview and the preview route produce — and Apply is
+ * `applyLayoutCandidate`: ONE canonical transaction with the exact base
+ * revision + lifecycle generation re-checked at serialized execution time.
+ */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { PcbBoardLifecycleScope } from "@/app/lib/pcb/lifecycle/board-lifecycle";
 import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
@@ -11,7 +17,7 @@ import {
   type AutoPlaceProgress,
 } from "@/app/lib/pcb/autoplace/auto-place";
 import type { AutoPlaceResult } from "@/app/lib/pcb/autoplace/types";
-import { applyPlacementCandidate } from "@/app/lib/pcb/placement/transaction";
+import { applyLayoutCandidate, producePlacementCandidate, type LayoutCandidateStore, type PlacementLayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate";
 import { pcbRevisionId } from "@/app/lib/pcb/ai/snapshot";
 import type { AutoPlaceWorkerRequest, AutoPlaceWorkerResponse } from "./autoplace.worker";
 
@@ -25,6 +31,10 @@ export interface AutoPlaceEditor {
   captureLifecycle?: () => PcbBoardLifecycleScope;
   getNetlist?: () => PcbNetlist | null;
   toast?: (message: string) => void;
+  /** [B17-E] the editor's shared candidate store (one per editor mount). */
+  candidates?: LayoutCandidateStore;
+  /** [B17-E] the current lifecycle generation number (pinned into the candidate). */
+  getGeneration?: () => number | undefined;
 }
 
 export type AutoPlaceState = "idle" | "running" | "done" | "cancelled" | "error";
@@ -36,11 +46,14 @@ export interface AutoPlaceUiProgress extends AutoPlaceProgress {
 export interface AutoPlaceHandle {
   state: AutoPlaceState;
   lastResult?: AutoPlaceResult;
+  /** [B17-E] the shared candidate produced by the last successful run (registered in the store). */
+  candidate?: PlacementLayoutCandidate;
   lastError?: string;
   progress?: AutoPlaceUiProgress;
   run(): Promise<void>;
-  apply(): void;
-  discard(): void;
+  /** Apply the last run's candidate, or any candidate in the store by id (an agent's, for instance). */
+  apply(candidateId?: string): void;
+  discard(candidateId?: string): void;
   cancel(): void;
   /** B08.2 — lifecycle replacement: terminate the worker, discard the
    *  preview candidate, and release the NEW generation from the old busy
@@ -56,6 +69,7 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
 
   const [state, setState] = useState<AutoPlaceState>("idle");
   const [lastResult, setLastResult] = useState<AutoPlaceResult>();
+  const [candidate, setCandidate] = useState<PlacementLayoutCandidate>();
   const [lastError, setLastError] = useState<string>();
   const [progress, setProgress] = useState<AutoPlaceUiProgress>();
   // B08.2 — request-keyed busy ownership (see useAutoroute): a run whose
@@ -64,7 +78,7 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
   const workerRef = useRef<Worker | null>(null);
   const cancelRef = useRef<(() => void) | null>(null);
   const requestSeqRef = useRef(0);
-  const candidateRef = useRef<{ result: AutoPlaceResult; revision: string; scope: PcbBoardLifecycleScope | null } | undefined>(undefined);
+  const scopeRef = useRef<PcbBoardLifecycleScope | null>(null);
 
   useEffect(() => () => {
     workerRef.current?.terminate();
@@ -87,7 +101,8 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
     workerRef.current?.terminate();
     workerRef.current = null;
     activeRef.current = null;
-    candidateRef.current = undefined;
+    scopeRef.current = null;
+    setCandidate(undefined);
     setState("idle");
     setLastResult(undefined);
     setLastError(undefined);
@@ -154,8 +169,10 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
       if (pcbRevisionId(history.present) !== revision) {
         throw new Error("Board changed while auto-placement was running; candidate discarded.");
       }
-      if (!result.report.success) {
-        candidateRef.current = { result, revision, scope };
+      scopeRef.current = scope;
+      const engineering = result.engineering;
+      if (!result.report.success || !engineering) {
+        setCandidate(undefined);
         setLastResult(result);
         setState("done");
         editorRef.current.toast?.(
@@ -163,10 +180,16 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
         );
         return;
       }
-
-      const engineering = result.engineering;
-      if (!engineering) throw new Error("Placement result is missing Stage 7 candidate evidence.");
-      candidateRef.current = { result, revision, scope };
+      // [B17-E] the shared candidate: the worker's run wrapped once, registered where every consumer sees it.
+      const produced = producePlacementCandidate({
+        board,
+        run: { runId: `run:${engineering.problemHash}`, problem: engineering.problem, candidates: [engineering.selectedCandidate], frontierCandidateIds: engineering.frontierCandidateIds, selectedCandidateId: engineering.selectedCandidate.candidateId, termination: engineering.termination, searchComplete: engineering.searchComplete, elapsedMs: result.stats.elapsedMs, diagnostics: [] },
+        producer: "editor",
+        generation: editorRef.current.getGeneration?.(),
+      });
+      if (!produced) throw new Error("Placement result is missing Stage 7 candidate evidence.");
+      editorRef.current.candidates?.register(produced);
+      setCandidate(produced);
       setLastResult(result);
       setState("done");
       if (engineering.selectedCandidate.moves.length === 0 && engineering.selectedCandidate.copperPlan.removeTrackIds.length === 0) {
@@ -203,88 +226,68 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
     }
   }, []);
 
-  const apply = useCallback((): void => {
-    const pending = candidateRef.current;
+  const resolveCandidate = (candidateId?: string): PlacementLayoutCandidate | undefined => {
+    if (candidateId) {
+      const found = editorRef.current.candidates?.get(candidateId);
+      return found?.kind === "placement" ? found : undefined;
+    }
+    return candidate;
+  };
+
+  const apply = useCallback((candidateId?: string): void => {
+    const pending = resolveCandidate(candidateId);
     const history = editorRef.current.getHistory();
     if (!pending || !history) return;
-    const { result, revision, scope: candidateScope } = pending;
     // B08.2 — GENERATION is authoritative: a lifecycle replacement (even one
     // restoring a board with the SAME digest) invalidates the preview.
+    const candidateScope = candidateId ? null : scopeRef.current;
     if (candidateScope && !candidateScope.isCurrent()) {
-      candidateRef.current = undefined;
+      editorRef.current.candidates?.retire(pending.candidateId, "stale");
+      setCandidate(undefined);
       setLastResult(undefined);
       setState("idle");
       editorRef.current.toast?.("This board was replaced since the placement preview was produced; the candidate was discarded. Nothing was changed.");
       return;
     }
-    const engineering = result.engineering;
-    if (!engineering || !result.report.success) {
-      editorRef.current.toast?.("This placement candidate is not hard-legal and cannot be applied.");
-      return;
-    }
-    if (pcbRevisionId(history.present) !== revision) {
-      setLastError("Board changed after placement preview; candidate discarded.");
-      setState("error");
-      setLastResult(undefined);
-      candidateRef.current = undefined;
-      editorRef.current.toast?.("Board changed after placement preview; candidate discarded.");
-      return;
-    }
     // B08.2 — the apply-side completion callbacks are scoped too.
     const applyScope = editorRef.current.captureLifecycle?.() ?? null;
     const applyOwned = (): boolean => applyScope === null || applyScope.isCurrent();
-    // (Re-checked again inside buildCandidate at serialized execution time.)
-    // B08 — ONE canonical transaction: the candidate is re-validated against
-    // the board at serialized execution time (applyPlacementCandidate pins
-    // source revision, problem hash, and constraint program hash) and the
-    // approved result board is delta-compiled. A changed base refuses with
-    // zero mutation.
-    void commitPcbCandidate(history, {
-      commandId: "pcb.auto-place",
-      label: "Engineering-aware auto-place",
-      idempotencyKey: `auto-place:${engineering.selectedCandidate.candidateId}:${revision}`,
-      metadata: {
-        operationType: "auto_place_footprints",
-        actor: "human",
-        reason: `Approved Stage 7 candidate ${engineering.selectedCandidate.candidateId}; hard legality verified.`,
-        details: { candidateHash: engineering.selectedCandidate.candidateHash, problemHash: engineering.problemHash, objectiveReport: engineering.selectedCandidate.objectiveReport },
-      },
-      buildCandidate: (board) => {
-        if (pcbRevisionId(board) !== revision) throw new Error("Board changed after placement preview; candidate discarded.");
-        const approved = applyPlacementCandidate({ board, problem: engineering.problem, candidate: engineering.selectedCandidate, actorId: "user:pcb-editor" });
-        if (!approved.ok) throw new Error(approved.message);
-        return {
-          ...structuredClone(board),
-          footprints: structuredClone(approved.board.footprints),
-          tracks: structuredClone(approved.board.tracks),
-          vias: structuredClone(approved.board.vias),
-          zones: structuredClone(approved.board.zones),
-          constraintState: structuredClone(approved.board.constraintState),
-        };
-      },
-    }).then((commitResult) => {
+    // [B17-E] ONE canonical transaction through the shared apply path: the exact base revision, the lifecycle
+    // generation, hard legality, problem/program hashes and protected copper are re-checked at serialized execution.
+    void applyLayoutCandidate({ history, candidate: pending, actorId: "user:pcb-editor", generation: editorRef.current.getGeneration?.() }).then((commitResult) => {
       if (!applyOwned()) return; // stale generation: no state, no toast
       if (!commitResult.ok) {
-        setLastError(commitResult.message);
+        const message = commitResult.message;
+        if ("code" in commitResult && (commitResult.code === "STALE_REVISION" || commitResult.code === "STALE_GENERATION" || commitResult.code === "EXPIRED")) {
+          editorRef.current.candidates?.retire(pending.candidateId, "stale");
+          if (!candidateId) { setCandidate(undefined); setLastResult(undefined); }
+        }
+        setLastError(message);
         setState("error");
-        editorRef.current.toast?.(`Placement apply rejected: ${commitResult.message}`);
+        editorRef.current.toast?.(`Placement apply rejected: ${message}`);
         return;
       }
-      candidateRef.current = undefined;
+      editorRef.current.candidates?.retire(pending.candidateId, "applied");
+      if (!candidateId || pending.candidateId === candidate?.candidateId) { setCandidate(undefined); setLastResult(undefined); }
+      setLastError(undefined);
+      setState("idle");
+      editorRef.current.toast?.(`Applied ${pending.candidate.moves.length} placement moves from the ${pending.producer} candidate as one undoable transaction.`);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate]);
+
+  const discard = useCallback((candidateId?: string): void => {
+    const pending = resolveCandidate(candidateId);
+    if (pending) editorRef.current.candidates?.retire(pending.candidateId, "discarded");
+    if (!candidateId || pending?.candidateId === candidate?.candidateId) {
+      setCandidate(undefined);
       setLastResult(undefined);
       setLastError(undefined);
       setState("idle");
-      editorRef.current.toast?.(`Applied ${engineering.selectedCandidate.moves.length} placement moves as one undoable transaction.`);
-    });
-  }, []);
-
-  const discard = useCallback((): void => {
-    candidateRef.current = undefined;
-    setLastResult(undefined);
-    setLastError(undefined);
-    setState("idle");
+    }
     editorRef.current.toast?.("Placement candidate discarded; board unchanged.");
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate]);
 
-  return { state, lastResult, lastError, progress, run, apply, discard, cancel, invalidate };
+  return { state, lastResult, candidate, lastError, progress, run, apply, discard, cancel, invalidate };
 }

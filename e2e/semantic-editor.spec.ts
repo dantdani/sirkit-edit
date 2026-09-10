@@ -204,3 +204,37 @@ test("B17-D workspace and schematic: tabs are workspace.open-editor; Go to R1 se
   await page.getByTestId("view-tab-pcb").click();
   await expect.poll(async () => (await tabView()).tab).toBe("pcb");
 });
+
+test("B17-E parity surfaces: selected-net commands follow the view-session selection; the project timeline lists both stores and project undo refuses a non-undoable latest operation", async () => {
+  // No selection → the selected-net commands are disabled; Go to J1 (pcb.select) names J1's nets → enabled with the count.
+  const reroute = page.getByRole("button", { name: /^Reroute selected nets/ });
+  const clear = page.getByRole("button", { name: "Clear selected nets" });
+  await expect(reroute).toBeVisible();
+  await page.getByTestId("pcb-goto-input").fill("J1");
+  await page.getByTestId("pcb-goto").click();
+  await expect.poll(async () => JSON.parse((await page.getByTestId("pcb-editor").getAttribute("data-view")) ?? "{}").selection?.primary?.kind).toBe("footprint");
+  await expect(reroute).toBeEnabled();
+  await expect(clear).toBeEnabled();
+  await expect(reroute).toHaveText(/\(\d+\)$/);
+  await expect(page.getByRole("button", { name: "New routed-board revision…" })).toBeVisible();
+  await expect(page.getByTestId("routing-candidate")).toHaveCount(0); // no routing candidate until a run
+  await expect(page.getByTestId("placement-candidates")).toHaveCount(0); // no placement candidate in the shared store
+  // Escape clears the selection (pcb.clear-selection) → the commands disable again.
+  await page.keyboard.press("Escape");
+  await expect(reroute).toBeDisabled();
+
+  // The project timeline: the journey recorded schematic and PCB operations; the latest is the PCB board load (a hydrate).
+  await page.getByRole("button", { name: "Revision history" }).click();
+  const timeline = page.getByTestId("project-timeline");
+  await expect(timeline).toBeVisible();
+  const entries = page.getByTestId("project-timeline-entry");
+  await expect.poll(async () => await entries.count()).toBeGreaterThan(1);
+  const stores = new Set(await entries.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-store"))));
+  expect(stores.has("schematic")).toBe(true);
+  expect(stores.has("pcb")).toBe(true);
+  await page.getByTestId("project-timeline-undo").click();
+  // Project undo never guesses: with a non-undoable latest operation it refuses with a code, and nothing changes.
+  await expect(page.getByTestId("project-timeline-notice")).toContainText(/NOT_UNDOABLE|DIVERGED_PCB|DIVERGED_SCHEMATIC/);
+  await page.screenshot({ path: `${EVIDENCE}/project-timeline.png`, fullPage: false });
+  await page.keyboard.press("Escape");
+});

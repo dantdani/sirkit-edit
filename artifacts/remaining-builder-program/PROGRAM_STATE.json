@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-E",
+  "currentCheckpoint": "B17-F",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17-E: close the remaining partial records \u2014 auto-placement and autoroute produce revision-bound candidates through shared services consumed by UI preview/apply/discard and agent proposals alike; explicit clear/reroute-selected-nets and new-routed-board-revision commands on B16; a project operation timeline over the authoritative schematic and PCB histories (project undo identifies the latest eligible operation, refuses on divergence); import/export paths report canonical state vs inert proposal vs file artifact; regenerate registry and matrices so no stale partial remains without a precise blocker.",
-  "updatedAt": "2026-09-10T01:15:00-04:00"
+  "nextAction": "B17-F: expose only registry-backed capabilities to agents \u2014 read-only view state, view-session actions (pcb3d/pcb/schematic/workspace commands), selection inspection/control, placement and routing proposal generation (the shared layout candidate), project-history inspection (the operation timeline); never manufacturing qualification/release, raw process execution, direct state replacement, generic database/file mutation or unreviewed Tier 2 apply; contextual discovery (no 3D tools without a PCB/3D surface, no routing tools without a board, no mutation proposals to a viewer); exposure-count gates derived from the registry, never hard-coded.",
+  "updatedAt": "2026-09-10T02:05:00-04:00"
 }

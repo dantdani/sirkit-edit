@@ -136,6 +136,8 @@ import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
 import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
+import { clearNets, LayoutCandidateStore, netsOfSelection } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import type { ProjectOperationTimeline, ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
 import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
@@ -297,6 +299,7 @@ export default function PcbEditor({
   active = true,
   hydrateToken = 0,
   gateSchematicSync,
+  operationTimeline,
   aiOwnership,
   editorContextBridge,
   pcbProposalIntake,
@@ -333,6 +336,8 @@ export default function PcbEditor({
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
+  /** [B17-E] the page-owned project operation timeline this editor records its canonical history operations on. */
+  operationTimeline?: ProjectOperationTimeline;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -373,6 +378,10 @@ export default function PcbEditor({
 
   const [state, dispatch] = useReducer(reducer, init.board, makeEditorState);
   const [scene, setScene] = useState<PcbScene | null>(null);
+  // [B17-E] the timeline is read through a ref inside the runtime-bind effect (it never re-binds the runtime).
+  const operationTimelineRef = useRef(operationTimeline);
+  useEffect(() => { operationTimelineRef.current = operationTimeline; });
+  const historyBindSeqRef = useRef(0);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [placementWarning, setPlacementWarning] = useState<string | null>(null);
@@ -973,6 +982,21 @@ export default function PcbEditor({
       toast: setToast,
       onContextMenu: (request) => setCtxMenu(request),
     });
+    // [B17-E] the PCB store on the project timeline: every canonical commit / undo / redo of THIS history is
+    // recorded with the canonical head fingerprint; the store lends its own undo + head while it is bound.
+    const timeline = operationTimelineRef.current;
+    const appliedCount = (): number => history.entries.filter((entry) => entry.state === "applied").length;
+    const redoCount = (): number => history.entries.filter((entry) => entry.state === "redo").length;
+    const historyId = `pcb-history-${++historyBindSeqRef.current}`;
+    const pcbHead = (board: PcbBoard): Extract<ProjectStoreHead, { store: "pcb" }> => {
+      const head = canonicalSessionFor(history)?.headMetadataFor(board) ?? null;
+      const applied = appliedCount();
+      return { store: "pcb", historyId: head?.lineageId ?? historyId, headSequence: head?.headSequence ?? applied, entryCount: applied };
+    };
+    let previousApplied = appliedCount();
+    let previousRedo = redoCount();
+    timeline?.record({ store: "pcb", kind: "hydrate", label: "Board loaded", actor: "system", head: pcbHead(history.present) });
+    const unbindTimeline = timeline?.bindStore("pcb", { undo: () => history.undo(), head: () => pcbHead(history.present) });
     const unsubscribe = history.subscribe((board) => {
       dispatch({ type: "set-board", board });
       editorRuntime.publishSnapshot(historyView(history));
@@ -980,12 +1004,23 @@ export default function PcbEditor({
       const refs = selectionStore.get().refs;
       const live = liveRefs(board, refs);
       if (live.length !== refs.length) selectionStore.replace(live);
+      if (timeline) {
+        const applied = appliedCount(), redo = redoCount();
+        const kind = applied > previousApplied ? (redo < previousRedo ? "redo" : "commit") : applied < previousApplied ? "undo" : null;
+        previousApplied = applied; previousRedo = redo;
+        if (kind) {
+          const appliedEntries = history.entries.filter((entry) => entry.state === "applied");
+          const last = appliedEntries[appliedEntries.length - 1];
+          timeline.record({ store: "pcb", kind, label: kind === "undo" ? (history.redoLabel ?? "PCB edit") : (last?.label ?? "PCB edit"), actor: last?.metadata.actor ?? "human", head: pcbHead(board), ref: { transactionId: last?.metadata.transactionId, entryId: last?.id } });
+        }
+      }
     });
     tool.refreshAirwires();
     // B09.0 — one atomic runtime adoption; retire() (reseed, lifecycle
     // replacement, unmount) runs this teardown exactly once.
     editorRuntime.bind(history, tool, () => {
       unsubscribe();
+      unbindTimeline?.();
       tool.destroy();
       bound.session.dispose();
     });
@@ -1276,6 +1311,11 @@ export default function PcbEditor({
     restoreSelection: () => scene?.setSelectionRefs(selectionStore.get().refs),
   });
   useEffect(() => { activeDrcPresetIdRef.current = drc.activePresetId; }, [drc.activePresetId]);
+  // ── [B17-E] the shared layout-candidate store: one per editor mount; every producer (this editor's placement
+  // worker and autoroute run, the agent's placement preview, the preview route) registers the same
+  // `sirkit.layout-candidate.v1` artifact and every consumer applies it through the same canonical path.
+  const [layoutCandidates] = useState(() => new LayoutCandidateStore());
+  const layoutCandidateList = useSyncExternalStore((listener) => layoutCandidates.subscribe(listener), () => layoutCandidates.list(), () => layoutCandidates.list());
   const repair = usePcbRepair({
     getHistory: () => editorRuntime.getHistory(),
     captureLifecycle,
@@ -1285,6 +1325,8 @@ export default function PcbEditor({
     getNetlist: () => liveNetlist,
     toast: setToast,
     onApplied: () => drc.run(),
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
   const liveReadinessReport = useMemo(() => {
     if (!state.board) return undefined;
@@ -1496,6 +1538,8 @@ export default function PcbEditor({
     captureLifecycle,
     getNetlist: () => liveNetlist,
     toast: setToast,
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
   const enlargeBoardToFit = useCallback((): void => {
     const history = editorRuntime.getHistory();
@@ -1543,7 +1587,12 @@ export default function PcbEditor({
     getDrcRules: () => getPreset(drc.activePresetId).rules, // Stage 12: DRC on completion
     getDrcPresetId: () => drc.activePresetId,
     getNetlist: () => liveNetlist,
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
+  // [B17-E] the routing candidate's copper is a ghost on the canvas until Apply; a board change retires stale candidates.
+  useEffect(() => { scene?.setRoutePreview(autoroute.candidate?.routes ?? null); }, [scene, autoroute.candidate]);
+  useEffect(() => { if (state.board) layoutCandidates.retireStale(state.board, lifecycleGeneration); }, [layoutCandidates, state.board, lifecycleGeneration]);
 
   // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
   // the adoption already aborted every captured scope's signal (fetches,
@@ -1717,6 +1766,26 @@ export default function PcbEditor({
     routingFailures: autoroute.lastResult?.failures ?? null,
     flash: (_location, itemIds) => drc.flash(itemIds),
   });
+  /** [B17-E] the nets the current selection names — the scope of clear / reroute. */
+  const selectedNetIds = useMemo(() => (state.board ? netsOfSelection(state.board, pcbView.view.selection.refs) : []), [state.board, pcbView.view.selection]);
+  const clearSelectedNets = useCallback(async (): Promise<void> => {
+    const history = editorRuntime.getHistory();
+    if (!history) return;
+    const result = await clearNets({ history, netIds: selectedNetIds, actorId: "user:pcb-editor" });
+    setToast(result.ok ? `Cleared routing on ${selectedNetIds.length} net(s) — locked copper kept; one undoable transaction.` : `Clear nets refused: ${result.message}`);
+  }, [editorRuntime, selectedNetIds]);
+  const rerouteSelectedNets = useCallback((): void => {
+    if (selectedNetIds.length === 0) { setToast("Select copper, pads or footprints to name the nets to reroute."); return; }
+    void autoroute.run({ netIds: selectedNetIds });
+  }, [autoroute, selectedNetIds]);
+  /** [B17-E] "New routed-board revision": the routed working copy becomes the durable board's next revision through
+   *  the B16 sync path (preflight → plan with copper carried only by proof → explicit apply); never a raw replacement.
+   *  Qualification then seals the routed-board authority on the new revision. */
+  const publishRoutedRevision = useCallback((): void => {
+    if (init.demo || !syncIdentity) { setToast("A routed-board revision needs a durable project board; demo boards have none."); return; }
+    setToast("Preparing the routed-board revision: the sync plan carries copper only where the netlist proves it unchanged; review and apply the plan.");
+    void handleSync();
+  }, [init.demo, syncIdentity, handleSync]);
   /** Toolbar "Go to": select the component and frame it — a refusal is shown, never guessed around. */
   const goToComponent = async (ref: string): Promise<void> => {
     const selected = await pcbView.selectTarget({ kind: "component", ref });
@@ -1957,7 +2026,7 @@ export default function PcbEditor({
   // ref access.
   const exportKicadFromPalette = useCallback((): void => {
     const board = init.demo ? state.board : authoritativeRecord?.board ?? null;
-    if (board) void downloadKicadPcb(board, liveNetlist);
+    if (board) void downloadKicadPcb(board, liveNetlist, undefined, setToast); // [B17-E] unsupported content is reported from this entry point too
   }, [init.demo, state.board, authoritativeRecord, liveNetlist]);
   const buildPaletteActions = (): PaletteAction[] => {
     const board = state.board;
@@ -1996,6 +2065,8 @@ export default function PcbEditor({
       { id: "run-drc", title: "Run design rule check", hint: "Ctrl+D", run: () => void drc.run() },
       { id: "autoplace", title: "Auto-place components", hint: "Ctrl+P", run: () => void autoPlace.run() },
       { id: "autoroute", title: "Autoroute board", hint: "Ctrl+E", run: () => void autoroute.run() },
+      { id: "reroute-nets", title: "Reroute selected nets", hint: "Routing", disabled: selectedNetIds.length > 0 ? null : "nothing routable selected", run: rerouteSelectedNets },
+      { id: "clear-nets", title: "Clear routing on selected nets", hint: "Routing", disabled: selectedNetIds.length > 0 ? null : "nothing routable selected", run: () => void clearSelectedNets() },
       { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => pcb3d.toggle() },
       { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
       { id: "export-kicad", title: "Export .kicad_pcb", run: exportKicadFromPalette },
@@ -2412,6 +2483,13 @@ export default function PcbEditor({
         <AutorouteSetup
           board={state.board}
           result={autoroute.lastResult}
+          candidate={autoroute.candidate}
+          onApplyCandidate={() => void autoroute.apply()}
+          onDiscardCandidate={() => autoroute.discard()}
+          selectedNetCount={selectedNetIds.length}
+          onClearSelectedNets={() => void clearSelectedNets()}
+          onRerouteSelectedNets={rerouteSelectedNets}
+          onPublishRoutedRevision={publishRoutedRevision}
           onFocusFailure={(failure) => {
             const index = autoroute.lastResult?.failures.indexOf(failure) ?? -1;
             if (index >= 0) void pcbView.revealFinding(`routing:${index}`);
@@ -2433,8 +2511,11 @@ export default function PcbEditor({
         <PlacementSetup
           board={state.board}
           result={autoPlace.lastResult}
-          onApply={autoPlace.apply}
-          onDiscard={autoPlace.discard}
+          onApply={() => autoPlace.apply()}
+          onDiscard={() => autoPlace.discard()}
+          candidates={layoutCandidateList.filter((item): item is Extract<typeof item, { kind: "placement" }> => item.kind === "placement")}
+          onApplyCandidate={(candidateId) => autoPlace.apply(candidateId)}
+          onDiscardCandidate={(candidateId) => autoPlace.discard(candidateId)}
           onChange={(preferences) => {
             const h = editorRuntime.getHistory();
             if (!h) return;

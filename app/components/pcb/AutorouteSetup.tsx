@@ -9,6 +9,7 @@ import {
   type StackupProfileId,
 } from "@/app/lib/pcb/stackup";
 import type { AutorouteResult } from "./hooks/useAutoroute";
+import type { RoutingLayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate";
 import type { AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
 import { readinessViewModel } from "@/app/lib/pcb/readiness/evaluate";
 import { zoneFillIsCurrent } from "@/app/lib/pcb/zones/fill-lifecycle";
@@ -26,11 +27,27 @@ export function AutorouteSetup({
   result,
   onChange,
   onFocusFailure,
+  candidate,
+  onApplyCandidate,
+  onDiscardCandidate,
+  selectedNetCount = 0,
+  onClearSelectedNets,
+  onRerouteSelectedNets,
+  onPublishRoutedRevision,
 }: {
   board: PcbBoard;
   result?: AutorouteResult;
   onChange: (stackup: BoardStackup, label: string) => void;
   onFocusFailure?: (failure: AutorouteUnresolvedConnection) => void;
+  /** [B17-E] the routing candidate awaiting review (the board is unchanged until Apply). */
+  candidate?: RoutingLayoutCandidate;
+  onApplyCandidate?: () => void;
+  onDiscardCandidate?: () => void;
+  /** [B17-E] explicit selected-net commands and the routed-board revision (B16 sync path). */
+  selectedNetCount?: number;
+  onClearSelectedNets?: () => void;
+  onRerouteSelectedNets?: () => void;
+  onPublishRoutedRevision?: () => void;
 }) {
   const stackup = getBoardStackup(board);
   const updateLayer = (id: CopperLayer["id"], patch: Partial<CopperLayer>): void => {
@@ -136,10 +153,24 @@ export function AutorouteSetup({
           );
         })}
       </div>
+      <div className="mt-2 flex flex-wrap gap-1 text-[10px]" data-testid="routing-net-commands">
+        <button type="button" onClick={onRerouteSelectedNets} disabled={selectedNetCount === 0} title="Reroute the nets of the current selection (a scoped routing candidate to review)" className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-300 disabled:opacity-40">Reroute selected nets{selectedNetCount > 0 ? ` (${selectedNetCount})` : ""}</button>
+        <button type="button" onClick={onClearSelectedNets} disabled={selectedNetCount === 0} title="Clear unlocked copper on the nets of the current selection (one undoable transaction)" className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-300 disabled:opacity-40">Clear selected nets</button>
+        <button type="button" onClick={onPublishRoutedRevision} title="Publish the routed working copy as the durable board's next revision through the B16 sync path (copper carried only by proof; qualification runs on the new revision)" className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-300">New routed-board revision…</button>
+      </div>
+      {candidate && (
+        <div className="mt-2 rounded border border-cyan-900/60 bg-cyan-950/10 p-1.5 text-[10px] text-zinc-300" data-testid="routing-candidate" data-candidate-id={candidate.candidateId} data-producer={candidate.producer}>
+          <p className="text-cyan-300">Routing candidate ready — {candidate.stats.tracks} tracks · {candidate.stats.vias} vias · {candidate.scope.netIds === "all" ? "whole board" : `${candidate.scope.netIds.length} selected net(s)`} · base {candidate.base.revision.slice(0, 12)}. The cyan ghost shows its copper; the board is unchanged until Apply.</p>
+          <div className="mt-1 flex gap-1">
+            <button type="button" aria-label="Apply routing candidate" onClick={onApplyCandidate} className="rounded bg-teal-600 px-2 py-0.5 text-white">Apply routing</button>
+            <button type="button" aria-label="Discard routing candidate" onClick={onDiscardCandidate} className="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300">Discard</button>
+          </div>
+        </div>
+      )}
       {result && (
         <div className="mt-2 space-y-1.5 text-[10px]">
           <p className={result.status === "complete" ? "text-emerald-400" : "text-amber-400"}>
-            {result.status === "complete" ? "Complete" : "Partial"}: {result.completedConnections}/{result.requiredConnections} connections · {result.acceptedPasses}/{result.passCount} improving passes
+            {result.phase === "preview" ? "Preview — " : ""}{result.status === "complete" ? "Complete" : "Partial"}: {result.completedConnections}/{result.requiredConnections} connections · {result.acceptedPasses}/{result.passCount} improving passes
           </p>
           {(() => {
             const view = readinessViewModel(result.fabricationReadiness);

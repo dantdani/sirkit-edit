@@ -29,7 +29,7 @@ import {
 } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 
-import type { PcbBoard, FootprintDef, FootprintInstance } from "../types";
+import type { PcbBoard, FootprintDef, FootprintInstance, Track, Via } from "../types";
 import type { LayerId } from "../layers";
 import { COPPER_LAYERS } from "../layers";
 import { NM_PER_MM } from "../units";
@@ -139,6 +139,8 @@ export interface PcbScene {
   onViewChange(cb: () => void): () => void;
   /** Net-highlight overlay (amber outlines), independent of the selection overlay. */
   setHighlightRefs(refs: SelectionRef[]): void;
+  /** [B17-E] Translucent ghost of a routing candidate's copper (the board is unchanged until Apply); null clears it. */
+  setRoutePreview(routes: { tracks: Track[]; vias: Via[] } | null): void;
 }
 
 /** Paint order, bottom → top. Stage 6 inserts copper content into these. */
@@ -232,6 +234,7 @@ export function createPcbScene(): PcbScene {
   let tool: "select" | "pan" = "select";
   let selectionRefs: SelectionRef[] = [];
   let highlightRefs: SelectionRef[] = [];
+  let routePreview: { tracks: Track[]; vias: Via[] } | null = null;
   let hoverId: string | null = null;
   /** [B17-D] the outline colour the overlay drawers use (selection teal; highlight amber while highlight refs draw). */
   let overlayColor: number = ACCENT_COLOR;
@@ -254,6 +257,7 @@ export function createPcbScene(): PcbScene {
   // Overlay children, created lazily in paint order: airwires under the
   // selection/hover boxes, marquee on top.
   let airwireG: Graphics | null = null;
+  let routePreviewG: Graphics | null = null;
   let highlightG: Graphics | null = null;
   let selectionG: Graphics | null = null;
   let marqueeG: Graphics | null = null;
@@ -580,12 +584,17 @@ export function createPcbScene(): PcbScene {
   }
 
   /** The overlay's children, in paint order: airwires, highlight, selection, marquee. */
-  function overlayGraphics(): { air: Graphics; hl: Graphics; sel: Graphics; marquee: Graphics } {
+  function overlayGraphics(): { air: Graphics; route: Graphics; hl: Graphics; sel: Graphics; marquee: Graphics } {
     const overlay = container("overlay");
     if (!airwireG) {
       airwireG = new Graphics();
       airwireG.eventMode = "none";
       overlay.addChild(airwireG);
+    }
+    if (!routePreviewG) {
+      routePreviewG = new Graphics();
+      routePreviewG.eventMode = "none";
+      overlay.addChild(routePreviewG);
     }
     if (!highlightG) {
       highlightG = new Graphics();
@@ -602,7 +611,7 @@ export function createPcbScene(): PcbScene {
       marqueeG.eventMode = "none";
       overlay.addChild(marqueeG);
     }
-    return { air: airwireG, hl: highlightG, sel: selectionG, marquee: marqueeG };
+    return { air: airwireG, route: routePreviewG, hl: highlightG, sel: selectionG, marquee: marqueeG };
   }
 
   function redrawAirwires(): void {
@@ -775,7 +784,21 @@ export function createPcbScene(): PcbScene {
     }
   }
 
+  /** [B17-E] the routing candidate ghost: screen-constant-ish translucent copper in the accent colour. */
+  function redrawRoutePreview(): void {
+    const g = overlayGraphics().route;
+    g.clear();
+    if (!routePreview) return;
+    for (const track of routePreview.tracks) {
+      g.moveTo(mm(track.start.x), mm(track.start.y)).lineTo(mm(track.end.x), mm(track.end.y)).stroke({ width: Math.max(mm(track.width), 1.5 / pxPerMm()), color: ACCENT_COLOR, alpha: 0.55, cap: "round" });
+    }
+    for (const via of routePreview.vias) {
+      g.circle(mm(via.at.x), mm(via.at.y), Math.max(mm(via.size) / 2, 2 / pxPerMm())).fill({ color: ACCENT_COLOR, alpha: 0.45 });
+    }
+  }
+
   function redrawOverlay(): void {
+    redrawRoutePreview();
     const g = overlayGraphics().sel;
     g.clear();
     const scale = pxPerMm();
@@ -1245,6 +1268,11 @@ export function createPcbScene(): PcbScene {
     setHighlightRefs(refs: SelectionRef[]): void {
       highlightRefs = [...refs];
       if (mounted) redrawOverlay();
+    },
+
+    setRoutePreview(routes: { tracks: Track[]; vias: Via[] } | null): void {
+      routePreview = routes ? { tracks: [...routes.tracks], vias: [...routes.vias] } : null;
+      if (mounted) redrawRoutePreview();
     },
 
     pickIn(rect: BBox): PickResult[] {

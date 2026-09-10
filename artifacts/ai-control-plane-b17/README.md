@@ -8,7 +8,7 @@ Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **PR
 | B17-B view-session command bus | `view-command-contract.md` | CONFIRMED — `sirkit.view-command.v1`, `ViewSessionBus`, 12 gates in CI |
 | B17-C PCB 3D semantic control | `3d-command-proof.md`, `evidence/pcb-3d-acceptance.png` | CONFIRMED — `pcb3d.*` commands on the bus; browser proof `e2e/semantic-editor.spec.ts` scenario 1 (found and fixed 2 defects) |
 | B17-D canvas navigation and selection | `selection-context-proof.md`, `evidence/pcb-canvas-acceptance.png`, `evidence/schematic-canvas-acceptance.png` | CONFIRMED — `pcb.*` / `schematic.*` / `workspace.*` commands on the bus; versioned selection; browser proof `e2e/semantic-editor.spec.ts` scenarios 2–3 and the full suite (found and fixed 5 defects) |
-| B17-E placement, routing, history, import/export parity | `placement-routing-parity.md`, `project-history-model.md` | pending |
+| B17-E placement, routing, history, import/export parity | `placement-routing-parity.md`, `project-history-model.md`, `evidence/project-timeline.png` | CONFIRMED — shared `sirkit.layout-candidate.v1` for placement/routing (editor, agent, route), preview/apply/discard, clear/reroute selected nets, routed-board revision on B16, project operation timeline with delegated undo, import/export outcome declarations; browser proof scenario 4 |
 | B17-F tool exposure | `tool-exposure.md` | pending |
 | validation | `ui-negative-tripwires.md`, browser evidence, `test-and-validation-report.md`, `changed-files.md`, `unknowns-and-owner-decisions.md`, `final-verdict.md` | pending |
 

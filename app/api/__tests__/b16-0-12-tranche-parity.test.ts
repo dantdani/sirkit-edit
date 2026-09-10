@@ -314,7 +314,9 @@ describe("B16.0.12 §H — deterministic export bytes & placement preview", () =
     // The engine mints a fresh run identifier and records wall-clock elapsedMs
     // per invocation (historical behavior, preserved). Everything else must be
     // byte-deterministic.
-    const norm = (o: unknown): string => JSON.stringify(o).replace(/"runId":"[^"]+"/g, '"runId":"<v>"').replace(/"elapsedMs":\d+/g, '"elapsedMs":0');
+    // [B17-E] the response now carries the shared layout candidate: its wall-clock stamps are the only other volatile
+    // fields (the candidate digest deliberately excludes them, so it must match byte-for-byte).
+    const norm = (o: unknown): string => JSON.stringify(o).replace(/"runId":"[^"]+"/g, '"runId":"<v>"').replace(/"elapsedMs":\d+/g, '"elapsedMs":0').replace(/"(createdAt|expiresAt)":"[^"]+"/g, '"$1":"<t>"');
     expect(norm(out2)).toBe(norm(out1));
     expect(JSON.stringify(board)).toBe(frozen); // input untouched
     expect(dbState.selects).toBe(0); // no durable save/history/revision
