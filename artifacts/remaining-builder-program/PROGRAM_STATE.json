@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17 integration: CI on the validation commit → record in final-verdict.md/ledger → mark PR #7 ready → merge normally (D17-1/OD-8) → fast-forward main → ledger → start B18 (safe agent execution of reversible engineering operations: B18-A permission tiers and autonomy settings).",
-  "updatedAt": "2026-09-10T03:25:00-04:00"
+  "nextAction": "B17 integration: mark PR #7 ready → merge normally (D17-1/OD-8) → fast-forward main → record the merge sha in the ledger → start B18 (chapter/b18-agent-execution): B18-A permission tiers and autonomy settings, B18-B server-minted grants, B18-C safe mutation tools over the canonical executor, B18-D chat execution UX, B18-E mandatory scenarios.",
+  "updatedAt": "2026-09-10T03:40:00-04:00"
 }

@@ -16,7 +16,7 @@ Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **PR
 | UI/keyboard/tool parity tests | every navigation/selection/layer/reveal/3D control issues the bus command (B17-C/D); Ctrl+3 / Escape through the same commands; the agent's six view-session tools map onto the same descriptors and the browser proof drives them through the bridge (scenario 5); `b17-f-agent-exposure.test.ts` §2 asserts `viewCommands` ⊆ registered bus commands — `ui-negative-tripwires.md` §4 | CONFIRMED |
 | no engineering mutation from a view command | `b17-negative-tripwires.test.ts` tripwire 1: 49 commands × representative + garbage payloads × 2 actors (518 dispatches, > 150 settled) leave the board and schematic sources byte-identical; tripwire 2: mirrors are human-only; tripwire 3: view-session tools carry no engineering side effect, authority or approval tier | CONFIRMED |
 | full suite and generators green | run 2 (bounded workers) on the final tree: 4928 passed / 1 failed / 33 pending of 4962 (the one failure is a PGlite migration-planning case that exceeds its timeout under load and passes alone, 15/15); all eight generators idempotent on the final tree — `test-and-validation-report.md` §2–§3 | CONFIRMED |
-| benchmark-quality green | green at every push incl. `81bf3ea` (34430572590); validation commit: CI_RESULT | CONFIRMED |
+| benchmark-quality green | green at every push incl. `81bf3ea` (34430572590); validation commit `f788acd`: deterministic-manufacturing run 34432252639 success (prompt-to-gerber, database-delivery, page-browser-e2e; 2026-09-10 03:09–03:14 UTC) and benchmark-quality run 34432252622 success (benchmark-core; nightly skipped by design) | CONFIRMED |
 
 ## What B17 delivered (CONFIRMED, by checkpoint)
 

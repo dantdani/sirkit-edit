@@ -64,7 +64,7 @@ Scenarios: (1) B17-C 3D acceptance through `pcb3d.*`; (2) B17-D PCB canvas (Go t
 | `96a2925` B17-D | green | green | |
 | `041fad9` B17-E | green | green | |
 | `81bf3ea` B17-F | green (34430572594) | green (34430572590) | |
-| validation commit | see the final verdict | | |
+| `f788acd` validation | green (34432252639) | green (34432252622) | the final tree of the chapter |
 
 ## 7. What was not run (RECORDED)
 
