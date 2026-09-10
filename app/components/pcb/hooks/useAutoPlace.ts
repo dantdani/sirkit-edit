@@ -235,20 +235,24 @@ export function useAutoPlace(editor: AutoPlaceEditor): AutoPlaceHandle {
   };
 
   const apply = useCallback((candidateId?: string): void => {
-    const pending = resolveCandidate(candidateId);
-    const history = editorRef.current.getHistory();
-    if (!pending || !history) return;
     // B08.2 — GENERATION is authoritative: a lifecycle replacement (even one
-    // restoring a board with the SAME digest) invalidates the preview.
+    // restoring a board with the SAME digest) invalidates the preview — a
+    // partial preview (no candidate, only a report) included. [B17 validation]
+    // this check precedes the candidate lookup; B17-E had moved it behind it.
     const candidateScope = candidateId ? null : scopeRef.current;
     if (candidateScope && !candidateScope.isCurrent()) {
-      editorRef.current.candidates?.retire(pending.candidateId, "stale");
+      const stale = resolveCandidate(candidateId);
+      if (stale) editorRef.current.candidates?.retire(stale.candidateId, "stale");
+      scopeRef.current = null;
       setCandidate(undefined);
       setLastResult(undefined);
       setState("idle");
       editorRef.current.toast?.("This board was replaced since the placement preview was produced; the candidate was discarded. Nothing was changed.");
       return;
     }
+    const pending = resolveCandidate(candidateId);
+    const history = editorRef.current.getHistory();
+    if (!pending || !history) return;
     // B08.2 — the apply-side completion callbacks are scoped too.
     const applyScope = editorRef.current.captureLifecycle?.() ?? null;
     const applyOwned = (): boolean => applyScope === null || applyScope.isCurrent();

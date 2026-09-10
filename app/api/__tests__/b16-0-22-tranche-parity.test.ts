@@ -45,6 +45,7 @@ import { FootprintResolutionService } from "@/app/lib/footprint-resolver/service
 import { PhysicalBindingService } from "@/app/lib/physical-binding/repository";
 import { PostgresPhysicalBindingRepository } from "@/app/lib/physical-binding/server-repository";
 import { DurablePcbSyncRepository } from "@/app/lib/pcb-sync/durable";
+import { DurableBoardLineageStore } from "@/app/lib/pcb-sync/board-lineage"; // [B17 validation] the B16-C.1 lineage read behind every board GET
 import {
   resetComponentAuthoritySourceFactory,
   setComponentAuthoritySourceFactory,
@@ -365,6 +366,9 @@ describe("B16.0.22 §E — passive-policy and pcb-sync read surfaces", () => {
   });
   it("pcb-sync GET ?boardId unknown board → 404 not_found envelope with ok:true result and the TRUSTED scope", async () => {
     const getBoard = vi.spyOn(DurablePcbSyncRepository.prototype, "getBoard").mockResolvedValueOnce(null);
+    // [B16-C.1] the board GET also resolves the board's lineage from the durable workflow store; an unknown board has no
+    // stored lineage record (its lineage is implicit) — mocked like the board read, so this stays a repository-free unit.
+    const lineage = vi.spyOn(DurableBoardLineageStore.prototype, "get").mockResolvedValueOnce(null);
     authed("viewer");
     const res = await psGet(get("/api/pcb-sync?boardId=board-1"));
     expect(res.status).toBe(404);
@@ -376,6 +380,8 @@ describe("B16.0.22 §E — passive-policy and pcb-sync read surfaces", () => {
     expect(result.scope).toEqual({ ...SCOPE, boardId: "board-1" });
     expect(getBoard).toHaveBeenCalledTimes(1);
     expect(getBoard.mock.calls[0]![0]).toEqual({ ...SCOPE, boardId: "board-1" });
+    expect(lineage).toHaveBeenCalledTimes(1);
+    expect(result.lineage).toMatchObject({ boardId: "board-1", rootBoardId: "board-1", generation: 0, state: "current", currentBoardId: "board-1" });
   });
   it("pcb-sync GET ?boardId with an unknown extra query field → 422 PS_API_UNKNOWN_FIELD; malformed boardId → 422 PS_BOARD_ID_INVALID", async () => {
     authed("viewer");
@@ -394,6 +400,7 @@ describe("B16.0.22 §E — passive-policy and pcb-sync read surfaces", () => {
   // Recorded in artifacts/ai-control-plane-b16-0-22/.]
   it("pcb-sync GET duplicated boardId query key → deterministic first-value-wins board read", async () => {
     const getBoard = vi.spyOn(DurablePcbSyncRepository.prototype, "getBoard").mockResolvedValueOnce(null);
+    vi.spyOn(DurableBoardLineageStore.prototype, "get").mockResolvedValueOnce(null);
     authed("viewer");
     const res = await psGet(get("/api/pcb-sync?boardId=board-a&boardId=board-b"));
     expect(res.status).toBe(404);

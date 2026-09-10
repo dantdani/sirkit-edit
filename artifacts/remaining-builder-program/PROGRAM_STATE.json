@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-validation",
+  "currentCheckpoint": "B17-integration",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17 validation: write ui-negative-tripwires.md, browser evidence, test-and-validation-report.md, changed-files.md, unknowns-and-owner-decisions.md, final-verdict.md; full suite + generators + benchmark-quality green (resolve or record the two pre-existing branch failures found by the B17-F broad run: b16-0-8 raw-route baseline for POST /api/pcb-sync stale since f6b9390; b16-0-22 pcb-sync GET unknown boardId 422 vs 404); PR #7 ready → CI → normal merge → fast-forward main → ledger → B18.",
-  "updatedAt": "2026-09-10T03:05:00-04:00"
+  "nextAction": "B17 integration: CI on the validation commit → record in final-verdict.md/ledger → mark PR #7 ready → merge normally (D17-1/OD-8) → fast-forward main → ledger → start B18 (safe agent execution of reversible engineering operations: B18-A permission tiers and autonomy settings).",
+  "updatedAt": "2026-09-10T03:25:00-04:00"
 }
