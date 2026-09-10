@@ -32,6 +32,9 @@ export const READ_RESOURCE_KINDS = [
   "fab-preset",
   "drc-preset",
   "netlist",
+  // [B17-F] the captured view context (what the editors show) and the project operation timeline it carries.
+  "view-state-snapshot",
+  "project-timeline-snapshot",
 ] as const;
 export type ReadResourceKind = (typeof READ_RESOURCE_KINDS)[number];
 

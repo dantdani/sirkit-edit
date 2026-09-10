@@ -22,6 +22,7 @@ import {
 } from "../sealed-pcb-edit-proposal";
 import { createSealedPcbEditProposal } from "../pcb-edit-proposal-service";
 import { rawSealPcbEditProposal } from "../pcb-edit-proposal-sealer.internal";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const RULES = getPreset(DEFAULT_PRESET_ID).rules;
 
@@ -314,7 +315,7 @@ describe("B15.2 — exposure pin (B15.3 supersession)", () => {
   it("the agent registry exposes exactly 12 tools and exactly ONE PCB propose tool", async () => {
     const { sirkitToolRegistry } = await import("../../../engineering/tool-catalog");
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed).toHaveLength(12);
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     const pcbPropose = exposed.filter((descriptor) => /pcb/i.test(descriptor.toolId) && descriptor.operationClass === "propose");
     expect(pcbPropose.map((descriptor) => descriptor.toolId)).toEqual(["sirkit.pcb.propose-bounded-edit"]);
   });

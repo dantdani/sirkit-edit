@@ -20,6 +20,7 @@ import { findNonPlainJsonPath, validateAgentRunTrace } from "../trace";
 import { buildEvaluationCases } from "../evaluation-cases";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { createEmptyBoard } from "../../pcb/types";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const pins = (JSON.parse(readFileSync(join(ROOT, "artifacts", "ai-control-plane-b11", "replay-trace-pins.json"), "utf8")) as { pins: Record<string, string> }).pins;
@@ -276,8 +277,8 @@ describe("B11.4 §G8–G12 — earlier closures and pins remain intact", () => {
 
   it("G12: static exposure is still exactly ELEVEN read/propose tools", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B15.3: + sirkit.pcb.propose-bounded-edit
-    for (const descriptor of exposed) expect(["read", "propose"]).toContain(descriptor.operationClass);
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
+    for (const descriptor of exposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
   });
 
   it("the wire contract did NOT change: the committed versions are unchanged", () => {

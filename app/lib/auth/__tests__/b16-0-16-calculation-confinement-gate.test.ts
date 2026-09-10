@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm } from "./_boundary-analysis";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const ROUTES = ["corners", "evaluate", "export", "feedback", "problem", "propose", "report", "transaction"].map((r) => `app/api/calculation/${r}/route.ts`);
@@ -97,7 +98,7 @@ describe("B16.0.16 §G — no misleading authority", () => {
   });
   it("no calculation route is agent-exposed and total exposed tools remain EXACTLY 12", () => {
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(JSON.stringify(exposed)).not.toMatch(/api\/calculation|calculation\.(propose|evaluate|report|transaction|export)/);
   });
 });

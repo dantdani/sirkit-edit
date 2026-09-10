@@ -8,9 +8,13 @@ sirkit.manufacturing.readiness-inspect,read.readiness,netlist,optional
 sirkit.pcb.board-inspect,read.board-snapshot,canonical-state,required
 sirkit.pcb.revision-inspect,read.pcb-revision,canonical-state,required
 sirkit.project.canonical-revision-inspect,read.canonical-revision,canonical-state,required
+sirkit.project.history-inspect,read.project-timeline,canonical-state,required
+sirkit.project.history-inspect,read.project-timeline,project-timeline-snapshot,required
 sirkit.schematic.inspect,read.schematic-snapshot,canonical-state,required
 sirkit.selection.inspect,read.selection,canonical-state,required
 sirkit.selection.inspect,read.selection,selection-snapshot,required
 sirkit.validation.connectivity-verify,read.connectivity,canonical-state,required
 sirkit.validation.drc-run,read.drc,canonical-state,required
 sirkit.validation.drc-run,read.drc,drc-rules,required
+sirkit.view.read-state,read.view-state,canonical-state,required
+sirkit.view.read-state,read.view-state,view-state-snapshot,required

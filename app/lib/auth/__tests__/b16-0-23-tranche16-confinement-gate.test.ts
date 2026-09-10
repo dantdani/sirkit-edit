@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm } from "./_boundary-analysis";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const METHODS: ReadonlyArray<[string, string]> = [
@@ -141,7 +142,7 @@ describe("B16.0.23 §J — agent exposure and human-truth wording", () => {
   it("tools remain EXACTLY 12 agent-exposed; no spice route is exposed", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(exposed.some((descriptor) => /spice/i.test(descriptor.toolId))).toBe(false);
   });
   it("no spice route claims signoff, certification, or manufacturing release (comments stripped — the claim surface is code and response strings)", () => {

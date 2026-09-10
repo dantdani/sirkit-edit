@@ -136,7 +136,9 @@ import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
 import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
-import { clearNets, LayoutCandidateStore, netsOfSelection } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
+import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import type { ProjectOperationTimeline, ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
@@ -305,6 +307,9 @@ export default function PcbEditor({
   pcbProposalIntake,
   onPcbProposalSettled,
   currentInterlock,
+  viewSessionBridge,
+  layoutCandidateIntake,
+  onLayoutCandidateSettled,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -333,6 +338,14 @@ export default function PcbEditor({
   pcbProposalIntake?: { proposal: SealedPcbEditProposal; originRunId: string | null } | null;
   /** Settle the pending proposal (applied / cancelled / retired). */
   onPcbProposalSettled?: (outcome: "applied" | "cancelled" | "retired") => void;
+  /** [B17-F] the page-owned view-session bridge: this editor registers its pcb and pcb3d view sessions while a
+   *  board is loaded (never in demo mode), so the agent's view tools see exactly the surfaces that exist. */
+  viewSessionBridge?: ViewSessionBridge;
+  /** [B17-F] an agent-produced layout candidate (placement or routing) handed to this editor's candidate store
+   *  after the page's SAFE receiver verified it. Registration re-verifies base revision, generation and expiry;
+   *  a stale candidate is refused with a visible reason. Apply stays the human's explicit action. */
+  layoutCandidateIntake?: { candidate: LayoutCandidate; originRunId: string | null } | null;
+  onLayoutCandidateSettled?: () => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
@@ -1468,6 +1481,8 @@ export default function PcbEditor({
   // every entry point (toolbar, palette, Ctrl+3, Escape, the preview's own controls) issues the same command.
   const pcb3d = usePcb3dViewSession({ projectId: init.scope?.projectId ?? (init.demo ? "demo" : "local"), branchId: init.scope?.branchId ?? "main", board: state.board, actorId: init.scope ? "trusted-session" : "local", demo: init.demo });
   const preview3dOpen = pcb3d.view.open;
+  // [B17-F] the pcb3d surface exists for the agent only while a real board is loaded (never in demo mode).
+  useViewSessionBridge(viewSessionBridge, pcb3d, !init.demo && state.board !== null);
 
   // ── Stage 17: padstack library panel (right column, not a modal) ───────────
   const [padstacksOpen, setPadstacksOpen] = useState(false);
@@ -1591,7 +1606,39 @@ export default function PcbEditor({
     getGeneration: () => lifecycleGeneration,
   });
   // [B17-E] the routing candidate's copper is a ghost on the canvas until Apply; a board change retires stale candidates.
-  useEffect(() => { scene?.setRoutePreview(autoroute.candidate?.routes ?? null); }, [scene, autoroute.candidate]);
+  // [B17-F] the routing candidate the panel shows: the editor's own run first, else the latest store candidate
+  // (an agent proposal); the same ghost, the same Apply / Discard path (`autoroute.apply(candidateId)`).
+  const storeRoutingCandidate = useMemo(() => {
+    const routing = layoutCandidateList.filter((item): item is Extract<typeof item, { kind: "routing" }> => item.kind === "routing");
+    return routing.length > 0 ? routing[routing.length - 1] : undefined;
+  }, [layoutCandidateList]);
+  const shownRoutingCandidate = autoroute.candidate ?? storeRoutingCandidate;
+  useEffect(() => { scene?.setRoutePreview(shownRoutingCandidate?.routes ?? null); }, [scene, shownRoutingCandidate]);
+  // [B17-F] an agent-produced layout candidate enters the SAME store the editor's own runs use — after the base
+  // revision / generation / expiry re-check; a stale one is refused visibly and nothing is registered.
+  const layoutIntakeRef = useRef<string | null>(null);
+  useEffect(() => {
+    const intake = layoutCandidateIntake;
+    if (!intake || layoutIntakeRef.current === intake.candidate.candidateId) return;
+    layoutIntakeRef.current = intake.candidate.candidateId;
+    const board = boardRef.current;
+    if (!board) { setToast("Agent layout candidate ignored: no board is loaded."); onLayoutCandidateSettled?.(); return; }
+    const verdict = verifyLayoutCandidate(intake.candidate, board);
+    if (!verdict.ok) {
+      setToast(`Agent ${intake.candidate.kind} candidate refused: ${verdict.message}`);
+      onLayoutCandidateSettled?.();
+      return;
+    }
+    try {
+      layoutCandidates.register({ ...intake.candidate, base: { ...intake.candidate.base, generation: lifecycleGeneration } });
+      setToast(intake.candidate.kind === "placement"
+        ? "Agent placement candidate ready — review it in the placement panel; the board is unchanged until you apply it."
+        : "Agent routing candidate ready — the cyan ghost shows its copper; the board is unchanged until you apply it.");
+    } catch (error) {
+      setToast(`Agent ${intake.candidate.kind} candidate refused: ${error instanceof Error ? error.message : "invalid candidate"}`);
+    }
+    onLayoutCandidateSettled?.();
+  }, [layoutCandidateIntake, layoutCandidates, lifecycleGeneration, onLayoutCandidateSettled]);
   useEffect(() => { if (state.board) layoutCandidates.retireStale(state.board, lifecycleGeneration); }, [layoutCandidates, state.board, lifecycleGeneration]);
 
   // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
@@ -1766,6 +1813,8 @@ export default function PcbEditor({
     routingFailures: autoroute.lastResult?.failures ?? null,
     flash: (_location, itemIds) => drc.flash(itemIds),
   });
+  // [B17-F] the pcb surface exists for the agent only while a real board is loaded (never in demo mode).
+  useViewSessionBridge(viewSessionBridge, pcbView, !init.demo && state.board !== null);
   /** [B17-E] the nets the current selection names — the scope of clear / reroute. */
   const selectedNetIds = useMemo(() => (state.board ? netsOfSelection(state.board, pcbView.view.selection.refs) : []), [state.board, pcbView.view.selection]);
   const clearSelectedNets = useCallback(async (): Promise<void> => {
@@ -2483,9 +2532,9 @@ export default function PcbEditor({
         <AutorouteSetup
           board={state.board}
           result={autoroute.lastResult}
-          candidate={autoroute.candidate}
-          onApplyCandidate={() => void autoroute.apply()}
-          onDiscardCandidate={() => autoroute.discard()}
+          candidate={shownRoutingCandidate}
+          onApplyCandidate={() => void autoroute.apply(shownRoutingCandidate?.candidateId)}
+          onDiscardCandidate={() => autoroute.discard(shownRoutingCandidate?.candidateId)}
           selectedNetCount={selectedNetIds.length}
           onClearSelectedNets={() => void clearSelectedNets()}
           onRerouteSelectedNets={rerouteSelectedNets}

@@ -9,7 +9,7 @@
 import { useEffect, useRef } from "react";
 import type { ProjectRole } from "@/app/lib/engineering/types";
 import { workspaceCommands, workspaceInitialState, type WorkspaceTab, type WorkspaceViewState } from "@/app/lib/view-session/workspace";
-import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult } from "@/app/lib/view-session/types";
+import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
 import { useViewSession, type ViewCommandOk, type ViewCommandRefusal } from "@/app/components/view-session/useViewSession";
 
 export interface WorkspaceViewSessionInput {
@@ -28,6 +28,8 @@ export interface WorkspaceViewSession {
   command: (commandId: string, payload: unknown) => Promise<ViewCommandOk | ViewCommandRefusal>;
   dispatch: (envelope: ViewCommandEnvelope) => Promise<ViewCommandResult<WorkspaceViewState>>;
   sessionId: string;
+  /** [B17-F] the session identity the view-session bridge registers (labels for tracing; never authority). */
+  identity: ViewSessionIdentity;
   open: (tab: WorkspaceTab) => void;
 }
 
@@ -60,5 +62,5 @@ export function useWorkspaceViewSession(input: WorkspaceViewSessionInput): Works
   // Mirror a tab change made outside the bus.
   useEffect(() => { void command("workspace.observe", { editor: input.tab }); }, [input.tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { view, viewRevision: session.viewRevision, command, dispatch: session.dispatch, sessionId: session.sessionId, open: (tab) => { void command("workspace.open-editor", { editor: tab }); } };
+  return { view, viewRevision: session.viewRevision, command, dispatch: session.dispatch, sessionId: session.sessionId, identity: session.identity, open: (tab) => { void command("workspace.open-editor", { editor: tab }); } };
 }

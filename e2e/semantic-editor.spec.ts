@@ -238,3 +238,63 @@ test("B17-E parity surfaces: selected-net commands follow the view-session selec
   await page.screenshot({ path: `${EVIDENCE}/project-timeline.png`, fullPage: false });
   await page.keyboard.press("Escape");
 });
+
+test("B17-F agent view tools through the browser bridge: the capture reports the live surfaces; validated requests open the 3D view, hide a layer and focus J1 on the canvas; a stale relative request, a foreign session and a malformed request are refused", async () => {
+  type Capture = { surfaces: string[]; editors: Record<string, { sessionId: string; viewRevision: number; state: Record<string, unknown> }>; timeline: { entries: unknown[] } | null } | null;
+  type Execution = { ok: boolean; status: string; commandId?: string | null; viewRevision?: number; code?: string | null; message?: string };
+  const capture = (): Promise<Capture> => page.evaluate(() => { const host = window as unknown as { __sirkitViewBridge?: { capture(): Capture } }; return host.__sirkitViewBridge ? host.__sirkitViewBridge.capture() : null; });
+  let seq = 0;
+  const execute = (partial: Record<string, unknown>): Promise<Execution> => page.evaluate((request) => {
+    const host = window as unknown as { __sirkitViewBridge: { execute(raw: unknown): Promise<Execution> } };
+    const now = Date.now(); // the fixture clock — the same clock the bus expiry uses
+    return host.__sirkitViewBridge.execute({ ...request, issuedAt: new Date(now).toISOString(), expiresAt: new Date(now + 60_000).toISOString() });
+  }, { schema: "sirkit.view-command-request.v1", requestId: `vcr-e2e-${String(++seq).padStart(16, "0")}`, toolId: "sirkit.view.pcb3d", actor: { actorId: "agent:e2e", role: "project_admin", actorKind: "agent" }, ...partial });
+
+  // The capture is what the chat request would carry: the live surfaces, each session's revision and bounded state.
+  const first = await capture();
+  expect(first).not.toBeNull();
+  expect(first!.surfaces).toEqual(expect.arrayContaining(["pcb", "pcb3d", "workspace"]));
+  expect(typeof first!.editors.pcb!.state.selection).toBe("object");
+  expect(first!.timeline!.entries.length).toBeGreaterThan(1);
+
+  // pcb3d.open as the agent actor, pinned to the captured 3D revision → the sheet opens.
+  const panel = page.getByTestId("pcb3d-panel");
+  const opened = await execute({ editor: "pcb3d", sessionId: first!.editors.pcb3d!.sessionId, commandId: "pcb3d.open", payload: null, expectedViewRevision: first!.editors.pcb3d!.viewRevision });
+  expect(opened).toMatchObject({ ok: true, status: "settled", commandId: "pcb3d.open" });
+  await expect(panel).toBeVisible({ timeout: 60_000 });
+  const view3d = async () => JSON.parse((await panel.getAttribute("data-view")) ?? "{}") as { open: boolean; layers: Record<string, boolean> };
+  expect((await view3d()).open).toBe(true);
+
+  // pcb3d.set-layer-visible { silkTop, false } against the CURRENT revision → the scene layer hides.
+  const second = await capture();
+  const hidden = await execute({ editor: "pcb3d", sessionId: second!.editors.pcb3d!.sessionId, commandId: "pcb3d.set-layer-visible", payload: { layer: "silkTop", visible: false }, expectedViewRevision: second!.editors.pcb3d!.viewRevision });
+  expect(hidden).toMatchObject({ ok: true, status: "settled" });
+  await expect.poll(async () => (await view3d()).layers.silkTop).toBe(false);
+  await expect(page.getByTestId("pcb3d-layer-silkTop")).toHaveAttribute("aria-pressed", "false");
+
+  // A relative toggle pinned to the STALE first revision is refused by the bus; the layer stays hidden.
+  const stale = await execute({ editor: "pcb3d", sessionId: first!.editors.pcb3d!.sessionId, commandId: "pcb3d.toggle-layer", payload: { layer: "silkTop" }, expectedViewRevision: first!.editors.pcb3d!.viewRevision });
+  expect(stale).toMatchObject({ ok: false, status: "refused" });
+  expect(String(stale.code)).toMatch(/STALE/);
+  expect((await view3d()).layers.silkTop).toBe(false);
+
+  // A foreign session id and a malformed request are dropped before any bus sees them.
+  expect(await execute({ editor: "pcb3d", sessionId: "vs-bogus", commandId: "pcb3d.close", payload: null, expectedViewRevision: 0 })).toMatchObject({ ok: false, status: "session_mismatch" });
+  expect(await execute({ editor: "pcb3d", sessionId: first!.editors.pcb3d!.sessionId, commandId: "pcb3d.observe", payload: null, expectedViewRevision: 0 })).toMatchObject({ ok: false, status: "malformed" });
+  expect((await view3d()).open).toBe(true);
+
+  // pcb.focus { component J1 } on the canvas session → the 2D camera intent frames J1.
+  const editor = page.getByTestId("pcb-editor");
+  const pcbView = async () => JSON.parse((await editor.getAttribute("data-view")) ?? "{}") as PcbView;
+  const third = await capture();
+  const focused = await execute({ toolId: "sirkit.view.canvas-navigation", editor: "pcb", sessionId: third!.editors.pcb!.sessionId, commandId: "pcb.focus", payload: { target: { kind: "component", ref: "J1" } }, expectedViewRevision: third!.editors.pcb!.viewRevision });
+  expect(focused).toMatchObject({ ok: true, status: "settled", commandId: "pcb.focus" });
+  await expect.poll(async () => (await pcbView()).camera.kind).toBe("custom");
+  expect((await pcbView()).camera.pxPerMm).toBe(40);
+
+  await page.screenshot({ path: `${EVIDENCE}/agent-view-tools.png`, fullPage: false });
+  // pcb3d.close through the same path leaves the canvas on top.
+  const fourth = await capture();
+  expect(await execute({ editor: "pcb3d", sessionId: fourth!.editors.pcb3d!.sessionId, commandId: "pcb3d.close", payload: null, expectedViewRevision: fourth!.editors.pcb3d!.viewRevision })).toMatchObject({ ok: true });
+  await expect(panel).toBeHidden();
+});

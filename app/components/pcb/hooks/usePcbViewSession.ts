@@ -25,7 +25,7 @@ import type { DrcResult } from "@/app/lib/pcb/drc/types";
 import type { AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
 import { pcbCommands, pcbInitialState, pcbViewProbe, type PcbViewState } from "@/app/lib/view-session/pcb";
 import { selectionDigest, type ViewTarget } from "@/app/lib/view-session/targets";
-import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult } from "@/app/lib/view-session/types";
+import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
 import { useViewSession, type ViewCommandOk, type ViewCommandRefusal } from "@/app/components/view-session/useViewSession";
 
 export interface PcbViewSessionInput {
@@ -53,6 +53,8 @@ export interface PcbViewSession {
   command: (commandId: string, payload: unknown) => Promise<PcbViewResult>;
   dispatch: (envelope: ViewCommandEnvelope) => Promise<ViewCommandResult<PcbViewState>>;
   sessionId: string;
+  /** [B17-F] the session identity the view-session bridge registers (labels for tracing; never authority). */
+  identity: ViewSessionIdentity;
   // Named entry points (the control inventory classifies these callee names).
   fitBoard: () => void;
   fitSelection: () => void;
@@ -177,6 +179,7 @@ export function usePcbViewSession(input: PcbViewSessionInput): PcbViewSession {
     command,
     dispatch: session.dispatch,
     sessionId: session.sessionId,
+    identity: session.identity,
     fitBoard: () => fire("pcb.fit-board", null),
     fitSelection: () => fire("pcb.fit-selection", {}),
     zoomBy: (factor) => fire("pcb.zoom", { factor }),

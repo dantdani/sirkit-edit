@@ -57,6 +57,7 @@ export const TOOL_BINDING_STATUSES = [
   "bound-read",
   "bound-proposal",
   "bound-mutation-editor-session",
+  "bound-view-session",
   "test-double",
 ] as const;
 export type ToolBindingStatus = (typeof TOOL_BINDING_STATUSES)[number];
@@ -82,7 +83,8 @@ export type ToolAuditMode = (typeof TOOL_AUDIT_MODES)[number];
 export const TOOL_BUDGET_CLASSES = ["interactive", "batch", "long-running"] as const;
 export type ToolBudgetClass = (typeof TOOL_BUDGET_CLASSES)[number];
 
-export const TOOL_PROJECT_STATES = ["board-present", "schematic-present", "authoritative-board", "catalog-available"] as const;
+/** [B17-F] `*-surface`: the editor surface exists in the user's browser session (captured view context). */
+export const TOOL_PROJECT_STATES = ["board-present", "schematic-present", "authoritative-board", "catalog-available", "pcb-surface", "pcb3d-surface", "schematic-surface", "workspace-surface"] as const;
 export type ToolProjectState = (typeof TOOL_PROJECT_STATES)[number];
 
 export const TOOL_SELECTION_KINDS = ["footprint", "track", "via", "zone", "text", "pad"] as const;
@@ -148,13 +150,19 @@ export interface ToolDescriptor {
   versionNotes: string;
   /** Optional feature-flag gate consumed by discovery. */
   featureFlag?: string;
+  /** [B17-F] view-session tools: the EXACT bus command ids (`<editor>.<name>`) the tool may issue — never an
+   *  `*.observe` (the editor's own mirror). Validated against the binding and used by the request preparer. */
+  viewCommands?: readonly string[];
 }
 
 // ─── Validation (deny by default) ────────────────────────────────────────────
 
 const TOOL_ID_PATTERN = /^sirkit(\.[a-z0-9][a-z0-9-]*)+$/;
 const VERSION_PATTERN = /^\d+\.\d+\.\d+$/;
-const MUTATION_CLASSES: readonly ToolOperationClass[] = ["mutate", "destructive", "release", "view-session"];
+/** Mutation-CAPABLE classes: never agent-exposed, always canonical-executor bound. [B17-F] `view-session` is not one of
+ *  them — it can never touch engineering state — but it is exposable ONLY as a bound bus-command tool (rules below). */
+const MUTATION_CLASSES: readonly ToolOperationClass[] = ["mutate", "destructive", "release"];
+const VIEW_COMMAND_PATTERN = /^(schematic|pcb|pcb3d|workspace)\.[a-z][a-z0-9-]*$/;
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value);
@@ -220,6 +228,24 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
     }
     if (descriptor.callability !== "callable") err("agent exposure requires callability");
     if (descriptor.discovery !== "discoverable") err("agent exposure requires discoverability");
+  }
+  // [B17-F] a view-session tool is a bus-command tool or nothing: bound to the view-session command module, session-state
+  // side effects only, no engineering authority, no approval tier, an explicit non-empty command list without `observe`.
+  if (descriptor.operationClass === "view-session") {
+    if (binding.status !== "unbound" && binding.status !== "bound-view-session") err("view-session tools bind only as bound-view-session");
+    if (descriptor.sideEffects !== "session-state") err("view-session tools have session-state side effects only");
+    if (!descriptor.requiredAuthority.includes("none")) err("view-session tools never require engineering authority");
+    if (descriptor.approvalTier !== "none") err("view-session tools carry no approval tier (they are never engineering state)");
+    if (descriptor.agentExposed || binding.status === "bound-view-session") {
+      if (binding.status !== "bound-view-session") err("an exposed view-session tool must be bound-view-session");
+      if (!Array.isArray(descriptor.viewCommands) || descriptor.viewCommands.length === 0) err("a bound view-session tool must list its bus command ids");
+      for (const commandId of descriptor.viewCommands ?? []) {
+        if (!VIEW_COMMAND_PATTERN.test(commandId)) err(`view command ${commandId} is not an <editor>.<name> bus command`);
+        if (commandId.endsWith(".observe")) err(`view command ${commandId} is the editor's own mirror and can never be a tool`);
+      }
+    }
+  } else if (descriptor.viewCommands !== undefined) {
+    err("only view-session tools list view commands");
   }
   if (descriptor.lifecycle === "deprecated" && !descriptor.deprecation?.reason) err("deprecated tools must carry deprecation metadata");
   if (descriptor.lifecycle === "retired" && descriptor.discovery !== "internal-only") err("retired tools cannot remain discoverable");

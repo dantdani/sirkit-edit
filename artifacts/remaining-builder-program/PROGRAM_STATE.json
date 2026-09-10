@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B17",
-  "currentCheckpoint": "B17-F",
+  "currentCheckpoint": "B17-validation",
   "status": "in_progress",
   "baseSha": "82ecbf8",
   "branch": "chapter/b17-semantic-editor",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B17-F: expose only registry-backed capabilities to agents \u2014 read-only view state, view-session actions (pcb3d/pcb/schematic/workspace commands), selection inspection/control, placement and routing proposal generation (the shared layout candidate), project-history inspection (the operation timeline); never manufacturing qualification/release, raw process execution, direct state replacement, generic database/file mutation or unreviewed Tier 2 apply; contextual discovery (no 3D tools without a PCB/3D surface, no routing tools without a board, no mutation proposals to a viewer); exposure-count gates derived from the registry, never hard-coded.",
-  "updatedAt": "2026-09-10T02:05:00-04:00"
+  "nextAction": "B17 validation: write ui-negative-tripwires.md, browser evidence, test-and-validation-report.md, changed-files.md, unknowns-and-owner-decisions.md, final-verdict.md; full suite + generators + benchmark-quality green (resolve or record the two pre-existing branch failures found by the B17-F broad run: b16-0-8 raw-route baseline for POST /api/pcb-sync stale since f6b9390; b16-0-22 pcb-sync GET unknown boardId 422 vs 404); PR #7 ready → CI → normal merge → fast-forward main → ledger → B18.",
+  "updatedAt": "2026-09-10T03:05:00-04:00"
 }

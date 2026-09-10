@@ -13,7 +13,7 @@ import { useEffect, useRef } from "react";
 import type { ProjectRole } from "@/app/lib/engineering/types";
 import { schematicCommands, schematicInitialState, schematicViewProbe, type SchematicFamily, type SchematicProbeSources, type SchematicViewState, type SheetPoint } from "@/app/lib/view-session/schematic";
 import type { ViewTarget } from "@/app/lib/view-session/targets";
-import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult } from "@/app/lib/view-session/types";
+import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
 import { useViewSession, type ViewCommandOk, type ViewCommandRefusal } from "@/app/components/view-session/useViewSession";
 
 export interface SchematicViewSessionInput {
@@ -39,6 +39,8 @@ export interface SchematicViewSession {
   command: (commandId: string, payload: unknown) => Promise<SchematicViewResult>;
   dispatch: (envelope: ViewCommandEnvelope) => Promise<ViewCommandResult<SchematicViewState>>;
   sessionId: string;
+  /** [B17-F] the session identity the view-session bridge registers (labels for tracing; never authority). */
+  identity: ViewSessionIdentity;
   fitPage: () => void;
   zoomBy: (factor: number) => void;
   focus: (target: ViewTarget) => Promise<SchematicViewResult>;
@@ -107,6 +109,7 @@ export function useSchematicViewSession(input: SchematicViewSessionInput): Schem
     command,
     dispatch: session.dispatch,
     sessionId: session.sessionId,
+    identity: session.identity,
     fitPage: () => fire("schematic.fit-page", null),
     zoomBy: (factor) => fire("schematic.zoom", { factor }),
     focus: (target) => command("schematic.focus", { target }),

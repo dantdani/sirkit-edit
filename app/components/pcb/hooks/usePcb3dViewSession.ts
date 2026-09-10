@@ -15,7 +15,7 @@
 import type { ProjectRole } from "@/app/lib/engineering/types";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import { boardGeometryProbe, pcb3dCommands, pcb3dInitialState, type Pcb3dViewState } from "@/app/lib/view-session/pcb3d";
-import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult } from "@/app/lib/view-session/types";
+import type { ViewCommandDescriptor, ViewCommandEnvelope, ViewCommandResult, ViewSessionIdentity } from "@/app/lib/view-session/types";
 import { browserPreferenceStore, useViewSession } from "@/app/components/view-session/useViewSession";
 
 const PREFERENCE_PREFIX = "sirkit.workspace.pcb3d.";
@@ -40,6 +40,8 @@ export interface Pcb3dViewSession {
   setOpen: (open: boolean) => void;
   toggle: () => void;
   sessionId: string;
+  /** [B17-F] the session identity the view-session bridge registers (labels for tracing; never authority). */
+  identity: ViewSessionIdentity;
 }
 
 type Deps = { board: PcbBoard | null };
@@ -64,5 +66,5 @@ export function usePcb3dViewSession(input: Pcb3dViewSessionInput): Pcb3dViewSess
   };
   const setOpen = (open: boolean): void => { void command(open ? "pcb3d.open" : "pcb3d.close", null); };
   const toggle = (): void => { void command(session.view.open ? "pcb3d.close" : "pcb3d.open", null); };
-  return { view: session.view, viewRevision: session.viewRevision, command, dispatch: session.dispatch, setOpen, toggle, sessionId: session.sessionId };
+  return { view: session.view, viewRevision: session.viewRevision, command, dispatch: session.dispatch, setOpen, toggle, sessionId: session.sessionId, identity: session.identity };
 }

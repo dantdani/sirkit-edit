@@ -22,6 +22,7 @@
  * results are digest-stable and replayable.
  */
 
+import { inspectProjectTimeline, inspectViewState, type CapturedViewContext } from "../agent/view-context";
 import type { SelectionRef } from "../pcb/edit/commands";
 import { getItems } from "../pcb/selection-queries";
 import { buildAIPcbSnapshot } from "../pcb/ai/snapshot";
@@ -63,6 +64,9 @@ export interface ReadBindingResources {
   fabPreset?: { preset: FabPreset; ref: ConsumedResourceRef };
   drcPreset?: { preset: DrcPreset; ref: ConsumedResourceRef };
   netlist?: { netlist: PcbNetlist; ref: ConsumedResourceRef };
+  /** [B17-F] the captured view context (read tools answer from it; nothing here is engineering state). */
+  viewState?: { view: CapturedViewContext; ref: ConsumedResourceRef };
+  projectTimeline?: { view: CapturedViewContext; ref: ConsumedResourceRef };
 }
 
 export function consumedRef(envelope: ReadAuthorityResourceEnvelope): ConsumedResourceRef {
@@ -100,6 +104,29 @@ function withoutTiming<T extends Record<string, unknown>>(value: T, keys: string
 // ─── The allowlist ───────────────────────────────────────────────────────────
 
 export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.freeze([
+  {
+    // [B17-F] read-only VIEW state of every open editor surface, from the run's captured view context.
+    bindingId: "read.view-state", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.view.read-state",
+    module: "app/lib/agent/view-context.ts", symbol: "inspectViewState",
+    requiredResources: ["canonical-state", "view-state-snapshot"],
+    invoke: (args, resources) => {
+      if (!resources.viewState) throw new Error("VIEW_RESOURCE_ABSENT");
+      // Inspection provenance only — view state is never engineering state or authority.
+      return { report: inspectViewState(resources.viewState.view, { editor: args.editor }), pinned: { view: resources.viewState.ref } };
+    },
+  },
+  {
+    // [B17-F] the project operation timeline (both authoritative histories referenced, never replaced).
+    bindingId: "read.project-timeline", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.project.history-inspect",
+    module: "app/lib/agent/view-context.ts", symbol: "inspectProjectTimeline",
+    requiredResources: ["canonical-state", "project-timeline-snapshot"],
+    invoke: (args, resources) => {
+      if (!resources.projectTimeline) throw new Error("TIMELINE_RESOURCE_ABSENT");
+      return { report: inspectProjectTimeline(resources.projectTimeline.view, { limit: args.limit }), pinned: { timeline: resources.projectTimeline.ref } };
+    },
+  },
   {
     bindingId: "read.canonical-revision", bindingVersion: "1.1.0", kind: "read",
     toolId: "sirkit.project.canonical-revision-inspect",

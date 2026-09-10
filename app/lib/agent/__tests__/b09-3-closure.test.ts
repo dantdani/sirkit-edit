@@ -16,6 +16,7 @@ import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { discoverTools } from "../../engineering/tool-discovery";
 import { canonicalJson } from "../../engineering/stable";
 import { createEmptyBoard } from "../../pcb/types";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const SCHEMATIC: SchematicState = { components: [{ id: "r1", type: "resistor", x: 100, y: 100, rotation: 0, value: "10k" }], wires: [] };
 const MARK = { lineageId: "lin1-1234567890abcdef", headSequence: 1, canonicalStateDigest: "eng1-1234567890abcdef" };
@@ -160,7 +161,7 @@ describe("B09.3 §B — the registered resource path is the ONLY read path (R3)"
 
   it("the static exposed registry remains the exact static set (ELEVEN distinct ids since B14)", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
   });
 });
 
@@ -222,7 +223,7 @@ describe("B09.3 §C — semantic provider-schema validation (R2)", () => {
 
   it("all exposed schemas keep rendering deterministically for BOTH providers", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed).toHaveLength(12); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
     const render = () => {
       const declarations = buildAgentToolDeclarations(exposed).declarations;
       return canonicalJson(declarations.map((declaration) => ({
@@ -274,7 +275,7 @@ describe("B09.3 §D — catalog and generated runtime truth (R4)", () => {
     };
     expect(manifest.schema).toBe("sirkit.agent-exposed-tool-manifest.v3");
     const exposed = manifest.tools.filter((tool) => tool.staticallyExposed);
-    expect(exposed).toHaveLength(12); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
     for (const tool of exposed.filter((entry) => entry.operationClass === "read")) {
       // [B10] reads are CONDITIONAL on the editorContext's published,
       // validated working-copy resources — never unconditional, never

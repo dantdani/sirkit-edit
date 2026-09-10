@@ -24,6 +24,8 @@ import { createAgentToolGateway } from "../gateway";
 import { runAgentLoop } from "../loop";
 import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentStep, type ProviderAgentAdapter } from "../contracts";
 import { AGENT_SYSTEM_PROMPT } from "../../prompts";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const PCB_TOOL = "sirkit.pcb.propose-bounded-edit";
 
@@ -57,27 +59,15 @@ function invokePcb(args: Record<string, unknown>, context = assemble().context) 
 // ─── K1–K3: exposure count, exact id set, nothing mutating exposed ───────────
 
 describe("B15.3 §K1–3 — exposure", () => {
-  it("exactly 12 agent-exposed tools with the exact id set", () => {
+  it("exactly the intentional agent-exposed tools with the exact id set", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed).map((descriptor) => descriptor.toolId).sort();
-    expect(exposed).toEqual([
-      "sirkit.component-authority.inspect",
-      "sirkit.manufacturing.readiness-inspect",
-      "sirkit.pcb.board-inspect",
-      "sirkit.pcb.propose-bounded-edit",
-      "sirkit.pcb.revision-inspect",
-      "sirkit.project.canonical-revision-inspect",
-      "sirkit.schematic.inspect",
-      "sirkit.schematic.propose-component-replacement",
-      "sirkit.schematic.propose-tier1-edit",
-      "sirkit.selection.inspect",
-      "sirkit.validation.connectivity-verify",
-      "sirkit.validation.drc-run",
-    ]);
+    // [B17-F] the exact set is the ONE reviewed intentional list (agent-exposure.ts).
+    expect(exposed).toEqual([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]);
   });
 
   it("no exposed tool is mutate/destructive/release/apply-class, and the PCB tool is propose/proposal-artifact only", () => {
     for (const descriptor of sirkitToolRegistry().list().filter((item) => item.agentExposed)) {
-      expect(["read", "propose"], descriptor.toolId).toContain(descriptor.operationClass);
+      expect(AGENT_EXPOSABLE_OPERATION_CLASSES, descriptor.toolId).toContain(descriptor.operationClass);
     }
     const pcb = sirkitToolRegistry().get(PCB_TOOL, "1.0.0")!;
     expect(pcb.operationClass).toBe("propose");

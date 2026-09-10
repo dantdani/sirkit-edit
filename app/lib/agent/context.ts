@@ -38,6 +38,9 @@ import { getItems } from "../pcb/selection-queries";
 import { proveAgentNetlist, type AgentNetlistLogical } from "./netlist-validation";
 import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../engineering/component-authority";
 import type { AgentActor, AgentRunContext, PcbProposalBasis } from "./contracts";
+import { validateCapturedViewContext, viewContextDigest, viewProjectStates, type CapturedViewContext } from "./view-context";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "../engineering/agent-exposure";
+import type { ToolSelectionKind } from "../engineering/tool-registry";
 
 /** [B13] SERVER-OWNED authority records — the shape the /api/chat loader
  *  hands the assembler. It is NEVER derived from the request body. */
@@ -159,6 +162,13 @@ export interface AssembleAgentContextInput {
    *  identity; absent ⇒ the local-only build actor (production always supplies
    *  it because the local-only path is impossible under production). */
   verifiedActor?: VerifiedRunPrincipal;
+  /** [B17-F] the client-captured view context (`sirkit.view-context.v1`):
+   *  the open editor surfaces, each view session's id/revision/bounded state,
+   *  the project operation timeline. Exact-key validated and bounded here;
+   *  malformed input withholds ONLY the view resources and view tools. It is
+   *  never authority — it decides which view tools exist and which revision
+   *  a view command expects. */
+  view?: unknown;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -436,6 +446,20 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     }
   }
 
+  // [B17-F] the captured view context: validated (exact keys, bounded), never
+  // authority. Its surfaces become `<editor>-surface` project states so 3D
+  // tools are not advertised without a 3D surface, and its selection kinds
+  // feed selection-gated discovery. Malformed ⇒ withheld with a warning.
+  let view: CapturedViewContext | null = null;
+  if (input.view !== undefined && input.view !== null) {
+    const validated = validateCapturedViewContext(input.view);
+    if (validated.ok) view = validated.view;
+    else warnings.push(`The view context was withheld: ${validated.reason.slice(0, 160)}. View and history tools are unavailable for this run.`);
+  }
+  const viewDigest = view ? viewContextDigest(view) : null;
+  for (const state of viewProjectStates(view)) projectState.push(state);
+  const selectedKinds: ToolSelectionKind[] = [...new Set((selection?.refs ?? []).map((ref) => ref.kind))].sort() as ToolSelectionKind[];
+
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -456,8 +480,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     // revision and the schematic-state digest are DIFFERENT meanings and
     // are never conflated with the session lineage).
     lineageId: effectiveHeadMark?.lineageId ?? "",
-    currentEditor: "", // agent channel: no single editor surface pins tools
-    selectedKinds: [],
+    currentEditor: "", // agent channel: no single editor surface pins tools — the captured SURFACES gate them (B17-F)
+    selectedKinds,
     projectState,
     // [B13] durable-server-board authority is advertised ONLY when the
     // server-owned component-authority resource was loaded and verified.
@@ -465,7 +489,9 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     providerCapabilities: {
       supportsJsonSchema: input.providerSupportsJsonSchema ?? true,
       toolNameMaxLength: 64,
-      maxToolCount: 16,
+      // [B17-F] derived from the reviewed intentional exposure set (never a
+      // hard-coded count): every intentional tool fits, with headroom.
+      maxToolCount: Math.max(16, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length + 4),
     },
     // B09 ceiling: reads + sealed proposals; never mutate/destructive/release.
     riskCeiling: "propose",
@@ -495,6 +521,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       componentAuthority,
       componentAuthorityDigest,
       pcbProposalBasis,
+      view,
+      viewDigest,
     },
     warnings,
   };
@@ -566,6 +594,16 @@ export function buildAgentResourceBundle(context: AgentRunContext): ReadResource
       freshness: "current",
       content: { records: context.componentAuthority.records, candidates: context.componentAuthority.candidates },
     }));
+  }
+  // [B17-F] the captured view context — sealed as the view-state snapshot
+  // (what the editors show) and, when it carries one, the project timeline
+  // snapshot. Both are pinned to their assembly-time digest and to the
+  // canonical revision; neither is engineering state.
+  if (context.view && context.viewDigest) {
+    auxiliary.push(envelope(context, "view-state-snapshot", `view:${context.projectId}`, context.viewDigest, context.view));
+    if (context.view.timeline) {
+      auxiliary.push(envelope(context, "project-timeline-snapshot", `timeline:${context.projectId}`, context.viewDigest, context.view));
+    }
   }
   return buildReadResourceBundle(canonicalState, auxiliary);
 }

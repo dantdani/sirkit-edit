@@ -72,6 +72,9 @@ jobs:
           app/lib/engineering/__tests__/action-registry.test.ts
           app/lib/engineering/__tests__/b17-a-control-inventory.test.ts
           app/lib/view-session
+          app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts
+          app/lib/agent/__tests__/b17-f-view-tools.test.ts
+          app/lib/agent/__tests__/b17-f-view-session-bridge.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()

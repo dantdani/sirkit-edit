@@ -21,6 +21,7 @@
  */
 
 import { ToolRegistry, type JsonSchema, type ToolDescriptor } from "./tool-registry";
+import { VIEW_TOOL_ENUMS } from "../agent/view-context";
 
 const OWNER = "ai-control-plane";
 
@@ -33,6 +34,9 @@ const obj = (properties: Record<string, unknown> = {}, required: string[] = []):
 
 const OUT_REPORT: JsonSchema = obj({ report: { type: "object" } }, ["report"]);
 const OUT_RESULT: JsonSchema = obj({ result: { type: "object" } }, ["result"]);
+/** [B17-F] a report plus the sealed resource refs it was answered from (inspection provenance, never authority). */
+const OUT_PINNED_REPORT: JsonSchema = obj({ report: { type: "object" }, pinned: { type: "object" } }, ["report", "pinned"]);
+
 
 /** Shared invariants for canonical-executor mutations (B03 slice). */
 const canonicalMutation = {
@@ -65,6 +69,40 @@ const readDefaults = {
   lifecycle: "active" as const,
   requiredSelectionKinds: [] as const,
   owner: OWNER,
+};
+
+// ── [B17-F] view-session tools: bus commands the BROWSER executes; never engineering state ──
+const ALL_ROLES = ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"] as const;
+/** A semantic view target (targets.ts): a stable identity or the versioned selection — never a screen coordinate. */
+const TARGET: JsonSchema = obj({
+  kind: { type: "string", enum: ["component", "object", "net", "point", "selection", "primary"], description: "component: by reference designator or id (ref); object: one board object (objectKind + objectId, or pad: footprintId + padNumber); net: by netId or name; point: world units (x, y); selection / primary: the user's CURRENT selection — refused when stale or empty" },
+  ref: { type: "string" },
+  objectKind: { type: "string", enum: ["footprint", "track", "via", "zone", "text", "dimension", "pad"] },
+  objectId: { type: "string" },
+  footprintId: { type: "string" },
+  padNumber: { type: "string" },
+  netId: { type: "number" },
+  name: { type: "string" },
+  x: { type: "number" },
+  y: { type: "number" },
+}, ["kind"]);
+const OUT_VIEW_COMMAND: JsonSchema = obj({ dispatched: { type: "boolean" }, editor: { type: "string" }, commandId: { type: "string" }, expectedViewRevision: { type: "number" } }, ["dispatched", "editor", "commandId", "expectedViewRevision"]);
+const viewSession = {
+  ...readDefaults,
+  category: "view" as const,
+  operationClass: "view-session" as const,
+  sideEffects: "session-state" as const,
+  requiredCapability: "read_project" as const,
+  requiredRoles: ALL_ROLES,
+  requiredAuthority: ["none"] as const,
+  discovery: "discoverable" as const,
+  callability: "callable" as const,
+  agentExposed: true,
+  audit: "event-log" as const,
+  timeoutMs: 5_000,
+  validationStrategy: "server: registry command list + captured surface + role + the bus command's own exact payload validation; browser: the bus's stale-revision rule, role gate and session scoping",
+  verificationStrategy: "the browser bus settles the command and reports the resulting view revision to the user; the model receives only that the request was dispatched",
+  versionNotes: "B17-F: a bus-command tool over the B17-B view-session bus.",
 };
 
 export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
@@ -411,39 +449,41 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Proposals (real engines; propose-class, never auto-apply) ─────────────
   {
     ...readDefaults,
-    toolId: "sirkit.placement.propose", version: "1.0.0",
-    owningCommandId: "placement.preview-api",
-    title: "Propose placement candidates",
-    description: "Create deterministic hard-validated placement candidates without mutating the board.",
+    toolId: "sirkit.placement.propose", version: "1.1.0",
+    agentExposed: true, // B17-F — the shared revision-bound layout candidate; the HUMAN applies it in the placement panel
+    owningCommandId: "placement.auto",
+    title: "Propose a placement candidate",
+    description: "Run the engineering placement engine over the CURRENT board and produce a revision-bound placement candidate (sirkit.layout-candidate.v1) that appears in the user's placement panel for review. Receiving the candidate changes nothing; the user applies or discards it explicitly. Optionally restrict to selected footprint ids.",
     category: "placement", operationClass: "propose",
-    inputSchema: obj({ envelopeScale: { type: "number", minimum: 1 } }), outputSchema: OUT_RESULT,
+    inputSchema: obj({ instanceIds: { type: "array", items: { type: "string" }, description: "Restrict the search to these footprint ids; absent = the whole board" }, candidateCount: { type: "number", description: "2–8 (enforced by the service)" }, maxIterations: { type: "number", description: "1–2000 (enforced by the service)" } }), outputSchema: OUT_RESULT,
     sideEffects: "proposal-artifact",
-    requiredCapability: "run_automation", requiredRoles: ["pcb_editor", "project_admin"],
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
-    binding: { status: "bound-proposal", module: "app/lib/pcb/placement/engine.ts", symbol: "runEngineeringPlacement" },
+    binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/layout-candidate.ts", symbol: "runPlacementCandidate" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 120_000, budgetClass: "long-running",
-    validationStrategy: "candidate hard-constraint validation", verificationStrategy: "only the user-facing workflow may apply a candidate",
-    sourceEvidence: ["app/lib/pcb/placement/engine.ts", "app/lib/pcb/ai/pcb-tool-service.ts"],
-    versionNotes: "Proposal only; apply remains the editor's decision.",
+    validationStrategy: "one options builder (placementRunOptions); candidate hard-constraint validation; digest-sealed, pinned to the board revision", verificationStrategy: "applyLayoutCandidate re-verifies revision, hashes and protected copper at apply — the user-facing workflow only",
+    sourceEvidence: ["app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/placement/engine.ts", "app/components/pcb/PlacementSetup.tsx"],
+    versionNotes: "1.1.0 (B17-F): exposed as the shared candidate producer; apply remains the editor's decision.",
   },
   {
     ...readDefaults,
-    toolId: "sirkit.routing.propose", version: "1.0.0",
+    toolId: "sirkit.routing.propose", version: "1.1.0",
+    agentExposed: true, // B17-F — the shared revision-bound routing candidate; the HUMAN applies it in the routing panel
     owningCommandId: "routing.autoroute",
-    title: "Propose routing preview",
-    description: "Preview deterministic routing for incomplete nets; never commits geometry.",
+    title: "Propose a routing candidate",
+    description: "Run the bounded local autorouter over the CURRENT board (optionally only the given nets) and produce a revision-bound routing candidate (sirkit.layout-candidate.v1) that the user previews as a ghost and applies or discards explicitly. Never commits copper.",
     category: "routing", operationClass: "propose",
-    inputSchema: obj({ netIds: { type: "array", items: { type: "number" } } }), outputSchema: OUT_RESULT,
+    inputSchema: obj({ netIds: { type: "array", items: { type: "number" }, description: "Route only these nets (a reroute); absent = every incomplete net" } }), outputSchema: OUT_RESULT,
     sideEffects: "proposal-artifact",
-    requiredCapability: "run_automation", requiredRoles: ["pcb_editor", "project_admin"],
+    requiredCapability: "read_project", requiredRoles: ["pcb_editor", "project_admin"],
     requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
-    binding: { status: "bound-proposal", module: "app/lib/pcb/routing/service.ts", symbol: "ProfessionalRoutingService" },
+    binding: { status: "bound-proposal", module: "app/lib/pcb/candidates/routing-server.ts", symbol: "runRoutingCandidate" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 180_000, budgetClass: "long-running",
-    validationStrategy: "preflight + preview validation", verificationStrategy: "connectivity/DRC verification of previews",
-    sourceEvidence: ["app/lib/pcb/routing/service.ts", "app/lib/pcb/ai/pcb-tool-service.ts"],
-    versionNotes: "Proposal only.",
+    validationStrategy: "the same completeAutoroute service as the autoroute route (DSN preflight, SES parse, boundary + monotonic acceptance); copper restricted to the requested nets; digest-sealed, revision-pinned", verificationStrategy: "applyLayoutCandidate re-verifies revision, scope and provenance at apply — the user-facing workflow only",
+    sourceEvidence: ["app/lib/pcb/candidates/routing-server.ts", "app/lib/pcb/autoroute/freerouting-pass-executor.ts", "app/components/pcb/AutorouteSetup.tsx"],
+    versionNotes: "1.1.0 (B17-F): exposed as the shared candidate producer over the shared pass executor.",
   },
   {
     ...readDefaults,
@@ -583,42 +623,139 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     sourceEvidence: ["app/api/pcb/release/route.ts", "app/lib/pcb/fab/release-gate.ts"],
     versionNotes: "Registered so the boundary is explicit: release is not, and must not become, agent-executable.",
   },
-  // ── View / session controls — UI-session only ─────────────────────────────
+  // ── [B17-F] View / session tools — registry-backed bus commands the browser executes ──
   {
     ...readDefaults,
-    toolId: "sirkit.view.canvas-navigation", version: "1.0.0",
+    toolId: "sirkit.view.read-state", version: "1.0.0",
+    agentExposed: true, // B17-F — read-only view state from the captured view context
     owningCommandId: "view.canvas-navigation",
-    title: "Canvas navigation (session)",
-    description: "Zoom/fit/pan and layer-visibility session controls; non-authoritative viewport state only.",
-    category: "view", operationClass: "view-session",
-    inputSchema: obj({ action: { type: "string", enum: ["zoom-fit", "zoom-selection", "toggle-grid"] } }, ["action"]), outputSchema: OUT_RESULT,
-    sideEffects: "session-state",
-    requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
+    title: "Read the editors' view state",
+    description: "What the user's editors currently SHOW (open surfaces, each editor's view state and its view revision, the 3D scene state). Read-only; never engineering state. Use the returned viewRevision when issuing view commands.",
+    category: "view", operationClass: "read",
+    inputSchema: obj({ editor: { type: "string", enum: VIEW_TOOL_ENUMS.editors, description: "Restrict to one editor" } }), outputSchema: OUT_PINNED_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
     requiredProjectState: ["board-present"], requiredAuthority: ["none"],
-    binding: { status: "unbound", notes: "UI/session-only. No external session adapter exists; PCBViewAdapter is an editor-internal seam, not a shared runtime." },
-    discovery: "discoverable", callability: "not-callable",
-    timeoutMs: 1_000,
-    validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["app/components/pcb/PcbToolbar.tsx", "app/lib/pcb/ai/pcb-tool-service.ts"],
-    versionNotes: "Session control; becomes callable only if a real external session adapter ships.",
+    binding: { status: "bound-read", module: "app/lib/agent/view-context.ts", symbol: "inspectViewState" },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 2_000,
+    validationStrategy: "the captured sirkit.view-context.v1 snapshot is exact-key validated and bounded at run assembly", verificationStrategy: "pinned to the sealed view-state-snapshot resource digest",
+    sourceEvidence: ["app/lib/agent/view-context.ts", "app/lib/agent/view-session-bridge.ts"],
+    versionNotes: "B17-F.",
   },
   {
     ...readDefaults,
-    toolId: "sirkit.view.pcb-3d", version: "1.0.0",
-    owningCommandId: "view.pcb-3d-control",
-    title: "3D view controls (session)",
-    description: "3D camera, focus, and visibility session controls; never engineering state.",
-    category: "view", operationClass: "view-session",
-    inputSchema: obj({ action: { type: "string" } }, ["action"]), outputSchema: OUT_RESULT,
-    sideEffects: "session-state",
-    requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
+    toolId: "sirkit.project.history-inspect", version: "1.0.0",
+    agentExposed: true, // B17-F — the project operation timeline (read-only)
+    owningCommandId: "project.operation-timeline",
+    title: "Inspect the project operation timeline",
+    description: "The ordered record of schematic and PCB operations in this session (commits, undo/redo, hydration, restores) with their store, label and actor, and whether a project-level undo is currently eligible. Read-only; undo itself stays a human action.",
+    category: "project", operationClass: "read",
+    inputSchema: obj({ limit: { type: "number", description: "most recent entries to return, 1–50" } }), outputSchema: OUT_PINNED_REPORT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
     requiredProjectState: ["board-present"], requiredAuthority: ["none"],
-    binding: { status: "unbound", notes: "Component-local state; no session adapter." },
-    discovery: "discoverable", callability: "not-callable",
-    timeoutMs: 1_000,
-    validationStrategy: "n/a (unbound)", verificationStrategy: "n/a (unbound)",
-    sourceEvidence: ["app/components/pcb/PcbPreview3D.tsx"],
-    versionNotes: "UI-only.",
+    binding: { status: "bound-read", module: "app/lib/agent/view-context.ts", symbol: "inspectProjectTimeline" },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 2_000,
+    validationStrategy: "bounded timeline snapshot validated at run assembly", verificationStrategy: "pinned to the sealed project-timeline-snapshot resource digest",
+    sourceEvidence: ["app/lib/project/operation-timeline.ts", "app/lib/agent/view-context.ts"],
+    versionNotes: "B17-F.",
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.view.pcb3d", version: "1.0.0",
+    owningCommandId: "view.pcb-3d-control",
+    title: "Control the 3D view",
+    description: "Open/close the 3D view, camera presets (top/bottom/iso), fit, reset, focus a component / the selection / a net, show or hide scene layers (top and bottom silkscreen independently, mask, copper, zones, vias, footprints, refdes, substrate), set the visual finish. The command runs on the user's 3D view session; a target without geometry is refused (model/geometry unavailable), never faked.",
+    inputSchema: obj({
+      action: { type: "string", enum: ["open", "close", "camera-preset", "fit-board", "reset-camera", "focus-component", "focus-selection", "focus-net", "set-layer-visible", "toggle-layer", "set-finish", "read-state"] },
+      preset: { type: "string", enum: VIEW_TOOL_ENUMS.pcb3dPresets },
+      ref: { type: "string", description: "component reference designator or id (focus-component)" },
+      netId: { type: "number" }, name: { type: "string", description: "net name (focus-net)" },
+      layer: { type: "string", enum: VIEW_TOOL_ENUMS.pcb3dLayers }, visible: { type: "boolean" },
+      finish: { type: "string" },
+    }, ["action"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: ["board-present", "pcb3d-surface"],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb3d.ts", symbol: "pcb3dCommands" },
+    viewCommands: ["pcb3d.open", "pcb3d.close", "pcb3d.camera-preset", "pcb3d.fit-board", "pcb3d.reset-camera", "pcb3d.focus-component", "pcb3d.focus-selection", "pcb3d.focus-net", "pcb3d.set-layer-visible", "pcb3d.toggle-layer", "pcb3d.set-finish", "pcb3d.read-state"],
+    sourceEvidence: ["app/lib/view-session/pcb3d.ts", "app/components/pcb/hooks/usePcb3dViewSession.ts", "app/lib/agent/view-context.ts"],
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.view.canvas-navigation", version: "1.1.0",
+    owningCommandId: "view.canvas-navigation",
+    title: "Navigate a canvas or open an editor tab",
+    description: "Fit the board/page, zoom by a bounded factor or to a scale, pan to or focus a semantic target (component by refdes/id, object, net, world point, or the user's current selection) on the PCB or schematic canvas; open a workspace editor tab. Relative commands refuse a stale view revision; selection-relative targets refuse a stale or empty selection.",
+    inputSchema: obj({
+      editor: { type: "string", enum: ["pcb", "schematic", "workspace"] },
+      action: { type: "string", enum: ["fit", "fit-selection", "zoom", "zoom-to", "pan-to", "focus", "open-editor"] },
+      target: TARGET,
+      factor: { type: "number", description: "zoom: relative factor 0.25–4 (the bus refuses others)" },
+      scale: { type: "number", description: "zoom-to: pcb px/mm or schematic zoom" },
+      tab: { type: "string", enum: VIEW_TOOL_ENUMS.workspaceTabs, description: "open-editor" },
+    }, ["editor", "action"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: [],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
+    viewCommands: ["pcb.fit-board", "pcb.fit-selection", "pcb.zoom", "pcb.zoom-to", "pcb.pan-to", "pcb.focus", "schematic.fit-page", "schematic.zoom", "schematic.zoom-to", "schematic.pan-to", "schematic.focus", "workspace.open-editor"],
+    sourceEvidence: ["app/lib/view-session/pcb.ts", "app/lib/view-session/schematic.ts", "app/lib/view-session/workspace.ts", "app/lib/agent/view-context.ts"],
+    versionNotes: "1.1.0 (B17-F): bound to the view-session bus (was an unbound schema declaration).",
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.selection.control", version: "1.0.0",
+    owningCommandId: "view.selection",
+    category: "selection",
+    title: "Change or highlight the selection",
+    description: "Replace, add to, remove from or clear the PCB selection (by refs or a semantic target), select every copper item on a net, highlight a net; select or highlight on the schematic. Selection is view state (never engineering state); relative changes refuse a stale view revision.",
+    inputSchema: obj({
+      editor: { type: "string", enum: ["pcb", "schematic"] },
+      action: { type: "string", enum: ["select", "add", "remove", "clear", "select-net", "highlight-net", "clear-highlight"] },
+      target: TARGET,
+      refs: { type: "array", items: obj({ kind: { type: "string", enum: ["footprint", "track", "via", "zone", "text", "dimension", "pad"] }, id: { type: "string" }, footprintId: { type: "string" }, padNumber: { type: "string" } }, ["kind"]) },
+      netId: { type: "number" }, name: { type: "string" },
+    }, ["editor", "action"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: [],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
+    viewCommands: ["pcb.select", "pcb.select-add", "pcb.select-remove", "pcb.clear-selection", "pcb.select-net", "pcb.highlight-net", "pcb.clear-highlight", "schematic.select", "schematic.clear-selection", "schematic.highlight-net", "schematic.clear-highlight"],
+    sourceEvidence: ["app/lib/view-session/pcb.ts", "app/lib/view-session/schematic.ts", "app/lib/view-session/targets.ts"],
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.view.layers", version: "1.0.0",
+    owningCommandId: "view.layer-visibility",
+    title: "Layer visibility, active layer and grid",
+    description: "Show/hide a PCB layer, toggle it, make a copper layer active, isolate one layer, show every copper layer, show/hide or toggle the grid. View state only; toggles refuse a stale view revision; inner layers refuse on a 2-layer board.",
+    inputSchema: obj({
+      action: { type: "string", enum: ["set-visible", "toggle", "set-active", "isolate", "show-copper", "set-grid", "toggle-grid"] },
+      layer: { type: "string", enum: VIEW_TOOL_ENUMS.pcbLayers }, visible: { type: "boolean" },
+    }, ["action"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: ["board-present", "pcb-surface"],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
+    viewCommands: ["pcb.set-layer-visible", "pcb.toggle-layer", "pcb.set-active-layer", "pcb.isolate-layer", "pcb.show-copper", "pcb.set-grid", "pcb.toggle-grid"],
+    sourceEvidence: ["app/lib/view-session/pcb.ts", "app/components/pcb/LayerPanel.tsx"],
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.view.reveal-finding", version: "1.0.0",
+    owningCommandId: "view.reveal-finding",
+    title: "Reveal a DRC or routing finding",
+    description: "Frame and flash a DRC violation (drc:<violation id>) or an unresolved routing connection (routing:<index>) on the PCB canvas. The schematic editor produces no ERC findings today and refuses honestly.",
+    inputSchema: obj({ editor: { type: "string", enum: ["pcb", "schematic"] }, findingId: { type: "string" } }, ["editor", "findingId"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: ["board-present", "pcb-surface"],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
+    viewCommands: ["pcb.reveal-finding", "schematic.reveal-finding"],
+    sourceEvidence: ["app/lib/view-session/pcb.ts", "app/components/pcb/DrcPanel.tsx"],
+  },
+  {
+    ...viewSession,
+    toolId: "sirkit.view.measure", version: "1.0.0",
+    owningCommandId: "view.measure",
+    title: "Measure between stable objects or points",
+    description: "Measure the distance between two stable targets (components by refdes, objects, the primary selected item, or world points) on the PCB without creating a dimension; the readout appears in the user's toolbar. A real dimension is only ever created by the user's dimension tool.",
+    inputSchema: obj({ action: { type: "string", enum: ["measure", "clear"] }, a: TARGET, b: TARGET }, ["action"]), outputSchema: OUT_VIEW_COMMAND,
+    requiredProjectState: ["board-present", "pcb-surface"],
+    binding: { status: "bound-view-session", module: "app/lib/view-session/pcb.ts", symbol: "pcbCommands" },
+    viewCommands: ["pcb.measure", "pcb.clear-measurement"],
+    sourceEvidence: ["app/lib/view-session/pcb.ts", "app/components/pcb/PcbToolbar.tsx"],
   },
   // ── Schema-only / partial / UI-only / missing — registered, NOT callable ──
   {

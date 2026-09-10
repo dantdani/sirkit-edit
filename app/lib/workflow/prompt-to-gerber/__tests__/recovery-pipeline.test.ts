@@ -94,6 +94,7 @@ import { pcbBoardInstanceId, pcbDesignInstanceId } from "@/app/lib/pcb/board-ide
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import type { PcbSyncManufacturingSummary } from "@/app/api/pcb-sync/handler";
 import type { PcbSyncBoardRecord } from "@/app/lib/pcb-sync/types";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const RECORDING = recordingRequested();
 const QUALIFY_TIMEOUT_MS = RECORDING || liveRouterRequested() ? 900_000 : 60_000;
@@ -478,10 +479,10 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
   it("H.16 zero release execution through the agent loop: no qualification or release tool is agent-exposed or callable; the release action has no tool exposure and needs the administrator's release authorization", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed).toHaveLength(12);
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     // (sirkit.manufacturing.readiness-inspect is a READ that "never authorizes a release" — it stays exposed.)
     expect(exposed.filter((descriptor) => /\.release$|qualif/i.test(descriptor.toolId)).map((descriptor) => descriptor.toolId)).toEqual([]);
-    expect(exposed.every((descriptor) => descriptor.operationClass === "read" || descriptor.operationClass === "propose")).toBe(true);
+    expect(exposed.every((descriptor) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass))).toBe(true);
     const releaseTool = registry.list().find((descriptor) => descriptor.toolId === "sirkit.manufacturing.release");
     expect(releaseTool).toBeDefined();
     expect(releaseTool!.agentExposed).toBe(false);

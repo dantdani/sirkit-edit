@@ -10,6 +10,7 @@
  * can re-verify model-free. Shared by the artifact generator and the tests.
  */
 
+import type { CapturedViewContext } from "../agent/view-context";
 import { createEmptyBoard, type FootprintInstance, type PcbBoard, type Track, type Via } from "../pcb/types";
 import { getPreset as getDrcPreset } from "../pcb/drc/presets";
 import { FAB_PRESETS } from "../pcb/fab/presets";
@@ -53,6 +54,26 @@ export function replayFixtureBoard(): PcbBoard {
 const SCOPE = { tenantId: "tenant-fixture", projectId: "project-fixture", branchId: "main" } as const;
 
 /** Deterministic pinned bundle: canonical state + every auxiliary resource. */
+/** [B17-F] a deterministic captured view context: three surfaces, fixed session ids/revisions, a two-entry timeline. */
+export function replayFixtureViewContext(): CapturedViewContext {
+  return {
+    schema: "sirkit.view-context.v1",
+    surfaces: ["pcb", "pcb3d", "workspace"],
+    editors: {
+      pcb: { editor: "pcb", sessionId: "vs-fixture-pcb", viewRevision: 3, state: { camera: { kind: "fit-board", seq: 1 }, layers: { active: "F.Cu" }, grid: true, selection: { refs: [{ kind: "footprint", id: "u1" }], primary: { kind: "footprint", id: "u1" }, digest: "eng1-fixtureselection00" }, highlight: null, measurement: null } },
+      pcb3d: { editor: "pcb3d", sessionId: "vs-fixture-pcb3d", viewRevision: 1, state: { open: false, preset: "iso", finish: "green" } },
+      workspace: { editor: "workspace", sessionId: "vs-fixture-workspace", viewRevision: 2, state: { tab: "pcb", available: ["schematic", "pcb"] } },
+    },
+    timeline: {
+      entries: [
+        { seq: 1, at: 1_700_000_000_000, store: "schematic", kind: "hydrate", label: "Loaded project", actor: "system", head: { store: "schematic", entryCount: 0, digest: "eng1-fixtureschematic0" } },
+        { seq: 2, at: 1_700_000_001_000, store: "pcb", kind: "commit", label: "Move U1", actor: "human", head: { store: "pcb", historyId: "hist-fixture", headSequence: 1, entryCount: 1 }, ref: { transactionId: "tx-fixture-1" } },
+      ],
+      eligibleUndo: { ok: true, code: null, operation: { store: "pcb", kind: "commit", label: "Move U1", seq: 2 } },
+    },
+  };
+}
+
 export function replayFixtureBundle(): ReadResourceBundle {
   const canonicalState: CanonicalProjectState = {
     schemaVersion: "sirkit.engineering.v1",
@@ -115,6 +136,25 @@ export function replayFixtureBundle(): ReadResourceBundle {
         candidates: [{ componentId: "u2", mpn: "CAND-200", manufacturer: "Maybe Inc", displayText: "candidate from search" }],
       },
     }),
+    // [B17-F] the captured view context (what the editors show) and the project timeline it carries.
+    sealResourceEnvelope({
+      ...common,
+      resourceId: "res:view:fixture",
+      kind: "view-state-snapshot",
+      authoritySource: "local-working-copy",
+      sourceVersion: "view-fixture-1",
+      producer: "b17-f-fixture", producerVersion: "1.0.0",
+      content: replayFixtureViewContext(),
+    }),
+    sealResourceEnvelope({
+      ...common,
+      resourceId: "res:timeline:fixture",
+      kind: "project-timeline-snapshot",
+      authoritySource: "local-working-copy",
+      sourceVersion: "view-fixture-1",
+      producer: "b17-f-fixture", producerVersion: "1.0.0",
+      content: replayFixtureViewContext(),
+    }),
     sealResourceEnvelope({
       ...common,
       resourceId: "res:drc-rules:fixture",
@@ -150,6 +190,8 @@ export function replayFixtureBundle(): ReadResourceBundle {
 const FIXTURE_ARGS: Record<string, Record<string, unknown>> = {
   "sirkit.selection.inspect": { refs: [{ kind: "footprint", id: "u1" }, { kind: "track", id: "t1" }, { kind: "via", id: "v-dead" }] },
   "sirkit.component-authority.inspect": { componentIds: ["u1", "u2", "u3"] },
+  "sirkit.view.read-state": { editor: "pcb" },
+  "sirkit.project.history-inspect": { limit: 10 },
 };
 
 export async function buildReadReplayFixtures(): Promise<ReadReplayFixture[]> {

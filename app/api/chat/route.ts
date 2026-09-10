@@ -34,6 +34,8 @@ import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
 import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder";
+import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
+import { createFreeroutingPassExecutor } from "@/app/lib/pcb/autoroute/freerouting-pass-executor";
 
 export const CHAT_PROTOCOL_VERSION = 1;
 
@@ -46,7 +48,7 @@ export const EDITOR_CONTEXT_SCHEMA = "sirkit.editor-context.v1";
 /** [B10] exact allowed top-level keys — anything else (authority, actor,
  *  role, capability, approval, durable-board, release, idempotency claims,
  *  or the obsolete boardState contract) refuses the request. */
-const ALLOWED_BODY_KEYS = new Set(["provider", "messages", "scope", "schematicState", "schematicHeadMark", "editorContext"]);
+const ALLOWED_BODY_KEYS = new Set(["provider", "messages", "scope", "schematicState", "schematicHeadMark", "editorContext", "viewContext"]);
 const ALLOWED_EDITOR_CONTEXT_KEYS = ["schema", "scope", "board", "pcbRevisionId", "selection", "netlist", "schematicDigest", "authoritySource"] as const;
 /** [B15.3] optional nullable capture keys — shape-validated in the context
  *  assembler; absence only withholds the PCB proposal tool. */
@@ -88,6 +90,9 @@ interface ChatBody {
   schematicState?: unknown;
   schematicHeadMark?: unknown;
   editorContext?: unknown;
+  /** [B17-F] the captured view context (`sirkit.view-context.v1`) — exact-key
+   *  validated and bounded by the assembler; malformed ⇒ view tools withheld. */
+  viewContext?: unknown;
 }
 
 function parseHistory(value: unknown): Array<{ role: "user" | "assistant"; text: string }> {
@@ -248,6 +253,7 @@ export const POST = agentStreamRoute(
     editorSchematicDigest,
     pcbProposalBasis: editorPcbProposalBasis,
     verifiedActor,
+    view: body.viewContext,
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -302,6 +308,7 @@ export const POST = agentStreamRoute(
           pcbProposalBasis: editorPcbProposalBasis,
           componentAuthority: authority,
           verifiedActor,
+          view: body.viewContext,
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -319,6 +326,20 @@ export const POST = agentStreamRoute(
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
       : {}),
+    // [B17-F] the SAME local FreeRouting pass executor the autoroute route
+    // uses, bound to this request's signal and the tool's deadline; an
+    // unavailable runtime refuses the routing proposal truthfully.
+    routingExecutor: async ({ signal: toolSignal, timeoutMs }) => {
+      const runtimeInfo = await resolveFreeroutingRuntime();
+      if (!runtimeInfo.ok) return { ok: false, reason: `local routing engine unavailable: ${String(runtimeInfo.error).slice(0, 160)}` };
+      const controller = new AbortController();
+      for (const source of [signal, toolSignal]) {
+        if (!source) continue;
+        if (source.aborted) controller.abort();
+        else source.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+      return { ok: true, executor: createFreeroutingPassExecutor({ runtimeInfo, deadline: Date.now() + timeoutMs, signal: controller.signal }) };
+    },
   });
   const adapter = agentAdapterFor(provider);
   // [B11] every run produces ONE bounded, redacted, provider-neutral trace.

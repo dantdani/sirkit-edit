@@ -55,6 +55,10 @@ import {
 import type { LLMProviderId } from "@/app/lib/llm/types";
 import { performProviderSwitch, settleAgentRunFailure } from "@/app/lib/agent/run-consumer";
 import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
+import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
+import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
+import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
+import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
 import { createAutosaver, settleAutosaveForTransition, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
@@ -1205,6 +1209,7 @@ function SchematicEditor({
   onDeleteComponent,
   graph,
   viewScope,
+  viewSessionBridge,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -1240,6 +1245,8 @@ function SchematicEditor({
   };
   /** [B17-D] the project/branch the schematic view session is scoped to. */
   viewScope: { projectId: string; branchId: string };
+  /** [B17-F] the page-owned view-session bridge (the schematic surface registers while mounted). */
+  viewSessionBridge: ViewSessionBridge;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -1303,6 +1310,8 @@ function SchematicEditor({
     applyCamera: (next) => { setZoom(next.zoom); setPan(next.pan); },
     fitToPage,
   });
+  // [B17-F] the schematic surface exists for the agent while this editor is mounted.
+  useViewSessionBridge(viewSessionBridge, schematicView);
   const [schematicGoTo, setSchematicGoTo] = useState("");
   const [schematicViewNotice, setSchematicViewNotice] = useState<string | null>(null);
   /** Toolbar "Go to": select the component and frame it; a refusal is shown, never guessed around. */
@@ -2675,6 +2684,9 @@ export default function Home() {
   // the SAFE discriminator only; display grants nothing. Apply authority
   // lives inside PcbEditor (the PCB composition root), never here.
   const [pendingPcbProposal, setPendingPcbProposal] = useState<{ proposal: SealedPcbEditProposal; originRunId: string | null } | null>(null);
+  // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
+  // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
+  const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
 
   // B06.2/B07.2: pending schematic-history recovery decision (projection
   // conflict, corrupt durable history, or an identity-invalid projection
@@ -2803,6 +2815,22 @@ export default function Home() {
   const projectRef = useRef(project);
   // [B17-D] which editor tab is open is a `workspace.open-editor` view command; tab changes made elsewhere are mirrored.
   const workspaceView = useWorkspaceViewSession({ projectId: project?.id ?? "local", branchId: "main", actorId: "local", tab: view, available: WORKSPACE_TABS, applyTab: (tab) => setView(tab) });
+  // [B17-F] ONE page-owned view-session bridge: every live editor view session registers into it; send() captures
+  // one bounded view-context snapshot per chat request and server-validated view commands run through it.
+  const viewSessionBridgeRef = useRef<ViewSessionBridge | null>(null);
+  if (viewSessionBridgeRef.current === null) viewSessionBridgeRef.current = new ViewSessionBridge();
+  useViewSessionBridge(viewSessionBridgeRef.current, workspaceView);
+  // [B17-F] FIXTURE-RUNTIME diagnostic hook ONLY: when the server rendered the fixture-runtime banner (impossible in
+  // production — the runtime refuses there), the deterministic browser journey may drive the bridge directly, exactly
+  // as the chat page does with a server-validated request. The bridge grants nothing: the bus's own rules decide.
+  useEffect(() => {
+    if (typeof document === "undefined" || !document.querySelector('[data-testid="fixture-runtime-banner"]')) return;
+    const bridge = viewSessionBridgeRef.current!;
+    const host = window as unknown as { __sirkitViewBridge?: { capture(): ReturnType<ViewSessionBridge["capture"]>; execute(raw: unknown): ReturnType<ViewSessionBridge["execute"]> } };
+    // The SAME capture the chat request sends (surfaces + the project timeline) and the SAME execute path.
+    host.__sirkitViewBridge = { capture: () => bridge.capture(projectTimeline), execute: (raw) => bridge.execute(raw) };
+    return () => { delete host.__sirkitViewBridge; };
+  }, [projectTimeline]);
   useEffect(() => { projectRef.current = project; }, [project]);
   const liveStateRef = useRef({ components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt });
   useEffect(() => { liveStateRef.current = { components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt }; });
@@ -4392,6 +4420,9 @@ export default function Home() {
         projectId: scope.projectId ?? projectRef.current?.id ?? "local",
         branchId: scope.branchId ?? "main",
       });
+      // [B17-F] ONE bounded view-context snapshot (which editor surfaces exist, each view session's revision and
+      // state, the project operation timeline). The server validates it exactly; it is never authority.
+      const chatViewContext = viewSessionBridgeRef.current!.capture(projectTimeline);
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4411,6 +4442,8 @@ export default function Home() {
           // sirkit.editor-context.v1). The server revalidates the board and
           // recomputes every revision/digest; nothing here is authority.
           ...(chatEditorContext ? { editorContext: chatEditorContext } : {}),
+          // [B17-F] the view context (schema sirkit.view-context.v1) — surfaces, view revisions, timeline.
+          ...(chatViewContext ? { viewContext: chatViewContext } : {}),
           // B09.1 — the ready session's head mark is a scope LABEL for
           // proposal sealing (verified at apply against the CURRENT
           // session); absent ⇒ the proposal tool is unavailable server-side.
@@ -4484,6 +4517,28 @@ export default function Home() {
             if (pcbProposal) {
               setPendingPcbProposal({ proposal: pcbProposal.proposal, originRunId: pcbProposal.runId });
               appendActivityStep(logId, `PCB proposal ready — ${pcbProposal.proposal.operations.length} bounded operation(s) awaiting your explicit review in the PCB editor`, "done");
+            }
+            return;
+          }
+          case "view_command_ready": {
+            // [B17-F] a server-VALIDATED view command for the user's own view bus. The bridge re-checks the
+            // request shape, expiry, the live surface and the session id; the bus applies its stale-revision
+            // rule and role gate. It changes what the editor SHOWS, never the design.
+            const bridge = viewSessionBridgeRef.current!;
+            void bridge.execute(event.request).then((execution) => {
+              if (!scope.isCurrent()) return;
+              if (execution.ok) appendActivityStep(logId, `View updated — ${execution.commandId}${execution.rebased ? " (rebased onto your newer view)" : ""}`, "done");
+              else appendActivityStep(logId, `View command ${execution.commandId ?? ""} not applied — ${execution.message}`, "error");
+            });
+            return;
+          }
+          case "layout_candidate_ready": {
+            // [B17-F] the agent's placement / routing candidate — the SAFE receiver verifies the artifact; the
+            // PCB editor registers it in its own store after re-verifying the base revision. Nothing is applied.
+            const received = receiveLayoutCandidateEvent(event);
+            if (received) {
+              setPendingLayoutCandidate({ candidate: received.candidate, originRunId: received.runId });
+              appendActivityStep(logId, `${received.candidate.kind === "placement" ? "Placement" : "Routing"} candidate ready — review it in the PCB editor's ${received.candidate.kind} panel; the board is unchanged until you apply it`, "done");
             }
             return;
           }
@@ -6105,6 +6160,7 @@ export default function Home() {
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
                     viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
+                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                   />
                   {/* Empty state overlay */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
@@ -6217,6 +6273,9 @@ export default function Home() {
                     onPcbProposalSettled={() => setPendingPcbProposal(null)}
                     currentInterlock={() => projectTransitionRef.current?.currentInterlock() ?? null}
                     operationTimeline={projectTimeline} // [B17-E]
+                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
+                    layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
+                    onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
                   />
                 </div>
               )}

@@ -80,9 +80,17 @@ export function availableResourceKinds(context: AgentRunContext): Set<ReadResour
     // [B13] the server-owned component-authority resource is available only
     // when the durable loader produced it (mirrors buildAgentResourceBundle).
     if (context.componentAuthority) kinds.add("component-authority-records");
+    // [B17-F] the captured view context (and the timeline it carries).
+    if (context.view) {
+      kinds.add("view-state-snapshot");
+      if (context.view.timeline) kinds.add("project-timeline-snapshot");
+    }
   }
   return kinds;
 }
+
+/** [B17-F] the layout proposals need ONLY a verified canonical board (no schematic head mark). */
+const LAYOUT_PROPOSAL_TOOL_IDS = new Set(["sirkit.placement.propose", "sirkit.routing.propose"]);
 
 /** Build the exact provider-exposed declaration subset for this run. */
 export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void): {
@@ -102,6 +110,13 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
     // schematic head mark; the schematic proposals keep their B09.1 gate.
     .filter((descriptor) => {
       if (descriptor.operationClass !== "propose") return true;
+      if (LAYOUT_PROPOSAL_TOOL_IDS.has(descriptor.toolId)) {
+        if (!context.canonicalState?.pcb) {
+          warn(`Tool ${descriptor.toolId} unavailable: no verified canonical board for this run.`);
+          return false;
+        }
+        return true;
+      }
       if (descriptor.toolId === "sirkit.pcb.propose-bounded-edit") {
         if (!context.canonicalState?.pcb || !context.pcbProposalBasis) {
           warn(`Tool ${descriptor.toolId} unavailable: no verified canonical board and PCB history basis for this run.`);
@@ -123,6 +138,15 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
     // separate. A zero-tool conversational run is a truthful outcome; no
     // resource is ever fabricated to preserve tool count.
     .filter((descriptor) => {
+      // [B17-F] a view-session tool is advertised only with a captured view
+      // context (discovery already required its surface); no read binding.
+      if (descriptor.operationClass === "view-session") {
+        if (!context.view) {
+          warn(`Tool ${descriptor.toolId} unavailable: no view context was captured for this run.`);
+          return false;
+        }
+        return true;
+      }
       if (descriptor.operationClass === "propose") {
         // [B14] the replacement proposal additionally requires the
         // SERVER-OWNED component-authority resource for this run — without
@@ -322,7 +346,13 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
 
         toolCallsUsed += 1;
         emitOnce({ type: "tool_started", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title });
-        const timeoutMs = Math.min(request.budget.perToolTimeoutMs, descriptor?.timeoutMs ?? request.budget.perToolTimeoutMs);
+        // [B17-F] a long-running proposal (placement / routing engines) may use
+        // its registered timeout up to the REMAINING run deadline — the run
+        // boundary stays hard; every other tool keeps the per-tool budget.
+        const remainingRunMs = Math.max(1_000, request.budget.runDeadlineMs - (now() - startedAt));
+        const timeoutMs = descriptor?.budgetClass === "long-running"
+          ? Math.min(descriptor.timeoutMs, remainingRunMs)
+          : Math.min(request.budget.perToolTimeoutMs, descriptor?.timeoutMs ?? request.budget.perToolTimeoutMs);
         let outcome;
         try {
           const raced = await guard(deps.gateway.invoke({
@@ -343,7 +373,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         anyToolExecuted = true;
         // [B11] bounded metadata: identities, argument/output DIGESTS, the
         // closed-vocabulary outcome class, and the verification state.
-        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null }): void => {
+        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused" | "view_command" | "layout_candidate", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null }): void => {
           try {
             trace?.recordTool({
               callId: call.callId, toolId: resolved.toolId, version: resolved.version,
@@ -361,6 +391,51 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           results.push({
             callId: call.callId,
             outputText: resultText({ ok: true, tool: outcome.toolId, revision: outcome.sourceRevisionDigest, verification: outcome.verification, output: outcome.output }),
+            isError: false,
+          });
+        } else if (outcome.kind === "view-command" && outcome.ok) {
+          // [B17-F] the browser executes the validated request on the user's
+          // own view bus; the model learns only that it was dispatched. The
+          // trace stores the request identity and the command id.
+          const viewRequest = outcome.request;
+          recordTrace("view_command", "view_command_dispatched", { verification: `expected view revision ${viewRequest.expectedViewRevision}`, output: { editor: viewRequest.editor, commandId: viewRequest.commandId, requestId: viewRequest.requestId } });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "view_command_dispatched" });
+          emitOnce({ type: "view_command_ready", runId: request.runId, toolId: resolved.toolId, request: viewRequest });
+          results.push({
+            callId: call.callId,
+            outputText: resultText({
+              ok: true,
+              status: "view_command_dispatched",
+              dispatched: true,
+              editor: viewRequest.editor,
+              commandId: viewRequest.commandId,
+              expectedViewRevision: viewRequest.expectedViewRevision,
+              note: "The view command was handed to the user's editor, which applies it to the VIEW only (never the design). If the user's view changed since this run started, the editor may refuse it as stale; say what you asked the view to do, never that the design changed.",
+            }),
+            isError: false,
+          });
+        } else if (outcome.kind === "layout-candidate" && outcome.ok) {
+          proposalIssued = true;
+          // [B17-F] the shared candidate lands in the editor's review panel; the
+          // trace stores its identity and content digest only.
+          const candidate = outcome.candidate;
+          recordTrace("layout_candidate", "layout_candidate_ready", { proposal: { proposalId: candidate.candidateId, operationsDigest: candidate.digest } });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "layout_candidate_ready" });
+          emitOnce({ type: "layout_candidate_ready", runId: request.runId, toolId: resolved.toolId, candidate });
+          const summary = candidate.kind === "placement"
+            ? { kind: "placement", scope: candidate.scope.instanceIds === "all" ? "whole board" : `${candidate.scope.instanceIds.length} footprint(s)`, legal: candidate.legal, termination: candidate.run.termination, candidateCount: candidate.run.candidateCount }
+            : { kind: "routing", scope: candidate.scope.netIds === "all" ? "every incomplete net" : `${candidate.scope.netIds.length} net(s)`, completion: candidate.completion.status, tracks: candidate.stats.tracks, vias: candidate.stats.vias, unresolved: candidate.completion.failures.length };
+          results.push({
+            callId: call.callId,
+            outputText: resultText({
+              ok: true,
+              status: "layout_candidate_ready",
+              candidateId: candidate.candidateId,
+              baseRevision: candidate.base.revision,
+              expiresAt: candidate.expiresAt,
+              ...summary,
+              note: "The candidate is awaiting the user's explicit review in the PCB editor's placement/routing panel — NOTHING on the board has changed. Tell the user to preview and apply or discard it; never claim it was applied, and never call it manufacturing-ready.",
+            }),
             isError: false,
           });
         } else if (outcome.kind === "pcb-proposal" && outcome.ok) {

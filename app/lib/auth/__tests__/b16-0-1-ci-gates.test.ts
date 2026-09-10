@@ -36,6 +36,7 @@ import {
   collectProductionFiles,
   moduleImportOffenders,
 } from "../../project/__tests__/_import-gate-helpers";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 
@@ -223,7 +224,7 @@ describe("B16.0.1 §I — unclassified routes fail closed", () => {
 describe("B16.0.1 §I — tool exposure unchanged", () => {
   it("agent tool exposure is EXACTLY 12", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });
 
   it("sirkit.manufacturing.release is internal-only and not-callable", () => {
