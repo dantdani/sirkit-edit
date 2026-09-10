@@ -10,6 +10,7 @@ import { getBoardStackup } from "../stackup";
 import { analyzePlacementRouteability } from "../autoplace/routeability";
 import type { AutoPlaceParams } from "../autoplace/types";
 import { runEngineeringPlacement } from "../placement/engine";
+import { runPlacementCandidate, type LayoutCandidateStore, type PlacementLayoutCandidate } from "../candidates/layout-candidate";
 import type { PlacementCandidate as EngineeringPlacementCandidate, PlacementRunResult } from "../placement/types";
 import { planDrcRepairs } from "../repair/planner";
 import {
@@ -79,6 +80,7 @@ interface PlacementCandidate {
   baseRevisionId: string;
   run: PlacementRunResult;
   candidate: EngineeringPlacementCandidate;
+  layoutCandidate: PlacementLayoutCandidate;
 }
 
 export interface PCBToolServiceOptions {
@@ -92,6 +94,9 @@ export interface PCBToolServiceOptions {
   autonomousDeclaration?: AutonomousDesignDeclaration;
   autonomousRouter?: AutonomousRouteExecutor;
   view?: PCBViewAdapter;
+  /** [B17-E] the editor's shared layout-candidate store and lifecycle generation (agent candidates land where the human reviews them). */
+  candidates?: LayoutCandidateStore;
+  generation?: () => number | undefined;
 }
 
 export class PCBToolService implements PCBToolServiceContract {
@@ -338,24 +343,27 @@ export class PCBToolService implements PCBToolServiceContract {
   }
 
   async previewPlacement(options: AutoPlaceParams = {}, footprintIds?: string[]): Promise<PlacementCandidate> {
-    const requested = footprintIds?.length ? new Set(footprintIds) : undefined;
-    const placementBoard: PcbBoard = requested
-      ? { ...this.board, footprints: this.board.footprints.map((footprint) => requested.has(footprint.id) ? footprint : { ...footprint, locked: true }) }
-      : this.board;
-    const run = runEngineeringPlacement({ board: placementBoard, options: {
-      projectId: this.options.projectId ?? "ai-placement",
-      mode: requested ? "selected_scope" : this.board.tracks.length > 0 ? "preserve_routed" : "initial_unrouted",
-      selectedInstanceIds: requested ? [...requested].sort() : undefined,
-      seeds: options.seed === undefined ? undefined : [options.seed],
-      candidateCount: options.candidateCount,
-      maxIterations: options.maxIterations,
-      gridNm: options.gridNm,
-    } });
+    // [B17-E] the SAME producer and options builder the editor and the preview route use; the resulting shared
+    // candidate lands in the editor's store, where the human reviews, previews and applies it like their own.
+    const { run, candidate: layoutCandidate } = runPlacementCandidate({
+      board: this.board,
+      request: {
+        producer: "agent",
+        projectId: this.options.projectId ?? "ai-placement",
+        instanceIds: footprintIds?.length ? footprintIds : undefined,
+        seeds: options.seed === undefined ? undefined : [options.seed],
+        candidateCount: options.candidateCount,
+        maxIterations: options.maxIterations,
+        gridNm: options.gridNm,
+      },
+      generation: this.options.generation?.(),
+    });
     const selected = run.candidates.find((item) => item.candidateId === run.selectedCandidateId);
-    if (!selected) throw new Error(`No legal placement candidate: ${run.termination}.`);
-    const id = selected.candidateId;
-    const candidate = { id, baseRevisionId: pcbRevisionId(this.board), run, candidate: selected };
+    if (!selected || !layoutCandidate) throw new Error(`No legal placement candidate: ${run.termination}.`);
+    const id = layoutCandidate.candidateId;
+    const candidate = { id, baseRevisionId: pcbRevisionId(this.board), run, candidate: selected, layoutCandidate };
     this.placementCandidates.set(id, candidate);
+    this.options.candidates?.register(layoutCandidate);
     return candidate;
   }
 
@@ -363,7 +371,8 @@ export class PCBToolService implements PCBToolServiceContract {
     const candidate = this.placementCandidates.get(candidateId);
     if (!candidate) return { ok: false, error: `Unknown placement candidate ${candidateId}.` };
     if (candidate.baseRevisionId !== pcbRevisionId(this.board)) return { ok: false, error: "Board changed after placement preview." };
-    return { ok: false, error: "AI placement tools are preview/compare/explain only. Apply requires explicit user approval through the PCB placement UI." };
+    // [B17-E] the candidate is in the editor's store under the same id: the human applies it from the placement panel (B18 activates agent execution).
+    return { ok: false, error: `AI placement tools are preview/compare/explain only. Candidate ${candidateId} is in the editor's placement panel; apply requires explicit user approval there.` };
   }
 
   async call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {

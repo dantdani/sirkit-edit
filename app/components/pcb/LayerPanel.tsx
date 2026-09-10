@@ -34,7 +34,9 @@ export function LayerPanel({
   );
 
   return (
-    <div className="flex flex-col min-h-0">
+    // [B17-D] `shrink-0`: as a shrinkable flex item the panel collapsed under the next panel in the right
+    // column and its rows were unreachable (the browser proof's click was intercepted by "Multilayer routing").
+    <div className="flex flex-col shrink-0" data-testid="layer-panel">
       <div className="px-3 py-2 border-b border-zinc-800">
         <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">Layers</p>
         <p className="mt-0.5 text-[10px] normal-case tracking-normal text-zinc-600">Click a row to focus its copper · eye toggles visibility</p>
@@ -47,7 +49,7 @@ export function LayerPanel({
           </button>
         </div>
       </div>
-      <div className="overflow-y-auto">
+      <div>
         {rows.map((layer) => {
           const active = layer.id === activeLayer;
           const visible = isVisible(layer.id);

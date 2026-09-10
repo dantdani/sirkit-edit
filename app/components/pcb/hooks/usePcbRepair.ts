@@ -1,5 +1,6 @@
 "use client";
 
+import type { LayoutCandidateStore } from "@/app/lib/pcb/candidates/layout-candidate";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PcbHistory } from "@/app/lib/pcb/history";
@@ -27,6 +28,9 @@ export interface PcbRepairEditor {
   /** [B16.0.2 §B] the active project identity — a SELECTOR for the
    *  authenticated, project-scoped autoroute route. */
   getScope?(): ProjectSelectorScope | null;
+  /** [B17-E] the editor's shared layout-candidate store and lifecycle generation. */
+  candidates?: LayoutCandidateStore;
+  getGeneration?: () => number | undefined;
 }
 
 export interface PcbRepairHandle {
@@ -143,6 +147,8 @@ export function usePcbRepair(editor: PcbRepairEditor): PcbRepairHandle {
       history,
       rules: editorRef.current.getRules(),
       netlist: editorRef.current.getNetlist?.() ?? undefined,
+      candidates: editorRef.current.candidates,
+      generation: editorRef.current.getGeneration,
       autoroute: async (board, netIds) => {
         const response = await fetch("/api/pcb/autoroute", {
           method: "POST",

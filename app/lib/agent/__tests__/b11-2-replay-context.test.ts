@@ -35,6 +35,7 @@ import {
 import { AgentTraceRecorder, InMemoryTraceSink, setAgentTraceSinkFactory, type AgentTraceSink } from "../trace-recorder";
 import { AGENT_SYSTEM_PROMPT_VERSION } from "../../prompts";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ARTIFACTS = join(process.cwd(), "artifacts", "ai-control-plane-b11");
 const pins = (JSON.parse(readFileSync(join(ARTIFACTS, "replay-trace-pins.json"), "utf8")) as { pins: Record<string, string> }).pins;
@@ -482,8 +483,8 @@ describe("B11.2 §F — invariants preserved", () => {
 
   it("static exposure is still exactly ELEVEN read/propose tools, and no new surface exists", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B15.3: + sirkit.pcb.propose-bounded-edit
-    for (const descriptor of exposed) expect(["read", "propose"]).toContain(descriptor.operationClass);
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
+    for (const descriptor of exposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     for (const file of ["trace.ts", "trace-recorder.ts", "replay-capsule.ts", "replay-context.ts", "evaluation.ts", "evaluation-cases.ts"]) {
       const source = readFileSync(join(process.cwd(), "app/lib/agent", file), "utf8");
       expect(source, file).not.toMatch(/modelcontextprotocol|mcpServer|spawnAgent|multiAgent/i);

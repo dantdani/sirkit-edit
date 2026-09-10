@@ -33,6 +33,7 @@ import {
   validateToolDescriptor,
   type ToolDescriptor,
 } from "../tool-registry";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, agentExposureReport } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const registry = sirkitToolRegistry();
 
@@ -129,7 +130,9 @@ describe("discovery engine (deterministic, contextual, fail closed)", () => {
 
   it("7. role and capability filtering", () => {
     const viewer = discoverTools(registry, editorContext({ actorRole: "viewer", grantedCapabilities: ["read_project"] }));
-    expect(viewer.included.every((item) => item.operationClass === "read")).toBe(true);
+    // [B17-F] a viewer may READ and drive their OWN view (view-session commands never touch engineering state); never propose.
+    expect(viewer.included.every((item) => item.operationClass === "read" || item.operationClass === "view-session")).toBe(true);
+    expect(viewer.included.some((item) => item.operationClass === "propose")).toBe(false);
     expect(viewer.excluded.some((entry) => entry.reason === "role_not_permitted")).toBe(true);
     const noCaps = discoverTools(registry, editorContext({ grantedCapabilities: [] }));
     expect(noCaps.included).toEqual([]);
@@ -226,7 +229,8 @@ describe("truthful classification", () => {
   it("18+19. missing implementations and schema-only declarations are non-callable", () => {
     // [B09] sirkit.schematic.inspect gained a real reusable accessor
     // (schematic-read.ts) and left this list.
-    for (const toolId of ["sirkit.pcb.create-via", "sirkit.pcb.zone-edit", "sirkit.view.canvas-navigation", "sirkit.view.pcb-3d"]) {
+    // [B17-F] the view descriptors are now bound view-session tools (bus commands) and left this list.
+    for (const toolId of ["sirkit.pcb.create-via", "sirkit.pcb.zone-edit"]) {
       const inspection = registry.inspectBinding(toolId);
       expect(inspection.state, toolId).toBe("not_callable");
       if (inspection.state === "not_callable") expect(inspection.reason).toContain("schema declarations are not implementations");
@@ -243,7 +247,7 @@ describe("truthful classification", () => {
     for (const item of agent.included) {
       const descriptor = registry.get(item.toolId, item.version)!;
       expect(descriptor.agentExposed, item.toolId).toBe(true);
-      expect(["read", "propose"]).toContain(descriptor.operationClass);
+      expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     }
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.schematic.add-component")).toBe(false); // internal-only: invisible to agents
   });
@@ -263,7 +267,7 @@ describe("truthful classification", () => {
     expect(ui.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
     for (const channel of ["assistant-agent", "automation"] as const) {
       const included = discoverTools(registry, editorContext({ channel, riskCeiling: "propose" })).included;
-      expect(included.every((item) => item.operationClass === "read" || item.operationClass === "propose"), channel).toBe(true);
+      expect(included.every((item) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(item.operationClass)), channel).toBe(true);
       expect(included.some((item) => item.toolId.startsWith("sirkit.pcb.move") || item.toolId === "sirkit.pcb.delete-item"), channel).toBe(false);
     }
   });
@@ -300,20 +304,9 @@ describe("truthful classification", () => {
 
   it("[B09] exactly the activated agent set is exposed, and EVERY exposed descriptor is backed by a real activated binding (tripwire)", () => {
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed).map((descriptor) => descriptor.toolId).sort();
-    expect(exposed).toEqual([
-      "sirkit.component-authority.inspect", // B13 — server-owned authority resource gates per-run availability
-      "sirkit.manufacturing.readiness-inspect",
-      "sirkit.pcb.board-inspect",
-      "sirkit.pcb.propose-bounded-edit", // B15.3 — sealed bounded PCB proposal; board + PCB history basis gate per-run availability
-      "sirkit.pcb.revision-inspect",
-      "sirkit.project.canonical-revision-inspect",
-      "sirkit.schematic.inspect",
-      "sirkit.schematic.propose-component-replacement", // B14 — sealed replacement proposal; head mark + component-authority-records gate per-run availability
-      "sirkit.schematic.propose-tier1-edit",
-      "sirkit.selection.inspect", // B10
-      "sirkit.validation.connectivity-verify",
-      "sirkit.validation.drc-run",
-    ]);
+    // [B17-F] the exact set is the ONE reviewed intentional list (agent-exposure.ts); the report derives both sides.
+    expect(exposed).toEqual([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]);
+    expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], count: INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length });
     for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
       if (descriptor.operationClass === "read") {
         // A registry declaration is NOT executable coverage: the read tool
@@ -321,17 +314,26 @@ describe("truthful classification", () => {
         const resolution = resolveReadBinding(descriptor);
         expect(resolution.state, descriptor.toolId).toBe("resolved");
       } else if (descriptor.operationClass === "propose") {
-        expect(["sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit", "sirkit.pcb.propose-bounded-edit"]).toContain(descriptor.toolId); // B14: + replacement proposal; B15.3: + bounded PCB proposal
+        expect(["sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit", "sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose"]).toContain(descriptor.toolId); // B14: + replacement proposal; B15.3: + bounded PCB proposal; B17-F: + the shared layout candidates
         expect(descriptor.binding.status).toBe("bound-proposal");
         expect(descriptor.sideEffects).toBe("proposal-artifact");
+      } else if (descriptor.operationClass === "view-session") {
+        // [B17-F] a view-session tool is a bound bus-command tool: session-state only, no authority, explicit commands.
+        expect(descriptor.binding.status, descriptor.toolId).toBe("bound-view-session");
+        expect(descriptor.sideEffects, descriptor.toolId).toBe("session-state");
+        expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["none"]);
+        expect(descriptor.viewCommands?.length ?? 0, descriptor.toolId).toBeGreaterThan(0);
       } else {
         throw new Error(`agent-exposed descriptor with forbidden class: ${descriptor.toolId} (${descriptor.operationClass})`);
       }
     }
-    // No mutation/destructive/release/undo/view-session descriptor is exposed.
+    // No mutation/destructive/release/undo descriptor is exposed; a view-session descriptor is exposed ONLY as a bound bus-command tool.
     for (const descriptor of registry.list()) {
-      if (["mutate", "destructive", "release", "view-session"].includes(descriptor.operationClass)) {
+      if (["mutate", "destructive", "release"].includes(descriptor.operationClass)) {
         expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
+      }
+      if (descriptor.operationClass === "view-session" && descriptor.agentExposed) {
+        expect(descriptor.binding.status, descriptor.toolId).toBe("bound-view-session");
       }
     }
   });

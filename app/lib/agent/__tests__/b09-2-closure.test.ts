@@ -19,6 +19,7 @@ import { sealResourceEnvelope, validateReadResourceBundle, buildReadResourceBund
 import { isWellFormedProposalScope } from "../../engineering/schematic-proposals";
 import { validateSchematicCanonicalMark } from "../../engineering/schematic-projection";
 import { createEmptyBoard } from "../../pcb/types";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const SCHEMATIC: SchematicState = { components: [{ id: "r1", type: "resistor", x: 100, y: 100, rotation: 0, value: "10k" }], wires: [] };
 const INVALID_BOARD = { stackup: 2, nets: [], footprints: [], tracks: [{ id: "" }], vias: [], zones: [] };
@@ -72,7 +73,7 @@ describe("B09.2 §A — no synthetic canonical authority (R1/R2)", () => {
 
   it("the runtime toolset excludes resource-unsatisfied tools deterministically; the static registry stays at the exact static set (ELEVEN ids since B14)", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B14: + replacement; B15.3: + pcb.propose-bounded-edit
     const schematicOnly = contextOf({ board: undefined, mark: VALID_MARK });
     const warnings: string[] = [];
     const toolset = buildRunToolset(sirkitToolRegistry(), schematicOnly.context, (message) => warnings.push(message));

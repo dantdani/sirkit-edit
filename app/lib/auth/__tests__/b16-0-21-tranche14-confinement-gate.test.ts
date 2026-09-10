@@ -15,6 +15,7 @@ vi.mock("@/app/api/full-flow/_scope", async (orig) => {
   return { ...actual, fullFlowScopeFromContext: (c: unknown) => scopeOverride.value ?? actual.fullFlowScopeFromContext(c) };
 });
 import { POST as ffTransition } from "../../../api/full-flow/transition/route";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const ROUTES = [
@@ -115,7 +116,7 @@ describe("B16.0.21 §C/§E — human-truth invariants", () => {
   it("no route is agent-exposed; tools EXACTLY 12; manufacturing release internal-only", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(JSON.stringify(exposed)).not.toMatch(/firmware-bringup|full-flow|release-engineering/);
     const release = registry.list().find((d) => d.toolId === "sirkit.manufacturing.release");
     expect(release).toMatchObject({ discovery: "internal-only", callability: "not-callable", agentExposed: false });

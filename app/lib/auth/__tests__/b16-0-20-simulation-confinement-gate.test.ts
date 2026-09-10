@@ -15,6 +15,7 @@ vi.mock("@/app/api/model-simulation/_scope", async (orig) => {
   return { ...actual, modelSimulationScopeFromContext: (c: unknown) => scopeOverride.value ?? actual.modelSimulationScopeFromContext(c) };
 });
 import { POST as execute } from "../../../api/model-simulation/execute/route";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const NAMES = ["denominator", "execute", "measure", "problem", "propose", "readiness"];
@@ -101,7 +102,7 @@ describe("B16.0.20 §J — human-truth and tool gates", () => {
   it("no simulation route is agent-exposed; tools EXACTLY 12; manufacturing release internal-only", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(JSON.stringify(exposed)).not.toMatch(/model-simulation/);
     const release = registry.list().find((d) => d.toolId === "sirkit.manufacturing.release");
     expect(release).toMatchObject({ discovery: "internal-only", callability: "not-callable", agentExposed: false });

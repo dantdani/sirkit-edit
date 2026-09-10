@@ -40,6 +40,7 @@ function ViolationRow({
     <li className="border-b border-zinc-800/60">
       <button
         type="button"
+        data-testid="drc-violation-row"
         onClick={onToggle}
         className="w-full text-left px-3 py-1.5 flex items-start gap-2 hover:bg-zinc-800/50 transition-colors"
       >
@@ -105,7 +106,9 @@ export function DrcPanel({ drc, repair, readiness, constraintProgram }: { drc: D
   }
 
   return (
-    <div className="flex flex-col min-h-0 flex-1 border-t border-zinc-800">
+    // [B17-D] content height inside the scrolling right column: as `flex-1 min-h-0` the panel collapsed to a
+    // zero-height box and its violation rows were unreachable (the browser proof's click hit the header).
+    <div className="flex flex-col border-t border-zinc-800" data-testid="drc-panel">
       <div className="px-3 py-2 border-b border-zinc-800 shrink-0 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-zinc-300">Design rule check</span>
@@ -200,7 +203,7 @@ export function DrcPanel({ drc, repair, readiness, constraintProgram }: { drc: D
             </p>
           </div>
 
-          <ul className="overflow-y-auto min-h-0 flex-1">
+          <ul className="max-h-96 overflow-y-auto" data-testid="drc-violations">
             {grouped
               ? [...groups.entries()].map(([kind, list]) => {
                   const isCollapsed = collapsedKinds.has(kind);

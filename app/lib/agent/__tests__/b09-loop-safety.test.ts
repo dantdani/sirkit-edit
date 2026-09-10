@@ -84,7 +84,8 @@ describe("B09 §3 — loop safety", () => {
     const names = toolset.declarations.map((declaration) => declaration.toolId);
     expect(names).toContain("sirkit.schematic.inspect");
     expect(names).toContain("sirkit.schematic.propose-tier1-edit");
-    for (const forbidden of ["sirkit.parts.search", "sirkit.selection.inspect", "sirkit.component-authority.inspect", "sirkit.pcb.delete-item", "sirkit.pcb.move-footprint", "sirkit.manufacturing.release", "sirkit.pcb.undo-redo-canonical", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.pcb.repair-plan"]) {
+    // [B17-F] placement/routing proposals are exposed (the shared layout candidate); they left this list.
+    for (const forbidden of ["sirkit.parts.search", "sirkit.selection.inspect", "sirkit.component-authority.inspect", "sirkit.pcb.delete-item", "sirkit.pcb.move-footprint", "sirkit.manufacturing.release", "sirkit.pcb.undo-redo-canonical", "sirkit.pcb.repair-plan"]) {
       expect(names, forbidden).not.toContain(forbidden);
     }
     const { result, adapter } = await run([

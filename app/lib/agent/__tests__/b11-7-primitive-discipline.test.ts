@@ -17,6 +17,7 @@ import { buildEvaluationCases } from "../evaluation-cases";
 import { canonicalJson } from "../../engineering/stable";
 import { createEmptyBoard } from "../../pcb/types";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const pins = (JSON.parse(readFileSync(join(ROOT, "artifacts", "ai-control-plane-b11", "replay-trace-pins.json"), "utf8")) as { pins: Record<string, string> }).pins;
@@ -317,7 +318,7 @@ describe("B11.7 §D — every prior closure is preserved", () => {
       expect(outcome.traceDigest, evaluationCase.caseId).toBe(pins[evaluationCase.caseId]);
     }
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B15.3: + sirkit.pcb.propose-bounded-edit
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
   });
 
   it("12: no B11 test writes repository paths", () => {

@@ -14,6 +14,7 @@ import { analyzePlacementRouteability } from "./routeability";
 import { buildPlacementEnvelope } from "./envelope";
 import { padWorldPosition } from "../geometry-copper";
 import { runEngineeringPlacement, EngineeringPlacementCancelledError } from "../placement/engine";
+import { placementRunOptions } from "../candidates/layout-candidate";
 import { boardWithPlacement } from "../placement/geometry";
 
 export interface AutoPlaceProgress {
@@ -272,17 +273,18 @@ export function autoPlace(
   observer?.onProgress?.({ phase: "analyzing", percent: 5 });
   const routeabilityBefore = analyzePlacementRouteability(board, { envelopeScale: resolved.envelopeScale });
   try {
+    // [B17-E] the SAME options builder every producer uses (editor worker, preview route, agent tool service).
     const run = runEngineeringPlacement({
       board,
-      options: {
+      options: placementRunOptions(board, {
+        producer: "editor",
         projectId: "autoplace",
-        mode: board.tracks.length > 0 || board.vias.length > 0 ? "preserve_routed" : "initial_unrouted",
         seeds: [resolved.seed, resolved.seed + 1],
         candidateCount: Math.max(2, resolved.candidateCount),
         maxIterations: resolved.maxIterations,
         localRefinementPasses: 1,
         gridNm: resolved.gridNm,
-      },
+      }),
       observer: {
         shouldCancel: observer?.shouldCancel,
         onProgress: (progress) => observer?.onProgress?.({

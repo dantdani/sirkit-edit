@@ -486,6 +486,12 @@ export function buildScopedResources(bundle: ReadResourceBundle, kinds: readonly
       case "netlist":
         scoped.netlist = { netlist: envelope.content as never, ref: consumedRef(envelope) };
         break;
+      case "view-state-snapshot":
+        scoped.viewState = { view: envelope.content as never, ref: consumedRef(envelope) };
+        break;
+      case "project-timeline-snapshot":
+        scoped.projectTimeline = { view: envelope.content as never, ref: consumedRef(envelope) };
+        break;
     }
   }
   return scoped;

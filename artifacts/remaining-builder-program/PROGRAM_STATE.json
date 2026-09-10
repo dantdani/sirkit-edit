@@ -1,18 +1,18 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B16",
-  "currentCheckpoint": "B16 final gate",
+  "currentChapter": "B17",
+  "currentCheckpoint": "B17-integration",
   "status": "in_progress",
-  "baseSha": "62ea4a65327510a842be46afe97bda0147aac15a",
-  "branch": "chapter/b16-foundation-closeout",
-  "lastGreenSha": "62ea4a65327510a842be46afe97bda0147aac15a",
+  "baseSha": "82ecbf8",
+  "branch": "chapter/b17-semantic-editor",
+  "lastGreenSha": "82ecbf8",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B16 final gate: push chapter/b16-foundation-closeout, mark PR #6 ready, wait for CI (prompt-to-gerber, database-delivery, page-browser-e2e, benchmark-quality), merge normally when green, fast-forward main, update the ledger, continue to B17-A.",
-  "updatedAt": "2026-09-09T22:05:00-04:00"
+  "nextAction": "B17 integration: mark PR #7 ready → merge normally (D17-1/OD-8) → fast-forward main → record the merge sha in the ledger → start B18 (chapter/b18-agent-execution): B18-A permission tiers and autonomy settings, B18-B server-minted grants, B18-C safe mutation tools over the canonical executor, B18-D chat execution UX, B18-E mandatory scenarios.",
+  "updatedAt": "2026-09-10T03:40:00-04:00"
 }

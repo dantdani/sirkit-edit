@@ -204,9 +204,11 @@ describe("B09 §4 — sealed proposals through the existing apply boundary", () 
   it("34. no mutation/destructive/release/undo/view-session descriptor is provider-exposed, and the gateway refuses their classes outright", async () => {
     const registry = sirkitToolRegistry();
     for (const descriptor of registry.list()) {
-      if (["mutate", "destructive", "release", "view-session"].includes(descriptor.operationClass)) {
+      if (["mutate", "destructive", "release"].includes(descriptor.operationClass)) {
         expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
       }
+      // [B17-F] view-session tools are exposed ONLY as bound bus-command tools (never engineering state).
+      if (descriptor.operationClass === "view-session" && descriptor.agentExposed) expect(descriptor.binding.status, descriptor.toolId).toBe("bound-view-session");
     }
     const gateway = createAgentToolGateway(registry);
     const outcome = await gateway.invoke({

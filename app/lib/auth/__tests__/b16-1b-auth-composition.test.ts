@@ -20,6 +20,7 @@ import { resolveAuthMode, localDevAllowed, sensitiveOperationsBlocker } from "..
 import { allRoutePolicies, policyFor } from "../route-policy";
 import { classifyRouteMethodForm, exportedHttpMethods } from "./_boundary-analysis";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const USER = "user-sirkit-qual-0001";
@@ -259,8 +260,8 @@ describe("B16.1B §G — exact invariants", () => {
     }
     expect({ total, canonical, factories, raw }).toEqual({ total: 153, canonical: 150, factories: 3, raw: 0 });
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
-    expect(exposed).toHaveLength(12);
-    expect(new Set(exposed.map((d) => d.toolId)).size).toBe(12);
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
+    expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     // the auth routes are policy rows, not tools, and none is agent-exposed
     for (const d of exposed) expect(d.toolId).not.toMatch(/^sirkit\.auth\.|sign-?in|sign-?out|callback|session/i);
     void relative;

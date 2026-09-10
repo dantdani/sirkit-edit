@@ -202,11 +202,14 @@ export function buildScene(board: PcbBoard, params: SceneParams): BuiltScene {
       if (padMesh) group.add(padMesh);
     }
 
+    group.visible = params.showCopper ?? true;
     copperMeshesByLayer.set(layer, group);
   }
 
   // 3 — vias.
   const vias = buildViasMesh(board.vias, stack, palette);
+  vias.visible = params.showVias ?? true;
+  substrate.visible = params.showSubstrate ?? true;
 
   // 4 — silk (footprint graphics; board texts + arcs deferred).
   const buildSilk = (target: "silkTop" | "silkBottom"): THREE.Object3D => {
@@ -216,7 +219,7 @@ export function buildScene(board: PcbBoard, params: SceneParams): BuiltScene {
     const slab = stack[target];
     const mesh = extrudedMesh(shapes, slab.heightMm, slab.zMm, silkMaterial, `${target}-strokes`);
     if (mesh) group.add(mesh);
-    group.visible = params.showSilk;
+    group.visible = (target === "silkTop" ? params.showSilkTop : params.showSilkBottom) ?? params.showSilk;
     return group;
   };
   const silkTop = buildSilk("silkTop");

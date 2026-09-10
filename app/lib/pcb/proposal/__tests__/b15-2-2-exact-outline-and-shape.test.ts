@@ -19,6 +19,7 @@ import { createSealedPcbEditProposal } from "../pcb-edit-proposal-service";
 import { PCB_EDIT_PROPOSAL_SCHEMA, verifySealedPcbEditProposalIntegrity } from "../sealed-pcb-edit-proposal";
 import { engineeringDigest } from "../../../engineering/stable";
 import { collectProductionFiles, moduleImportOffenders } from "../../../project/__tests__/_import-gate-helpers";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const RULES = getPreset(DEFAULT_PRESET_ID).rules;
 // B16.0.1: the identity digest schema moved .v1 → .v2 with the proposal schema.
@@ -253,7 +254,7 @@ describe("B15.2.2 §C — the seal import boundary is fixed", () => {
   it("exposure is exactly 12 with exactly ONE PCB propose tool (B15.3 supersession of the B15.2.2 11-tool pin)", async () => {
     const { sirkitToolRegistry } = await import("../../../engineering/tool-catalog");
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(exposed).toHaveLength(12);
+    expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     const pcbPropose = exposed.filter((d) => /pcb/i.test(d.toolId) && d.operationClass === "propose");
     expect(pcbPropose.map((d) => d.toolId)).toEqual(["sirkit.pcb.propose-bounded-edit"]);
   });

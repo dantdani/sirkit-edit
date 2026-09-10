@@ -38,6 +38,8 @@ import { discoverTools } from "../engineering/tool-discovery";
 import { PCB_EDIT_PROPOSAL_SCHEMA, PCB_EDIT_PROPOSAL_TOOL_ID, PCB_EDIT_PROPOSAL_TOOL_VERSION, type SealedPcbEditProposal } from "../pcb/proposal/sealed-pcb-edit-proposal";
 import { handlePcbProposeTool } from "../pcb/proposal/pcb-propose-tool-handler";
 import { buildAgentResourceBundle } from "./context";
+import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
+import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
 import type { AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
 
 export const AGENT_PROPOSAL_TOOL_ID = "sirkit.schematic.propose-tier1-edit";
@@ -136,6 +138,18 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
     if (!discovery.availableAuthority.includes("durable-server-board")) issues.push("component-authority is present but durable-server-board authority is not advertised");
   } else if (context.componentAuthorityDigest !== null) {
     issues.push("a component-authority digest is claimed without a component-authority resource");
+  }
+  // [B17-F] the view context is recomputed against its assembly-time pin, and
+  // the surfaces it proves must be the ONLY `*-surface` project states the
+  // discovery context advertises (a widened surface list fails closed).
+  if (context.view !== null) {
+    if (viewContextDigest(context.view) !== context.viewDigest) issues.push("the view context no longer matches its assembly-time digest (post-assembly mutation)");
+    const advertised = discovery.projectState.filter((state) => state.endsWith("-surface")).sort().join(",");
+    const proven = context.view.surfaces.map((surface) => `${surface}-surface`).sort().join(",");
+    if (advertised !== proven) issues.push("the advertised editor surfaces diverge from the captured view context");
+  } else {
+    if (context.viewDigest !== null) issues.push("a view digest is claimed without a view context");
+    if (discovery.projectState.some((state) => state.endsWith("-surface"))) issues.push("editor surfaces are advertised without a captured view context");
   }
   return issues;
 }
@@ -403,11 +417,17 @@ export interface AgentGatewayOptions {
    *  path — wired by the SERVER composition root only. Absent ⇒ the
    *  replacement proposal blocks with a structured pin-authority blocker. */
   replacementPinFacts?: ReplacementPinFactsFetcher;
+  /** [B17-F] the server composition root's local routing engine for the
+   *  routing proposal (a resolved FreeRouting pass executor per request);
+   *  absent ⇒ the routing proposal refuses truthfully. */
+  routingExecutor?: RoutingExecutorFactory;
+  layoutProposalService?: LayoutProposalService;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
   const readService = options?.readService ?? new ReadToolInvocationService(registry);
   const proposalService = options?.proposalService ?? new ProposalInvocationService(registry, options?.now, options?.replacementPinFacts);
+  const layoutService = options?.layoutProposalService ?? new LayoutProposalService(registry, { now: options?.now, routingExecutor: options?.routingExecutor });
   return {
     async invoke(input): Promise<GatewayInvocationOutcome> {
       const descriptor = registry.get(input.toolId, input.version);
@@ -459,6 +479,44 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
         }
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: result.status, diagnostics: result.diagnostics };
       }
+      // [B17-F] view-session tools: the gateway VALIDATES the request against
+      // the registry-backed command list, the captured surface, the board, the
+      // command's role gate and its exact payload contract, then hands the
+      // browser a request to dispatch on the user's own view bus. Nothing
+      // executes here; nothing is engineering state.
+      if (descriptor.operationClass === "view-session") {
+        if (descriptor.binding.status !== "bound-view-session" || !descriptor.agentExposed) {
+          return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "not_callable", diagnostics: ["Only bound, exposed view-session tools are invocable here."] };
+        }
+        const discovery = discoverTools(registry, input.context.discovery);
+        if (!discovery.included.some((item) => item.toolId === descriptor.toolId && item.version === descriptor.version)) {
+          const reason = discovery.excluded.find((entry) => entry.toolId === descriptor.toolId)?.reason ?? "not discoverable";
+          return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "not_discoverable", diagnostics: [`Tool is not discoverable in the current context (${reason}).`] };
+        }
+        if (!descriptor.requiredRoles.includes(input.context.actor.actorRole) || !input.context.actor.grantedCapabilities.includes(descriptor.requiredCapability)) {
+          return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "unauthorized", diagnostics: [`Role ${input.context.actor.actorRole} / capability ${descriptor.requiredCapability} is not permitted for this tool.`] };
+        }
+        const prepared = prepareViewCommandRequest({
+          descriptor,
+          args: input.args,
+          context: {
+            canonicalState: input.context.canonicalState,
+            view: input.context.view,
+            actor: { actorId: input.context.actor.actorId, role: input.context.actor.actorRole, actorKind: "agent" },
+            runId: input.runId,
+            ...(options?.now ? { now: options.now } : {}),
+          },
+        });
+        if (!prepared.ok) return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: prepared.status, diagnostics: prepared.diagnostics };
+        return { kind: "view-command", ok: true, toolId: input.toolId, version: input.version, request: prepared.request };
+      }
+      // [B17-F] layout proposals produce the shared revision-bound candidate
+      // (an artifact for the editor's own review panel), never a mutation.
+      if (descriptor.operationClass === "propose" && LAYOUT_PROPOSAL_TOOL_IDS.includes(descriptor.toolId)) {
+        const outcome = await layoutService.invoke({ toolId: input.toolId, version: input.version, args: input.args, context: input.context, runId: input.runId, timeoutMs: input.timeoutMs, signal: input.signal });
+        if (outcome.status === "candidate") return { kind: "layout-candidate", ok: true, toolId: input.toolId, version: input.version, candidate: outcome.candidate };
+        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: outcome.failure, diagnostics: outcome.diagnostics };
+      }
       if (descriptor.operationClass === "propose") {
         // [B09.1] real provider provenance — never the placeholder "agent".
         const outcome = await proposalService.invoke({
@@ -480,7 +538,7 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
         if (outcome.status === "blocked") return { kind: "proposal-blocked", ok: false, toolId: input.toolId, version: input.version, blockers: outcome.blockers };
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: outcome.failure, diagnostics: outcome.diagnostics };
       }
-      // Mutation/destructive/release/view-session can never execute here.
+      // Mutation/destructive/release can never execute here.
       return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "not_callable", diagnostics: [`Operation class ${descriptor.operationClass} is not executable through the agent gateway.`] };
     },
   };

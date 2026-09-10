@@ -33,6 +33,8 @@ export interface DrcHandle {
   setActivePresetId(id: DrcPresetId): void;
   run(): Promise<void>;
   zoomToViolation(v: DrcViolation): void;
+  /** [B17-D] Flash items (the transient selection overlay) without moving the camera — the view-session reveal applies the camera itself. */
+  flash(ids: string[]): void;
 }
 
 const FLASH_MS = 2000;
@@ -72,12 +74,10 @@ export function useDrc(editor: DrcEditor): DrcHandle {
     }
   }, [activePresetId]);
 
-  const zoomToViolation = useCallback((v: DrcViolation) => {
+  // Flash items via the teal selection overlay, then hand the overlay back to the real selection.
+  const flash = useCallback((ids: string[]) => {
     const scene = editorRef.current.scene;
     if (!scene) return;
-    scene.centerOn(v.location, ZOOM_PX_PER_MM);
-    // Flash the offending items via the teal selection overlay, then clear.
-    const ids = v.items.map(refHighlightId).filter((id) => id.length > 0);
     scene.setSelection(ids);
     if (flashTimer.current) clearTimeout(flashTimer.current);
     flashTimer.current = setTimeout(() => {
@@ -87,5 +87,12 @@ export function useDrc(editor: DrcEditor): DrcHandle {
     }, FLASH_MS);
   }, []);
 
-  return { state: visibleState, lastResult, activePresetId, setActivePresetId, run, zoomToViolation };
+  const zoomToViolation = useCallback((v: DrcViolation) => {
+    const scene = editorRef.current.scene;
+    if (!scene) return;
+    scene.centerOn(v.location, ZOOM_PX_PER_MM);
+    flash(v.items.map(refHighlightId).filter((id) => id.length > 0));
+  }, [flash]);
+
+  return { state: visibleState, lastResult, activePresetId, setActivePresetId, run, zoomToViolation, flash };
 }

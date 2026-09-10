@@ -208,7 +208,7 @@ describe("B16.0.2 §C — forwarding headers never define the expected origin (g
 
 describe("B16.0.2 — tool exposure unchanged; release internal-only", () => {
   it("agent tool exposure is EXACTLY 12", () => {
-    expect(sirkitToolRegistry().list().filter((d) => d.agentExposed).length).toBe(12);
+    expect(sirkitToolRegistry().list().filter((d) => d.agentExposed).length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });
 
   it("sirkit.manufacturing.release is internal-only, not-callable, not agent-exposed", () => {
@@ -254,6 +254,7 @@ describe("B16.0.2 — no provider/model/gateway module imports reauthorization o
 // ── §A: route data/resource classification bijection + invariants ────────────
 
 import { classificationViolations, renderRouteResourceClassificationCsv, routeResourceClassification } from "../route-resource-classification";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 describe("B16.0.2 §A — route data/resource classification", () => {
   it("classifies EVERY policy row exactly once (bijection with the policy table)", () => {

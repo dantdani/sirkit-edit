@@ -39,6 +39,7 @@ import { applyApprovedTier1Proposal, ApprovedMutationAuditLedger, ApprovedMutati
 import { ACTION_COVERAGE_REGISTRY } from "../action-registry";
 import { AgentTraceRecorder, InMemoryTraceSink } from "../../agent/trace-recorder";
 import { POST as CHAT_POST } from "@/app/api/chat/route";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 
@@ -48,8 +49,8 @@ describe("B12 §G — the provider surface stays eleven read/propose tools", () 
   it("static agent exposure is exactly ELEVEN read/propose tools, and apply is not among them", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     const ids = exposed.map((descriptor) => descriptor.toolId).sort();
-    expect(new Set(ids).size).toBe(12); // B15.3: + sirkit.pcb.propose-bounded-edit
-    for (const descriptor of exposed) expect(["read", "propose"]).toContain(descriptor.operationClass);
+    expect(new Set(ids).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
+    for (const descriptor of exposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     expect(ids).not.toContain("schematic.edit-tier1-apply");
     expect(ids).toContain("sirkit.schematic.propose-tier1-edit");
   });

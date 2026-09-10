@@ -28,6 +28,7 @@ import {
   type ReadInvocationRequest,
 } from "../tool-invocation";
 import { buildReadReplayFixtures, replayFixtureBundle } from "../tool-read-replay";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const registry = sirkitToolRegistry();
 const SCOPE = { tenantId: "tenant-fixture", projectId: "project-fixture", branchId: "main" };
@@ -364,7 +365,7 @@ describe("prior gates", () => {
     for (const item of discoverTools(registry, contextFor(b, { channel: "assistant-agent" })).included) {
       const descriptor = registry.get(item.toolId, item.version)!;
       expect(descriptor.agentExposed, item.toolId).toBe(true);
-      expect(["read", "propose"]).toContain(descriptor.operationClass);
+      expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     }
   });
 

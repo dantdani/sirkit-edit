@@ -47,6 +47,7 @@ import { containsSecretShapedText, findNonPlainJsonPath, findSecretShapedPath, i
 import { validatePcbBoardStructure } from "../../engineering/pcb-board-structure";
 import { createEmptyBoard, type PcbBoard } from "../../pcb/types";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const DESCRIPTOR_FILE = join(ROOT, "app", "lib", "agent", "generated", "pcb-shape-descriptor.ts");
@@ -737,8 +738,8 @@ describe("B11.3 §E / B11.4 §F — drift gates, fully in memory", () => {
 describe("B11.3 §F — surrounding invariants intact", () => {
   it("static exposure is still exactly ELEVEN read/propose tools", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
-    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(12); // B15.3: + sirkit.pcb.propose-bounded-edit
-    for (const descriptor of exposed) expect(["read", "propose"]).toContain(descriptor.operationClass);
+    expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
+    for (const descriptor of exposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     for (const file of ["pcb-shape-projection.ts", "pcb-shape-types.ts", "replay-context.ts", "generated/pcb-shape-descriptor.ts"]) {
       const source = readFileSync(join(ROOT, "app", "lib", "agent", file), "utf8");
       expect(source, file).not.toMatch(/modelcontextprotocol|mcpServer|spawnAgent|multiAgent/i);

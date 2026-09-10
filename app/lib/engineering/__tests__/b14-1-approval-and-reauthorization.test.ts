@@ -29,6 +29,7 @@ import { buildAuthorizationBinding } from "../proposal-authorization";
 import type { ComponentAuthorityRecord } from "../component-authority";
 import type { PublishedSymbolPinFacts } from "../replacement-pin-facts";
 import { sirkitToolRegistry } from "../tool-catalog";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 // ─── Fixtures (b14 family) ───────────────────────────────────────────────────
 
@@ -303,7 +304,7 @@ describe("B14.1 — capability import boundaries", () => {
 
   it("the provider registry still exposes ONLY read/propose tools — apply is never provider-callable", () => {
     for (const descriptor of sirkitToolRegistry().list()) {
-      if (descriptor.agentExposed) expect(["read", "propose"]).toContain(descriptor.operationClass);
+      if (descriptor.agentExposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
     }
   });
 });

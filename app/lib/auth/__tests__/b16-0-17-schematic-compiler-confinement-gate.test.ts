@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm } from "./_boundary-analysis";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const NAMES = ["compare", "diff", "export", "graph/validate", "kicad/inspect", "layout", "problem", "propose", "transaction", "variants"];
@@ -102,7 +103,7 @@ describe("B16.0.17 §I — security & human-truth invariants", () => {
   it("no route becomes an agent tool; total exposed tools remain EXACTLY 12; manufacturing release stays internal-only", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(JSON.stringify(exposed)).not.toMatch(/schematic-compiler/);
     const release = registry.list().find((d) => d.toolId === "sirkit.manufacturing.release");
     expect(release).toMatchObject({ discovery: "internal-only", callability: "not-callable", agentExposed: false });

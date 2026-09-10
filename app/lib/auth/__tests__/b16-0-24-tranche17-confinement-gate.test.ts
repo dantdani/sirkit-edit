@@ -10,6 +10,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm, APPROVED_ROUTE_WRAPPERS } from "./_boundary-analysis";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const METHODS: ReadonlyArray<[string, string]> = [
@@ -157,7 +158,7 @@ describe("B16.0.24 §I — simulate process security confinement", () => {
 describe("B16.0.24 §I — no new agent tool exposure; sole-adopter of the two closed profiles", () => {
   it("exactly 12 agent-exposed tools; no auth/chat/simulate route is agent-exposed", () => {
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
-    expect(exposed.length).toBe(12);
+    expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(exposed.some((d) => /callback|signin|signout|simulate/i.test(d.toolId))).toBe(false);
   });
   it("agentStreamRoute is an approved canonical wrapper name and auth-signin-v1 is closed", () => {

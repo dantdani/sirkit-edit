@@ -29,6 +29,8 @@ import type { SchematicState } from "@/lib/schematic-types";
 import type { SelectionRef } from "../pcb/edit/commands";
 import type { AgentNetlistLogical } from "./netlist-validation";
 import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../engineering/component-authority";
+import type { CapturedViewContext, ViewCommandRequest } from "./view-context";
+import type { LayoutCandidate } from "../pcb/candidates/layout-candidate";
 
 // ─── Run identity + context ──────────────────────────────────────────────────
 
@@ -117,6 +119,15 @@ export interface AgentRunContext {
    *  validated at assembly, never granted authority. null ⇒ the PCB proposal
    *  tool is unavailable for this run (fail closed; reads unaffected). */
   pcbProposalBasis: PcbProposalBasis | null;
+  /** [B17-F] the VALIDATED captured view context — what the user's editors
+   *  show (open surfaces, each editor's view session id + revision + a
+   *  bounded state summary, the project operation timeline). View state is
+   *  never engineering state and never authority: it gates which view /
+   *  history tools are advertised and pins the revision a view command
+   *  expects. null ⇒ no view tools for this run. */
+  view: CapturedViewContext | null;
+  /** [B17-F] integrity pin for `view`. */
+  viewDigest: string | null;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
@@ -237,6 +248,14 @@ export type GatewayInvocationOutcome =
    *  proposal path can never receive one by type or by accident. */
   | { kind: "pcb-proposal"; ok: true; toolId: string; version: string; proposal: SealedPcbEditProposal }
   | { kind: "proposal-blocked"; ok: false; toolId: string; version: string; blockers: Array<{ code: string; detail: string }> }
+  /** [B17-F] a server-VALIDATED view-session command request the BROWSER
+   *  executes on the user's own view bus (stale-revision rule, role gate and
+   *  session scoping re-applied there). Never engineering state. */
+  | { kind: "view-command"; ok: true; toolId: string; version: string; request: ViewCommandRequest }
+  /** [B17-F] the shared revision-bound layout candidate (placement or
+   *  routing) — an artifact the human previews and applies in the editor's
+   *  own panel; producing it changes nothing. */
+  | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate }
   | { kind: "refused"; ok: false; toolId: string; version?: string; status: string; diagnostics: string[] };
 
 export interface AgentToolInvocationGateway {
@@ -267,6 +286,14 @@ export type AgentRunEvent =
    *  it grants nothing and mutates nothing; apply authority stays behind the
    *  human-gated PCB approval boundary. Emitted at most once per run. */
   | { type: "pcb_proposal_ready"; runId: string; toolId: string; proposal: SealedPcbEditProposal }
+  /** [B17-F] a validated view-command request for the browser's view bus.
+   *  The page dispatches it on the named editor session with the agent
+   *  actor; the bus's own stale-revision / role / session rules decide. */
+  | { type: "view_command_ready"; runId: string; toolId: string; request: ViewCommandRequest }
+  /** [B17-F] a layout candidate for the editor's candidate store — displayed
+   *  in the placement / routing panel; apply stays the human's explicit
+   *  action through the B17-E apply path. */
+  | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate }
   | { type: "warning"; runId: string; message: string }
   | { type: "run_failed"; runId: string; reason: string; message: string }
   | {

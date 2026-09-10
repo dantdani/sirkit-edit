@@ -13,12 +13,10 @@
 
 import { Crosshair, Trash2 } from "lucide-react";
 import type { PcbBoard } from "@/app/lib/pcb/types";
-import type { PcbScene } from "@/app/lib/pcb/render/scene";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { DrcRules, DrcPresetId } from "@/app/lib/pcb/drc/types";
 import type { SelectionStore } from "@/app/lib/pcb/selection";
 import type { EditCommand, SelectionRef } from "@/app/lib/pcb/edit/commands";
-import { selectionBBoxCenter } from "@/app/lib/pcb/edit/apply";
 import { applyEditsCanonical } from "@/app/lib/engineering/editor-adapter";
 import { previewEdits, type EditPreview } from "@/app/lib/pcb/edit/preview";
 import { getItems, type ResolvedItem } from "@/app/lib/pcb/selection-queries";
@@ -77,7 +75,7 @@ export function Inspector({
   board,
   selection,
   getHistory,
-  scene,
+  onFitSelection,
   rules,
   presetId,
   toast,
@@ -86,7 +84,8 @@ export function Inspector({
   board: PcbBoard;
   selection: SelectionStore;
   getHistory: () => PcbHistory | null;
-  scene: PcbScene | null;
+  /** [B17-D] "Zoom to" issues `pcb.fit-selection` on the view-session bus. */
+  onFitSelection: () => void;
   rules: DrcRules;
   presetId: DrcPresetId;
   toast(message: string): void;
@@ -198,7 +197,7 @@ export function Inspector({
       <div className="px-3 py-1.5 border-t border-zinc-800/60 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => scene?.centerOn(selectionBBoxCenter(board, set.refs))}
+          onClick={onFitSelection}
           className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
         >
           <Crosshair className="size-3" />

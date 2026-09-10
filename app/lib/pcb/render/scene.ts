@@ -29,7 +29,7 @@ import {
 } from "pixi.js";
 import { Viewport } from "pixi-viewport";
 
-import type { PcbBoard, FootprintDef, FootprintInstance } from "../types";
+import type { PcbBoard, FootprintDef, FootprintInstance, Track, Via } from "../types";
 import type { LayerId } from "../layers";
 import { COPPER_LAYERS } from "../layers";
 import { NM_PER_MM } from "../units";
@@ -132,6 +132,15 @@ export interface PcbScene {
   pickIn(rect: BBox): PickResult[];
   /** Marquee rectangle overlay (nm); null hides it. */
   setMarquee(rect: BBox | null): void;
+  // ── [B17-D] view-session mirror ─────────────────────────────────────────
+  /** What the viewport shows: centre (nm), zoom (px/mm) and the host size (CSS px); null before mount. */
+  viewState(): { centerNm: Vec2; pxPerMm: number; viewportPx: { width: number; height: number } } | null;
+  /** Fires after the viewport moved, zoomed, was fitted/centred or resized (the editor mirrors it onto the bus). */
+  onViewChange(cb: () => void): () => void;
+  /** Net-highlight overlay (amber outlines), independent of the selection overlay. */
+  setHighlightRefs(refs: SelectionRef[]): void;
+  /** [B17-E] Translucent ghost of a routing candidate's copper (the board is unchanged until Apply); null clears it. */
+  setRoutePreview(routes: { tracks: Track[]; vias: Via[] } | null): void;
 }
 
 /** Paint order, bottom → top. Stage 6 inserts copper content into these. */
@@ -172,6 +181,8 @@ const AIRWIRE_ALPHA = 0.62;
 const GHOST_TINT = 0xff8080;
 
 const mm = (nm: number): number => nm / NM_PER_MM;
+/** [B17-D] net-highlight outline (amber): distinct from the teal selection. */
+const HIGHLIGHT_COLOR = 0xf59e0b;
 
 interface InstanceText {
   bt: BitmapText;
@@ -222,7 +233,13 @@ export function createPcbScene(): PcbScene {
   let gridVisible = true;
   let tool: "select" | "pan" = "select";
   let selectionRefs: SelectionRef[] = [];
+  let highlightRefs: SelectionRef[] = [];
+  let routePreview: { tracks: Track[]; vias: Via[] } | null = null;
   let hoverId: string | null = null;
+  /** [B17-D] the outline colour the overlay drawers use (selection teal; highlight amber while highlight refs draw). */
+  let overlayColor: number = ACCENT_COLOR;
+  const viewCallbacks = new Set<() => void>();
+  const notifyView = (): void => { for (const cb of viewCallbacks) cb(); };
 
   let instances: InstanceRecord[] = [];
   const instanceById = new Map<string, InstanceRecord>();
@@ -240,6 +257,8 @@ export function createPcbScene(): PcbScene {
   // Overlay children, created lazily in paint order: airwires under the
   // selection/hover boxes, marquee on top.
   let airwireG: Graphics | null = null;
+  let routePreviewG: Graphics | null = null;
+  let highlightG: Graphics | null = null;
   let selectionG: Graphics | null = null;
   let marqueeG: Graphics | null = null;
 
@@ -564,13 +583,23 @@ export function createPcbScene(): PcbScene {
     for (const h of handleGraphics) h.scale.set(s);
   }
 
-  /** The overlay's three children, in paint order: airwires, selection, marquee. */
-  function overlayGraphics(): { air: Graphics; sel: Graphics; marquee: Graphics } {
+  /** The overlay's children, in paint order: airwires, highlight, selection, marquee. */
+  function overlayGraphics(): { air: Graphics; route: Graphics; hl: Graphics; sel: Graphics; marquee: Graphics } {
     const overlay = container("overlay");
     if (!airwireG) {
       airwireG = new Graphics();
       airwireG.eventMode = "none";
       overlay.addChild(airwireG);
+    }
+    if (!routePreviewG) {
+      routePreviewG = new Graphics();
+      routePreviewG.eventMode = "none";
+      overlay.addChild(routePreviewG);
+    }
+    if (!highlightG) {
+      highlightG = new Graphics();
+      highlightG.eventMode = "none";
+      overlay.addChild(highlightG);
     }
     if (!selectionG) {
       selectionG = new Graphics();
@@ -582,7 +611,7 @@ export function createPcbScene(): PcbScene {
       marqueeG.eventMode = "none";
       overlay.addChild(marqueeG);
     }
-    return { air: airwireG, sel: selectionG, marquee: marqueeG };
+    return { air: airwireG, route: routePreviewG, hl: highlightG, sel: selectionG, marquee: marqueeG };
   }
 
   function redrawAirwires(): void {
@@ -618,7 +647,7 @@ export function createPcbScene(): PcbScene {
 
   function strokeBBoxNm(g: Graphics, b: BBox, scale: number): void {
     g.roundRect(mm(b.minX), mm(b.minY), mm(b.maxX - b.minX), mm(b.maxY - b.minY), 4 / scale)
-      .stroke({ width: 2 / scale, color: ACCENT_COLOR });
+      .stroke({ width: 2 / scale, color: overlayColor });
   }
 
   /** Per-redraw item lookup — one O(board) pass instead of a per-ref linear
@@ -661,7 +690,7 @@ export function createPcbScene(): PcbScene {
         if (!via) return;
         g.circle(mm(via.at.x), mm(via.at.y), mm(via.size) / 2 + 2 / scale).stroke({
           width: 2 / scale,
-          color: ACCENT_COLOR,
+          color: overlayColor,
         });
         return;
       }
@@ -672,7 +701,7 @@ export function createPcbScene(): PcbScene {
           .lineTo(mm(t.end.x), mm(t.end.y))
           .stroke({
             width: mm(t.width) + 4 / scale,
-            color: ACCENT_COLOR,
+            color: overlayColor,
             alpha: 0.45,
             cap: "round",
           });
@@ -684,7 +713,7 @@ export function createPcbScene(): PcbScene {
         g.poly(
           z.polygon.map((p) => ({ x: mm(p.x), y: mm(p.y) })),
           true,
-        ).stroke({ width: 2 / scale, color: ACCENT_COLOR });
+        ).stroke({ width: 2 / scale, color: overlayColor });
         return;
       }
       case "text": {
@@ -727,7 +756,7 @@ export function createPcbScene(): PcbScene {
         if (sh.kind === "circle") {
           g.circle(mm(center.x), mm(center.y), mm(sh.radius) + 2 / scale).stroke({
             width: 2 / scale,
-            color: ACCENT_COLOR,
+            color: overlayColor,
           });
           return;
         }
@@ -749,13 +778,27 @@ export function createPcbScene(): PcbScene {
             return { x: mm(w.x), y: mm(w.y) };
           }),
           true,
-        ).stroke({ width: 2 / scale, color: ACCENT_COLOR });
+        ).stroke({ width: 2 / scale, color: overlayColor });
         return;
       }
     }
   }
 
+  /** [B17-E] the routing candidate ghost: screen-constant-ish translucent copper in the accent colour. */
+  function redrawRoutePreview(): void {
+    const g = overlayGraphics().route;
+    g.clear();
+    if (!routePreview) return;
+    for (const track of routePreview.tracks) {
+      g.moveTo(mm(track.start.x), mm(track.start.y)).lineTo(mm(track.end.x), mm(track.end.y)).stroke({ width: Math.max(mm(track.width), 1.5 / pxPerMm()), color: ACCENT_COLOR, alpha: 0.55, cap: "round" });
+    }
+    for (const via of routePreview.vias) {
+      g.circle(mm(via.at.x), mm(via.at.y), Math.max(mm(via.size) / 2, 2 / pxPerMm())).fill({ color: ACCENT_COLOR, alpha: 0.45 });
+    }
+  }
+
   function redrawOverlay(): void {
+    redrawRoutePreview();
     const g = overlayGraphics().sel;
     g.clear();
     const scale = pxPerMm();
@@ -770,9 +813,15 @@ export function createPcbScene(): PcbScene {
           .stroke({ width: 1.5 / scale, color: ACCENT_COLOR, alpha: HOVER_ALPHA });
       }
     }
-    if (selectionRefs.length > 0 && board) {
-      const lookup = buildOverlayLookup(board);
+    const lookup = board && (selectionRefs.length > 0 || highlightRefs.length > 0) ? buildOverlayLookup(board) : null;
+    if (selectionRefs.length > 0 && lookup) {
       for (const ref of selectionRefs) drawSelectedRef(g, ref, scale, lookup);
+    }
+    const hl = overlayGraphics().hl;
+    hl.clear();
+    if (highlightRefs.length > 0 && lookup) {
+      overlayColor = HIGHLIGHT_COLOR;
+      try { for (const ref of highlightRefs) drawSelectedRef(hl, ref, scale, lookup); } finally { overlayColor = ACCENT_COLOR; }
     }
   }
 
@@ -905,8 +954,9 @@ export function createPcbScene(): PcbScene {
       redrawOverlay();
       redrawAirwires(); // screen-constant stroke widths
       redrawMarquee();
+      notifyView();
     });
-    vp.on("moved", () => maybeRebuildGrid());
+    vp.on("moved", () => { maybeRebuildGrid(); notifyView(); });
 
     // FPS bookkeeping.
     pixiApp.ticker.add(() => {
@@ -946,6 +996,7 @@ export function createPcbScene(): PcbScene {
       app.renderer.resize(w, h);
       viewport.resize(w, h);
       maybeRebuildGrid();
+      notifyView();
     });
     resizeObserver.observe(el);
 
@@ -1042,6 +1093,7 @@ export function createPcbScene(): PcbScene {
     maybeRebuildGrid(true);
     updateHandleScales();
     redrawOverlay();
+    notifyView();
   }
 
   function centerOn(world: Vec2, pxPerMm?: number): void {
@@ -1053,6 +1105,7 @@ export function createPcbScene(): PcbScene {
     maybeRebuildGrid(true);
     updateHandleScales();
     redrawOverlay();
+    notifyView();
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -1194,6 +1247,32 @@ export function createPcbScene(): PcbScene {
       else ghosts.set(id, state);
       const rec = instanceById.get(id);
       if (rec) applyGhost(rec);
+    },
+
+    // ── [B17-D] view-session mirror ────────────────────────────────────────
+    viewState(): { centerNm: Vec2; pxPerMm: number; viewportPx: { width: number; height: number } } | null {
+      if (!viewport || !hostEl || !mounted) return null;
+      const c = viewport.center;
+      return {
+        centerNm: { x: Math.round(c.x * NM_PER_MM), y: Math.round(c.y * NM_PER_MM) },
+        pxPerMm: viewport.scale.x,
+        viewportPx: { width: Math.max(hostEl.clientWidth, 1), height: Math.max(hostEl.clientHeight, 1) },
+      };
+    },
+
+    onViewChange(cb: () => void): () => void {
+      viewCallbacks.add(cb);
+      return () => { viewCallbacks.delete(cb); };
+    },
+
+    setHighlightRefs(refs: SelectionRef[]): void {
+      highlightRefs = [...refs];
+      if (mounted) redrawOverlay();
+    },
+
+    setRoutePreview(routes: { tracks: Track[]; vias: Via[] } | null): void {
+      routePreview = routes ? { tracks: [...routes.tracks], vias: [...routes.vias] } : null;
+      if (mounted) redrawRoutePreview();
     },
 
     pickIn(rect: BBox): PickResult[] {

@@ -25,10 +25,17 @@ export interface Palette {
 export interface SceneParams {
   palette: Palette;
   showMask: boolean;
+  /** Both silkscreens; `showSilkTop` / `showSilkBottom` override it per side ([B17-C] independent silkscreens). */
   showSilk: boolean;
+  showSilkTop?: boolean;
+  showSilkBottom?: boolean;
   showZones: boolean;
   showFootprints: boolean;
   showRefdes: boolean;
+  /** [B17-C] default true: copper (tracks + pads), vias, board substrate. */
+  showCopper?: boolean;
+  showVias?: boolean;
+  showSubstrate?: boolean;
   cameraPreset?: "top" | "bottom" | "iso";
 }
 

@@ -1,12 +1,20 @@
-/** One-click bounded multilayer FreeRouting completion with one atomic commit. */
+/** One-click bounded multilayer FreeRouting completion.
+ *
+ * [B17-E] `run()` no longer commits: it produces the SHARED routing candidate
+ * (`sirkit.layout-candidate.v1`, scoped to the requested nets when the caller
+ * names them) and registers it in the editor's candidate store — a ghost of
+ * its copper is previewed, the board stays unchanged — and `apply()` commits
+ * it through `applyLayoutCandidate`: ONE canonical transaction with the
+ * exact base revision + lifecycle generation re-checked at serialized
+ * execution time and locked copper preserved. `discard()` retires it.
+ */
 
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { PcbBoardLifecycleScope } from "@/app/lib/pcb/lifecycle/board-lifecycle";
-import { createEmptyBoard, type PcbBoard, type Track, type Via } from "@/app/lib/pcb/types";
-import { parseSes, type SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
+import { createEmptyBoard, type PcbBoard } from "@/app/lib/pcb/types";
+import type { SesLayerUsage } from "@/app/lib/pcb/dsn/read-ses";
 import { buildAutorouteImportCommand } from "@/app/lib/pcb/autoroute/command";
 import { applyRouteCommand } from "@/app/lib/pcb/route-tool.commands";
 import { computeElectricalTruth } from "@/app/lib/pcb/electrical-truth";
@@ -14,6 +22,7 @@ import { runDrc } from "@/app/lib/pcb/drc/run-drc";
 import type { DrcRules } from "@/app/lib/pcb/drc/types";
 import type { LayerId } from "@/app/lib/pcb/layers";
 import type { AutoroutePassReport, AutorouteUnresolvedConnection } from "@/app/lib/pcb/autoroute/completion";
+import { applyLayoutCandidate, produceRoutingCandidate, type AutorouteResponseLike, type LayoutCandidateStore, type RoutingLayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate";
 import { pcbRevisionId } from "@/app/lib/pcb/ai/snapshot";
 import type { PcbNetlist } from "@/app/lib/pcb/netlist-bridge";
 import type { DrcPresetId } from "@/app/lib/pcb/drc/types";
@@ -33,12 +42,18 @@ export interface AutorouteEditor {
   /** [B16.0.2 §B] the active project identity — sent as a SELECTOR only; the
    *  autoroute route is authenticated + project-scoped on the server. */
   getScope?: () => ProjectSelectorScope | null;
+  /** [B17-E] the editor's shared candidate store and lifecycle generation. */
+  candidates?: LayoutCandidateStore;
+  getGeneration?: () => number | undefined;
 }
 
-export type AutorouteState = "idle" | "queued" | "running" | "complete" | "partial" | "failed" | "cancelled";
+export type AutorouteState = "idle" | "queued" | "running" | "preview" | "complete" | "partial" | "failed" | "cancelled";
 
 export interface AutorouteResult {
   status: "complete" | "partial";
+  /** [B17-E] `preview` = the candidate's projected board (unchanged until Apply); `applied` = the committed board. */
+  phase: "preview" | "applied";
+  scope: { netIds: number[] | "all" };
   tracksImported: number;
   viasImported: number;
   routedNets: number;
@@ -56,12 +71,21 @@ export interface AutorouteResult {
   fabricationReadiness: ReadinessReport;
 }
 
+export interface AutorouteRunScope {
+  /** Route only these nets (a reroute of the selection); absent = the whole board. */
+  netIds?: number[];
+}
+
 export interface AutorouteHandle {
   state: AutorouteState;
   elapsedMs: number;
   lastResult?: AutorouteResult;
+  /** [B17-E] the routing candidate awaiting Apply / Discard (registered in the store). */
+  candidate?: RoutingLayoutCandidate;
   lastError?: string;
-  run(): Promise<void>;
+  run(scope?: AutorouteRunScope): Promise<void>;
+  apply(candidateId?: string): Promise<void>;
+  discard(candidateId?: string): void;
   cancel(): void;
   /** B08.2 — lifecycle replacement: abort the in-flight request, discard
    *  results/errors, and release the NEW generation from the old busy flag.
@@ -69,36 +93,10 @@ export interface AutorouteHandle {
   invalidate(): void;
 }
 
-interface AutorouteApiResponse {
-  ok?: boolean;
-  sourceRevision?: string;
-  candidateRevision?: string;
-  routeAttemptId?: string;
-  sesText?: string;
-  routes?: { tracks: Track[]; vias: Via[] };
+interface AutorouteApiResponse extends AutorouteResponseLike {
   error?: string;
-  engine?: { name?: string; version?: string; apiKeyRequired?: boolean };
-  job?: { id?: string; status?: "complete" | "partial" | "failed" };
-  verification?: {
-    requiredConnections?: number;
-    completedConnections?: number;
-    remainingConnections?: number;
-    routedNets?: number;
-    totalNets?: number;
-  };
-  completion?: {
-    acceptedPasses?: number;
-    passes?: AutoroutePassReport[];
-    failures?: AutorouteUnresolvedConnection[];
-  };
-  stats?: {
-    elapsedMs?: number;
-    tracksImported?: number;
-    viasImported?: number;
-    layerUsage?: Partial<Record<LayerId, SesLayerUsage>>;
-  };
+  stats?: { elapsedMs?: number; tracksImported?: number; viasImported?: number; layerUsage?: Partial<Record<LayerId, SesLayerUsage>> };
   debugDirectory?: string;
-  readiness?: ReadinessReport;
 }
 
 export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
@@ -109,6 +107,7 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
   const [state, setState] = useState<AutorouteState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lastResult, setLastResult] = useState<AutorouteResult>();
+  const [candidate, setCandidate] = useState<RoutingLayoutCandidate>();
   const [lastError, setLastError] = useState<string>();
   // B08.2 — request-keyed busy ownership: `active` names the EXACT run that
   // owns the busy flag and whether its generation is still current. A run
@@ -117,6 +116,7 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
   const activeRef = useRef<{ requestId: string; isCurrent: () => boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const requestSeqRef = useRef(0);
+  const responseMetaRef = useRef<{ layerUsage: Partial<Record<LayerId, SesLayerUsage>>; debugDirectory?: string; engine: string }>({ layerUsage: {}, engine: "" });
 
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -140,10 +140,39 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
     setState("idle");
     setElapsedMs(0);
     setLastResult(undefined);
+    setCandidate(undefined);
     setLastError(undefined);
   }, []);
 
-  const run = useCallback(async (): Promise<void> => {
+  /** The routed board's truth (electrical + DRC) for a summary — of the projection during preview, of the committed board after apply. */
+  const summarize = (board: PcbBoard, routing: RoutingLayoutCandidate, phase: AutorouteResult["phase"]): AutorouteResult => {
+    const electricalTruth = computeElectricalTruth(board);
+    const drcRules = editorRef.current.getDrcRules?.();
+    const drcErrors = drcRules ? runDrc(board, drcRules).violations.filter((violation) => violation.severity === "error").length : undefined;
+    const remainingConnections = electricalTruth.realized.remainingConnections;
+    return {
+      status: routing.completion.status === "complete" && remainingConnections === 0 ? "complete" : "partial",
+      phase,
+      scope: routing.scope,
+      tracksImported: routing.stats.tracks,
+      viasImported: routing.stats.vias,
+      routedNets: electricalTruth.realized.routedNets,
+      totalNets: electricalTruth.realized.totalNets,
+      drcErrors,
+      requiredConnections: electricalTruth.realized.requiredConnections,
+      completedConnections: electricalTruth.realized.completedConnections,
+      remainingConnections,
+      layerUsage: responseMetaRef.current.layerUsage,
+      passCount: routing.completion.passCount,
+      acceptedPasses: routing.completion.acceptedPasses,
+      failures: routing.completion.failures,
+      passReports: routing.completion.passReports,
+      debugDirectory: responseMetaRef.current.debugDirectory,
+      fabricationReadiness: routing.readiness as ReadinessReport,
+    };
+  };
+
+  const run = useCallback(async (scopeInput?: AutorouteRunScope): Promise<void> => {
     // Busy only while the owning run's GENERATION is still current — a
     // lifecycle replacement releases the new generation immediately.
     if (activeRef.current?.isCurrent()) return;
@@ -155,6 +184,7 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
     const requestId = scope?.requestId ?? `autoroute-local-${++requestSeqRef.current}`;
     const board: PcbBoard = editorRef.current.getHistory()?.present ?? createEmptyBoard();
     const baseRevision = pcbRevisionId(board);
+    const netIds = scopeInput?.netIds && scopeInput.netIds.length > 0 ? [...new Set(scopeInput.netIds)].sort((a, b) => a - b) : undefined;
     activeRef.current = { requestId, isCurrent: owned };
     setState("queued");
     setLastError(undefined);
@@ -179,12 +209,15 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
           board,
           netlist: editorRef.current.getNetlist?.() ?? undefined,
           fabPresetId: editorRef.current.getDrcPresetId?.(),
+          // [B17-E] the server refuses a mismatched base (409) and routes only the requested nets.
+          sourceRevision: baseRevision,
+          ...(netIds ? { netIds } : {}),
         }),
         signal: controller.signal,
       });
       const body = await response.json() as AutorouteApiResponse;
       if (!owned()) return; // stale: the candidate is discarded silently
-      if (!response.ok || !body.ok || (!body.routes && !body.sesText)) {
+      if (!response.ok || !body.ok || !body.routes) {
         throw new Error(body.error ?? `Autoroute failed (${response.status})`);
       }
       if (!body.readiness) throw new Error("Autoroute response is missing the authoritative fabrication-readiness report.");
@@ -193,90 +226,24 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
       if (pcbRevisionId(history.present) !== baseRevision) {
         throw new Error("Board changed while autorouting; the stale route candidate was discarded.");
       }
-      if (body.sourceRevision && body.sourceRevision !== baseRevision) {
-        throw new Error("Autoroute response was generated from a different board revision and was discarded.");
+      // [B17-E] the shared candidate — pinned to the base revision and the lifecycle generation, scoped to the request.
+      const produced = produceRoutingCandidate({ board: history.present, response: body, producer: "editor", netIds, generation: editorRef.current.getGeneration?.() });
+      if ("ok" in produced) throw new Error(produced.message);
+      responseMetaRef.current = { layerUsage: body.stats?.layerUsage ?? {}, debugDirectory: body.debugDirectory, engine: body.engine?.version ? `Freerouting ${body.engine.version} local · ` : "" };
+      // The projection the candidate would produce: the summary (and readiness) the user reviews before Apply.
+      const projected = applyRouteCommand(history.present, buildAutorouteImportCommand(history.present, produced.routes));
+      if (produced.candidateRevision && pcbRevisionId(projected) !== produced.candidateRevision) {
+        throw new Error("Autoroute candidate provenance check failed; board was left unchanged.");
       }
-      const current = history.present;
-      const parsed = body.routes ? undefined : parseSes(body.sesText ?? "", current);
-      const imported = body.routes ?? { tracks: parsed?.tracks ?? [], vias: parsed?.vias ?? [] };
-      const acceptedPasses = body.completion?.acceptedPasses ?? (imported.tracks.length + imported.vias.length > 0 ? 1 : 0);
-      const passReports = body.completion?.passes ?? [];
-      const failures = body.completion?.failures ?? [];
-
-      if (acceptedPasses > 0) {
-        const command = buildAutorouteImportCommand(current, imported);
-        const projected = applyRouteCommand(current, command);
-        if (body.candidateRevision && pcbRevisionId(projected) !== body.candidateRevision) {
-          throw new Error("Autoroute candidate provenance check failed; board was left unchanged.");
-        }
-        if (!owned()) return; // stale: never even SUBMIT the commit
-        // B08 — ONE canonical transaction; the base revision is re-verified
-        // against the board at serialized execution time, so a changed base
-        // discards the candidate with zero mutation. (A lifecycle
-        // replacement also retires the history — the gateway refuses.)
-        const commit = await commitPcbCandidate(history, {
-          commandId: "pcb.autoroute-import",
-          label: "Autoroute board",
-          ...(body.routeAttemptId ? { idempotencyKey: `autoroute:${body.routeAttemptId}` } : {}),
-          metadata: {
-            operationType: "autoroute_completion",
-            actor: "autorouter",
-            reason: `Applied ${acceptedPasses} monotonic high-effort routing pass(es).`,
-            details: {
-              routeAttemptId: body.routeAttemptId,
-              sourceRevision: body.sourceRevision ?? baseRevision,
-              candidateRevision: body.candidateRevision,
-              passReports,
-              failures,
-            },
-          },
-          buildCandidate: (board) => {
-            if (pcbRevisionId(board) !== baseRevision) throw new Error("Board changed while autorouting; the stale route candidate was discarded.");
-            return applyRouteCommand(board, command);
-          },
-        });
-        if (!owned()) return;
-        if (!commit.ok) throw new Error(commit.message);
-      }
-
-      const electricalTruth = computeElectricalTruth(history.present);
-      const drcRules = editorRef.current.getDrcRules?.();
-      const drcErrors = drcRules
-        ? runDrc(history.present, drcRules).violations.filter((violation) => violation.severity === "error").length
-        : undefined;
-      const requiredConnections = electricalTruth.realized.requiredConnections;
-      const completedConnections = electricalTruth.realized.completedConnections;
-      const remainingConnections = electricalTruth.realized.remainingConnections;
-      const result: AutorouteResult = {
-        status: body.job?.status === "complete" && remainingConnections === 0 ? "complete" : "partial",
-        tracksImported: body.stats?.tracksImported ?? imported.tracks.length,
-        viasImported: body.stats?.viasImported ?? imported.vias.length,
-        routedNets: electricalTruth.realized.routedNets,
-        totalNets: electricalTruth.realized.totalNets,
-        drcErrors,
-        requiredConnections,
-        completedConnections,
-        remainingConnections,
-        layerUsage: body.stats?.layerUsage ?? parsed?.layerUsage ?? {},
-        passCount: passReports.length,
-        acceptedPasses,
-        failures,
-        passReports,
-        debugDirectory: body.debugDirectory,
-        fabricationReadiness: body.readiness,
-      };
+      editorRef.current.candidates?.register(produced);
+      const result = summarize(projected, produced, "preview");
       if (!owned()) return;
+      setCandidate(produced);
       setLastResult(result);
-      setState(result.status);
+      setState("preview");
       const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-      const engine = body.engine?.version ? `Freerouting ${body.engine.version} local · ` : "";
-      const drcChip = drcErrors === undefined ? "" : ` · DRC: ${drcErrors} error${drcErrors === 1 ? "" : "s"}`;
-      if (result.status === "complete") {
-        toast(`${engine}Autoroute complete — ${result.completedConnections}/${result.requiredConnections} connections completed · 0 unrouted · ${result.passCount} pass${result.passCount === 1 ? "" : "es"} in ${seconds}s${drcChip}`);
-      } else {
-        const blocker = failures[0]?.primaryBlockers[0] ? ` · ${failures[0].primaryBlockers[0]}` : "";
-        toast(`${engine}Autoroute partial — ${result.completedConnections}/${result.requiredConnections} connections completed · ${result.remainingConnections} remain · ${result.acceptedPasses}/${result.passCount} passes improved${blocker}${drcChip}`);
-      }
+      const scopeLabel = netIds ? `${netIds.length} selected net${netIds.length === 1 ? "" : "s"}` : "board";
+      toast(`${responseMetaRef.current.engine}Routing candidate ready for the ${scopeLabel} — ${result.completedConnections}/${result.requiredConnections} connections would be completed · ${result.tracksImported} tracks · ${result.acceptedPasses}/${result.passCount} passes in ${seconds}s. Review the ghost and apply explicitly.`);
     } catch (error) {
       if (controller.signal.aborted) return; // user cancel or lifecycle abort
       if (!owned()) return; // stale generation: errors belong to nobody
@@ -298,5 +265,59 @@ export function useAutoroute(editor: AutorouteEditor): AutorouteHandle {
     }
   }, []);
 
-  return { state, elapsedMs, lastResult, lastError, run, cancel, invalidate };
+  const resolveCandidate = (candidateId?: string): RoutingLayoutCandidate | undefined => {
+    if (candidateId) {
+      const found = editorRef.current.candidates?.get(candidateId);
+      return found?.kind === "routing" ? found : undefined;
+    }
+    return candidate;
+  };
+
+  const apply = useCallback(async (candidateId?: string): Promise<void> => {
+    const pending = resolveCandidate(candidateId);
+    const history = editorRef.current.getHistory();
+    if (!pending || !history) return;
+    const applyScope = editorRef.current.captureLifecycle?.() ?? null;
+    const applyOwned = (): boolean => applyScope === null || applyScope.isCurrent();
+    // [B17-E] ONE canonical transaction through the shared apply path (base revision, generation, scope, provenance re-checked).
+    const commit = await applyLayoutCandidate({ history, candidate: pending, actorId: "user:pcb-editor", actor: "autorouter", generation: editorRef.current.getGeneration?.() });
+    if (!applyOwned()) return;
+    if (!commit.ok) {
+      if ("code" in commit && (commit.code === "STALE_REVISION" || commit.code === "STALE_GENERATION" || commit.code === "EXPIRED")) {
+        editorRef.current.candidates?.retire(pending.candidateId, "stale");
+        if (!candidateId || pending.candidateId === candidate?.candidateId) setCandidate(undefined);
+      }
+      setLastError(commit.message);
+      setState("failed");
+      toast(`Autoroute apply rejected: ${commit.message}`);
+      return;
+    }
+    editorRef.current.candidates?.retire(pending.candidateId, "applied");
+    const result = summarize(history.present, pending, "applied");
+    setCandidate(undefined);
+    setLastResult(result);
+    setState(result.status);
+    const drcChip = result.drcErrors === undefined ? "" : ` · DRC: ${result.drcErrors} error${result.drcErrors === 1 ? "" : "s"}`;
+    if (result.status === "complete") {
+      toast(`Autoroute applied — ${result.completedConnections}/${result.requiredConnections} connections completed · 0 unrouted · ${result.passCount} pass${result.passCount === 1 ? "" : "es"}${drcChip}`);
+    } else {
+      const blocker = result.failures[0]?.primaryBlockers[0] ? ` · ${result.failures[0].primaryBlockers[0]}` : "";
+      toast(`Autoroute applied (partial) — ${result.completedConnections}/${result.requiredConnections} connections completed · ${result.remainingConnections} remain${blocker}${drcChip}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate]);
+
+  const discard = useCallback((candidateId?: string): void => {
+    const pending = resolveCandidate(candidateId);
+    if (pending) editorRef.current.candidates?.retire(pending.candidateId, "discarded");
+    if (!candidateId || pending?.candidateId === candidate?.candidateId) {
+      setCandidate(undefined);
+      setLastResult(undefined);
+      setState("idle");
+    }
+    toast("Routing candidate discarded; board unchanged.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidate]);
+
+  return { state, elapsedMs, lastResult, candidate, lastError, run, apply, discard, cancel, invalidate };
 }

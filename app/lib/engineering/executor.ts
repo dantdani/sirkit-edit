@@ -101,6 +101,9 @@ export const KERNEL_OPERATION_BINDINGS = Object.freeze({
   // B08 — bulk candidates: each applies ONE compiled transaction.
   "pcb.auto-place": ["move_footprint", "add_track", "update_track", "remove_track", "add_via", "update_via", "remove_via", "add_zone", "update_zone", "remove_zone", "update_constraint_state", "update_board_outline"],
   "pcb.autoroute-import": ["add_track", "remove_track", "add_via", "remove_via", "update_routing_history"],
+  // [B17-E] explicit selected-net commands built on the same vocabulary: a scoped routing candidate and a per-net rip-up.
+  "pcb.reroute-nets": ["add_track", "remove_track", "add_via", "remove_via", "update_routing_history"],
+  "pcb.clear-nets": ["remove_track", "remove_via", "update_routing_history"],
   "pcb.autonomous-layout": [...ALL_PCB_OPERATION_KINDS],
   "pcb.board-repair": ["add_track", "update_track", "remove_track", "add_via", "update_via", "remove_via", "add_zone", "update_zone", "remove_zone", "update_constraint_state", "update_routing_history"],
   // B08 — AI assist explicit apply: a declared compound command whose batch

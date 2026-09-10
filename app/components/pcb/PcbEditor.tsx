@@ -51,8 +51,8 @@ import {
   type ContextMenuRequest,
 } from "@/app/lib/pcb/tools/select-move";
 import { createSelectionStore } from "@/app/lib/pcb/selection"; // Stage 17
-import { selectSimilar, selectNet, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
-import { liveRefs, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply"; // Stage 17
+import { selectSimilar, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
+import { liveRefs } from "@/app/lib/pcb/edit/apply"; // Stage 17
 // B03: the canonical editor session — slice mutations run through the
 // canonical executor; the wrapped history keeps undo/redo UI semantics.
 import { applyEditsCanonical, bindCanonicalEditorSession, canonicalSessionFor } from "@/app/lib/engineering/editor-adapter";
@@ -134,6 +134,12 @@ import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B
 import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
 import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
+import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
+import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
+import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
+import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
+import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
+import type { ProjectOperationTimeline, ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
 import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
@@ -174,7 +180,10 @@ type EditorAction =
   | { type: "show-copper" }
   | { type: "set-active-layer"; layer: LayerId }
   | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension" } // Stages 7 + 11 + 16 + B08
-  | { type: "toggle-grid" };
+  | { type: "toggle-grid" }
+  // [B17-D] explicit-value forms the view-session bus applies (rebase-safe: the target value is in the action).
+  | { type: "set-layer-visible"; layer: LayerId; visible: boolean }
+  | { type: "set-grid"; visible: boolean };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
   LAYERS.map((l) => [l.id, l.defaultVisible]),
@@ -223,6 +232,13 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, tool: action.tool };
     case "toggle-grid":
       return { ...state, gridOn: !state.gridOn };
+    case "set-layer-visible": {
+      const current = state.visibleOverrides[action.layer] ?? DEFAULT_VISIBLE[action.layer];
+      if (current === action.visible) return state;
+      return { ...state, visibleOverrides: { ...state.visibleOverrides, [action.layer]: action.visible } };
+    }
+    case "set-grid":
+      return state.gridOn === action.visible ? state : { ...state, gridOn: action.visible };
   }
 }
 
@@ -285,11 +301,15 @@ export default function PcbEditor({
   active = true,
   hydrateToken = 0,
   gateSchematicSync,
+  operationTimeline,
   aiOwnership,
   editorContextBridge,
   pcbProposalIntake,
   onPcbProposalSettled,
   currentInterlock,
+  viewSessionBridge,
+  layoutCandidateIntake,
+  onLayoutCandidateSettled,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -318,9 +338,19 @@ export default function PcbEditor({
   pcbProposalIntake?: { proposal: SealedPcbEditProposal; originRunId: string | null } | null;
   /** Settle the pending proposal (applied / cancelled / retired). */
   onPcbProposalSettled?: (outcome: "applied" | "cancelled" | "retired") => void;
+  /** [B17-F] the page-owned view-session bridge: this editor registers its pcb and pcb3d view sessions while a
+   *  board is loaded (never in demo mode), so the agent's view tools see exactly the surfaces that exist. */
+  viewSessionBridge?: ViewSessionBridge;
+  /** [B17-F] an agent-produced layout candidate (placement or routing) handed to this editor's candidate store
+   *  after the page's SAFE receiver verified it. Registration re-verifies base revision, generation and expiry;
+   *  a stale candidate is refused with a visible reason. Apply stays the human's explicit action. */
+  layoutCandidateIntake?: { candidate: LayoutCandidate; originRunId: string | null } | null;
+  onLayoutCandidateSettled?: () => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
+  /** [B17-E] the page-owned project operation timeline this editor records its canonical history operations on. */
+  operationTimeline?: ProjectOperationTimeline;
 }) {
   // Lint note (B08.3): this editor is an imperative orchestrator — canvas
   // scene, gesture tool, and history/session refs are deliberately mutated
@@ -361,6 +391,10 @@ export default function PcbEditor({
 
   const [state, dispatch] = useReducer(reducer, init.board, makeEditorState);
   const [scene, setScene] = useState<PcbScene | null>(null);
+  // [B17-E] the timeline is read through a ref inside the runtime-bind effect (it never re-binds the runtime).
+  const operationTimelineRef = useRef(operationTimeline);
+  useEffect(() => { operationTimelineRef.current = operationTimeline; });
+  const historyBindSeqRef = useRef(0);
   const [syncProgress, setSyncProgress] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [placementWarning, setPlacementWarning] = useState<string | null>(null);
@@ -961,6 +995,21 @@ export default function PcbEditor({
       toast: setToast,
       onContextMenu: (request) => setCtxMenu(request),
     });
+    // [B17-E] the PCB store on the project timeline: every canonical commit / undo / redo of THIS history is
+    // recorded with the canonical head fingerprint; the store lends its own undo + head while it is bound.
+    const timeline = operationTimelineRef.current;
+    const appliedCount = (): number => history.entries.filter((entry) => entry.state === "applied").length;
+    const redoCount = (): number => history.entries.filter((entry) => entry.state === "redo").length;
+    const historyId = `pcb-history-${++historyBindSeqRef.current}`;
+    const pcbHead = (board: PcbBoard): Extract<ProjectStoreHead, { store: "pcb" }> => {
+      const head = canonicalSessionFor(history)?.headMetadataFor(board) ?? null;
+      const applied = appliedCount();
+      return { store: "pcb", historyId: head?.lineageId ?? historyId, headSequence: head?.headSequence ?? applied, entryCount: applied };
+    };
+    let previousApplied = appliedCount();
+    let previousRedo = redoCount();
+    timeline?.record({ store: "pcb", kind: "hydrate", label: "Board loaded", actor: "system", head: pcbHead(history.present) });
+    const unbindTimeline = timeline?.bindStore("pcb", { undo: () => history.undo(), head: () => pcbHead(history.present) });
     const unsubscribe = history.subscribe((board) => {
       dispatch({ type: "set-board", board });
       editorRuntime.publishSnapshot(historyView(history));
@@ -968,12 +1017,23 @@ export default function PcbEditor({
       const refs = selectionStore.get().refs;
       const live = liveRefs(board, refs);
       if (live.length !== refs.length) selectionStore.replace(live);
+      if (timeline) {
+        const applied = appliedCount(), redo = redoCount();
+        const kind = applied > previousApplied ? (redo < previousRedo ? "redo" : "commit") : applied < previousApplied ? "undo" : null;
+        previousApplied = applied; previousRedo = redo;
+        if (kind) {
+          const appliedEntries = history.entries.filter((entry) => entry.state === "applied");
+          const last = appliedEntries[appliedEntries.length - 1];
+          timeline.record({ store: "pcb", kind, label: kind === "undo" ? (history.redoLabel ?? "PCB edit") : (last?.label ?? "PCB edit"), actor: last?.metadata.actor ?? "human", head: pcbHead(board), ref: { transactionId: last?.metadata.transactionId, entryId: last?.id } });
+        }
+      }
     });
     tool.refreshAirwires();
     // B09.0 — one atomic runtime adoption; retire() (reseed, lifecycle
     // replacement, unmount) runs this teardown exactly once.
     editorRuntime.bind(history, tool, () => {
       unsubscribe();
+      unbindTimeline?.();
       tool.destroy();
       bound.session.dispose();
     });
@@ -1264,6 +1324,11 @@ export default function PcbEditor({
     restoreSelection: () => scene?.setSelectionRefs(selectionStore.get().refs),
   });
   useEffect(() => { activeDrcPresetIdRef.current = drc.activePresetId; }, [drc.activePresetId]);
+  // ── [B17-E] the shared layout-candidate store: one per editor mount; every producer (this editor's placement
+  // worker and autoroute run, the agent's placement preview, the preview route) registers the same
+  // `sirkit.layout-candidate.v1` artifact and every consumer applies it through the same canonical path.
+  const [layoutCandidates] = useState(() => new LayoutCandidateStore());
+  const layoutCandidateList = useSyncExternalStore((listener) => layoutCandidates.subscribe(listener), () => layoutCandidates.list(), () => layoutCandidates.list());
   const repair = usePcbRepair({
     getHistory: () => editorRuntime.getHistory(),
     captureLifecycle,
@@ -1273,6 +1338,8 @@ export default function PcbEditor({
     getNetlist: () => liveNetlist,
     toast: setToast,
     onApplied: () => drc.run(),
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
   const liveReadinessReport = useMemo(() => {
     if (!state.board) return undefined;
@@ -1410,7 +1477,12 @@ export default function PcbEditor({
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────
-  const [preview3dOpen, setPreview3dOpen] = useState(false);
+  // [B17-C] the 3D preview is VIEW state on the pcb3d view-session bus (open/close, camera, focus, layers, finish);
+  // every entry point (toolbar, palette, Ctrl+3, Escape, the preview's own controls) issues the same command.
+  const pcb3d = usePcb3dViewSession({ projectId: init.scope?.projectId ?? (init.demo ? "demo" : "local"), branchId: init.scope?.branchId ?? "main", board: state.board, actorId: init.scope ? "trusted-session" : "local", demo: init.demo });
+  const preview3dOpen = pcb3d.view.open;
+  // [B17-F] the pcb3d surface exists for the agent only while a real board is loaded (never in demo mode).
+  useViewSessionBridge(viewSessionBridge, pcb3d, !init.demo && state.board !== null);
 
   // ── Stage 17: padstack library panel (right column, not a modal) ───────────
   const [padstacksOpen, setPadstacksOpen] = useState(false);
@@ -1481,6 +1553,8 @@ export default function PcbEditor({
     captureLifecycle,
     getNetlist: () => liveNetlist,
     toast: setToast,
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
   const enlargeBoardToFit = useCallback((): void => {
     const history = editorRuntime.getHistory();
@@ -1528,7 +1602,44 @@ export default function PcbEditor({
     getDrcRules: () => getPreset(drc.activePresetId).rules, // Stage 12: DRC on completion
     getDrcPresetId: () => drc.activePresetId,
     getNetlist: () => liveNetlist,
+    candidates: layoutCandidates,
+    getGeneration: () => lifecycleGeneration,
   });
+  // [B17-E] the routing candidate's copper is a ghost on the canvas until Apply; a board change retires stale candidates.
+  // [B17-F] the routing candidate the panel shows: the editor's own run first, else the latest store candidate
+  // (an agent proposal); the same ghost, the same Apply / Discard path (`autoroute.apply(candidateId)`).
+  const storeRoutingCandidate = useMemo(() => {
+    const routing = layoutCandidateList.filter((item): item is Extract<typeof item, { kind: "routing" }> => item.kind === "routing");
+    return routing.length > 0 ? routing[routing.length - 1] : undefined;
+  }, [layoutCandidateList]);
+  const shownRoutingCandidate = autoroute.candidate ?? storeRoutingCandidate;
+  useEffect(() => { scene?.setRoutePreview(shownRoutingCandidate?.routes ?? null); }, [scene, shownRoutingCandidate]);
+  // [B17-F] an agent-produced layout candidate enters the SAME store the editor's own runs use — after the base
+  // revision / generation / expiry re-check; a stale one is refused visibly and nothing is registered.
+  const layoutIntakeRef = useRef<string | null>(null);
+  useEffect(() => {
+    const intake = layoutCandidateIntake;
+    if (!intake || layoutIntakeRef.current === intake.candidate.candidateId) return;
+    layoutIntakeRef.current = intake.candidate.candidateId;
+    const board = boardRef.current;
+    if (!board) { setToast("Agent layout candidate ignored: no board is loaded."); onLayoutCandidateSettled?.(); return; }
+    const verdict = verifyLayoutCandidate(intake.candidate, board);
+    if (!verdict.ok) {
+      setToast(`Agent ${intake.candidate.kind} candidate refused: ${verdict.message}`);
+      onLayoutCandidateSettled?.();
+      return;
+    }
+    try {
+      layoutCandidates.register({ ...intake.candidate, base: { ...intake.candidate.base, generation: lifecycleGeneration } });
+      setToast(intake.candidate.kind === "placement"
+        ? "Agent placement candidate ready — review it in the placement panel; the board is unchanged until you apply it."
+        : "Agent routing candidate ready — the cyan ghost shows its copper; the board is unchanged until you apply it.");
+    } catch (error) {
+      setToast(`Agent ${intake.candidate.kind} candidate refused: ${error instanceof Error ? error.message : "invalid candidate"}`);
+    }
+    onLayoutCandidateSettled?.();
+  }, [layoutCandidateIntake, layoutCandidates, lifecycleGeneration, onLayoutCandidateSettled]);
+  useEffect(() => { if (state.board) layoutCandidates.retireStale(state.board, lifecycleGeneration); }, [layoutCandidates, state.board, lifecycleGeneration]);
 
   // B08.2 — lifecycle replacement IMMEDIATELY releases the new generation:
   // the adoption already aborted every captured scope's signal (fetches,
@@ -1676,11 +1787,79 @@ export default function PcbEditor({
       preview3dOpen,
     };
   });
+  const isVisible = useCallback(
+    (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
+    [state.visibleOverrides],
+  );
+
+  // ── [B17-D] the 2D canvas view session ─────────────────────────────────────
+  // Navigation, selection, layers, grid, net highlight, finding reveal and measurement are `pcb.*` view
+  // commands on ONE bus per editor mount; the hook applies the bus state to the scene / selection store /
+  // layer reducer and mirrors the human's own changes (canvas clicks, wheel zoom) back as `pcb.observe`.
+  const pcbView = usePcbViewSession({
+    projectId: init.scope?.projectId ?? (init.demo ? "demo" : "local"),
+    branchId: init.scope?.branchId ?? "main",
+    actorId: init.scope ? "trusted-session" : "local",
+    board: state.board,
+    scene,
+    selectionStore,
+    layers: { visible: isVisible, active: state.activeLayer, grid: state.gridOn, stackup: state.board?.stackup === 4 ? 4 : 2 },
+    applyLayers: (change) => {
+      for (const item of change.visible ?? []) dispatch({ type: "set-layer-visible", layer: item.layer, visible: item.visible });
+      if (change.active !== undefined) dispatch({ type: "set-active-layer", layer: change.active });
+      if (change.grid !== undefined) dispatch({ type: "set-grid", visible: change.grid });
+    },
+    drc: drc.lastResult ?? null,
+    routingFailures: autoroute.lastResult?.failures ?? null,
+    flash: (_location, itemIds) => drc.flash(itemIds),
+  });
+  // [B17-F] the pcb surface exists for the agent only while a real board is loaded (never in demo mode).
+  useViewSessionBridge(viewSessionBridge, pcbView, !init.demo && state.board !== null);
+  /** [B17-E] the nets the current selection names — the scope of clear / reroute. */
+  const selectedNetIds = useMemo(() => (state.board ? netsOfSelection(state.board, pcbView.view.selection.refs) : []), [state.board, pcbView.view.selection]);
+  const clearSelectedNets = useCallback(async (): Promise<void> => {
+    const history = editorRuntime.getHistory();
+    if (!history) return;
+    const result = await clearNets({ history, netIds: selectedNetIds, actorId: "user:pcb-editor" });
+    setToast(result.ok ? `Cleared routing on ${selectedNetIds.length} net(s) — locked copper kept; one undoable transaction.` : `Clear nets refused: ${result.message}`);
+  }, [editorRuntime, selectedNetIds]);
+  const rerouteSelectedNets = useCallback((): void => {
+    if (selectedNetIds.length === 0) { setToast("Select copper, pads or footprints to name the nets to reroute."); return; }
+    void autoroute.run({ netIds: selectedNetIds });
+  }, [autoroute, selectedNetIds]);
+  /** [B17-E] "New routed-board revision": the routed working copy becomes the durable board's next revision through
+   *  the B16 sync path (preflight → plan with copper carried only by proof → explicit apply); never a raw replacement.
+   *  Qualification then seals the routed-board authority on the new revision. */
+  const publishRoutedRevision = useCallback((): void => {
+    if (init.demo || !syncIdentity) { setToast("A routed-board revision needs a durable project board; demo boards have none."); return; }
+    setToast("Preparing the routed-board revision: the sync plan carries copper only where the netlist proves it unchanged; review and apply the plan.");
+    void handleSync();
+  }, [init.demo, syncIdentity, handleSync]);
+  /** Toolbar "Go to": select the component and frame it — a refusal is shown, never guessed around. */
+  const goToComponent = async (ref: string): Promise<void> => {
+    const selected = await pcbView.selectTarget({ kind: "component", ref });
+    if (!selected.ok) { setToast(selected.message); return; }
+    const focused = await pcbView.focus({ kind: "component", ref });
+    if (!focused.ok) setToast(focused.message);
+  };
+  const pcbViewSummary = JSON.stringify({
+    camera: pcbView.view.camera,
+    observed: pcbView.view.observed ? { centerNm: pcbView.view.observed.centerNm, pxPerMm: Math.round(pcbView.view.observed.pxPerMm * 100) / 100, viewportPx: pcbView.view.observed.viewportPx } : null,
+    selection: pcbView.view.selection,
+    layers: pcbView.view.layers,
+    grid: pcbView.view.grid,
+    highlight: pcbView.view.highlight ? { netId: pcbView.view.highlight.netId, name: pcbView.view.highlight.name, count: pcbView.view.highlight.refs.length } : null,
+    reveal: pcbView.view.reveal ? { findingId: pcbView.view.reveal.findingId, source: pcbView.view.reveal.source, seq: pcbView.view.reveal.seq, itemIds: pcbView.view.reveal.itemIds } : null,
+    measurement: pcbView.view.measurement ? { distanceMm: pcbView.view.measurement.distanceMm, dxNm: pcbView.view.measurement.dxNm, dyNm: pcbView.view.measurement.dyNm } : null,
+  });
+
   const globalActionsRef = useRef({
     autoPlace: () => {},
     autoroute: () => {},
     runDrc: () => {},
     toggle3d: () => {},
+    close3d: () => {},
+    clearSelection: () => {},
     openFab: () => {},
   });
   useEffect(() => {
@@ -1688,7 +1867,9 @@ export default function PcbEditor({
       autoPlace: () => void autoPlace.run(),
       autoroute: () => void autoroute.run(),
       runDrc: () => void drc.run(),
-      toggle3d: () => setPreview3dOpen((o) => !o),
+      toggle3d: () => pcb3d.toggle(), // [B17-C] pcb3d.open / pcb3d.close on the view-session bus
+      close3d: () => pcb3d.setOpen(false),
+      clearSelection: () => pcbView.clearSelection(), // [B17-D] pcb.clear-selection
       openFab: () => setFabDialogOpen(true),
     };
   });
@@ -1715,7 +1896,7 @@ export default function PcbEditor({
         (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable);
       if (e.key === "Escape" && modalGuardRef.current.preview3dOpen) {
         e.preventDefault();
-        setPreview3dOpen(false);
+        globalActionsRef.current.close3d(); // [B17-C] pcb3d.close through the same ref as the other global actions
         return;
       }
       // Undo/redo are editor-global. Route/zone/silk own their drawing keys,
@@ -1774,16 +1955,12 @@ export default function PcbEditor({
       if (toolRef.current === "route") return; // useRouteTool owns V/Tab/Backspace/Escape/X
       if (toolRef.current === "zone") return; // ZoneTool owns Enter/Escape
       if (toolRef.current === "silk") return; // useSilkTool owns Enter/Escape (Stage 16)
-      if (e.key === "Escape") selectionStore.clear();
+      if (e.key === "Escape") globalActionsRef.current.clearSelection(); // [B17-D] pcb.clear-selection through the bus
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectionStore, editorRuntime]);
 
-  const isVisible = useCallback(
-    (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
-    [state.visibleOverrides],
-  );
 
   // ── Stage 17: context-menu items for the current right-click pick ─────────
   // Items are thin wrappers over the same primitives the palette and
@@ -1817,19 +1994,19 @@ export default function PcbEditor({
           const name = board.nets.find((n) => n.id === netId)?.name || `net ${netId}`;
           items.push({
             label: `Select net ${name}`,
-            onClick: () => selectionStore.replace(selectNet(board, netId)),
+            onClick: () => pcbView.selectNet({ netId }),
           });
         }
         if (item.kind === "via") {
           items.push({
             label: "Select similar vias",
-            onClick: () => selectionStore.replace(selectSimilar(board, ref, "padstack")),
+            onClick: () => pcbView.select(selectSimilar(board, ref, "padstack")),
           });
         }
         if (item.kind === "track" || item.kind === "zone" || item.kind === "text") {
           items.push({
             label: "Select same layer",
-            onClick: () => selectionStore.replace(selectSimilar(board, ref, "layer")),
+            onClick: () => pcbView.select(selectSimilar(board, ref, "layer")),
           });
         }
       }
@@ -1898,7 +2075,7 @@ export default function PcbEditor({
   // ref access.
   const exportKicadFromPalette = useCallback((): void => {
     const board = init.demo ? state.board : authoritativeRecord?.board ?? null;
-    if (board) void downloadKicadPcb(board, liveNetlist);
+    if (board) void downloadKicadPcb(board, liveNetlist, undefined, setToast); // [B17-E] unsupported content is reported from this entry point too
   }, [init.demo, state.board, authoritativeRecord, liveNetlist]);
   const buildPaletteActions = (): PaletteAction[] => {
     const board = state.board;
@@ -1927,23 +2104,23 @@ export default function PcbEditor({
 
     const actions: PaletteAction[] = [
       { id: "assist", title: "Ask AI to edit the board…", hint: "AI", run: () => setAssistOpen(true) },
-      { id: "zoom-fit", title: "Zoom to fit", run: () => scene?.zoomToFit() },
+      { id: "zoom-fit", title: "Zoom to fit", run: () => pcbView.fitBoard() },
       {
         id: "zoom-selection",
         title: "Zoom to selection",
         disabled: refs.length > 0 ? null : "nothing selected",
-        run: () => {
-          if (board && scene) scene.centerOn(selectionBBoxCenter(board, refs));
-        },
+        run: () => pcbView.fitSelection(),
       },
       { id: "run-drc", title: "Run design rule check", hint: "Ctrl+D", run: () => void drc.run() },
       { id: "autoplace", title: "Auto-place components", hint: "Ctrl+P", run: () => void autoPlace.run() },
       { id: "autoroute", title: "Autoroute board", hint: "Ctrl+E", run: () => void autoroute.run() },
-      { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => setPreview3dOpen((o) => !o) },
+      { id: "reroute-nets", title: "Reroute selected nets", hint: "Routing", disabled: selectedNetIds.length > 0 ? null : "nothing routable selected", run: rerouteSelectedNets },
+      { id: "clear-nets", title: "Clear routing on selected nets", hint: "Routing", disabled: selectedNetIds.length > 0 ? null : "nothing routable selected", run: () => void clearSelectedNets() },
+      { id: "3d", title: "Toggle 3D preview", hint: "Ctrl+3", run: () => pcb3d.toggle() },
       { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
       { id: "export-kicad", title: "Export .kicad_pcb", run: exportKicadFromPalette },
       { id: "padstacks", title: "Open padstack library", run: () => setPadstacksOpen(true) },
-      { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => dispatch({ type: "toggle-grid" }) },
+      { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => pcbView.toggleGrid() },
       { id: "shortcuts", title: "Keyboard shortcuts", hint: "?", run: shortcuts.show },
       alignAction("left", "Align left"),
       alignAction("centerH", "Align horizontal centers"),
@@ -1995,18 +2172,18 @@ export default function PcbEditor({
       actions.push({
         id: "select-net",
         title: "Select everything on this net",
-        run: () => selectionStore.replace(selectSimilar(board, primary, "net")),
+        run: () => pcbView.select(selectSimilar(board, primary, "net")),
       });
       actions.push({
         id: "select-layer",
         title: "Select everything on this layer",
-        run: () => selectionStore.replace(selectSimilar(board, primary, "layer")),
+        run: () => pcbView.select(selectSimilar(board, primary, "layer")),
       });
       if (primary.kind === "via") {
         actions.push({
           id: "select-padstack",
           title: "Select vias with this padstack",
-          run: () => selectionStore.replace(selectSimilar(board, primary, "padstack")),
+          run: () => pcbView.select(selectSimilar(board, primary, "padstack")),
         });
       }
     }
@@ -2019,7 +2196,7 @@ export default function PcbEditor({
         id: `layer-${layer.id}`,
         title: `Toggle ${layer.displayName}`,
         hint: "Layers",
-        run: () => dispatch({ type: "toggle-layer", layer: layer.id }),
+        run: () => pcbView.toggleLayer(layer.id),
       });
     }
     return actions;
@@ -2079,15 +2256,18 @@ export default function PcbEditor({
   }
 
   return (
-    <div className="absolute inset-0 flex bg-zinc-950">
+    <div className="absolute inset-0 flex bg-zinc-950" data-testid="pcb-editor" data-view={pcbViewSummary} data-view-revision={pcbView.viewRevision}>
       {/* Canvas column */}
       <div className="flex-1 flex flex-col min-w-0">
         <PcbToolbar
           tool={state.tool}
           onToolChange={(tool) => dispatch({ type: "set-tool", tool })}
-          onZoomToFit={() => scene?.zoomToFit()}
+          onZoomToFit={() => pcbView.fitBoard()} // [B17-D] pcb.fit-board
+          onGoTo={(ref) => void goToComponent(ref)}
+          measurement={pcbView.view.measurement ? `${pcbView.view.measurement.distanceMm.toFixed(3)} mm` : null}
+          onClearMeasurement={() => pcbView.clearMeasurement()}
           gridOn={state.gridOn}
-          onToggleGrid={() => dispatch({ type: "toggle-grid" })}
+          onToggleGrid={() => pcbView.toggleGrid()}
           stackup={state.board.stackup}
           onStackupChange={(stackup) => {
             const h = editorRuntime.getHistory();
@@ -2132,7 +2312,7 @@ export default function PcbEditor({
           drcRunning={drc.state === "running"}
           onAddPlane={() => setPlaneDialogOpen(true)} // Stage 11
           zoneFilling={zoneFills.isFilling} // Stage 11
-          onToggle3d={() => setPreview3dOpen((o) => !o)} // Stage 15
+          onToggle3d={() => pcb3d.toggle()} // Stage 15 / [B17-C] via the pcb3d view-session bus
           preview3dOpen={preview3dOpen} // Stage 15
           onTogglePadstacks={() => setPadstacksOpen((o) => !o)} // Stage 17
           padstacksOpen={padstacksOpen} // Stage 17
@@ -2261,14 +2441,14 @@ export default function PcbEditor({
                 <button
                   type="button"
                   aria-label="Close 3D preview"
-                  onClick={() => setPreview3dOpen(false)}
+                  onClick={() => pcb3d.setOpen(false)}
                   className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
                 >
                   <X className="size-3.5" />
                 </button>
               </div>
               <div className="flex-1 min-h-0">
-                <PcbPreview3D board={state.board} />
+                <PcbPreview3D board={state.board} view={pcb3d.view} command={pcb3d.command} />
               </div>
             </div>
           )}
@@ -2336,23 +2516,32 @@ export default function PcbEditor({
       </div>
 
       {/* Right panel column */}
-      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
+      {/* [B17-D] the column SCROLLS, so every panel keeps its content height (`[&>*]:shrink-0`): shrinkable panels
+          collapsed under their neighbours and their rows (layers, DRC violations, inspector) were unreachable. */}
+      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [&>*]:shrink-0" data-testid="pcb-right-column">
         <LayerPanel
           stackup={state.board.stackup}
           activeLayer={state.activeLayer}
           isVisible={isVisible}
-          onToggleVisible={(layer) => dispatch({ type: "toggle-layer", layer })}
-          onActivate={(layer) => dispatch({ type: "set-active-layer", layer })}
-          onIsolate={(layer) => dispatch({ type: "isolate-layer", layer })}
-          onShowAllCopper={() => dispatch({ type: "show-copper" })}
+          onToggleVisible={(layer) => pcbView.toggleLayer(layer)}
+          onActivate={(layer) => pcbView.setActiveLayer(layer)}
+          onIsolate={(layer) => pcbView.isolateLayer(layer)}
+          onShowAllCopper={() => pcbView.showCopper()}
           layerUsage={autoroute.lastResult?.layerUsage}
         />
         <AutorouteSetup
           board={state.board}
           result={autoroute.lastResult}
+          candidate={shownRoutingCandidate}
+          onApplyCandidate={() => void autoroute.apply(shownRoutingCandidate?.candidateId)}
+          onDiscardCandidate={() => autoroute.discard(shownRoutingCandidate?.candidateId)}
+          selectedNetCount={selectedNetIds.length}
+          onClearSelectedNets={() => void clearSelectedNets()}
+          onRerouteSelectedNets={rerouteSelectedNets}
+          onPublishRoutedRevision={publishRoutedRevision}
           onFocusFailure={(failure) => {
-            scene?.centerOn(failure.location, 40);
-            scene?.setSelection([failure.from?.footprintId, failure.to?.footprintId].filter((id): id is string => Boolean(id)));
+            const index = autoroute.lastResult?.failures.indexOf(failure) ?? -1;
+            if (index >= 0) void pcbView.revealFinding(`routing:${index}`);
           }}
           onChange={(stackup, label) => {
             const h = editorRuntime.getHistory();
@@ -2371,8 +2560,11 @@ export default function PcbEditor({
         <PlacementSetup
           board={state.board}
           result={autoPlace.lastResult}
-          onApply={autoPlace.apply}
-          onDiscard={autoPlace.discard}
+          onApply={() => autoPlace.apply()}
+          onDiscard={() => autoPlace.discard()}
+          candidates={layoutCandidateList.filter((item): item is Extract<typeof item, { kind: "placement" }> => item.kind === "placement")}
+          onApplyCandidate={(candidateId) => autoPlace.apply(candidateId)}
+          onDiscardCandidate={(candidateId) => autoPlace.discard(candidateId)}
           onChange={(preferences) => {
             const h = editorRuntime.getHistory();
             if (!h) return;
@@ -2391,7 +2583,7 @@ export default function PcbEditor({
           board={state.board}
           selection={selectionStore}
           getHistory={() => editorRuntime.getHistory()}
-          scene={scene}
+          onFitSelection={() => pcbView.fitSelection()}
           rules={getPreset(drc.activePresetId).rules}
           presetId={drc.activePresetId}
           toast={setToast}
@@ -2415,10 +2607,10 @@ export default function PcbEditor({
             onAction={() => void drc.run()}
           />
         ) : (
-          <DrcPanel drc={drc} repair={repair} readiness={liveReadinessReport} constraintProgram={state.board.constraintState?.activeProgram} />
+          <DrcPanel drc={{ ...drc, zoomToViolation: (v) => void pcbView.revealFinding(`drc:${v.id}`) }} repair={repair} readiness={liveReadinessReport} constraintProgram={state.board.constraintState?.activeProgram} />
         )}
       </div>
-      <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={drc.zoomToViolation} /> {/* Stage 14 */}
+      <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={(v) => void pcbView.revealFinding(`drc:${v.id}`)} /> {/* Stage 14 */}
       {/* [B15.3 §I] the human-gated PCB proposal review — display grants
           nothing; only the explicit Approve click reaches the controller. */}
       <PcbProposalReviewDialog

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
 const SpiceStudio = dynamic(() => import("@/app/components/spice/SpiceStudio"), { ssr: false });
@@ -29,6 +29,12 @@ import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinS
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
 import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize } from "@/lib/schematic-types";
+import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
+import { describeExportRefusal } from "@/app/lib/project/io-outcome"; // [B17-E]
+import { ProjectOperationTimeline } from "@/app/lib/project/operation-timeline"; // [B17-E]
+import { engineeringDigest } from "@/app/lib/engineering/stable";
+import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
+import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
@@ -49,6 +55,10 @@ import {
 import type { LLMProviderId } from "@/app/lib/llm/types";
 import { performProviderSwitch, settleAgentRunFailure } from "@/app/lib/agent/run-consumer";
 import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // B10
+import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
+import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
+import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
+import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
 import { createAutosaver, settleAutosaveForTransition, type Autosaver, type SaveStatus } from "@/app/lib/project/autosave";
@@ -1198,6 +1208,8 @@ function SchematicEditor({
   pageSize, setPageSize,
   onDeleteComponent,
   graph,
+  viewScope,
+  viewSessionBridge,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -1231,6 +1243,10 @@ function SchematicEditor({
     cancel(): void;
     commit(label: string, finalGraph: SchematicGraphAfter): void;
   };
+  /** [B17-D] the project/branch the schematic view session is scoped to. */
+  viewScope: { projectId: string; branchId: string };
+  /** [B17-F] the page-owned view-session bridge (the schematic surface registers while mounted). */
+  viewSessionBridge: ViewSessionBridge;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -1273,6 +1289,44 @@ function SchematicEditor({
   useEffect(() => {
     fitToPage();
   }, [fitToPage]);
+
+  // ── [B17-D] the schematic view session ──────────────────────────────────────
+  // Fit, zoom, pan/focus, select and net highlight are `schematic.*` view commands on ONE bus per editor
+  // mount; the hook applies bus state to pan/zoom and the page's selection and mirrors the human's own
+  // changes (wheel zoom, drag pan, clicks) back through `schematic.observe`.
+  const schematicView = useSchematicViewSession({
+    projectId: viewScope.projectId,
+    branchId: viewScope.branchId,
+    actorId: "local",
+    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx } },
+    selectedId,
+    selectedKicadId,
+    applySelection: (id, family) => {
+      if (family === "kicad") { setSelectedId(null); setSelectedKicadId(id); }
+      else { setSelectedKicadId(null); setSelectedId(id); }
+    },
+    camera: { pan, zoom },
+    viewportPx: () => { const r = svgRef.current?.getBoundingClientRect(); return r && r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null; },
+    applyCamera: (next) => { setZoom(next.zoom); setPan(next.pan); },
+    fitToPage,
+  });
+  // [B17-F] the schematic surface exists for the agent while this editor is mounted.
+  useViewSessionBridge(viewSessionBridge, schematicView);
+  const [schematicGoTo, setSchematicGoTo] = useState("");
+  const [schematicViewNotice, setSchematicViewNotice] = useState<string | null>(null);
+  /** Toolbar "Go to": select the component and frame it; a refusal is shown, never guessed around. */
+  const goToSchematicComponent = async (ref: string): Promise<void> => {
+    const selected = await schematicView.select({ kind: "component", ref });
+    if (!selected.ok) { setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; }
+    const focused = await schematicView.focus({ kind: "component", ref });
+    setSchematicViewNotice(focused.ok ? null : `${focused.code} — ${focused.message}`);
+  };
+  const schematicViewSummary = JSON.stringify({
+    camera: schematicView.view.camera,
+    observed: schematicView.view.observed ? { pan: { x: Math.round(schematicView.view.observed.pan.x), y: Math.round(schematicView.view.observed.pan.y) }, zoom: Math.round(schematicView.view.observed.zoom * 1000) / 1000, viewportPx: schematicView.view.observed.viewportPx } : null,
+    selection: schematicView.view.selection,
+    highlight: schematicView.view.highlight,
+  });
 
   const componentsRef = useRef(components);
   componentsRef.current = components;
@@ -1926,12 +1980,24 @@ function SchematicEditor({
         </select>
         <button
           title="Fit page to view"
-          onClick={fitToPage}
+          onClick={() => schematicView.fitPage()}
           className="h-7 flex items-center gap-1.5 px-2 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
         >
           <Maximize2 className="size-3.5" />
           <span className="text-[10px] font-mono hidden sm:inline">Fit</span>
         </button>
+        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const ref = schematicGoTo.trim(); if (ref) void goToSchematicComponent(ref); }}>
+          <input
+            data-testid="schematic-goto-input"
+            aria-label="Go to component"
+            value={schematicGoTo}
+            onChange={(e) => setSchematicGoTo(e.target.value)}
+            placeholder="Go to…"
+            className="h-7 w-20 rounded border border-zinc-800 bg-zinc-900 px-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+          />
+          <button type="submit" data-testid="schematic-goto" title="Focus the component" className="h-7 px-2 rounded text-[10px] font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition">Go</button>
+        </form>
+        {schematicViewNotice && <span data-testid="schematic-notice" className="text-[10px] text-amber-300 truncate max-w-56">{schematicViewNotice}</span>}
       </div>
 
       {/* Floating toolbar */}
@@ -2027,6 +2093,9 @@ function SchematicEditor({
       <svg
         ref={svgRef}
         id="sirkit-schematic-svg"
+        data-testid="schematic-canvas"
+        data-view={schematicViewSummary}
+        data-view-revision={schematicView.viewRevision}
         width="100%"
         height="100%"
         style={{ cursor: cursorStyle, display: "block" }}
@@ -2172,6 +2241,13 @@ function SchematicEditor({
 
           {/* Explicit net labels — power flags, ground symbols, signal flags.
               Same-name labels are electrically one net. */}
+          {schematicView.view.highlight && (
+            <g data-testid="schematic-highlight" data-net={schematicView.view.highlight.name} pointerEvents="none">
+              {netLabels.filter((label) => schematicView.view.highlight!.labelIds.includes(label.id)).map((label) => (
+                <circle key={label.id} cx={label.position.x} cy={label.position.y} r={14} fill="none" stroke="#f59e0b" strokeWidth={2 / zoom} />
+              ))}
+            </g>
+          )}
           {netLabels.map((label) => (
             <NetLabelGlyph
               key={label.id}
@@ -2357,7 +2433,7 @@ function PropertiesPanel({
   onReferenceChange: (v: string) => void;
 }) {
   return (
-    <div className="absolute top-4 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
       <div className="text-xs uppercase text-zinc-500 mb-0.5 tracking-wide">
         {SCH_TYPE_LABEL[comp.type]}
       </div>
@@ -2428,7 +2504,7 @@ function KicadPropertiesPanel({
   }, [instance.partId]);
 
   return (
-    <div className="absolute top-4 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
       <div className="text-xs uppercase text-zinc-500 mb-2 tracking-wide truncate">
         {part?.name ?? "KiCad part"}
       </div>
@@ -2608,6 +2684,9 @@ export default function Home() {
   // the SAFE discriminator only; display grants nothing. Apply authority
   // lives inside PcbEditor (the PCB composition root), never here.
   const [pendingPcbProposal, setPendingPcbProposal] = useState<{ proposal: SealedPcbEditProposal; originRunId: string | null } | null>(null);
+  // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
+  // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
+  const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
 
   // B06.2/B07.2: pending schematic-history recovery decision (projection
   // conflict, corrupt durable history, or an identity-invalid projection
@@ -2715,10 +2794,43 @@ export default function Home() {
   // site: it is hidden, not unmounted, on tab switches).
   useEffect(() => { if (view === "pcb") setPcbMounted(true); }, [view]);
   const schHistoryRef = useRef<SchematicHistory<SchematicSnapshot> | null>(null);
+  // ── [B17-E] the project operation timeline: it REFERENCES the two authoritative histories (schematic snapshots,
+  // canonical PCB history) and orders their operations; a project-level undo identifies the latest ELIGIBLE
+  // operation (the store's head still matches) and delegates to that store's own undo — never cross-store atomicity.
+  const [projectTimeline] = useState(() => new ProjectOperationTimeline());
+  const projectTimelineEntries = useSyncExternalStore((listener) => projectTimeline.subscribe(listener), () => projectTimeline.entries(), () => projectTimeline.entries());
+  const [projectTimelineNotice, setProjectTimelineNotice] = useState<string | null>(null);
+  const schematicTimelineHead = useCallback((view: SchematicHistoryView) => ({ store: "schematic" as const, entryCount: view.entries.length, digest: engineeringDigest(view.entries.map((entry) => [entry.label, entry.at])) }), []);
+  /** Publish the schematic history view AND record the operation on the project timeline. */
+  const publishSchematicHistory = useCallback((kind: "commit" | "undo" | "redo" | "hydrate" | "restore", label?: string) => {
+    const history = schHistoryRef.current;
+    if (!history) return;
+    const view = history.view();
+    setSchHistoryView(view);
+    projectTimeline.record({ store: "schematic", kind, label: label ?? (kind === "undo" ? view.redoLabel : view.undoLabel) ?? view.entries[view.entries.length - 1]?.label ?? "Schematic edit", actor: kind === "hydrate" || kind === "restore" ? "system" : "human", head: schematicTimelineHead(view) });
+  }, [projectTimeline, schematicTimelineHead]);
   const historyLabelRef = useRef<string | null>(null);
   const pendingRecordRef = useRef<{ timer: ReturnType<typeof setTimeout>; snap: SchematicSnapshot; label: string } | null>(null);
   const autosaverRef = useRef<Autosaver | null>(null);
   const projectRef = useRef(project);
+  // [B17-D] which editor tab is open is a `workspace.open-editor` view command; tab changes made elsewhere are mirrored.
+  const workspaceView = useWorkspaceViewSession({ projectId: project?.id ?? "local", branchId: "main", actorId: "local", tab: view, available: WORKSPACE_TABS, applyTab: (tab) => setView(tab) });
+  // [B17-F] ONE page-owned view-session bridge: every live editor view session registers into it; send() captures
+  // one bounded view-context snapshot per chat request and server-validated view commands run through it.
+  const viewSessionBridgeRef = useRef<ViewSessionBridge | null>(null);
+  if (viewSessionBridgeRef.current === null) viewSessionBridgeRef.current = new ViewSessionBridge();
+  useViewSessionBridge(viewSessionBridgeRef.current, workspaceView);
+  // [B17-F] FIXTURE-RUNTIME diagnostic hook ONLY: when the server rendered the fixture-runtime banner (impossible in
+  // production — the runtime refuses there), the deterministic browser journey may drive the bridge directly, exactly
+  // as the chat page does with a server-validated request. The bridge grants nothing: the bus's own rules decide.
+  useEffect(() => {
+    if (typeof document === "undefined" || !document.querySelector('[data-testid="fixture-runtime-banner"]')) return;
+    const bridge = viewSessionBridgeRef.current!;
+    const host = window as unknown as { __sirkitViewBridge?: { capture(): ReturnType<ViewSessionBridge["capture"]>; execute(raw: unknown): ReturnType<ViewSessionBridge["execute"]> } };
+    // The SAME capture the chat request sends (surfaces + the project timeline) and the SAME execute path.
+    host.__sirkitViewBridge = { capture: () => bridge.capture(projectTimeline), execute: (raw) => bridge.execute(raw) };
+    return () => { delete host.__sirkitViewBridge; };
+  }, [projectTimeline]);
   useEffect(() => { projectRef.current = project; }, [project]);
   const liveStateRef = useRef({ components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt });
   useEffect(() => { liveStateRef.current = { components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt }; });
@@ -2798,7 +2910,7 @@ export default function Home() {
         gestureCoordinatorRef.current?.notifyAuthoritativeProjection(authoritative);
       },
       snapshot: (authoritative) => ({ components: authoritative.components, wires: authoritative.wires, kicadComponents: authoritative.kicadComponents!, netLabels: authoritative.netLabels! }),
-      historyRecorded: () => { if (schHistoryRef.current) setSchHistoryView(schHistoryRef.current.view()); },
+      historyRecorded: () => publishSchematicHistory("commit"),
       // The design-state watcher's existing applying-history guard: it
       // clears the flag, schedules autosave, and records NOTHING for this
       // change — the canonical entry above stays the only one.
@@ -2806,7 +2918,7 @@ export default function Home() {
       scheduleAutosave: () => autosaverRef.current?.schedule(),
     }, label, state);
     if (!outcome.ok) throw new Error(`canonical adoption failed: ${outcome.detail}`);
-  }, [flushPendingRecord]);
+  }, [flushPendingRecord, publishSchematicHistory]);
 
   /** Lifecycle replacement (hydration, undo/redo, canonical recovery
    *  adoption, gesture rollback) — applied without recording history. */
@@ -2935,9 +3047,9 @@ export default function Home() {
       components: adopted.components, wires: adopted.wires,
       kicadComponents: adopted.kicadComponents ?? [], netLabels: adopted.netLabels ?? [],
     }, { label });
-    setSchHistoryView(schHistoryRef.current.view());
+    publishSchematicHistory("restore", label);
     session.confirmAdoption(adopted);
-  }, [applyLifecycleSchematicProjection]);
+  }, [applyLifecycleSchematicProjection, publishSchematicHistory]);
 
   /**
    * B07.4 — THE project-transition reset: every project-owned transient
@@ -3101,7 +3213,7 @@ export default function Home() {
     setProject({ id: record.id, name: record.name });
     projectRef.current = { id: record.id, name: record.name };
     schHistoryRef.current = prepared.history;
-    setSchHistoryView(schHistoryRef.current.view());
+    publishSchematicHistory("hydrate", "Opened project");
     // B06.1: the session opens the DURABLE canonical head and reconciles the
     // SavedProject projection against it. A stale projection cannot
     // overwrite a newer canonical head — the head is projected back out.
@@ -3192,7 +3304,7 @@ export default function Home() {
       // adopted — blocking recovery, never a survivor-installed claim.
       return { ok: false, detail: `activation commit failed: ${error instanceof Error ? error.message : String(error)}`, recovery: true };
     }
-  }, [adoptCanonicalSchematic, applyLifecycleSchematicProjection, resetTransientProjectState, refreshCheckpoints]);
+  }, [adoptCanonicalSchematic, applyLifecycleSchematicProjection, resetTransientProjectState, refreshCheckpoints, publishSchematicHistory]);
 
   /** B12.2 §A — every hydration entry point routes through the serialized
    *  transition coordinator; only the LATEST requested target installs, and
@@ -3281,12 +3393,12 @@ export default function Home() {
         pendingRecordRef.current = null;
         if (pending && schHistoryRef.current) {
           schHistoryRef.current.record(pending.label, pending.snap);
-          setSchHistoryView(schHistoryRef.current.view());
+          publishSchematicHistory("commit", pending.label);
         }
       }, 350),
     };
     autosaverRef.current?.schedule();
-  }, [components, wires, kicadComponents, netLabels]);
+  }, [components, wires, kicadComponents, netLabels, publishSchematicHistory]);
 
   // Non-design persisted state (chat, stage, prompt, page size) — autosave only.
   useEffect(() => {
@@ -3325,7 +3437,7 @@ export default function Home() {
         const history = schHistoryRef.current;
         if (!history) return;
         if (direction === "undo") history.undo(); else history.redo();
-        setSchHistoryView(history.view());
+        publishSchematicHistory(direction);
       },
       applyUi: () => {
         const history = schHistoryRef.current;
@@ -3336,10 +3448,18 @@ export default function Home() {
       if (outcome.status === "refused-busy") showToast(outcome.detail);
       else if (outcome.status === "failed") showToast(`${direction === "undo" ? "Undo" : "Redo"} was not applied: ${outcome.detail}`);
     });
-  }, [applySchematicSnapshot, flushPendingRecord]);
+  }, [applySchematicSnapshot, flushPendingRecord, publishSchematicHistory]);
 
   const undoSchematic = useCallback(() => { runHistoryStep("undo"); }, [runHistoryStep]);
   const redoSchematic = useCallback(() => { runHistoryStep("redo"); }, [runHistoryStep]);
+  // [B17-E] the schematic store lends the timeline its own undo and its current head fingerprint.
+  useEffect(() => projectTimeline.bindStore("schematic", { undo: () => undoSchematic(), head: () => (schHistoryRef.current ? schematicTimelineHead(schHistoryRef.current.view()) : null) }), [projectTimeline, undoSchematic, schematicTimelineHead]);
+  /** Project-level undo: identify the latest eligible operation across both stores and run THAT store's undo; refuse on divergence. */
+  const undoLatestProjectOperation = useCallback(async () => {
+    const decision = await projectTimeline.undoLatest();
+    setProjectTimelineNotice(decision.ok ? null : `${decision.code} — ${decision.message}`);
+    if (decision.ok) showToast(`Undid the latest ${decision.operation.store} operation: ${decision.operation.label}`);
+  }, [projectTimeline]);
 
   // ── B06: canonical schematic command execution ─────────────────────────────
   // One migrated user action → one canonical transaction → one history entry.
@@ -4018,7 +4138,10 @@ export default function Home() {
     if (!result.ok) { showToast(`Open project failed: ${result.reason}`); return; }
     // B12.4 §E — the imported record/checkpoints are persisted; activation
     // (the pointer) belongs to the winning install.
-    hydrateProject(result.project, { announce: `Opened "${result.project.name}" from file (${result.checkpointsImported} checkpoint(s) restored)` });
+    // [B17-E] the import creates CANONICAL state after structural + integrity validation; the announcement reports the outcome in full.
+    const missing = result.missingParts.length > 0 ? ` · ${result.missingParts.length} catalog part(s) missing: ${result.missingParts.slice(0, 3).join(", ")}${result.missingParts.length > 3 ? ", …" : ""}` : "";
+    const copy = result.importedAsCopy ? " · imported as a copy (a project with this id already existed)" : "";
+    hydrateProject(result.project, { announce: `Opened "${result.project.name}" from file (${result.checkpointsImported} checkpoint(s) restored${copy}${missing}${result.warnings.length > 0 ? ` · ${result.warnings.length} warning(s)` : ""})` });
     for (const warning of result.warnings) showToast(warning);
     setProjectList(listProjects());
   }, [hydrateProject]);
@@ -4297,6 +4420,9 @@ export default function Home() {
         projectId: scope.projectId ?? projectRef.current?.id ?? "local",
         branchId: scope.branchId ?? "main",
       });
+      // [B17-F] ONE bounded view-context snapshot (which editor surfaces exist, each view session's revision and
+      // state, the project operation timeline). The server validates it exactly; it is never authority.
+      const chatViewContext = viewSessionBridgeRef.current!.capture(projectTimeline);
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4316,6 +4442,8 @@ export default function Home() {
           // sirkit.editor-context.v1). The server revalidates the board and
           // recomputes every revision/digest; nothing here is authority.
           ...(chatEditorContext ? { editorContext: chatEditorContext } : {}),
+          // [B17-F] the view context (schema sirkit.view-context.v1) — surfaces, view revisions, timeline.
+          ...(chatViewContext ? { viewContext: chatViewContext } : {}),
           // B09.1 — the ready session's head mark is a scope LABEL for
           // proposal sealing (verified at apply against the CURRENT
           // session); absent ⇒ the proposal tool is unavailable server-side.
@@ -4389,6 +4517,28 @@ export default function Home() {
             if (pcbProposal) {
               setPendingPcbProposal({ proposal: pcbProposal.proposal, originRunId: pcbProposal.runId });
               appendActivityStep(logId, `PCB proposal ready — ${pcbProposal.proposal.operations.length} bounded operation(s) awaiting your explicit review in the PCB editor`, "done");
+            }
+            return;
+          }
+          case "view_command_ready": {
+            // [B17-F] a server-VALIDATED view command for the user's own view bus. The bridge re-checks the
+            // request shape, expiry, the live surface and the session id; the bus applies its stale-revision
+            // rule and role gate. It changes what the editor SHOWS, never the design.
+            const bridge = viewSessionBridgeRef.current!;
+            void bridge.execute(event.request).then((execution) => {
+              if (!scope.isCurrent()) return;
+              if (execution.ok) appendActivityStep(logId, `View updated — ${execution.commandId}${execution.rebased ? " (rebased onto your newer view)" : ""}`, "done");
+              else appendActivityStep(logId, `View command ${execution.commandId ?? ""} not applied — ${execution.message}`, "error");
+            });
+            return;
+          }
+          case "layout_candidate_ready": {
+            // [B17-F] the agent's placement / routing candidate — the SAFE receiver verifies the artifact; the
+            // PCB editor registers it in its own store after re-verifying the base revision. Nothing is applied.
+            const received = receiveLayoutCandidateEvent(event);
+            if (received) {
+              setPendingLayoutCandidate({ candidate: received.candidate, originRunId: received.runId });
+              appendActivityStep(logId, `${received.candidate.kind === "placement" ? "Placement" : "Routing"} candidate ready — review it in the PCB editor's ${received.candidate.kind} panel; the board is unchanged until you apply it`, "done");
             }
             return;
           }
@@ -5627,8 +5777,10 @@ export default function Home() {
         }),
       });
       if (!res.ok) {
-        const err = await res.text();
-        alert(`Export failed: ${err.slice(0, 300)}`);
+        // [B17-E] the route answers a structured, sanitized refusal (SCHEMATIC_STATE_INVALID + issues): report it as such — a file artifact was NOT produced and nothing changed.
+        let refusal: unknown = null;
+        try { refusal = await res.json(); } catch { refusal = null; }
+        showToast(`KiCad export refused: ${describeExportRefusal(res.status, refusal)} No file was produced; the schematic is unchanged.`);
         return;
       }
       const blob = await res.blob();
@@ -5825,7 +5977,7 @@ export default function Home() {
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="sm" variant="ghost" className="gap-1.5 text-zinc-300"
-            onClick={() => { setView("sim"); handleRunSim(); }}
+            onClick={() => { workspaceView.open("sim"); handleRunSim(); }}
             disabled={simLoading}
           >
             {simLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
@@ -5981,12 +6133,12 @@ export default function Home() {
         {/* Main Content */}
         {!chatFullscreen && (
           <main className="flex-1 flex flex-col min-w-0">
-            <div className="h-10 border-b border-zinc-800 flex items-center px-2 gap-1 shrink-0">
-              <ViewTab icon={Cable}        label="Schematic" active={view === "schematic"} onClick={() => setView("schematic")} />
-              <ViewTab icon={CircuitBoard} label="PCB"       active={view === "pcb"}       onClick={() => setView("pcb")} />
-              <ViewTab icon={Box}          label="3D"        active={view === "3d"}        onClick={() => setView("3d")} />
-              <ViewTab icon={Receipt}      label="BOM"       active={view === "bom"}       onClick={() => setView("bom")} />
-              <ViewTab icon={Activity}     label="SPICE"     active={view === "sim"}       onClick={() => setView("sim")} />
+            <div className="h-10 border-b border-zinc-800 flex items-center px-2 gap-1 shrink-0" data-testid="workspace-tabs" data-view={JSON.stringify(workspaceView.view)} data-view-revision={workspaceView.viewRevision}>
+              <ViewTab icon={Cable}        label="Schematic" active={view === "schematic"} onClick={() => workspaceView.open("schematic")} />
+              <ViewTab icon={CircuitBoard} label="PCB"       active={view === "pcb"}       onClick={() => workspaceView.open("pcb")} />
+              <ViewTab icon={Box}          label="3D"        active={view === "3d"}        onClick={() => workspaceView.open("3d")} />
+              <ViewTab icon={Receipt}      label="BOM"       active={view === "bom"}       onClick={() => workspaceView.open("bom")} />
+              <ViewTab icon={Activity}     label="SPICE"     active={view === "sim"}       onClick={() => workspaceView.open("sim")} />
             </div>
 
             <div className="flex-1 min-h-0 relative">
@@ -6007,6 +6159,8 @@ export default function Home() {
                     pageSize={pageSize} setPageSize={changeSheetSize}
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
+                    viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
+                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                   />
                   {/* Empty state overlay */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (
@@ -6118,6 +6272,10 @@ export default function Home() {
                     pcbProposalIntake={pendingPcbProposal} // B15.3 — display only; approval lives inside PcbEditor
                     onPcbProposalSettled={() => setPendingPcbProposal(null)}
                     currentInterlock={() => projectTransitionRef.current?.currentInterlock() ?? null}
+                    operationTimeline={projectTimeline} // [B17-E]
+                    viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
+                    layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
+                    onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
                   />
                 </div>
               )}
@@ -6398,6 +6556,22 @@ export default function Home() {
                 </div>
               </div>
             )}
+            <div className="mb-2" data-testid="project-timeline">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs text-zinc-500">Project timeline (schematic + PCB, this session)</div>
+                <Button size="sm" variant="secondary" data-testid="project-timeline-undo" onClick={() => void undoLatestProjectOperation()}>Undo latest</Button>
+              </div>
+              {projectTimelineNotice && <p data-testid="project-timeline-notice" className="text-[11px] text-amber-300 mb-1">{projectTimelineNotice}</p>}
+              <div className="max-h-28 overflow-y-auto rounded border border-zinc-800 px-2 py-1 space-y-0.5">
+                {projectTimelineEntries.length === 0 && <div className="text-[11px] text-zinc-600">No operation recorded yet this session.</div>}
+                {[...projectTimelineEntries].reverse().slice(0, 40).map((operation) => (
+                  <div key={operation.seq} className="text-[11px] text-zinc-400 truncate" data-testid="project-timeline-entry" data-store={operation.store} data-kind={operation.kind}>
+                    <span className="rounded bg-zinc-800 px-1 font-mono text-[9px] uppercase text-zinc-300">{operation.store}</span> {operation.kind !== "commit" ? `${operation.kind}: ` : ""}{operation.label} <span className="text-zinc-600">· {new Date(operation.at).toLocaleTimeString()}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-zinc-600 mt-1">Undo latest runs the owning editor&apos;s own undo; it refuses when that history moved on. Nothing is undone across both stores at once.</p>
+            </div>
             <div className="text-xs text-zinc-500 mb-1">Durable checkpoints</div>
             <div className="max-h-80 overflow-y-auto space-y-1">
               {checkpoints.length === 0 && (
