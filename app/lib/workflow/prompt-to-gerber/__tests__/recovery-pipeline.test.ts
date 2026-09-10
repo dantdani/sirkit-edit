@@ -475,7 +475,7 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     void ASSEMBLY_VARIANT_ID;
   });
 
-  it("H.16 zero release execution through the agent loop: no qualification or release tool is agent-exposed or callable; the release action is api-only with no tool exposure", () => {
+  it("H.16 zero release execution through the agent loop: no qualification or release tool is agent-exposed or callable; the release action has no tool exposure and needs the administrator's release authorization", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed).toHaveLength(12);
@@ -488,7 +488,12 @@ describe("B16.1C recovery, refusal, retry, isolation (deterministic, credit-free
     expect(releaseTool!.callability).toBe("not-callable");
     expect(registry.list().some((descriptor) => /qualif/i.test(descriptor.toolId) && descriptor.callability === "callable")).toBe(false);
     const action = ACTION_COVERAGE_REGISTRY.find((row) => row.id === "manufacturing.release");
-    expect(action).toMatchObject({ kind: "destructive", status: "api-only", toolExposure: "none", approvalTier: "release" });
+    // B16.1C recorded the release as api-only (no UI yet); B16-C added the administrator-authorized release UI and
+    // B17-A re-baselined the record to implemented. The invariant is unchanged: destructive, release-tier, NO tool
+    // exposure, and the UI path is the server-owned release route — never a tool, never a raw process.
+    expect(action).toMatchObject({ kind: "destructive", status: "implemented", toolExposure: "none", approvalTier: "release" });
+    expect(action!.sources).toContain("app/api/pcb/release/route.ts");
+    expect(action!.handler).toMatch(/authorizeRelease/);
     const qualifyAction = ACTION_COVERAGE_REGISTRY.find((row) => row.id === "pcb.qualify-route");
     expect(qualifyAction).toMatchObject({ toolExposure: "none" });
   });
