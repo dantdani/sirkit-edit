@@ -64,6 +64,7 @@ jobs:
           app/components/pcb/__tests__/board-revision-dialog.test.tsx
           app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx
           app/components/pcb/__tests__/pcb3d-view-session.test.tsx
+          app/components/view-session
           app/lib/engineering/__tests__/action-registry.test.ts
           app/lib/engineering/__tests__/b17-a-control-inventory.test.ts
           app/lib/view-session

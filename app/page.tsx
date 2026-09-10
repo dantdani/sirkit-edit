@@ -29,6 +29,9 @@ import { findConnectedGroup, splitWiresAtPoint, consolidateWires, type KicadPinS
 import { classifyNets, type NetRole } from "./lib/nets";
 import { rangeAwareTickFormatter } from "./lib/format";
 import { schDisplayRef, type SchComponent, type Wire, type Point, type SchComponentType, type SchematicState, type KicadComponentInstance, type BuildLogicalNetlist, type NetLabel, type NetLabelKind, type Rotation, type SchematicEditOp, type PageSize } from "@/lib/schematic-types";
+import { useSchematicViewSession } from "@/app/components/schematic/hooks/useSchematicViewSession"; // [B17-D]
+import { useWorkspaceViewSession } from "@/app/components/workspace/useWorkspaceViewSession"; // [B17-D]
+import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
@@ -1198,6 +1201,7 @@ function SchematicEditor({
   pageSize, setPageSize,
   onDeleteComponent,
   graph,
+  viewScope,
 }: {
   tool: Tool;
   setTool: (t: Tool) => void;
@@ -1231,6 +1235,8 @@ function SchematicEditor({
     cancel(): void;
     commit(label: string, finalGraph: SchematicGraphAfter): void;
   };
+  /** [B17-D] the project/branch the schematic view session is scoped to. */
+  viewScope: { projectId: string; branchId: string };
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [pan, setPan]     = useState<Point>({ x: 100, y: 80 });
@@ -1273,6 +1279,42 @@ function SchematicEditor({
   useEffect(() => {
     fitToPage();
   }, [fitToPage]);
+
+  // ── [B17-D] the schematic view session ──────────────────────────────────────
+  // Fit, zoom, pan/focus, select and net highlight are `schematic.*` view commands on ONE bus per editor
+  // mount; the hook applies bus state to pan/zoom and the page's selection and mirrors the human's own
+  // changes (wheel zoom, drag pan, clicks) back through `schematic.observe`.
+  const schematicView = useSchematicViewSession({
+    projectId: viewScope.projectId,
+    branchId: viewScope.branchId,
+    actorId: "local",
+    sources: { components, kicadComponents, netLabels, pagePx: { width: pageSizePx(pageSize).widthPx, height: pageSizePx(pageSize).heightPx } },
+    selectedId,
+    selectedKicadId,
+    applySelection: (id, family) => {
+      if (family === "kicad") { setSelectedId(null); setSelectedKicadId(id); }
+      else { setSelectedKicadId(null); setSelectedId(id); }
+    },
+    camera: { pan, zoom },
+    viewportPx: () => { const r = svgRef.current?.getBoundingClientRect(); return r && r.width > 0 && r.height > 0 ? { width: r.width, height: r.height } : null; },
+    applyCamera: (next) => { setZoom(next.zoom); setPan(next.pan); },
+    fitToPage,
+  });
+  const [schematicGoTo, setSchematicGoTo] = useState("");
+  const [schematicViewNotice, setSchematicViewNotice] = useState<string | null>(null);
+  /** Toolbar "Go to": select the component and frame it; a refusal is shown, never guessed around. */
+  const goToSchematicComponent = async (ref: string): Promise<void> => {
+    const selected = await schematicView.select({ kind: "component", ref });
+    if (!selected.ok) { setSchematicViewNotice(`${selected.code} — ${selected.message}`); return; }
+    const focused = await schematicView.focus({ kind: "component", ref });
+    setSchematicViewNotice(focused.ok ? null : `${focused.code} — ${focused.message}`);
+  };
+  const schematicViewSummary = JSON.stringify({
+    camera: schematicView.view.camera,
+    observed: schematicView.view.observed ? { pan: { x: Math.round(schematicView.view.observed.pan.x), y: Math.round(schematicView.view.observed.pan.y) }, zoom: Math.round(schematicView.view.observed.zoom * 1000) / 1000, viewportPx: schematicView.view.observed.viewportPx } : null,
+    selection: schematicView.view.selection,
+    highlight: schematicView.view.highlight,
+  });
 
   const componentsRef = useRef(components);
   componentsRef.current = components;
@@ -1926,12 +1968,24 @@ function SchematicEditor({
         </select>
         <button
           title="Fit page to view"
-          onClick={fitToPage}
+          onClick={() => schematicView.fitPage()}
           className="h-7 flex items-center gap-1.5 px-2 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
         >
           <Maximize2 className="size-3.5" />
           <span className="text-[10px] font-mono hidden sm:inline">Fit</span>
         </button>
+        <form className="flex items-center gap-1" onSubmit={(e) => { e.preventDefault(); const ref = schematicGoTo.trim(); if (ref) void goToSchematicComponent(ref); }}>
+          <input
+            data-testid="schematic-goto-input"
+            aria-label="Go to component"
+            value={schematicGoTo}
+            onChange={(e) => setSchematicGoTo(e.target.value)}
+            placeholder="Go to…"
+            className="h-7 w-20 rounded border border-zinc-800 bg-zinc-900 px-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-600 focus:outline-none"
+          />
+          <button type="submit" data-testid="schematic-goto" title="Focus the component" className="h-7 px-2 rounded text-[10px] font-mono text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition">Go</button>
+        </form>
+        {schematicViewNotice && <span data-testid="schematic-notice" className="text-[10px] text-amber-300 truncate max-w-56">{schematicViewNotice}</span>}
       </div>
 
       {/* Floating toolbar */}
@@ -2027,6 +2081,9 @@ function SchematicEditor({
       <svg
         ref={svgRef}
         id="sirkit-schematic-svg"
+        data-testid="schematic-canvas"
+        data-view={schematicViewSummary}
+        data-view-revision={schematicView.viewRevision}
         width="100%"
         height="100%"
         style={{ cursor: cursorStyle, display: "block" }}
@@ -2172,6 +2229,13 @@ function SchematicEditor({
 
           {/* Explicit net labels — power flags, ground symbols, signal flags.
               Same-name labels are electrically one net. */}
+          {schematicView.view.highlight && (
+            <g data-testid="schematic-highlight" data-net={schematicView.view.highlight.name} pointerEvents="none">
+              {netLabels.filter((label) => schematicView.view.highlight!.labelIds.includes(label.id)).map((label) => (
+                <circle key={label.id} cx={label.position.x} cy={label.position.y} r={14} fill="none" stroke="#f59e0b" strokeWidth={2 / zoom} />
+              ))}
+            </g>
+          )}
           {netLabels.map((label) => (
             <NetLabelGlyph
               key={label.id}
@@ -2357,7 +2421,7 @@ function PropertiesPanel({
   onReferenceChange: (v: string) => void;
 }) {
   return (
-    <div className="absolute top-4 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-52 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
       <div className="text-xs uppercase text-zinc-500 mb-0.5 tracking-wide">
         {SCH_TYPE_LABEL[comp.type]}
       </div>
@@ -2428,7 +2492,7 @@ function KicadPropertiesPanel({
   }, [instance.partId]);
 
   return (
-    <div className="absolute top-4 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
+    <div className="absolute top-14 right-4 w-60 z-10 bg-zinc-900/95 border border-zinc-800 rounded-md p-3 backdrop-blur-sm shadow-lg">
       <div className="text-xs uppercase text-zinc-500 mb-2 tracking-wide truncate">
         {part?.name ?? "KiCad part"}
       </div>
@@ -2719,6 +2783,8 @@ export default function Home() {
   const pendingRecordRef = useRef<{ timer: ReturnType<typeof setTimeout>; snap: SchematicSnapshot; label: string } | null>(null);
   const autosaverRef = useRef<Autosaver | null>(null);
   const projectRef = useRef(project);
+  // [B17-D] which editor tab is open is a `workspace.open-editor` view command; tab changes made elsewhere are mirrored.
+  const workspaceView = useWorkspaceViewSession({ projectId: project?.id ?? "local", branchId: "main", actorId: "local", tab: view, available: WORKSPACE_TABS, applyTab: (tab) => setView(tab) });
   useEffect(() => { projectRef.current = project; }, [project]);
   const liveStateRef = useRef({ components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt });
   useEffect(() => { liveStateRef.current = { components, wires, kicadComponents, netLabels, pageSize, messages, view, lastDesignPrompt }; });
@@ -5825,7 +5891,7 @@ export default function Home() {
         <div className="ml-auto flex items-center gap-1">
           <Button
             size="sm" variant="ghost" className="gap-1.5 text-zinc-300"
-            onClick={() => { setView("sim"); handleRunSim(); }}
+            onClick={() => { workspaceView.open("sim"); handleRunSim(); }}
             disabled={simLoading}
           >
             {simLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
@@ -5981,12 +6047,12 @@ export default function Home() {
         {/* Main Content */}
         {!chatFullscreen && (
           <main className="flex-1 flex flex-col min-w-0">
-            <div className="h-10 border-b border-zinc-800 flex items-center px-2 gap-1 shrink-0">
-              <ViewTab icon={Cable}        label="Schematic" active={view === "schematic"} onClick={() => setView("schematic")} />
-              <ViewTab icon={CircuitBoard} label="PCB"       active={view === "pcb"}       onClick={() => setView("pcb")} />
-              <ViewTab icon={Box}          label="3D"        active={view === "3d"}        onClick={() => setView("3d")} />
-              <ViewTab icon={Receipt}      label="BOM"       active={view === "bom"}       onClick={() => setView("bom")} />
-              <ViewTab icon={Activity}     label="SPICE"     active={view === "sim"}       onClick={() => setView("sim")} />
+            <div className="h-10 border-b border-zinc-800 flex items-center px-2 gap-1 shrink-0" data-testid="workspace-tabs" data-view={JSON.stringify(workspaceView.view)} data-view-revision={workspaceView.viewRevision}>
+              <ViewTab icon={Cable}        label="Schematic" active={view === "schematic"} onClick={() => workspaceView.open("schematic")} />
+              <ViewTab icon={CircuitBoard} label="PCB"       active={view === "pcb"}       onClick={() => workspaceView.open("pcb")} />
+              <ViewTab icon={Box}          label="3D"        active={view === "3d"}        onClick={() => workspaceView.open("3d")} />
+              <ViewTab icon={Receipt}      label="BOM"       active={view === "bom"}       onClick={() => workspaceView.open("bom")} />
+              <ViewTab icon={Activity}     label="SPICE"     active={view === "sim"}       onClick={() => workspaceView.open("sim")} />
             </div>
 
             <div className="flex-1 min-h-0 relative">
@@ -6007,6 +6073,7 @@ export default function Home() {
                     pageSize={pageSize} setPageSize={changeSheetSize}
                     onDeleteComponent={(family, componentId) => void deleteComponentCanonical(family, componentId)}
                     graph={schematicGraphApi}
+                    viewScope={{ projectId: project?.id ?? "local", branchId: "main" }}
                   />
                   {/* Empty state overlay */}
                   {components.length === 0 && wires.length === 0 && kicadComponents.length === 0 && netLabels.length === 0 && (

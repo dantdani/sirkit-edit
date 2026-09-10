@@ -51,8 +51,8 @@ import {
   type ContextMenuRequest,
 } from "@/app/lib/pcb/tools/select-move";
 import { createSelectionStore } from "@/app/lib/pcb/selection"; // Stage 17
-import { selectSimilar, selectNet, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
-import { liveRefs, selectionBBoxCenter } from "@/app/lib/pcb/edit/apply"; // Stage 17
+import { selectSimilar, getItems } from "@/app/lib/pcb/selection-queries"; // Stage 17
+import { liveRefs } from "@/app/lib/pcb/edit/apply"; // Stage 17
 // B03: the canonical editor session — slice mutations run through the
 // canonical executor; the wrapped history keeps undo/redo UI semantics.
 import { applyEditsCanonical, bindCanonicalEditorSession, canonicalSessionFor } from "@/app/lib/engineering/editor-adapter";
@@ -135,6 +135,7 @@ import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // 
 import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
+import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
 import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
@@ -175,7 +176,10 @@ type EditorAction =
   | { type: "show-copper" }
   | { type: "set-active-layer"; layer: LayerId }
   | { type: "set-tool"; tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension" } // Stages 7 + 11 + 16 + B08
-  | { type: "toggle-grid" };
+  | { type: "toggle-grid" }
+  // [B17-D] explicit-value forms the view-session bus applies (rebase-safe: the target value is in the action).
+  | { type: "set-layer-visible"; layer: LayerId; visible: boolean }
+  | { type: "set-grid"; visible: boolean };
 
 const DEFAULT_VISIBLE: Record<LayerId, boolean> = Object.fromEntries(
   LAYERS.map((l) => [l.id, l.defaultVisible]),
@@ -224,6 +228,13 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, tool: action.tool };
     case "toggle-grid":
       return { ...state, gridOn: !state.gridOn };
+    case "set-layer-visible": {
+      const current = state.visibleOverrides[action.layer] ?? DEFAULT_VISIBLE[action.layer];
+      if (current === action.visible) return state;
+      return { ...state, visibleOverrides: { ...state.visibleOverrides, [action.layer]: action.visible } };
+    }
+    case "set-grid":
+      return state.gridOn === action.visible ? state : { ...state, gridOn: action.visible };
   }
 }
 
@@ -1680,12 +1691,57 @@ export default function PcbEditor({
       preview3dOpen,
     };
   });
+  const isVisible = useCallback(
+    (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
+    [state.visibleOverrides],
+  );
+
+  // ── [B17-D] the 2D canvas view session ─────────────────────────────────────
+  // Navigation, selection, layers, grid, net highlight, finding reveal and measurement are `pcb.*` view
+  // commands on ONE bus per editor mount; the hook applies the bus state to the scene / selection store /
+  // layer reducer and mirrors the human's own changes (canvas clicks, wheel zoom) back as `pcb.observe`.
+  const pcbView = usePcbViewSession({
+    projectId: init.scope?.projectId ?? (init.demo ? "demo" : "local"),
+    branchId: init.scope?.branchId ?? "main",
+    actorId: init.scope ? "trusted-session" : "local",
+    board: state.board,
+    scene,
+    selectionStore,
+    layers: { visible: isVisible, active: state.activeLayer, grid: state.gridOn, stackup: state.board?.stackup === 4 ? 4 : 2 },
+    applyLayers: (change) => {
+      for (const item of change.visible ?? []) dispatch({ type: "set-layer-visible", layer: item.layer, visible: item.visible });
+      if (change.active !== undefined) dispatch({ type: "set-active-layer", layer: change.active });
+      if (change.grid !== undefined) dispatch({ type: "set-grid", visible: change.grid });
+    },
+    drc: drc.lastResult ?? null,
+    routingFailures: autoroute.lastResult?.failures ?? null,
+    flash: (_location, itemIds) => drc.flash(itemIds),
+  });
+  /** Toolbar "Go to": select the component and frame it — a refusal is shown, never guessed around. */
+  const goToComponent = async (ref: string): Promise<void> => {
+    const selected = await pcbView.selectTarget({ kind: "component", ref });
+    if (!selected.ok) { setToast(selected.message); return; }
+    const focused = await pcbView.focus({ kind: "component", ref });
+    if (!focused.ok) setToast(focused.message);
+  };
+  const pcbViewSummary = JSON.stringify({
+    camera: pcbView.view.camera,
+    observed: pcbView.view.observed ? { centerNm: pcbView.view.observed.centerNm, pxPerMm: Math.round(pcbView.view.observed.pxPerMm * 100) / 100, viewportPx: pcbView.view.observed.viewportPx } : null,
+    selection: pcbView.view.selection,
+    layers: pcbView.view.layers,
+    grid: pcbView.view.grid,
+    highlight: pcbView.view.highlight ? { netId: pcbView.view.highlight.netId, name: pcbView.view.highlight.name, count: pcbView.view.highlight.refs.length } : null,
+    reveal: pcbView.view.reveal ? { findingId: pcbView.view.reveal.findingId, source: pcbView.view.reveal.source, seq: pcbView.view.reveal.seq, itemIds: pcbView.view.reveal.itemIds } : null,
+    measurement: pcbView.view.measurement ? { distanceMm: pcbView.view.measurement.distanceMm, dxNm: pcbView.view.measurement.dxNm, dyNm: pcbView.view.measurement.dyNm } : null,
+  });
+
   const globalActionsRef = useRef({
     autoPlace: () => {},
     autoroute: () => {},
     runDrc: () => {},
     toggle3d: () => {},
     close3d: () => {},
+    clearSelection: () => {},
     openFab: () => {},
   });
   useEffect(() => {
@@ -1695,6 +1751,7 @@ export default function PcbEditor({
       runDrc: () => void drc.run(),
       toggle3d: () => pcb3d.toggle(), // [B17-C] pcb3d.open / pcb3d.close on the view-session bus
       close3d: () => pcb3d.setOpen(false),
+      clearSelection: () => pcbView.clearSelection(), // [B17-D] pcb.clear-selection
       openFab: () => setFabDialogOpen(true),
     };
   });
@@ -1780,16 +1837,12 @@ export default function PcbEditor({
       if (toolRef.current === "route") return; // useRouteTool owns V/Tab/Backspace/Escape/X
       if (toolRef.current === "zone") return; // ZoneTool owns Enter/Escape
       if (toolRef.current === "silk") return; // useSilkTool owns Enter/Escape (Stage 16)
-      if (e.key === "Escape") selectionStore.clear();
+      if (e.key === "Escape") globalActionsRef.current.clearSelection(); // [B17-D] pcb.clear-selection through the bus
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectionStore, editorRuntime]);
 
-  const isVisible = useCallback(
-    (layer: LayerId) => state.visibleOverrides[layer] ?? DEFAULT_VISIBLE[layer],
-    [state.visibleOverrides],
-  );
 
   // ── Stage 17: context-menu items for the current right-click pick ─────────
   // Items are thin wrappers over the same primitives the palette and
@@ -1823,19 +1876,19 @@ export default function PcbEditor({
           const name = board.nets.find((n) => n.id === netId)?.name || `net ${netId}`;
           items.push({
             label: `Select net ${name}`,
-            onClick: () => selectionStore.replace(selectNet(board, netId)),
+            onClick: () => pcbView.selectNet({ netId }),
           });
         }
         if (item.kind === "via") {
           items.push({
             label: "Select similar vias",
-            onClick: () => selectionStore.replace(selectSimilar(board, ref, "padstack")),
+            onClick: () => pcbView.select(selectSimilar(board, ref, "padstack")),
           });
         }
         if (item.kind === "track" || item.kind === "zone" || item.kind === "text") {
           items.push({
             label: "Select same layer",
-            onClick: () => selectionStore.replace(selectSimilar(board, ref, "layer")),
+            onClick: () => pcbView.select(selectSimilar(board, ref, "layer")),
           });
         }
       }
@@ -1933,14 +1986,12 @@ export default function PcbEditor({
 
     const actions: PaletteAction[] = [
       { id: "assist", title: "Ask AI to edit the board…", hint: "AI", run: () => setAssistOpen(true) },
-      { id: "zoom-fit", title: "Zoom to fit", run: () => scene?.zoomToFit() },
+      { id: "zoom-fit", title: "Zoom to fit", run: () => pcbView.fitBoard() },
       {
         id: "zoom-selection",
         title: "Zoom to selection",
         disabled: refs.length > 0 ? null : "nothing selected",
-        run: () => {
-          if (board && scene) scene.centerOn(selectionBBoxCenter(board, refs));
-        },
+        run: () => pcbView.fitSelection(),
       },
       { id: "run-drc", title: "Run design rule check", hint: "Ctrl+D", run: () => void drc.run() },
       { id: "autoplace", title: "Auto-place components", hint: "Ctrl+P", run: () => void autoPlace.run() },
@@ -1949,7 +2000,7 @@ export default function PcbEditor({
       { id: "fab", title: "Send to fab…", hint: "Ctrl+B", run: () => setFabDialogOpen(true) },
       { id: "export-kicad", title: "Export .kicad_pcb", run: exportKicadFromPalette },
       { id: "padstacks", title: "Open padstack library", run: () => setPadstacksOpen(true) },
-      { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => dispatch({ type: "toggle-grid" }) },
+      { id: "grid", title: state.gridOn ? "Hide grid" : "Show grid", run: () => pcbView.toggleGrid() },
       { id: "shortcuts", title: "Keyboard shortcuts", hint: "?", run: shortcuts.show },
       alignAction("left", "Align left"),
       alignAction("centerH", "Align horizontal centers"),
@@ -2001,18 +2052,18 @@ export default function PcbEditor({
       actions.push({
         id: "select-net",
         title: "Select everything on this net",
-        run: () => selectionStore.replace(selectSimilar(board, primary, "net")),
+        run: () => pcbView.select(selectSimilar(board, primary, "net")),
       });
       actions.push({
         id: "select-layer",
         title: "Select everything on this layer",
-        run: () => selectionStore.replace(selectSimilar(board, primary, "layer")),
+        run: () => pcbView.select(selectSimilar(board, primary, "layer")),
       });
       if (primary.kind === "via") {
         actions.push({
           id: "select-padstack",
           title: "Select vias with this padstack",
-          run: () => selectionStore.replace(selectSimilar(board, primary, "padstack")),
+          run: () => pcbView.select(selectSimilar(board, primary, "padstack")),
         });
       }
     }
@@ -2025,7 +2076,7 @@ export default function PcbEditor({
         id: `layer-${layer.id}`,
         title: `Toggle ${layer.displayName}`,
         hint: "Layers",
-        run: () => dispatch({ type: "toggle-layer", layer: layer.id }),
+        run: () => pcbView.toggleLayer(layer.id),
       });
     }
     return actions;
@@ -2085,15 +2136,18 @@ export default function PcbEditor({
   }
 
   return (
-    <div className="absolute inset-0 flex bg-zinc-950">
+    <div className="absolute inset-0 flex bg-zinc-950" data-testid="pcb-editor" data-view={pcbViewSummary} data-view-revision={pcbView.viewRevision}>
       {/* Canvas column */}
       <div className="flex-1 flex flex-col min-w-0">
         <PcbToolbar
           tool={state.tool}
           onToolChange={(tool) => dispatch({ type: "set-tool", tool })}
-          onZoomToFit={() => scene?.zoomToFit()}
+          onZoomToFit={() => pcbView.fitBoard()} // [B17-D] pcb.fit-board
+          onGoTo={(ref) => void goToComponent(ref)}
+          measurement={pcbView.view.measurement ? `${pcbView.view.measurement.distanceMm.toFixed(3)} mm` : null}
+          onClearMeasurement={() => pcbView.clearMeasurement()}
           gridOn={state.gridOn}
-          onToggleGrid={() => dispatch({ type: "toggle-grid" })}
+          onToggleGrid={() => pcbView.toggleGrid()}
           stackup={state.board.stackup}
           onStackupChange={(stackup) => {
             const h = editorRuntime.getHistory();
@@ -2342,23 +2396,25 @@ export default function PcbEditor({
       </div>
 
       {/* Right panel column */}
-      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
+      {/* [B17-D] the column SCROLLS, so every panel keeps its content height (`[&>*]:shrink-0`): shrinkable panels
+          collapsed under their neighbours and their rows (layers, DRC violations, inspector) were unreachable. */}
+      <div className="w-60 shrink-0 border-l border-zinc-800 bg-zinc-900/50 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden [&>*]:shrink-0" data-testid="pcb-right-column">
         <LayerPanel
           stackup={state.board.stackup}
           activeLayer={state.activeLayer}
           isVisible={isVisible}
-          onToggleVisible={(layer) => dispatch({ type: "toggle-layer", layer })}
-          onActivate={(layer) => dispatch({ type: "set-active-layer", layer })}
-          onIsolate={(layer) => dispatch({ type: "isolate-layer", layer })}
-          onShowAllCopper={() => dispatch({ type: "show-copper" })}
+          onToggleVisible={(layer) => pcbView.toggleLayer(layer)}
+          onActivate={(layer) => pcbView.setActiveLayer(layer)}
+          onIsolate={(layer) => pcbView.isolateLayer(layer)}
+          onShowAllCopper={() => pcbView.showCopper()}
           layerUsage={autoroute.lastResult?.layerUsage}
         />
         <AutorouteSetup
           board={state.board}
           result={autoroute.lastResult}
           onFocusFailure={(failure) => {
-            scene?.centerOn(failure.location, 40);
-            scene?.setSelection([failure.from?.footprintId, failure.to?.footprintId].filter((id): id is string => Boolean(id)));
+            const index = autoroute.lastResult?.failures.indexOf(failure) ?? -1;
+            if (index >= 0) void pcbView.revealFinding(`routing:${index}`);
           }}
           onChange={(stackup, label) => {
             const h = editorRuntime.getHistory();
@@ -2397,7 +2453,7 @@ export default function PcbEditor({
           board={state.board}
           selection={selectionStore}
           getHistory={() => editorRuntime.getHistory()}
-          scene={scene}
+          onFitSelection={() => pcbView.fitSelection()}
           rules={getPreset(drc.activePresetId).rules}
           presetId={drc.activePresetId}
           toast={setToast}
@@ -2421,10 +2477,10 @@ export default function PcbEditor({
             onAction={() => void drc.run()}
           />
         ) : (
-          <DrcPanel drc={drc} repair={repair} readiness={liveReadinessReport} constraintProgram={state.board.constraintState?.activeProgram} />
+          <DrcPanel drc={{ ...drc, zoomToViolation: (v) => void pcbView.revealFinding(`drc:${v.id}`) }} repair={repair} readiness={liveReadinessReport} constraintProgram={state.board.constraintState?.activeProgram} />
         )}
       </div>
-      <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={drc.zoomToViolation} /> {/* Stage 14 */}
+      <FabDialog open={fabDialogOpen} onClose={() => setFabDialogOpen(false)} fab={fabExport} onZoomToViolation={(v) => void pcbView.revealFinding(`drc:${v.id}`)} /> {/* Stage 14 */}
       {/* [B15.3 §I] the human-gated PCB proposal review — display grants
           nothing; only the explicit Approve click reaches the controller. */}
       <PcbProposalReviewDialog

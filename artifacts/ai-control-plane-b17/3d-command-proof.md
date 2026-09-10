@@ -26,7 +26,7 @@ The command set (`app/lib/view-session/pcb3d.ts`) is pure: a geometry probe over
 - `app/components/pcb/__tests__/pcb3d-view-session.test.tsx` (2) — the editor hook under React StrictMode (see the defects below).
 - Static: tsc 0; eslint 0 on the change set (`react-hooks/purity` at `PcbEditor.tsx:1320` is pre-existing in `82ecbf8`). Escape and Ctrl+3 reach the bus through the editor's global-actions ref (`close3d` / `toggle3d`) so the window keydown listener is bound once.
 
-## Browser proof (CONFIRMED — `e2e/pcb-3d-semantic.spec.ts`)
+## Browser proof (CONFIRMED — `e2e/pcb-3d-semantic.spec.ts`, since B17-D the first serial scenario of `e2e/semantic-editor.spec.ts`)
 
 Run 3 on 2026-09-09 23:03 local (`pnpm exec playwright test e2e/pcb-3d-semantic.spec.ts`; Chromium 1243 against `next dev` on port 3100 under the fixture runtime; `retries: 0`): **1 passed in 24.3 s** (the test itself 19.0 s). Runs 1 and 2 failed and each exposed a real defect (next section); nothing was retried away.
 

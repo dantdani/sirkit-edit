@@ -35,6 +35,12 @@ export async function installDeterministicBrowser(page: Page, context: BrowserCo
   await page.clock.setFixedTime(new Date(FIXTURE_CLOCK));
 }
 
+/** The workspace is interactive only once the client hydrated and the project record loaded (the header shows the
+ *  project name instead of "Loading…"); a cold Turbopack client compile can take longer than one expect budget. */
+export async function expectHydrated(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: /Untitled project/ })).toBeVisible({ timeout: 120_000 });
+}
+
 export async function actAs(context: BrowserContext, role: FixtureRole, baseURL: string): Promise<void> {
   await context.clearCookies();
   await context.addCookies([{ name: "sirkit-fixture-role", value: role, url: baseURL }]);
@@ -68,6 +74,7 @@ export async function bootstrapSynchronizedBoard(page: Page, context: BrowserCon
   await actAs(context, "editor", origin);
   await page.goto("/");
   await expect(page.getByTestId("fixture-runtime-banner")).toBeVisible();
+  await expectHydrated(page);
   await page.getByTestId("activity-ai chat").click();
   const prompt = page.getByTestId("prompt-input");
   await expect(prompt).toBeEnabled();

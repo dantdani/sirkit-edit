@@ -41,7 +41,7 @@ function setup(selectTrackCount: number) {
       board={history.present}
       selection={store}
       getHistory={() => history}
-      scene={null}
+      onFitSelection={() => {}}
       rules={RULES}
       presetId="jlcpcb-2l"
       toast={toast}
@@ -59,7 +59,7 @@ describe("Inspector", () => {
         board={board}
         selection={createSelectionStore()}
         getHistory={() => history}
-        scene={null}
+        onFitSelection={() => {}}
         rules={RULES}
         presetId="jlcpcb-2l"
         toast={() => {}}
@@ -135,7 +135,7 @@ describe("Inspector", () => {
         board={board}
         selection={store}
         getHistory={() => history}
-        scene={null}
+        onFitSelection={() => {}}
         rules={RULES}
         presetId="jlcpcb-2l"
         toast={() => {}}
@@ -158,7 +158,7 @@ describe("Inspector", () => {
         board={board}
         selection={store}
         getHistory={() => history}
-        scene={null}
+        onFitSelection={() => {}}
         rules={RULES}
         presetId="jlcpcb-2l"
         toast={toast}

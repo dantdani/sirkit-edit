@@ -197,11 +197,14 @@ describe("B17-B — view-session command bus", () => {
     expect(() => new ViewSessionBus<TestView>({ identity: { ...IDENTITY, sessionId: "bad id!" }, initialState: bus.getState(), commands: [] })).toThrow(/VS_IDENTITY_INVALID/);
   });
 
-  it("createViewCommand builds a valid, scoped envelope with a deterministic invocation id; session ids are fresh and never persisted", () => {
+  it("createViewCommand builds a valid, scoped envelope with an invocation id that is unique per issue (replay only for a deliberately reused id); session ids are fresh and never persisted", () => {
     const env = createViewCommand({ identity: IDENTITY, commandId: "test.fit", payload: { a: 1 }, actor: HUMAN, expectedViewRevision: 3, issuedAt: T0, ttlMs: 5_000 });
     expect(env).toMatchObject({ schemaVersion: VIEW_COMMAND_SCHEMA, commandId: "test.fit", sessionId: IDENTITY.sessionId, projectId: IDENTITY.projectId, branchId: IDENTITY.branchId, editor: "pcb", expectedViewRevision: 3, actor: HUMAN, payload: { a: 1 }, issuedAt: T0, expiresAt: "2026-09-09T12:00:05.000Z" });
-    expect(env.invocationId).toMatch(/^vc-[0-9a-f]{16,}$/);
-    expect(createViewCommand({ identity: IDENTITY, commandId: "test.fit", payload: { a: 1 }, actor: HUMAN, expectedViewRevision: 3, issuedAt: T0 }).invocationId).toBe(env.invocationId);
+    expect(env.invocationId).toMatch(/^vc-[0-9a-z]+-[0-9a-f]{16}$/);
+    // [B17-D] equal content at the same frozen instant is a NEW invocation: the B17-D browser proof found a
+    // content-derived id replaying an old settled observe when the renderer returned to an earlier camera.
+    expect(createViewCommand({ identity: IDENTITY, commandId: "test.fit", payload: { a: 1 }, actor: HUMAN, expectedViewRevision: 3, issuedAt: T0 }).invocationId).not.toBe(env.invocationId);
+    expect(createViewCommand({ identity: IDENTITY, commandId: "test.fit", payload: { a: 1 }, actor: HUMAN, expectedViewRevision: 3, issuedAt: T0, invocationId: "retry-1" }).invocationId).toBe("retry-1");
     expect(newViewSessionId()).toMatch(/^vs-/);
     expect(newViewSessionId()).not.toBe(newViewSessionId());
   });

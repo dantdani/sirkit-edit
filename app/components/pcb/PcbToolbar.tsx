@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 /**
  * PCB canvas toolbar (PCB Stage 3): select/pan tool toggle, zoom-to-fit,
  * grid on/off, stackup 2/4 switch (proves layer-panel filtering), and board
@@ -33,6 +35,9 @@ export function PcbToolbar({
   tool,
   onToolChange,
   onZoomToFit,
+  onGoTo,
+  measurement,
+  onClearMeasurement,
   gridOn,
   onToggleGrid,
   stackup,
@@ -72,6 +77,11 @@ export function PcbToolbar({
   tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension"; // Stages 7/11/16 + B08 dimension
   onToolChange: (tool: "select" | "pan" | "route" | "zone" | "silk" | "dimension") => void;
   onZoomToFit: () => void;
+  /** [B17-D] Focus a component by reference designator (pcb.select + pcb.focus on the view-session bus). */
+  onGoTo: (ref: string) => void;
+  /** [B17-D] The view-session measurement readout (never a board dimension); null hides the chip. */
+  measurement: string | null;
+  onClearMeasurement: () => void;
   gridOn: boolean;
   onToggleGrid: () => void;
   stackup: 2 | 4;
@@ -138,6 +148,9 @@ export function PcbToolbar({
     if (!Number.isFinite(v)) return;
     onOutlineChange({ ...outline, [dim]: mmToNm(Math.max(v, MIN_BOARD_MM)) });
   };
+
+  // [B17-D] the Go-to draft is view state; submitting issues the semantic focus.
+  const [goTo, setGoTo] = useState("");
 
   const toggleRoundRect = (): void => {
     if (outline.kind === "rect") {
@@ -350,6 +363,29 @@ export function PcbToolbar({
       >
         <Maximize2 className="size-3.5" />
       </button>
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(e) => { e.preventDefault(); const ref = goTo.trim(); if (ref) onGoTo(ref); }}
+      >
+        <input
+          data-testid="pcb-goto-input"
+          aria-label="Go to component"
+          value={goTo}
+          onChange={(e) => setGoTo(e.target.value)}
+          placeholder="Go to…"
+          className="h-6 w-20 rounded border border-zinc-700 bg-zinc-900 px-1.5 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-zinc-500 focus:outline-none"
+        />
+        <button type="submit" data-testid="pcb-goto" title="Focus the component" className={iconButtonClass(false)}>
+          Go
+        </button>
+      </form>
+      {measurement && (
+        <span data-testid="pcb-measurement" className="flex items-center gap-1 rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[11px] text-amber-300">
+          <Ruler className="size-3" />
+          {measurement}
+          <button type="button" aria-label="Clear measurement" onClick={onClearMeasurement} className="text-zinc-500 hover:text-zinc-200">×</button>
+        </span>
+      )}
       <button
         type="button"
         title="Toggle grid"

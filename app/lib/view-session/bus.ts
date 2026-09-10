@@ -234,7 +234,13 @@ export class ViewSessionBus<State> {
   }
 }
 
-/** Build an envelope for the UI, a keyboard shortcut or a tool: the caller supplies identity, actor and the revision it observed. */
+/** Per-process issue counter: a DEFAULT invocation id is unique per call (single settlement replays only an id the
+ *  caller deliberately reuses). The B17-D browser proof found the content-derived id replaying an OLD settled
+ *  `pcb.observe` under the frozen fixture clock when the renderer returned to an earlier camera. */
+let issued = 0;
+
+/** Build an envelope for the UI, a keyboard shortcut or a tool: the caller supplies identity, actor and the revision it observed;
+ *  pass `invocationId` only to get retry/replay semantics for the SAME invocation. */
 export function createViewCommand(input: {
   identity: ViewSessionIdentity;
   commandId: string;
@@ -247,7 +253,8 @@ export function createViewCommand(input: {
 }): ViewCommandEnvelope {
   const issuedAt = input.issuedAt ?? new Date().toISOString();
   const expiresAt = new Date(Date.parse(issuedAt) + (input.ttlMs ?? 10_000)).toISOString();
-  const invocationId = input.invocationId ?? `vc-${engineeringDigest({ ...input.identity, commandId: input.commandId, payload: input.payload ?? null, issuedAt, actor: input.actor.actorId }).slice(5)}`;
+  issued += 1;
+  const invocationId = input.invocationId ?? `vc-${issued.toString(36)}-${engineeringDigest({ ...input.identity, commandId: input.commandId, payload: input.payload ?? null, issuedAt, actor: input.actor.actorId }).slice(5)}`;
   return {
     schemaVersion: VIEW_COMMAND_SCHEMA,
     commandId: input.commandId,
@@ -264,8 +271,15 @@ export function createViewCommand(input: {
   };
 }
 
-/** A stable browser-session id (one per tab lifetime; never persisted). */
+let sessionSeq = 0;
+
+/** A stable browser-session id (one per tab lifetime; never persisted).
+ *  [B17-D] It deliberately does NOT draw on `crypto.randomUUID()`: view sessions are created at page mount, and
+ *  drawing on the browser's UUID source there shifted every id the application minted afterwards (project,
+ *  board, footprints) — the prompt-to-Gerber browser proof's placed-board revision stopped matching the router
+ *  recording. Session ids only need to be unique within the tab. */
 export function newViewSessionId(): string {
-  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `vs-${random}`;
+  sessionSeq += 1;
+  const entropy = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+  return `vs-${sessionSeq.toString(36)}-${entropy}`;
 }
