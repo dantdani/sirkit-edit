@@ -15,7 +15,8 @@ import type { ProjectRole } from "../engineering/types";
 export const VIEW_COMMAND_SCHEMA = "sirkit.view-command.v1" as const;
 export const VIEW_TRACE_SCHEMA = "sirkit.view-command-trace.v1" as const;
 
-export const VIEW_EDITORS = ["schematic", "pcb", "pcb3d"] as const;
+/** [B17-D] `workspace` is the tab-level session (open editor/tab); the three editors own their canvases. */
+export const VIEW_EDITORS = ["schematic", "pcb", "pcb3d", "workspace"] as const;
 export type ViewEditor = (typeof VIEW_EDITORS)[number];
 
 /** The actor as the trusted boundary knows it — a LABEL for tracing and role gates, never an authority claim. */
@@ -92,6 +93,12 @@ export interface ViewCommandContext<State> {
   state: State;
   actor: TrustedViewActor;
   identity: ViewSessionIdentity;
+  /** The revision the issuer observed and the current one. */
+  expectedViewRevision: number;
+  viewRevision: number;
+  /** [B17-D] true when a `rebase` command is being applied on a revision the issuer did not observe — a
+   *  selection-relative target ("this component", "the selection") must then REFUSE instead of guessing. */
+  rebased: boolean;
 }
 
 export interface ViewCommandDescriptor<State, Payload = unknown> {

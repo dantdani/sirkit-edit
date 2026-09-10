@@ -204,7 +204,7 @@ export class ViewSessionBus<State> {
     try {
       if (signal.aborted) return this.remember(this.cancelled(envelope));
       const before = this.state;
-      const outcome = await command.apply(validated.value as never, { signal, state: before, actor: envelope.actor as TrustedViewActor, identity: this.identity });
+      const outcome = await command.apply(validated.value as never, { signal, state: before, actor: envelope.actor as TrustedViewActor, identity: this.identity, expectedViewRevision: envelope.expectedViewRevision, viewRevision: this.revision, rebased });
       if (signal.aborted) return this.remember(this.cancelled(envelope));
       if (this.retired) return this.refuse(envelope, "VS_SESSION_RETIRED", `The view session was retired (${this.retired}) while the command ran.`);
       if (!outcome.ok) return this.refuse(envelope, outcome.refusal.code, outcome.refusal.message);
