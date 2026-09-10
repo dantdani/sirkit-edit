@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "d33b255",
+  "lastGreenSha": "486d0ac",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-B closeout: adversarial review workflow of the server and browser halves (act on confirmed findings), then B18-C: the gateway dispatch branch (seal -> mint through the injected closure, discovery recheck), the B04 exposure lift for pcb.move-footprint with every pinned invariant re-derived (tool-registry, tool-discovery, agent-exposure, loop filter, b09/b04/b17-f/b16-1c INTENTIONAL list), the system prompt 1.1.0, the undo/redo sub-design (OD-14), then B18-D chat execution UX and B18-E scenarios.",
-  "updatedAt": "2026-09-10T06:45:00-04:00"
+  "nextAction": "B18-C: the design workflow (three independent designs x two adversarial lenses, one synthesis) is running against the B18-B tree; then implement its increments one by one (gateway dispatch branch seal -> mint through the injected closure with the discovery recheck; the B04 exposure lift for pcb.move-footprint re-deriving every pinned gate from the one intentional list; the system prompt 1.1.0 with the b11 artifacts regenerated; the other Tier 1 families' builders/grammars or their justified confirmation-only fallback; the edit-via / dimension tier decision (OD-13); the undo/redo sub-design (OD-14); the model-facing before/after result contract), each committed, pushed and CI-watched; then B18-D chat execution UX and B18-E scenarios 1-8 with recorded evidence.",
+  "updatedAt": "2026-09-10T07:20:00-04:00"
 }
