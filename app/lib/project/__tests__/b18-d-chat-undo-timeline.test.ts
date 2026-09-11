@@ -71,7 +71,7 @@ describe("B18-D I8 — what the entry's Undo shows", () => {
     expect(entryUndoAvailability(committed, { kind: "redo", ref: { transactionId: tx } }, false)).toEqual({ eligible: true, reason: null });
     expect(entryUndoAvailability(committed, { kind: "commit", ref: { transactionId: "tx-human" } }, false)).toEqual({ eligible: false, reason: LATEST });
     // an undo of a LATER change leaves this change at the head, but the newest operation is an undo: the timeline would refuse
-    expect(entryUndoAvailability(committed, { kind: "undo", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: LATEST });
+    expect(entryUndoAvailability(committed, { kind: "undo", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: "Not available here after a later undo — it is on top again: the editor's Undo reverts it." }); // [B18-D review] pin moved: the reason names the Undo that works
     expect(entryUndoAvailability(committed, undefined, false)).toEqual({ eligible: false, reason: LATEST });
     expect(entryUndoAvailability(committed, { kind: "commit", ref: { transactionId: tx } }, true)).toEqual({ eligible: false, reason: "Paused — an AI change is being made." });
     expect(entryUndoAvailability({ ...committed, undoEligible: false }, { kind: "commit", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: "No longer undoable from here — use the revision history." });

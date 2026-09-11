@@ -635,3 +635,11 @@ _(discovery, reproduction and results appended below as they are observed)_
 - The completeness critic: it reported seven gaps; each is fixed in part 4, the next commit (D-A15).
 - Gates: B17 581 controls and the B01 fingerprint unchanged (no new control; the toolbar titles are expressions); the CI list gains b18-d-review-part3.
 - Tests: broad run: 249 files / 3299 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 12/12 passed (4.6 min) incl. P2 checking the paused toolbar title; the one missing_credentials server line is the pre-existing automatic schematic review; tsc 0; eslint clean on the changed files (`page.tsx` 14 and `PcbEditor.tsx` 1 pre-existing problems, the same rules as before).
+- CI at `e770bf1` (I12 part 3): CI green (deterministic-manufacturing 34640379579 incl. page-browser-e2e, benchmark-quality 34640379575).
+
+### B18-D I12 part 4 — the completeness critic's gaps (2026-09-11 local, solo; this commit)
+
+- Reproduced first: b18-d-review-part4 failed 5/5 on the part-3 code (the label wording, the undoable in-progress claim, recovery not settling a live entry, the reason after a later undo, the missing edit-route helper).
+- Fixed: a cut stream is a visible failure with its notes released; the answer label is true in the unsettled case; Rule 2 on the schematic edit route (owner decision OD-18, a default); the chat Undo's reason after a later undo; recovery settles live entries; the static Tier 3 line; the in-progress lines drop "undoable" and show the wait.
+- Gates: B17 581 controls and the B01 fingerprint unchanged (no new control); the CI list gains b18-d-review-part4.
+- Tests: `b18-d-review-part4` (CI list); broad run: 250 files / 3304 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 13/13 passed (4.6 min) incl. the new cut-stream scenario and the Tier 3 line; the one missing_credentials server line is the pre-existing automatic schematic review; tsc 0; eslint clean on the changed files (`page.tsx` 14 and `PcbEditor.tsx` 1 pre-existing problems, the same rules as before).

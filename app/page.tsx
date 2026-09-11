@@ -60,7 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -4691,6 +4691,13 @@ export default function Home() {
       // [B18-D review] a run stopped before it ended: close its view so its interim notes are still released as notes.
       const stoppedEarly = chatRun.stopped && runView.terminal === null;
       if (stoppedEarly) runView = reduceRunView(runView, { type: "run_failed", reason: "stopped", message: "Stopped by you." });
+      // [B18-D review] a stream that ended without its terminal event (a dropped connection, not Stop) is a failure: its notes
+      // are released and the failure stays visible — never a green log.
+      if (!chatRun.stopped && runView.terminal === null && scope.isCurrent()) {
+        const cut = "The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made.";
+        runView = reduceRunView(runView, { type: "run_failed", reason: "stream_cut", message: cut });
+        runFailure = { reason: "stream_cut", message: cut };
+      }
       // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
       if (scope.isCurrent()) {
         const projected = projectRunView(runView);
@@ -5318,13 +5325,17 @@ export default function Home() {
         return;
       }
       setPendingTier1(sealed.proposal);
+      // [B18-D review] Rule 2 here too (OD-18): the model's note is a labelled note in the run log — never the answer, and never
+      // the history the next run receives; the answer is the page's own sentence.
+      const editMessages = editProposalMessages(data.note);
+      if (editMessages.note) appendActivityStep(logId, editMessages.note, "done");
       finishActivityLog(logId, `Proposal ready — ${sealed.proposal.operations.length} operation(s) awaiting your review`);
       appendChatFor(pin.projectId, (prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `${data.note || "Edit proposal prepared."} Review the exact operations and choose "Apply exact proposal" — nothing has been changed yet.`,
+          content: editMessages.answer,
         },
       ]);
     } catch (err) {
@@ -6788,6 +6799,8 @@ export default function Home() {
                 {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
                 <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
               </div>
+              {/* [B18-D review] §1 item 3: the static Tier 3 line */}
+              <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-tier3-line">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">

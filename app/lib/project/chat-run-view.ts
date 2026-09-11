@@ -12,11 +12,12 @@
  *    the editor and the server disagree it falls back to "landed, unverified".
  */
 import type { PublicExecutionGrant } from "../engineering/execution-grant";
+import { EXECUTION_SETTLEMENT_TIMEOUT_MS } from "../engineering/execution-grant"; // [B18-D review] the wait for the editor, shown (§1 item 6)
 import type { ReceivedExecutionSettlement } from "./execution-grant-events";
 import { checksLine, confirmationReason, operationLines, refusalSentence, retirementSentence, recoverySentence, targetLines, tierLabel, type RefOf } from "./execution-display";
 import type { ProjectOperation } from "./operation-timeline"; // [B18-D I8]
 
-export const LABEL_BEFORE_CHANGE = "Written before any change was made — the status above is authoritative.";
+export const LABEL_BEFORE_CHANGE = "Written before the outcome of this change was confirmed — the entry above is authoritative."; // [B18-D review] true also when the change was made but not yet confirmed
 export const LABEL_BEFORE_REVIEW = "Written before anything was applied — the proposal above awaits your review.";
 export const NOTE_PREFIX = "Assistant note (written before the result): ";
 
@@ -237,7 +238,26 @@ export function entrySettled(entry: ExecutionEntry, received: Pick<ReceivedExecu
 
 export const entryCancelled = (entry: ExecutionEntry): ExecutionEntry => (TERMINAL.has(entry.state) ? entry : { ...entry, state: "cancelled", failure: { headline: "Cancelled — nothing was changed.", next: "Ask again if you still want it.", code: "cancelled_by_user" } });
 export const entrySuperseded = (entry: ExecutionEntry): ExecutionEntry => (TERMINAL.has(entry.state) ? entry : { ...entry, state: "superseded", failure: { headline: "Replaced — a newer change or a board change superseded it. Nothing was changed.", next: "Ask again.", code: "superseded" } });
-export const entryRecovery = (entry: ExecutionEntry, action: unknown): ExecutionEntry => ({ ...entry, recovery: recoverySentence(action) });
+/** The recovery sweep's result for a live entry. [B18-D review] it also settles a non-terminal entry to what the sweep
+ *  established (never "Executing …" beside "Recovered …"); a terminal entry keeps its state and gains the sentence. */
+export const entryRecovery = (entry: ExecutionEntry, action: unknown): ExecutionEntry => {
+  const recovery = recoverySentence(action);
+  if (TERMINAL.has(entry.state)) return { ...entry, recovery };
+  if (action === "adopted-and-settled" || action === "settled-from-receipt") return { ...entry, recovery, state: "committed", serverRecord: "settled", failure: null, undoEligible: false };
+  if (action === "abandoned-not-committed") return { ...entry, recovery: null, state: "not_made", failure: { headline: recovery, next: "Ask again.", code: "abandoned-not-committed" }, undoEligible: false };
+  if (action === "refused-poisoned") return { ...entry, recovery, state: "landed_unverified", failure: { ...refusalSentence(null, true), code: "refused-poisoned" }, undoEligible: false };
+  return { ...entry, recovery };
+};
+/** [B18-D review] A schematic edit proposal's chat text (Rule 2): the answer is the page's own sentence; the model's note, if
+ *  any, is a labelled note for the run log — never the answer, and never the history the next run receives. */
+export function editProposalMessages(note: unknown): { answer: string; note: string | null } {
+  const text = typeof note === "string" ? note.trim().slice(0, 600) : "";
+  return {
+    answer: `Edit proposal prepared. Review the exact operations and choose "Apply exact proposal" — nothing has been changed yet.`,
+    note: text ? `${NOTE_PREFIX}${text}` : null,
+  };
+}
+
 export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(entry.state);
 /** [B18-D review] A confirmed preview refused for a transient reason changed nothing and keeps its card for a retry: the entry
  *  returns to awaiting confirmation and says the attempt was not made — never "executing" with no ritual running. */
@@ -259,7 +279,11 @@ export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<Projec
   if (entry.undoResult?.ok) return { eligible: false, reason: latest ? "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" : "Already undone — the editor's Redo brings it back." };
   if (!entry.undoEligible) return { eligible: false, reason: "No longer undoable from here — use the revision history." };
   if (aiChangeInFlight) return { eligible: false, reason: "Paused — an AI change is being made." };
-  return latest ? { eligible: true, reason: null } : { eligible: false, reason: "No longer the latest operation — use the revision history." };
+  if (latest) return { eligible: true, reason: null };
+  // [B18-D review] after a LATER change was undone this change is on top again, but the project timeline only undoes its
+  // newest commit or redo (and refuses after an undo): the editor's own Undo reverts it
+  if (newest?.kind === "undo" && newest.ref?.transactionId === entry.transaction.id) return { eligible: false, reason: "Not available here after a later undo — it is on top again: the editor's Undo reverts it." };
+  return { eligible: false, reason: "No longer the latest operation — use the revision history." };
 }
 
 /** [B18-D I8] The chat Undo's result, written into the entry: a success names the one history step and ends the entry's
@@ -274,7 +298,7 @@ export const entryUndoResult = (entry: ExecutionEntry, result: { ok: true } | { 
 // first row's id (`xlog-<grantId>:state:<state>`) so a reloaded record still renders its state (a static record: no
 // live Undo). The pinned phrases appear in the entry exactly once each:
 //  - awaiting confirmation: "Change ready for your confirmation in the PCB editor — <after>; nothing has changed yet"
-//  - executing:             "Executing in the PCB editor — <after> (one canonical transaction, undoable) — awaiting the editor's settlement"
+//  - executing:             "Executing in the PCB editor — <after> (one canonical transaction) — awaiting the editor's settlement (the assistant waits up to N s)"
 //  - committed:             "AI change committed by your editor (one canonical transaction)[ — DRC: N errors]"
 
 export const EXECUTION_ENTRY_ID_PREFIX = "xlog-";
@@ -286,12 +310,14 @@ export interface EntryLogMessage { id: string; role: "log"; title: string; statu
 const RUNNING_STATES: ReadonlySet<ExecutionEntryState> = new Set(["awaiting_confirmation", "issued", "executing", "outcome_unknown"]);
 const ERROR_STATES: ReadonlySet<ExecutionEntryState> = new Set(["not_made", "landed_unverified", "cancelled", "superseded"]);
 
+const SETTLE_WAIT_S = Math.round(EXECUTION_SETTLEMENT_TIMEOUT_MS / 1000); // [B18-D review] how long the assistant waits for the editor
+
 function stateSentence(entry: ExecutionEntry): string {
   const after = entry.understood.replace(/^[^—]*— /, "");
   switch (entry.state) {
     case "awaiting_confirmation": return `Change ready for your confirmation in the PCB editor — ${after}; nothing has changed yet`;
-    case "issued": return `Issued — your editor executes it now (one canonical transaction, undoable)`;
-    case "executing": return `Executing in the PCB editor — ${after} (one canonical transaction, undoable) — awaiting the editor's settlement`;
+    case "issued": return `Issued — your editor executes it now (one canonical transaction; the assistant waits up to ${SETTLE_WAIT_S} s for the result)`;
+    case "executing": return `Executing in the PCB editor — ${after} (one canonical transaction) — awaiting the editor's settlement (the assistant waits up to ${SETTLE_WAIT_S} s)`;
     case "committed": return `AI change committed by your editor (one canonical transaction)${entry.checks ? ` — ${entry.checks.replace(/^Checks: /, "")}` : ""}`;
     case "landed_unverified": return entry.failure?.headline ?? "The change LANDED but could not be verified — the board MAY have changed.";
     case "outcome_unknown": return entry.failure?.headline ?? "Outcome not yet known — the editor did not report in time.";

@@ -198,7 +198,7 @@ test("B18-C preview: under proposal_only an AI move is shown on the confirmation
   await expect(page.getByTestId("granted-execution-preview")).toContainText("R3 at (");
   await expect(page.getByText(/Change ready for your confirmation in the PCB editor — R3 at/)).toBeVisible();
   // [B18-D S5] the preview run's answer opens with its label paragraph: it was written before any change was made.
-  await expect(page.getByText("Written before any change was made — the status above is authoritative.").last()).toBeVisible();
+  await expect(page.getByText("Written before the outcome of this change was confirmed — the entry above is authoritative.").last()).toBeVisible();
   await expect(page.getByTitle(/^Undo: AI: /)).toHaveCount(0); // the card is a preview: no AI entry exists yet
   await page.screenshot({ path: `${EVIDENCE}/granted-preview-card.png`, fullPage: false });
 
@@ -419,6 +419,8 @@ test("B18-D I11 the agent autonomy in the chat: the editor sees the mode and why
   await openChat();
   const control = page.getByTestId("autonomy-control");
   const select = page.getByTestId("autonomy-mode");
+  // [B18-D review] §1 item 3: the chat header states the Tier 3 boundary for every message, not only when a word matches
+  await expect(page.getByTestId("chat-tier3-line")).toHaveText("Release, qualification and ordering are never done by the assistant — use the release workflow.");
   // The page is the fixture editor here (the bootstrap ends as the editor): the mode and what it means, locked, with the reason.
   await expect(control).toHaveAttribute("data-mode", "execute_explicit_tier1");
   await expect(select).toBeDisabled();
@@ -533,6 +535,21 @@ test("B18-D review: a preview replaced by a newer one says so, and only the newe
   await page.getByRole("button", { name: "Cancel — change nothing" }).click();
   await expect(page.getByTestId("granted-execution-card")).toBeHidden();
   expect(silkTexts(await board())).toEqual(silkTexts(start));
+});
+
+test("B18-D review: a chat stream cut before its terminal event is shown as a failure, never as a finished run", async () => {
+  await openChat();
+  const prompt = page.getByTestId("prompt-input");
+  await expect(prompt).toBeEnabled({ timeout: 90_000 });
+  await page.route("**/api/chat", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).split("\n").filter((line) => !line.includes("\"run_completed\"") && !line.includes("\"run_failed\"")).join("\n");
+    await route.fulfill({ response, body });
+  }, { times: 1 });
+  await prompt.fill("Status.");
+  await prompt.press("Enter");
+  await expect(page.getByText("The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made.").last()).toBeVisible();
+  await expect(prompt).toBeEnabled({ timeout: 90_000 });
 });
 
 test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, while an execution entry existed, and never in a request's history", async () => {
