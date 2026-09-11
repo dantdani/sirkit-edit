@@ -1510,7 +1510,8 @@ export default function PcbEditor({
   useEffect(() => {
     if (executionGrantGenerationRef.current !== lifecycleGeneration && pendingExecutionGrant) {
       // The board lifecycle moved under a pending grant: retire it locally AND cancel it durably (best-effort) so it can never be spent later.
-      if (syncIdentity) void cancelGrantedExecution({ grant: pendingExecutionGrant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "session_superseded" }).catch(() => undefined);
+      // [B18-C review U2] cancelled under the grant's OWN scope, never the editor's current one.
+      void cancelGrantedExecution({ grant: pendingExecutionGrant, scope: { tenantId: pendingExecutionGrant.binding.scope.tenantId, projectId: pendingExecutionGrant.binding.scope.projectId, branchId: pendingExecutionGrant.binding.scope.branchId }, reason: "session_superseded" }).catch(() => undefined);
       setToast("The AI change was retired: the board lifecycle changed while it was pending. Nothing was changed.");
       onExecutionGrantSettled?.(pendingExecutionGrant.grantId, "retired");
     }
@@ -1582,7 +1583,10 @@ export default function PcbEditor({
         onExecutionGrantSettled?.(grant.grantId, "committed");
       } else {
         setToast(`${outcome.changed ? "AI change LANDED but could not be verified" : "AI change not made"}: ${outcome.message}`);
-        onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired");
+        // [B18-C review U3] a PREVIEW grant refused for a transient reason (nothing changed; the grant stays issued) keeps its
+        // dialog so the user can retry what the message tells them to retry; every other outcome clears it.
+        const transient = !outcome.changed && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
+        if (!(mode === "confirm" && grant.binding.operation.decision === "preview_then_confirm" && transient)) onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired");
       }
     } finally {
       setExecutionGrantBusy(false);
@@ -1591,7 +1595,7 @@ export default function PcbEditor({
   const cancelExecutionGrant = useCallback(async () => {
     const grant = pendingExecutionGrant;
     if (!grant || !syncIdentity) { if (grant) onExecutionGrantSettled?.(grant.grantId, "cancelled"); return; }
-    const result = await cancelGrantedExecution({ grant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "cancelled_by_user" });
+    const result = await cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "cancelled_by_user" });
     setToast(result.ok ? "AI change cancelled — nothing was changed." : `The grant could not be cancelled on the server (${result.message}); it expires on its own. Nothing was changed.`);
     onExecutionGrantSettled?.(grant.grantId, "cancelled");
   }, [pendingExecutionGrant, syncIdentity, onExecutionGrantSettled]);
@@ -1608,7 +1612,7 @@ export default function PcbEditor({
       // Reported asynchronously (never a synchronous setState inside the effect), and cancelled DURABLY so the awaiting run is
       // answered at once instead of at its settlement timeout.
       void Promise.resolve().then(async () => {
-        if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId }, reason: "session_superseded" }).catch(() => undefined);
+        if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "session_superseded" }).catch(() => undefined);
         setToast(`AI change not made: ${reason} Nothing was changed.`);
         onExecutionGrantSettled?.(grant.grantId, "retired");
       });

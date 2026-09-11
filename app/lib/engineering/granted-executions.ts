@@ -31,6 +31,7 @@ import { AgentExecutionJournal, buildExecutionReceipt, type AgentExecutionJourna
 import { canonicalSessionFor, type CanonicalEditorSession } from "./editor-adapter";
 import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence, type PublicExecutionGrant } from "./execution-grant";
 import { buildExecutionOperations, type ExecutionPlan } from "./execution-operations";
+import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { KERNEL_OPERATION_BINDINGS } from "./executor";
 import type { ProjectCommitInterlock } from "./project-commit-interlock";
 import type { EngineeringOperation } from "./types";
@@ -218,6 +219,8 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
 
   let leaseRelease: (() => void) | null = null;
   let committedButUnfinalized = false;
+  let consumedOnServer = false; // [B18-C review V4] the server burned the grant for this attempt
+  let commitAttempted = false;  // [B18-C review V4] session.commit was called
   let entryForSettle: Pick<AgentExecutionJournalEntry, "identityKey" | "grantId" | "grantDigest" | "attemptId" | "commitment"> | null = null;
   try {
     // 5. Journal + canonical evidence: the recovery disposition FIRST.
@@ -295,7 +298,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     const plan = planOf(grant);
     const built = plan ? buildExecutionOperations(liveBoard, plan) : null;
     if (!built || !built.ok) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The grant's operations no longer compile against the live board${built && !built.ok ? ` (${built.code})` : ""}. Ask again. Nothing was changed.`); }
-    if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
+    if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest || built.resultRevision !== b.proposal.expectedPcbRevisionAfter) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
     const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[b.operation.family] ?? [];
     if (built.operations.some((operation: EngineeringOperation) => !allowed.includes(operation.kind))) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "An operation kind is outside the family's kernel binding. Nothing was changed."); }
 
@@ -336,6 +339,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       const reason = consumed.reason ? ` (${consumed.reason})` : "";
       return refuse("consume-refused", `The server refused the execution${reason}: ${consumed.message} Nothing was changed.`, { serverCode: consumed.reason ?? consumed.code });
     }
+    consumedOnServer = true;
     // 11. Journal grant-consumed.
     const markedConsumed = await input.journal.markConsumed(identityKey, { consumedAt: now() });
     if (!markedConsumed.ok) {
@@ -363,17 +367,40 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
 
     // 13. EXACTLY ONE canonical transaction; the serialized build re-pins the exact base.
     const revisionBefore = liveRevision;
-    const commit = await session.commit({
-      commandId: b.operation.family,
-      label: `AI: ${b.proposal.preview.after}`.slice(0, 120),
-      idempotencyKey: grant.grantId,
-      provenanceCandidateId: entry.commitment,
-      metadata: { actor: "ai", reason: `Granted execution ${grant.grantId} (${b.operation.decision})` },
-      buildOperations: (board: PcbBoard) => {
-        if (pcbRevisionId(board) !== base.pcbRevisionId) throw new Error("The board changed at the serialized commit position; the grant base is stale.");
-        return built.operations;
-      },
-    });
+    let commit: Awaited<ReturnType<CanonicalEditorSession["commit"]>>;
+    commitAttempted = true;
+    try {
+      commit = await session.commit({
+        commandId: b.operation.family,
+        label: `AI: ${b.proposal.preview.after}`.slice(0, 120),
+        idempotencyKey: grant.grantId,
+        provenanceCandidateId: entry.commitment,
+        metadata: { actor: "ai", reason: `Granted execution ${grant.grantId} (${b.operation.decision})` },
+        buildOperations: (board: PcbBoard) => {
+          if (pcbRevisionId(board) !== base.pcbRevisionId) throw new Error("The board changed at the serialized commit position; the grant base is stale.");
+          return built.operations;
+        },
+      });
+    } catch (error) {
+      // [B18-C review V4] the commit promise REJECTED instead of answering. A disposed session rejects before its queued task
+      // starts (provably nothing ran); otherwise the canonical ledger decides whether anything landed for this grant.
+      const detail = error instanceof Error ? error.message : String(error);
+      const neverStarted = detail === "CANONICAL_SESSION_DISPOSED";
+      const evidence = neverStarted ? null : await session.durableIdempotencyEvidence(grant.grantId).catch(() => ({ kind: "unavailable" as const }));
+      if (neverStarted || evidence?.kind === "absent") {
+        registry.release(identityKey);
+        await settleOnServer({ transport: input.transport, scope, entry, settlement: NOT_COMMITTED("threw"), signal: input.signal });
+        await input.journal.abandon(identityKey, `the commit did not run: ${detail.slice(0, 80)}`);
+        return refuse("commit-rejected", `The canonical commit did not run (${detail.slice(0, 120)}); the grant was settled as not committed. Nothing was changed.`);
+      }
+      if (evidence?.kind === "found") {
+        registry.poison(identityKey); await input.journal.poison(identityKey);
+        await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
+        return refuse("recovery-required", `The commit threw (${detail.slice(0, 120)}) after a transaction landed for this grant; it could not be verified. The board HAS changed — inspect the canonical history.`, { changed: true });
+      }
+      // The canonical ledger cannot answer: the consumed journal entry stays for the recovery sweep, which settles from evidence.
+      return refuse("recovery-required", `The commit threw (${detail.slice(0, 120)}) and the canonical ledger could not confirm the outcome; recovery will settle it. The board may have changed — check it.`, { changed: true });
+    }
     if (!commit.ok || commit.status === "noop") {
       registry.release(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry, settlement: NOT_COMMITTED("rejected"), signal: input.signal });
@@ -392,7 +419,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     const afterBoard = input.history.committedPresent;
     const afterRevision = pcbRevisionId(afterBoard);
     const afterHead = session.headMetadataFor(afterBoard);
-    if (afterRevision !== b.proposal.expectedPcbRevisionAfter || !afterHead || afterHead.headSequence !== base.headSequence + 1 || afterHead.lineageId !== base.lineageId) {
+    // [B18-C review V0] "exactly the grant landed" is decided in the fill-normalized semantic domain (the kernel re-marks zone
+    // fills dirty and the editor may refill them before this runs); the head advance and the lineage stay exact.
+    if (canonicalLineageDigest(afterBoard) !== built.resultLineageDigest || !afterHead || afterHead.headSequence !== base.headSequence + 1 || afterHead.lineageId !== base.lineageId) {
       registry.poison(identityKey); await input.journal.poison(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
       return refuse("recovery-required", "The commit landed but its result does not match the grant; recovery required. The board HAS changed — inspect the canonical history.", { changed: true });
@@ -428,6 +457,16 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       try { await input.journal.poison(identityKey); } catch { /* fail-closed already */ }
       if (entryForSettle) await settleOnServer({ transport: input.transport, scope, entry: entryForSettle, settlement: POISONED, signal: input.signal });
       return refuse("recovery-required", `The execution failed after the commit phase (${detail}); recovery required. The board may have changed.`, { changed: true });
+    }
+    // [B18-C review V4] burned on the server but no commit was attempted: provably nothing landed — settle it truthfully.
+    if (consumedOnServer && !commitAttempted && entryForSettle) {
+      registry.release(identityKey);
+      await settleOnServer({ transport: input.transport, scope, entry: entryForSettle, settlement: NOT_COMMITTED("threw"), signal: input.signal });
+      try { await input.journal.abandon(identityKey, `failed before the commit: ${detail.slice(0, 80)}`); } catch { /* the sweep reconciles from the server state */ }
+      return refuse("execution-failed", `The execution failed before the commit (${detail}); the consumed grant was settled as not committed. Nothing was changed.`);
+    }
+    if (commitAttempted) {
+      return refuse("recovery-required", `The execution failed around the commit (${detail}); recovery will settle it from the canonical ledger. The board may have changed — check it.`, { changed: true });
     }
     registry.release(identityKey);
     return refuse("execution-failed", `The execution failed before any commit (${detail}). Nothing was changed.`);

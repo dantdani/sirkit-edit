@@ -3069,6 +3069,7 @@ export default function Home() {
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
+    setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
     setSchematicRecovery(null);         // recovery re-evaluated by the new open
     // B07.5 (failure A) — release recovery-decision ownership: the previous
     // project's in-flight decision (if any) is already scope-stale; the new

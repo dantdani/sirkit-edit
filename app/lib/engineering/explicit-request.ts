@@ -15,6 +15,7 @@
  * grammar per family with the same negative test set.
  */
 import type { PcbBoard } from "../pcb/types";
+import { canonicalReference } from "../pcb/integrity";
 import { buildExecutionOperations, type ExecutionPlan } from "./execution-operations";
 import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExplicitness } from "./execution-grant";
 
@@ -59,8 +60,12 @@ export function deriveExplicitPlan(userMessage: string, family: ExecutionFamily,
   const match = MOVE_PATTERN.exec(normalized);
   if (!match) return { refusal: "the instruction is not one whole move clause (verb, reference designator, magnitude with unit, direction)", excerpt };
   const [, ref, magnitude, unit, direction] = match;
-  const footprint = board.footprints.find((item) => item.ref.toLowerCase() === ref!.toLowerCase());
-  if (!footprint) return { refusal: `${ref} is not a reference designator on this board`, excerpt };
+  // [B18-C review V2] the reference must name EXACTLY one footprint (references compare trimmed and uppercase): an
+  // ambiguous reference is never an explicit request, whichever footprint the plan picked.
+  const matches = board.footprints.filter((item) => canonicalReference(item.ref) === canonicalReference(ref!));
+  if (matches.length === 0) return { refusal: `${ref} is not a reference designator on this board`, excerpt };
+  if (matches.length > 1) return { refusal: `${ref} names ${matches.length} footprints on this board; the instruction is ambiguous`, excerpt };
+  const footprint = matches[0]!;
   const unitNm = UNIT_NM[unit!.toLowerCase()];
   const vector = DIRECTIONS[direction!.toLowerCase()];
   if (!unitNm || !vector) return { refusal: "unknown unit or direction", excerpt };

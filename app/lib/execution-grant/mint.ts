@@ -24,7 +24,7 @@ import {
 import type { ProjectRole } from "../engineering/types";
 import type { LLMProviderId } from "../llm/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
-import { resolveExecutionGrantStore, type ExecutionGrantStore } from "./store";
+import { resolveExecutionGrantStore, type ExecutionGrantStore, type RetryGuardOutcome } from "./store";
 import type { AgentExecutionGrantMinter, AgentExecutionGrantOutcome, AgentExecutionGrantRequest, AgentExecutionPlan, AgentExecutionSettlement } from "../agent/contracts";
 
 /** What the seal hands the minter (the agent's data-only plan) — the agent-layer contract, re-exported for the server. */
@@ -79,12 +79,16 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
       let note: string | null = decision === "preview_then_confirm" && ctx.autonomy.mode === "execute_explicit_tier1" ? proof.reason : null;
       const userMessageDigest = userInstructionDigest(ctx.userMessage);
       const issuedMs = now();
-      let previous: { grantId: string; at: string } | null = null;
+      let previous: { grantId: string; at: string; outcome: RetryGuardOutcome } | null = null;
       try {
         // 3. The cross-run retry guard: an identical instruction already executed recently ⇒ preview + confirmation.
         if (decision === "execute_explicit") {
           previous = await store.recentIdenticalExecution(scope, ctx.principalId, request.session.editor, { userMessageDigest, family: plan.family, targetsDigest: plan.targets.targetsDigest }, issuedMs);
-          if (previous) { decision = "preview_then_confirm"; note = `An identical instruction already executed at ${previous.at} (grant ${previous.grantId}); confirm to run it again.`; }
+          if (previous) {
+            decision = "preview_then_confirm";
+            const what = previous.outcome === "committed" ? "already executed" : previous.outcome === "in_flight" ? "is already executing" : previous.outcome === "poisoned" ? "already landed a change that could not be verified" : "already ran with an unknown outcome";
+            note = `An identical instruction ${what} at ${previous.at} (grant ${previous.grantId}); confirm to run it again.`;
+          }
         }
         const ttlMs = ttlForDecision(decision);
         const issuedAt = new Date(issuedMs).toISOString();

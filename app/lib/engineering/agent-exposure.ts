@@ -14,7 +14,7 @@
  * state wholesale, or mutates a database/file is in this list.
  */
 import type { ToolDescriptor, ToolRegistry } from "./tool-registry";
-import { GRANTED_EXECUTION_TOOL_IDS, NEVER_GRANTED_COMMAND_IDS, grantedExecutionViolations, type GrantedExecutionCandidate } from "./granted-execution-families"; // [B18-C]
+import { GRANTED_EXECUTION_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, NEVER_GRANTED_COMMAND_IDS, grantedExecutionViolations, type GrantedExecutionCandidate } from "./granted-execution-families"; // [B18-C]
 
 export const AGENT_EXPOSABLE_OPERATION_CLASSES = Object.freeze(["read", "propose", "view-session"] as const);
 
@@ -53,12 +53,8 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.view.reveal-finding",                   // B17-F — reveal a DRC/routing finding (view-session)
 ].sort());
 
-export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
-  /\.release$/,               // manufacturing release
-  /qualif/i,                  // qualification
-  /undo-redo/,                // canonical replay
-  /^sirkit\.pcb\.(rotate-side-footprint|edit-track|delete-item|arrange|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions (B18-C lifts a family by removing it HERE in the increment that exposes it)
-]);
+/** [B18-C review U1] defined in `granted-execution-families.ts` (a runtime key on every lift); re-exported for the gates. */
+export { NEVER_EXPOSED_TOOL_PATTERNS };
 
 export interface AgentExposureReport {
   ok: boolean;

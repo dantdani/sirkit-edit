@@ -55,6 +55,7 @@ import { isBareHistoryAuthorized } from "./pcb-bare-authority.internal";
 import { createPersistenceEnvelope, InMemoryAtomicProjectStore, validatePersistenceEnvelope, type AtomicProjectStore } from "./persistence";
 import { computeProjectRevision } from "./revision";
 import { engineeringDigest } from "./stable";
+import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { EngineeringTransactionService } from "./transaction-service";
 import type { CanonicalProjectState, EngineeringActor, EngineeringOperation, ProjectPersistenceEnvelope, ProjectRevision } from "./types";
 
@@ -70,20 +71,10 @@ export interface CanonicalEditorIdentity {
  * Semantic lineage digest: the board with zone-fill DERIVED state normalized
  * away. `applyDerived` zone refills change board content without a history
  * entry; excluding fills keeps refills from being misread as lineage drift.
+ * [B18-C review] The one implementation lives in `./semantic-board-digest`
+ * (pure; shared with the granted-execution builder and ritual) — re-exported.
  */
-export function canonicalLineageDigest(board: PcbBoard): string {
-  const normalized = {
-    ...board,
-    zones: board.zones.map((zone) => ({
-      ...zone,
-      fill: [],
-      dirty: false,
-      fillState: undefined,
-      fillHash: undefined,
-    })),
-  };
-  return engineeringDigest({ schema: "sirkit.b03-lineage.v1", board: normalized });
-}
+export { canonicalLineageDigest };
 
 // ─── Structured results + event log ──────────────────────────────────────────
 

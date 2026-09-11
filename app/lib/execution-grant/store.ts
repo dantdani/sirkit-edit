@@ -51,6 +51,19 @@ function outbox(record: ExecutionGrantRecord, eventType: string, extra: Record<s
   return { owner: { aggregateType: EXECUTION_GRANT_AGGREGATE_TYPE, aggregateKey: grantKey(record.grantId) }, eventType, eventVersion: 1, topic: eventType, payload: auditPayload(record, extra) };
 }
 
+/** What a recent identical execution may have done (the minter words its note from it). */
+export type RetryGuardOutcome = "in_flight" | "committed" | "poisoned" | "unknown";
+/** Retirements AFTER a consumption whose commit outcome the server never learned. */
+const OUTCOME_UNKNOWN_RETIREMENTS: readonly string[] = Object.freeze(["recovery_required", "consumed_unsettled"]);
+
+function mayHaveChanged(entry: ExecutionGrantIndex["recent"][number]): RetryGuardOutcome | null {
+  if (entry.status === "consumed") return "in_flight";
+  if (entry.status === "settled" && entry.outcome === "committed") return "committed";
+  if (entry.status === "settled" && entry.outcome === "poisoned") return "poisoned";
+  if (entry.status === "retired" && typeof entry.reason === "string" && OUTCOME_UNKNOWN_RETIREMENTS.includes(entry.reason)) return "unknown";
+  return null;
+}
+
 export class ExecutionGrantStore {
   constructor(private readonly workflow: DurableWorkflowRepository) {}
 
@@ -88,7 +101,7 @@ export class ExecutionGrantStore {
     const live = index.live.filter((id) => id !== record.grantId);
     if (record.state.status === "issued" || record.state.status === "consumed") live.push(record.grantId);
     const recent = index.recent.filter((entry) => entry.grantId !== record.grantId);
-    recent.push({ grantId: record.grantId, userMessageDigest: record.binding.instruction.userMessageDigest, family: record.binding.operation.family, targetsDigest: record.binding.targets.targetsDigest, status: record.state.status, outcome: record.state.settlement?.outcome ?? null, at });
+    recent.push({ grantId: record.grantId, userMessageDigest: record.binding.instruction.userMessageDigest, family: record.binding.operation.family, targetsDigest: record.binding.targets.targetsDigest, status: record.state.status, outcome: record.state.settlement?.outcome ?? null, reason: record.state.retirement?.reason ?? null, at });
     while (recent.length > MAX_INDEX_RECENT) recent.shift();
     return { live, recent };
   }
@@ -198,15 +211,17 @@ export class ExecutionGrantStore {
     return this.transition(scope, loaded, { type: "retire", retirement }, { idempotencyKey: `grant-retire:${loaded.record.grantId}:${retirement.reason}:${loaded.revision}`, now: retirement.at });
   }
 
-  /** The retry guard (§3.6): an identical instruction + family + targets consumed or settled within the window. */
-  async recentIdenticalExecution(scope: DurableWorkflowScope, principalId: string, editor: string, probe: { userMessageDigest: string; family: string; targetsDigest: string }, now: number): Promise<{ grantId: string; at: string } | null> {
+  /** The retry guard (§3.6): an identical instruction + family + targets that MAY have changed the board within the window —
+   *  in flight (consumed), settled committed, settled POISONED (a transaction landed but could not be verified), or retired
+   *  after consumption with an unknown outcome. Only a settlement that provably changed nothing (not-committed) or a grant
+   *  that was never consumed leaves nothing to double-execute. [B18-C review V1] */
+  async recentIdenticalExecution(scope: DurableWorkflowScope, principalId: string, editor: string, probe: { userMessageDigest: string; family: string; targetsDigest: string }, now: number): Promise<{ grantId: string; at: string; outcome: RetryGuardOutcome } | null> {
     const { index } = await this.index(scope, principalId, editor);
     for (const entry of [...index.recent].reverse()) {
       if (entry.userMessageDigest !== probe.userMessageDigest || entry.family !== probe.family || entry.targetsDigest !== probe.targetsDigest) continue;
-      // Only an execution that is in flight (consumed) or actually COMMITTED guards a retry; a settlement that
-      // committed nothing (not-committed / poisoned) leaves nothing to double-execute.
-      if (entry.status !== "consumed" && !(entry.status === "settled" && entry.outcome === "committed")) continue;
-      if (now - Date.parse(entry.at) <= RETRY_GUARD_WINDOW_MS) return { grantId: entry.grantId, at: entry.at };
+      const outcome = mayHaveChanged(entry);
+      if (!outcome) continue;
+      if (now - Date.parse(entry.at) <= RETRY_GUARD_WINDOW_MS) return { grantId: entry.grantId, at: entry.at, outcome };
     }
     return null;
   }

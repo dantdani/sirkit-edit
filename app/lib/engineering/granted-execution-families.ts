@@ -42,6 +42,17 @@ export const NEVER_GRANTED_COMMAND_IDS: readonly string[] = Object.freeze([
   "schematic.delete-component", "schematic.replace-component", "schematic.connect",
 ]);
 
+/** Tool ids that are NEVER exposed: manufacturing release, qualification, the canonical replay primitive, and the canonical
+ *  mutations not reviewed as granted executions (B18-C lifts a family by removing it HERE in the increment that exposes it).
+ *  [B18-C review U1] a SECOND key on every lift: `grantedExecutionViolations` refuses a pattern-listed tool even with a
+ *  reviewed row, so every runtime gate (validator, discovery-backed toolset, dispatch) enforces it — not only the tests. */
+export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
+  /\.release$/,               // manufacturing release
+  /qualif/i,                  // qualification
+  /undo-redo/,                // canonical replay
+  /^sirkit\.pcb\.(rotate-side-footprint|edit-track|delete-item|arrange|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions
+]);
+
 export type GrantedExecutionCandidate = Pick<ToolDescriptor, "toolId" | "operationClass" | "binding" | "approvalTier" | "requiredCapability" | "owningCommandId" | "agentExposed" | "sideEffects" | "executionMode">;
 
 /**
@@ -63,6 +74,7 @@ export function grantedExecutionViolations(descriptor: GrantedExecutionCandidate
   if (tier !== 1) violations.push(`permission tier ${tier} is not Tier 1`);
   if (!(TIER1_GRANTABLE_CAPABILITIES as readonly string[]).includes(descriptor.requiredCapability)) violations.push(`capability ${descriptor.requiredCapability} is not grantable`);
   if (descriptor.sideEffects !== "engineering-state") violations.push(`side effects ${descriptor.sideEffects} are not engineering-state`);
+  if (NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(descriptor.toolId))) violations.push(`${descriptor.toolId} matches a never-exposed tool pattern`);
   return violations;
 }
 

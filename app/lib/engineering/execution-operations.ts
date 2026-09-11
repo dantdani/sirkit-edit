@@ -15,7 +15,9 @@ import type { PcbBoard } from "../pcb/types";
 import { nmToMm } from "../pcb/units";
 import { compilePcbBoardDelta } from "./pcb-delta";
 import { executionOperationsDigest, executionPreviewDigest, executionTargetsDigest, MAX_GRANT_OPERATIONS, type ExecutionFamily, type ExecutionGrantPreview, type ExecutionGrantTargets } from "./execution-grant";
-import type { EngineeringOperation } from "./types";
+import { applyEngineeringOperations } from "./operations";
+import { canonicalLineageDigest } from "./semantic-board-digest";
+import { STAGE10_SCHEMA_VERSION, type EngineeringOperation } from "./types";
 
 /** A move plan: absolute integer-nm targets per footprint (the tool's argument shape). */
 export interface MoveFootprintPlan { family: "pcb.move-footprint"; moves: Array<{ footprintId: string; x: number; y: number }> }
@@ -31,8 +33,13 @@ export interface BuiltExecution {
   previewDigest: string;
   /** The edit commands the operations were compiled from (the browser recompiles the same commands). */
   commands: EditCommand[];
-  /** The PCB semantic revision of the board AFTER the operations — the grant pins it as the exact expected result. */
+  /** The PCB revision of the board AFTER the operations, as the canonical KERNEL produces it (the kernel re-marks every
+   *  zone fill dirty from the operation id on a move, so only its own applier predicts the committed board) — the grant
+   *  pins it as the exact expected result. */
   resultRevision: string;
+  /** [B18-C review] the fill-normalized semantic digest of that result — what the ritual's postcondition compares (zone
+   *  refills may land in the editor between the commit and the check; derived fill state never decides "it landed"). */
+  resultLineageDigest: string;
 }
 export interface BuildRefusal { ok: false; code: "empty" | "too_many" | "unknown_target" | "locked_target" | "invalid_geometry" | "compile_failed" | "no_change" | "unsupported_family"; message: string }
 
@@ -66,9 +73,17 @@ export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): 
   const operations = delta.operations.filter((operation) => operation.kind === "move_footprint");
   if (operations.length === 0) return { ok: false, code: "no_change", message: "The plan changes nothing (every footprint is already at its target)." };
   if (operations.length !== delta.operations.length) return { ok: false, code: "compile_failed", message: "The plan compiled to operations outside the move-footprint family." };
+  // [B18-C review V0] the expected result is what the canonical KERNEL commits from these exact operations — not the
+  // editor mutator's board. A kernel refusal here refuses the plan before any grant exists.
+  let predicted: PcbBoard;
+  try {
+    predicted = applyEngineeringOperations({ schemaVersion: STAGE10_SCHEMA_VERSION, tenantId: "", projectId: "", branchId: "", pcb: board, pinnedAssets: [] }, operations).project.pcb;
+  } catch (error) {
+    return { ok: false, code: "compile_failed", message: `The canonical kernel refuses the plan: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}` };
+  }
   const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [...seen].sort(), netIds: [], kinds: ["footprint"], selectionDigest: null, targetsDigest: "" };
   targets.targetsDigest = executionTargetsDigest(targets);
   const preview: ExecutionGrantPreview = { before: before.join("; "), after: after.join("; "), warnings: compiled.diagnostics.map((diagnostic) => diagnostic.summary).slice(0, 8) };
   const operationsDigest = executionOperationsDigest(plan.family, operations);
-  return { ok: true, family: plan.family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(compiled.result) };
+  return { ok: true, family: plan.family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(predicted), resultLineageDigest: canonicalLineageDigest(predicted) };
 }

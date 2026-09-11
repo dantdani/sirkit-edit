@@ -221,8 +221,9 @@ export interface PublicExecutionGrant {
 /** The per-(principal, editor) index aggregate: at most one live grant per principal/editor; a bounded retry-guard tail. */
 export interface ExecutionGrantIndex {
   live: string[];
-  /** `outcome`: the settlement outcome once settled (the retry guard counts only committed executions and in-flight consumptions). */
-  recent: Array<{ grantId: string; userMessageDigest: string; family: ExecutionFamily; targetsDigest: string; status: GrantStatus; outcome: SettlementOutcome | null; at: string }>;
+  /** `outcome`: the settlement outcome once settled; `reason`: the retirement reason once retired (absent on entries
+   *  written before B18-C). The retry guard counts every execution that MAY have changed the board (store.ts). */
+  recent: Array<{ grantId: string; userMessageDigest: string; family: ExecutionFamily; targetsDigest: string; status: GrantStatus; outcome: SettlementOutcome | null; reason?: RetirementReason | null; at: string }>;
 }
 
 // ── digests (every formula pinned by tests; the browser recomputes the first five) ──
