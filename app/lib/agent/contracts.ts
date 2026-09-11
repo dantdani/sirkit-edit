@@ -347,6 +347,9 @@ export interface AgentToolInvocationGateway {
     context: AgentRunContext;
     timeoutMs: number;
     signal?: AbortSignal;
+    /** [B18-C] the provider call id. REQUIRED by the granted-execution dispatch (a grant is minted once per run + call —
+     *  the mint idempotency key); every other operation class ignores it. */
+    callId?: string;
   }): Promise<GatewayInvocationOutcome>;
 }
 

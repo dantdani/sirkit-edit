@@ -16,6 +16,7 @@
  */
 
 import { discoverTools } from "../engineering/tool-discovery";
+import { grantedExecutionViolations } from "../engineering/granted-execution-families";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
 import type { AgentTraceRecorder } from "./trace-recorder";
@@ -146,6 +147,21 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
     // separate. A zero-tool conversational run is a truthful outcome; no
     // resource is ever fabricated to preserve tool count.
     .filter((descriptor) => {
+      // [B18-C] a granted execution (a reviewed Tier 1 mutate tool) is
+      // advertised ONLY to a run with an execution-grant minter, a verified
+      // canonical board and a PCB history basis; the gateway re-derives all of
+      // it per call. Any other mutation never reaches the model.
+      if (descriptor.operationClass === "mutate") {
+        if (grantedExecutionViolations(descriptor, registry.grantedExecutionTools()).length > 0) {
+          warn(`Tool ${descriptor.toolId} unavailable: not a reviewed granted execution.`);
+          return false;
+        }
+        if (!context.executionGrantsAvailable || !context.canonicalState?.pcb || !context.pcbProposalBasis) {
+          warn(`Tool ${descriptor.toolId} unavailable: no execution-grant minter, verified canonical board and PCB history basis for this run.`);
+          return false;
+        }
+        return true;
+      }
       // [B17-F] a view-session tool is advertised only with a captured view
       // context (discovery already required its surface); no read binding.
       if (descriptor.operationClass === "view-session") {
@@ -377,6 +393,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           const raced = await guard(deps.gateway.invoke({
             runId: request.runId,
             provider: request.provider,
+            callId: call.callId,
             toolId: resolved.toolId,
             version: resolved.version,
             args,
@@ -499,6 +516,11 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             const settlement = settled.grant?.state.settlement ?? null;
             const retirement = settled.grant?.state.retirement ?? null;
             emitOnce({ type: "execution_settled", runId: request.runId, toolId: resolved.toolId, grantId: grant.grantId, status: settled.status, outcome: settlement?.outcome ?? null, reason: retirement?.reason ?? null });
+            // [B18-C / R18-7] the trace mirrors what the run learned from the DURABLE record, on the SAME call id.
+            recordTrace("execution_grant", settled.status === "settled" && settlement ? `execution_settled:${settlement.outcome}` : `execution_settled:${settled.status}`, {
+              verification: settled.status === "retired" ? `retired ${retirement?.reason ?? "unknown"}` : settlement?.transactionId ? `transaction ${settlement.transactionId}` : null,
+              proposal: { proposalId: grant.grantId, operationsDigest: grant.binding.proposal.operationsDigest },
+            });
             if (settled.status === "settled" && settlement?.outcome === "committed") {
               results.push({
                 callId: call.callId,

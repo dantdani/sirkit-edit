@@ -259,6 +259,15 @@ export const POST = agentStreamRoute(
   } catch {
     autonomyWarnings.push("The project's agent autonomy setting could not be read; this run is proposal-only.");
   }
+  // [B18-C] ONE server fact decides whether this run can be granted anything: a
+  // human session principal with a readable autonomy setting. The SAME fact
+  // binds the minter below and tells BOTH context assemblies that grants are
+  // available (grantability additionally needs a Tier 1 execute role, the
+  // verified board and the PCB history basis — derived by the assembler).
+  const minterAuthority = autonomy && context.actor.actorKind === "human" && (context.authMethod === "supabase_cookie" || context.authMethod === "local_dev")
+    ? { autonomy, authClass: context.authMethod }
+    : null;
+  const executionGrantsAvailable = minterAuthority !== null;
 
   const assembly = assembleAgentRunContext({
     ...requestScope,
@@ -272,6 +281,7 @@ export const POST = agentStreamRoute(
     verifiedActor,
     view: body.viewContext,
     autonomy,
+    executionGrantsAvailable,
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -328,6 +338,7 @@ export const POST = agentStreamRoute(
           verifiedActor,
           view: body.viewContext,
           autonomy,
+          executionGrantsAvailable,
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -346,17 +357,17 @@ export const POST = agentStreamRoute(
   // setting can be granted anything; otherwise execution is simply unavailable
   // for the run (proposals unaffected — unavailability never widens).
   let executionGrants: AgentExecutionGrantMinter | undefined;
-  if (autonomy && context.actor.actorKind === "human" && (context.authMethod === "supabase_cookie" || context.authMethod === "local_dev")) {
+  if (minterAuthority) {
     executionGrants = createExecutionGrantMinter({
       principalId: context.principalId,
       role: context.actor.role,
       membershipRevision: context.membershipRevision,
-      authClass: context.authMethod,
+      authClass: minterAuthority.authClass,
       sessionIdentity: context.sessionIdentity,
       correlationId: context.correlationId,
       scope: requestScope,
       boardInstanceId: pcbBoardInstanceId(requestScope.projectId),
-      autonomy,
+      autonomy: minterAuthority.autonomy,
       userMessage,
       runId,
       provider,
@@ -368,6 +379,8 @@ export const POST = agentStreamRoute(
   const replacementFactsSource = resolveReplacementPinFactsSource();
   const gateway = createAgentToolGateway(registry, {
     ...(executionGrants ? { executionGrants } : {}),
+    // [B18-C] pinned into every grant's origin; the dispatch refuses without it.
+    promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
       : {}),

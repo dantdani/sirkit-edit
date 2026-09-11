@@ -2,17 +2,17 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B18",
-  "currentCheckpoint": "B18-B",
+  "currentCheckpoint": "B18-C",
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "486d0ac",
+  "lastGreenSha": "928160b",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-C: the design workflow (three independent designs x two adversarial lenses, one synthesis) is running against the B18-B tree; then implement its increments one by one (gateway dispatch branch seal -> mint through the injected closure with the discovery recheck; the B04 exposure lift for pcb.move-footprint re-deriving every pinned gate from the one intentional list; the system prompt 1.1.0 with the b11 artifacts regenerated; the other Tier 1 families' builders/grammars or their justified confirmation-only fallback; the edit-via / dimension tier decision (OD-13); the undo/redo sub-design (OD-14); the model-facing before/after result contract), each committed, pushed and CI-watched; then B18-D chat execution UX and B18-E scenarios 1-8 with recorded evidence.",
-  "updatedAt": "2026-09-10T07:20:00-04:00"
+  "nextAction": "B18-C I3: expose sirkit.pcb.move-footprint as the first reviewed granted execution (the row + intentional list; catalog 1.1.0 with executionMode granted, requiredSelectionKinds [], a model-facing description; the system prompt 1.1.0; every pin the contract marks I3 re-derived; b18-c-exposure-lift, b18-c-gateway-execution and b18-c-loop-real-gateway over the REAL registry; artifacts regenerated), then I4 result contract, I5 rotate/flip + arrange, I6 silkscreen text, I7 dimension (owner-gated), I8 undo/redo, I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched.",
+  "updatedAt": "2026-09-11T03:20:00-04:00"
 }

@@ -20,7 +20,7 @@
  */
 
 import { ACTION_COVERAGE_REGISTRY, type ApprovalTier } from "./action-registry";
-import { grantedExecutionViolations, type GrantedExecutionTool } from "./granted-execution-families"; // [B18-C]
+import { GRANTED_EXECUTION_TOOLS, grantedExecutionViolations, type GrantedExecutionTool } from "./granted-execution-families"; // [B18-C]
 import { canonicalJson, engineeringDigest } from "./stable";
 import type { EngineeringCapability, ProjectRole } from "./types";
 
@@ -306,9 +306,11 @@ export interface ToolCoverageReport {
 export class ToolRegistry {
   private readonly byKey = new Map<string, ToolDescriptor>();
   private readonly ordered: ToolDescriptor[];
+  private readonly grantedTools: readonly GrantedExecutionTool[];
 
   constructor(descriptors: readonly ToolDescriptor[], knownCommandIds?: ReadonlySet<string>, options: ToolRegistryValidationOptions = {}) {
     const commandIds = knownCommandIds ?? new Set(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
+    this.grantedTools = Object.freeze([...(options.grantedExecutionTools ?? GRANTED_EXECUTION_TOOLS)]);
     const errors: string[] = [];
     for (const descriptor of descriptors) {
       errors.push(...validateToolDescriptor(descriptor, commandIds, options));
@@ -340,6 +342,13 @@ export class ToolRegistry {
 
   deprecated(): readonly ToolDescriptor[] {
     return this.ordered.filter((item) => item.lifecycle === "deprecated" || item.lifecycle === "retired");
+  }
+
+  /** [B18-C] the reviewed granted-execution list this registry was VALIDATED against. The runtime gates (the run toolset,
+   *  the gateway dispatch) derive from it, so they can never disagree with the validator: the production registry always
+   *  carries the reviewed list; a test registry carries its injected rows. */
+  grantedExecutionTools(): readonly GrantedExecutionTool[] {
+    return this.grantedTools;
   }
 
   /**

@@ -14,6 +14,11 @@
  *    the exact schematic), and mutates NOTHING. The sealed artifact can
  *    only enter the existing explicit Apply-exact-proposal review boundary
  *    (page.tsx → verifySealedTier1Proposal → trusted schematic session).
+ *  - [B18-C] A reviewed Tier 1 GRANTED EXECUTION travels through
+ *    `dispatchGrantedExecution` (./execution-dispatch): re-discovered, role-
+ *    rechecked, sealed purely against the verified board and MINTED as a
+ *    one-shot grant through the composition root's closure. Nothing executes
+ *    here — the browser's canonical editor session is the only committer.
  *
  * No provider SDK types, no CanonicalEditorSession/SchematicEditorSession
  * imports, no API-route-to-API-route execution, no LLM-backed routes as
@@ -40,6 +45,7 @@ import { handlePcbProposeTool } from "../pcb/proposal/pcb-propose-tool-handler";
 import { buildAgentResourceBundle } from "./context";
 import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
 import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
+import { dispatchGrantedExecution } from "./execution-dispatch";
 import type { AgentExecutionGrantMinter, AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
 import { TIER1_EXECUTE_ROLES } from "../engineering/permission-tiers"; // [B18-C]
 import { TIER1_GRANTABLE_CAPABILITIES } from "../engineering/execution-grant"; // [B18-C]
@@ -442,10 +448,12 @@ export interface AgentGatewayOptions {
   layoutProposalService?: LayoutProposalService;
   /** [B18-B] the server composition root's execution-grant minter (a
    *  closure over the trusted request context). Absent ⇒ no Tier 1
-   *  execution can be granted in this run. The gateway dispatch branch that
-   *  seals a mutation intent and mints through it lands with the exposure
-   *  lift (B18-C); until then every mutation class stays not_callable. */
+   *  execution can be granted in this run: a granted execution refuses
+   *  `execution_unavailable` (the B18-C dispatch). */
   executionGrants?: AgentExecutionGrantMinter;
+  /** [B18-C] the system prompt version the run answers under — pinned into
+   *  every grant's origin. Absent ⇒ granted executions are unavailable. */
+  promptVersion?: string;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
@@ -562,7 +570,12 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
         if (outcome.status === "blocked") return { kind: "proposal-blocked", ok: false, toolId: input.toolId, version: input.version, blockers: outcome.blockers };
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: outcome.failure, diagnostics: outcome.diagnostics };
       }
-      // Mutation/destructive/release can never execute here.
+      // [B18-C] a mutation is callable ONLY as a reviewed Tier 1 granted execution: sealed and MINTED as a one-shot grant
+      // through the composition root's closure (nothing executes here). Every other mutation refuses not_callable there.
+      if (descriptor.operationClass === "mutate") {
+        return dispatchGrantedExecution({ registry, descriptor, args: input.args, context: input.context, runId: input.runId, callId: input.callId, executionGrants: options?.executionGrants, promptVersion: options?.promptVersion });
+      }
+      // Destructive/release can never execute here.
       return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "not_callable", diagnostics: [`Operation class ${descriptor.operationClass} is not executable through the agent gateway.`] };
     },
   };

@@ -20,6 +20,7 @@ import type { EngineeringOperation } from "./types";
 import { engineeringDigest } from "./stable";
 import type { AutonomyMode } from "./permission-tiers";
 import type { LLMProviderId } from "../llm/types";
+import type { PcbBoard } from "../pcb/types";
 
 export const EXECUTION_GRANT_SCHEMA = "sirkit.agent-execution-grant.v1" as const;
 export const EXECUTION_GRANT_AGGREGATE_TYPE = "agent.execution-grant.v1" as const;
@@ -245,6 +246,12 @@ export function executionTargetsDigest(targets: Pick<ExecutionGrantTargets, "obj
 
 export function executionPreviewDigest(input: { operationsDigest: string; targetsDigest: string; preview: ExecutionGrantPreview }): string {
   return engineeringDigest({ schema: "sirkit.agent-execution-preview.v1", operationsDigest: input.operationsDigest, targetsDigest: input.targetsDigest, preview: input.preview });
+}
+
+/** [B18-C] the ONE board fingerprint a grant base pins (`base.pcb.boardDigest`) — the gateway's base builder, the B18-B
+ *  fixtures and every later drift check use this formula, never a second one. */
+export function executionBoardDigest(board: PcbBoard): string {
+  return engineeringDigest({ schema: "sirkit.pcb-board.v1", board });
 }
 
 export function userInstructionDigest(text: string): string {

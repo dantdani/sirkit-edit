@@ -16,13 +16,15 @@
  * This module imports no authority and nothing under `app/lib/execution-grant`.
  */
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
-import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, isExecutionFamily, type ExecutionFamily, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
+import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
 import { buildExecutionOperations, type ExecutionPlan } from "../engineering/execution-operations";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
 import type { ToolDescriptor } from "../engineering/tool-registry";
 import type { EngineeringOperation } from "../engineering/types";
 import type { EditCommand } from "../pcb/edit/commands";
-import type { AgentRunContext } from "./contracts";
+import { pcbRevisionId } from "../pcb/revision";
+import { resolvePcbValidationPolicy } from "../pcb/proposal/sealed-pcb-edit-proposal";
+import type { AgentExecutionPlan, AgentRunContext } from "./contracts";
 
 export interface SealedExecutionPlan {
   family: ExecutionFamily;
@@ -95,6 +97,44 @@ export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: R
       family, toolId: descriptor.toolId, toolVersion: descriptor.version, capability: descriptor.requiredCapability as GrantableCapability,
       plan: parsed.plan, commands: built.commands, operations: built.operations, operationsDigest: built.operationsDigest, operationCount: built.operations.length,
       targets: built.targets, preview: built.preview, previewDigest: built.previewDigest, expectedPcbRevisionAfter: built.resultRevision,
+    },
+  };
+}
+
+/** [B18-C] The data-only projection the minter receives: the parsed plan and the edit commands stay behind (the browser
+ *  recompiles from the grant's operations through the same builder). */
+export function mintablePlanOf(sealed: SealedExecutionPlan): AgentExecutionPlan {
+  return {
+    family: sealed.family, toolId: sealed.toolId, toolVersion: sealed.toolVersion, capability: sealed.capability,
+    operations: sealed.operations, operationsDigest: sealed.operationsDigest, operationCount: sealed.operationCount,
+    targets: sealed.targets, preview: sealed.preview, previewDigest: sealed.previewDigest, expectedPcbRevisionAfter: sealed.expectedPcbRevisionAfter,
+  };
+}
+
+/**
+ * [B18-C] The grant BASE — what a grant pins about the state it was sealed against — derived ONLY from the verified run
+ * context: the canonical revision digest, the verified board's revision id and fingerprint, the PCB history head and
+ * lineage from the basis, and the validation policy the preset REGISTRY resolves for the editor's active DRC preset. A
+ * missing board/basis or an unresolvable preset refuses; nothing is fabricated.
+ */
+export function buildExecutionGrantBase(context: AgentRunContext): { ok: true; base: ExecutionGrantBase } | { ok: false; diagnostics: string[] } {
+  const board = context.canonicalState?.pcb;
+  const basis = context.pcbProposalBasis;
+  if (!board || !context.canonicalRevisionDigest || !basis) return { ok: false, diagnostics: ["No verified canonical board with a PCB history basis exists for this run; no grant base can be derived."] };
+  const resolved = resolvePcbValidationPolicy(basis.activeDrcPresetId);
+  if (!resolved) return { ok: false, diagnostics: [`The editor's active DRC preset "${basis.activeDrcPresetId.slice(0, 60)}" does not resolve in the preset registry; no grant base can be derived.`] };
+  return {
+    ok: true,
+    base: {
+      canonicalRevisionDigest: context.canonicalRevisionDigest,
+      pcb: {
+        pcbRevisionId: pcbRevisionId(board),
+        boardDigest: executionBoardDigest(board),
+        headSequence: basis.historyHeadSequence,
+        lineageId: basis.lineageId,
+        validationPolicy: { presetId: resolved.policy.presetId, presetVersion: String(resolved.policy.presetVersion), rulesDigest: resolved.policy.rulesDigest },
+      },
+      schematic: null,
     },
   };
 }
