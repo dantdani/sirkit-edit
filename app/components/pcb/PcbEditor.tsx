@@ -1028,7 +1028,7 @@ export default function PcbEditor({
     let previousApplied = appliedCount();
     let previousRedo = redoCount();
     timeline?.record({ store: "pcb", kind: "hydrate", label: "Board loaded", actor: "system", head: pcbHead(history.present) });
-    const unbindTimeline = timeline?.bindStore("pcb", { undo: () => history.undo(), head: () => pcbHead(history.present) });
+    const unbindTimeline = timeline?.bindStore("pcb", { undo: () => history.undo(), head: () => pcbHead(history.present), busy: () => canonicalSessionFor(history)?.historyHoldReason() ?? null }); // [B18-D I7] busy
     const unsubscribe = history.subscribe((board) => {
       dispatch({ type: "set-board", board });
       editorRuntime.publishSnapshot(historyView(history));
@@ -2078,8 +2078,12 @@ export default function PcbEditor({
         const key = e.key.toLowerCase();
         if (key === "z" || key === "y") {
           e.preventDefault();
-          if (key === "y" || (key === "z" && e.shiftKey)) editorRuntime.getHistory()?.redo();
-          else editorRuntime.getHistory()?.undo();
+          // [B18-D I7] while an AI change is in flight the history refuses every step: say why instead of doing nothing.
+          const stepHistory = editorRuntime.getHistory();
+          const holdReason = stepHistory ? canonicalSessionFor(stepHistory)?.historyHoldReason() ?? null : null;
+          if (holdReason) { setToast(`Undo and redo are paused: ${holdReason}. Try again when it finishes.`); return; }
+          if (key === "y" || (key === "z" && e.shiftKey)) stepHistory?.redo();
+          else stepHistory?.undo();
           return;
         }
       }

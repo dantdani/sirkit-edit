@@ -94,6 +94,7 @@ jobs:
           app/lib/project/__tests__/b18-d-execution-display.test.ts
           app/lib/project/__tests__/b18-d-chat-run-view.test.ts
           app/lib/project/__tests__/b18-d-execution-entry-log.test.ts
+          app/lib/project/__tests__/b18-d-timeline-store-busy.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
           app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
           app/lib/agent/__tests__/b18-c-gateway-execution.test.ts
@@ -108,6 +109,7 @@ jobs:
           app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts
           app/lib/engineering/__tests__/b18-c-recovery-inflight.test.ts
           app/lib/engineering/__tests__/b18-d-ritual-outcome-report.test.ts
+          app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts
           app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
           app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
           app/lib/engineering/__tests__/b18-c-result-contract.test.ts

@@ -157,9 +157,9 @@ export function settlementValidations(board: PcbBoard, presetId: string): { drc:
  *  can no longer reach the change even though the retired history still lists it. */
 export function undoEligibleFor(history: PcbHistory, transactionId: string): boolean {
   if (historyBindingState(history) !== "active") return false;
-  if (!history.canUndo) return false;
+  // [B18-D I7] from the entries, not `canUndo`: a history hold (an execution in flight) must never make a report say "not undoable".
   const applied = history.entries.filter((entry) => entry.state === "applied");
-  return applied.at(-1)?.metadata.transactionId === transactionId;
+  return applied.length > 0 && applied.at(-1)?.metadata.transactionId === transactionId;
 }
 
 /** [B18-C I8] The provenance a landed commit of this entry carries: the chain-protected commitment for a builder family; for a
@@ -269,7 +269,10 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
   let consumedOnServer = false; // [B18-C review V4] the server burned the grant for this attempt
   let commitAttempted = false;  // [B18-C review V4] session.commit was called
   let entryForSettle: Pick<AgentExecutionJournalEntry, "identityKey" | "grantId" | "grantDigest" | "attemptId" | "commitment"> | null = null;
+  let releaseHold: (() => void) | null = null;
   try {
+    // [B18-D I7] the user's undo / redo are refused while this execution is in flight (released in the finally below).
+    releaseHold = session.holdHistorySteps("an AI change is being made");
     // 5. Journal + canonical evidence: the recovery disposition FIRST.
     const lookup = await input.journal.lookup(identityKey);
     const evidence = await session.durableIdempotencyEvidence(grant.grantId);
@@ -547,6 +550,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     return refuse("execution-failed", `The execution failed before any commit (${detail}). Nothing was changed.`);
   } finally {
     leaseRelease?.();
+    releaseHold?.();
   }
 }
 

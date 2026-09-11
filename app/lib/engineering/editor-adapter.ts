@@ -284,6 +284,10 @@ export class CanonicalEditorSession {
   private readonly eventLog: CanonicalAdapterEvent[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
+  /** [B18-D I7] active history holds (a granted execution in flight): the user's undo / redo are refused meanwhile. */
+  private readonly historyHolds = new Map<number, string>();
+  private holdSeq = 0;
+  private readonly holdListeners = new Set<(board: PcbBoard, entry: { label: string }) => void>();
 
   constructor(raw: PcbHistory, identity: CanonicalEditorIdentity, options?: BindCanonicalOptions) {
     this.delegate = raw;
@@ -388,6 +392,39 @@ export class CanonicalEditorSession {
    */
   replayUnderGrant(request: CanonicalReplayRequest): Promise<CanonicalCommitResult> {
     return this.enqueue(() => this.runReplay(request));
+  }
+
+  /**
+   * [B18-D I7] Refuse the user's undo / redo while a granted execution is in flight (the ritual is the only caller). Every
+   * undo path — the toolbar, Ctrl+Z, the select tool, the project timeline, board repair — goes through this wrapped
+   * history, so this is the single choke point: an Undo pressed while the executor works would otherwise pop at once, be
+   * overwritten by the commit (computed from the pre-undo base), lose its redo and make the reconcile rebase the lineage.
+   * It only REFUSES — no mutation path. Returns an idempotent release; subscribers hear when a hold starts and ends, so the
+   * editor's Undo control follows it.
+   */
+  holdHistorySteps(reason: string): () => void {
+    const id = ++this.holdSeq;
+    this.historyHolds.set(id, reason);
+    this.notifyHoldChange();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.historyHolds.delete(id);
+      this.notifyHoldChange();
+    };
+  }
+
+  /** [B18-D I7] Why undo / redo are refused right now, or null. */
+  historyHoldReason(): string | null {
+    const first = this.historyHolds.values().next();
+    return first.done ? null : first.value;
+  }
+
+  private notifyHoldChange(): void {
+    for (const listener of [...this.holdListeners]) {
+      try { listener(this.delegate.present, { label: "history hold" }); } catch { /* a subscriber's error never breaks the hold */ }
+    }
   }
 
   /** [B18-C I8] Whether `transactionId` can be undone (it IS the canonical head) or redone (the head is the replay that undid
@@ -773,27 +810,34 @@ export class CanonicalEditorSession {
 
   private makeWrappedHistory(): PcbHistory {
     const delegate = this.delegate;
+    const held = (): boolean => this.historyHolds.size > 0; // [B18-D I7]
     return {
       get present() { return delegate.present; },
       get committedPresent() { return delegate.committedPresent; },
-      get canUndo() { return delegate.canUndo; },
-      get canRedo() { return delegate.canRedo; },
+      get canUndo() { return delegate.canUndo && !held(); },
+      get canRedo() { return delegate.canRedo && !held(); },
       get undoLabel() { return delegate.undoLabel; },
       get redoLabel() { return delegate.redoLabel; },
       get entries() { return delegate.entries; },
       get events() { return delegate.events; },
       execute: (label, mutate, metadata) => delegate.execute(label, mutate, metadata),
-      subscribe: (cb) => delegate.subscribe(cb),
+      subscribe: (cb) => {
+        const off = delegate.subscribe(cb);
+        this.holdListeners.add(cb); // [B18-D I7] a hold's start and end republish the history view
+        return () => { off(); this.holdListeners.delete(cb); };
+      },
       transient: (mutate) => delegate.transient(mutate),
       cancelTransient: () => delegate.cancelTransient(),
       applyDerived: (label, mutate) => delegate.applyDerived(label, mutate),
       undo: (): void => {
+        if (held()) return; // [B18-D I7] refused while a granted execution is in flight (the editor and the timeline say why)
         const applied = delegate.entries.filter((entry) => entry.state === "applied");
         const top = applied.at(-1);
         delegate.undo(); // synchronous patch undo — the UI contract
         if (top) void this.scheduleReconcile(top.metadata.transactionId, "undo", top.label);
       },
       redo: (): void => {
+        if (held()) return; // [B18-D I7]
         const redoTop = delegate.entries.filter((entry) => entry.state === "redo").at(-1);
         delegate.redo(); // synchronous patch redo — the UI contract
         if (redoTop) void this.scheduleReconcile(redoTop.metadata.transactionId, "redo", redoTop.label);

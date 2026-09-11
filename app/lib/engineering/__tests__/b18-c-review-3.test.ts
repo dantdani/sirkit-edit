@@ -102,21 +102,28 @@ describe("B18-C review 3 Q3 — a replay's preview says what it does", () => {
 });
 
 describe("B18-C review 3 Q4 — a Ctrl+Z during the replay's envelope write", () => {
-  it("does not poison an exact replay; the user's Undo then reverses the AI undo", async () => {
+  it("does not poison an exact replay; [B18-D I7] the Ctrl+Z is refused by the history hold while the replay is in flight, and an Undo afterwards reverses the AI undo", async () => {
     const c = await composition("execute_explicit_tier1");
     const x0 = r3Of(c).at.x;
     await runScenario(c, moveScript(c));
     const store = (c.session as unknown as { durableStore: { restore(envelope: unknown): Promise<void> } }).durableStore;
     const realRestore = store.restore.bind(store);
     let ctrlZ = true;
+    let heldDuringWrite: string | null = null;
     store.restore = async (envelope: unknown) => {
       await realRestore(envelope);
-      if (ctrlZ) { ctrlZ = false; c.history.undo(); } // the user presses Ctrl+Z while the envelope is written
+      if (ctrlZ) { ctrlZ = false; heldDuringWrite = c.session.historyHoldReason(); c.history.undo(); } // the user presses Ctrl+Z while the envelope is written
     };
     const undo = await runScenario(c, replayScript("undo"), { message: "Undo that." });
     expect(undo.rituals[0], JSON.stringify(undo.rituals[0])).toMatchObject({ ok: true, status: "committed" });
     await c.session.whenIdle();
-    expect(r3Of(c).at.x).toBe(x0 + mmToNm(2)); // the user's Undo reversed the AI undo
+    // [B18-D I7] this pinned the pre-hold semantics (the Ctrl+Z was a separate step that re-applied the move); under the hold an
+    // Undo pressed while an AI change is in flight is refused, with the reason, and the AI undo stands.
+    expect(heldDuringWrite).toBe("an AI change is being made");
+    expect(r3Of(c).at.x).toBe(x0);
+    c.history.undo(); // the user's Undo once the replay finished
+    await c.session.whenIdle();
+    expect(r3Of(c).at.x).toBe(x0 + mmToNm(2)); // it reverses the AI undo
   }, 30_000);
 });
 

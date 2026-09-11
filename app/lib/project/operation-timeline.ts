@@ -32,7 +32,7 @@ export interface ProjectOperation {
   ref?: { transactionId?: string; entryId?: string };
 }
 
-export type ProjectUndoRefusalCode = "NOTHING_TO_UNDO" | "DIVERGED_SCHEMATIC" | "DIVERGED_PCB" | "NOT_UNDOABLE";
+export type ProjectUndoRefusalCode = "NOTHING_TO_UNDO" | "DIVERGED_SCHEMATIC" | "DIVERGED_PCB" | "NOT_UNDOABLE" | "STORE_BUSY";
 
 export type ProjectUndoDecision =
   | { ok: true; operation: ProjectOperation }
@@ -49,6 +49,8 @@ export function sameHead(a: ProjectStoreHead, b: ProjectStoreHead): boolean {
 export interface ProjectStoreBinding {
   undo(): void | Promise<void>;
   head(): ProjectStoreHead | null;
+  /** [B18-D I7] why the store refuses a history step right now (an AI change in flight), or null. */
+  busy?(): string | null;
 }
 
 export class ProjectOperationTimeline {
@@ -76,6 +78,9 @@ export class ProjectOperationTimeline {
     if (!decision.ok) return decision;
     const binding = this.stores.get(decision.operation.store);
     if (!binding) return { ok: false, code: decision.operation.store === "schematic" ? "DIVERGED_SCHEMATIC" : "DIVERGED_PCB", message: `The ${decision.operation.store} editor is not open.`, operation: decision.operation };
+    // [B18-D I7] a busy store is refused with its reason — never "undone" when its own undo would do nothing.
+    const busy = binding.busy?.() ?? null;
+    if (busy) return { ok: false, code: "STORE_BUSY", message: `The ${decision.operation.store} editor is busy: ${busy}. Nothing was undone.`, operation: decision.operation };
     await binding.undo();
     return decision;
   }
