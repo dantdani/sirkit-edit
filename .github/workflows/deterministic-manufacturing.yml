@@ -94,6 +94,7 @@ jobs:
           app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
           app/lib/agent/__tests__/b18-c-gateway-execution.test.ts
           app/lib/agent/__tests__/b18-c-never-execution-sweep.test.ts
+          app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts
           app/lib/engineering/__tests__/b18-c-adversarial.test.ts
           app/lib/engineering/__tests__/b18-c-builders.test.ts
           app/lib/engineering/__tests__/b18-c-dimension.test.ts

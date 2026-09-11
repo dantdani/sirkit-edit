@@ -17,6 +17,7 @@
 
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
+import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
 import type { ExecutionDecisionMode, PublicExecutionGrant } from "../engineering/execution-grant";
 import { REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
@@ -325,7 +326,17 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
       // [B11] normalized step metadata only — never model text, never
       // provider continuation state.
       try { trace?.recordStep({ model: step.model, usage: step.usage, toolCallCount: step.toolCalls.length }); } catch { /* passive */ }
-      if (step.text) emitOnce({ type: "text_delta", runId: request.runId, text: step.text });
+      // [B18-D I2] Rule 2 - model text never announces a change before it exists: a step that calls a side-effecting tool
+      // (operationClass mutate - an execution grant - or propose - a sealed proposal or layout candidate) emits its text
+      // only AFTER its calls resolved (after the settlement, the preview or the proposal), and never after a boundary
+      // failure; every other step emits in place. Text beside a tool call is "interim"; the closing answer is "final".
+      const textPhase: "interim" | "final" = step.toolCalls.length === 0 ? "final" : "interim";
+      const holdText = step.toolCalls.some((toolCall) => {
+        const resolvedCall = toolset.resolve(toolCall.providerName);
+        const operationClass = resolvedCall ? deps.registry.get(resolvedCall.toolId, resolvedCall.version)?.operationClass : undefined;
+        return operationClass === "mutate" || operationClass === "propose";
+      });
+      if (step.text && !holdText) emitOnce({ type: "text_delta", runId: request.runId, text: step.text, phase: textPhase });
 
       if (step.toolCalls.length === 0) {
         completedNormally = true;
@@ -355,6 +366,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         }
         const descriptor = deps.registry.get(resolved.toolId, resolved.version);
         const title = descriptor?.title ?? resolved.toolId;
+        const tier = descriptor ? permissionTierOfDescriptor(descriptor) : null; // [B18-D I2] display data on the tool events
         if (toolCallsUsed >= request.budget.maxToolCalls) {
           results.push(errorResult("budget_exhausted", "The run's tool-call budget is exhausted; answer from the results you already have."));
           continue;
@@ -397,7 +409,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         }
 
         toolCallsUsed += 1;
-        emitOnce({ type: "tool_started", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title });
+        emitOnce({ type: "tool_started", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier });
         // [B17-F] a long-running proposal (placement / routing engines) may use
         // its registered timeout up to the REMAINING run deadline — the run
         // boundary stays hard; every other tool keeps the per-tool budget.
@@ -440,7 +452,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         };
         if (outcome.kind === "read" && outcome.ok) {
           recordTrace("read", "succeeded", { verification: outcome.verification, output: outcome.output });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "succeeded" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "succeeded" });
           results.push({
             callId: call.callId,
             outputText: resultText({ ok: true, tool: outcome.toolId, revision: outcome.sourceRevisionDigest, verification: outcome.verification, output: outcome.output }),
@@ -452,7 +464,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           // trace stores the request identity and the command id.
           const viewRequest = outcome.request;
           recordTrace("view_command", "view_command_dispatched", { verification: `expected view revision ${viewRequest.expectedViewRevision}`, output: { editor: viewRequest.editor, commandId: viewRequest.commandId, requestId: viewRequest.requestId } });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "view_command_dispatched" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "view_command_dispatched" });
           emitOnce({ type: "view_command_ready", runId: request.runId, toolId: resolved.toolId, request: viewRequest });
           results.push({
             callId: call.callId,
@@ -473,7 +485,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           // trace stores its identity and content digest only.
           const candidate = outcome.candidate;
           recordTrace("layout_candidate", "layout_candidate_ready", { proposal: { proposalId: candidate.candidateId, operationsDigest: candidate.digest } });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "layout_candidate_ready" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "layout_candidate_ready" });
           emitOnce({ type: "layout_candidate_ready", runId: request.runId, toolId: resolved.toolId, candidate });
           const summary = candidate.kind === "placement"
             ? { kind: "placement", scope: candidate.scope.instanceIds === "all" ? "whole board" : `${candidate.scope.instanceIds.length} footprint(s)`, legal: candidate.legal, termination: candidate.run.termination, candidateCount: candidate.run.candidateCount }
@@ -500,7 +512,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           const explicit = outcome.decision === "execute_explicit";
           const issuedStatus = explicit ? "execution_grant_issued" : "execution_preview_issued";
           recordTrace("execution_grant", issuedStatus, { verification: `grant ${grant.grantId} (${outcome.decision}) expires ${grant.binding.expiresAt}`, proposal: { proposalId: grant.grantId, operationsDigest: grant.binding.proposal.operationsDigest } });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: issuedStatus });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: issuedStatus });
           emitOnce({ type: "execution_grant_ready", runId: request.runId, toolId: resolved.toolId, grant, decision: outcome.decision, note: outcome.note });
           if (!explicit) {
             results.push({
@@ -599,7 +611,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           // digests only; the provider result text confirms zero mutation.
           const sealedPcb = outcome.proposal;
           recordTrace("proposal", "proposal_sealed", { proposal: { proposalId: sealedPcb.proposalId, operationsDigest: sealedPcb.operationsDigest } });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "proposal_sealed" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "proposal_sealed" });
           emitOnce({ type: "pcb_proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedPcb });
           results.push({
             callId: call.callId,
@@ -622,7 +634,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           const isReplacementProposal = sealedProposal.schema === REPLACEMENT_PROPOSAL_SCHEMA;
           const proposalDigest = isReplacementProposal ? sealedProposal.operationDigest : sealedProposal.operationsDigest;
           recordTrace("proposal", "proposal_sealed", { proposal: { proposalId: sealedProposal.proposalId, operationsDigest: proposalDigest } });
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: true, status: "proposal_sealed" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "proposal_sealed" });
           emitOnce({ type: "proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedProposal });
           results.push({
             callId: call.callId,
@@ -639,7 +651,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           });
         } else if (outcome.kind === "proposal-blocked") {
           recordTrace("proposal_blocked", "proposal_blocked");
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: false, status: "proposal_blocked" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: "proposal_blocked" });
           results.push({
             callId: call.callId,
             outputText: resultText({ ok: false, status: "proposal_blocked", blockers: outcome.blockers.slice(0, 10) }),
@@ -647,7 +659,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           });
         } else if (outcome.kind === "refused") {
           recordTrace("refused", outcome.status);
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: false, status: outcome.status });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: outcome.status });
           results.push({
             callId: call.callId,
             outputText: resultText({ ok: false, status: outcome.status, diagnostics: outcome.diagnostics.slice(0, 5) }),
@@ -655,12 +667,13 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           });
         } else {
           recordTrace("refused", "invalid_outcome");
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, ok: false, status: "invalid_outcome" });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: "invalid_outcome" });
           results.push(errorResult("invalid_outcome", "The tool returned an unrecognized outcome shape."));
         }
         if (runSignal.aborted || deadlineExceeded()) return boundaryFailure();
       }
 
+      if (step.text && holdText) emitOnce({ type: "text_delta", runId: request.runId, text: step.text, phase: "interim" });
       const nextStep = await guard(deps.adapter.continueWith({
         continuation: step.continuation,
         results,

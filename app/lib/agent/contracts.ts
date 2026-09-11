@@ -10,6 +10,7 @@
 
 import type { LLMProviderId } from "../llm/types";
 import type { DiscoveryContext } from "../engineering/tool-discovery";
+import type { PermissionTier } from "../engineering/permission-tiers";
 import type { SealedTier1Proposal, Tier1ProposalHeadMark } from "../engineering/schematic-proposals";
 import type { SealedReplacementProposal } from "../engineering/replacement-proposals";
 import type { SealedPcbEditProposal } from "../pcb/proposal/sealed-pcb-edit-proposal";
@@ -369,9 +370,11 @@ export interface AgentToolInvocationGateway {
 
 export type AgentRunEvent =
   | { type: "run_started"; runId: string; provider: LLMProviderId }
-  | { type: "text_delta"; runId: string; text: string }
-  | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string }
-  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string }
+  /** [B18-D I2] `phase`: "interim" — written in a step that also called tools (a side-effecting step's text is emitted only
+   *  after its calls resolved); "final" — the closing answer. `tier` on tool events: the tool's permission tier (display only). */
+  | { type: "text_delta"; runId: string; text: string; phase: "interim" | "final" }
+  | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string; tier: PermissionTier | null }
+  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string; tier: PermissionTier | null }
   | { type: "proposal_ready"; runId: string; toolId: string; proposal: SealedAgentProposal }
   /** [B15.3] DISTINCT event for the sealed bounded PCB-edit proposal — never
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
