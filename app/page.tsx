@@ -62,6 +62,7 @@ import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type Rec
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { EXECUTION_ENTRY_ID_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
+import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -6763,6 +6764,8 @@ export default function Home() {
                   ) : null}
                   <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
                 </div>
+                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
+                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
               </div>
             </div>
 

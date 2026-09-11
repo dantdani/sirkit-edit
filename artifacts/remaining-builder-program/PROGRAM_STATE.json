@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "f0152ca",
+  "lastGreenSha": "6ca4941",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I11 (the agent autonomy indicator and administrator change in the chat header), then the I12 closeout (full Playwright, adversarial review, closing record); then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T07:52:45-04:00"
+  "nextAction": "B18-D I12: part 1 the §7 checks still unwritten (ui-gates, card Cancel, P2 and S5 in the browser), part 2 an adversarial review of all of B18-D, fixes, the full Playwright suite and the closing record; then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T13:54:07-04:00"
 }

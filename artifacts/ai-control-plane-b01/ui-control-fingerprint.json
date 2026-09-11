@@ -127,6 +127,9 @@
     ],
     "app/components/pcb/GrantedExecutionDialog.tsx": [],
     "app/components/chat/ExecutionEntryActions.tsx": [],
+    "app/components/chat/AutonomyModeControl.tsx": [
+      "Agent autonomy"
+    ],
     "app/components/editor/BuildLibraryPanel.tsx": [
       "Close"
     ],
