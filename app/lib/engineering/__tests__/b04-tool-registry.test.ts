@@ -33,7 +33,7 @@ import {
   validateToolDescriptor,
   type ToolDescriptor,
 } from "../tool-registry";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, agentExposureReport } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, agentExposureReport, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const registry = sirkitToolRegistry();
 
@@ -247,7 +247,7 @@ describe("truthful classification", () => {
     for (const item of agent.included) {
       const descriptor = registry.get(item.toolId, item.version)!;
       expect(descriptor.agentExposed, item.toolId).toBe(true);
-      expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.schematic.add-component")).toBe(false); // internal-only: invisible to agents
   });
@@ -267,7 +267,7 @@ describe("truthful classification", () => {
     expect(ui.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
     for (const channel of ["assistant-agent", "automation"] as const) {
       const included = discoverTools(registry, editorContext({ channel, riskCeiling: "propose" })).included;
-      expect(included.every((item) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(item.operationClass)), channel).toBe(true);
+      expect(included.every((item) => isAgentExposableDescriptor(registry.get(item.toolId, item.version)!)), channel).toBe(true);
       expect(included.some((item) => item.toolId.startsWith("sirkit.pcb.move") || item.toolId === "sirkit.pcb.delete-item"), channel).toBe(false);
     }
   });

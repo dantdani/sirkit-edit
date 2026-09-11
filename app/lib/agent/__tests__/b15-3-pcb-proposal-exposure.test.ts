@@ -24,7 +24,7 @@ import { createAgentToolGateway } from "../gateway";
 import { runAgentLoop } from "../loop";
 import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentStep, type ProviderAgentAdapter } from "../contracts";
 import { AGENT_SYSTEM_PROMPT } from "../../prompts";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const PCB_TOOL = "sirkit.pcb.propose-bounded-edit";
@@ -67,7 +67,7 @@ describe("B15.3 §K1–3 — exposure", () => {
 
   it("no exposed tool is mutate/destructive/release/apply-class, and the PCB tool is propose/proposal-artifact only", () => {
     for (const descriptor of sirkitToolRegistry().list().filter((item) => item.agentExposed)) {
-      expect(AGENT_EXPOSABLE_OPERATION_CLASSES, descriptor.toolId).toContain(descriptor.operationClass);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }
     const pcb = sirkitToolRegistry().get(PCB_TOOL, "1.0.0")!;
     expect(pcb.operationClass).toBe("propose");

@@ -10,9 +10,19 @@
  * that qualifies or releases manufacturing, runs a raw process, replaces
  * state wholesale, or mutates a database/file is in this list.
  */
-import type { ToolRegistry } from "./tool-registry";
+import type { ToolDescriptor, ToolRegistry } from "./tool-registry";
+import { GRANTED_EXECUTION_TOOL_IDS, NEVER_GRANTED_COMMAND_IDS, grantedExecutionViolations, type GrantedExecutionCandidate } from "./granted-execution-families"; // [B18-C]
 
 export const AGENT_EXPOSABLE_OPERATION_CLASSES = Object.freeze(["read", "propose", "view-session"] as const);
+
+/**
+ * [B18-C] THE exposure rule every gate and pin derives from: the three exposable classes, or a `mutate` tool that is a
+ * reviewed granted execution (B18-B grants; `granted-execution-families.ts`). Nothing else is ever exposable.
+ */
+export function isAgentExposableDescriptor(descriptor: GrantedExecutionCandidate): boolean {
+  if ((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass)) return true;
+  return descriptor.operationClass === "mutate" && grantedExecutionViolations(descriptor).length === 0;
+}
 
 export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.component-authority.inspect",           // B13 — server-owned authority resource gates per-run availability
@@ -53,6 +63,9 @@ export interface AgentExposureReport {
   missing: string[];
   unexpected: string[];
   classViolations: string[];
+  /** [B18-C] granted executions: every reviewed id exposed with zero violations, every exposed mutate in the list, no
+   *  exposed tool bound to a never-granted command, no stray `executionMode`. */
+  executionViolations: string[];
   count: number;
 }
 
@@ -64,7 +77,26 @@ export function agentExposureReport(registry: ToolRegistry): AgentExposureReport
   const missing = expected.filter((id) => !actual.includes(id));
   const unexpected = actual.filter((id) => !expected.includes(id));
   const classViolations = exposed
-    .filter((descriptor) => !(AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass) || NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(descriptor.toolId)))
+    .filter((descriptor) => !isAgentExposableDescriptor(descriptor) || NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(descriptor.toolId)))
     .map((descriptor) => `${descriptor.toolId} (${descriptor.operationClass})`);
-  return { ok: missing.length === 0 && unexpected.length === 0 && classViolations.length === 0 && registry.coverageReport().agentExposedCount === expected.length, expected, actual, missing, unexpected, classViolations, count: actual.length };
+  const executionViolations = grantedExecutionReport(registry.list());
+  return { ok: missing.length === 0 && unexpected.length === 0 && classViolations.length === 0 && executionViolations.length === 0 && registry.coverageReport().agentExposedCount === expected.length, expected, actual, missing, unexpected, classViolations, executionViolations, count: actual.length };
+}
+
+/** [B18-C] the granted-execution side of the report (derived from the reviewed list, never a count). */
+export function grantedExecutionReport(descriptors: readonly ToolDescriptor[]): string[] {
+  const violations: string[] = [];
+  for (const id of GRANTED_EXECUTION_TOOL_IDS) {
+    const descriptor = descriptors.find((item) => item.toolId === id && item.lifecycle === "active");
+    if (!descriptor) { violations.push(`${id}: in the granted-execution list but not registered`); continue; }
+    if (!descriptor.agentExposed) violations.push(`${id}: in the granted-execution list but not exposed`);
+    for (const violation of grantedExecutionViolations(descriptor)) violations.push(`${id}: ${violation}`);
+    if (!INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.includes(id)) violations.push(`${id}: granted but not in the intentional exposure list`);
+  }
+  for (const descriptor of descriptors) {
+    if (descriptor.agentExposed && descriptor.operationClass === "mutate" && !GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId)) violations.push(`${descriptor.toolId}: an exposed mutate tool outside the granted-execution list`);
+    if (descriptor.executionMode !== undefined && !GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId)) violations.push(`${descriptor.toolId}: carries executionMode outside the granted-execution list`);
+    if (descriptor.agentExposed && descriptor.binding.canonicalCommandId && NEVER_GRANTED_COMMAND_IDS.includes(descriptor.binding.canonicalCommandId)) violations.push(`${descriptor.toolId}: exposed while bound to the never-granted command ${descriptor.binding.canonicalCommandId}`);
+  }
+  return violations;
 }

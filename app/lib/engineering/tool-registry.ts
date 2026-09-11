@@ -20,6 +20,7 @@
  */
 
 import { ACTION_COVERAGE_REGISTRY, type ApprovalTier } from "./action-registry";
+import { grantedExecutionViolations, type GrantedExecutionTool } from "./granted-execution-families"; // [B18-C]
 import { canonicalJson, engineeringDigest } from "./stable";
 import type { EngineeringCapability, ProjectRole } from "./types";
 
@@ -153,6 +154,17 @@ export interface ToolDescriptor {
   /** [B17-F] view-session tools: the EXACT bus command ids (`<editor>.<name>`) the tool may issue — never an
    *  `*.observe` (the editor's own mirror). Validated against the binding and used by the request preparer. */
   viewCommands?: readonly string[];
+  /** [B18-C] a `mutate` tool the agent may invoke ONLY through a server-minted one-shot execution grant (B18-B) — legal
+   *  solely on a reviewed granted-execution family (`granted-execution-families.ts`); the agent actor never holds the
+   *  capability, the grant carries it. Absent everywhere else. */
+  executionMode?: "granted";
+  /** [B18-C] reachable ONLY under a grant on the agent channel (never interactive-ui / api / automation discovery). */
+  grantOnly?: true;
+}
+
+export interface ToolRegistryValidationOptions {
+  /** Test seam: prove the granted-execution gates on a registry whose list is injected; production uses the reviewed list. */
+  grantedExecutionTools?: readonly GrantedExecutionTool[];
 }
 
 // ─── Validation (deny by default) ────────────────────────────────────────────
@@ -168,7 +180,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[]): value i
   return typeof value === "string" && (allowed as readonly string[]).includes(value);
 }
 
-export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandIds: ReadonlySet<string>): string[] {
+export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandIds: ReadonlySet<string>, options: ToolRegistryValidationOptions = {}): string[] {
   const errors: string[] = [];
   const id = descriptor.toolId ?? "(missing toolId)";
   const err = (message: string): void => { errors.push(`${id}@${descriptor.version ?? "?"}: ${message}`); };
@@ -224,11 +236,20 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
   }
   if (descriptor.agentExposed) {
     if (MUTATION_CLASSES.includes(descriptor.operationClass) || descriptor.operationClass === "destructive") {
-      err("agent-exposed mutation capability is forbidden (B04 invariant)");
+      // [B18-C] the ONE exception: a reviewed granted-execution family (Tier 1, canonical editor-session binding,
+      // grantable capability, `executionMode: "granted"`) — derived from the list, never asserted by a descriptor alone.
+      const violations = grantedExecutionViolations(descriptor, options.grantedExecutionTools);
+      if (violations.length > 0) err(`agent-exposed mutation capability is forbidden (B04 invariant) unless it is a granted-execution family: ${violations.join("; ")}`);
     }
     if (descriptor.callability !== "callable") err("agent exposure requires callability");
     if (descriptor.discovery !== "discoverable") err("agent exposure requires discoverability");
   }
+  if ((descriptor.executionMode !== undefined || descriptor.grantOnly !== undefined) && descriptor.operationClass !== "mutate") {
+    err("executionMode / grantOnly are legal only on a mutate tool (a granted execution)");
+  }
+  if (descriptor.executionMode !== undefined && descriptor.executionMode !== "granted") err("executionMode must be \"granted\" when present");
+  if (descriptor.grantOnly !== undefined && descriptor.grantOnly !== true) err("grantOnly must be true when present");
+  if (descriptor.grantOnly && descriptor.executionMode !== "granted") err("a grant-only tool must be a granted execution");
   // [B17-F] a view-session tool is a bus-command tool or nothing: bound to the view-session command module, session-state
   // side effects only, no engineering authority, no approval tier, an explicit non-empty command list without `observe`.
   if (descriptor.operationClass === "view-session") {
@@ -276,6 +297,8 @@ export interface ToolCoverageReport {
   byOperationClass: Record<string, number>;
   byBindingStatus: Record<string, number>;
   agentExposedCount: number;
+  /** [B18-C] exposed granted executions (mutate tools callable only under a grant). */
+  agentExecutedCount: number;
   referencedCommandIds: string[];
   unreferencedMutationCapableCommands: string[];
 }
@@ -284,11 +307,11 @@ export class ToolRegistry {
   private readonly byKey = new Map<string, ToolDescriptor>();
   private readonly ordered: ToolDescriptor[];
 
-  constructor(descriptors: readonly ToolDescriptor[], knownCommandIds?: ReadonlySet<string>) {
+  constructor(descriptors: readonly ToolDescriptor[], knownCommandIds?: ReadonlySet<string>, options: ToolRegistryValidationOptions = {}) {
     const commandIds = knownCommandIds ?? new Set(ACTION_COVERAGE_REGISTRY.map((record) => record.id));
     const errors: string[] = [];
     for (const descriptor of descriptors) {
-      errors.push(...validateToolDescriptor(descriptor, commandIds));
+      errors.push(...validateToolDescriptor(descriptor, commandIds, options));
       const key = `${descriptor.toolId}@${descriptor.version}`;
       if (this.byKey.has(key)) errors.push(`${key}: duplicate tool id/version registration`);
       this.byKey.set(key, descriptor);
@@ -379,6 +402,7 @@ export class ToolRegistry {
       byOperationClass,
       byBindingStatus,
       agentExposedCount: this.ordered.filter((item) => item.agentExposed).length,
+      agentExecutedCount: this.ordered.filter((item) => item.agentExposed && item.executionMode === "granted").length,
       referencedCommandIds: referenced,
       unreferencedMutationCapableCommands,
     };

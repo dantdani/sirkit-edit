@@ -5,7 +5,7 @@
  * no routing without a board, no proposals to a viewer).
  */
 import { describe, expect, it } from "vitest";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, agentExposureReport } from "../agent-exposure";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, agentExposureReport, isAgentExposableDescriptor } from "../agent-exposure";
 import { sirkitToolRegistry, SIRKIT_TOOL_CATALOG } from "../tool-catalog";
 import { discoverTools, type DiscoveryContext } from "../tool-discovery";
 import { ToolRegistry, validateToolDescriptor, type ToolDescriptor } from "../tool-registry";
@@ -45,7 +45,7 @@ describe("B17-F §1 — the intentional exposure set is derived, reviewed and ex
   it("only read / propose / view-session classes are exposable; every exposed tool is active, discoverable, callable and bound", () => {
     expect([...AGENT_EXPOSABLE_OPERATION_CLASSES]).toEqual(["read", "propose", "view-session"]);
     for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
-      expect((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass), descriptor.toolId).toBe(true);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
       expect(descriptor.lifecycle, descriptor.toolId).toBe("active");
       expect(descriptor.discovery, descriptor.toolId).toBe("discoverable");
       expect(descriptor.callability, descriptor.toolId).toBe("callable");

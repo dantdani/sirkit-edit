@@ -72,6 +72,12 @@ export interface DiscoveryContext {
   requestedCategories: readonly ToolCategory[];
   /** Optional deterministic schema-byte budget (canonical JSON bytes). */
   maxSchemaBytes?: number;
+  /** [B18-C] capabilities a server-minted execution grant may carry for this run (SERVER-derived; never the actor's own —
+   *  D18-8). Present only when the run can be granted; counted only on the assistant-agent channel for granted executions. */
+  grantableCapabilities?: readonly EngineeringCapability[];
+  /** [B18-C] the PCB proposal basis lineage a granted execution binds to (the canonical mutation's lineage requirement is
+   *  satisfied by the grant's base, never by the schematic head mark). Present only when the run can be granted. */
+  grantLineageId?: string;
 }
 
 // ─── Result ──────────────────────────────────────────────────────────────────
@@ -80,6 +86,7 @@ export const EXCLUSION_REASONS = [
   "lifecycle",
   "internal_only",
   "not_agent_exposed",
+  "grant_only",
   "role_not_permitted",
   "capability_missing",
   "revision_required",
@@ -141,6 +148,7 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
   };
 
   const capabilities = new Set(context.grantedCapabilities ?? []);
+  const grantable = new Set(context.grantableCapabilities ?? []);
   const projectState = new Set(context.projectState ?? []);
   const authority = new Set(context.availableAuthority ?? []);
   const flags = new Set(context.enabledFlags ?? []);
@@ -154,17 +162,22 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
       // 1-2. Lifecycle + internal-only.
       if (descriptor.lifecycle !== "active") return exclude(descriptor, "lifecycle");
       if (descriptor.discovery === "internal-only") return exclude(descriptor, "internal_only");
-      // Channel: agents see only agent-exposed tools (B04 exposes none).
+      // Channel: agents see only agent-exposed tools (B04 exposes none of the mutation classes; B18-C exposes reviewed
+      // granted executions to the assistant-agent channel only).
       if ((context.channel === "assistant-agent" || context.channel === "automation") && !descriptor.agentExposed) {
         return exclude(descriptor, "not_agent_exposed");
       }
-      // 3. Actor role + capability.
+      if (descriptor.grantOnly && context.channel !== "assistant-agent") return exclude(descriptor, "grant_only");
+      // 3. Actor role + capability. [B18-C] a granted execution's capability is the GRANT's: it may be satisfied by the
+      // server-derived grantable set on the assistant-agent channel only — the actor's own set never widens.
+      const grantedExecution = descriptor.executionMode === "granted" && descriptor.agentExposed && context.channel === "assistant-agent";
       if (!descriptor.requiredRoles.includes(context.actorRole)) return exclude(descriptor, "role_not_permitted");
-      if (!capabilities.has(descriptor.requiredCapability)) return exclude(descriptor, "capability_missing");
+      if (!capabilities.has(descriptor.requiredCapability) && !(grantedExecution && grantable.has(descriptor.requiredCapability))) return exclude(descriptor, "capability_missing");
       // 4-5. Project scope is asserted by the caller-assembled context; the
-      // revision/lineage REQUIREMENTS gate here.
+      // revision/lineage REQUIREMENTS gate here. [B18-C] a granted execution's lineage is its grant base (the PCB proposal
+      // basis), never the schematic head mark.
       if (descriptor.requiresExpectedRevision && !context.currentRevisionDigest) return exclude(descriptor, "revision_required");
-      if (descriptor.requiresLineage && !context.lineageId) return exclude(descriptor, "lineage_required");
+      if (descriptor.requiresLineage && !context.lineageId && !(grantedExecution && context.grantLineageId)) return exclude(descriptor, "lineage_required");
       // 6. Editor + selection kinds.
       if (descriptor.category !== "project" && descriptor.category !== "parts" && context.currentEditor && descriptor.category !== context.currentEditor) {
         // view/validation/selection/placement/routing/manufacturing tools ride the pcb editor.

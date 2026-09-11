@@ -22,7 +22,7 @@ import { buildEvaluationCases } from "../evaluation-cases";
 import { canonicalJson } from "../../engineering/stable";
 import { createEmptyBoard } from "../../pcb/types";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const pins = (JSON.parse(readFileSync(join(ROOT, "artifacts", "ai-control-plane-b11", "replay-trace-pins.json"), "utf8")) as { pins: Record<string, string> }).pins;
@@ -353,7 +353,7 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
   it("static exposure remains exactly ELEVEN read/propose tools", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
-    for (const descriptor of exposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+    for (const descriptor of exposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
   });
 
   it("12: NO test anywhere in the repository writes under app/, lib/, scripts/ or artifacts/", () => {

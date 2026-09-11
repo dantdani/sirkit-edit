@@ -22,7 +22,7 @@ import { policyFor } from "@/app/lib/auth/route-policy";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { MANUFACTURING_PUBLIC_ERRORS } from "@/app/lib/pcb/fab/manufacturing-errors";
 import { QUALIFICATION_PACKAGE_VOCABULARY } from "@/app/lib/pcb/fab/qualification-authority";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
@@ -53,7 +53,7 @@ describe("B16.1C §I — invariant tripwires", () => {
     expect(exposed.map((descriptor) => descriptor.toolId).sort()).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     // (sirkit.manufacturing.readiness-inspect is a read-only readiness report and stays exposed; nothing that qualifies or releases is.)
     expect(exposed.some((descriptor) => /qualif|\.release$/i.test(descriptor.toolId))).toBe(false);
-    expect(exposed.every((descriptor) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass))).toBe(true);
+    expect(exposed.every((descriptor) => isAgentExposableDescriptor(descriptor))).toBe(true);
     expect(registry.list().filter((descriptor) => descriptor.callability === "callable" && /qualif|release/i.test(descriptor.toolId))).toEqual([]);
     const releaseTool = registry.list().find((descriptor) => descriptor.toolId === "sirkit.manufacturing.release");
     expect(releaseTool).toMatchObject({ agentExposed: false, callability: "not-callable" });

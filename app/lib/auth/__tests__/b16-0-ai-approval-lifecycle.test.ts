@@ -14,7 +14,7 @@ import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { membershipRevisionOf } from "../project-membership";
 import type { ProjectMembershipRecord } from "../project-membership";
 import { injectIdentity, injectMembership, resetInjectedIdentity } from "../test-support";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 afterEach(() => resetInjectedIdentity());
 
@@ -33,7 +33,7 @@ describe("B16.0 — AI exposure invariants are preserved", () => {
     expect(release!.operationClass).toBe("release");
     // No exposed tool is a release/mutate/destructive class.
     for (const d of sirkitToolRegistry().list().filter((t) => t.agentExposed)) {
-      expect(AGENT_EXPOSABLE_OPERATION_CLASSES, d.toolId).toContain(d.operationClass);
+      expect(isAgentExposableDescriptor(d), d.toolId).toBe(true);
     }
   });
 });

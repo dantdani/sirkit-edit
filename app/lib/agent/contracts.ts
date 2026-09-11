@@ -139,6 +139,10 @@ export interface AgentRunContext {
    *  decides, with the operation's permission tier and the actor's role,
    *  whether a Tier 1 operation previews or executes (B18-C). */
   autonomy: AgentAutonomySetting;
+  /** [B18-C] whether the composition root bound an execution-grant minter to this run (a human session principal with a
+   *  readable autonomy setting). SERVER-derived; with the verified board, the PCB proposal basis and a Tier 1 execute role it
+   *  makes granted executions discoverable — the actor still holds only read_project. */
+  executionGrantsAvailable: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */

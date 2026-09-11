@@ -26,7 +26,7 @@ import {
 } from "../tool-invocation";
 import { renderRegistryJson } from "../tool-registry";
 import { buildReadReplayFixtures, replayFixtureBundle } from "../tool-read-replay";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const registry = sirkitToolRegistry();
 
@@ -482,7 +482,7 @@ describe("architecture + prior-stage consistency", () => {
       for (const item of included) {
         const descriptor = registry.get(item.toolId, item.version)!;
         expect(descriptor.agentExposed, item.toolId).toBe(true);
-        expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+        expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
       }
     }
   });
