@@ -14,6 +14,7 @@ import { DEFAULT_PRESET_ID } from "../../pcb/drc/presets";
 import { makeBoard, makeInstance, makeResistorDef } from "../../pcb/__tests__/autoplace-fixture";
 import { mmToNm } from "../../pcb/units";
 import type { PcbBoard } from "../../pcb/types";
+import type { SelectionRef } from "../../pcb/edit/commands";
 import { InMemoryDurableWorkflowRepository } from "../../durable-workflow/repository";
 import { ExecutionGrantStore } from "../../execution-grant/store";
 import { createExecutionGrantMinter } from "../../execution-grant/mint";
@@ -149,14 +150,18 @@ export function ritual(c: Composed, grant: PublicExecutionGrant, originRunId = "
   };
 }
 
+/** [B18-C I10a] the live selection a chat run captures with the board (verified by the assembler). */
+export interface RunSelection { refs: SelectionRef[]; primary: SelectionRef | null }
+
 /** The run context from the LIVE board exactly as the page sends it, with the basis from the session's head metadata. */
-export function runContext(c: Composed) {
+export function runContext(c: Composed, selection?: RunSelection) {
   const head = headOf(c);
   const assembly = assembleAgentRunContext({
     ...SCOPE, board: JSON.parse(JSON.stringify(c.history.committedPresent)),
     pcbProposalBasis: { historyHeadSequence: head.headSequence, historyHeadLabel: null, lineageId: head.lineageId, activeDrcPresetId: DEFAULT_PRESET_ID },
     verifiedActor: { principalId: PRINCIPAL.principalId, actorRole: "pcb_editor", membershipRevision: PRINCIPAL.membershipRevision, authMethod: "local_dev" },
     executionGrantsAvailable: true, autonomy: c.autonomy,
+    ...(selection ? { selection } : {}),
   });
   if (!assembly.ok) throw new Error(assembly.reason);
   return assembly.context;
@@ -176,12 +181,14 @@ export class FakeAdapter implements ProviderAgentAdapter {
 export const call = (callId: string, providerName: string, args: string): AgentStep["toolCalls"][number] => ({ callId, providerName, argumentsText: args });
 
 let runSeq = 0;
-/** One chat run: the page auto-runs the ritual for an execute_explicit grant exactly as PcbEditor does. */
-export async function runScenario(c: Composed, script: (moveTool: string, tool: (toolId: string) => string) => Array<() => Partial<AgentStep>>, options: { message?: string; settlementTimeoutMs?: number } = {}) {
+export interface RunOptions { message?: string; settlementTimeoutMs?: number; selection?: RunSelection }
+
+/** One chat run over any adapter: the page auto-runs the ritual for an execute_explicit grant exactly as PcbEditor does. */
+async function runWith(c: Composed, makeAdapter: (moveTool: string, tool: (toolId: string) => string) => ProviderAgentAdapter, options: RunOptions) {
   const runId = `run-${(runSeq += 1)}`;
   const message = options.message ?? MESSAGE;
   const registry = sirkitToolRegistry();
-  const context = runContext(c);
+  const context = runContext(c, options.selection);
   const declarations = buildRunToolset(registry, context, () => undefined).declarations;
   const move = declarations.find((d) => d.toolId === "sirkit.pcb.move-footprint");
   if (!move) throw new Error("the lifted move tool must be advertised to a grantable run");
@@ -197,7 +204,7 @@ export async function runScenario(c: Composed, script: (moveTool: string, tool: 
   const events: AgentRunEvent[] = [];
   const rituals: Array<Promise<GrantedExecutionOutcome>> = [];
   const grants: PublicExecutionGrant[] = [];
-  const adapter = new FakeAdapter(script(move.providerName, tool));
+  const adapter = makeAdapter(move.providerName, tool);
   const result = await runAgentLoop(
     { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: options.settlementTimeoutMs ?? 10_000 } },
     {
@@ -213,5 +220,17 @@ export async function runScenario(c: Composed, script: (moveTool: string, tool: 
       },
     },
   );
-  return { result, events, adapter, grants, rituals: await Promise.all(rituals) };
+  return { result, events, grants, rituals: await Promise.all(rituals) };
+}
+
+/** One chat run driven by a scripted FakeAdapter. */
+export async function runScenario(c: Composed, script: (moveTool: string, tool: (toolId: string) => string) => Array<() => Partial<AgentStep>>, options: RunOptions = {}) {
+  let fake: FakeAdapter | null = null;
+  const run = await runWith(c, (move, tool) => (fake = new FakeAdapter(script(move, tool))), options);
+  return { ...run, adapter: fake! as FakeAdapter };
+}
+
+/** [B18-C I10a] One chat run driven by any provider adapter (the browser harness's scripted agent, for one). */
+export function runWithAdapter(c: Composed, adapter: ProviderAgentAdapter, options: RunOptions = {}) {
+  return runWith(c, () => adapter, options);
 }

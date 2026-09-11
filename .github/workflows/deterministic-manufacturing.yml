@@ -88,6 +88,25 @@ jobs:
           app/api/chat/__tests__/b18-b-chat-authority-keys.test.ts
           app/lib/engineering/__tests__/b18-b-granted-executions.test.ts
           app/lib/project/__tests__/b18-b-import-gates.test.ts
+          app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
+          app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
+          app/lib/agent/__tests__/b18-c-gateway-execution.test.ts
+          app/lib/agent/__tests__/b18-c-never-execution-sweep.test.ts
+          app/lib/engineering/__tests__/b18-c-adversarial.test.ts
+          app/lib/engineering/__tests__/b18-c-builders.test.ts
+          app/lib/engineering/__tests__/b18-c-dimension.test.ts
+          app/lib/engineering/__tests__/b18-c-explicit-grammars.test.ts
+          app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts
+          app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts
+          app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
+          app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
+          app/lib/engineering/__tests__/b18-c-result-contract.test.ts
+          app/lib/engineering/__tests__/b18-c-review-2.test.ts
+          app/lib/engineering/__tests__/b18-c-review-fixes.test.ts
+          app/lib/engineering/__tests__/b18-c-rotate-arrange-e2e.test.ts
+          app/lib/engineering/__tests__/b18-c-silk-text.test.ts
+          app/lib/engineering/__tests__/b18-c-tier2-truth.test.ts
+          app/lib/engineering/__tests__/b18-c-undo-redo.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()
