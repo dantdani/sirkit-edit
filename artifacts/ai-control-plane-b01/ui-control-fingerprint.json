@@ -124,6 +124,7 @@
       "Close import placement",
       "Schematic import placement"
     ],
+    "app/components/pcb/GrantedExecutionDialog.tsx": [],
     "app/components/editor/BuildLibraryPanel.tsx": [
       "Close"
     ],

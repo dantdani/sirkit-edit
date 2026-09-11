@@ -537,3 +537,13 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Reproduced first: the new `b18-d-ritual-outcome-report` suite failed both cases on the pre-fix code.
 - Gates: B17 577 controls and the B01 fingerprint unchanged (props and the notice text are not scanned controls); the import gates unchanged (PcbEditor imports the report types from the approved controller); `PcbEditor` eslint 1 pre-existing problem before and after.
 - Tests: `b18-d-ritual-outcome-report` 2/2 (CI list); every `b18-*` suite + the B17 gate 42 files / 224 passed; broad run: 235 files / 3256 passed, 10 skipped (the 9 live Supabase matrix tests and the opt-in database-qualification test), with the panel wait fix (`64a8034`) in the tree — the first I4 run's only failure was that wait's recurrence; Playwright `agent-execution`: 5 passed (45.4 s); tsc 0; eslint 0 on the changed files.
+- CI at `64a8034` (the panel wait): CI green (deterministic-manufacturing 34590830884 incl. page-browser-e2e, benchmark-quality 34590830896).
+- CI at `603fe9f` (I4): CI green (deterministic-manufacturing 34591108582 incl. page-browser-e2e, benchmark-quality 34591108565).
+
+### B18-D I5 — the confirmation card shows exactly what changes (CONFIRMED, 2026-09-11 local, solo; this commit)
+
+- Before: the card showed the preview, the family and the operation count, with the scope, the instruction excerpt and the minter's note mixed in beside it — no tier, no targets, no individual operations, no reason for the confirmation.
+- Now: a change block with only digest-covered content (tier, family, preview, targets by reference, each exact operation) and a separate "As issued by the server" block (why a confirmation is required, what you asked, scope and base, the note). Inert: no inputs; Confirm and Cancel pass no arguments. `PcbEditor` passes the live board for references; the card joins the B01 watched surfaces.
+- Reproduced first: `b18-d-granted-execution-card` failed all four cases on the pre-fix card (no change block, no operations list, Confirm received the click event).
+- Gates: B17 577 controls, the card's rows unchanged (Confirm and Cancel still record onConfirm / onCancel); B01: the card joins the watched surfaces with no literal labels (`"app/components/pcb/GrantedExecutionDialog.tsx": []`).
+- Tests: `b18-d-granted-execution-card` (CI list) and the review-3 card test unchanged; broad run: 236 files / 3260 passed, 10 skipped (the 9 live Supabase matrix tests and the opt-in database-qualification test); Playwright `agent-execution`: 5 passed (45.6 s) — the reworked card in the preview and silkscreen scenarios; tsc 0; eslint 0.

@@ -63,6 +63,7 @@ jobs:
           app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx
           app/components/pcb/__tests__/board-revision-dialog.test.tsx
           app/components/pcb/__tests__/b18-c-granted-execution-dialog.test.tsx
+          app/components/pcb/__tests__/b18-d-granted-execution-card.test.tsx
           app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx
           app/components/pcb/__tests__/pcb3d-view-session.test.tsx
           app/components/view-session

@@ -73,6 +73,7 @@ export const UI_CONTROL_SURFACES = [
   "app/components/pcb/AssistBox.tsx",
   "app/components/pcb/CommandPalette.tsx",
   "app/components/pcb/SyncPlacementDialog.tsx",
+  "app/components/pcb/GrantedExecutionDialog.tsx", // [B18-D I5] the confirmation card joins the watched surfaces (OD-17 D5)
   "app/components/editor/BuildLibraryPanel.tsx",
   "app/components/bom/BomView.tsx",
 ] as const;

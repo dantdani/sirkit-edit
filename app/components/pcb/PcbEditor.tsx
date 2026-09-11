@@ -2797,6 +2797,7 @@ export default function PcbEditor({
       <GrantedExecutionDialog
         grant={pendingExecutionGrant && pendingExecutionGrant.binding.operation.decision === "preview_then_confirm" ? pendingExecutionGrant : null}
         note={executionGrantIntake?.note ?? null}
+        board={state.board} // [B18-D I5] display only: references for the card's targets and operations
         busy={executionGrantBusy}
         disableReason={executionGrantDisableReason}
         onConfirm={() => void runGrantedExecution("confirm")}
