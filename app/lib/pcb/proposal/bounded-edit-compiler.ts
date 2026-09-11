@@ -121,6 +121,7 @@ export type BoundedEditCompileRefusalCode =
   | "invalid-geometry"
   | "structural-invalid"
   | "padstack-conflict"
+  | "padstack-bound"
   | "no-effective-change";
 
 export type BoundedEditCompileResult =
@@ -659,6 +660,13 @@ function applyOperation(
       const existing = context.viasById.get(operation.viaId);
       if (!existing) return refuse("unknown-object", `${label} references a via that is not on this board (${operation.viaId}).`);
       if (existing.locked) return refuse("locked-object", `${label} targets a locked via (${operation.viaId}).`);
+      // [B18-C I9] a via bound to a padstack takes its size and drill FROM the padstack: explicit geometry without a padstack
+      // would leave the via claiming a padstack it no longer matches. Retarget it onto an existing padstack (padstackId), or
+      // fork a padstack in the editor — a human step (the via inspector's create-padstack, then set-via-padstack).
+      if (existing.padstackId && operation.padstackId === undefined && (operation.sizeNm !== undefined || operation.drillNm !== undefined)) {
+        const bound = getPadstack(context.board, existing.padstackId);
+        return refuse("padstack-bound", `${label} changes the size/drill of via ${operation.viaId}, which is bound to padstack ${bound?.name ?? existing.padstackId} (${existing.padstackId}). Retarget it onto an existing padstack with padstackId, or fork a padstack in the editor (the via inspector's create-padstack, then set-via-padstack).`);
+      }
       // [B15.1 §D] padstack and explicit geometry are MUTUALLY EXCLUSIVE;
       // assigning a padstack updates padstackId, size, and drill ATOMICALLY
       // through the shared `applyPadstackToVia` authority.
