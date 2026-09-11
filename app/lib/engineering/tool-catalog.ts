@@ -616,6 +616,38 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
     versionNotes: "1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); the mode's parameter is explicit (edge / axis / gridNm); no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
+  // ── [B18-C I6] Silkscreen TEXT — a reviewed granted execution (confirmation-only) ──
+  {
+    ...canonicalMutation,
+    toolId: "sirkit.pcb.silkscreen-text", version: "1.0.0",
+    owningCommandId: "pcb.silkscreen-text",
+    title: "Add, edit or remove silkscreen text",
+    description: "EXECUTION tool: add silkscreen TEXT (a label, revision mark or note) at a board position, change an existing silk text's text, size, stroke or layer, or remove one. Only silkscreen TEXT items (never lines, rectangles, circles or copper text). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor shows the exact change for the user to confirm; nothing is committed until they do. Name existing silk text by the stable ids from board-inspect; 1–16 edits; bottom-side text is mirrored automatically.",
+    category: "pcb", operationClass: "mutate",
+    inputSchema: obj({
+      edits: {
+        type: "array",
+        description: "1–16 silkscreen TEXT edits, applied together as one change.",
+        items: obj({
+          op: { type: "string", enum: ["add", "update", "remove"], description: "add a new silk text; update an existing silk text; remove one." },
+          silkId: { type: "string", description: "update / remove only: the stable id of an existing silk TEXT item from board-inspect; null for add." },
+          text: { type: "string", description: "add (required) / update: 1–64 printable ASCII characters; null keeps the text on update." },
+          layer: { enum: ["silkTop", "silkBottom"], description: "add (required) / update: the silkscreen layer; null keeps the layer on update." },
+          atNm: { ...obj({ x: { type: "integer", description: "X of the text centre in integer nanometres (+x right)." }, y: { type: "integer", description: "Y of the text centre in integer nanometres (+y down)." } }, ["x", "y"]), description: "add only: where the text is centred; null for update / remove." },
+          heightNm: { type: "integer", description: "add / update: cap height in whole nanometres, at least 100000 (0.1 mm); null means 1 mm on add, unchanged on update." },
+          strokeWidthNm: { type: "integer", description: "add / update: stroke width in whole nanometres; null means 0.15 mm on add, unchanged on update." },
+        }, ["op"]),
+      },
+    }, ["edits"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "edit_placement", requiredRoles: ["pcb_editor", "project_admin"],
+    approvalTier: "reversible", requiredSelectionKinds: [],
+    agentExposed: true, executionMode: "granted",
+    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.silkscreen-text", notes: "Trusted UI: the silk tool through the PCB commit gateway. The agent reaches it solely through a server-minted one-shot execution grant (B18-B/C); the ritual commits the grant's exact silk operations through CanonicalEditorSession.commit." },
+    timeoutMs: 5_000,
+    sourceEvidence: ["app/lib/pcb/silk/commands.ts", "app/components/pcb/hooks/useSilkTool.ts", "app/lib/engineering/editor-adapter.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
+    versionNotes: "1.0.0 (B18-C I6): the first descriptor for pcb.silkscreen-text — silk TEXT only (board text is not silk and stays out of scope); deterministic add ids; confirmation-only (no explicit grammar).",
+  },
   // ── Canonical undo/redo — INTERNAL, never discoverable ────────────────────
   {
     ...canonicalMutation,

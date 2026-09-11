@@ -17,7 +17,10 @@
  *
  * No parallel mutation code exists here: a plan is a list of edit commands.
  */
+import { produce } from "immer";
 import { compileEdits } from "../pcb/edit/apply";
+import { mutateBoardWithSilkCommand } from "../pcb/silk/commands";
+import type { SilkLayer, SilkTextItem } from "../pcb/silk/types";
 import { pcbRevisionId } from "../pcb/revision";
 import type { EditCommand, SelectionRef } from "../pcb/edit/commands";
 import type { PcbBoard } from "../pcb/types";
@@ -26,6 +29,7 @@ import { compilePcbBoardDelta } from "./pcb-delta";
 import { executionOperationsDigest, executionPreviewDigest, executionTargetsDigest, MAX_GRANT_OPERATIONS, type ExecutionFamily, type ExecutionGrantPreview, type ExecutionGrantTargets } from "./execution-grant";
 import { applyEngineeringOperations } from "./operations";
 import { canonicalLineageDigest } from "./semantic-board-digest";
+import { engineeringDigest } from "./stable";
 import { STAGE10_SCHEMA_VERSION, type EngineeringOperation } from "./types";
 
 /** A move plan: absolute integer-nm targets per footprint (the tool's argument shape). */
@@ -42,7 +46,30 @@ export type ArrangePlan =
   | { family: "pcb.arrange"; mode: "distribute"; footprintIds: string[]; axis: "h" | "v" }
   | { family: "pcb.arrange"; mode: "snap-to-grid"; footprintIds: string[]; gridNm: number }
   | { family: "pcb.arrange"; mode: "positions"; moves: Array<{ footprintId: string; x: number; y: number }> };
-export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan;
+/** [B18-C I6] Silkscreen TEXT edits as the model states them. An `add` receives a DETERMINISTIC id derived from the base
+ *  revision, its index among the plan's adds and its content (the editor's own silk ids are salted counters, which a
+ *  byte-for-byte recompile could never reproduce). */
+export type SilkTextEdit =
+  | { op: "add"; text: string; layer: SilkLayer; atNm: { x: number; y: number }; heightNm: number; strokeWidthNm: number }
+  | { op: "update"; silkId: string; text?: string; heightNm?: number; strokeWidthNm?: number; layer?: SilkLayer }
+  | { op: "remove"; silkId: string };
+/** [B18-C I6] …or as a grant pins them (only `planFromOperations` produces this form): the exact resulting items. */
+export type SilkTextChange = { op: "add"; item: SilkTextItem } | { op: "replace"; item: SilkTextItem } | { op: "remove"; silkId: string };
+export type SilkTextPlan = { family: "pcb.silkscreen-text"; edits: SilkTextEdit[] } | { family: "pcb.silkscreen-text"; mode: "pinned"; changes: SilkTextChange[] };
+export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan;
+
+export const SILK_TEXT_MAX_CHARS = 64;
+/** The editor's own silk tool never places text shorter than 0.1 mm (useSilkTool). */
+export const SILK_TEXT_MIN_HEIGHT_NM = 100_000;
+const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
+const SILK_LAYERS: readonly SilkLayer[] = Object.freeze(["silkTop", "silkBottom"]);
+const SILK_KINDS = Object.freeze(["add_silk", "update_silk", "remove_silk"] as const);
+const PLACEMENT_KINDS = Object.freeze(["move_footprint"] as const);
+
+/** [B18-C I6] The deterministic id of an AI-added silk text: base revision + index + content (never a salted counter). */
+export function aiSilkTextId(board: PcbBoard, index: number, body: Omit<SilkTextItem, "id">): string {
+  return `silk-ai-${engineeringDigest({ schema: "sirkit.agent-silk-id.v1", base: pcbRevisionId(board), index, item: body }).slice(5, 21)}`;
+}
 
 export interface BuiltExecution {
   ok: true;
@@ -73,8 +100,16 @@ const footprintRef = (id: string): SelectionRef => ({ kind: "footprint", id });
 function finish(board: PcbBoard, family: ExecutionFamily, commands: EditCommand[], objectIds: readonly string[], before: string[], after: string[], noChange: string): BuiltExecution | BuildRefusal {
   const compiled = compileEdits(board, commands);
   if (compiled.errors.length > 0) return refusal("compile_failed", compiled.errors[0]!);
-  const delta = compilePcbBoardDelta(board, compiled.result, family);
-  const operations = delta.operations.filter((operation) => operation.kind === "move_footprint");
+  return finishCandidate(board, family, compiled.result, commands, objectIds, before, after, noChange, PLACEMENT_KINDS, ["footprint"], compiled.diagnostics.map((diagnostic) => diagnostic.summary));
+}
+
+/** [B18-C I6] The tail over an already-built candidate board (the silk commands mutate a candidate directly). */
+function finishCandidate(board: PcbBoard, family: ExecutionFamily, candidate: PcbBoard, commands: EditCommand[], objectIds: readonly string[], before: string[], after: string[], noChange: string, kinds: readonly string[], targetKinds: ExecutionGrantTargets["kinds"], warnings: string[], describe?: (operations: readonly EngineeringOperation[]) => { before: string[]; after: string[] }): BuiltExecution | BuildRefusal {
+  const delta = compilePcbBoardDelta(board, candidate, family);
+  const operations = delta.operations.filter((operation) => kinds.includes(operation.kind));
+  // [B18-C I6] a describer reads the preview off the canonical operations themselves (their delta order), so the seal and a
+  // pinned recompile — which replays the operations, not the model's edit order — describe the identical change.
+  if (describe) ({ before, after } = describe(operations));
   if (operations.length === 0) return refusal("no_change", noChange);
   if (operations.length !== delta.operations.length) return refusal("compile_failed", `The plan compiled to operations outside the ${family.replace(/^pcb\./, "")} family.`);
   // [B18-C review V0] the expected result is what the canonical KERNEL commits from these exact operations — not the
@@ -85,9 +120,9 @@ function finish(board: PcbBoard, family: ExecutionFamily, commands: EditCommand[
   } catch (error) {
     return refusal("compile_failed", `The canonical kernel refuses the plan: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
   }
-  const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [...objectIds].sort(), netIds: [], kinds: ["footprint"], selectionDigest: null, targetsDigest: "" };
+  const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [...objectIds].sort(), netIds: [], kinds: [...targetKinds], selectionDigest: null, targetsDigest: "" };
   targets.targetsDigest = executionTargetsDigest(targets);
-  const preview: ExecutionGrantPreview = { before: before.join("; "), after: after.join("; "), warnings: compiled.diagnostics.map((diagnostic) => diagnostic.summary).slice(0, 8) };
+  const preview: ExecutionGrantPreview = { before: before.join("; "), after: after.join("; "), warnings: warnings.slice(0, 8) };
   const operationsDigest = executionOperationsDigest(family, operations);
   return { ok: true, family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(predicted), resultLineageDigest: canonicalLineageDigest(predicted) };
 }
@@ -180,12 +215,105 @@ function buildArrange(board: PcbBoard, plan: ArrangePlan): BuiltExecution | Buil
   return buildPositions(board, "pcb.arrange", moves);
 }
 
+const silkTextOf = (board: PcbBoard, id: string): SilkTextItem | null => {
+  const item = (board.silkItems ?? []).find((candidate) => candidate.id === id);
+  return item && item.kind === "text" ? item : null;
+};
+const describeSilk = (item: SilkTextItem): string => `silk text "${item.text}" at (${fmt(item.position.x)}, ${fmt(item.position.y)}) mm on ${item.layer === "silkBottom" ? "bottom" : "top"}, ${fmt(item.heightNm)} mm high`;
+function silkTextProblem(text: unknown): string | null {
+  if (typeof text !== "string" || text.length === 0) return "Silk text can't be empty.";
+  if (text.length > SILK_TEXT_MAX_CHARS) return `Silk text is at most ${SILK_TEXT_MAX_CHARS} characters.`;
+  if (!PRINTABLE_ASCII.test(text)) return "Silk text must be printable ASCII (the silkscreen font has no other glyphs).";
+  return null;
+}
+function silkSizeProblem(heightNm: unknown, strokeWidthNm: unknown): string | null {
+  if (heightNm !== undefined && (typeof heightNm !== "number" || !Number.isSafeInteger(heightNm) || heightNm < SILK_TEXT_MIN_HEIGHT_NM)) return "Silk text height must be whole nanometres, at least 0.1 mm.";
+  if (strokeWidthNm !== undefined && (typeof strokeWidthNm !== "number" || !Number.isSafeInteger(strokeWidthNm) || strokeWidthNm <= 0)) return "Silk text stroke must be a positive whole number of nanometres.";
+  return null;
+}
+
+/** [B18-C I6] Silkscreen TEXT: adds and removes with the editor's own silk commands, updates with its own `set-text-props`
+ *  mutator (validation included); the candidate board's canonical delta gives the operations (never `*_text`: board text is
+ *  not silk and is out of scope). A pinned plan replays the grant's exact resulting items. */
+function buildSilkText(board: PcbBoard, plan: SilkTextPlan): BuiltExecution | BuildRefusal {
+  const changes: SilkTextChange[] = [];
+  const commands: EditCommand[] = [];
+  if ("mode" in plan) {
+    if (!Array.isArray(plan.changes) || plan.changes.length === 0) return refusal("empty", "The plan names no silkscreen text change.");
+    changes.push(...plan.changes);
+  } else {
+    const edits = plan.edits;
+    if (!Array.isArray(edits) || edits.length === 0) return refusal("empty", "The plan names no silkscreen text edit.");
+    if (edits.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+    let addIndex = 0;
+    for (const edit of edits) {
+      if (edit.op === "add") {
+        const problem = silkTextProblem(edit.text) ?? silkSizeProblem(edit.heightNm, edit.strokeWidthNm);
+        if (problem) return refusal("invalid_geometry", problem);
+        if (!SILK_LAYERS.includes(edit.layer)) return refusal("invalid_geometry", "Silk text can only sit on a silkscreen layer (silkTop or silkBottom).");
+        if (!Number.isSafeInteger(edit.atNm?.x) || !Number.isSafeInteger(edit.atNm?.y)) return refusal("invalid_geometry", "The text position must be integer nanometres.");
+        // Derived fields follow the editor's own silk tool exactly: rotation 0, centred, mirrored on the bottom side.
+        const body: Omit<SilkTextItem, "id"> = { kind: "text", layer: edit.layer, position: { x: edit.atNm.x, y: edit.atNm.y }, text: edit.text, heightNm: edit.heightNm, strokeWidthNm: edit.strokeWidthNm, rotationDeg: 0, mirror: edit.layer === "silkBottom", anchor: "center" };
+        changes.push({ op: "add", item: { id: aiSilkTextId(board, addIndex, body), ...body } });
+        addIndex += 1;
+        continue;
+      }
+      const current = silkTextOf(board, edit.silkId);
+      if (!current) return refusal("unknown_target", `Silk text ${String(edit.silkId).slice(0, 60)} is not on this board (only silkscreen TEXT items can be edited or removed).`);
+      if (edit.op === "remove") { changes.push({ op: "remove", silkId: edit.silkId }); continue; }
+      if (edit.text !== undefined) { const problem = silkTextProblem(edit.text); if (problem) return refusal("invalid_geometry", problem); }
+      const sizeProblem = silkSizeProblem(edit.heightNm, edit.strokeWidthNm);
+      if (sizeProblem) return refusal("invalid_geometry", sizeProblem);
+      if (edit.layer !== undefined && !SILK_LAYERS.includes(edit.layer)) return refusal("invalid_geometry", "Silk text can only sit on a silkscreen layer (silkTop or silkBottom).");
+      const patch = { ...(edit.text !== undefined ? { text: edit.text } : {}), ...(edit.heightNm !== undefined ? { sizeNm: edit.heightNm } : {}), ...(edit.strokeWidthNm !== undefined ? { thicknessNm: edit.strokeWidthNm } : {}), ...(edit.layer !== undefined ? { layer: edit.layer } : {}) };
+      const command: EditCommand = { op: "set-text-props", id: edit.silkId, patch };
+      const compiled = compileEdits(board, [command]);
+      if (compiled.errors.length > 0) return refusal("compile_failed", compiled.errors[0]!);
+      commands.push(command);
+      changes.push({ op: "replace", item: silkTextOf(compiled.result, edit.silkId)! });
+    }
+  }
+  // Validate every change against the base board (a pinned plan is re-checked here too), then build the candidate with the
+  // editor's own silk commands.
+  const touched = new Set<string>();
+  for (const change of changes) {
+    const id = change.op === "remove" ? change.silkId : change.item.id;
+    if (typeof id !== "string" || id.length === 0 || touched.has(id)) return refusal("unknown_target", "Each silk text may appear once per plan.");
+    touched.add(id);
+    if (change.op === "add") {
+      if ((board.silkItems ?? []).some((existing) => existing.id === id)) return refusal("unknown_target", `The derived silk id ${id} already exists on this board.`);
+      if (change.item.kind !== "text") return refusal("unknown_target", "Only silkscreen TEXT items are in scope.");
+    } else if (!silkTextOf(board, id)) {
+      return refusal("unknown_target", `Silk text ${id.slice(0, 60)} is not on this board (only silkscreen TEXT items can be edited or removed).`);
+    }
+  }
+  const candidate = produce(board, (draft) => {
+    for (const change of changes) {
+      if (change.op === "add") mutateBoardWithSilkCommand(draft, { kind: "AddSilk", item: change.item });
+      else if (change.op === "replace") mutateBoardWithSilkCommand(draft, { kind: "EditSilk", id: change.item.id, before: silkTextOf(board, change.item.id)!, after: change.item });
+      else mutateBoardWithSilkCommand(draft, { kind: "DeleteSilk", before: silkTextOf(board, change.silkId)! });
+    }
+  });
+  const describe = (operations: readonly EngineeringOperation[]) => {
+    const before: string[] = [];
+    const after: string[] = [];
+    for (const operation of operations) {
+      if (operation.kind === "add_silk" && operation.item.kind === "text") { before.push("(new)"); after.push(describeSilk(operation.item)); }
+      else if (operation.kind === "update_silk" && operation.replace.kind === "text") { before.push(describeSilk(silkTextOf(board, operation.silkId)!)); after.push(describeSilk(operation.replace)); }
+      else if (operation.kind === "remove_silk") { before.push(describeSilk(silkTextOf(board, operation.silkId)!)); after.push("(removed)"); }
+    }
+    return { before, after };
+  };
+  return finishCandidate(board, plan.family, candidate, commands, [...touched], [], [], "The plan changes nothing (every silk text already reads that way).", SILK_KINDS, ["text"], [], describe);
+}
+
 /** Build the canonical operations for a plan against the exact board it must run on. */
 export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): BuiltExecution | BuildRefusal {
   switch (plan.family) {
     case "pcb.move-footprint": return buildPositions(board, plan.family, plan.moves);
     case "pcb.rotate-side-footprint": return buildRotateSide(board, plan);
     case "pcb.arrange": return buildArrange(board, plan);
+    case "pcb.silkscreen-text": return buildSilkText(board, plan);
     default: return refusal("unsupported_family", `Family ${String((plan as { family?: unknown }).family)} has no builder yet.`);
   }
 }
@@ -197,6 +325,16 @@ export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): 
  */
 export function planFromOperations(family: ExecutionFamily, operations: readonly EngineeringOperation[]): ExecutionPlan | null {
   if (operations.length === 0) return null;
+  if (family === "pcb.silkscreen-text") {
+    const changes: SilkTextChange[] = [];
+    for (const operation of operations) {
+      if (operation.kind === "add_silk" && operation.item.kind === "text") changes.push({ op: "add", item: operation.item });
+      else if (operation.kind === "update_silk" && operation.replace.kind === "text") changes.push({ op: "replace", item: operation.replace });
+      else if (operation.kind === "remove_silk") changes.push({ op: "remove", silkId: operation.silkId });
+      else return null;
+    }
+    return { family, mode: "pinned", changes };
+  }
   const moves: Array<Extract<EngineeringOperation, { kind: "move_footprint" }>> = [];
   for (const operation of operations) {
     if (operation.kind !== "move_footprint") return null;

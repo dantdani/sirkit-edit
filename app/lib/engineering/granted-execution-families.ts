@@ -39,6 +39,11 @@ export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.f
     family: "pcb.arrange",
     reason: "B18-C I5 — align / distribute / snap-to-grid through the editor's own arrangement commands, pinned in the grant as the absolute positions they produce; permission Tier 1 (reversible, edit_placement); confirmation-only (no explicit grammar: multi-target geometry the user must see)",
   }),
+  Object.freeze({
+    toolId: "sirkit.pcb.silkscreen-text",
+    family: "pcb.silkscreen-text",
+    reason: "B18-C I6 — silkscreen TEXT add / update / remove through the editor's own silk commands and set-text-props (never copper, never board text); permission Tier 1 (reversible, edit_placement); deterministic add ids; confirmation-only (free text placed by the AI is always shown to the user first)",
+  }),
 ] as GrantedExecutionTool[]);
 
 export const GRANTED_EXECUTION_TOOL_IDS: readonly string[] = Object.freeze(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());

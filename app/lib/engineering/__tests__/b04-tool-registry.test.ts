@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderActionToolabilityCsv } from "../action-registry";
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
-import { GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
+import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
 import { resolveReadBinding } from "../tool-bindings-readonly";
 import {
   discoverTools,
@@ -449,7 +449,8 @@ describe("generated artifacts + B01 consistency", () => {
     const coverage = registry.coverageReport();
     expect(coverage.descriptorCount).toBe(SIRKIT_TOOL_CATALOG.length);
     expect(coverage.referencedCommandIds).toContain("pcb.move-footprint");
-    expect(coverage.unreferencedMutationCapableCommands.length).toBeGreaterThan(0);
-    expect(coverage.unreferencedMutationCapableCommands).toContain("pcb.silkscreen-text");
+    // [B18-C I6] pcb.silkscreen-text is referenced by its granted-execution descriptor; every reviewed family is referenced.
+    expect(coverage.unreferencedMutationCapableCommands).not.toContain("pcb.silkscreen-text");
+    for (const tool of GRANTED_EXECUTION_TOOLS) expect(coverage.referencedCommandIds, tool.family).toContain(tool.family);
   });
 });

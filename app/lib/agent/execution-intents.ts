@@ -17,7 +17,8 @@
  */
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
-import { ARRANGE_EDGES, buildExecutionOperations, type ArrangeEdge, type ExecutionPlan } from "../engineering/execution-operations";
+import { ARRANGE_EDGES, buildExecutionOperations, type ArrangeEdge, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
+import { DEFAULT_SILK_STROKE_NM, DEFAULT_SILK_TEXT_HEIGHT_NM } from "../pcb/silk/types";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
 import type { ToolDescriptor } from "../engineering/tool-registry";
 import type { EngineeringOperation } from "../engineering/types";
@@ -61,6 +62,7 @@ export function parseExecutionArguments(family: ExecutionFamily, args: Record<st
   if (authority.length > 0) return { ok: false, diagnostics: [`Argument "${authority[0]!.slice(0, 40)}" is an authority-shaped claim; a tool argument can never assert approval, a grant or explicitness.`] };
   if (family === "pcb.rotate-side-footprint") return parseRotateSideArguments(args, board ?? null);
   if (family === "pcb.arrange") return parseArrangeArguments(args);
+  if (family === "pcb.silkscreen-text") return parseSilkTextArguments(args);
   if (family !== "pcb.move-footprint") return { ok: false, diagnostics: [`Family ${family} has no executable argument contract yet.`] };
   const unknown = Object.keys(args).filter((key) => key !== "moves");
   if (unknown.length > 0) return { ok: false, diagnostics: [`Unexpected argument "${unknown[0]!.slice(0, 40)}" — move-footprint accepts only moves.`] };
@@ -131,6 +133,55 @@ function parseArrangeArguments(args: Record<string, unknown>): { ok: true; plan:
   if (present("edge") || present("axis")) return argumentRefusal("snap-to-grid takes gridNm only (edge and axis must be null).");
   if (typeof args.gridNm !== "number" || !Number.isSafeInteger(args.gridNm) || args.gridNm <= 0) return argumentRefusal("gridNm must be a positive whole number of nanometres.");
   return { ok: true, plan: { family: "pcb.arrange", mode, footprintIds, gridNm: args.gridNm } };
+}
+
+/** [B18-C I6] `{ edits: [{ op, silkId?, text?, layer?, atNm?, heightNm?, strokeWidthNm? }] }` — each op carries exactly its
+ *  fields (the rest absent / null); an add takes the editor's own silk-tool defaults (1 mm high, 0.15 mm stroke). */
+function parseSilkTextArguments(args: Record<string, unknown>): { ok: true; plan: ExecutionPlan } | { ok: false; diagnostics: string[] } {
+  const unknown = Object.keys(args).filter((key) => key !== "edits");
+  if (unknown.length > 0) return argumentRefusal(`Unexpected argument "${unknown[0]!.slice(0, 40)}" — silkscreen text accepts only edits.`);
+  const edits = args.edits;
+  if (!Array.isArray(edits) || edits.length === 0 || edits.length > MAX_GRANT_OPERATIONS) return argumentRefusal(`edits must list 1–${MAX_GRANT_OPERATIONS} silkscreen text edits.`);
+  const FIELDS = ["op", "silkId", "text", "layer", "atNm", "heightNm", "strokeWidthNm"];
+  const parsed: SilkTextEdit[] = [];
+  for (const raw of edits) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return argumentRefusal("Each edit must be an object.");
+    const edit = raw as Record<string, unknown>;
+    const extra = Object.keys(edit).filter((key) => !FIELDS.includes(key));
+    if (extra.length > 0) return argumentRefusal(`Unexpected edit field "${extra[0]!.slice(0, 40)}".`);
+    const given = (key: string): boolean => !absent(edit[key]);
+    const onlyGiven = (allowed: string[]): string | null => FIELDS.filter((key) => key !== "op" && given(key) && !allowed.includes(key))[0] ?? null;
+    const optionalInt = (key: string): number | undefined | "bad" => (!given(key) ? undefined : typeof edit[key] === "number" && Number.isSafeInteger(edit[key]) ? (edit[key] as number) : "bad");
+    if (edit.op === "add") {
+      const stray = onlyGiven(["text", "layer", "atNm", "heightNm", "strokeWidthNm"]);
+      if (stray) return argumentRefusal(`add takes text, layer, atNm, heightNm and strokeWidthNm only (${stray} must be null).`);
+      if (typeof edit.text !== "string") return argumentRefusal("add needs the text.");
+      if (edit.layer !== "silkTop" && edit.layer !== "silkBottom") return argumentRefusal("add needs layer silkTop or silkBottom.");
+      const at = edit.atNm as Record<string, unknown> | null | undefined;
+      if (!at || typeof at !== "object" || Array.isArray(at) || Object.keys(at).sort().join(",") !== "x,y" || !Number.isSafeInteger(at.x) || !Number.isSafeInteger(at.y)) return argumentRefusal("add needs atNm { x, y } in integer nanometres.");
+      const heightNm = optionalInt("heightNm"), strokeWidthNm = optionalInt("strokeWidthNm");
+      if (heightNm === "bad" || strokeWidthNm === "bad") return argumentRefusal("heightNm and strokeWidthNm must be whole nanometres.");
+      parsed.push({ op: "add", text: edit.text, layer: edit.layer, atNm: { x: at.x as number, y: at.y as number }, heightNm: heightNm ?? DEFAULT_SILK_TEXT_HEIGHT_NM, strokeWidthNm: strokeWidthNm ?? DEFAULT_SILK_STROKE_NM });
+    } else if (edit.op === "update") {
+      const stray = onlyGiven(["silkId", "text", "layer", "heightNm", "strokeWidthNm"]);
+      if (stray) return argumentRefusal(`update takes silkId, text, layer, heightNm and strokeWidthNm only (${stray} must be null).`);
+      if (typeof edit.silkId !== "string" || edit.silkId.length === 0 || edit.silkId.length > 200) return argumentRefusal("update needs the stable silkId.");
+      if (!given("text") && !given("layer") && !given("heightNm") && !given("strokeWidthNm")) return argumentRefusal("update must change the text, the layer, the height or the stroke.");
+      if (given("text") && typeof edit.text !== "string") return argumentRefusal("text must be a string.");
+      if (given("layer") && edit.layer !== "silkTop" && edit.layer !== "silkBottom") return argumentRefusal("layer must be silkTop or silkBottom.");
+      const heightNm = optionalInt("heightNm"), strokeWidthNm = optionalInt("strokeWidthNm");
+      if (heightNm === "bad" || strokeWidthNm === "bad") return argumentRefusal("heightNm and strokeWidthNm must be whole nanometres.");
+      parsed.push({ op: "update", silkId: edit.silkId, ...(given("text") ? { text: edit.text as string } : {}), ...(given("layer") ? { layer: edit.layer as "silkTop" | "silkBottom" } : {}), ...(heightNm !== undefined ? { heightNm } : {}), ...(strokeWidthNm !== undefined ? { strokeWidthNm } : {}) });
+    } else if (edit.op === "remove") {
+      const stray = onlyGiven(["silkId"]);
+      if (stray) return argumentRefusal(`remove takes silkId only (${stray} must be null).`);
+      if (typeof edit.silkId !== "string" || edit.silkId.length === 0 || edit.silkId.length > 200) return argumentRefusal("remove needs the stable silkId.");
+      parsed.push({ op: "remove", silkId: edit.silkId });
+    } else {
+      return argumentRefusal("op must be add, update or remove.");
+    }
+  }
+  return { ok: true, plan: { family: "pcb.silkscreen-text", edits: parsed } };
 }
 
 export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: Record<string, unknown>; context: AgentRunContext }): SealOutcome {
