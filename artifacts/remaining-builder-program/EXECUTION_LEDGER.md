@@ -527,3 +527,13 @@ _(discovery, reproduction and results appended below as they are observed)_
 
 - `app/components/pcb/__tests__/assignment-queue-panel.test.tsx:29` waited for "Exact decision preview" with testing-library's default one-second `findByText`. It failed twice, only inside broad parallel runs: 1.24 s in I2's first run and 1.26 s in I4's. Alone it passed 3/3 both times, and nothing on this branch touches the panel, its test or its imports.
 - After the recurrence (as recorded in I2) the wait is explicit — 5 s, with the reason in the test. The assertion is unchanged: the preview must still appear, the commit button must still start disabled.
+- CI at `d1e1307` (I2): CI green (deterministic-manufacturing 34589879025 incl. page-browser-e2e, benchmark-quality 34589879113).
+- CI at `3565ad6` (I3): CI green (deterministic-manufacturing 34590335575 incl. page-browser-e2e, benchmark-quality 34590335530).
+
+### B18-D I4 — the editor reports what it settled with (CONFIRMED, 2026-09-11 local, solo; this commit)
+
+- Before: the ritual settled the server record with the checks it ran and the undo eligibility, but returned neither — a confirmed preview's checks were visible nowhere, and the committed notice said "Undo restores the exact previous board" even when the change was no longer the latest.
+- Now the ritual computes both once, settles with them and returns them (null checks for an execution that was already applied); the editor passes the outcome to the page, reports when it starts executing and what the recovery sweep did, and says the undo sentence only while it is true. The page consumes these in I6.
+- Reproduced first: the new `b18-d-ritual-outcome-report` suite failed both cases on the pre-fix code.
+- Gates: B17 577 controls and the B01 fingerprint unchanged (props and the notice text are not scanned controls); the import gates unchanged (PcbEditor imports the report types from the approved controller); `PcbEditor` eslint 1 pre-existing problem before and after.
+- Tests: `b18-d-ritual-outcome-report` 2/2 (CI list); every `b18-*` suite + the B17 gate 42 files / 224 passed; broad run: 235 files / 3256 passed, 10 skipped (the 9 live Supabase matrix tests and the opt-in database-qualification test), with the panel wait fix (`64a8034`) in the tree — the first I4 run's only failure was that wait's recurrence; Playwright `agent-execution`: 5 passed (45.4 s); tsc 0; eslint 0 on the changed files.

@@ -66,7 +66,9 @@ export type GrantedExecutionRefusalCode =
   | "consume-refused" | "commit-rejected" | "execution-failed";
 
 export type GrantedExecutionOutcome =
-  | { ok: true; status: "committed" | "already-applied"; receipt: ExecutionReceipt; autosaveSettled: boolean; settled: "settled" | "settle-failed" }
+  /** [B18-D I4] `validations` and `undoEligible`: exactly what the server settlement received — the checks the editor ran on the
+   *  committed board (null for an execution that was already applied) and whether it is still the latest, undoable change. */
+  | { ok: true; status: "committed" | "already-applied"; receipt: ExecutionReceipt; autosaveSettled: boolean; settled: "settled" | "settle-failed"; validations: { drc: { ran: boolean; violations: number } } | null; undoEligible: boolean }
   /** `changed`: whether the board changed (true only after a landed commit that could not be verified). */
   | { ok: false; status: "refused"; code: GrantedExecutionRefusalCode; message: string; changed: boolean; serverCode: string | null };
 
@@ -254,8 +256,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       // The journal, not memory, says whether the server holds the report; a finalized-but-unsettled entry is re-sent now.
       const lookup = await input.journal.lookup(identityKey);
       const finalized = lookup.kind === "entry" && lookup.entry.state === "receipt-finalized" ? lookup.entry : null;
-      const settled = finalized ? await settleOnServer({ transport: input.transport, scope, entry: finalized, settlement: committedSettlement(claim.receipt, null, null, undoEligibleFor(input.history, claim.receipt.transactionId)), signal: input.signal, journal: input.journal }) : true;
-      return { ok: true, status: "already-applied", receipt: claim.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
+      const undoEligible = undoEligibleFor(input.history, claim.receipt.transactionId);
+      const settled = finalized ? await settleOnServer({ transport: input.transport, scope, entry: finalized, settlement: committedSettlement(claim.receipt, null, null, undoEligible), signal: input.signal, journal: input.journal }) : true;
+      return { ok: true, status: "already-applied", receipt: claim.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed", validations: null, undoEligible };
     }
     if (claim.code === "already-in-flight") return refuse("already-in-flight", "This grant is already being executed. Nothing further was changed.");
     return refuse("identity-poisoned", "A previous execution of this grant could not be verified; it is permanently refused. Ask again.");
@@ -294,8 +297,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
             return refuse("recovery-required", `${adopted.detail}; recovery is refused. The board HAS changed — inspect the canonical history.`, { changed: true });
           }
           registry.consume(identityKey, adopted.receipt);
-          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligibleFor(input.history, adopted.receipt.transactionId)), signal: input.signal, journal: input.journal });
-          return { ok: true, status: "already-applied", receipt: adopted.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
+          const undoEligible = undoEligibleFor(input.history, adopted.receipt.transactionId);
+          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligible), signal: input.signal, journal: input.journal });
+          return { ok: true, status: "already-applied", receipt: adopted.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed", validations: null, undoEligible };
         }
         if (entry.state === "grant-consumed") {
           // Consumed, no evidence yet: another tab (or this one, moments ago) owns the commit window — zero writes.
@@ -516,8 +520,11 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (input.settleAutosave) { try { autosaveSettled = input.settleAutosave() === true; } catch { autosaveSettled = false; } }
 
     // 18. SETTLE on the server from the receipt (best-effort, one retry; the sweep re-settles from the finalized entry).
-    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null, settlementValidations(afterBoard, base.validationPolicy.presetId), input.stillCurrent() && !input.interlock.retired && undoEligibleFor(input.history, transactionId)), signal: input.signal, journal: input.journal });
-    return { ok: true, status: "committed", receipt, autosaveSettled, settled: settled ? "settled" : "settle-failed" };
+    // [B18-D I4] computed ONCE: the same checks and undo eligibility settle the server record and reach the editor's report.
+    const validations = settlementValidations(afterBoard, base.validationPolicy.presetId);
+    const undoEligible = input.stillCurrent() && !input.interlock.retired && undoEligibleFor(input.history, transactionId);
+    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null, validations, undoEligible), signal: input.signal, journal: input.journal });
+    return { ok: true, status: "committed", receipt, autosaveSettled, settled: settled ? "settled" : "settle-failed", validations, undoEligible };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     if (committedButUnfinalized) {

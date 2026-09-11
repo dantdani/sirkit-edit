@@ -19,6 +19,9 @@ import type { PublicExecutionGrant } from "../engineering/execution-grant";
 import { createExecutionGrantTransport, type ExecutionGrantTransport } from "./execution-grant-client";
 import type { ProjectSelectorScope } from "./project-selector";
 
+/** [B18-D I4] the ritual's report and the sweep's results, for the composition root's callbacks (types only). */
+export type { GrantedExecutionOutcome, GrantedExecutionRecoveryResult } from "../engineering/granted-executions";
+
 export type GrantedExecutionDeps = Omit<GrantedExecutionInput, "confirmation" | "transport"> & { grant: PublicExecutionGrant; transport?: ExecutionGrantTransport };
 
 export function tenderConfirmedExecution(deps: GrantedExecutionDeps): Promise<GrantedExecutionOutcome> {

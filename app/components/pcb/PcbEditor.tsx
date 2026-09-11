@@ -62,7 +62,7 @@ import { approveAndApplyPcbEdit } from "@/app/lib/project/pcb-edit-approval-cont
 import { createPcbApplyReauthorizer } from "@/app/lib/project/pcb-apply-reauthorization";
 import { IndexedDbAgentExecutionJournalStore } from "@/app/lib/engineering/agent-execution-journal-idb"; // [B18-B]
 import { AgentExecutionJournal } from "@/app/lib/engineering/agent-execution-journal"; // [B18-B]
-import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, tenderConfirmedExecution, tenderExplicitExecution } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]
+import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, tenderConfirmedExecution, tenderExplicitExecution, type GrantedExecutionOutcome, type GrantedExecutionRecoveryResult } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]; [B18-D I4] report types
 import { verifyPublicGrantCoherence, type ExecutionDecisionMode, type PublicExecutionGrant } from "@/app/lib/engineering/execution-grant"; // [B18-B]
 import { GrantedExecutionDialog } from "./GrantedExecutionDialog"; // [B18-B]
 import { isPcbEditProposalExpired, verifySealedPcbEditProposalIntegrity, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
@@ -317,6 +317,8 @@ export default function PcbEditor({
   onLayoutCandidateSettled,
   executionGrantIntake,
   onExecutionGrantSettled,
+  onExecutionGrantProgress,
+  onExecutionRecovery,
 }: {
   schematic: SchematicState;
   /** R06: false while the editor is mounted but hidden (another workspace
@@ -358,7 +360,11 @@ export default function PcbEditor({
    *  editor's controller — never the chat page or the agent layer. */
   executionGrantIntake?: { grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null; originRunId: string | null } | null;
   /** Settle the pending grant BY ID (a later grant that replaced it in the page state is never cleared by an earlier one). */
-  onExecutionGrantSettled?: (grantId: string, outcome: "committed" | "cancelled" | "retired" | "failed") => void;
+  onExecutionGrantSettled?: (grantId: string, outcome: "committed" | "cancelled" | "retired" | "failed", detail?: GrantedExecutionOutcome | null) => void;
+  /** [B18-D I4] the editor started executing this grant (display only). */
+  onExecutionGrantProgress?: (grantId: string) => void;
+  /** [B18-D I4] what the hydration sweep did (display only; the sweep's own notice stays). */
+  onExecutionRecovery?: (results: GrantedExecutionRecoveryResult[]) => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
    *  acquires its commit lease at the serialized position. */
   currentInterlock?: () => ProjectCommitInterlock | null;
@@ -1555,6 +1561,7 @@ export default function PcbEditor({
     }
     const lifecycleScope = pcbLifecycle.capture();
     setExecutionGrantBusy(true);
+    onExecutionGrantProgress?.(grant.grantId); // [B18-D I4] display only
     try {
       // The journal is scoped by the lineage ROOT board id — the identity the grant was minted and checked against (a derived board revision keeps the same journal).
       const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: pcbBoardInstanceId(syncIdentity.projectId), editor: "pcb" });
@@ -1577,21 +1584,21 @@ export default function PcbEditor({
       const outcome = mode === "confirm" ? await tenderConfirmedExecution(deps) : await tenderExplicitExecution(deps);
       if (outcome.ok) {
         setToast(outcome.status === "committed"
-          ? `AI change made as ONE canonical transaction (${outcome.receipt.transactionId.slice(0, 18)}…). Undo restores the exact previous board.${outcome.settled === "settled" ? "" : " WARNING: the server settlement did not complete; the assistant may report the outcome as unsettled."}${outcome.autosaveSettled ? "" : " WARNING: the working-copy autosave did not settle — the change is committed canonically but the browser working copy save failed."}`
+          ? `AI change made as ONE canonical transaction (${outcome.receipt.transactionId.slice(0, 18)}…).${outcome.undoEligible ? " Undo restores the exact previous board." : " It is no longer the latest change, so the editor's Undo would not restore it — use the revision history."}${outcome.settled === "settled" ? "" : " WARNING: the server settlement did not complete; the assistant may report the outcome as unsettled."}${outcome.autosaveSettled ? "" : " WARNING: the working-copy autosave did not settle — the change is committed canonically but the browser working copy save failed."}`
           : "This AI change was already made; no second transaction was created.");
         if (lifecycleScope.isCurrent()) drc.run();
-        onExecutionGrantSettled?.(grant.grantId, "committed");
+        onExecutionGrantSettled?.(grant.grantId, "committed", outcome);
       } else {
         setToast(`${outcome.changed ? "AI change LANDED but could not be verified" : "AI change not made"}: ${outcome.message}`);
         // [B18-C review U3] a PREVIEW grant refused for a transient reason (nothing changed; the grant stays issued) keeps its
         // dialog so the user can retry what the message tells them to retry; every other outcome clears it.
         const transient = !outcome.changed && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
-        if (!(mode === "confirm" && grant.binding.operation.decision === "preview_then_confirm" && transient)) onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired");
+        if (!(mode === "confirm" && grant.binding.operation.decision === "preview_then_confirm" && transient)) onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired", outcome);
       }
     } finally {
       setExecutionGrantBusy(false);
     }
-  }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled]);
+  }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled, onExecutionGrantProgress]);
   const cancelExecutionGrant = useCallback(async () => {
     const grant = pendingExecutionGrant;
     if (!grant || !syncIdentity) { if (grant) onExecutionGrantSettled?.(grant.grantId, "cancelled"); return; }
@@ -1633,11 +1640,12 @@ export default function PcbEditor({
     const journal = new AgentExecutionJournal(executionJournalStoreRef.current!, { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId, boardInstanceId: pcbBoardInstanceId(syncIdentity.projectId), editor: "pcb" });
     void recoverGrantedExecutionsForEditor({ journal, history: liveHistory, scope: { tenantId: syncIdentity.tenantId, projectId: syncIdentity.projectId, branchId: syncIdentity.branchId } })
       .then((results) => {
+        onExecutionRecovery?.(results); // [B18-D I4] display only
         const notable = results.filter((result) => result.action === "adopted-and-settled" || result.action === "abandoned-not-committed" || result.action === "settled-from-receipt" || result.action === "refused-poisoned");
         if (notable.length > 0) setToast(`AI execution recovery: ${notable.map((result) => `${result.grantId.slice(0, 12)}… ${result.action}`).join("; ")}.`);
       })
       .catch(() => undefined);
-  }, [init.demo, syncIdentity, editorRuntime, state.board, lifecycleGeneration]);
+  }, [init.demo, syncIdentity, editorRuntime, state.board, lifecycleGeneration, onExecutionRecovery]);
   const liveReadiness = liveReadinessReport ? readinessViewModel(liveReadinessReport) : undefined;
 
   // ── Stage 15: 3D preview panel ──────────────────────────────────────────────

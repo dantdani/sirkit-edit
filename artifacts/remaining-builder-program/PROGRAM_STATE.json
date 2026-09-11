@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "c6eaaa1",
+  "lastGreenSha": "3565ad6",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I4 the ritual outcome report and editor callbacks (the ok outcome carries validations and undoEligible; onExecutionGrantSettled with detail, onExecutionGrantProgress, onExecutionRecovery; conditional undo sentence), then I5 card, I6 chat execution entry and the page half of Rule 2, I7 history hold, I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T06:40:02-04:00"
+  "nextAction": "B18-D I5 the confirmation card (tier, targets, operations and the confirmation reason in a digest-covered change block; the excerpt, scope and note in an 'as issued' context block; inert, pinned copy), then I6 chat execution entry and the page half of Rule 2, I7 history hold, I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T06:49:47-04:00"
 }
