@@ -71,7 +71,9 @@ export type DimensionEdit =
 /** [B18-C I7] …or as a grant pins them (only `planFromOperations` produces this form): the exact resulting items. */
 export type DimensionChange = { op: "add"; item: BoardDimension } | { op: "replace"; item: BoardDimension } | { op: "remove"; dimensionId: string };
 export type DimensionPlan = { family: "pcb.dimension"; edits: DimensionEdit[] } | { family: "pcb.dimension"; mode: "pinned"; changes: DimensionChange[] };
-export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan | DimensionPlan;
+/** [B18-C I8] Undo or redo the exact last AI change: the seal reads only the direction; the server minter resolves WHAT. */
+export interface ReplayPlan { family: "pcb.undo-redo-canonical"; direction: "undo" | "redo" }
+export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan | DimensionPlan | ReplayPlan;
 
 /** [B18-C review 2] The editor's own Flip (select-move.ts `flipSelection`) turns a part over about its origin: the side toggles
  *  and the rotation becomes 360 − r. A side change that states no rotation follows it (the seal's fill and the grammar). */
@@ -483,6 +485,7 @@ export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): 
     case "pcb.arrange": return buildArrange(board, plan);
     case "pcb.silkscreen-text": return buildSilkText(board, plan);
     case "pcb.dimension": return buildDimension(board, plan);
+    case "pcb.undo-redo-canonical": return refusal("unsupported_family", "An undo or redo has no operations to build: the canonical executor replays the durable record.");
     default: return refusal("unsupported_family", `Family ${String((plan as { family?: unknown }).family)} has no builder yet.`);
   }
 }

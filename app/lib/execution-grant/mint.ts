@@ -17,10 +17,7 @@ import { randomBytes } from "node:crypto";
 import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import { decideAgentExecution } from "../engineering/permission-tiers";
 import { proveExplicitUserRequest } from "../engineering/explicit-request";
-import {
-  EXECUTION_GRANT_SCHEMA, MAX_INSTRUCTION_EXCERPT, grantDigestFor, grantIdentityKey, publicExecutionGrant, ttlForDecision, userInstructionDigest,
-  type ExecutionDecisionMode, type ExecutionGrantBinding, type ExecutionGrantRecord,
-} from "../engineering/execution-grant";
+import { EXECUTION_GRANT_SCHEMA, MAX_INSTRUCTION_EXCERPT, grantDigestFor, grantIdentityKey, publicExecutionGrant, ttlForDecision, userInstructionDigest, type ExecutionDecisionMode, type ExecutionGrantBinding, type ExecutionGrantRecord, REPLAY_FAMILY, executionPreviewDigest, executionTargetsDigest, replayOperationsDigest, type ExecutionGrantTargets, type ExecutionReplay, type ExecutionGrantBase, type ExecutionGrantPreview } from "../engineering/execution-grant";
 import type { ProjectRole } from "../engineering/types";
 import type { LLMProviderId } from "../llm/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
@@ -60,6 +57,50 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((
   signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
 });
 
+/**
+ * [B18-C I8] Server-side (inside the minter, the only server authority that may read the store for it) resolution of WHAT an agent undo / redo replays —
+ * never the model's words (its tool takes only a direction). The reference is
+ * the principal's committed grant AT the current canonical head of the same
+ * lineage (the sameHead bound: any later change — the human's or the AI's —
+ * advances the head and refuses the replay):
+ *
+ *  - undo: the head grant is an ordinary committed AI change (never itself a
+ *    replay) — the reference is its transaction;
+ *  - redo: the head grant is a committed AI UNDO — the reference is the
+ *    transaction that undo reverted.
+ *
+ * The preview swaps the referenced grant's own before/after. Revisions are
+ * informational here (the editor refills derived zone fills without advancing
+ * the head), so only the head sequence and the lineage decide.
+ */
+export type ReplayResolution =
+  | { ok: true; replay: ExecutionReplay; preview: ExecutionGrantPreview; expectedPcbRevisionAfter: string }
+  | { ok: false; diagnostics: string[] };
+
+/** Shown with every replay preview (the history semantics the user must know). */
+export const AI_REPLAY_NOTE = "An AI undo or redo is a NEW history entry: the editor's own Undo afterwards re-applies the change.";
+
+export async function resolveReplayReference(input: { store: ExecutionGrantStore; scope: DurableWorkflowScope; principalId: string; editor: "pcb" | "schematic"; base: NonNullable<ExecutionGrantBase["pcb"]>; direction: "undo" | "redo"; now: number }): Promise<ReplayResolution> {
+  const { index } = await input.store.index(input.scope, input.principalId, input.editor);
+  for (const entry of [...index.recent].reverse()) {
+    if (entry.status !== "settled" || entry.outcome !== "committed") continue;
+    const record = (await input.store.load(input.scope, entry.grantId, input.now))?.record;
+    const settlement = record?.state.settlement;
+    if (!record || !settlement || settlement.outcome !== "committed" || !settlement.transactionId || settlement.headSequenceAfter === null || !settlement.revisionBefore) continue;
+    if (settlement.headSequenceAfter !== input.base.headSequence || record.binding.base.pcb?.lineageId !== input.base.lineageId) continue;
+    const isReplay = record.binding.operation.family === REPLAY_FAMILY;
+    const preview: ExecutionGrantPreview = { before: record.binding.proposal.preview.after, after: record.binding.proposal.preview.before, warnings: [AI_REPLAY_NOTE] };
+    if (input.direction === "undo") {
+      if (isReplay) return { ok: false, diagnostics: ["The latest change is itself an AI undo or redo; nothing was issued — the user can use the editor's own Undo or Redo for that."] };
+      return { ok: true, replay: { direction: "undo", referencedTransactionId: settlement.transactionId, referencedGrantId: record.grantId }, preview, expectedPcbRevisionAfter: settlement.revisionBefore };
+    }
+    const undone = record.binding.proposal.replay;
+    if (!isReplay || !undone || undone.direction !== "undo") return { ok: false, diagnostics: ["The latest change is not an AI undo, so there is nothing to redo; nothing was issued."] };
+    return { ok: true, replay: { direction: "redo", referencedTransactionId: undone.referencedTransactionId, referencedGrantId: record.grantId }, preview, expectedPcbRevisionAfter: settlement.revisionBefore };
+  }
+  return { ok: false, diagnostics: [`The latest change on this board (history head ${input.base.headSequence}) is not an AI change made through a grant; nothing was issued — the user can use the editor's own ${input.direction === "undo" ? "Undo" : "Redo"}.`] };
+}
+
 export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMinter {
   const now = ctx.now ?? (() => Date.now());
   const store = ctx.store ?? resolveExecutionGrantStore();
@@ -69,7 +110,26 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
 
   return {
     async mint(request): Promise<MintOutcome> {
-      const { plan } = request;
+      let plan = request.plan;
+      let replay: ExecutionReplay | null = null;
+      // [B18-C I8] a replay's reference is resolved HERE, from the principal's own settled grants at the verified head —
+      // never from the model (its tool takes only a direction).
+      if (plan.family === REPLAY_FAMILY) {
+        if (!plan.replayDirection || !request.base.pcb) return { ok: false, reason: "nothing_to_replay", diagnostics: ["An undo or redo needs a direction and a verified PCB head; nothing was issued."] };
+        let resolved: ReplayResolution;
+        try {
+          resolved = await resolveReplayReference({ store, scope, principalId: ctx.principalId, editor: request.session.editor, base: request.base.pcb, direction: plan.replayDirection, now: now() });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return { ok: false, reason: "grant_unavailable", diagnostics: [`The execution grant store is unavailable (${message.slice(0, 120)}); nothing was minted and nothing changed.`] };
+        }
+        if (!resolved.ok) return { ok: false, reason: "nothing_to_replay", diagnostics: resolved.diagnostics };
+        replay = resolved.replay;
+        const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [replay.referencedTransactionId], netIds: [], kinds: ["transaction"], selectionDigest: null, targetsDigest: "" };
+        targets.targetsDigest = executionTargetsDigest(targets);
+        const operationsDigest = replayOperationsDigest(replay, resolved.expectedPcbRevisionAfter);
+        plan = { ...plan, operations: [], operationCount: 0, operationsDigest, targets, preview: resolved.preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview: resolved.preview }), expectedPcbRevisionAfter: resolved.expectedPcbRevisionAfter };
+      }
       // 1. The explicit-request proof — derivation against the verified board; never a model claim.
       const proof = proveExplicitUserRequest({ userMessage: ctx.userMessage, family: plan.family, board: request.board, operationsDigest: plan.operationsDigest });
       // 2. The B18-A policy decision for Tier 1 under the SERVER-read setting.
@@ -100,7 +160,7 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
           operation: { family: plan.family, tier: 1, capability: plan.capability, decision, requiresHumanApproval: decision === "preview_then_confirm", autonomy: { mode: ctx.autonomy.mode, revision: ctx.autonomy.revision } },
           targets: structuredClone(plan.targets),
           base: structuredClone(request.base),
-          proposal: { operations: structuredClone(plan.operations), operationsDigest: plan.operationsDigest, operationCount: plan.operationCount, preview: structuredClone(plan.preview), previewDigest: plan.previewDigest, expectedPcbRevisionAfter: plan.expectedPcbRevisionAfter },
+          proposal: { operations: structuredClone(plan.operations), operationsDigest: plan.operationsDigest, operationCount: plan.operationCount, preview: structuredClone(plan.preview), previewDigest: plan.previewDigest, expectedPcbRevisionAfter: plan.expectedPcbRevisionAfter, ...(replay ? { replay } : {}) },
           instruction: { userMessageDigest, excerpt: proof.excerpt.slice(0, MAX_INSTRUCTION_EXCERPT), explicit: { proven: proof.proven && decision === "execute_explicit", grammarId: proof.grammarId, grammarVersion: proof.grammarVersion, coverage: proof.proven && decision === "execute_explicit" ? "whole-message" : "unproven", derivedOperationsDigest: proof.derivedOperationsDigest } },
           issuedAt, expiresAt: new Date(issuedMs + ttlMs).toISOString(), ttlMs,
         };

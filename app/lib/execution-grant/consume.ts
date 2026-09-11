@@ -17,7 +17,7 @@ import { evaluateMembershipReauthorization } from "../project/membership-reautho
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { ACTION_COVERAGE_REGISTRY } from "../engineering/action-registry";
 import { permissionTierOfAction, TIER1_EXECUTE_ROLES, type AgentAutonomySetting } from "../engineering/permission-tiers";
-import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantConsumption, type ExecutionGrantState, type PublicExecutionGrant, type RetirementReason } from "../engineering/execution-grant";
+import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantConsumption, type ExecutionGrantState, type PublicExecutionGrant, type RetirementReason, REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ProjectRole } from "../engineering/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
 import type { ExecutionGrantStore, LoadedGrant } from "./store";
@@ -121,6 +121,8 @@ export async function consumeExecutionGrant(input: { store: ExecutionGrantStore;
   if (familyTier(b.operation.family) !== 1) return burn("tier_exceeded", `${b.operation.family} is no longer a Tier 1 family.`);
   const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[b.operation.family] ?? [];
   if (b.proposal.operations.some((operation) => !allowed.includes(operation.kind))) return burn("kind_not_allowed", "A stored operation kind is outside the family's kernel binding.");
+  // [B18-C I8] a replay grant carries its reference and no operations; no other family carries a reference.
+  if (b.operation.family === REPLAY_FAMILY ? b.proposal.operations.length !== 0 || !b.proposal.replay : b.proposal.replay !== undefined) return burn("proposal_altered", "The grant's replay reference does not match its family.");
   const live = tender.live;
   if (live && b.base.pcb) {
     if (live.pcbRevisionId != null && live.pcbRevisionId !== b.base.pcb.pcbRevisionId) return burn("revision_drift", "The board revision moved since the grant was issued.");

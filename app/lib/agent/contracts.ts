@@ -278,6 +278,8 @@ export interface AgentExecutionPlan {
   preview: ExecutionGrantPreview;
   previewDigest: string;
   expectedPcbRevisionAfter: string;
+  /** [B18-C I8] a replay plan's direction (the minter resolves the reference from the principal's settled grants). */
+  replayDirection?: "undo" | "redo";
 }
 
 export interface AgentExecutionGrantRequest {
@@ -291,7 +293,7 @@ export interface AgentExecutionGrantRequest {
 
 export type AgentExecutionGrantOutcome =
   | { ok: true; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
-  | { ok: false; reason: "execution_not_permitted" | "grant_unavailable"; diagnostics: string[] };
+  | { ok: false; reason: "execution_not_permitted" | "grant_unavailable" | "nothing_to_replay"; diagnostics: string[] };
 
 export interface AgentExecutionSettlement {
   status: "settled" | "retired" | "in_flight" | "unsettled";

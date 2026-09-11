@@ -27,13 +27,21 @@ export const EXECUTION_GRANT_AGGREGATE_TYPE = "agent.execution-grant.v1" as cons
 export const EXECUTION_GRANT_INDEX_AGGREGATE_TYPE = "agent.execution-grant-index.v1" as const;
 export const EXECUTION_RECEIPT_SCHEMA = "sirkit.agent-execution-receipt.v1" as const;
 
-/** The canonical command families a grant may cover in B18-B: registry-`reversible` mutations only (D18-6). */
+/** The canonical command families a grant may cover: permission Tier 1 only (D18-6) — registry-`reversible` mutations and
+ *  [B18-C I8] the exact-last-operation replay (`approvalTier: "none"` on a mutate record, Tier 1 by derivation). */
 export const EXECUTION_FAMILIES = Object.freeze([
-  "pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "pcb.dimension",
+  "pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "pcb.dimension", "pcb.undo-redo-canonical",
   "schematic.set-property", "schematic.move-rotate",
 ] as const);
 export type ExecutionFamily = (typeof EXECUTION_FAMILIES)[number];
 export const isExecutionFamily = (value: unknown): value is ExecutionFamily => typeof value === "string" && (EXECUTION_FAMILIES as readonly string[]).includes(value);
+
+/** [B18-C I8] The replay family: its grant carries a REPLAY reference and NO operations — the canonical executor selects the
+ *  authoritative operations from the durable record, never from the grant or the model. */
+export const REPLAY_FAMILY = "pcb.undo-redo-canonical" as const;
+/** What a replay grant undoes or redoes — resolved by the SERVER minter from the principal's own settled grants at the
+ *  verified head (the model's tool takes only a direction). */
+export interface ExecutionReplay { direction: "undo" | "redo"; referencedTransactionId: string; referencedGrantId: string }
 
 /** Capabilities a grant may carry (D18-8): the run actor keeps `read_project`; the grant carries the operation's capability. */
 export const TIER1_GRANTABLE_CAPABILITIES = Object.freeze(["edit_placement"] as const);
@@ -115,7 +123,7 @@ export interface ExecutionGrantTargets {
   resolvedFrom: "named" | "selection";
   objectIds: string[];
   netIds: number[];
-  kinds: Array<"footprint" | "text" | "component" | "dimension">;
+  kinds: Array<"footprint" | "text" | "component" | "dimension" | "transaction">;
   selectionDigest: string | null;
   targetsDigest: string;
 }
@@ -137,6 +145,8 @@ export interface ExecutionGrantProposal {
   previewDigest: string;
   /** The exact PCB semantic revision the operations produce from the base — the browser's postcondition and recovery anchor. */
   expectedPcbRevisionAfter: string;
+  /** [B18-C I8] present exactly on a replay grant (and absent on every other family). */
+  replay?: ExecutionReplay;
 }
 
 export interface ExecutionGrantExplicitness {
@@ -241,6 +251,11 @@ export function executionOperationsDigest(family: ExecutionFamily, operations: r
   return engineeringDigest({ schema: "sirkit.agent-execution-operations.v1", family, operations: normalizeOperationsForDigest(operations) });
 }
 
+/** [B18-C I8] A replay grant's "operations digest": the reference itself (the grant carries no operations). */
+export function replayOperationsDigest(replay: ExecutionReplay, expectedPcbRevisionAfter: string): string {
+  return engineeringDigest({ schema: "sirkit.agent-execution-replay.v1", family: REPLAY_FAMILY, direction: replay.direction, referencedTransactionId: replay.referencedTransactionId, referencedGrantId: replay.referencedGrantId, expectedPcbRevisionAfter });
+}
+
 export function executionTargetsDigest(targets: Pick<ExecutionGrantTargets, "objectIds" | "netIds" | "kinds">): string {
   return engineeringDigest({ schema: "sirkit.agent-execution-targets.v1", objectIds: [...targets.objectIds].sort(), netIds: [...targets.netIds].sort((a, b) => a - b), kinds: [...targets.kinds].sort() });
 }
@@ -339,6 +354,9 @@ export function lazyExpiryTransition(record: Pick<ExecutionGrantRecord, "binding
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const str = (value: unknown, max = 512): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
+/** [B18-C I8] exactly { direction, referencedGrantId, referencedTransactionId }. */
+export const isExecutionReplay = (value: unknown): value is ExecutionReplay => isObject(value) && Object.keys(value).sort().join(",") === "direction,referencedGrantId,referencedTransactionId"
+  && (value.direction === "undo" || value.direction === "redo") && str(value.referencedTransactionId, 200) && isGrantId(value.referencedGrantId);
 
 /** Exact structural validation of a public grant received by the browser or an event consumer. */
 export function parsePublicExecutionGrant(raw: unknown): PublicExecutionGrant | null {
@@ -355,7 +373,11 @@ export function parsePublicExecutionGrant(raw: unknown): PublicExecutionGrant | 
   if (!isObject(scope) || !str(scope.tenantId) || !str(scope.projectId) || !str(scope.branchId)) return null;
   if (!isObject(session) || (session.editor !== "pcb" && session.editor !== "schematic") || !str(session.lineageId) || !str(session.runId)) return null;
   if (!isObject(operation) || !isExecutionFamily(operation.family) || operation.tier !== 1 || !(TIER1_GRANTABLE_CAPABILITIES as readonly string[]).includes(operation.capability as string) || !(EXECUTION_DECISION_MODES as readonly string[]).includes(operation.decision as string) || typeof operation.requiresHumanApproval !== "boolean") return null;
-  if (!isObject(proposal) || !Array.isArray(proposal.operations) || proposal.operations.length === 0 || proposal.operations.length > MAX_GRANT_OPERATIONS || !str(proposal.operationsDigest, 64) || !str(proposal.previewDigest, 64) || !str(proposal.expectedPcbRevisionAfter, 160) || proposal.operationCount !== proposal.operations.length) return null;
+  // [B18-C I8] family-aware: a replay grant carries its reference and NO operations; every other family carries 1–16
+  // operations and no reference.
+  const replayFamily = operation.family === REPLAY_FAMILY;
+  if (!isObject(proposal) || !Array.isArray(proposal.operations) || (replayFamily ? proposal.operations.length !== 0 : proposal.operations.length === 0) || proposal.operations.length > MAX_GRANT_OPERATIONS || !str(proposal.operationsDigest, 64) || !str(proposal.previewDigest, 64) || !str(proposal.expectedPcbRevisionAfter, 160) || proposal.operationCount !== proposal.operations.length) return null;
+  if (replayFamily ? !isExecutionReplay(proposal.replay) : "replay" in proposal) return null;
   if (!isObject(instruction) || !str(instruction.userMessageDigest, 64) || typeof instruction.excerpt !== "string" || instruction.excerpt.length > MAX_INSTRUCTION_EXCERPT || !isObject(instruction.explicit)) return null;
   if (!isObject(targets) || !Array.isArray(targets.objectIds) || !Array.isArray(targets.netIds) || !Array.isArray(targets.kinds) || !str(targets.targetsDigest, 64)) return null;
   if (!str(binding.issuedAt, 64) || !str(binding.expiresAt, 64) || typeof binding.ttlMs !== "number") return null;
@@ -368,7 +390,9 @@ export function parsePublicExecutionGrant(raw: unknown): PublicExecutionGrant | 
 /** Bounded, digest-checked view: the browser re-derives what it can and refuses a grant whose covered content disagrees. */
 export function verifyPublicGrantCoherence(grant: PublicExecutionGrant): { ok: true } | { ok: false; reason: string } {
   const proposal = grant.binding.proposal;
-  if (executionOperationsDigest(grant.binding.operation.family, proposal.operations) !== proposal.operationsDigest) return { ok: false, reason: "operationsDigest does not match the operations" };
+  // [B18-C I8] a replay grant's operations digest is its reference's digest.
+  const expectedOperationsDigest = grant.binding.operation.family === REPLAY_FAMILY && proposal.replay ? replayOperationsDigest(proposal.replay, proposal.expectedPcbRevisionAfter) : executionOperationsDigest(grant.binding.operation.family, proposal.operations);
+  if (expectedOperationsDigest !== proposal.operationsDigest) return { ok: false, reason: "operationsDigest does not match the operations" };
   if (executionTargetsDigest(grant.binding.targets) !== grant.binding.targets.targetsDigest) return { ok: false, reason: "targetsDigest does not match the targets" };
   if (executionPreviewDigest({ operationsDigest: proposal.operationsDigest, targetsDigest: grant.binding.targets.targetsDigest, preview: proposal.preview }) !== proposal.previewDigest) return { ok: false, reason: "previewDigest does not match the preview" };
   if (grant.binding.operation.decision === "execute_explicit" && (grant.binding.operation.requiresHumanApproval || grant.binding.instruction.explicit.coverage !== "whole-message" || grant.binding.instruction.explicit.derivedOperationsDigest !== proposal.operationsDigest)) return { ok: false, reason: "an execute_explicit grant must carry a whole-message proof equal to its operations digest" };

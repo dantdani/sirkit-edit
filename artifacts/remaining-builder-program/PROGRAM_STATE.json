@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "ded7fbd",
+  "lastGreenSha": "e77ea20",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-C: I8 undo/redo (replayUnderGrant, OD-14), I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched; then B18-D and B18-E.",
-  "updatedAt": "2026-09-11T03:12:46-04:00"
+  "nextAction": "B18-C: I8b the browser half of undo/redo (replayUnderGrant, the ritual's replay branch with a semantic postcondition and provenance-keyed adoption, the undo/redo grammar, the grant-only descriptor and its exposure, prompt 1.2.0, end-to-end proofs), I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched; then B18-D and B18-E.",
+  "updatedAt": "2026-09-11T03:28:44-04:00"
 }

@@ -16,7 +16,7 @@
  * This module imports no authority and nothing under `app/lib/execution-grant`.
  */
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
-import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
+import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability, REPLAY_FAMILY } from "../engineering/execution-grant";
 import { ARRANGE_EDGES, buildExecutionOperations, editorFlipRotation, type ArrangeEdge, type DimensionEdit, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
 import { DIMENSION_DEFAULTS, DIMENSION_KINDS } from "../pcb/dimensions/commands";
 import { DEFAULT_SILK_STROKE_NM, DEFAULT_SILK_TEXT_HEIGHT_NM } from "../pcb/silk/types";
@@ -43,6 +43,8 @@ export interface SealedExecutionPlan {
   preview: ExecutionGrantPreview;
   previewDigest: string;
   expectedPcbRevisionAfter: string;
+  /** [B18-C I8] a replay seal carries only the direction; the server minter resolves the reference and fills the rest. */
+  replayDirection?: "undo" | "redo";
 }
 
 export type SealOutcome =
@@ -65,6 +67,7 @@ export function parseExecutionArguments(family: ExecutionFamily, args: Record<st
   if (family === "pcb.arrange") return parseArrangeArguments(args);
   if (family === "pcb.silkscreen-text") return parseSilkTextArguments(args);
   if (family === "pcb.dimension") return parseDimensionArguments(args);
+  if (family === REPLAY_FAMILY) return parseReplayArguments(args);
   if (family !== "pcb.move-footprint") return { ok: false, diagnostics: [`Family ${family} has no executable argument contract yet.`] };
   const unknown = Object.keys(args).filter((key) => key !== "moves");
   if (unknown.length > 0) return { ok: false, diagnostics: [`Unexpected argument "${unknown[0]!.slice(0, 40)}" — move-footprint accepts only moves.`] };
@@ -246,6 +249,15 @@ function parseDimensionArguments(args: Record<string, unknown>): { ok: true; pla
   return { ok: true, plan: { family: "pcb.dimension", edits: parsed } };
 }
 
+/** [B18-C I8] `{ direction: "undo" | "redo" }` — the model never names a transaction: the server resolves the exact last AI
+ *  change from the principal's own settled grants at the verified head. */
+function parseReplayArguments(args: Record<string, unknown>): { ok: true; plan: ExecutionPlan } | { ok: false; diagnostics: string[] } {
+  const unknown = Object.keys(args).filter((key) => key !== "direction");
+  if (unknown.length > 0) return argumentRefusal(`Unexpected argument "${unknown[0]!.slice(0, 40)}" — undo/redo accepts only direction (the server finds the change).`);
+  if (args.direction !== "undo" && args.direction !== "redo") return argumentRefusal("direction must be undo or redo.");
+  return { ok: true, plan: { family: REPLAY_FAMILY, direction: args.direction } };
+}
+
 export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: Record<string, unknown>; context: AgentRunContext }): SealOutcome {
   const { descriptor, context } = input;
   if (descriptor.binding.status !== "bound-mutation-editor-session" || !descriptor.binding.canonicalCommandId) return refuse("not_callable", "Only a canonical mutation binding can be sealed as an execution intent.");
@@ -258,6 +270,18 @@ export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: R
   if (!board || !context.canonicalRevisionDigest || !context.pcbProposalBasis) return refuse("authority_unavailable", "No verified canonical board with a PCB history basis exists for this run; execution intents are unavailable.");
   const parsed = parseExecutionArguments(family, input.args, board);
   if (!parsed.ok) return refuse("invalid_input", ...parsed.diagnostics);
+  if (parsed.plan.family === REPLAY_FAMILY) {
+    // [B18-C I8] nothing to build: the reference, the targets, the preview and every digest are resolved by the server minter.
+    const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [], netIds: [], kinds: ["transaction"], selectionDigest: null, targetsDigest: "" };
+    return {
+      ok: true,
+      plan: {
+        family, toolId: descriptor.toolId, toolVersion: descriptor.version, capability: descriptor.requiredCapability as GrantableCapability,
+        plan: parsed.plan, commands: [], operations: [], operationsDigest: "", operationCount: 0, targets, preview: { before: "", after: "", warnings: [] }, previewDigest: "", expectedPcbRevisionAfter: "",
+        replayDirection: parsed.plan.direction,
+      },
+    };
+  }
   const built = buildExecutionOperations(board, parsed.plan);
   if (!built.ok) return refuse("invalid_input", built.message);
   const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[family] ?? [];
@@ -280,6 +304,7 @@ export function mintablePlanOf(sealed: SealedExecutionPlan): AgentExecutionPlan 
     family: sealed.family, toolId: sealed.toolId, toolVersion: sealed.toolVersion, capability: sealed.capability,
     operations: sealed.operations, operationsDigest: sealed.operationsDigest, operationCount: sealed.operationCount,
     targets: sealed.targets, preview: sealed.preview, previewDigest: sealed.previewDigest, expectedPcbRevisionAfter: sealed.expectedPcbRevisionAfter,
+    ...(sealed.replayDirection ? { replayDirection: sealed.replayDirection } : {}),
   };
 }
 
