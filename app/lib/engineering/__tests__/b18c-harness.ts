@@ -177,13 +177,19 @@ export const call = (callId: string, providerName: string, args: string): AgentS
 
 let runSeq = 0;
 /** One chat run: the page auto-runs the ritual for an execute_explicit grant exactly as PcbEditor does. */
-export async function runScenario(c: Composed, script: (moveTool: string) => Array<() => Partial<AgentStep>>, options: { message?: string; settlementTimeoutMs?: number } = {}) {
+export async function runScenario(c: Composed, script: (moveTool: string, tool: (toolId: string) => string) => Array<() => Partial<AgentStep>>, options: { message?: string; settlementTimeoutMs?: number } = {}) {
   const runId = `run-${(runSeq += 1)}`;
   const message = options.message ?? MESSAGE;
   const registry = sirkitToolRegistry();
   const context = runContext(c);
-  const move = buildRunToolset(registry, context, () => undefined).declarations.find((d) => d.toolId === "sirkit.pcb.move-footprint");
+  const declarations = buildRunToolset(registry, context, () => undefined).declarations;
+  const move = declarations.find((d) => d.toolId === "sirkit.pcb.move-footprint");
   if (!move) throw new Error("the lifted move tool must be advertised to a grantable run");
+  const tool = (toolId: string): string => {
+    const declaration = declarations.find((d) => d.toolId === toolId);
+    if (!declaration) throw new Error(`${toolId} is not advertised to this run`);
+    return declaration.providerName;
+  };
   const minter = createExecutionGrantMinter({
     principalId: PRINCIPAL.principalId, role: "pcb_editor", membershipRevision: PRINCIPAL.membershipRevision, authClass: "local_dev", sessionIdentity: PRINCIPAL.sessionIdentity, correlationId: "corr-1",
     scope: SCOPE, boardInstanceId: pcbBoardInstanceId(PROJECT), autonomy: c.autonomy, userMessage: message, runId, provider: "openai", store: c.store, now: c.now,
@@ -191,7 +197,7 @@ export async function runScenario(c: Composed, script: (moveTool: string) => Arr
   const events: AgentRunEvent[] = [];
   const rituals: Array<Promise<GrantedExecutionOutcome>> = [];
   const grants: PublicExecutionGrant[] = [];
-  const adapter = new FakeAdapter(script(move.providerName));
+  const adapter = new FakeAdapter(script(move.providerName, tool));
   const result = await runAgentLoop(
     { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: options.settlementTimeoutMs ?? 10_000 } },
     {

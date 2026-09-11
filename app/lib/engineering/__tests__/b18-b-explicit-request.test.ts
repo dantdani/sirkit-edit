@@ -11,7 +11,7 @@ import { makeBoard, makeInstance, makeResistorDef } from "@/app/lib/pcb/__tests_
 import { mmToNm } from "@/app/lib/pcb/units";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import { buildExecutionOperations } from "../execution-operations";
-import { deriveExplicitPlan, proveExplicitUserRequest } from "../explicit-request";
+import { EXPLICIT_GRAMMAR_VERSION, deriveExplicitPlan, proveExplicitUserRequest } from "../explicit-request";
 import { executionOperationsDigest, normalizeOperationsForDigest } from "../execution-grant";
 
 function board(): PcbBoard {
@@ -54,11 +54,11 @@ describe("B18-B §3 — the explicit-request proof (pcb.move-footprint reference
   it('scenario 1 — "Move R3 2 mm to the right." is proven whole-message; spelling/unit/verb variants derive the same operations', () => {
     for (const text of ["Move R3 2 mm to the right.", "move r3 2mm right", "Please shift R3 by 2 millimeters to the right", "Nudge R3 2000 um towards the right!"]) {
       const proof = prove(text);
-      expect(proof, text).toMatchObject({ proven: true, coverage: "whole-message", derivedOperationsDigest: RIGHT_2MM.operationsDigest, grammarId: "pcb.move-footprint", grammarVersion: "1.0.0" });
+      expect(proof, text).toMatchObject({ proven: true, coverage: "whole-message", derivedOperationsDigest: RIGHT_2MM.operationsDigest, grammarId: "pcb.move-footprint", grammarVersion: EXPLICIT_GRAMMAR_VERSION }); // [B18-C I5] derived from the constant
       expect(proof.excerpt.length).toBeLessThanOrEqual(240);
     }
     const derived = deriveExplicitPlan("Move R3 2 mm up", "pcb.move-footprint", b);
-    expect("plan" in derived && derived.plan.moves[0]).toMatchObject({ footprintId: R3.id, x: R3.at.x, y: R3.at.y - mmToNm(2) }); // up = −y (board coordinates)
+    expect("plan" in derived && derived.plan.family === "pcb.move-footprint" && derived.plan.moves[0]).toMatchObject({ footprintId: R3.id, x: R3.at.x, y: R3.at.y - mmToNm(2) }); // up = −y (board coordinates)
   });
 
   it("NOT proven (preview + confirmation): the plan differs from the sentence in target, magnitude, direction, axis, sign or count", () => {

@@ -31,8 +31,8 @@ import type { ExecutionGrantTransport, TenderBody } from "../project/execution-g
 import type { ProjectSelectorScope } from "../project/project-selector";
 import { AgentExecutionJournal, buildExecutionReceipt, type AgentExecutionJournalEntry, type ExecutionReceipt } from "./agent-execution-journal";
 import { canonicalSessionFor, type CanonicalEditorSession } from "./editor-adapter";
-import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence, type PublicExecutionGrant } from "./execution-grant";
-import { buildExecutionOperations, type ExecutionPlan } from "./execution-operations";
+import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence } from "./execution-grant";
+import { buildExecutionOperations, planFromOperations } from "./execution-operations";
 import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { KERNEL_OPERATION_BINDINGS } from "./executor";
 import type { ProjectCommitInterlock } from "./project-commit-interlock";
@@ -103,17 +103,7 @@ function randomNonce(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Re-derive the family plan from the grant's operations (B18-B: pcb.move-footprint only). */
-function planOf(grant: PublicExecutionGrant): ExecutionPlan | null {
-  const family = grant.binding.operation.family;
-  if (family !== "pcb.move-footprint") return null;
-  const moves: Array<{ footprintId: string; x: number; y: number }> = [];
-  for (const operation of grant.binding.proposal.operations) {
-    if (operation.kind !== "move_footprint") return null;
-    moves.push({ footprintId: operation.footprintId, x: operation.at.x, y: operation.at.y });
-  }
-  return { family, moves };
-}
+/* [B18-C I5] the grant's plan is re-derived by `planFromOperations` (execution-operations.ts) — the ONE inverse. */
 
 async function withRetry<T extends { ok: boolean; status: number | null }>(call: () => Promise<T>): Promise<T> {
   const first = await call();
@@ -325,7 +315,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     }
 
     // 7. RECOMPILE through the shared builder against the live board; byte-match; kinds inside the family's kernel binding.
-    const plan = planOf(grant);
+    const plan = planFromOperations(b.operation.family, b.proposal.operations);
     const built = plan ? buildExecutionOperations(liveBoard, plan) : null;
     if (!built || !built.ok) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The grant's operations no longer compile against the live board${built && !built.ok ? ` (${built.code})` : ""}. Ask again. Nothing was changed.`); }
     if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest || built.resultRevision !== b.proposal.expectedPcbRevisionAfter) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }

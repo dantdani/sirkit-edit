@@ -6,6 +6,15 @@
  * grammar's derivation and the browser's recompile at commit time all produce
  * byte-identical operations for the same intent against the same board.
  *
+ * [B18-C I5] Three families: absolute footprint moves; absolute rotation and
+ * board side (`set-footprint-props`); and arrange (align / distribute /
+ * snap-to-grid). `planFromOperations` is the ONE inverse — a grant's
+ * operations back to the plan that rebuilds them byte for byte — shared by the
+ * browser recompile (and pinned against the seal and the grammar). An arrange
+ * grant is rebuilt as the absolute positions its parameters produced: the
+ * parameters are the MODEL's words, the grant pins their result, and the
+ * browser never re-runs the arrangement against a possibly drifted board.
+ *
  * No parallel mutation code exists here: a plan is a list of edit commands.
  */
 import { compileEdits } from "../pcb/edit/apply";
@@ -21,7 +30,19 @@ import { STAGE10_SCHEMA_VERSION, type EngineeringOperation } from "./types";
 
 /** A move plan: absolute integer-nm targets per footprint (the tool's argument shape). */
 export interface MoveFootprintPlan { family: "pcb.move-footprint"; moves: Array<{ footprintId: string; x: number; y: number }> }
-export type ExecutionPlan = MoveFootprintPlan;
+/** [B18-C I5] Absolute rotation (whole degrees, counter-clockwise as seen on screen, 0–359) AND board side per footprint —
+ *  both always present (the seal fills an omitted field from the verified board), so the plan is its own canonical form. */
+export interface RotateSidePlan { family: "pcb.rotate-side-footprint"; targets: Array<{ footprintId: string; rotationDeg: number; side: "top" | "bottom" }> }
+export const ARRANGE_EDGES = Object.freeze(["left", "right", "top", "bottom", "centerH", "centerV"] as const);
+export type ArrangeEdge = (typeof ARRANGE_EDGES)[number];
+/** [B18-C I5] Arrange as the MODEL states it (the parameters) — or as a grant pins it (`positions`: the absolute positions those
+ *  parameters produced; only `planFromOperations` produces this form, never a tool argument). */
+export type ArrangePlan =
+  | { family: "pcb.arrange"; mode: "align"; footprintIds: string[]; edge: ArrangeEdge }
+  | { family: "pcb.arrange"; mode: "distribute"; footprintIds: string[]; axis: "h" | "v" }
+  | { family: "pcb.arrange"; mode: "snap-to-grid"; footprintIds: string[]; gridNm: number }
+  | { family: "pcb.arrange"; mode: "positions"; moves: Array<{ footprintId: string; x: number; y: number }> };
+export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan;
 
 export interface BuiltExecution {
   ok: true;
@@ -44,46 +65,152 @@ export interface BuiltExecution {
 export interface BuildRefusal { ok: false; code: "empty" | "too_many" | "unknown_target" | "locked_target" | "invalid_geometry" | "compile_failed" | "no_change" | "unsupported_family"; message: string }
 
 const fmt = (nm: number): string => nmToMm(nm).toFixed(3);
+const refusal = (code: BuildRefusal["code"], message: string): BuildRefusal => ({ ok: false, code, message });
+const footprintRef = (id: string): SelectionRef => ({ kind: "footprint", id });
 
-/** Build the canonical operations for a plan against the exact board it must run on. */
-export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): BuiltExecution | BuildRefusal {
-  if (plan.family !== "pcb.move-footprint") return { ok: false, code: "unsupported_family", message: `Family ${String((plan as { family?: unknown }).family)} has no builder in B18-B.` };
-  const moves = plan.moves;
-  if (!Array.isArray(moves) || moves.length === 0) return { ok: false, code: "empty", message: "The plan names no footprint to move." };
-  if (moves.length > MAX_GRANT_OPERATIONS) return { ok: false, code: "too_many", message: `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.` };
-  const commands: EditCommand[] = [];
-  const before: string[] = [];
-  const after: string[] = [];
-  const seen = new Set<string>();
-  for (const move of moves) {
-    if (typeof move.footprintId !== "string" || move.footprintId.length === 0 || seen.has(move.footprintId)) return { ok: false, code: "unknown_target", message: "Each move must name one distinct footprint id." };
-    seen.add(move.footprintId);
-    const footprint = board.footprints.find((item) => item.id === move.footprintId);
-    if (!footprint) return { ok: false, code: "unknown_target", message: `Footprint ${move.footprintId} is not on this board.` };
-    if (footprint.locked) return { ok: false, code: "locked_target", message: `Footprint ${footprint.ref} is locked; a locked footprint is never moved by an agent.` };
-    if (!Number.isSafeInteger(move.x) || !Number.isSafeInteger(move.y)) return { ok: false, code: "invalid_geometry", message: "Targets must be integer nanometres." };
-    const ref: SelectionRef = { kind: "footprint", id: footprint.id };
-    commands.push({ op: "set-position", ref, atNm: { x: move.x, y: move.y } });
-    before.push(`${footprint.ref} at (${fmt(footprint.at.x)}, ${fmt(footprint.at.y)}) mm`);
-    after.push(`${footprint.ref} at (${fmt(move.x)}, ${fmt(move.y)}) mm`);
-  }
+/** The shared tail: the editor's own mutators compile the commands, the canonical delta derives the operations, the KERNEL
+ *  predicts the committed result, and every digest is taken over exactly that. */
+function finish(board: PcbBoard, family: ExecutionFamily, commands: EditCommand[], objectIds: readonly string[], before: string[], after: string[], noChange: string): BuiltExecution | BuildRefusal {
   const compiled = compileEdits(board, commands);
-  if (compiled.errors.length > 0) return { ok: false, code: "compile_failed", message: compiled.errors[0]! };
-  const delta = compilePcbBoardDelta(board, compiled.result, plan.family);
+  if (compiled.errors.length > 0) return refusal("compile_failed", compiled.errors[0]!);
+  const delta = compilePcbBoardDelta(board, compiled.result, family);
   const operations = delta.operations.filter((operation) => operation.kind === "move_footprint");
-  if (operations.length === 0) return { ok: false, code: "no_change", message: "The plan changes nothing (every footprint is already at its target)." };
-  if (operations.length !== delta.operations.length) return { ok: false, code: "compile_failed", message: "The plan compiled to operations outside the move-footprint family." };
+  if (operations.length === 0) return refusal("no_change", noChange);
+  if (operations.length !== delta.operations.length) return refusal("compile_failed", `The plan compiled to operations outside the ${family.replace(/^pcb\./, "")} family.`);
   // [B18-C review V0] the expected result is what the canonical KERNEL commits from these exact operations — not the
   // editor mutator's board. A kernel refusal here refuses the plan before any grant exists.
   let predicted: PcbBoard;
   try {
     predicted = applyEngineeringOperations({ schemaVersion: STAGE10_SCHEMA_VERSION, tenantId: "", projectId: "", branchId: "", pcb: board, pinnedAssets: [] }, operations).project.pcb;
   } catch (error) {
-    return { ok: false, code: "compile_failed", message: `The canonical kernel refuses the plan: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}` };
+    return refusal("compile_failed", `The canonical kernel refuses the plan: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
   }
-  const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [...seen].sort(), netIds: [], kinds: ["footprint"], selectionDigest: null, targetsDigest: "" };
+  const targets: ExecutionGrantTargets = { resolvedFrom: "named", objectIds: [...objectIds].sort(), netIds: [], kinds: ["footprint"], selectionDigest: null, targetsDigest: "" };
   targets.targetsDigest = executionTargetsDigest(targets);
   const preview: ExecutionGrantPreview = { before: before.join("; "), after: after.join("; "), warnings: compiled.diagnostics.map((diagnostic) => diagnostic.summary).slice(0, 8) };
-  const operationsDigest = executionOperationsDigest(plan.family, operations);
-  return { ok: true, family: plan.family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(predicted), resultLineageDigest: canonicalLineageDigest(predicted) };
+  const operationsDigest = executionOperationsDigest(family, operations);
+  return { ok: true, family, operations, operationsDigest, targets, preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview }), commands, resultRevision: pcbRevisionId(predicted), resultLineageDigest: canonicalLineageDigest(predicted) };
+}
+
+/** Absolute positions (the move family, and an arrange grant's pinned form). */
+function buildPositions(board: PcbBoard, family: "pcb.move-footprint" | "pcb.arrange", moves: MoveFootprintPlan["moves"]): BuiltExecution | BuildRefusal {
+  if (!Array.isArray(moves) || moves.length === 0) return refusal("empty", "The plan names no footprint to move.");
+  if (moves.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+  const commands: EditCommand[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
+  const seen = new Set<string>();
+  for (const move of moves) {
+    if (typeof move.footprintId !== "string" || move.footprintId.length === 0 || seen.has(move.footprintId)) return refusal("unknown_target", "Each move must name one distinct footprint id.");
+    seen.add(move.footprintId);
+    const footprint = board.footprints.find((item) => item.id === move.footprintId);
+    if (!footprint) return refusal("unknown_target", `Footprint ${move.footprintId} is not on this board.`);
+    if (footprint.locked) return refusal("locked_target", `Footprint ${footprint.ref} is locked; a locked footprint is never moved by an agent.`);
+    if (!Number.isSafeInteger(move.x) || !Number.isSafeInteger(move.y)) return refusal("invalid_geometry", "Targets must be integer nanometres.");
+    commands.push({ op: "set-position", ref: footprintRef(footprint.id), atNm: { x: move.x, y: move.y } });
+    before.push(`${footprint.ref} at (${fmt(footprint.at.x)}, ${fmt(footprint.at.y)}) mm`);
+    after.push(`${footprint.ref} at (${fmt(move.x)}, ${fmt(move.y)}) mm`);
+  }
+  return finish(board, family, commands, [...seen], before, after, "The plan changes nothing (every footprint is already at its target).");
+}
+
+/** [B18-C I5] Absolute rotation / board side through `set-footprint-props`; the preview names only the fields that change. */
+function buildRotateSide(board: PcbBoard, plan: RotateSidePlan): BuiltExecution | BuildRefusal {
+  const targets = plan.targets;
+  if (!Array.isArray(targets) || targets.length === 0) return refusal("empty", "The plan names no footprint to rotate or flip.");
+  if (targets.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+  const commands: EditCommand[] = [];
+  const before: string[] = [];
+  const after: string[] = [];
+  const seen = new Set<string>();
+  for (const target of targets) {
+    if (typeof target.footprintId !== "string" || target.footprintId.length === 0 || seen.has(target.footprintId)) return refusal("unknown_target", "Each target must name one distinct footprint id.");
+    seen.add(target.footprintId);
+    const footprint = board.footprints.find((item) => item.id === target.footprintId);
+    if (!footprint) return refusal("unknown_target", `Footprint ${target.footprintId} is not on this board.`);
+    if (footprint.locked) return refusal("locked_target", `Footprint ${footprint.ref} is locked; a locked footprint is never rotated or flipped by an agent.`);
+    if (!Number.isSafeInteger(target.rotationDeg) || target.rotationDeg < 0 || target.rotationDeg > 359) return refusal("invalid_geometry", "Rotation must be a whole number of degrees from 0 to 359.");
+    if (target.side !== "top" && target.side !== "bottom") return refusal("invalid_geometry", "Side must be top or bottom.");
+    const patch: { rotationDeg?: number; side?: "top" | "bottom" } = {};
+    const was: string[] = [];
+    const will: string[] = [];
+    if (target.rotationDeg !== footprint.rotationDeg) { patch.rotationDeg = target.rotationDeg; was.push(`rotation ${footprint.rotationDeg}°`); will.push(`rotation ${target.rotationDeg}°`); }
+    if (target.side !== footprint.side) { patch.side = target.side; was.push(`side ${footprint.side}`); will.push(`side ${target.side}`); }
+    if (was.length === 0) continue;
+    commands.push({ op: "set-footprint-props", id: footprint.id, patch });
+    before.push(`${footprint.ref} ${was.join(", ")}`);
+    after.push(`${footprint.ref} ${will.join(", ")}`);
+  }
+  if (commands.length === 0) return refusal("no_change", "The plan changes nothing (every footprint already has that rotation and side).");
+  return finish(board, plan.family, commands, [...seen].filter((id) => commands.some((command) => command.op === "set-footprint-props" && command.id === id)), before, after, "The plan changes nothing (every footprint already has that rotation and side).");
+}
+
+/** [B18-C I5] Arrange: the editor's own align / distribute / snap-to-grid compute the new positions; the grant is built (and
+ *  later recompiled) as exactly those absolute positions. */
+function buildArrange(board: PcbBoard, plan: ArrangePlan): BuiltExecution | BuildRefusal {
+  if (plan.mode === "positions") return buildPositions(board, "pcb.arrange", plan.moves);
+  const ids = plan.footprintIds;
+  if (!Array.isArray(ids) || ids.length === 0) return refusal("empty", "The plan names no footprint to arrange.");
+  if (ids.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+  if (new Set(ids).size !== ids.length || ids.some((id) => typeof id !== "string" || id.length === 0)) return refusal("unknown_target", "Each footprint must be named once by its stable id.");
+  for (const id of ids) {
+    const footprint = board.footprints.find((item) => item.id === id);
+    if (!footprint) return refusal("unknown_target", `Footprint ${id} is not on this board.`);
+    if (footprint.locked) return refusal("locked_target", `Footprint ${footprint.ref} is locked; a locked footprint is never moved by an agent.`);
+  }
+  const refs = ids.map(footprintRef);
+  let command: EditCommand;
+  if (plan.mode === "align") command = { op: "align", refs, mode: plan.edge };
+  else if (plan.mode === "distribute") command = { op: "distribute", refs, axis: plan.axis };
+  else {
+    if (!Number.isSafeInteger(plan.gridNm) || plan.gridNm <= 0) return refusal("invalid_geometry", "The snap grid must be a positive whole number of nanometres.");
+    command = { op: "snap-to-grid", refs, gridNm: plan.gridNm };
+  }
+  const arranged = compileEdits(board, [command]);
+  if (arranged.errors.length > 0) return refusal("compile_failed", arranged.errors[0]!);
+  const moves: MoveFootprintPlan["moves"] = [];
+  for (const id of ids) {
+    const was = board.footprints.find((item) => item.id === id)!;
+    const now = arranged.result.footprints.find((item) => item.id === id);
+    if (!now) return refusal("compile_failed", `The arrangement removed footprint ${was.ref}.`);
+    if (now.rotationDeg !== was.rotationDeg || now.side !== was.side) return refusal("compile_failed", `The arrangement changed ${was.ref} beyond its position.`);
+    if (now.at.x !== was.at.x || now.at.y !== was.at.y) moves.push({ footprintId: id, x: now.at.x, y: now.at.y });
+  }
+  if (moves.length === 0) return refusal("no_change", "The arrangement changes nothing (the footprints are already arranged that way).");
+  return buildPositions(board, "pcb.arrange", moves);
+}
+
+/** Build the canonical operations for a plan against the exact board it must run on. */
+export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): BuiltExecution | BuildRefusal {
+  switch (plan.family) {
+    case "pcb.move-footprint": return buildPositions(board, plan.family, plan.moves);
+    case "pcb.rotate-side-footprint": return buildRotateSide(board, plan);
+    case "pcb.arrange": return buildArrange(board, plan);
+    default: return refusal("unsupported_family", `Family ${String((plan as { family?: unknown }).family)} has no builder yet.`);
+  }
+}
+
+/**
+ * [B18-C I5] The ONE inverse: a grant's operations back to the plan that rebuilds them byte for byte (the browser's recompile).
+ * Every operation must be a `move_footprint`; an arrange grant becomes its pinned `positions`; a rotate/flip grant carries the
+ * absolute rotation and side of each operation. null ⇒ the operations are not a plan of that family (the ritual refuses).
+ */
+export function planFromOperations(family: ExecutionFamily, operations: readonly EngineeringOperation[]): ExecutionPlan | null {
+  if (operations.length === 0) return null;
+  const moves: Array<Extract<EngineeringOperation, { kind: "move_footprint" }>> = [];
+  for (const operation of operations) {
+    if (operation.kind !== "move_footprint") return null;
+    moves.push(operation);
+  }
+  if (family === "pcb.move-footprint") return { family, moves: moves.map((operation) => ({ footprintId: operation.footprintId, x: operation.at.x, y: operation.at.y })) };
+  if (family === "pcb.arrange") return { family, mode: "positions", moves: moves.map((operation) => ({ footprintId: operation.footprintId, x: operation.at.x, y: operation.at.y })) };
+  if (family === "pcb.rotate-side-footprint") {
+    const targets: RotateSidePlan["targets"] = [];
+    for (const operation of moves) {
+      if (typeof operation.rotationDeg !== "number" || (operation.side !== "top" && operation.side !== "bottom")) return null;
+      targets.push({ footprintId: operation.footprintId, rotationDeg: operation.rotationDeg, side: operation.side });
+    }
+    return { family, targets };
+  }
+  return null;
 }

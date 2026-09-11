@@ -29,6 +29,16 @@ export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.f
     family: "pcb.move-footprint",
     reason: "B18-C I3 — absolute footprint moves (integer nm) compiled by the SAME builder the editor session and the explicit-request grammar use; permission Tier 1 (reversible, edit_placement); one canonical transaction and one undo entry; targets named by stable id, never resolved from a selection",
   }),
+  Object.freeze({
+    toolId: "sirkit.pcb.rotate-side-footprint",
+    family: "pcb.rotate-side-footprint",
+    reason: "B18-C I5 — absolute rotation and board side through set-footprint-props (the editor's own mutator); permission Tier 1 (reversible, edit_placement); one transaction; the explicit grammar derives rotate-BY-an-angle with a required direction word and flip onto a named side",
+  }),
+  Object.freeze({
+    toolId: "sirkit.pcb.arrange",
+    family: "pcb.arrange",
+    reason: "B18-C I5 — align / distribute / snap-to-grid through the editor's own arrangement commands, pinned in the grant as the absolute positions they produce; permission Tier 1 (reversible, edit_placement); confirmation-only (no explicit grammar: multi-target geometry the user must see)",
+  }),
 ] as GrantedExecutionTool[]);
 
 export const GRANTED_EXECUTION_TOOL_IDS: readonly string[] = Object.freeze(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());
@@ -50,7 +60,7 @@ export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
   /\.release$/,               // manufacturing release
   /qualif/i,                  // qualification
   /undo-redo/,                // canonical replay
-  /^sirkit\.pcb\.(rotate-side-footprint|edit-track|delete-item|arrange|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions
+  /^sirkit\.pcb\.(edit-track|delete-item|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions
 ]);
 
 export type GrantedExecutionCandidate = Pick<ToolDescriptor, "toolId" | "operationClass" | "binding" | "approvalTier" | "requiredCapability" | "owningCommandId" | "agentExposed" | "sideEffects" | "executionMode">;

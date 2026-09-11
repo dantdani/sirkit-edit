@@ -165,7 +165,10 @@ describe("discovery engine (deterministic, contextual, fail closed)", () => {
     expect(nothingSelected.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
     const trackOnly = discoverTools(registry, editorContext({ selectedKinds: ["track"] }));
     expect(trackOnly.included.some((item) => item.toolId === "sirkit.pcb.edit-track")).toBe(true);
-    expect(trackOnly.included.some((item) => item.toolId === "sirkit.pcb.arrange")).toBe(false);
+    // [B18-C I5] arrange names its targets by stable id (no selection gate); the negative moves to the tools that stay
+    // selection-gated: under a footprint-only selection, delete-item (track/via/zone) and edit-track (track) are excluded.
+    const footprintOnly = discoverTools(registry, editorContext({ selectedKinds: ["footprint"] }));
+    for (const id of ["sirkit.pcb.delete-item", "sirkit.pcb.edit-track"]) expect(footprintOnly.excluded.some((entry) => entry.toolId === id && entry.reason === "selection_kind_missing"), id).toBe(true);
   });
 
   it("10. risk-ceiling filtering", () => {

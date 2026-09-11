@@ -44,7 +44,8 @@ import { resolvePcbValidationPolicy } from "../../pcb/proposal/sealed-pcb-edit-p
 const SCOPE = { tenantId: "local", projectId: "p18", branchId: "main" };
 const T0 = Date.parse("2026-09-11T12:00:00.000Z");
 const MOVE = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.move-footprint")!;
-const ROWS: readonly GrantedExecutionTool[] = [{ toolId: MOVE.toolId, family: "pcb.move-footprint", reason: "B18-C I2 test registry: the dispatch is proven before the production row lands (I3)" }];
+// [B18-C I5] the test registry must also carry every OTHER reviewed row (the catalog exposes them; B04 refuses an exposed mutate without its row).
+const ROWS: readonly GrantedExecutionTool[] = [{ toolId: MOVE.toolId, family: "pcb.move-footprint", reason: "B18-C I2 test registry: the dispatch is proven before the production row lands (I3)" }, ...GRANTED_EXECUTION_TOOLS.filter((tool) => tool.toolId !== MOVE.toolId)];
 const GRANTED: ToolDescriptor = { ...MOVE, agentExposed: true, executionMode: "granted", requiredSelectionKinds: [] };
 const TEST_REGISTRY = new ToolRegistry(SIRKIT_TOOL_CATALOG.map((d) => (d.toolId === GRANTED.toolId && d.version === GRANTED.version ? GRANTED : d)), undefined, { grantedExecutionTools: ROWS });
 
@@ -195,7 +196,7 @@ describe("B18-C I2 — every refusal is exact and mints nothing", () => {
     const gateway = createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: "1.0.0" });
     const ctx = context();
     const risky = registry.list().filter((d) => ["mutate", "destructive", "release"].includes(d.operationClass) && !GRANTED_EXECUTION_TOOL_IDS.includes(d.toolId));
-    expect(risky.map((d) => d.toolId)).toEqual(expect.arrayContaining(["sirkit.pcb.rotate-side-footprint", "sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.manufacturing.release"]));
+    expect(risky.map((d) => d.toolId)).toEqual(expect.arrayContaining(["sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.manufacturing.release"])); // [B18-C I5] rotate/flip and arrange were lifted
     for (const descriptor of risky) {
       const outcome = await gateway.invoke({ runId: "run-1", provider: "openai", toolId: descriptor.toolId, version: descriptor.version, args: MOVE_ARGS, context: ctx, timeoutMs: 5_000, callId: "call-1" });
       expect(outcome, descriptor.toolId).toMatchObject({ kind: "refused", status: "not_callable" });

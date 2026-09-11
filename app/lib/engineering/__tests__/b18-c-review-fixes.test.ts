@@ -179,11 +179,13 @@ describe("B18-C review V8 / U0 / U1 — isolating gate pins", () => {
 
   it("U1: the never-exposed patterns are a RUNTIME key — a pattern-listed mutation with a reviewed-looking row is refused by the validator; the exposure module re-exports the same list", () => {
     expect(EXPOSURE_MODULE_PATTERNS).toBe(NEVER_EXPOSED_TOOL_PATTERNS);
-    const rotate = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.rotate-side-footprint")!;
-    const rows: GrantedExecutionTool[] = [...GRANTED_EXECUTION_TOOLS, { toolId: rotate.toolId, family: "pcb.rotate-side-footprint", reason: "test: a lift that forgot to remove the pattern" }];
-    const exposed: ToolDescriptor = { ...rotate, agentExposed: true, executionMode: "granted" };
-    expect(grantedExecutionViolations(exposed, rows)).toEqual([`${rotate.toolId} matches a never-exposed tool pattern`]);
-    expect(() => new ToolRegistry(SIRKIT_TOOL_CATALOG.map((d) => (d.toolId === rotate.toolId ? exposed : d)), undefined, { grantedExecutionTools: rows })).toThrow(/matches a never-exposed tool pattern/);
+    // [B18-C I5] rotate/flip was lifted, so the subject is a reviewed-shaped Tier 1 execution under a tool id that is STILL
+    // pattern-listed (dimension, until its lift): only the pattern can refuse it.
+    const move = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.move-footprint")!;
+    const shadow: ToolDescriptor = { ...move, toolId: "sirkit.pcb.dimension", version: "9.9.9" };
+    const rows: GrantedExecutionTool[] = [...GRANTED_EXECUTION_TOOLS, { toolId: shadow.toolId, family: "pcb.move-footprint", reason: "test: a lift that forgot to remove the pattern" }];
+    expect(grantedExecutionViolations(shadow, rows)).toEqual([`${shadow.toolId} matches a never-exposed tool pattern`]);
+    expect(() => new ToolRegistry([...SIRKIT_TOOL_CATALOG, shadow], undefined, { grantedExecutionTools: rows })).toThrow(/matches a never-exposed tool pattern/);
   });
 });
 

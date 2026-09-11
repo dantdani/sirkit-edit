@@ -19,7 +19,8 @@ import { canonicalReference } from "../pcb/integrity";
 import { buildExecutionOperations, type ExecutionPlan } from "./execution-operations";
 import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExplicitness } from "./execution-grant";
 
-export const EXPLICIT_GRAMMAR_VERSION = "1.0.0";
+/** [B18-C I5] 1.1.0: + rotate (angle with a REQUIRED direction word) and flip (onto a named side) for pcb.rotate-side-footprint. */
+export const EXPLICIT_GRAMMAR_VERSION = "1.1.0";
 
 const REFUSAL_TOKENS = /\b(don'?t|do not|never|not|instead|but|rather|except|unless|if|later|afterwards?|after|before|first|then|what if|would|could|should|can you|maybe|perhaps|probably|and then|also)\b|\?|\n|\r/i;
 const UNIT_NM: Readonly<Record<string, number>> = Object.freeze({ mm: 1_000_000, millimeter: 1_000_000, millimeters: 1_000_000, millimetre: 1_000_000, millimetres: 1_000_000, um: 1_000, µm: 1_000, micron: 1_000, microns: 1_000, mil: 25_400, mils: 25_400, cm: 10_000_000 });
@@ -28,6 +29,10 @@ const DIRECTIONS: Readonly<Record<string, { x: number; y: number }>> = Object.fr
 
 /** Positional groups: 1 = reference designator, 2 = magnitude, 3 = unit, 4 = direction (the whole turn must match). */
 const MOVE_PATTERN = /^(?:please\s+)?(?:move|shift|nudge)\s+([a-z][a-z0-9]*\d)\s+(?:by\s+)?(\d+(?:\.\d+)?)\s*(mm|millimet(?:er|re)s?|um|µm|microns?|mils?|cm)\s+(?:to\s+the\s+|towards?\s+the\s+)?(right|left|up|down)$/i;
+/** [B18-C I5] 1 = reference designator, 2 = whole degrees, 3 = the REQUIRED direction word. */
+const ROTATE_PATTERN = /^(?:please\s+)?(?:rotate|turn)\s+([a-z][a-z0-9]*\d)\s+(?:by\s+)?(\d{1,3})\s*(?:°|degrees?|deg)?\s+(clockwise|cw|counter-?clockwise|anti-?clockwise|ccw)$/i;
+/** [B18-C I5] 1 = reference designator, 2 = the side. */
+const FLIP_PATTERN = /^(?:please\s+)?(?:flip|put)\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+(?:side|layer))?$/i;
 
 export interface ExplicitProofInput {
   userMessage: string;
@@ -56,6 +61,7 @@ export function deriveExplicitPlan(userMessage: string, family: ExecutionFamily,
   const normalized = normalizeInstruction(userMessage);
   if (normalized.length === 0) return { refusal: "the instruction is empty", excerpt };
   if (REFUSAL_TOKENS.test(normalized)) return { refusal: "the instruction carries a negation, question, condition, deferral or a second clause", excerpt };
+  if (family === "pcb.rotate-side-footprint") return deriveRotateSide(normalized, board, excerpt);
   if (family !== "pcb.move-footprint") return { refusal: `no explicit-request grammar exists for ${family} yet`, excerpt };
   const match = MOVE_PATTERN.exec(normalized);
   if (!match) return { refusal: "the instruction is not one whole move clause (verb, reference designator, magnitude with unit, direction)", excerpt };
@@ -72,6 +78,29 @@ export function deriveExplicitPlan(userMessage: string, family: ExecutionFamily,
   const deltaNm = Math.round(Number(magnitude) * unitNm);
   if (!Number.isSafeInteger(deltaNm) || deltaNm <= 0) return { refusal: "the magnitude is not a positive distance", excerpt };
   return { plan: { family: "pcb.move-footprint", moves: [{ footprintId: footprint.id, x: footprint.at.x + vector.x * deltaNm, y: footprint.at.y + vector.y * deltaNm }] }, excerpt };
+}
+
+/** [B18-C I5] Rotate BY a whole angle with a REQUIRED direction word, or flip onto a named side — one whole clause — derived to
+ *  an ABSOLUTE plan in the editor's own convention (positive = counter-clockwise on screen, so a clockwise turn subtracts). */
+function deriveRotateSide(normalized: string, board: PcbBoard, excerpt: string): { plan: ExecutionPlan; excerpt: string } | { refusal: string; excerpt: string } {
+  const rotate = ROTATE_PATTERN.exec(normalized);
+  const flip = rotate ? null : FLIP_PATTERN.exec(normalized);
+  if (!rotate && !flip) return { refusal: "the instruction is not one whole rotate clause (verb, reference designator, angle, direction word) or flip clause (verb, reference designator, top or bottom)", excerpt };
+  const ref = (rotate ?? flip)![1]!;
+  // [B18-C review V2] the reference must name EXACTLY one footprint.
+  const matches = board.footprints.filter((item) => canonicalReference(item.ref) === canonicalReference(ref));
+  if (matches.length === 0) return { refusal: `${ref} is not a reference designator on this board`, excerpt };
+  if (matches.length > 1) return { refusal: `${ref} names ${matches.length} footprints on this board; the instruction is ambiguous`, excerpt };
+  const footprint = matches[0]!;
+  if (rotate) {
+    const angle = Number(rotate[2]);
+    if (!Number.isSafeInteger(angle) || angle < 1 || angle > 359) return { refusal: "the angle is not a whole number of degrees from 1 to 359", excerpt };
+    const clockwise = /^(?:clockwise|cw)$/i.test(rotate[3]!);
+    const rotationDeg = (((footprint.rotationDeg + (clockwise ? -angle : angle)) % 360) + 360) % 360;
+    return { plan: { family: "pcb.rotate-side-footprint", targets: [{ footprintId: footprint.id, rotationDeg, side: footprint.side }] }, excerpt };
+  }
+  const side = flip![2]!.toLowerCase() as "top" | "bottom";
+  return { plan: { family: "pcb.rotate-side-footprint", targets: [{ footprintId: footprint.id, rotationDeg: footprint.rotationDeg, side }] }, excerpt };
 }
 
 /** The proof: derive, build with the SAME builder, compare digests byte for byte. */
