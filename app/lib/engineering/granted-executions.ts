@@ -550,69 +550,81 @@ export interface GrantedExecutionRecoveryInput {
   scope: ProjectSelectorScope;
   now?: () => number;
   signal?: AbortSignal;
+  /** [B18-C I10b] the in-memory claim registry the page's ritual uses (default: the same module registry). */
+  registry?: GrantedExecutionRegistry;
 }
 export interface GrantedExecutionRecoveryResult { grantId: string; state: AgentExecutionJournalEntry["state"]; action: "adopted-and-settled" | "abandoned-not-committed" | "settled-from-receipt" | "left-in-flight" | "left-issued" | "refused-poisoned" | "unavailable"; detail: string }
 
 /**
  * The hydration sweep (§4.6): finish what a crash interrupted, keyed by the
  * journal ENTRY (its grant, attempt and commitment) — never a new grant.
+ * [B18-C I10b] It shares the ritual's claim registry: an execution THIS page is running right now is left to its own ritual
+ * (the sweep once adopted and settled an in-flight execution between its consume and its commit record, and the ritual then
+ * reported a landed change as "recovery required"); while the sweep works on an entry it holds the claim itself.
  */
 export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryInput): Promise<GrantedExecutionRecoveryResult[]> {
   const now = input.now ?? (() => Date.now());
+  const registry = input.registry ?? grantedExecutionRegistry;
   const results: GrantedExecutionRecoveryResult[] = [];
   const session = canonicalSessionFor(input.history);
   const pending = await input.journal.pending();
   if (!pending.ok || !session) return [{ grantId: "-", state: "prepared", action: "unavailable", detail: pending.ok ? "no canonical session" : `journal ${pending.reason}` }];
   for (const entry of pending.entries) {
     const push = (action: GrantedExecutionRecoveryResult["action"], detail: string): void => { results.push({ grantId: entry.grantId, state: entry.state, action, detail }); };
-    const evidence = await session.durableIdempotencyEvidence(entry.grantId);
-    if (evidence.kind === "unavailable" || evidence.kind === "corrupt") { push("unavailable", `canonical evidence ${evidence.kind}`); continue; }
-    if (entry.state === "receipt-finalized" && entry.receipt) {
-      // The commit is finalized locally; only the server's report is missing — re-send it from the receipt (idempotent on the server).
-      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null, null, undoEligibleFor(input.history, entry.receipt.transactionId)), signal: input.signal, journal: input.journal });
-      push("settled-from-receipt", settled ? "settled committed from the finalized receipt" : "settle failed; retry later"); continue;
-    }
-    if (entry.state === "prepared") {
+    const claim = registry.claim(entry.identityKey);
+    if (!claim.ok && claim.code === "already-in-flight") { push("left-in-flight", "this page is executing the grant right now; its own ritual settles it"); continue; }
+    try {
+      const evidence = await session.durableIdempotencyEvidence(entry.grantId);
+      if (evidence.kind === "unavailable" || evidence.kind === "corrupt") { push("unavailable", `canonical evidence ${evidence.kind}`); continue; }
+      if (entry.state === "receipt-finalized" && entry.receipt) {
+        // The commit is finalized locally; only the server's report is missing — re-send it from the receipt (idempotent on the server).
+        const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null, null, undoEligibleFor(input.history, entry.receipt.transactionId)), signal: input.signal, journal: input.journal });
+        push("settled-from-receipt", settled ? "settled committed from the finalized receipt" : "settle failed; retry later"); continue;
+      }
+      if (entry.state === "prepared") {
+        if (evidence.kind === "found") {
+          await input.journal.poison(entry.identityKey);
+          await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
+          push("refused-poisoned", "a transaction exists for a grant that was never consumed"); continue;
+        }
+        const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
+        if (!remote.ok) { push(remote.status === 404 ? "abandoned-not-committed" : "unavailable", remote.message); if (remote.status === 404) await input.journal.abandon(entry.identityKey, "grant unknown to the server"); continue; }
+        const status = remote.body.grant.state.status;
+        if (status === "issued") { push("left-issued", "the grant is still issued; re-tender or cancel it"); continue; }
+        if (status === "consumed" && remote.body.grant.state.consumption?.attemptId === entry.attemptId) {
+          await input.journal.markConsumed(entry.identityKey, { consumedAt: Date.parse(remote.body.grant.state.consumption.consumedAt) });
+          push("left-in-flight", "the server consumed this attempt; the commit window is open"); continue;
+        }
+        await input.journal.abandon(entry.identityKey, `server state ${status}`); push("abandoned-not-committed", `the grant is ${status} on the server`); continue;
+      }
       if (evidence.kind === "found") {
+        const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) });
+        if (!adopted.ok) {
+          if (adopted.kind === "journal") { push("unavailable", `${adopted.detail}; the proven commit stays pending`); continue; }
+          await input.journal.poison(entry.identityKey);
+          await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
+          push("refused-poisoned", adopted.detail); continue;
+        }
+        const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligibleFor(input.history, adopted.receipt.transactionId)), signal: input.signal, journal: input.journal });
+        push(entry.state === "grant-consumed" ? "adopted-and-settled" : "settled-from-receipt", settled ? "settled committed" : "settle failed; retry later"); continue;
+      }
+      // grant-consumed / committed / adopted with NO canonical evidence.
+      if (entry.state !== "grant-consumed") {
         await input.journal.poison(entry.identityKey);
         await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
-        push("refused-poisoned", "a transaction exists for a grant that was never consumed"); continue;
+        push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue;
       }
       const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
-      if (!remote.ok) { push(remote.status === 404 ? "abandoned-not-committed" : "unavailable", remote.message); if (remote.status === 404) await input.journal.abandon(entry.identityKey, "grant unknown to the server"); continue; }
-      const status = remote.body.grant.state.status;
-      if (status === "issued") { push("left-issued", "the grant is still issued; re-tender or cancel it"); continue; }
-      if (status === "consumed" && remote.body.grant.state.consumption?.attemptId === entry.attemptId) {
-        await input.journal.markConsumed(entry.identityKey, { consumedAt: Date.parse(remote.body.grant.state.consumption.consumedAt) });
-        push("left-in-flight", "the server consumed this attempt; the commit window is open"); continue;
+      const deadline = remote.ok && remote.body.grant.state.consumption ? Date.parse(remote.body.grant.state.consumption.commitDeadline) : (entry.consumedAt ?? entry.preparedAt) + 60_000;
+      if (now() > deadline + GRANT_SETTLE_GRACE_MS || (remote.ok && remote.body.grant.state.status !== "consumed")) {
+        await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: NOT_COMMITTED("recovery"), signal: input.signal });
+        await input.journal.abandon(entry.identityKey, "recovery: no canonical evidence after the commit window");
+        push("abandoned-not-committed", "no canonical evidence after the commit window; settled not committed"); continue;
       }
-      await input.journal.abandon(entry.identityKey, `server state ${status}`); push("abandoned-not-committed", `the grant is ${status} on the server`); continue;
+      push("left-in-flight", "the commit window is still open");
+    } finally {
+      if (claim.ok) registry.release(entry.identityKey);
     }
-    if (evidence.kind === "found") {
-      const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) });
-      if (!adopted.ok) {
-        if (adopted.kind === "journal") { push("unavailable", `${adopted.detail}; the proven commit stays pending`); continue; }
-        await input.journal.poison(entry.identityKey);
-        await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
-        push("refused-poisoned", adopted.detail); continue;
-      }
-      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligibleFor(input.history, adopted.receipt.transactionId)), signal: input.signal, journal: input.journal });
-      push(entry.state === "grant-consumed" ? "adopted-and-settled" : "settled-from-receipt", settled ? "settled committed" : "settle failed; retry later"); continue;
-    }
-    // grant-consumed / committed / adopted with NO canonical evidence.
-    if (entry.state !== "grant-consumed") {
-      await input.journal.poison(entry.identityKey);
-      await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
-      push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue;
-    }
-    const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
-    const deadline = remote.ok && remote.body.grant.state.consumption ? Date.parse(remote.body.grant.state.consumption.commitDeadline) : (entry.consumedAt ?? entry.preparedAt) + 60_000;
-    if (now() > deadline + GRANT_SETTLE_GRACE_MS || (remote.ok && remote.body.grant.state.status !== "consumed")) {
-      await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: NOT_COMMITTED("recovery"), signal: input.signal });
-      await input.journal.abandon(entry.identityKey, "recovery: no canonical evidence after the commit window");
-      push("abandoned-not-committed", "no canonical evidence after the commit window; settled not committed"); continue;
-    }
-    push("left-in-flight", "the commit window is still open");
   }
   return results;
 }

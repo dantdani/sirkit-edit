@@ -100,6 +100,7 @@ jobs:
           app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts
           app/lib/engineering/__tests__/b18-c-fixture-agent.test.ts
           app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts
+          app/lib/engineering/__tests__/b18-c-recovery-inflight.test.ts
           app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
           app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
           app/lib/engineering/__tests__/b18-c-result-contract.test.ts

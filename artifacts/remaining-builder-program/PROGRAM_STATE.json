@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "88c6875",
+  "lastGreenSha": "14d38ba",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-C I10b: the browser spec e2e/agent-execution.spec.ts (never edit source during the run) and the closeout (safe-mutation-tools.md, OWNER_DECISIONS OD-11/13/14/15/16); committed, pushed and CI-watched; then B18-D (PROPOSED there: gate the editor's Undo/Redo while a grant executes) and B18-E.",
-  "updatedAt": "2026-09-11T04:28:37-04:00"
+  "nextAction": "B18-D chat execution UX (PROPOSED there: route PCB-execution phrasing such as 'Add silkscreen text …' to the assistant instead of the schematic editor; gate the editor's Undo/Redo while a grant executes), then B18-E (the scenario matrix), B18 validation, PR #8 ready, merge after green; then B19.",
+  "updatedAt": "2026-09-11T05:03:28-04:00"
 }
