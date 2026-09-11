@@ -404,14 +404,17 @@ export class CanonicalEditorSession {
   }
 
   /** [B18-C I8] A landed replay is exactly what it claims: its durable record links the referenced transaction and direction,
-   *  and its recorded semantic result is the referenced change's other side (two DIFFERENT durable records agree). */
-  replayResultVerified(direction: "undo" | "redo", referencedTransactionId: string, transactionId: string): boolean {
+   *  and its recorded semantic result is the referenced change's other side (two DIFFERENT durable records agree).
+   *  [B18-C review 3] With `expectedResultHeadSequence`, its RECORDED result position is that single advance too — from the
+   *  durable record, so a user step after it (an Undo pressed at once) never changes the answer. */
+  replayResultVerified(direction: "undo" | "redo", referencedTransactionId: string, transactionId: string, expectedResultHeadSequence?: number): boolean {
     if (!this.service || this.disposed) return false;
     const records = this.service.durableRecords();
     const replay = records.find((item) => item.transaction.transactionId === transactionId);
     const referenced = records.find((item) => item.transaction.transactionId === referencedTransactionId);
     if (!replay?.appliedChangeSet || !referenced?.appliedChangeSet) return false;
     if (replay.transaction.provenance?.candidateId !== `${direction}:${referencedTransactionId}`) return false;
+    if (expectedResultHeadSequence !== undefined && replay.resultingRevision?.headSequence !== expectedResultHeadSequence) return false;
     const expected = direction === "undo" ? referenced.appliedChangeSet.baseSemanticStateDigest : referenced.appliedChangeSet.resultSemanticStateDigest;
     return typeof expected === "string" && expected.length > 0 && replay.appliedChangeSet.resultSemanticStateDigest === expected;
   }
@@ -631,10 +634,12 @@ export class CanonicalEditorSession {
     if (result.status === "rejected") return refuse(result.reasonCode, `The canonical executor refused the ${request.direction} (${result.reasonCode}). Nothing was changed.`, result.diagnostics);
     const mapped = this.applyExecutionResult({ commandId: REPLAY_COMMAND_ID, label: request.label, metadata: request.metadata, buildOperations: () => [] }, result);
     if (mapped.ok && mapped.status === "executed") {
+      // [B18-C review 3] verified SYNCHRONOUSLY, before the envelope write yields: an Undo the user presses during the write is
+      // a later, separate history step (its reconcile queues behind this task) and never makes an exact replay unverified.
+      const verified = canonicalLineageDigest(this.delegate.committedPresent) === canonicalLineageDigest(service.currentProject().pcb)
+        && this.replayResultVerified(request.direction, request.referencedTransactionId, mapped.transactionId ?? "", head.headSequence + 1);
       await this.persistEnvelope();
-      if (canonicalLineageDigest(this.delegate.committedPresent) !== canonicalLineageDigest(service.currentProject().pcb) || !this.replayResultVerified(request.direction, request.referencedTransactionId, mapped.transactionId ?? "")) {
-        throw new Error("REPLAY_RESULT_UNVERIFIED");
-      }
+      if (!verified) throw new Error("REPLAY_RESULT_UNVERIFIED");
     }
     return mapped;
   }

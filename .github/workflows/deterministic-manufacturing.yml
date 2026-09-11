@@ -62,6 +62,7 @@ jobs:
           app/components/pcb/__tests__/component-review-panel.test.tsx
           app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx
           app/components/pcb/__tests__/board-revision-dialog.test.tsx
+          app/components/pcb/__tests__/b18-c-granted-execution-dialog.test.tsx
           app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx
           app/components/pcb/__tests__/pcb3d-view-session.test.tsx
           app/components/view-session
@@ -97,11 +98,13 @@ jobs:
           app/lib/engineering/__tests__/b18-c-dimension.test.ts
           app/lib/engineering/__tests__/b18-c-explicit-grammars.test.ts
           app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts
+          app/lib/engineering/__tests__/b18-c-fixture-agent.test.ts
           app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts
           app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
           app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
           app/lib/engineering/__tests__/b18-c-result-contract.test.ts
           app/lib/engineering/__tests__/b18-c-review-2.test.ts
+          app/lib/engineering/__tests__/b18-c-review-3.test.ts
           app/lib/engineering/__tests__/b18-c-review-fixes.test.ts
           app/lib/engineering/__tests__/b18-c-rotate-arrange-e2e.test.ts
           app/lib/engineering/__tests__/b18-c-silk-text.test.ts

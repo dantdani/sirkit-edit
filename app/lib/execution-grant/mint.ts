@@ -69,7 +69,8 @@ const sleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((
  *  - redo: the head grant is a committed AI UNDO — the reference is the
  *    transaction that undo reverted.
  *
- * The preview swaps the referenced grant's own before/after. Revisions are
+ * The preview swaps the referenced grant's own before/after (an undone add reads "(removed)"; a redo shows the original
+ * change's own preview). Revisions are
  * informational here (the editor refills derived zone fills without advancing
  * the head), so only the head sequence and the lineage decide.
  */
@@ -77,8 +78,18 @@ export type ReplayResolution =
   | { ok: true; replay: ExecutionReplay; preview: ExecutionGrantPreview; expectedPcbRevisionAfter: string }
   | { ok: false; diagnostics: string[] };
 
-/** Shown with every replay preview (the history semantics the user must know). */
-export const AI_REPLAY_NOTE = "An AI undo or redo is a NEW history entry: the editor's own Undo afterwards re-applies the change.";
+/** Shown with every replay preview (the history semantics the user must know). [B18-C review 3] per direction: after an AI
+ *  undo the editor's own Undo re-applies the change; after an AI redo it removes the change again. */
+export const AI_REPLAY_NOTES: Readonly<Record<ExecutionReplay["direction"], string>> = Object.freeze({
+  undo: "An AI undo is a NEW history entry: the editor's own Undo afterwards re-applies the change.",
+  redo: "An AI redo is a NEW history entry: the editor's own Undo afterwards removes the change again.",
+});
+
+/** [B18-C review 3] An undo shows the referenced change's after as its before and that change's before as its after — an
+ *  added item ("(new)") shows as "(removed)": undoing an add deletes it. */
+function undoPreviewOf(original: ExecutionGrantPreview): ExecutionGrantPreview {
+  return { before: original.after, after: original.before.split("; ").map((segment) => (segment === "(new)" ? "(removed)" : segment)).join("; "), warnings: [AI_REPLAY_NOTES.undo] };
+}
 
 export async function resolveReplayReference(input: { store: ExecutionGrantStore; scope: DurableWorkflowScope; principalId: string; editor: "pcb" | "schematic"; base: NonNullable<ExecutionGrantBase["pcb"]>; direction: "undo" | "redo"; now: number }): Promise<ReplayResolution> {
   const { index } = await input.store.index(input.scope, input.principalId, input.editor);
@@ -89,14 +100,19 @@ export async function resolveReplayReference(input: { store: ExecutionGrantStore
     if (!record || !settlement || settlement.outcome !== "committed" || !settlement.transactionId || settlement.headSequenceAfter === null || !settlement.revisionBefore) continue;
     if (settlement.headSequenceAfter !== input.base.headSequence || record.binding.base.pcb?.lineageId !== input.base.lineageId) continue;
     const isReplay = record.binding.operation.family === REPLAY_FAMILY;
-    const preview: ExecutionGrantPreview = { before: record.binding.proposal.preview.after, after: record.binding.proposal.preview.before, warnings: [AI_REPLAY_NOTE] };
     if (input.direction === "undo") {
       if (isReplay) return { ok: false, diagnostics: ["The latest change is itself an AI undo or redo; nothing was issued — the user can use the editor's own Undo or Redo for that."] };
-      return { ok: true, replay: { direction: "undo", referencedTransactionId: settlement.transactionId, referencedGrantId: record.grantId }, preview, expectedPcbRevisionAfter: settlement.revisionBefore };
+      return { ok: true, replay: { direction: "undo", referencedTransactionId: settlement.transactionId, referencedGrantId: record.grantId }, preview: undoPreviewOf(record.binding.proposal.preview), expectedPcbRevisionAfter: settlement.revisionBefore };
     }
     const undone = record.binding.proposal.replay;
     if (!isReplay || !undone || undone.direction !== "undo") return { ok: false, diagnostics: ["The latest change is not an AI undo, so there is nothing to redo; nothing was issued."] };
-    return { ok: true, replay: { direction: "redo", referencedTransactionId: undone.referencedTransactionId, referencedGrantId: record.grantId }, preview, expectedPcbRevisionAfter: settlement.revisionBefore };
+    // [B18-C review 3] a redo re-applies the ORIGINAL change: it shows that change's own preview (read from the original grant
+    // the undo referenced while it still records that transaction; otherwise the undo's preview swapped back).
+    const original = (await input.store.load(input.scope, undone.referencedGrantId, input.now))?.record;
+    const shown = original && original.binding.operation.family !== REPLAY_FAMILY && original.state.settlement?.transactionId === undone.referencedTransactionId
+      ? original.binding.proposal.preview
+      : { before: record.binding.proposal.preview.after, after: record.binding.proposal.preview.before };
+    return { ok: true, replay: { direction: "redo", referencedTransactionId: undone.referencedTransactionId, referencedGrantId: record.grantId }, preview: { before: shown.before, after: shown.after, warnings: [AI_REPLAY_NOTES.redo] }, expectedPcbRevisionAfter: settlement.revisionBefore };
   }
   return { ok: false, diagnostics: [`The latest change on this board (history head ${input.base.headSequence}) is not an AI change made through a grant; nothing was issued — the user can use the editor's own ${input.direction === "undo" ? "Undo" : "Redo"}.`] };
 }

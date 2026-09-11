@@ -42,7 +42,7 @@ const editorTurn = (quarterTurns: 1 | -1): number => compileEdits(B, [{ op: "rot
 
 describe("B18-C I5 — rotate", () => {
   it("clockwise and counter-clockwise quarter turns derive EXACTLY the rotation the editor's own rotate command produces", () => {
-    expect(EXPLICIT_GRAMMAR_VERSION).toBe("1.3.0"); // [review 2] the flip follows the editor's Flip; "put" needs the side word; [I8] + undo / redo
+    expect(EXPLICIT_GRAMMAR_VERSION).toBe("1.4.0"); // [review 2] the flip follows the editor's Flip; "put" needs the side word; [I8] + undo / redo; [review 3] no kind noun
     const cases: Array<[string, 1 | -1]> = [
       ["Rotate R3 90 degrees clockwise.", 1], ["rotate r3 by 90° cw", 1], ["Please turn R3 90 deg clockwise", 1],
       ["Turn R3 90 counterclockwise", -1], ["Rotate R3 90 degrees counter-clockwise", -1], ["please rotate R3 by 90 degrees anti-clockwise", -1], ["rotate R3 90 ccw", -1],

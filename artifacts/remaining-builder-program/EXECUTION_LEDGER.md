@@ -462,3 +462,15 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Found while wiring it: the adapter's methods first declared narrower inputs than `ProviderAgentAdapter`; they now use the interface's own parameter types.
 - CI: the deterministic-manufacturing vitest list gains every B18-C suite (none were listed; the B18-A/B suites were).
 - Tests: broad run: 211 files / 3162 passed, 9 skipped (the live Supabase matrix) across agent, chat, agent routes, execution-grant, engineering, project, auth, api tripwires, the B15 proposal suites, the fixture runtime and the recovery pipeline. eslint 0; tsc 0.
+- CI at `88c6875` (I10a): `deterministic-manufacturing` run 34577331711 success; `benchmark-quality` run 34577331705 success. (Found in review 3: `b18-c-fixture-agent` itself was not in the CI list at `88c6875`, so this line's "every B18-C suite" was not yet true; fixed in review 3.)
+
+### B18-C review 3 — the fixes from the I8 adversarial review (CONFIRMED, 2026-09-11 local, solo; this commit)
+
+- The review: a workflow over `0d75bbe` (I8a/I8b), each finding adversarially verified — eight confirmed, one refuted (A24 records every verdict).
+- Reproduced first: the new `b18-c-review-3` suite and `b18-c-granted-execution-dialog` ran on the pre-fix code — seven behavioural cases failed (the redo wording ×2, the grammar, the undo preview of an add, the Ctrl+Z during the envelope write, the recovered revision, the card); the three pins passed, as intended.
+- The fixes (A24): direction-aware notes and answers, prompt 1.2.1, the replay tool 1.0.1; grammar 1.4.0; `(removed)` for an undone add and the original preview for a redo; replay history labels; the replay verified synchronously before its envelope write; the ritual's replay postcondition from the durable records (recorded position `base + 1`, lineage); the live revision on adoption; the card.
+- Moved pins: the I8b grammar pin "Redo the last move" → "Redo the last edit"; `AI_REPLAY_NOTE` → `AI_REPLAY_NOTES.undo` in `b18-c-replay-grants` and `b18-c-undo-redo`; the gateway prompt pins 1.2.1; the grammar pin 1.4.0.
+- Generators re-run: tool registry (digest `eng1-2e9c517667471755`), B09 agent artifacts, B11 (19/19 cases, 59/59 checks at prompt 1.2.1), the toolability matrix, B16-0.x (158 = 155 + 3 + 0, unchanged) and the B17 control inventory (576 controls, unchanged).
+- CI: `b18-c-review-3`, the dialog component test and `b18-c-fixture-agent` join the deterministic-manufacturing vitest list (the last was missing since I10a).
+- Not done, PROPOSED for B18-D: gating the editor's own Undo/Redo while a grant executes (a UX choice after the fix, not a safety need).
+- Tests: review-3 10/10; dialog 1/1; broad run: 229 files / 3228 passed, 10 skipped (the 9 live Supabase matrix tests and the opt-in database-qualification test in pcb-sync-authority, a component suite the run now includes) across agent, chat, agent routes, execution-grant, engineering, project, auth, api tripwires, the B15 proposal suites, the fixture runtime, the recovery pipeline and the PCB component suites. eslint 0; tsc 0.

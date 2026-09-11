@@ -168,15 +168,23 @@ function expectedProvenanceFor(entry: AgentExecutionJournalEntry): string {
   return replay ? `${replay.direction}:${replay.referencedTransactionId}` : entry.commitment;
 }
 
+/** [B18-C review 3] The live board's revision while it still IS `transactionId`'s result (its zone fills as the editor holds
+ *  them); null once anything moved past it — the caller then records the revision the grant pinned. */
+function liveRevisionAfterFor(session: CanonicalEditorSession, history: PcbHistory, transactionId: string): string | null {
+  const live = history.committedPresent;
+  return session.headMetadataFor(live)?.headTransactionId === transactionId ? pcbRevisionId(live) : null;
+}
+
 /** Adopt a landed commit proven by canonical evidence: committed → adopted → receipt; returns the receipt. */
-async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; kind: "mismatch" | "journal"; detail: string }> {
+async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number; liveRevisionAfter: string | null }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; kind: "mismatch" | "journal"; detail: string }> {
   const { journal, entry, evidence } = input;
   if (evidence.provenanceCandidateId !== expectedProvenanceFor(entry)) return { ok: false, kind: "mismatch", detail: "the canonical record's chain-protected commitment does not match this grant's journal entry" };
   if (evidence.resultHeadSequence !== null && evidence.resultHeadSequence !== entry.baseHeadSequence + 1) return { ok: false, kind: "mismatch", detail: "the canonical record's result head does not match the expected single advance" };
   let current = entry;
   if (current.state === "grant-consumed") {
     // The grant pinned the exact revision its operations produce from the base; a proven single advance under this commitment landed exactly that.
-    const revisionAfter = entry.grant.binding.proposal.expectedPcbRevisionAfter;
+    // [B18-C review 3] ... in the fill-normalized domain: while the live board still IS the proven result, its own revision is recorded.
+    const revisionAfter = input.liveRevisionAfter ?? entry.grant.binding.proposal.expectedPcbRevisionAfter;
     const marked = await journal.markCommitted(entry.identityKey, { committedAt: input.now, transactionId: evidence.transactionId, pcbRevisionBefore: entry.basePcbRevisionId, pcbRevisionAfter: revisionAfter, headSequenceAfter: entry.baseHeadSequence + 1 });
     if (!marked.ok) return { ok: false, kind: "journal", detail: `the journal could not adopt the proven commit (${marked.reason})` };
     current = { ...current, state: "canonical-committed", committedAt: input.now, transactionId: evidence.transactionId, pcbRevisionBefore: entry.basePcbRevisionId, pcbRevisionAfter: revisionAfter, headSequenceAfter: entry.baseHeadSequence + 1 };
@@ -277,7 +285,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       if (entry.state !== "prepared") {
         // grant-consumed / committed / adopted / finalized: the journal claims progress — the canonical history decides.
         if (evidence.kind === "found") {
-          const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now() });
+          const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) });
           if (!adopted.ok) {
             if (adopted.kind === "journal") { registry.release(identityKey); return refuse("recovery-required", `${adopted.detail}; the proven commit stays pending for the recovery sweep. The board HAS changed.`, { changed: true }); }
             // The ledger holds a transaction under this grant that does not match it: poison AND report it (never "nothing changed").
@@ -416,7 +424,8 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     commitAttempted = true;
     try {
       const metadata = { actor: "ai" as const, reason: `Granted execution ${grant.grantId} (${b.operation.decision})` };
-      const label = `AI: ${b.proposal.preview.after}`.slice(0, 120);
+      // [B18-C review 3] a replay's label names its direction and both sides (its "after" alone can read "(removed)").
+      const label = (replay ? `AI: ${replay.direction} — ${b.proposal.preview.before} → ${b.proposal.preview.after}` : `AI: ${b.proposal.preview.after}`).slice(0, 120);
       // [B18-C I8] a replay goes through the session's verified replay path (canonical first); every other family commits
       // its grant's exact operations.
       commit = replay
@@ -468,27 +477,33 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
 
     // 14. Postconditions on the LIVE result.
     const afterBoard = input.history.committedPresent;
-    const afterRevision = pcbRevisionId(afterBoard);
     const afterHead = session.headMetadataFor(afterBoard);
     // [B18-C review V0] "exactly the grant landed" is decided in the fill-normalized semantic domain (the kernel re-marks zone
     // fills dirty and the editor may refill them before this runs); the head advance and the lineage stay exact.
     // [B18-C I8] a replay lands exactly when two durable records agree (the replay's recorded result is the referenced change's other side).
-    const landedExactly = replay ? session.replayResultVerified(replay.direction, replay.referencedTransactionId, transactionId) : canonicalLineageDigest(afterBoard) === built!.resultLineageDigest;
-    if (!landedExactly || !afterHead || afterHead.headSequence !== base.headSequence + 1 || afterHead.lineageId !== base.lineageId) {
+    // [B18-C review 3] ... at its RECORDED position (the single advance) on the grant's lineage — from the durable records, never
+    // the live board: the user may already have pressed Undo (a later, separate step queued behind the replay).
+    const headSequenceAfter = base.headSequence + 1;
+    const landedExactly = replay
+      ? session.replayResultVerified(replay.direction, replay.referencedTransactionId, transactionId, headSequenceAfter) && session.lineageId === base.lineageId
+      : canonicalLineageDigest(afterBoard) === built!.resultLineageDigest && afterHead !== null && afterHead.headSequence === headSequenceAfter && afterHead.lineageId === base.lineageId;
+    if (!landedExactly) {
       registry.poison(identityKey); await input.journal.poison(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
       return refuse("recovery-required", "The commit landed but its result does not match the grant; recovery required. The board HAS changed — inspect the canonical history.", { changed: true });
     }
+    // The revision after is the live board's; a replay the user already stepped past records the revision its grant pinned.
+    const afterRevision = replay ? (liveRevisionAfterFor(session, input.history, transactionId) ?? b.proposal.expectedPcbRevisionAfter) : pcbRevisionId(afterBoard);
 
     // 15–17. committed → adopted → receipt → finalized.
     const committedAt = now();
-    const marked = await input.journal.markCommitted(identityKey, { committedAt, transactionId, pcbRevisionBefore: revisionBefore, pcbRevisionAfter: afterRevision, headSequenceAfter: afterHead.headSequence });
+    const marked = await input.journal.markCommitted(identityKey, { committedAt, transactionId, pcbRevisionBefore: revisionBefore, pcbRevisionAfter: afterRevision, headSequenceAfter });
     if (!marked.ok) { registry.poison(identityKey); return refuse("recovery-required", "The change was committed but its durable record could not be updated; recovery required. The board HAS changed.", { changed: true }); }
     const adopted = await input.journal.markAdopted(identityKey);
     if (!adopted.ok) { registry.poison(identityKey); return refuse("recovery-required", "The change was committed but its durable adoption could not be recorded; recovery required. The board HAS changed.", { changed: true }); }
     const receipt = buildExecutionReceipt({
       grantId: grant.grantId, identityKey, attemptId: entry.attemptId, transactionId, committedAt,
-      pcbRevisionBefore: revisionBefore, pcbRevisionAfter: afterRevision, headSequenceAfter: afterHead.headSequence,
+      pcbRevisionBefore: revisionBefore, pcbRevisionAfter: afterRevision, headSequenceAfter,
       approvalActor: b.operation.decision === "execute_explicit" ? "server-grant:execute_explicit" : "human:confirmed-preview",
       authorization: { principalId: b.authorization.principalId, membershipRevision: b.authorization.membershipRevision }, commitment: entry.commitment,
     });
@@ -574,7 +589,7 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
       await input.journal.abandon(entry.identityKey, `server state ${status}`); push("abandoned-not-committed", `the grant is ${status} on the server`); continue;
     }
     if (evidence.kind === "found") {
-      const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now() });
+      const adopted = await adoptProvenCommit({ journal: input.journal, entry, evidence: evidence.record, now: now(), liveRevisionAfter: liveRevisionAfterFor(session, input.history, evidence.record.transactionId) });
       if (!adopted.ok) {
         if (adopted.kind === "journal") { push("unavailable", `${adopted.detail}; the proven commit stays pending`); continue; }
         await input.journal.poison(entry.identityKey);

@@ -21,8 +21,10 @@ import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExpli
 
 /** [B18-C I5] 1.1.0: + rotate (angle with a REQUIRED direction word) and flip (onto a named side) for pcb.rotate-side-footprint.
  *  [B18-C review 2] 1.2.0: a flip derives the editor's own Flip (rotation 360 − r); "put" needs the side or layer word.
- *  [B18-C I8] 1.3.0: + "undo" / "redo" of the latest AI change (the grammar reads the direction; the server resolves what). */
-export const EXPLICIT_GRAMMAR_VERSION = "1.3.0";
+ *  [B18-C I8] 1.3.0: + "undo" / "redo" of the latest AI change (the grammar reads the direction; the server resolves what).
+ *  [B18-C review 3] 1.4.0: the undo / redo clause names no kind of change ("the last move" proved an undo of an AI change that
+ *  was not a move). */
+export const EXPLICIT_GRAMMAR_VERSION = "1.4.0";
 
 const REFUSAL_TOKENS = /\b(don'?t|do not|never|not|instead|but|rather|except|unless|if|later|afterwards?|after|before|first|then|what if|would|could|should|can you|maybe|perhaps|probably|and then|also)\b|\?|\n|\r/i;
 const UNIT_NM: Readonly<Record<string, number>> = Object.freeze({ mm: 1_000_000, millimeter: 1_000_000, millimeters: 1_000_000, millimetre: 1_000_000, millimetres: 1_000_000, um: 1_000, µm: 1_000, micron: 1_000, microns: 1_000, mil: 25_400, mils: 25_400, cm: 10_000_000 });
@@ -36,8 +38,9 @@ const ROTATE_PATTERN = /^(?:please\s+)?(?:rotate|turn)\s+([a-z][a-z0-9]*\d)\s+(?
 /** [B18-C I5] 1 = reference designator, 2 = the side. [B18-C review 2] "flip" implies a side change; "put … to the top" also
  *  reads as a position, so "put" needs the side or layer word. */
 const FLIP_PATTERN = /^(?:please\s+)?flip\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+(?:side|layer))?$/i;
-/** [B18-C I8] 1 = undo | redo; optionally "that", "it" or "the last (AI) change / edit / move / operation" — nothing else. */
-const REPLAY_PATTERN = /^(?:please\s+)?(undo|redo)(?:\s+(?:that|it|the\s+last\s+(?:ai\s+)?(?:change|edit|move|operation)))?$/i;
+/** [B18-C I8] 1 = undo | redo; optionally "that", "it" or "the last (AI) change / edit / operation" — nothing else. [B18-C
+ *  review 3] no kind noun: the server resolves WHICH change, so the words may not claim what kind it was. */
+const REPLAY_PATTERN = /^(?:please\s+)?(undo|redo)(?:\s+(?:that|it|the\s+last\s+(?:ai\s+)?(?:change|edit|operation)))?$/i;
 const PUT_PATTERN = /^(?:please\s+)?put\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)\s+(?:side|layer)$/i;
 
 export interface ExplicitProofInput {

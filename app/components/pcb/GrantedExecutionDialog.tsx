@@ -41,8 +41,9 @@ export function GrantedExecutionDialog({ grant, note, busy, disableReason, onCon
         {grant && base && (
           <div className="space-y-3 text-sm" data-testid="granted-execution-card">
             <p className="text-zinc-400 text-xs">
-              The assistant asks to make exactly this change ({grant.binding.operation.family}, {grant.binding.proposal.operationCount} operation
-              {grant.binding.proposal.operationCount === 1 ? "" : "s"}) · grant {grant.grantId.slice(0, 14)}… · expires {new Date(grant.binding.expiresAt).toLocaleTimeString()}.{" "}
+              The assistant asks to make exactly this change ({grant.binding.operation.family}, {grant.binding.proposal.replay
+                ? `${grant.binding.proposal.replay.direction} of the assistant's latest change`
+                : `${grant.binding.proposal.operationCount} operation${grant.binding.proposal.operationCount === 1 ? "" : "s"}`}) · grant {grant.grantId.slice(0, 14)}… · expires {new Date(grant.binding.expiresAt).toLocaleTimeString()}.{" "}
               <span className="text-zinc-300">Nothing has been changed yet.</span> Confirming revalidates everything against the live board and
               executes exactly ONE canonical PCB transaction (one history entry, exactly undoable).
             </p>

@@ -564,7 +564,10 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
                     how: !settlement.undoEligible
                       ? "It is no longer the latest change (or undo is unavailable); the user reverts it from the revision history."
                       : grant.binding.operation.family === REPLAY_FAMILY
-                        ? "This undo or redo is itself a new history entry: the editor's Undo (one step) reverses it — re-applying the change — while it is still the latest change."
+                        // [B18-C review 3] the user's Undo reverses THIS step: after an AI undo it re-applies the change, after an AI redo it removes it again.
+                        ? grant.binding.proposal.replay?.direction === "redo"
+                          ? "This redo is itself a new history entry: the editor's Undo (one step) reverses it — removing the change again — while it is still the latest change."
+                          : "This undo is itself a new history entry: the editor's Undo (one step) reverses it — re-applying the change — while it is still the latest change."
                         : "The user can undo it with the editor's Undo (one step), or ask you to undo it, while it is still the latest change.",
                   },
                   note: "The user's editor committed exactly this change through its canonical session (one transaction, one undo entry). Say what changed, the DRC result and how to undo it; never call the board safe or manufacturing-ready.",

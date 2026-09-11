@@ -70,12 +70,12 @@ const invoke = (gateway: AgentToolInvocationGateway, over: { ctx?: AgentRunConte
 
 describe("B18-C I3 — scenario 1 through the production registry", () => {
   it("the exact request under execute_explicit_tier1 mints an EXPLICIT grant pinned to the production registry digest, the lifted descriptor version and the system prompt version", async () => {
-    expect(AGENT_SYSTEM_PROMPT_VERSION).toBe("1.2.0"); // [B18-C I8] + undo / redo of the assistant's own latest change
+    expect(AGENT_SYSTEM_PROMPT_VERSION).toBe("1.2.1"); // [B18-C I8] + undo / redo of the assistant's own latest change; [review 3] the user's Undo per direction
     const m = minting({ autonomy: EXPLICIT });
     const outcome = await invoke(createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION }));
     expect(outcome).toMatchObject({ kind: "execution-grant", ok: true, decision: "execute_explicit" });
     if (outcome.kind !== "execution-grant") throw new Error("unreachable");
-    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.0", registryDigest: registry.digest(), promptVersion: "1.2.0" });
+    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.0", registryDigest: registry.digest(), promptVersion: "1.2.1" });
     expect(outcome.grant.binding.instruction.explicit).toMatchObject({ proven: true, coverage: "whole-message" });
     expect(outcome.grant.binding.proposal.preview).toEqual({ before: "R3 at (5.000, 5.000) mm", after: "R3 at (7.000, 5.000) mm", warnings: [] });
     expect(m.calls).toBe(1);

@@ -23,7 +23,7 @@ import { permissionTierOfAction } from "../permission-tiers";
 import { REPLAY_FAMILY, isExecutionFamily, parsePublicExecutionGrant, replayOperationsDigest, verifyPublicGrantCoherence, type PublicExecutionGrant } from "../execution-grant";
 import { buildExecutionOperations } from "../execution-operations";
 import { buildExecutionGrantBase, mintablePlanOf, parseExecutionArguments, sealExecutionIntent } from "../../agent/execution-intents";
-import { AI_REPLAY_NOTE, createExecutionGrantMinter } from "../../execution-grant/mint";
+import { AI_REPLAY_NOTES, createExecutionGrantMinter } from "../../execution-grant/mint";
 import { sirkitToolRegistry } from "../tool-catalog";
 import type { ToolDescriptor } from "../tool-registry";
 import { AGENT_SYSTEM_PROMPT_VERSION } from "../../prompts";
@@ -89,7 +89,7 @@ describe("B18-C I8a — the minter resolves the exact last AI change, server-sid
     const b = minted.grant.binding;
     expect(b.operation).toMatchObject({ family: REPLAY_FAMILY, tier: 1, capability: "edit_placement" });
     expect(b.proposal).toMatchObject({ operations: [], operationCount: 0, replay: { direction: "undo", referencedTransactionId: move.receipt.transactionId, referencedGrantId: move.grant.grantId }, expectedPcbRevisionAfter: move.settled.state.settlement!.revisionBefore });
-    expect(b.proposal.preview).toEqual({ before: move.grant.binding.proposal.preview.after, after: move.grant.binding.proposal.preview.before, warnings: [AI_REPLAY_NOTE] });
+    expect(b.proposal.preview).toEqual({ before: move.grant.binding.proposal.preview.after, after: move.grant.binding.proposal.preview.before, warnings: [AI_REPLAY_NOTES.undo] });
     expect(b.targets).toMatchObject({ resolvedFrom: "named", objectIds: [move.receipt.transactionId], kinds: ["transaction"] });
     expect(parsePublicExecutionGrant(JSON.parse(JSON.stringify(minted.grant)))).not.toBeNull();
     expect(verifyPublicGrantCoherence(minted.grant)).toEqual({ ok: true });

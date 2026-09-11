@@ -28,7 +28,7 @@ import { mmToNm } from "../../pcb/units";
 import { buildExecutionOperations } from "../execution-operations";
 import { deriveExplicitPlan, proveExplicitUserRequest } from "../explicit-request";
 import { REPLAY_FAMILY, replayOperationsDigest } from "../execution-grant";
-import { AI_REPLAY_NOTE } from "../../execution-grant/mint";
+import { AI_REPLAY_NOTES } from "../../execution-grant/mint";
 import { recoverGrantedExecutionsForEditor, tenderConfirmedExecution } from "../../project/granted-execution-controller.internal";
 import { sirkitToolRegistry } from "../tool-catalog";
 import { permissionTierOfDescriptor } from "../permission-tiers";
@@ -49,9 +49,9 @@ async function humanMoveR4(c: Composed): Promise<void> {
 }
 
 describe("B18-C I8b — the undo / redo grammar", () => {
-  it("'undo' / 'redo' (optionally 'that', 'it', 'the last change') derive the direction; anything more is never explicit; the proof needs the server's reference", () => {
+  it("'undo' / 'redo' (optionally 'that', 'it', 'the last change') derive the direction; anything more — a kind noun such as 'the last move' included (review 3) — is never explicit; the proof needs the server's reference", () => {
     const board = fixtureBoard();
-    for (const [text, direction] of [["Undo", "undo"], ["undo that.", "undo"], ["Please undo it", "undo"], ["Undo the last AI change.", "undo"], ["redo", "redo"], ["Redo the last move", "redo"]] as const) {
+    for (const [text, direction] of [["Undo", "undo"], ["undo that.", "undo"], ["Please undo it", "undo"], ["Undo the last AI change.", "undo"], ["redo", "redo"], ["Redo the last edit", "redo"]] as const) {
       expect(deriveExplicitPlan(text, REPLAY_FAMILY, board), text).toMatchObject({ plan: { family: REPLAY_FAMILY, direction } });
     }
     for (const text of ["undo the move of R3", "don't undo that", "undo?", "undo and redo", "undo twice", "revert that", "undo that, then move R4", "Undo that\nplease"]) {
@@ -115,7 +115,7 @@ describe("B18-C I8b — undo and redo end to end", () => {
     const asked = await runScenario(c, replayScript("undo"), { message: "Could you undo that?" });
     expect(asked.rituals).toEqual([]);
     expect(answerOf(asked.adapter)).toMatchObject({ ok: true, status: "execution_preview_issued", family: REPLAY_FAMILY, decision: "preview_then_confirm" });
-    expect(asked.grants[0]!.binding.proposal.preview.warnings).toEqual([AI_REPLAY_NOTE]);
+    expect(asked.grants[0]!.binding.proposal.preview.warnings).toEqual([AI_REPLAY_NOTES.undo]);
     const head = headOf(c).headSequence;
     expect(await tenderConfirmedExecution(ritual(c, asked.grants[0]!))).toMatchObject({ ok: true, status: "committed", receipt: { approvalActor: "human:confirmed-preview" } });
     expect(r3Of(c).at.x).toBe(x0);
