@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "e88ca47",
+  "lastGreenSha": "a162ef9",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I12 part 2: the adversarial review of all of B18-D (workflow wf_ebe145ea-ffc over I0-I10, then I11-I12), fixes for what survives verification, the full Playwright suite, the closing record; then B18-E (the scenario matrix) and B18 validation.",
-  "updatedAt": "2026-09-11T14:18:48-04:00"
+  "nextAction": "B18-D I12 part 3: a short review of I11 and I12 (a second workflow), the full Playwright suite, the closing record; then B18-E (the scenario matrix) and B18 validation.",
+  "updatedAt": "2026-09-11T19:28:56-04:00"
 }

@@ -318,6 +318,7 @@ export default function PcbEditor({
   executionGrantIntake,
   onExecutionGrantSettled,
   onExecutionGrantProgress,
+  onExecutionGrantAttemptRefused,
   onExecutionRecovery,
 }: {
   schematic: SchematicState;
@@ -363,6 +364,9 @@ export default function PcbEditor({
   onExecutionGrantSettled?: (grantId: string, outcome: "committed" | "cancelled" | "retired" | "failed", detail?: GrantedExecutionOutcome | null) => void;
   /** [B18-D I4] the editor started executing this grant (display only). */
   onExecutionGrantProgress?: (grantId: string) => void;
+  /** [B18-D review] a confirmed preview refused for a transient reason changed nothing and keeps its card for a retry: the
+   *  chat's entry leaves "executing" and says the attempt was not made. Display only. */
+  onExecutionGrantAttemptRefused?: (grantId: string, refusal: { code: string; message: string }) => void;
   /** [B18-D I4] what the hydration sweep did (display only; the sweep's own notice stays). */
   onExecutionRecovery?: (results: GrantedExecutionRecoveryResult[]) => void;
   /** [B15.3 §J] the page-owned transition interlock accessor — the apply
@@ -1594,11 +1598,12 @@ export default function PcbEditor({
         // dialog so the user can retry what the message tells them to retry; every other outcome clears it.
         const transient = !outcome.changed && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
         if (!(mode === "confirm" && grant.binding.operation.decision === "preview_then_confirm" && transient)) onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired", outcome);
+        else onExecutionGrantAttemptRefused?.(grant.grantId, { code: outcome.code, message: outcome.message }); // [B18-D review] the card stays for a retry
       }
     } finally {
       setExecutionGrantBusy(false);
     }
-  }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled, onExecutionGrantProgress]);
+  }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled, onExecutionGrantProgress, onExecutionGrantAttemptRefused]);
   const cancelExecutionGrant = useCallback(async () => {
     const grant = pendingExecutionGrant;
     if (!grant || !syncIdentity) { if (grant) onExecutionGrantSettled?.(grant.grantId, "cancelled"); return; }

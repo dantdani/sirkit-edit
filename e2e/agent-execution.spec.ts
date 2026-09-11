@@ -326,6 +326,9 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
   await expect(page.getByText(/the tool answered execution_preview_issued/).last()).toBeVisible();
   await expect(page.getByTestId("granted-execution-card")).toBeHidden();
   await expect(page.getByText(/Change ready for your confirmation in the PCB editor — \(nothing at all\)/)).toHaveCount(0);
+  // [B18-D review] the dropped grant is said to be dropped, and its tool line never says it is awaiting confirmation
+  await expect(page.getByText("An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.").last()).toBeVisible();
+  await expect(page.getByText(/dropped by this page — it failed the integrity checks; nothing was changed$/).last()).toBeVisible();
   await page.screenshot({ path: `${EVIDENCE}/forged-grant-dropped.png`, fullPage: false });
 
   const after = await board();
@@ -388,7 +391,7 @@ test("B18-D I8 Undo in chat: a committed AI move that is still the latest is und
   expect(r3(await board()).at.x).toBe(x0); // exactly the AI change reversed
 });
 
-test("B18-D I9 Stop: Stop during a chat run cancels it and sends nothing; the chat says it stopped and that a change the editor already started still finishes", async () => {
+test("B18-D I9 Stop: Stop during a chat run cancels it and sends nothing; the chat says it stopped and that an AI change already sent to the editor is reported in its entry", async () => {
   await openChat();
   const prompt = page.getByTestId("prompt-input");
   await expect(prompt).toBeEnabled({ timeout: 90_000 });
@@ -405,7 +408,7 @@ test("B18-D I9 Stop: Stop during a chat run cancels it and sends nothing; the ch
   const requests = chatBodies.length;
   await stop.click();
   release(); // the held request reaches the server; the page cancels its reader as soon as the response arrives
-  await expect(page.getByText("Stopped. An AI change your editor had already started still finishes and is reported here.").last()).toBeVisible();
+  await expect(page.getByText("Stopped. An AI change already sent to your editor is reported in its entry: made, or not made.").last()).toBeVisible();
   await expect(stop).toBeHidden();
   await expect(prompt).toBeEnabled();
   expect(chatBodies.length, "Stop sends nothing").toBe(requests);
@@ -509,6 +512,23 @@ test("B18-D P2: while an AI change is being made the editor's Undo and Redo wait
   if (priorState !== null) await expect(entries.nth(entriesBefore - 1)).toHaveAttribute("data-state", priorState);
   await expect(page.getByTestId("prompt-input")).toBeEnabled({ timeout: 90_000 });
   expect(r3(await board()).at.x).toBe(x0 - 3 * NM_PER_MM); // committed once; the refused Ctrl+Z changed nothing
+});
+
+test("B18-D review: a preview replaced by a newer one says so, and only the newer card remains", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  await chat(`Add silkscreen text FIRST at ${at.x}, ${at.y}.`);
+  await expect(page.getByTestId("granted-execution-card")).toBeVisible();
+  const firstId = await page.getByTestId("chat-execution-entry").last().getAttribute("data-grant-id");
+  expect(firstId).toBeTruthy();
+  const first = page.locator(`[data-testid="chat-execution-entry"][data-grant-id="${firstId}"]`);
+  await expect(first).toHaveAttribute("data-state", "awaiting_confirmation");
+  await chat(`Add silkscreen text SECOND at ${at.x}, ${at.y}.`);
+  await expect(first).toHaveAttribute("data-state", "superseded");
+  await expect(page.getByTestId("granted-execution-preview")).toContainText("SECOND");
+  await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  expect(silkTexts(await board())).toEqual(silkTexts(start));
 });
 
 test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, while an execution entry existed, and never in a request's history", async () => {

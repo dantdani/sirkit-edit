@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import type { PublicExecutionGrant } from "../../engineering/execution-grant";
-import { LABEL_BEFORE_CHANGE, LABEL_BEFORE_REVIEW, NOTE_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entrySuperseded, initialRunView, isTerminalEntry, projectRunView, reduceRunView, runViewExecutionCommitted, toolLineLabel } from "../chat-run-view";
+import { LABEL_BEFORE_CHANGE, LABEL_BEFORE_REVIEW, NOTE_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entrySuperseded, initialRunView, isTerminalEntry, projectRunView, reduceRunView, toolLineLabel } from "../chat-run-view";
 
 const run = (events: Array<Record<string, unknown>>) => projectRunView(events.reduce(reduceRunView, initialRunView()));
 const text = (value: string, phase?: "interim" | "final") => ({ type: "text_delta", text: value, ...(phase ? { phase } : {}) });
@@ -60,9 +60,7 @@ describe("B18-D I3 — the answer, the notes and the history (Rule 2 on the page
     for (const settled of [{ status: "settled", outcome: "not-committed" }, { status: "retired", outcome: null }, { status: "unsettled", outcome: null }, { status: "in_flight", outcome: null }]) {
       expect(run([finished("execution_grant_issued"), { type: "execution_settled", ...settled }, text("Done.", "final"), { type: "run_completed" }]).label, JSON.stringify(settled)).toBe(LABEL_BEFORE_CHANGE);
     }
-    // a preview the human later confirms: the page folds the editor's committed outcome in
-    const confirmed = projectRunView(runViewExecutionCommitted([finished("execution_preview_issued"), text("R3 is moved.", "final")].reduce(reduceRunView, initialRunView())));
-    expect(confirmed.label).toBeNull();
+    // [B18-D review] a preview the human confirms after its run ended keeps its label: the answer was written before any change.
   });
 
   it("a proposal or candidate labels the answer as written before anything was applied; a read-only run is never labelled", () => {

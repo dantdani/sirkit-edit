@@ -201,7 +201,12 @@ export function undoRepairTransaction(history: PcbHistory, transactionId: string
   if (!latest || latest.metadata.transactionId !== transactionId) {
     return { ok: false, error: "Only the most recent repair transaction can be undone directly." };
   }
+  // [B18-D review] the editor's history can refuse a step (while an AI change is being made it holds undo and redo): never
+  // report an undo that did not happen.
+  if (!history.canUndo) return { ok: false, error: "The editor refused the undo right now (an AI change may be in progress); nothing was undone. Try again when it finishes." };
   history.undo();
+  const after = [...history.entries].reverse().find((entry) => entry.state === "applied");
+  if (after?.metadata.transactionId === transactionId) return { ok: false, error: "The editor did not undo the repair; nothing was undone." };
   return { ok: true };
 }
 

@@ -60,7 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -2686,6 +2686,10 @@ export default function Home() {
   // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
   // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
   const [pendingExecutionGrant, setPendingExecutionGrant] = useState<{ grant: ReceivedExecutionGrant["grant"]; decision: ReceivedExecutionGrant["decision"]; note: string | null; originRunId: string | null } | null>(null);
+  // [B18-D I6/I8] one chat execution entry per grant, kept by grant id (the ref for handlers, the state for rendering).
+  // Declared with the other pending grant state so the project reset below can clear it: entries never cross projects.
+  const executionEntriesRef = useRef<Map<string, ExecutionEntry>>(new Map());
+  const [executionEntries, setExecutionEntries] = useState<ReadonlyMap<string, ExecutionEntry>>(() => new Map());
 
   // B06.2/B07.2: pending schematic-history recovery decision (projection
   // conflict, corrupt durable history, or an identity-invalid projection
@@ -3065,6 +3069,8 @@ export default function Home() {
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
     setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
+    executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
+    setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
     setSchematicRecovery(null);         // recovery re-evaluated by the new open
     // B07.5 (failure A) — release recovery-decision ownership: the previous
     // project's in-flight decision (if any) is already scope-stale; the new
@@ -4373,8 +4379,6 @@ export default function Home() {
   // [B18-D I6] one chat execution entry per grant (display only). Kept by grant id so the preview outcome, the explicit
   // settlement and recovery update the same entry; persisted through the existing chat log shape (a reloaded entry is a
   // static record).
-  const executionEntriesRef = useRef<Map<string, ExecutionEntry>>(new Map());
-  const [executionEntries, setExecutionEntries] = useState<ReadonlyMap<string, ExecutionEntry>>(() => new Map()); // [B18-D I8] what the entries' Undo renders from
   const upsertExecutionEntry = useCallback((entry: ExecutionEntry, insertBeforeId?: string) => {
     executionEntriesRef.current.set(entry.grantId, entry);
     setExecutionEntries((prev) => new Map(prev).set(entry.grantId, entry));
@@ -4615,8 +4619,19 @@ export default function Home() {
             // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
             // explicit grants execute once and settle back to the server. Receiving it changes nothing.
             const received = receiveExecutionGrantReadyEvent(event);
+            if (!received) {
+              // [B18-D review] the SAFE receiver dropped the grant (altered in transit, incoherent or not issued). The tool line
+              // came first and said it was issued: rewrite it, and say what happened.
+              setMessages((prev) => prev.map((m) => (m.role === "log" && m.id === logId ? { ...m, entries: markGrantLineDropped(m.entries) } : m)));
+              appendActivityStep(logId, "An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.", "error");
+            }
             if (received) {
               setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
+              // [B18-D review] one card at a time: an earlier preview still awaiting confirmation was replaced by this grant (its card
+              // is gone), so its entry says so instead of inviting a confirmation that no longer exists.
+              for (const earlier of [...executionEntriesRef.current.values()]) {
+                if (earlier.grantId !== received.grant.grantId && earlier.state === "awaiting_confirmation") upsertExecutionEntry(entrySuperseded(earlier));
+              }
               // [B18-D I6] ONE execution entry per grant (just before this run's answer) carries the state, the tier, what was
               // asked and understood, the targets, the operations and why a confirmation is (not) required; the run log points to it.
               upsertExecutionEntry(entryFromGrant({ grant: received.grant, decision: received.decision, note: received.note }, refOf), assistantId);
@@ -4673,15 +4688,20 @@ export default function Home() {
           } catch { /* malformed line: skipped, never rendered raw */ }
         }
       }
+      // [B18-D review] a run stopped before it ended: close its view so its interim notes are still released as notes.
+      const stoppedEarly = chatRun.stopped && runView.terminal === null;
+      if (stoppedEarly) runView = reduceRunView(runView, { type: "run_failed", reason: "stopped", message: "Stopped by you." });
       // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
       if (scope.isCurrent()) {
         const projected = projectRunView(runView);
         for (const note of projected.notes) appendActivityStep(logId, note, "done");
         if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
       }
-      // [B18-D I9] a stopped run says so — and that a change the editor had already started still finishes and is reported here.
-      if (chatRun.stopped && scope.isCurrent()) {
-        const stopped = "Stopped. An AI change your editor had already started still finishes and is reported here.";
+      // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).
+      // An AI change already sent to the editor is reported in its entry either way — made, or not made: a grant not yet consumed
+      // is retired run_cancelled, so "it still finishes" would not be true.
+      if (stoppedEarly && scope.isCurrent()) {
+        const stopped = "Stopped. An AI change already sent to your editor is reported in its entry: made, or not made.";
         appendActivityStep(logId, "Stopped by you — the assistant's run was cancelled.", "done");
         setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content ? `${m.content}\n\n${stopped}` : stopped } : m)));
       }
@@ -6400,6 +6420,7 @@ export default function Home() {
                       else if (outcome === "failed") upsertExecutionEntry(entryEditorOutcome(entry, { ok: false, code: "session-superseded", changed: false }));
                     }}
                     onExecutionGrantProgress={(grantId) => { const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryExecuting(entry)); }}
+                    onExecutionGrantAttemptRefused={(grantId, refusal) => { /* [B18-D review] the card stays; the entry says the attempt changed nothing */ const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryAttemptRefused(entry, refusal)); }}
                     onExecutionRecovery={(results) => { for (const result of results) { const entry = executionEntriesRef.current.get(result.grantId); if (entry && result.action !== "left-in-flight") upsertExecutionEntry(entryRecovery(entry, result.action)); } }}
                   />
                 </div>

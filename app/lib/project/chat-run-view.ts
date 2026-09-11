@@ -28,6 +28,7 @@ const TOOL_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
   proposal_sealed: "proposal sealed — awaiting your review",
   layout_candidate_ready: "candidate ready — awaiting your review",
   view_command_dispatched: "view request sent",
+  execution_grant_dropped: "dropped by this page — it failed the integrity checks; nothing was changed", // [B18-D review]
 });
 
 /** One tool line: the tier tag, the title and what really happened. */
@@ -48,6 +49,22 @@ export function refusedLineLabel(input: { title?: unknown; tier?: unknown; statu
   const title = typeof input.title === "string" && input.title.length > 0 ? input.title.slice(0, 120) : "Unknown tool";
   const status = typeof input.status === "string" ? input.status.slice(0, 60) : "unknown";
   return `${tag}${title} — refused before running (${status}) — nothing ran`;
+}
+
+/** [B18-D review] Once this page drops a grant that the server reported as issued (its tool line arrives first), the run
+ *  log's latest execution tool line is rewritten: it never keeps saying "executing in your editor" or "awaiting your
+ *  confirmation". Every other line is returned unchanged; the input is not mutated. */
+export function markGrantLineDropped(rows: readonly EntryLogRow[]): EntryLogRow[] {
+  const issued = [TOOL_STATUS_LABELS.execution_grant_issued, TOOL_STATUS_LABELS.execution_preview_issued];
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index]!;
+    const label = issued.find((candidate) => row.text.endsWith(` — ${candidate}`));
+    if (!label) continue;
+    const copy = [...rows];
+    copy[index] = { ...row, text: `${row.text.slice(0, row.text.length - label.length)}${TOOL_STATUS_LABELS.execution_grant_dropped}`, status: "error" };
+    return copy;
+  }
+  return [...rows];
 }
 
 // ── the run's answer, notes and history ──────────────────────────────────────
@@ -91,8 +108,6 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
   }
 }
 
-/** Mark the run's pending execution as durably committed (the editor's outcome for a preview the human confirmed). */
-export const runViewExecutionCommitted = (state: RunViewState): RunViewState => ({ ...state, committedExecutions: state.committedExecutions + 1 });
 
 export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null }
 
@@ -135,6 +150,8 @@ export interface ExecutionEntry {
   undoEligible: boolean;
   /** [B18-D I8] the chat Undo's result for this entry: a success, or the timeline's refusal verbatim. */
   undoResult?: { ok: boolean; text: string } | null;
+  /** [B18-D review] the last confirmed attempt was refused for a transient reason (nothing changed; the card stays). */
+  attempt?: string | null;
 }
 
 /** The entry for a received grant (preview: awaiting your confirmation; explicit: issued). */
@@ -215,6 +232,12 @@ export const entryCancelled = (entry: ExecutionEntry): ExecutionEntry => (TERMIN
 export const entrySuperseded = (entry: ExecutionEntry): ExecutionEntry => (TERMINAL.has(entry.state) ? entry : { ...entry, state: "superseded", failure: { headline: "Replaced — a newer change or a board change superseded it. Nothing was changed.", next: "Ask again.", code: "superseded" } });
 export const entryRecovery = (entry: ExecutionEntry, action: unknown): ExecutionEntry => ({ ...entry, recovery: recoverySentence(action) });
 export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(entry.state);
+/** [B18-D review] A confirmed preview refused for a transient reason changed nothing and keeps its card for a retry: the entry
+ *  returns to awaiting confirmation and says the attempt was not made — never "executing" with no ritual running. */
+export const entryAttemptRefused = (entry: ExecutionEntry, refusal: { code: string; message: string }): ExecutionEntry =>
+  entry.state === "executing" || entry.state === "awaiting_confirmation"
+    ? { ...entry, state: "awaiting_confirmation", attempt: `Last attempt not made: ${refusal.message.replace(/[.\s]+$/, "").slice(0, 300)}. Nothing changed — retry or cancel on the card.` }
+    : entry;
 
 /** [B18-D I8] What a committed entry's "Undo this change" shows (chat-execution-ux.md §1 item 10): available only for a
  *  change still undoable, still the timeline's newest operation (a commit or a redo of exactly this transaction) and with
@@ -224,10 +247,11 @@ export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(
 export interface EntryUndoAvailability { eligible: boolean; reason: string | null }
 export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<ProjectOperation, "kind" | "ref"> | undefined, aiChangeInFlight: boolean): EntryUndoAvailability | null {
   if (entry.state !== "committed" || !entry.transaction) return null;
-  if (entry.undoResult?.ok) return { eligible: false, reason: "Already undone — the editor's Redo brings it back." };
+  const latest = newest !== undefined && (newest.kind === "commit" || newest.kind === "redo") && newest.ref?.transactionId === entry.transaction.id;
+  // The chat's Undo is one-shot (D-A8). [B18-D review] its reason stays true after the editor's Redo brings the change back.
+  if (entry.undoResult?.ok) return { eligible: false, reason: latest ? "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" : "Already undone — the editor's Redo brings it back." };
   if (!entry.undoEligible) return { eligible: false, reason: "No longer undoable from here — use the revision history." };
   if (aiChangeInFlight) return { eligible: false, reason: "Paused — an AI change is being made." };
-  const latest = newest !== undefined && (newest.kind === "commit" || newest.kind === "redo") && newest.ref?.transactionId === entry.transaction.id;
   return latest ? { eligible: true, reason: null } : { eligible: false, reason: "No longer the latest operation — use the revision history." };
 }
 
@@ -286,11 +310,12 @@ export function entryToLogMessage(entry: ExecutionEntry): EntryLogMessage {
     const t = entry.transaction;
     rows.push(row("transaction", `Transaction ${t.id} · revision ${(t.revisionBefore ?? "?").slice(0, 16)}… → ${(t.revisionAfter ?? "?").slice(0, 16)}… · history #${t.headSequenceAfter ?? "?"} · server record: ${entry.serverRecord ?? "not yet recorded"}`));
   }
+  if (entry.attempt && entry.state === "awaiting_confirmation") rows.push(row("attempt", entry.attempt, "error")); // [B18-D review]
   if (entry.failure && entry.state !== "committed") rows.push(row("next", `Next: ${entry.failure.next}`, "error"));
   if (entry.recovery) rows.push(row("recovery", entry.recovery));
   if (entry.state === "committed") {
     // [B18-D I8] once the chat's Undo was used, its result replaces the hint
-    const undo = entry.undoResult ?? { ok: true, text: entry.undoEligible ? "Undo: the editor's Undo (one step), or say “Undo that.”" : "Undo: no longer the latest change — use the revision history." };
+    const undo = entry.undoResult ?? { ok: true, text: entry.undoEligible ? "Undo: while it is the latest change — “Undo this change” here, the editor's Undo (one step), or say “Undo that.”" : "Undo: it was no longer the latest change when it settled — use the revision history." };
     rows.push(row("undo", undo.text, undo.ok ? "done" : "error"));
   }
   return { id, role: "log", title: `AI change — ${entry.understood}`.slice(0, 160), status, entries: rows };

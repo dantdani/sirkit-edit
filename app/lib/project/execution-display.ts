@@ -39,13 +39,28 @@ const idLabel = (refOf: RefOf | undefined, id: unknown): string => {
 
 function describeSilk(item: unknown): string {
   if (!isObject(item)) return "a silkscreen item (not displayable)";
-  if (item.kind === "text") return `silkscreen text ${quoted(item.text)} at ${point(item.position)} on the ${item.layer === "silkBottom" ? "bottom" : "top"}, ${formatMm(item.heightNm)} mm high`;
+  if (item.kind === "text") {
+    const parts = [`silkscreen text ${quoted(item.text)} at ${point(item.position)} on the ${item.layer === "silkBottom" ? "bottom" : "top"}, ${formatMm(item.heightNm)} mm high`];
+    // [B18-D review] every field an update can change is shown (the runbook's "exact proposed operations")
+    if (typeof item.strokeWidthNm === "number") parts.push(`stroke ${formatMm(item.strokeWidthNm)} mm`);
+    if (typeof item.rotationDeg === "number" && Number.isFinite(item.rotationDeg)) parts.push(`rotation ${item.rotationDeg}°`);
+    if (typeof item.mirror === "boolean") parts.push(item.mirror ? "mirrored" : "not mirrored");
+    if (item.anchor === "left" || item.anchor === "center" || item.anchor === "right") parts.push(`anchored ${item.anchor}`);
+    return parts.join(", ");
+  }
   return `a silkscreen ${short(item.kind, 20)} item`;
 }
 function describeDimension(value: unknown): string {
   if (!isObject(value)) return "a dimension (not displayable)";
   const kind = typeof value.kind === "string" ? `${value.kind.slice(0, 20)} ` : "";
-  return `a ${kind}dimension from ${point(value.a)} to ${point(value.b)}`;
+  const parts = [`a ${kind}dimension from ${point(value.a)} to ${point(value.b)}`];
+  // [B18-D review] every field an update can change is shown (an update may change only the style)
+  if (typeof value.offsetNm === "number") parts.push(`offset ${formatMm(value.offsetNm)} mm`);
+  if (typeof value.layer === "string") parts.push(`on ${short(value.layer, 20)}`);
+  if (value.unit === "mm" || value.unit === "in") parts.push(`in ${value.unit}${typeof value.precision === "number" ? ` to ${value.precision} decimals` : ""}`);
+  if (typeof value.textHeightNm === "number") parts.push(`text ${formatMm(value.textHeightNm)} mm`);
+  if (typeof value.strokeWidthNm === "number") parts.push(`stroke ${formatMm(value.strokeWidthNm)} mm`);
+  return parts.join(", ");
 }
 
 /** One digest-covered operation as a sentence (never throws; an unknown kind is "not displayable"). */

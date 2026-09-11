@@ -79,8 +79,10 @@ describe("B18-D I8 — what the entry's Undo shows", () => {
 
   it("a success is written into the entry once (one history step; no longer undoable); a refusal carries the timeline's message verbatim", () => {
     const undone = entryUndoResult(committed, { ok: true });
-    expect(undone).toMatchObject({ state: "committed", undoEligible: false });
-    expect(entryUndoAvailability(undone, { kind: "redo", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: "Already undone — the editor's Redo brings it back." });
+    expect(undone).toMatchObject({ state: "committed", undoEligible: false, undoResult: { ok: true } });
+    expect(entryUndoAvailability(undone, { kind: "undo", ref: { transactionId: "tx-before" } }, false)).toEqual({ eligible: false, reason: "Already undone — the editor's Redo brings it back." });
+    // [B18-D review] pin moved: after the editor's Redo the reason no longer says "Already undone"; the chat's Undo stays one-shot (D-A8)
+    expect(entryUndoAvailability(undone, { kind: "redo", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" });
     const message = entryToLogMessage(undone);
     const rows = message.entries.map((row) => row.text);
     expect(rows.filter((text) => text === "Undone by you — the editor's own Undo reversed this change (one history step).")).toHaveLength(1);
