@@ -155,6 +155,8 @@ export async function previewRepairTransaction(
   };
 }
 
+const REPAIR_COMMAND_ID = "pcb.board-repair";
+
 export async function applyRepairTransaction(
   history: PcbHistory,
   plan: PCBRepairPlan,
@@ -174,7 +176,7 @@ export async function applyRepairTransaction(
   // execution time and the candidate is delta-compiled (never a raw
   // whole-board history write). A rejected/stale preview mutates nothing.
   const result = await commitPcbCandidate(history, {
-    commandId: "pcb.board-repair",
+    commandId: REPAIR_COMMAND_ID,
     label: "AI PCB repair",
     idempotencyKey: `repair:${preview.id}`,
     metadata: {
@@ -184,7 +186,9 @@ export async function applyRepairTransaction(
       sourceViolationIds: preview.sourceViolationIds,
       transactionId: preview.id,
       affectedObjects: preview.affectedObjectIds,
-      details: { metrics: preview.metrics, fixIds: preview.selectedFixIds },
+      // The repair's own id also rides in the details: a bound canonical session records the executor's transaction id as
+      // the entry's `transactionId` (B03), and the repair's undo must still find THIS repair there.
+      details: { metrics: preview.metrics, fixIds: preview.selectedFixIds, repairTransactionId: preview.id },
     },
     buildCandidate: (board) => {
       if (pcbRevisionId(board) !== preview.baseRevisionId) throw new Error("Board changed after preview; generate a new repair plan.");
@@ -196,9 +200,22 @@ export async function applyRepairTransaction(
   return { ok: true };
 }
 
+/**
+ * Whether `entry` is the repair `repairTransactionId`, matched by the repair's own id in the entry's details: a bound
+ * canonical session records the executor's transaction id (`tx:<command>:<idempotency key>`) as the entry's `transactionId`,
+ * so that field never equals the repair id there. A canonical entry must also have been committed under the repair command
+ * (its B03 details); a bare-history entry still carries the repair id as its `transactionId`.
+ */
+function isRepairEntry(entry: PcbHistory["entries"][number] | undefined, repairTransactionId: string): boolean {
+  const metadata = entry?.metadata;
+  if (metadata?.operationType !== "pcb_repair" || metadata.details?.repairTransactionId !== repairTransactionId) return false;
+  const b03 = metadata.details.b03 as { commandId?: unknown } | undefined;
+  return b03 === undefined ? metadata.transactionId === repairTransactionId : b03.commandId === REPAIR_COMMAND_ID;
+}
+
 export function undoRepairTransaction(history: PcbHistory, transactionId: string): { ok: boolean; error?: string } {
   const latest = [...history.entries].reverse().find((entry) => entry.state === "applied");
-  if (!latest || latest.metadata.transactionId !== transactionId) {
+  if (!isRepairEntry(latest, transactionId)) {
     return { ok: false, error: "Only the most recent repair transaction can be undone directly." };
   }
   // [B18-D review] the editor's history can refuse a step (while an AI change is being made it holds undo and redo): never
@@ -206,7 +223,7 @@ export function undoRepairTransaction(history: PcbHistory, transactionId: string
   if (!history.canUndo) return { ok: false, error: "The editor refused the undo right now (an AI change may be in progress); nothing was undone. Try again when it finishes." };
   history.undo();
   const after = [...history.entries].reverse().find((entry) => entry.state === "applied");
-  if (after?.metadata.transactionId === transactionId) return { ok: false, error: "The editor did not undo the repair; nothing was undone." };
+  if (isRepairEntry(after, transactionId)) return { ok: false, error: "The editor did not undo the repair; nothing was undone." };
   return { ok: true };
 }
 
