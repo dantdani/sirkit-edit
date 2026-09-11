@@ -584,3 +584,12 @@ _(discovery, reproduction and results appended below as they are observed)_
 - The page: `send()` registers its run; Stop cancels the response reader (also when pressed before the response arrived) and carries nothing; the chat says "Stopped. An AI change your editor had already started still finishes and is reported here."
 - Gates: B17 579 controls / 60 surfaces (Stop classified semantic under ai.chat-run-stop); B01 fingerprint regenerated (the Stop button title literal); b17-a-control-inventory, action-registry and the route test 17/17.
 - Tests: broad run: 242 files / 3276 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 7/7 passed (59.0 s) incl. the new Stop scenario and the re-taken Undo-in-chat frame (now on the entry); the server log line `[llm:openai] request failed (missing_credentials)` belongs to the automatic schematic review (`POST /api/schematic/review` 503; the fixture runtime has no provider credentials), not to the Stop scenario; tsc 0; eslint: `page.tsx` 14 pre-existing problems before and after, the new test clean.
+- CI at `f0152ca` (I9): CI green (deterministic-manufacturing 34595618195 incl. page-browser-e2e, benchmark-quality 34595618149).
+
+### B18-D I10 — calls refused before they run are shown (2026-09-11 local, solo; this commit)
+
+- Reproduced first: `b18-d-tool-refused` (no `tool_refused` event for an unknown tool, invalid JSON or a repeated call) and `b18-d-refused-line` (no label) failed 3/3 on the pre-change code.
+- The loop emits an untraced `tool_refused` at its seven pre-run refusal sites through one helper that also pushes the unchanged error result; the page shows "… refused before running (<code>) — nothing ran".
+- The trace and the evaluation capsules are unchanged: the agent suite (33 files / 363 tests, including the b11 capsules and e11) passed without a pin moving.
+- Gates: B17 579 controls and the B01 fingerprint unchanged (no new control).
+- Tests: broad run: 244 files / 3279 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 7/7 passed (1.1 min); the one `[llm:openai] request failed (missing_credentials)` server line is again the automatic schematic review (pre-existing; also in the B16-C fixture logs); tsc 0; eslint clean on the changed files (`page.tsx` 14 pre-existing problems before and after).

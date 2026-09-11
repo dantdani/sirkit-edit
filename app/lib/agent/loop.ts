@@ -357,22 +357,28 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           outputText: resultText({ ok: false, status, detail }),
           isError: true,
         });
+        // [B18-D I10] a call refused BEFORE it runs is also shown to the user, as an UNTRACED `tool_refused` event (the
+        // model still receives the same error result; the run trace and the evaluation capsules are unchanged).
+        const refuse = (status: string, detail: string, known: { toolId: string; title: string; tier: ReturnType<typeof permissionTierOfDescriptor> | null } | null): void => {
+          emitOnce({ type: "tool_refused", runId: request.runId, callId: call.callId, toolId: known?.toolId ?? null, title: known?.title ?? null, tier: known?.tier ?? null, status });
+          results.push(errorResult(status, detail));
+        };
 
         const resolved = toolset.resolve(call.providerName);
         if (!resolved) {
           emitOnce({ type: "warning", runId: request.runId, message: `The model requested unknown tool "${call.providerName.slice(0, 80)}" — refused.` });
-          results.push(errorResult("unknown_tool", "No such tool is exposed in this run."));
+          refuse("unknown_tool", "No such tool is exposed in this run.", null);
           continue;
         }
         const descriptor = deps.registry.get(resolved.toolId, resolved.version);
         const title = descriptor?.title ?? resolved.toolId;
         const tier = descriptor ? permissionTierOfDescriptor(descriptor) : null; // [B18-D I2] display data on the tool events
         if (toolCallsUsed >= request.budget.maxToolCalls) {
-          results.push(errorResult("budget_exhausted", "The run's tool-call budget is exhausted; answer from the results you already have."));
+          refuse("budget_exhausted", "The run's tool-call budget is exhausted; answer from the results you already have.", { toolId: resolved.toolId, title, tier });
           continue;
         }
         if (call.argumentsText.length > MAX_ARGUMENT_CHARS) {
-          results.push(errorResult("invalid_input", "Tool arguments exceeded the size limit."));
+          refuse("invalid_input", "Tool arguments exceeded the size limit.", { toolId: resolved.toolId, title, tier });
           continue;
         }
         let args: Record<string, unknown>;
@@ -381,7 +387,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("not an object");
           args = parsed as Record<string, unknown>;
         } catch {
-          results.push(errorResult("invalid_input", "Tool arguments were not a valid JSON object."));
+          refuse("invalid_input", "Tool arguments were not a valid JSON object.", { toolId: resolved.toolId, title, tier });
           continue;
         }
         // Cycle detection: tool id/version + canonical argument digest.
@@ -389,7 +395,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         const seen = (identicalCalls.get(cycleKey) ?? 0) + 1;
         identicalCalls.set(cycleKey, seen);
         if (seen > request.budget.maxIdenticalCalls) {
-          results.push(errorResult("repeated_call", "This exact call already ran in this run; its result has not changed."));
+          refuse("repeated_call", "This exact call already ran in this run; its result has not changed.", { toolId: resolved.toolId, title, tier });
           continue;
         }
         // Proposal single-flight: never two proposal artifacts per run — a
@@ -400,11 +406,11 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         const isProposal = descriptor?.operationClass === "propose";
         const isExecution = descriptor?.operationClass === "mutate";
         if (isProposal && (proposalIssued || executionIssued)) {
-          results.push(errorResult("proposal_exists", proposalIssued ? "A sealed proposal already exists for this run; ask the user to review it." : "An execution grant was already issued in this run; report its outcome before proposing more."));
+          refuse("proposal_exists", proposalIssued ? "A sealed proposal already exists for this run; ask the user to review it." : "An execution grant was already issued in this run; report its outcome before proposing more.", { toolId: resolved.toolId, title, tier });
           continue;
         }
         if (isExecution && (executionIssued || proposalIssued)) {
-          results.push(errorResult("execution_exists", executionIssued ? "An execution grant was already issued in this run; its outcome has not changed." : "A sealed proposal already exists for this run; nothing executes beside it."));
+          refuse("execution_exists", executionIssued ? "An execution grant was already issued in this run; its outcome has not changed." : "A sealed proposal already exists for this run; nothing executes beside it.", { toolId: resolved.toolId, title, tier });
           continue;
         }
 

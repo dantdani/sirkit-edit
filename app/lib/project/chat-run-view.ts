@@ -41,6 +41,15 @@ export function toolLineLabel(input: { title?: unknown; tier?: unknown; ok?: unk
   return `${tag}${title} — ${TOOL_STATUS_LABELS[status] ?? `finished (${status})`}`;
 }
 
+/** [B18-D I10] A call refused before it ran: the tier tag, the title (or "Unknown tool"), the code, and that nothing ran. */
+export function refusedLineLabel(input: { title?: unknown; tier?: unknown; status?: unknown }): string {
+  const tier = tierLabel(input.tier);
+  const tag = tier ? `T${input.tier as number} · ` : "";
+  const title = typeof input.title === "string" && input.title.length > 0 ? input.title.slice(0, 120) : "Unknown tool";
+  const status = typeof input.status === "string" ? input.status.slice(0, 60) : "unknown";
+  return `${tag}${title} — refused before running (${status}) — nothing ran`;
+}
+
 // ── the run's answer, notes and history ──────────────────────────────────────
 
 const EXECUTION_STATUSES = new Set(["execution_grant_issued", "execution_preview_issued"]);

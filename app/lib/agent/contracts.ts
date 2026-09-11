@@ -375,6 +375,10 @@ export type AgentRunEvent =
   | { type: "text_delta"; runId: string; text: string; phase: "interim" | "final" }
   | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string; tier: PermissionTier | null }
   | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string; tier: PermissionTier | null }
+  /** [B18-D I10] a call refused BEFORE it ran (an unknown tool, the budget, invalid arguments, a repeated call, a second
+   *  side-effecting artifact) — shown to the user; the model already receives the error result. UNTRACED: the run trace
+   *  and the evaluation capsules are unchanged. `toolId`, `title` and `tier` are null for an unknown tool. */
+  | { type: "tool_refused"; runId: string; callId: string; toolId: string | null; title: string | null; tier: PermissionTier | null; status: string }
   | { type: "proposal_ready"; runId: string; toolId: string; proposal: SealedAgentProposal }
   /** [B15.3] DISTINCT event for the sealed bounded PCB-edit proposal — never
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
