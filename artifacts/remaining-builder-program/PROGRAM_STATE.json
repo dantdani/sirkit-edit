@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "1352a20",
+  "lastGreenSha": "ab71fe2",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I8 undo in chat (the timeline's undoLatest({ expectTransactionId }) with NOT_LATEST; one 'Undo this change' button on a committed entry that is still the newest operation; B17/B01 rules), then I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T07:15:58-04:00"
+  "nextAction": "B18-D I9 Stop (the run reader's cancel, a stopChatRun handler, a B17 rule, a route test), then optional I10/I11, I12 closeout; then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T07:36:12-04:00"
 }

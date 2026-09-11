@@ -74,6 +74,7 @@ export const UI_CONTROL_SURFACES = [
   "app/components/pcb/CommandPalette.tsx",
   "app/components/pcb/SyncPlacementDialog.tsx",
   "app/components/pcb/GrantedExecutionDialog.tsx", // [B18-D I5] the confirmation card joins the watched surfaces (OD-17 D5)
+  "app/components/chat/ExecutionEntryActions.tsx", // [B18-D I8] the chat entry's Undo
   "app/components/editor/BuildLibraryPanel.tsx",
   "app/components/bom/BomView.tsx",
 ] as const;

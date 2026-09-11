@@ -318,3 +318,35 @@ test("B18-D I1 composer routing: the route is shown before sending and can be ov
   await chat("Draw a dimension from U1 to J1.");
   await expect(page.getByTestId("schematic-proposal-review")).toBeHidden();
 });
+
+test("B18-D I8 Undo in chat: a committed AI move that is still the latest is undone from its entry — exactly that change, one pcb undo — and a second click is refused", async () => {
+  const start = await board();
+  const x0 = r3(start).at.x;
+  const autonomy = (await (await page.request.get("/api/agent/autonomy", { headers: scopeHeaders() })).json()) as { setting: { mode: string } };
+  const before = await committedLines().count();
+  await select("R3");
+  await chat("Move R3 1 mm to the right.");
+  if (autonomy.setting.mode === "proposal_only") await page.getByTestId("granted-execution-confirm").click(); // the card, when the project previews
+  await expect(committedLines()).toHaveCount(before + 1);
+  const entry = page.getByTestId("chat-execution-entry").last();
+  await expect(entry).toHaveAttribute("data-state", "committed");
+  expect(r3(await board()).at.x).toBe(x0 + NM_PER_MM);
+
+  const pcbUndos = page.locator('[data-testid="project-timeline-entry"][data-store="pcb"][data-kind="undo"]');
+  await page.getByRole("button", { name: "Revision history" }).click();
+  const undosBefore = await pcbUndos.count();
+  await page.keyboard.press("Escape");
+
+  const undo = entry.getByTestId("execution-undo");
+  await expect(undo).toBeEnabled();
+  await undo.click();
+  await expect(entry).toContainText("Undone by you — the editor's own Undo reversed this change (one history step).");
+  await expect(undo).toBeDisabled(); // a second click is refused
+  await expect(entry.getByTestId("execution-undo-reason")).toHaveText("Already undone — the editor's Redo brings it back.");
+  await page.screenshot({ path: `${EVIDENCE}/chat-undo-entry.png`, fullPage: false });
+
+  await page.getByRole("button", { name: "Revision history" }).click();
+  await expect(pcbUndos).toHaveCount(undosBefore + 1);
+  await page.keyboard.press("Escape");
+  expect(r3(await board()).at.x).toBe(x0); // exactly the AI change reversed
+});

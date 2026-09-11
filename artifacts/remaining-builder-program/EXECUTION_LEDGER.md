@@ -567,3 +567,12 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Pin moved (deliberate): review 3's Q4 now pins that a Ctrl+Z during the AI undo's envelope write is refused with the reason and that an Undo afterwards reverses the AI undo; the replay is still never poisoned.
 - Gates: B17 577 controls and the B01 fingerprint unchanged (the hold adds no controls); `PcbEditor` eslint 1 pre-existing problem before and after.
 - Tests: the probe 2/2 and `b18-d-timeline-store-busy` 2/2 (CI list); the B18, B17-E, B03-1 and B08 canonical-history suites 49 files / 278 passed after the Q4 move; broad run: 239 files / 3268 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 5/5 passed (47.9 s); tsc 0; eslint 0.
+- CI at `ab71fe2` (I7): CI green (deterministic-manufacturing 34593230526 incl. page-browser-e2e, benchmark-quality 34593230461).
+
+### B18-D I8 — Undo in chat (2026-09-11 local, solo; this commit)
+
+- Reproduced first: `b18-d-chat-undo-timeline` failed 2/2 on the pre-change timeline (`undoLatest` ignored the expectation and undid whatever was newest — for a forged id it undid the operation).
+- The timeline's `undoLatest({ expectTransactionId })` refuses `NOT_LATEST` against its own recorded reference; the store's undo is never called on a refusal.
+- One "Undo this change" button on a live committed entry (`ExecutionEntryActions`); disabled with its reason when already undone, no longer undoable, an AI change is in flight, or not the newest operation; the result (or the refusal, verbatim) is written into the entry. The page mirrors its entries in state so nothing reads a ref during render.
+- Gates: B17 578 controls / 60 surfaces (the new button classified semantic under agent.execution-entry-undo); B01 fingerprint regenerated (the new watched file); b17-a-control-inventory and action-registry 16/16.
+- Tests: `b18-d-chat-undo-timeline` 5/5 and `b18-d-execution-entry-actions` 2/2 (CI list); broad run: 241 files / 3275 passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); Playwright `agent-execution`: 6/6 passed (56.2 s) incl. the new Undo-in-chat scenario (its evidence frame chat-undo-entry.png shows the editor's 'Undid: AI: R3 …' toast; the entry itself is scrolled out of view — I9 re-takes the frame on the entry); tsc 0; eslint: `page.tsx` 14 pre-existing problems before and after, the new files clean.

@@ -60,7 +60,8 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, initialRunView, projectRunView, reduceRunView, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, projectRunView, reduceRunView, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -4372,8 +4373,10 @@ export default function Home() {
   // settlement and recovery update the same entry; persisted through the existing chat log shape (a reloaded entry is a
   // static record).
   const executionEntriesRef = useRef<Map<string, ExecutionEntry>>(new Map());
+  const [executionEntries, setExecutionEntries] = useState<ReadonlyMap<string, ExecutionEntry>>(() => new Map()); // [B18-D I8] what the entries' Undo renders from
   const upsertExecutionEntry = useCallback((entry: ExecutionEntry, insertBeforeId?: string) => {
     executionEntriesRef.current.set(entry.grantId, entry);
+    setExecutionEntries((prev) => new Map(prev).set(entry.grantId, entry));
     const message = entryToLogMessage(entry);
     setMessages((prev) => {
       if (prev.some((existing) => existing.id === message.id)) return prev.map((existing) => (existing.id === message.id ? message : existing));
@@ -4381,6 +4384,34 @@ export default function Home() {
       return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
     });
   }, []);
+
+  // [B18-D I8] "Undo this change" on a committed entry (chat-execution-ux.md §1 item 10): available only for a change
+  // still undoable and still the timeline's newest operation, with no AI change in flight. The click carries only the
+  // entry's grant id; the page looks up its transaction, the timeline undoes exactly that transaction (NOT_LATEST
+  // otherwise) with the PCB store's own Undo, and the result — or the refusal, verbatim — is written into the entry.
+  const executionUndoStates = useMemo(() => {
+    const newest = projectTimelineEntries[projectTimelineEntries.length - 1];
+    const inFlight = [...executionEntries.values()].some((entry) => entry.state === "issued" || entry.state === "executing");
+    const states = new Map<string, NonNullable<ReturnType<typeof entryUndoAvailability>>>();
+    for (const entry of executionEntries.values()) {
+      const availability = entryUndoAvailability(entry, newest, inFlight);
+      if (availability) states.set(entry.grantId, availability);
+    }
+    return states;
+  }, [executionEntries, projectTimelineEntries]);
+  async function undoAiChange(grantId: string) {
+    const entry = executionEntriesRef.current.get(grantId);
+    if (!entry?.transaction) return;
+    const decision = await projectTimeline.undoLatest({ expectTransactionId: entry.transaction.id });
+    const current = executionEntriesRef.current.get(grantId) ?? entry;
+    if (decision.ok) {
+      upsertExecutionEntry(entryUndoResult(current, { ok: true }));
+      showToast(`Undid: ${decision.operation.label}`);
+    } else {
+      upsertExecutionEntry(entryUndoResult(current, { ok: false, message: decision.message }));
+      setProjectTimelineNotice(`${decision.code} — ${decision.message}`);
+    }
+  }
 
   async function send(retryText?: string) {
     const text = (retryText ?? input).trim();
@@ -6718,7 +6749,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} />
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -8234,7 +8265,7 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, undoStates, onUndoExecution }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void> }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -8246,7 +8277,9 @@ function MessageBubble({ message }: { message: Message }) {
   }
   if (message.role === "log") {
     const StatusIcon = message.status === "running" ? Loader2 : message.status === "error" ? X : Check;
-    const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; no controls)
+    const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; its one control is I8's Undo)
+    const entryGrantId = entryState ? message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length) : null;
+    const undoState = entryGrantId && entryState === "committed" ? (undoStates?.get(entryGrantId) ?? null) : null; // [B18-D I8] live entries only
     return (
       <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
@@ -8254,6 +8287,7 @@ function MessageBubble({ message }: { message: Message }) {
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
             <span className="font-medium">{message.title}</span>
           </div>
+          {undoState && entryGrantId && onUndoExecution ? <ExecutionEntryActions eligible={undoState.eligible} reason={undoState.reason} onUndo={() => void onUndoExecution?.(entryGrantId)} /> : null}
           <div className="mt-2 space-y-1.5">
             {message.entries.map((entry) => (
               <div key={entry.id} className="flex items-start gap-2 text-[11px] leading-relaxed">

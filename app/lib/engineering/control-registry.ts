@@ -50,6 +50,7 @@ export interface ControlRule {
 const rule = (r: ControlRule): ControlRule => Object.freeze(r);
 const PCB = "app/components/pcb/";
 const PAGE = "app/page.tsx";
+const CHAT = "app/components/chat/"; // [B18-D I8]
 const SPICE = "app/components/spice/";
 const BOM = "app/components/bom/BomView.tsx";
 const CD = /^app\/components\/(architecture|circuit-verification|interfaces|model-simulation|power|requirements|schematic-compiler)\//;
@@ -78,6 +79,7 @@ export const CONTROL_RULES: readonly ControlRule[] = Object.freeze([
   rule({ id: "view.schematic-wheel-zoom", surface: PAGE, kind: "gesture", label: /^wheel:/, classification: "view", recordIds: ["view.canvas-navigation"], note: "wheel zoom/pan on the schematic canvas and the waveform plot" }),
   rule({ id: "view.document-click-outside", surface: PAGE, kind: "gesture", label: /^mousedown:/, classification: "view", note: "a mouse down outside the open menu closes it" }),
   rule({ id: "dispatcher.chat-composer", surface: PAGE, handler: /^(handleComposerSubmit|e\.preventDefault,handleComposerSubmit)$/, classification: "dispatcher", recordIds: ["schematic.generate", "schematic.edit-topology", "ai.chat-qa", "pcb.bounded-edit-propose", "schematic.edit-tier1-propose", "schematic.replace-component-propose", "agent.execution-grant"], note: "the composer submits a generation, an edit or a chat turn; agent turns may return sealed proposals (tier-1 edits, replacements, bounded PCB edits) that their own classified controls approve, and [B18-D I1] server-minted execution grants the PCB editor's card confirms" }),
+  rule({ id: "agent.execution-entry-undo", surface: CHAT + "ExecutionEntryActions.tsx", handler: /^onUndo$/, classification: "semantic", recordIds: ["project.operation-timeline", "project.undo-redo", "pcb.undo-redo-canonical"], note: "[B18-D I8] Undo this change on a committed AI change's chat entry: the click carries nothing; the page asks the project timeline to undo the newest operation only if it is exactly this entry's transaction (NOT_LATEST otherwise) — the PCB store's own Undo, one history step" }),
   rule({ id: "view.composer-route-override", surface: PAGE, handler: /^overrideComposerRoute$/, classification: "view", note: "[B18-D I1] sends the message to the assistant instead of the suggested schematic edit or generation (and back) — routing only; the server loop or the proposal review decides everything" }),
 
   // ── page.tsx: project / files / recovery ──────────────────────────────────

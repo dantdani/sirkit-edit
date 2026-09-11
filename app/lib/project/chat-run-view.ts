@@ -14,6 +14,7 @@
 import type { PublicExecutionGrant } from "../engineering/execution-grant";
 import type { ReceivedExecutionSettlement } from "./execution-grant-events";
 import { checksLine, confirmationReason, operationLines, refusalSentence, retirementSentence, recoverySentence, targetLines, tierLabel, type RefOf } from "./execution-display";
+import type { ProjectOperation } from "./operation-timeline"; // [B18-D I8]
 
 export const LABEL_BEFORE_CHANGE = "Written before any change was made — the status above is authoritative.";
 export const LABEL_BEFORE_REVIEW = "Written before anything was applied — the proposal above awaits your review.";
@@ -123,6 +124,8 @@ export interface ExecutionEntry {
   failure: { headline: string; next: string; code: string | null } | null;
   recovery: string | null;
   undoEligible: boolean;
+  /** [B18-D I8] the chat Undo's result for this entry: a success, or the timeline's refusal verbatim. */
+  undoResult?: { ok: boolean; text: string } | null;
 }
 
 /** The entry for a received grant (preview: awaiting your confirmation; explicit: issued). */
@@ -204,6 +207,28 @@ export const entrySuperseded = (entry: ExecutionEntry): ExecutionEntry => (TERMI
 export const entryRecovery = (entry: ExecutionEntry, action: unknown): ExecutionEntry => ({ ...entry, recovery: recoverySentence(action) });
 export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(entry.state);
 
+/** [B18-D I8] What a committed entry's "Undo this change" shows (chat-execution-ux.md §1 item 10): available only for a
+ *  change still undoable, still the timeline's newest operation (a commit or a redo of exactly this transaction) and with
+ *  no AI change in flight; otherwise it says why. Null: no live Undo (not committed, or no transaction). A reloaded record
+ *  is not among the page's live entries at all. The timeline re-checks everything when it is used (NOT_LATEST,
+ *  STORE_BUSY, a moved head), so this only decides what the button shows. */
+export interface EntryUndoAvailability { eligible: boolean; reason: string | null }
+export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<ProjectOperation, "kind" | "ref"> | undefined, aiChangeInFlight: boolean): EntryUndoAvailability | null {
+  if (entry.state !== "committed" || !entry.transaction) return null;
+  if (entry.undoResult?.ok) return { eligible: false, reason: "Already undone — the editor's Redo brings it back." };
+  if (!entry.undoEligible) return { eligible: false, reason: "No longer undoable from here — use the revision history." };
+  if (aiChangeInFlight) return { eligible: false, reason: "Paused — an AI change is being made." };
+  const latest = newest !== undefined && (newest.kind === "commit" || newest.kind === "redo") && newest.ref?.transactionId === entry.transaction.id;
+  return latest ? { eligible: true, reason: null } : { eligible: false, reason: "No longer the latest operation — use the revision history." };
+}
+
+/** [B18-D I8] The chat Undo's result, written into the entry: a success names the one history step and ends the entry's
+ *  Undo; a refusal carries the timeline's message verbatim and changes nothing else. */
+export const entryUndoResult = (entry: ExecutionEntry, result: { ok: true } | { ok: false; message: string }): ExecutionEntry =>
+  result.ok
+    ? { ...entry, undoEligible: false, undoResult: { ok: true, text: "Undone by you — the editor's own Undo reversed this change (one history step)." } }
+    : { ...entry, undoResult: { ok: false, text: `Not undone — ${result.message}` } };
+
 // The execution entry as a chat log message. It persists through the EXISTING stored-chat log shape (no schema
 // change): id `xlog-<grantId>`, a title, a status and rows of { id, text, status }. The entry's state rides in the
 // first row's id (`xlog-<grantId>:state:<state>`) so a reloaded record still renders its state (a static record: no
@@ -254,7 +279,11 @@ export function entryToLogMessage(entry: ExecutionEntry): EntryLogMessage {
   }
   if (entry.failure && entry.state !== "committed") rows.push(row("next", `Next: ${entry.failure.next}`, "error"));
   if (entry.recovery) rows.push(row("recovery", entry.recovery));
-  if (entry.state === "committed") rows.push(row("undo", entry.undoEligible ? "Undo: the editor's Undo (one step), or say “Undo that.”" : "Undo: no longer the latest change — use the revision history."));
+  if (entry.state === "committed") {
+    // [B18-D I8] once the chat's Undo was used, its result replaces the hint
+    const undo = entry.undoResult ?? { ok: true, text: entry.undoEligible ? "Undo: the editor's Undo (one step), or say “Undo that.”" : "Undo: no longer the latest change — use the revision history." };
+    rows.push(row("undo", undo.text, undo.ok ? "done" : "error"));
+  }
   return { id, role: "log", title: `AI change — ${entry.understood}`.slice(0, 160), status, entries: rows };
 }
 
