@@ -48,36 +48,38 @@ const reasonFor = (registry: ToolRegistry, context: DiscoveryContext, toolId: st
   return result.excluded.find((item) => item.toolId === toolId)?.reason ?? "absent";
 };
 
-describe("B18-C I1 — the reviewed list is empty on this tree and the production exposure is unchanged", () => {
-  it("no row, no exposed mutate, no executionMode anywhere; the exposure report is clean; the predicate equals the class rule", () => {
-    expect(GRANTED_EXECUTION_TOOLS).toEqual([]);
-    expect(GRANTED_EXECUTION_TOOL_IDS).toEqual([]);
+describe("B18-C — the reviewed list and the production exposure derived from it", () => {
+  it("executionMode only on reviewed rows; every row exposed and violation-free; every other mutation unexposed; the report is clean; the predicate is the class rule plus the reviewed rows", () => {
+    // I1 landed the list empty; I3 added the first reviewed row. No gate carries a count.
+    expect(GRANTED_EXECUTION_TOOL_IDS).toEqual(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());
     const registry = sirkitToolRegistry();
     expect(agentExposureReport(registry)).toMatchObject({ ok: true, executionViolations: [], classViolations: [], missing: [], unexpected: [] });
-    expect(registry.coverageReport().agentExecutedCount).toBe(0);
+    expect(registry.coverageReport().agentExecutedCount).toBe(GRANTED_EXECUTION_TOOL_IDS.length);
     for (const descriptor of registry.list()) {
-      expect(descriptor.executionMode, descriptor.toolId).toBeUndefined();
+      const granted = GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId);
+      expect(descriptor.executionMode === "granted", descriptor.toolId).toBe(granted);
       expect(descriptor.grantOnly, descriptor.toolId).toBeUndefined();
-      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass));
-      if (["mutate", "destructive", "release"].includes(descriptor.operationClass)) expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass) || granted);
+      if (["destructive", "release"].includes(descriptor.operationClass)) expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
+      if (descriptor.operationClass === "mutate") expect(descriptor.agentExposed, descriptor.toolId).toBe(granted);
     }
+    for (const tool of GRANTED_EXECUTION_TOOLS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, tool.toolId).toContain(tool.toolId);
     expect(NEVER_GRANTED_COMMAND_IDS).toContain("pcb.edit-via");
     expect(NEVER_GRANTED_COMMAND_IDS).toContain("pcb.bounded-edit-apply");
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(22);
   });
 });
 
 describe("B18-C I1 — the validator: B04 stays the rule, the granted family is the one derived exception", () => {
   it("an exposed mutation is refused without a reviewed row / executionMode / Tier 1 / grantable capability / canonical binding; the reviewed shape validates", () => {
     const forbidden = /agent-exposed mutation capability is forbidden/;
-    expect(validateToolDescriptor({ ...MOVE, agentExposed: true }, COMMANDS).join("\n")).toMatch(forbidden); // no executionMode, no row
-    expect(validateToolDescriptor(GRANTED, COMMANDS).join("\n")).toMatch(/not in the reviewed granted-execution list/); // executionMode but the production list is empty
+    expect(validateToolDescriptor({ ...MOVE, agentExposed: true, executionMode: undefined }, COMMANDS).join("\n")).toMatch(forbidden); // no executionMode
+    expect(validateToolDescriptor({ ...GRANTED, toolId: "sirkit.pcb.move-footprint-shadow" }, COMMANDS).join("\n")).toMatch(/not in the reviewed granted-execution list/); // executionMode without a reviewed row
     expect(validateToolDescriptor(GRANTED, COMMANDS, { grantedExecutionTools: ROWS })).toEqual([]);
     expect(validateToolDescriptor({ ...GRANTED, approvalTier: "destructive" }, COMMANDS, { grantedExecutionTools: ROWS }).join("\n")).toMatch(/permission tier 2 is not Tier 1/);
     expect(validateToolDescriptor({ ...GRANTED, requiredCapability: "edit_copper" }, COMMANDS, { grantedExecutionTools: ROWS }).join("\n")).toMatch(/capability edit_copper is not grantable/);
     expect(validateToolDescriptor({ ...EDIT_TRACK, agentExposed: true, executionMode: "granted" }, COMMANDS, { grantedExecutionTools: [...ROWS, { toolId: "sirkit.pcb.edit-track", family: "pcb.move-footprint", reason: "x" }] }).join("\n")).toMatch(/can never be granted|not an execution family|differs from the reviewed family/);
     expect(validateToolDescriptor({ ...DELETE, agentExposed: true, executionMode: "granted" }, COMMANDS, { grantedExecutionTools: [...ROWS, { toolId: "sirkit.pcb.delete-item", family: "pcb.move-footprint", reason: "x" }] }).join("\n")).toMatch(/operation class destructive is not mutate|can never be granted/);
-    expect(validateToolDescriptor({ ...MOVE, executionMode: "granted" }, COMMANDS, { grantedExecutionTools: ROWS })).toEqual([]); // executionMode without exposure is inert metadata
+    expect(validateToolDescriptor({ ...MOVE, agentExposed: false }, COMMANDS, { grantedExecutionTools: ROWS })).toEqual([]); // executionMode without exposure is inert metadata
     const read = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.board-inspect")!;
     expect(validateToolDescriptor({ ...read, executionMode: "granted" }, COMMANDS).join("\n")).toMatch(/legal only on a mutate tool/);
     expect(validateToolDescriptor({ ...GRANTED, grantOnly: true, executionMode: undefined }, COMMANDS, { grantedExecutionTools: ROWS }).join("\n")).toMatch(/grant-only tool must be a granted execution/);
@@ -85,7 +87,8 @@ describe("B18-C I1 — the validator: B04 stays the rule, the granted family is 
     expect(isGrantedExecutionDescriptor(GRANTED, ROWS)).toBe(true);
     expect(isGrantedExecutionDescriptor({ ...GRANTED, agentExposed: false }, ROWS)).toBe(false);
     expect(new ToolRegistry([GRANTED], COMMANDS, { grantedExecutionTools: ROWS }).coverageReport().agentExecutedCount).toBe(1);
-    expect(() => new ToolRegistry([GRANTED], COMMANDS)).toThrow(forbidden);
+    expect(() => new ToolRegistry([{ ...GRANTED, toolId: "sirkit.pcb.move-footprint-shadow" }], COMMANDS)).toThrow(forbidden);
+    expect(() => new ToolRegistry([GRANTED], COMMANDS)).not.toThrow(); // [B18-C I3] the production list carries the reviewed row
   });
 });
 

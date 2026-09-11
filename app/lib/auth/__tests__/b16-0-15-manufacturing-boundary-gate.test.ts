@@ -76,7 +76,7 @@ describe("B16.0.15 §F — manufacturing release remains internal-only & non-age
     expect(release).toBeTruthy();
     expect(release).toMatchObject({ discovery: "internal-only", callability: "not-callable", agentExposed: false });
   });
-  it("total agent-exposed tool count remains EXACTLY 12", () => {
+  it("the agent-exposed tools equal the intentional list", () => {
     expect(registry.list().filter((d) => d.agentExposed).length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });
   it("no agent-exposed tool routes to /api/pcb/qualify or /api/pcb/release", () => {

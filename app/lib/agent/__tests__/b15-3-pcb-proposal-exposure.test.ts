@@ -1,8 +1,8 @@
 /**
  * B15.3 §H/§K — secure exposure of `sirkit.pcb.propose-bounded-edit`.
  *
- * Pins: exposure exactly 12 with the exact id set and NO PCB
- * mutate/apply/destructive tool; OpenAI/Anthropic descriptor parity; the
+ * Pins: exposure equals the intentional id set with NO PCB apply/destructive
+ * tool (a mutation only as a reviewed granted execution); OpenAI/Anthropic descriptor parity; the
  * strict {intent, operations} argument surface (authority-shaped provider
  * arguments refuse BY NAME); board/basis prerequisites fail closed;
  * invocation/cancel/timeout mutate NOTHING; the scripted REAL loop emits
@@ -65,7 +65,7 @@ describe("B15.3 §K1–3 — exposure", () => {
     expect(exposed).toEqual([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]);
   });
 
-  it("no exposed tool is mutate/destructive/release/apply-class, and the PCB tool is propose/proposal-artifact only", () => {
+  it("no exposed tool is destructive/release/apply-class (a mutation only as a reviewed granted execution), and the PCB tool is propose/proposal-artifact only", () => {
     for (const descriptor of sirkitToolRegistry().list().filter((item) => item.agentExposed)) {
       expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }

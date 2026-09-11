@@ -1,8 +1,8 @@
 /**
  * [B18-C I2] The gateway's granted-execution dispatch, the loop's toolset rule
  * and its call-id plumbing — proven on a TEST registry whose reviewed list is
- * injected (the production list is still empty on this tree, so nothing is
- * exposed to a real run):
+ * injected (written before the production row landed in I3; the production
+ * registry now carries the same row and b18-c-gateway-execution covers it):
  *
  *  - seal → base → mint through the REAL minter over the in-memory grant
  *    store: a preview grant under proposal_only, an explicit grant for the
@@ -27,7 +27,7 @@ import { validateAgentRunTrace } from "../trace";
 import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentStep, type AgentToolResult, type GatewayInvocationOutcome, type ProviderAgentAdapter } from "../contracts";
 import { ToolRegistry, type ToolDescriptor } from "../../engineering/tool-registry";
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../../engineering/tool-catalog";
-import type { GrantedExecutionTool } from "../../engineering/granted-execution-families";
+import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, type GrantedExecutionTool } from "../../engineering/granted-execution-families";
 import { executionBoardDigest } from "../../engineering/execution-grant";
 import { defaultAutonomySetting, type AgentAutonomySetting } from "../../engineering/permission-tiers";
 import type { ProjectRole } from "../../engineering/types";
@@ -187,15 +187,15 @@ describe("B18-C I2 — every refusal is exact and mints nothing", () => {
     expect(JSON.stringify(failed)).not.toContain("internal store detail 42");
   });
 
-  it("the production registry: with a minter bound and a grantable context, every mutation / destructive / release tool stays not_callable and nothing is minted", async () => {
+  it("the production registry: with a minter bound and a grantable context, every mutation / destructive / release tool OUTSIDE the reviewed list stays not_callable and nothing is minted", async () => {
     const registry = sirkitToolRegistry();
-    expect(registry.grantedExecutionTools()).toEqual([]);
+    expect(registry.grantedExecutionTools()).toEqual(GRANTED_EXECUTION_TOOLS);
     expect(TEST_REGISTRY.grantedExecutionTools()).toEqual(ROWS);
     const m = minting();
     const gateway = createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: "1.0.0" });
     const ctx = context();
-    const risky = registry.list().filter((d) => ["mutate", "destructive", "release"].includes(d.operationClass));
-    expect(risky.map((d) => d.toolId)).toContain("sirkit.pcb.move-footprint");
+    const risky = registry.list().filter((d) => ["mutate", "destructive", "release"].includes(d.operationClass) && !GRANTED_EXECUTION_TOOL_IDS.includes(d.toolId));
+    expect(risky.map((d) => d.toolId)).toEqual(expect.arrayContaining(["sirkit.pcb.rotate-side-footprint", "sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.manufacturing.release"]));
     for (const descriptor of risky) {
       const outcome = await gateway.invoke({ runId: "run-1", provider: "openai", toolId: descriptor.toolId, version: descriptor.version, args: MOVE_ARGS, context: ctx, timeoutMs: 5_000, callId: "call-1" });
       expect(outcome, descriptor.toolId).toMatchObject({ kind: "refused", status: "not_callable" });
@@ -240,7 +240,8 @@ describe("B18-C I2 — the loop: toolset rule, call id, durable answers, trace",
     expect(names(TEST_REGISTRY, context({ flag: false }))).not.toContain(GRANTED.toolId);
     expect(names(TEST_REGISTRY, context({ basis: false }))).not.toContain(GRANTED.toolId);
     expect(names(TEST_REGISTRY, context({ role: "viewer" }))).not.toContain(GRANTED.toolId);
-    expect(names(sirkitToolRegistry(), context())).not.toContain(GRANTED.toolId);
+    expect(names(sirkitToolRegistry(), context())).toContain(GRANTED.toolId); // [B18-C I3] the production registry carries the reviewed row
+    expect(names(sirkitToolRegistry(), context({ flag: false }))).not.toContain(GRANTED.toolId);
     // Defense in depth: discovery claims grantability but the run carries no minter ⇒ withheld with a truthful warning.
     const warnings: string[] = [];
     expect(names(TEST_REGISTRY, { ...context(), executionGrantsAvailable: false }, warnings)).not.toContain(GRANTED.toolId);

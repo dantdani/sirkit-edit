@@ -6,7 +6,10 @@
  * Exposable operation classes are `read`, `propose` (sealed proposal
  * artifacts / revision-bound layout candidates the human applies) and
  * `view-session` (bus commands the browser executes; never engineering
- * state). `mutate`, `destructive` and `release` are never exposed; nothing
+ * state). [B18-C] A `mutate` tool is exposable ONLY as a reviewed granted
+ * execution (`granted-execution-families.ts`): the model's call mints a
+ * server-bound one-shot grant and the user's canonical editor session is
+ * the only committer. `destructive` and `release` are never exposed; nothing
  * that qualifies or releases manufacturing, runs a raw process, replaces
  * state wholesale, or mutates a database/file is in this list.
  */
@@ -28,6 +31,7 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.component-authority.inspect",           // B13 — server-owned authority resource gates per-run availability
   "sirkit.manufacturing.readiness-inspect",       // read: a readiness REPORT; never authorizes a release
   "sirkit.pcb.board-inspect",
+  "sirkit.pcb.move-footprint",                    // B18-C I3 — the first reviewed granted execution (server-minted one-shot grant: a preview to confirm, or the exact requested move)
   "sirkit.pcb.propose-bounded-edit",              // B15.3 — sealed bounded PCB proposal
   "sirkit.pcb.revision-inspect",
   "sirkit.placement.propose",                     // B17-F — the shared revision-bound layout candidate (human applies it in the placement panel)
@@ -53,7 +57,7 @@ export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
   /\.release$/,               // manufacturing release
   /qualif/i,                  // qualification
   /undo-redo/,                // canonical replay
-  /^sirkit\.pcb\.(move-footprint|rotate-side-footprint|edit-track|delete-item|arrange|create-via|zone-edit|dimension)$/, // canonical mutations
+  /^sirkit\.pcb\.(rotate-side-footprint|edit-track|delete-item|arrange|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions (B18-C lifts a family by removing it HERE in the increment that exposes it)
 ]);
 
 export interface AgentExposureReport {

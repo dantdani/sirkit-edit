@@ -3,7 +3,7 @@
  * regression of a security or truth boundary this stage depends on:
  *
  *  - 155 route methods / 152 canonical wrappers / 3 approved factories / 0 raw (B18-A: + GET/POST /api/agent/autonomy);
- *  - exactly 12 agent-exposed tools, none of them qualification or release;
+ *  - exactly the intentional agent-exposed tools (agent-exposure.ts), none of them qualification or release;
  *  - the manufacturing routes keep their policy rows (qualify: pcb_editor |
  *    project_admin; release: project_admin only) and their bounded envelopes;
  *  - qualification derives package class ONLY from server-owned binding

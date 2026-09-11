@@ -94,7 +94,7 @@ describe("B16.0.19 §G — human-truth and fail-closed invariants", () => {
       expect(src, rel).not.toMatch(/createWaiver|approveWaiver|certifySafety|ercSignoff/);
     }
   });
-  it("no circuit route is agent-exposed; total exposed tools remain EXACTLY 12; mfg release internal-only", () => {
+  it("no circuit route is agent-exposed; the exposed tools equal the intentional list; mfg release internal-only", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

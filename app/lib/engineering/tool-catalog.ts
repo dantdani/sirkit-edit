@@ -506,19 +506,31 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Migrated PCB mutations (B03 slice — trusted editor session ONLY) ──────
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.move-footprint", version: "1.0.0",
+    toolId: "sirkit.pcb.move-footprint", version: "1.1.0",
     owningCommandId: "pcb.move-footprint",
     title: "Move footprint",
-    description: "Move footprints to absolute positions through the canonical executor (one transaction, one undo entry).",
+    description: "EXECUTION tool: move footprints to absolute board positions (integer nanometres; +x right, +y down). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact move for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by the stable ids from board-inspect results (never reference designators); 1–16 moves; locked footprints refuse.",
     category: "pcb", operationClass: "mutate",
-    inputSchema: obj({ moves: { type: "array", items: obj({ footprintId: { type: "string" }, x: { type: "number" }, y: { type: "number" } }, ["footprintId", "x", "y"]) } }, ["moves"]),
+    inputSchema: obj({
+      moves: {
+        type: "array",
+        description: "1–16 footprint moves, each to an absolute position.",
+        items: obj({
+          footprintId: { type: "string", description: "The stable footprint id from board-inspect (not the reference designator)." },
+          x: { type: "integer", description: "Absolute X of the footprint origin in integer nanometres (+x right)." },
+          y: { type: "integer", description: "Absolute Y of the footprint origin in integer nanometres (+y down, so moving up means a smaller y)." },
+        }, ["footprintId", "x", "y"]),
+      },
+    }, ["moves"]),
     outputSchema: OUT_RESULT,
     requiredCapability: "edit_placement", requiredRoles: ["pcb_editor", "project_admin"],
-    approvalTier: "reversible", requiredSelectionKinds: ["footprint"],
-    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.move-footprint", notes: "Executes ONLY inside the trusted interactive editor session; B04 never invokes it." },
+    // [B18-C I3] targets are NAMED by stable id (never resolved from a selection), so no selection gates discovery.
+    approvalTier: "reversible", requiredSelectionKinds: [],
+    agentExposed: true, executionMode: "granted",
+    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.move-footprint", notes: "Commits ONLY inside the trusted interactive editor session. The agent reaches it solely through a server-minted one-shot execution grant (B18-B/C): the gateway seals and mints; the user's editor tenders the grant and commits through this session; nothing server-side invokes it." },
     timeoutMs: 5_000,
-    sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv"],
-    versionNotes: "Runtime-executable for trusted UI; agent-exposed: false by invariant.",
+    sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
+    versionNotes: "1.1.0 (B18-C I3): agent-exposed as the first reviewed granted execution (executionMode granted); integer-nanometre schema with model-facing descriptions; no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
   {
     ...canonicalMutation,

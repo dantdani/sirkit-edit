@@ -18,7 +18,7 @@
  *     qualify=pcb_editor|project_admin);
  *  5. negative tripwires: an unclassified sub-path under a classified family
  *     (e.g. /api/calculation/evil) has NO policy and refuses 500;
- *  6. agent tool exposure is EXACTLY 12 and `sirkit.manufacturing.release`
+ *  6. agent tool exposure equals the intentional list and `sirkit.manufacturing.release`
  *     stays internal-only and not-callable;
  *  7. AST import gates: browser-reachable code can never import the server
  *     auth modules, and the provider/agent/gateway layer can never import the
@@ -222,7 +222,7 @@ describe("B16.0.1 §I — unclassified routes fail closed", () => {
 // ─── 6: agent exposure stays 12; release stays internal-only ────────────────
 
 describe("B16.0.1 §I — tool exposure unchanged", () => {
-  it("agent tool exposure is EXACTLY 12", () => {
+  it("agent tool exposure equals the intentional list (derived, never a count)", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });

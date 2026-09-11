@@ -172,12 +172,15 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
       // server-derived grantable set on the assistant-agent channel only — the actor's own set never widens.
       const grantedExecution = descriptor.executionMode === "granted" && descriptor.agentExposed && context.channel === "assistant-agent";
       if (!descriptor.requiredRoles.includes(context.actorRole)) return exclude(descriptor, "role_not_permitted");
-      if (!capabilities.has(descriptor.requiredCapability) && !(grantedExecution && grantable.has(descriptor.requiredCapability))) return exclude(descriptor, "capability_missing");
+      // [B18-C I3] on the assistant-agent channel a granted execution is satisfied ONLY by the grantable set — the actor's
+      // own capabilities never count there, even when a context claims them; every other tool keeps the actor rule.
+      const capabilitySatisfied = grantedExecution ? grantable.has(descriptor.requiredCapability) : capabilities.has(descriptor.requiredCapability);
+      if (!capabilitySatisfied) return exclude(descriptor, "capability_missing");
       // 4-5. Project scope is asserted by the caller-assembled context; the
       // revision/lineage REQUIREMENTS gate here. [B18-C] a granted execution's lineage is its grant base (the PCB proposal
       // basis), never the schematic head mark.
       if (descriptor.requiresExpectedRevision && !context.currentRevisionDigest) return exclude(descriptor, "revision_required");
-      if (descriptor.requiresLineage && !context.lineageId && !(grantedExecution && context.grantLineageId)) return exclude(descriptor, "lineage_required");
+      if (descriptor.requiresLineage && !(grantedExecution ? context.grantLineageId : context.lineageId)) return exclude(descriptor, "lineage_required");
       // 6. Editor + selection kinds.
       if (descriptor.category !== "project" && descriptor.category !== "parts" && context.currentEditor && descriptor.category !== context.currentEditor) {
         // view/validation/selection/placement/routing/manufacturing tools ride the pcb editor.

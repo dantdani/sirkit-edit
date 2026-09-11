@@ -22,8 +22,14 @@ export interface GrantedExecutionTool {
   reason: string;
 }
 
-/** Rows land per increment (B18-C I3 …); empty ⇒ nothing is granted anywhere. */
-export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.freeze([] as GrantedExecutionTool[]);
+/** One row per reviewed granted execution, each with its reason; rows land per increment (B18-C I3, I5 …). */
+export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.freeze([
+  Object.freeze({
+    toolId: "sirkit.pcb.move-footprint",
+    family: "pcb.move-footprint",
+    reason: "B18-C I3 — absolute footprint moves (integer nm) compiled by the SAME builder the editor session and the explicit-request grammar use; permission Tier 1 (reversible, edit_placement); one canonical transaction and one undo entry; targets named by stable id, never resolved from a selection",
+  }),
+] as GrantedExecutionTool[]);
 
 export const GRANTED_EXECUTION_TOOL_IDS: readonly string[] = Object.freeze(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());
 
