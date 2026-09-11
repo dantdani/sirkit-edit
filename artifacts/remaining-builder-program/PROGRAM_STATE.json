@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I3 pure display modules (execution-display.ts: operation formatter, target labels, tier label, confirmation reason, failure/recovery sentences; chat-run-view.ts: the entry reducer and the answer/notes/history projection), then I4 ritual outcome report, I5 card, I6 chat execution entry and the page half of Rule 2, I7 history hold, I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T06:34:21-04:00"
+  "nextAction": "B18-D I4 the ritual outcome report and editor callbacks (the ok outcome carries validations and undoEligible; onExecutionGrantSettled with detail, onExecutionGrantProgress, onExecutionRecovery; conditional undo sentence), then I5 card, I6 chat execution entry and the page half of Rule 2, I7 history hold, I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T06:40:02-04:00"
 }

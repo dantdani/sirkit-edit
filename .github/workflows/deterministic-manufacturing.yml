@@ -90,6 +90,8 @@ jobs:
           app/lib/engineering/__tests__/b18-b-granted-executions.test.ts
           app/lib/project/__tests__/b18-b-import-gates.test.ts
           app/lib/project/__tests__/b18-d-composer-routing.test.ts
+          app/lib/project/__tests__/b18-d-execution-display.test.ts
+          app/lib/project/__tests__/b18-d-chat-run-view.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
           app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
           app/lib/agent/__tests__/b18-c-gateway-execution.test.ts
