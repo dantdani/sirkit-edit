@@ -35,6 +35,7 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.pcb.rotate-side-footprint",             // B18-C I5 — reviewed granted execution (absolute rotation / board side; explicit rotate and flip grammar)
   "sirkit.pcb.arrange",                           // B18-C I5 — reviewed granted execution (align / distribute / snap-to-grid; confirmation-only)
   "sirkit.pcb.silkscreen-text",                   // B18-C I6 — reviewed granted execution (silkscreen TEXT only; confirmation-only)
+  "sirkit.pcb.dimension",                         // B18-C I7 — reviewed granted execution (dimension annotations; re-tiered Tier 1 per OD-13; confirmation-only)
   "sirkit.pcb.propose-bounded-edit",              // B15.3 — sealed bounded PCB proposal
   "sirkit.pcb.revision-inspect",
   "sirkit.placement.propose",                     // B17-F — the shared revision-bound layout candidate (human applies it in the placement panel)

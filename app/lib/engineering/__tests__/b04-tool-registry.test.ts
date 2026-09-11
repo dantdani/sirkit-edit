@@ -314,14 +314,19 @@ describe("truthful classification", () => {
     }
   });
 
-  it("24. [B09.1] dimensions are IMPLEMENTED (B08 canonical interactive path) but still have no tool adapter: active, non-callable, never agent-visible", () => {
+  it("24. [B18-C I7] dimensions are a reviewed granted execution (was [B09.1] implemented but unbound): bound to the canonical editor session, re-tiered reversible (OD-13), agent-visible ONLY with the server-derived grant context", () => {
     const dimension = registry.get("sirkit.pcb.dimension")!;
-    expect(dimension.callability).toBe("not-callable");
+    expect(dimension.version).toBe("1.2.0");
+    expect(dimension.callability).toBe("callable");
     expect(dimension.lifecycle).toBe("active");
-    expect(dimension.agentExposed).toBe(false);
-    expect(dimension.binding.status).toBe("unbound");
-    expect(discoverTools(registry, editorContext()).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
+    expect(dimension.approvalTier).toBe("reversible");
+    expect(dimension.agentExposed).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(dimension.toolId));
+    expect(dimension.executionMode).toBe("granted");
+    expect(dimension.binding).toMatchObject({ status: "bound-mutation-editor-session", canonicalCommandId: "pcb.dimension" });
     expect(discoverTools(registry, editorContext({ channel: "assistant-agent", riskCeiling: "propose" })).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
+    const grantContext: Partial<DiscoveryContext> = { grantedCapabilities: ["read_project"], grantableCapabilities: ["edit_placement"], grantLineageId: "lin1-pcb", riskCeiling: "mutate", approvalsAvailable: ["reversible"] };
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", ...grantContext })).included.map((item) => item.toolId)).toContain("sirkit.pcb.dimension");
+    expect(discoverTools(registry, editorContext({ channel: "automation", ...grantContext })).included.map((item) => item.toolId)).not.toContain("sirkit.pcb.dimension");
   });
 
   it("[B09] exactly the activated agent set is exposed, and EVERY exposed descriptor is backed by a real activated binding (tripwire)", () => {

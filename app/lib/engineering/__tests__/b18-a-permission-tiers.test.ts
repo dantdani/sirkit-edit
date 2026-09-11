@@ -39,7 +39,7 @@ describe("B18-A §1 — tiers map onto the existing approval vocabulary", () => 
     expect(tierOf("sirkit.pcb.delete-item")).toBe(2);
     expect(tierOf("sirkit.pcb.create-via")).toBe(2);
     expect(tierOf("sirkit.pcb.zone-edit")).toBe(2);
-    expect(tierOf("sirkit.pcb.dimension")).toBe(2);
+    expect(tierOf("sirkit.pcb.dimension")).toBe(1); // [B18-C I7] re-tiered reversible per the runbook's PCB Tier 1 list (OD-13)
     expect(tierOf("sirkit.schematic.add-component")).toBe(2);
     expect(tierOf("sirkit.manufacturing.release")).toBe(3);
     expect(actionTier("manufacturing.release")).toBe(3);
@@ -53,7 +53,7 @@ describe("B18-A §1 — tiers map onto the existing approval vocabulary", () => 
     expect(actionTier("schematic.delete-component")).toBe(2);
     expect(actionTier("schematic.replace-component")).toBe(2);
     expect(actionTier("pcb.route-copper")).toBe(2);
-    expect(actionTier("pcb.dimension")).toBe(2);
+    expect(actionTier("pcb.dimension")).toBe(1); // [B18-C I7] OD-13 — the record and the descriptor move together
     expect(actionTier("view.canvas-navigation")).toBe(0);
     for (const id of ["manufacturing.release", "sirkit.manufacturing.release", "bom.order", "publish-authority", "external.upload", "purchase"]) expect(TIER3_FAMILY_PATTERN.test(id), id).toBe(true);
   });

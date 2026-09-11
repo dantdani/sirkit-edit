@@ -29,7 +29,7 @@ export const EXECUTION_RECEIPT_SCHEMA = "sirkit.agent-execution-receipt.v1" as c
 
 /** The canonical command families a grant may cover in B18-B: registry-`reversible` mutations only (D18-6). */
 export const EXECUTION_FAMILIES = Object.freeze([
-  "pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text",
+  "pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "pcb.dimension",
   "schematic.set-property", "schematic.move-rotate",
 ] as const);
 export type ExecutionFamily = (typeof EXECUTION_FAMILIES)[number];
@@ -115,7 +115,7 @@ export interface ExecutionGrantTargets {
   resolvedFrom: "named" | "selection";
   objectIds: string[];
   netIds: number[];
-  kinds: Array<"footprint" | "text" | "component">;
+  kinds: Array<"footprint" | "text" | "component" | "dimension">;
   selectionDigest: string | null;
   targetsDigest: string;
 }

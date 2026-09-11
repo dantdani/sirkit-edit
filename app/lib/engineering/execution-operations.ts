@@ -14,20 +14,26 @@
  * grant is rebuilt as the absolute positions its parameters produced: the
  * parameters are the MODEL's words, the grant pins their result, and the
  * browser never re-runs the arrangement against a possibly drifted board.
+ * [B18-C I6/I7] Silkscreen text and dimension annotations: add / update /
+ * remove through the editor's own silk and dimension commands, deterministic
+ * add ids, and a pinned inverse (the grant's exact resulting items).
  *
  * No parallel mutation code exists here: a plan is a list of edit commands.
  */
 import { produce } from "immer";
 import { compileEdits } from "../pcb/edit/apply";
 import { mutateBoardWithSilkCommand } from "../pcb/silk/commands";
+import { mutateBoardWithDimensionCommand, newBoardDimension, type DimensionPatch } from "../pcb/dimensions/commands";
+import { formatDimensionValue } from "../pcb/dimensions/geometry";
 import type { SilkLayer, SilkTextItem } from "../pcb/silk/types";
 import { pcbRevisionId } from "../pcb/revision";
 import type { EditCommand, SelectionRef } from "../pcb/edit/commands";
-import type { PcbBoard } from "../pcb/types";
+import type { BoardDimension, DimensionKind, DimensionLayer, PcbBoard } from "../pcb/types";
 import { nmToMm } from "../pcb/units";
 import { compilePcbBoardDelta } from "./pcb-delta";
 import { executionOperationsDigest, executionPreviewDigest, executionTargetsDigest, MAX_GRANT_OPERATIONS, type ExecutionFamily, type ExecutionGrantPreview, type ExecutionGrantTargets } from "./execution-grant";
 import { applyEngineeringOperations } from "./operations";
+import { validateBoardDimension } from "./pcb-board-structure";
 import { canonicalLineageDigest } from "./semantic-board-digest";
 import { engineeringDigest } from "./stable";
 import { STAGE10_SCHEMA_VERSION, type EngineeringOperation } from "./types";
@@ -56,7 +62,16 @@ export type SilkTextEdit =
 /** [B18-C I6] …or as a grant pins them (only `planFromOperations` produces this form): the exact resulting items. */
 export type SilkTextChange = { op: "add"; item: SilkTextItem } | { op: "replace"; item: SilkTextItem } | { op: "remove"; silkId: string };
 export type SilkTextPlan = { family: "pcb.silkscreen-text"; edits: SilkTextEdit[] } | { family: "pcb.silkscreen-text"; mode: "pinned"; changes: SilkTextChange[] };
-export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan;
+/** [B18-C I7] Dimension annotations as the model states them. An `add` receives a DETERMINISTIC id (base revision + index +
+ *  content), like an AI silk text; an `update` changes only what the dimension inspector edits — never the measured points. */
+export type DimensionEdit =
+  | { op: "add"; kind: DimensionKind; a: { x: number; y: number }; b: { x: number; y: number }; offsetNm: number; layer: DimensionLayer; unit: BoardDimension["unit"]; precision: BoardDimension["precision"]; textHeightNm: number; strokeWidthNm: number }
+  | ({ op: "update"; dimensionId: string } & DimensionPatch)
+  | { op: "remove"; dimensionId: string };
+/** [B18-C I7] …or as a grant pins them (only `planFromOperations` produces this form): the exact resulting items. */
+export type DimensionChange = { op: "add"; item: BoardDimension } | { op: "replace"; item: BoardDimension } | { op: "remove"; dimensionId: string };
+export type DimensionPlan = { family: "pcb.dimension"; edits: DimensionEdit[] } | { family: "pcb.dimension"; mode: "pinned"; changes: DimensionChange[] };
+export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan | DimensionPlan;
 
 export const SILK_TEXT_MAX_CHARS = 64;
 /** The editor's own silk tool never places text shorter than 0.1 mm (useSilkTool). */
@@ -65,10 +80,17 @@ const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
 const SILK_LAYERS: readonly SilkLayer[] = Object.freeze(["silkTop", "silkBottom"]);
 const SILK_KINDS = Object.freeze(["add_silk", "update_silk", "remove_silk"] as const);
 const PLACEMENT_KINDS = Object.freeze(["move_footprint"] as const);
+const DIMENSION_OPERATION_KINDS = Object.freeze(["add_dimension", "update_dimension", "remove_dimension"] as const);
+const DIMENSION_PATCH_KEYS = Object.freeze(["kind", "offsetNm", "layer", "unit", "precision", "textHeightNm", "strokeWidthNm"] as const);
 
 /** [B18-C I6] The deterministic id of an AI-added silk text: base revision + index + content (never a salted counter). */
 export function aiSilkTextId(board: PcbBoard, index: number, body: Omit<SilkTextItem, "id">): string {
   return `silk-ai-${engineeringDigest({ schema: "sirkit.agent-silk-id.v1", base: pcbRevisionId(board), index, item: body }).slice(5, 21)}`;
+}
+
+/** [B18-C I7] The deterministic id of an AI-added dimension: base revision + index + content (never the tool's salted counter). */
+export function aiDimensionId(board: PcbBoard, index: number, body: Omit<BoardDimension, "id">): string {
+  return `dim-ai-${engineeringDigest({ schema: "sirkit.agent-dimension-id.v1", base: pcbRevisionId(board), index, item: body }).slice(5, 21)}`;
 }
 
 export interface BuiltExecution {
@@ -307,6 +329,96 @@ function buildSilkText(board: PcbBoard, plan: SilkTextPlan): BuiltExecution | Bu
   return finishCandidate(board, plan.family, candidate, commands, [...touched], [], [], "The plan changes nothing (every silk text already reads that way).", SILK_KINDS, ["text"], [], describe);
 }
 
+const dimensionOf = (board: PcbBoard, id: string): BoardDimension | null => (board.dimensions ?? []).find((candidate) => candidate.id === id) ?? null;
+const describeDimension = (item: BoardDimension): string => `${item.kind} dimension ${formatDimensionValue(item)} from (${fmt(item.a.x)}, ${fmt(item.a.y)}) to (${fmt(item.b.x)}, ${fmt(item.b.y)}) mm, offset ${fmt(item.offsetNm)} mm, on ${item.layer}`;
+/** Everything an in-place edit may change (the id and the measured points never change in place). */
+const dimensionStyleOf = (item: BoardDimension): DimensionPatch => ({ kind: item.kind, offsetNm: item.offsetNm, layer: item.layer, unit: item.unit, precision: item.precision, textHeightNm: item.textHeightNm, strokeWidthNm: item.strokeWidthNm });
+const isDimensionShaped = (item: unknown): item is BoardDimension => {
+  if (typeof item !== "object" || item === null) return false;
+  const { a, b } = item as { a?: unknown; b?: unknown };
+  return typeof a === "object" && a !== null && typeof b === "object" && b !== null;
+};
+
+/** The kernel's own rules (`validateBoardDimension`) plus two the editor keeps by construction: a NEW dimension line never sits
+ *  on its measured span (the tool substitutes 2 mm for a zero offset — an AI plan is refused instead of silently changed), and a
+ *  label height the plan sets is at least 0.1 mm (the inspector's input minimum). */
+function dimensionProblem(item: BoardDimension, current: BoardDimension | null): string | null {
+  if (!current && item.offsetNm === 0) return "A new dimension needs a non-zero offset (its line would sit on the measured span).";
+  if ((!current || item.textHeightNm !== current.textHeightNm) && typeof item.textHeightNm === "number" && item.textHeightNm < SILK_TEXT_MIN_HEIGHT_NM) return "Dimension text height must be at least 0.1 mm.";
+  const issues = validateBoardDimension(item);
+  return issues.length > 0 ? `The dimension is invalid: ${issues[0]!.slice(`dimension ${item.id}: `.length)}.` : null;
+}
+
+/** [B18-C I7] Dimension annotations: every change goes through the editor's own dimension commands (the tool's add, the
+ *  inspector's in-place edit, the Delete semantics); the candidate board's canonical delta gives the operations. A pinned plan
+ *  replays the grant's exact resulting items, rebuilt from their known fields only. */
+function buildDimension(board: PcbBoard, plan: DimensionPlan): BuiltExecution | BuildRefusal {
+  const changes: DimensionChange[] = [];
+  if ("mode" in plan) {
+    if (!Array.isArray(plan.changes) || plan.changes.length === 0) return refusal("empty", "The plan names no dimension change.");
+    if (plan.changes.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+    changes.push(...plan.changes);
+  } else {
+    const edits = plan.edits;
+    if (!Array.isArray(edits) || edits.length === 0) return refusal("empty", "The plan names no dimension edit.");
+    if (edits.length > MAX_GRANT_OPERATIONS) return refusal("too_many", `A grant covers at most ${MAX_GRANT_OPERATIONS} operations.`);
+    let addIndex = 0;
+    for (const edit of edits) {
+      if (edit.op === "add") {
+        const body: Omit<BoardDimension, "id"> = { kind: edit.kind, a: { x: edit.a.x, y: edit.a.y }, b: { x: edit.b.x, y: edit.b.y }, offsetNm: edit.offsetNm, layer: edit.layer, unit: edit.unit, precision: edit.precision, textHeightNm: edit.textHeightNm, strokeWidthNm: edit.strokeWidthNm };
+        changes.push({ op: "add", item: newBoardDimension({ id: aiDimensionId(board, addIndex, body), ...body }) });
+        addIndex += 1;
+        continue;
+      }
+      const current = dimensionOf(board, edit.dimensionId);
+      if (!current) return refusal("unknown_target", `Dimension ${String(edit.dimensionId).slice(0, 60)} is not on this board.`);
+      if (edit.op === "remove") { changes.push({ op: "remove", dimensionId: current.id }); continue; }
+      const patch: DimensionPatch = {};
+      for (const key of DIMENSION_PATCH_KEYS) if (edit[key] !== undefined) (patch as Record<string, unknown>)[key] = edit[key];
+      const edited = produce(board, (draft) => mutateBoardWithDimensionCommand(draft, { kind: "EditDimension", id: current.id, patch }));
+      changes.push({ op: "replace", item: dimensionOf(edited, current.id)! });
+    }
+  }
+  // Validate every change against the base board (a pinned plan is re-checked here too); a no-op update is not a target.
+  const touched = new Set<string>();
+  const applied: DimensionChange[] = [];
+  for (const change of changes) {
+    const id = change.op === "remove" ? change.dimensionId : (change.item as { id?: unknown } | undefined)?.id;
+    if (typeof id !== "string" || id.length === 0 || touched.has(id)) return refusal("unknown_target", "Each dimension may appear once per plan.");
+    touched.add(id);
+    const current = dimensionOf(board, id);
+    if (change.op === "add" && current) return refusal("unknown_target", `The derived dimension id ${id.slice(0, 60)} already exists on this board.`);
+    if (change.op !== "add" && !current) return refusal("unknown_target", `Dimension ${id.slice(0, 60)} is not on this board.`);
+    if (change.op === "remove") { applied.push(change); continue; }
+    const item = change.item;
+    if (!isDimensionShaped(item)) return refusal("invalid_geometry", "A dimension change must carry a whole dimension.");
+    if (change.op === "replace" && (item.a.x !== current!.a.x || item.a.y !== current!.a.y || item.b.x !== current!.b.x || item.b.y !== current!.b.y)) return refusal("invalid_geometry", "An update never moves a dimension's measured points (remove it and add a new one).");
+    const problem = dimensionProblem(item, change.op === "replace" ? current : null);
+    if (problem) return refusal("invalid_geometry", problem);
+    if (change.op === "replace" && engineeringDigest(dimensionStyleOf(item)) === engineeringDigest(dimensionStyleOf(current!))) continue;
+    applied.push(change);
+  }
+  const candidate = produce(board, (draft) => {
+    for (const change of applied) {
+      if (change.op === "add") mutateBoardWithDimensionCommand(draft, { kind: "AddDimension", item: newBoardDimension(change.item) });
+      else if (change.op === "replace") mutateBoardWithDimensionCommand(draft, { kind: "EditDimension", id: change.item.id, patch: dimensionStyleOf(change.item) });
+      else mutateBoardWithDimensionCommand(draft, { kind: "DeleteDimension", id: change.dimensionId });
+    }
+  });
+  const describe = (operations: readonly EngineeringOperation[]) => {
+    const before: string[] = [];
+    const after: string[] = [];
+    for (const operation of operations) {
+      if (operation.kind === "add_dimension") { before.push("(new)"); after.push(describeDimension(operation.dimension)); }
+      else if (operation.kind === "update_dimension") { before.push(describeDimension(dimensionOf(board, operation.dimensionId)!)); after.push(describeDimension(operation.replace)); }
+      else if (operation.kind === "remove_dimension") { before.push(describeDimension(dimensionOf(board, operation.dimensionId)!)); after.push("(removed)"); }
+    }
+    return { before, after };
+  };
+  const targetIds = applied.map((change) => (change.op === "remove" ? change.dimensionId : change.item.id));
+  return finishCandidate(board, plan.family, candidate, [], targetIds, [], [], "The plan changes nothing (every dimension already reads that way).", DIMENSION_OPERATION_KINDS, ["dimension"], [], describe);
+}
+
 /** Build the canonical operations for a plan against the exact board it must run on. */
 export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): BuiltExecution | BuildRefusal {
   switch (plan.family) {
@@ -314,14 +426,16 @@ export function buildExecutionOperations(board: PcbBoard, plan: ExecutionPlan): 
     case "pcb.rotate-side-footprint": return buildRotateSide(board, plan);
     case "pcb.arrange": return buildArrange(board, plan);
     case "pcb.silkscreen-text": return buildSilkText(board, plan);
+    case "pcb.dimension": return buildDimension(board, plan);
     default: return refusal("unsupported_family", `Family ${String((plan as { family?: unknown }).family)} has no builder yet.`);
   }
 }
 
 /**
  * [B18-C I5] The ONE inverse: a grant's operations back to the plan that rebuilds them byte for byte (the browser's recompile).
- * Every operation must be a `move_footprint`; an arrange grant becomes its pinned `positions`; a rotate/flip grant carries the
- * absolute rotation and side of each operation. null ⇒ the operations are not a plan of that family (the ritual refuses).
+ * A placement family takes only `move_footprint`: an arrange grant becomes its pinned `positions`, a rotate/flip grant carries
+ * the absolute rotation and side of each operation. Silk text and dimension grants become their pinned resulting items
+ * [B18-C I6/I7]. null ⇒ the operations are not a plan of that family (the ritual refuses).
  */
 export function planFromOperations(family: ExecutionFamily, operations: readonly EngineeringOperation[]): ExecutionPlan | null {
   if (operations.length === 0) return null;
@@ -331,6 +445,16 @@ export function planFromOperations(family: ExecutionFamily, operations: readonly
       if (operation.kind === "add_silk" && operation.item.kind === "text") changes.push({ op: "add", item: operation.item });
       else if (operation.kind === "update_silk" && operation.replace.kind === "text") changes.push({ op: "replace", item: operation.replace });
       else if (operation.kind === "remove_silk") changes.push({ op: "remove", silkId: operation.silkId });
+      else return null;
+    }
+    return { family, mode: "pinned", changes };
+  }
+  if (family === "pcb.dimension") {
+    const changes: DimensionChange[] = [];
+    for (const operation of operations) {
+      if (operation.kind === "add_dimension") changes.push({ op: "add", item: operation.dimension });
+      else if (operation.kind === "update_dimension") changes.push({ op: "replace", item: operation.replace });
+      else if (operation.kind === "remove_dimension") changes.push({ op: "remove", dimensionId: operation.dimensionId });
       else return null;
     }
     return { family, mode: "pinned", changes };

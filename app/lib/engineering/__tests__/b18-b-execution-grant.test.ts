@@ -107,7 +107,7 @@ describe("B18-B §2 — the state machine is monotonic and fail-closed", () => {
     expect(transitionGrant(unsettled.state, { type: "settle", settlement: { ...settlement, outcome: "not-committed", transactionId: null, revisionAfter: null, undoEligible: false } })).toMatchObject({ ok: true, state: { status: "settled", settlement: { outcome: "not-committed", late: true } } });
     expect(transitionGrant(unsettled.state, { type: "retire", retirement: { reason: "proposal_altered", detail: "", at: T0, observedBy: "server" } })).toMatchObject({ ok: false });
     expect([...RETIREMENT_REASONS]).toHaveLength(23);
-    expect([...EXECUTION_FAMILIES]).toEqual(["pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "schematic.set-property", "schematic.move-rotate"]);
+    expect([...EXECUTION_FAMILIES]).toEqual(["pcb.move-footprint", "pcb.rotate-side-footprint", "pcb.arrange", "pcb.silkscreen-text", "pcb.dimension", "schematic.set-property", "schematic.move-rotate"]);
   });
 
   it("lazy expiry: an issued grant past its expiry retires `expired`; a consumed grant past commitDeadline + grace retires `consumed_unsettled`; otherwise nothing", () => {

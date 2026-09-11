@@ -44,6 +44,11 @@ export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.f
     family: "pcb.silkscreen-text",
     reason: "B18-C I6 — silkscreen TEXT add / update / remove through the editor's own silk commands and set-text-props (never copper, never board text); permission Tier 1 (reversible, edit_placement); deterministic add ids; confirmation-only (free text placed by the AI is always shown to the user first)",
   }),
+  Object.freeze({
+    toolId: "sirkit.pcb.dimension",
+    family: "pcb.dimension",
+    reason: "B18-C I7 — dimension annotations add / update / remove through the editor's own dimension commands (documentation layers only: never copper, never connectivity); re-tiered permission Tier 1 (reversible, edit_placement) per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points; confirmation-only (no explicit grammar)",
+  }),
 ] as GrantedExecutionTool[]);
 
 export const GRANTED_EXECUTION_TOOL_IDS: readonly string[] = Object.freeze(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());
@@ -65,7 +70,7 @@ export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
   /\.release$/,               // manufacturing release
   /qualif/i,                  // qualification
   /undo-redo/,                // canonical replay
-  /^sirkit\.pcb\.(edit-track|delete-item|create-via|zone-edit|dimension)$/, // canonical mutations not reviewed as granted executions
+  /^sirkit\.pcb\.(edit-track|delete-item|create-via|zone-edit)$/, // canonical mutations not reviewed as granted executions ([B18-C I7] dimension lifted)
 ]);
 
 export type GrantedExecutionCandidate = Pick<ToolDescriptor, "toolId" | "operationClass" | "binding" | "approvalTier" | "requiredCapability" | "owningCommandId" | "agentExposed" | "sideEffects" | "executionMode">;

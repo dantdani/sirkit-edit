@@ -12,6 +12,7 @@ import { commitPcbCandidate } from "@/app/lib/engineering/pcb-commit-gateway";
 import type { PcbHistory } from "@/app/lib/pcb/history";
 import { DIMENSION_LAYERS, type BoardDimension, type DimensionKind, type DimensionLayer } from "@/app/lib/pcb/types";
 import { formatDimensionValue } from "@/app/lib/pcb/dimensions/geometry";
+import { mutateBoardWithDimensionCommand, type DimensionPatch } from "@/app/lib/pcb/dimensions/commands";
 import { NM_PER_MM } from "@/app/lib/pcb/units";
 
 const mm = (nm: number): number => nm / NM_PER_MM;
@@ -31,15 +32,15 @@ export function DimensionInspector({
     return <div className="px-3 py-2 text-xs text-zinc-500">{items.length} dimensions selected — edit one at a time.</div>;
   }
 
-  const update = (patch: Partial<BoardDimension>, label: string): void => {
+  const update = (patch: DimensionPatch, label: string): void => {
     const h = getHistory();
     if (!h) return;
     void commitPcbCandidate(h, {
       commandId: "pcb.dimension",
       label,
+      // [B18-C I7] the shared pure command — the agent's granted dimension update uses the same one.
       buildCandidate: (board) => produce(board, (draft) => {
-        const target = (draft.dimensions ?? []).find((d) => d.id === item.id);
-        if (target) Object.assign(target, patch);
+        mutateBoardWithDimensionCommand(draft, { kind: "EditDimension", id: item.id, patch });
       }),
     }).then((result) => { if (!result.ok) toast(result.message); });
   };

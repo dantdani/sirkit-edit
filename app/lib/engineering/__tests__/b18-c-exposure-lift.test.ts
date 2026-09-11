@@ -92,7 +92,7 @@ describe("B18-C I3 — the exposure lift", () => {
       if (descriptor.agentExposed && descriptor.binding.canonicalCommandId) expect(NEVER_GRANTED_COMMAND_IDS, descriptor.toolId).not.toContain(descriptor.binding.canonicalCommandId);
       if (descriptor.agentExposed) for (const pattern of NEVER_EXPOSED_TOOL_PATTERNS) expect(pattern.test(descriptor.toolId), `${descriptor.toolId} vs ${pattern}`).toBe(false);
     }
-    for (const id of ["sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.pcb.dimension", "sirkit.pcb.undo-redo-canonical", "sirkit.manufacturing.release"]) { // [B18-C I5] rotate/flip and arrange were lifted
+    for (const id of ["sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.pcb.create-via", "sirkit.pcb.zone-edit", "sirkit.pcb.undo-redo-canonical", "sirkit.manufacturing.release"]) { // [B18-C I5/I7] rotate/flip, arrange and dimension were lifted
       expect(registry.get(id)?.agentExposed, id).toBe(false);
       expect(NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(id)), id).toBe(true);
     }

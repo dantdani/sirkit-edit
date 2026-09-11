@@ -17,13 +17,14 @@
  */
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
-import { ARRANGE_EDGES, buildExecutionOperations, type ArrangeEdge, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
+import { ARRANGE_EDGES, buildExecutionOperations, type ArrangeEdge, type DimensionEdit, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
+import { DIMENSION_DEFAULTS, DIMENSION_KINDS } from "../pcb/dimensions/commands";
 import { DEFAULT_SILK_STROKE_NM, DEFAULT_SILK_TEXT_HEIGHT_NM } from "../pcb/silk/types";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
 import type { ToolDescriptor } from "../engineering/tool-registry";
 import type { EngineeringOperation } from "../engineering/types";
 import type { EditCommand } from "../pcb/edit/commands";
-import type { PcbBoard } from "../pcb/types";
+import { DIMENSION_LAYERS, type BoardDimension, type DimensionKind, type DimensionLayer, type PcbBoard } from "../pcb/types";
 import { pcbRevisionId } from "../pcb/revision";
 import { resolvePcbValidationPolicy } from "../pcb/proposal/sealed-pcb-edit-proposal";
 import type { AgentExecutionPlan, AgentRunContext } from "./contracts";
@@ -63,6 +64,7 @@ export function parseExecutionArguments(family: ExecutionFamily, args: Record<st
   if (family === "pcb.rotate-side-footprint") return parseRotateSideArguments(args, board ?? null);
   if (family === "pcb.arrange") return parseArrangeArguments(args);
   if (family === "pcb.silkscreen-text") return parseSilkTextArguments(args);
+  if (family === "pcb.dimension") return parseDimensionArguments(args);
   if (family !== "pcb.move-footprint") return { ok: false, diagnostics: [`Family ${family} has no executable argument contract yet.`] };
   const unknown = Object.keys(args).filter((key) => key !== "moves");
   if (unknown.length > 0) return { ok: false, diagnostics: [`Unexpected argument "${unknown[0]!.slice(0, 40)}" — move-footprint accepts only moves.`] };
@@ -182,6 +184,63 @@ function parseSilkTextArguments(args: Record<string, unknown>): { ok: true; plan
     }
   }
   return { ok: true, plan: { family: "pcb.silkscreen-text", edits: parsed } };
+}
+
+/** [B18-C I7] `{ edits: [{ op, dimensionId?, kind?, a?, b?, offsetNm?, layer?, unit?, precision?, textHeightNm?, strokeWidthNm? }] }`
+ *  — each op carries exactly its fields (the rest absent / null); an add takes the dimension tool's own style defaults; an
+ *  update never carries the measured points. */
+function parseDimensionArguments(args: Record<string, unknown>): { ok: true; plan: ExecutionPlan } | { ok: false; diagnostics: string[] } {
+  const unknown = Object.keys(args).filter((key) => key !== "edits");
+  if (unknown.length > 0) return argumentRefusal(`Unexpected argument "${unknown[0]!.slice(0, 40)}" — dimension accepts only edits.`);
+  const edits = args.edits;
+  if (!Array.isArray(edits) || edits.length === 0 || edits.length > MAX_GRANT_OPERATIONS) return argumentRefusal(`edits must list 1–${MAX_GRANT_OPERATIONS} dimension edits.`);
+  const FIELDS = ["op", "dimensionId", "kind", "a", "b", "offsetNm", "layer", "unit", "precision", "textHeightNm", "strokeWidthNm"];
+  const STYLE = ["layer", "unit", "precision", "textHeightNm", "strokeWidthNm"];
+  const ALLOWED: Record<"add" | "update" | "remove", string[]> = { add: ["kind", "a", "b", "offsetNm", ...STYLE], update: ["dimensionId", "kind", "offsetNm", ...STYLE], remove: ["dimensionId"] };
+  const parsed: DimensionEdit[] = [];
+  for (const raw of edits) {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return argumentRefusal("Each edit must be an object.");
+    const edit = raw as Record<string, unknown>;
+    const extra = Object.keys(edit).filter((key) => !FIELDS.includes(key));
+    if (extra.length > 0) return argumentRefusal(`Unexpected edit field "${extra[0]!.slice(0, 40)}".`);
+    const op = edit.op;
+    if (op !== "add" && op !== "update" && op !== "remove") return argumentRefusal("op must be add, update or remove.");
+    const given = (key: string): boolean => !absent(edit[key]);
+    const stray = FIELDS.filter((key) => key !== "op" && given(key) && !ALLOWED[op].includes(key))[0];
+    if (stray) return argumentRefusal(`${op} takes ${ALLOWED[op].join(", ")} only (${stray} must be null${op === "update" && (stray === "a" || stray === "b") ? "; an update never moves the measured points" : ""}).`);
+    if (given("kind") && !(DIMENSION_KINDS as readonly unknown[]).includes(edit.kind)) return argumentRefusal(`kind must be ${DIMENSION_KINDS.join(", ")}.`);
+    if (given("layer") && !(DIMENSION_LAYERS as readonly unknown[]).includes(edit.layer)) return argumentRefusal(`layer must be one of ${DIMENSION_LAYERS.join(", ")} (documentation layers only).`);
+    if (given("unit") && edit.unit !== "mm" && edit.unit !== "in") return argumentRefusal("unit must be mm or in.");
+    const optionalInt = (key: string): number | undefined | "bad" => (!given(key) ? undefined : typeof edit[key] === "number" && Number.isSafeInteger(edit[key]) ? (edit[key] as number) : "bad");
+    const offsetNm = optionalInt("offsetNm"), precision = optionalInt("precision"), textHeightNm = optionalInt("textHeightNm"), strokeWidthNm = optionalInt("strokeWidthNm");
+    if (offsetNm === "bad" || precision === "bad" || textHeightNm === "bad" || strokeWidthNm === "bad") return argumentRefusal("offsetNm, textHeightNm and strokeWidthNm must be whole nanometres, and precision a whole number of decimal places.");
+    const style = {
+      ...(given("layer") ? { layer: edit.layer as DimensionLayer } : {}),
+      ...(given("unit") ? { unit: edit.unit as BoardDimension["unit"] } : {}),
+      ...(precision !== undefined ? { precision: precision as BoardDimension["precision"] } : {}),
+      ...(textHeightNm !== undefined ? { textHeightNm } : {}),
+      ...(strokeWidthNm !== undefined ? { strokeWidthNm } : {}),
+    };
+    if (op === "add") {
+      if (!given("kind")) return argumentRefusal(`add needs the kind (${DIMENSION_KINDS.join(", ")}).`);
+      const point = (key: "a" | "b"): { x: number; y: number } | null => {
+        const value = edit[key];
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+        const p = value as Record<string, unknown>;
+        return Object.keys(p).sort().join(",") === "x,y" && Number.isSafeInteger(p.x) && Number.isSafeInteger(p.y) ? { x: p.x as number, y: p.y as number } : null;
+      };
+      const a = point("a"), b = point("b");
+      if (!a || !b) return argumentRefusal("add needs the measured points a and b as { x, y } in integer nanometres.");
+      if (offsetNm === undefined) return argumentRefusal("add needs offsetNm (the signed distance of the dimension line from the measured points).");
+      parsed.push({ op: "add", kind: edit.kind as DimensionKind, a, b, offsetNm, ...DIMENSION_DEFAULTS, ...style });
+      continue;
+    }
+    if (typeof edit.dimensionId !== "string" || edit.dimensionId.length === 0 || edit.dimensionId.length > 200) return argumentRefusal(`${op} needs the stable dimensionId.`);
+    if (op === "remove") { parsed.push({ op: "remove", dimensionId: edit.dimensionId }); continue; }
+    if (!given("kind") && offsetNm === undefined && Object.keys(style).length === 0) return argumentRefusal("update must change the kind, the offset or the style.");
+    parsed.push({ op: "update", dimensionId: edit.dimensionId, ...(given("kind") ? { kind: edit.kind as DimensionKind } : {}), ...(offsetNm !== undefined ? { offsetNm } : {}), ...style });
+  }
+  return { ok: true, plan: { family: "pcb.dimension", edits: parsed } };
 }
 
 export function sealExecutionIntent(input: { descriptor: ToolDescriptor; args: Record<string, unknown>; context: AgentRunContext }): SealOutcome {

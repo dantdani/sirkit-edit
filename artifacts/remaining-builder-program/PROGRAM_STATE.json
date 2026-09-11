@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "916c8b7",
+  "lastGreenSha": "b350c5a",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-C: ONE adversarial review of I4\u2013I6 (the result contract, the rotate/flip grammar, the arrange and silk pinning, the deterministic silk ids) and its fixes; then I7 dimension (owner-gated re-tier), I8 undo/redo (replayUnderGrant), I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched.",
-  "updatedAt": "2026-09-11T09:30:00-04:00"
+  "nextAction": "B18-C: the I4–I6 adversarial review (running in isolated worktrees) and its fixes, including the silk descriptor's id-source correction (A18); then I8 undo/redo (replayUnderGrant, OD-14), I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched.",
+  "updatedAt": "2026-09-11T02:54:22-04:00"
 }
