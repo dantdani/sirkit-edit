@@ -25,6 +25,7 @@ import { assembleAgentRunContext } from "../../agent/context";
 import { verifyAgentContextIntegrity } from "../../agent/gateway";
 import { makeBoard, makeInstance, makeResistorDef } from "../../pcb/__tests__/autoplace-fixture";
 import { PRESETS } from "../../pcb/drc/presets";
+import { REPLAY_FAMILY } from "../execution-grant";
 
 const MOVE = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.move-footprint")!;
 const EDIT_TRACK = SIRKIT_TOOL_CATALOG.find((d) => d.toolId === "sirkit.pcb.edit-track")!;
@@ -58,7 +59,8 @@ describe("B18-C — the reviewed list and the production exposure derived from i
     for (const descriptor of registry.list()) {
       const granted = GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId);
       expect(descriptor.executionMode === "granted", descriptor.toolId).toBe(granted);
-      expect(descriptor.grantOnly, descriptor.toolId).toBeUndefined();
+      // [B18-C I8] grant-only exactly on the reviewed replay row (absent from every non-agent channel).
+      expect(descriptor.grantOnly === true, descriptor.toolId).toBe(granted && descriptor.binding.canonicalCommandId === REPLAY_FAMILY);
       expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass) || granted);
       if (["destructive", "release"].includes(descriptor.operationClass)) expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
       if (descriptor.operationClass === "mutate") expect(descriptor.agentExposed, descriptor.toolId).toBe(granted);

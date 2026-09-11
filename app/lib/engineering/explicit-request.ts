@@ -17,11 +17,12 @@
 import type { PcbBoard } from "../pcb/types";
 import { canonicalReference } from "../pcb/integrity";
 import { buildExecutionOperations, editorFlipRotation, type ExecutionPlan } from "./execution-operations";
-import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExplicitness } from "./execution-grant";
+import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExplicitness, REPLAY_FAMILY, replayOperationsDigest, type ExecutionReplay } from "./execution-grant";
 
 /** [B18-C I5] 1.1.0: + rotate (angle with a REQUIRED direction word) and flip (onto a named side) for pcb.rotate-side-footprint.
- *  [B18-C review 2] 1.2.0: a flip derives the editor's own Flip (rotation 360 − r); "put" needs the side or layer word. */
-export const EXPLICIT_GRAMMAR_VERSION = "1.2.0";
+ *  [B18-C review 2] 1.2.0: a flip derives the editor's own Flip (rotation 360 − r); "put" needs the side or layer word.
+ *  [B18-C I8] 1.3.0: + "undo" / "redo" of the latest AI change (the grammar reads the direction; the server resolves what). */
+export const EXPLICIT_GRAMMAR_VERSION = "1.3.0";
 
 const REFUSAL_TOKENS = /\b(don'?t|do not|never|not|instead|but|rather|except|unless|if|later|afterwards?|after|before|first|then|what if|would|could|should|can you|maybe|perhaps|probably|and then|also)\b|\?|\n|\r/i;
 const UNIT_NM: Readonly<Record<string, number>> = Object.freeze({ mm: 1_000_000, millimeter: 1_000_000, millimeters: 1_000_000, millimetre: 1_000_000, millimetres: 1_000_000, um: 1_000, µm: 1_000, micron: 1_000, microns: 1_000, mil: 25_400, mils: 25_400, cm: 10_000_000 });
@@ -35,6 +36,8 @@ const ROTATE_PATTERN = /^(?:please\s+)?(?:rotate|turn)\s+([a-z][a-z0-9]*\d)\s+(?
 /** [B18-C I5] 1 = reference designator, 2 = the side. [B18-C review 2] "flip" implies a side change; "put … to the top" also
  *  reads as a position, so "put" needs the side or layer word. */
 const FLIP_PATTERN = /^(?:please\s+)?flip\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+(?:side|layer))?$/i;
+/** [B18-C I8] 1 = undo | redo; optionally "that", "it" or "the last (AI) change / edit / move / operation" — nothing else. */
+const REPLAY_PATTERN = /^(?:please\s+)?(undo|redo)(?:\s+(?:that|it|the\s+last\s+(?:ai\s+)?(?:change|edit|move|operation)))?$/i;
 const PUT_PATTERN = /^(?:please\s+)?put\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)\s+(?:side|layer)$/i;
 
 export interface ExplicitProofInput {
@@ -43,6 +46,8 @@ export interface ExplicitProofInput {
   board: PcbBoard;
   /** The plan's operations digest (from the same builder). */
   operationsDigest: string;
+  /** [B18-C I8] a replay proof: the SERVER-resolved reference (the grammar reads only the direction). */
+  replay?: ExecutionReplay & { expectedPcbRevisionAfter: string };
 }
 
 export interface ExplicitProof extends ExecutionGrantExplicitness { reason: string; excerpt: string }
@@ -65,6 +70,11 @@ export function deriveExplicitPlan(userMessage: string, family: ExecutionFamily,
   if (normalized.length === 0) return { refusal: "the instruction is empty", excerpt };
   if (REFUSAL_TOKENS.test(normalized)) return { refusal: "the instruction carries a negation, question, condition, deferral or a second clause", excerpt };
   if (family === "pcb.rotate-side-footprint") return deriveRotateSide(normalized, board, excerpt);
+  if (family === REPLAY_FAMILY) {
+    const replay = REPLAY_PATTERN.exec(normalized);
+    if (!replay) return { refusal: "the instruction is not one whole undo or redo clause (\"undo\" or \"redo\", optionally \"that\", \"it\" or \"the last change\")", excerpt };
+    return { plan: { family: REPLAY_FAMILY, direction: replay[1]!.toLowerCase() as "undo" | "redo" }, excerpt };
+  }
   if (family !== "pcb.move-footprint") return { refusal: `no explicit-request grammar exists for ${family} yet`, excerpt };
   const match = MOVE_PATTERN.exec(normalized);
   if (!match) return { refusal: "the instruction is not one whole move clause (verb, reference designator, magnitude with unit, direction)", excerpt };
@@ -112,6 +122,13 @@ export function proveExplicitUserRequest(input: ExplicitProofInput): ExplicitPro
   const grammarId = input.family;
   const derived = deriveExplicitPlan(input.userMessage, input.family, input.board);
   if ("refusal" in derived) return unproven(derived.refusal, derived.excerpt, grammarId);
+  if (derived.plan.family === REPLAY_FAMILY) {
+    // [B18-C I8] the grammar reads the direction; the SERVER-resolved reference supplies what; the digests compare byte for byte.
+    if (!input.replay) return unproven("no server-resolved replay reference accompanies this proof", derived.excerpt, grammarId);
+    const digest = replayOperationsDigest({ direction: derived.plan.direction, referencedTransactionId: input.replay.referencedTransactionId, referencedGrantId: input.replay.referencedGrantId }, input.replay.expectedPcbRevisionAfter);
+    const proven = digest === input.operationsDigest;
+    return { proven, grammarId, grammarVersion: EXPLICIT_GRAMMAR_VERSION, coverage: proven ? "whole-message" : "unproven", derivedOperationsDigest: digest, reason: proven ? "the whole instruction asks for exactly this undo or redo of the latest AI change" : "the instruction asks for the other direction", excerpt: derived.excerpt };
+  }
   const built = buildExecutionOperations(input.board, derived.plan);
   if (!built.ok) return unproven(`the derived plan does not build: ${built.message}`, derived.excerpt, grammarId);
   const proven = built.operationsDigest === input.operationsDigest;

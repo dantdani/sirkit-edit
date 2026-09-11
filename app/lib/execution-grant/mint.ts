@@ -131,7 +131,7 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
         plan = { ...plan, operations: [], operationCount: 0, operationsDigest, targets, preview: resolved.preview, previewDigest: executionPreviewDigest({ operationsDigest, targetsDigest: targets.targetsDigest, preview: resolved.preview }), expectedPcbRevisionAfter: resolved.expectedPcbRevisionAfter };
       }
       // 1. The explicit-request proof — derivation against the verified board; never a model claim.
-      const proof = proveExplicitUserRequest({ userMessage: ctx.userMessage, family: plan.family, board: request.board, operationsDigest: plan.operationsDigest });
+      const proof = proveExplicitUserRequest({ userMessage: ctx.userMessage, family: plan.family, board: request.board, operationsDigest: plan.operationsDigest, ...(replay ? { replay: { ...replay, expectedPcbRevisionAfter: plan.expectedPcbRevisionAfter } } : {}) });
       // 2. The B18-A policy decision for Tier 1 under the SERVER-read setting.
       const decided = decideAgentExecution({ tier: 1, setting: ctx.autonomy, actorRole: ctx.role, explicitUserRequest: proof.proven });
       if (decided.decision === "never" || decided.decision === "proposal_only") return { ok: false, reason: "execution_not_permitted", diagnostics: [decided.reason] };

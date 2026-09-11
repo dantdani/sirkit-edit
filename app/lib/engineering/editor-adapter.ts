@@ -49,7 +49,7 @@ import type { PcbHistory, PcbHistoryMetadata } from "../pcb/history";
 import { pcbRevisionId } from "../pcb/revision";
 import type { PcbBoard } from "../pcb/types";
 import { ACTION_COVERAGE_REGISTRY } from "./action-registry";
-import { CanonicalExecutor, deriveExecutorLineageId, type ExecutionRejectionCode, type ExecutionResult } from "./executor";
+import { CanonicalExecutor, deriveExecutorLineageId, type ExecutionRejectionCode, type ExecutionResult, REPLAY_COMMAND_ID } from "./executor";
 import { createEditorSessionChannel } from "./interactive-channel.internal";
 import { isBareHistoryAuthorized } from "./pcb-bare-authority.internal";
 import { createPersistenceEnvelope, InMemoryAtomicProjectStore, validatePersistenceEnvelope, type AtomicProjectStore } from "./persistence";
@@ -168,6 +168,18 @@ export interface CanonicalCommitRequest {
    * caller.
    */
   provenanceCandidateId?: string;
+}
+
+/** [B18-C I8] One granted undo / redo of a referenced durable transaction (see `CanonicalEditorSession.replayUnderGrant`). */
+export interface CanonicalReplayRequest {
+  direction: "undo" | "redo";
+  referencedTransactionId: string;
+  /** The grant id — the replay transaction's clientOperationId, so the durable idempotency evidence finds it. */
+  idempotencyKey: string;
+  /** The canonical head sequence the grant was issued against. */
+  expectedBaseHeadSequence: number;
+  label: string;
+  metadata?: Partial<PcbHistoryMetadata>;
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────────
@@ -367,6 +379,43 @@ export class CanonicalEditorSession {
     return this.enqueue(() => this.runCommit(request));
   }
 
+  /**
+   * [B18-C I8] Undo or redo ONE referenced durable transaction under a server-minted grant — canonical FIRST: the executor
+   * verifies the reference, the lineage position and a pure dry run BEFORE any mutation, and only an accepted replay is
+   * published into the editor history (a NEW applied entry, never a stack pop). A refusal mutates nothing and never rebases
+   * the lineage (the grant is bound to it). A landed result the durable records cannot confirm throws AFTER the envelope is
+   * persisted, so the ritual's canonical-evidence path reports it as landed and unverified — never "nothing changed".
+   */
+  replayUnderGrant(request: CanonicalReplayRequest): Promise<CanonicalCommitResult> {
+    return this.enqueue(() => this.runReplay(request));
+  }
+
+  /** [B18-C I8] Whether `transactionId` can be undone (it IS the canonical head) or redone (the head is the replay that undid
+   *  it) right now — read-only, from the durable records (never the in-memory links, which a reload clears). */
+  isReplayEligible(direction: "undo" | "redo", transactionId: string): boolean {
+    if (!this.service || this.disposed) return false;
+    const records = this.service.durableRecords();
+    const referenced = records.find((item) => item.transaction.transactionId === transactionId);
+    if (!referenced || referenced.status !== "accepted" || !referenced.appliedChangeSet?.baseSemanticStateDigest || !referenced.appliedChangeSet.resultSemanticStateDigest) return false;
+    const head = this.service.currentRevision();
+    if (direction === "undo") return head.headTransactionId === transactionId;
+    const top = records.find((item) => item.transaction.transactionId === head.headTransactionId);
+    return top?.transaction.provenance?.candidateId === `undo:${transactionId}`;
+  }
+
+  /** [B18-C I8] A landed replay is exactly what it claims: its durable record links the referenced transaction and direction,
+   *  and its recorded semantic result is the referenced change's other side (two DIFFERENT durable records agree). */
+  replayResultVerified(direction: "undo" | "redo", referencedTransactionId: string, transactionId: string): boolean {
+    if (!this.service || this.disposed) return false;
+    const records = this.service.durableRecords();
+    const replay = records.find((item) => item.transaction.transactionId === transactionId);
+    const referenced = records.find((item) => item.transaction.transactionId === referencedTransactionId);
+    if (!replay?.appliedChangeSet || !referenced?.appliedChangeSet) return false;
+    if (replay.transaction.provenance?.candidateId !== `${direction}:${referencedTransactionId}`) return false;
+    const expected = direction === "undo" ? referenced.appliedChangeSet.baseSemanticStateDigest : referenced.appliedChangeSet.resultSemanticStateDigest;
+    return typeof expected === "string" && expected.length > 0 && replay.appliedChangeSet.resultSemanticStateDigest === expected;
+  }
+
   // ── Internals ──────────────────────────────────────────────────────────────
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
@@ -547,6 +596,47 @@ export class CanonicalEditorSession {
     if (boardDigest !== headDigest) {
       await this.openLineage(this.delegate.committedPresent, "rebased", undefined, "Editor board diverged from the canonical head (legacy-path mutation); rebased onto the current board.");
     }
+  }
+
+  private async runReplay(request: CanonicalReplayRequest): Promise<CanonicalCommitResult> {
+    type RejectionCode = Extract<CanonicalCommitResult, { ok: false }>["reasonCode"];
+    const refuse = (reasonCode: RejectionCode, message: string, diagnostics: string[] = []): CanonicalCommitResult => {
+      this.record({ kind: "rejected", detail: `granted ${request.direction} of ${request.referencedTransactionId}: ${reasonCode} — ${message}` });
+      return { ok: false, status: "rejected", reasonCode, message, diagnostics };
+    };
+    // NO lineage repair here: a replay under a grant is bound to the lineage it was issued against — a diverged board refuses.
+    if (!this.service || !this.executor) return refuse("stale_revision", "The canonical session has no open lineage. Nothing was changed.");
+    const service = this.service;
+    if (canonicalLineageDigest(this.delegate.committedPresent) !== canonicalLineageDigest(service.currentProject().pcb)) return refuse("stale_revision", "The editor board diverged from the canonical head. Nothing was changed.");
+    const head = service.currentRevision();
+    if (head.headSequence !== request.expectedBaseHeadSequence) return refuse("stale_revision", "The history advanced since the grant was issued. Nothing was changed.");
+    if (!this.isReplayEligible(request.direction, request.referencedTransactionId)) return refuse("replay_position", `The referenced change is no longer ${request.direction}-eligible at the head. Nothing was changed.`);
+    const changeSet = service.durableRecords().find((item) => item.transaction.transactionId === request.referencedTransactionId)!.appliedChangeSet!;
+    const result = await this.executor.executeUndoRedo({
+      referencedTransactionId: request.referencedTransactionId,
+      direction: request.direction,
+      actor: this.actor,
+      expectedLineage: { ...this.identity, lineageId: this.lineage },
+      expectedHeadRevision: head,
+      expectedSourceStateDigest: (request.direction === "undo" ? changeSet.resultSemanticStateDigest : changeSet.baseSemanticStateDigest)!,
+      expectedResultStateDigest: (request.direction === "undo" ? changeSet.baseSemanticStateDigest : changeSet.resultSemanticStateDigest)!,
+      idempotencyKey: request.idempotencyKey,
+      reason: request.label,
+    });
+    if (this.disposed) {
+      this.record({ kind: "rejected", detail: `granted ${request.direction}: session retired while the replay was in flight — result not published.` });
+      return { ok: false, status: "rejected", reasonCode: "session_retired", message: "The replay was not applied: the board was replaced while it was in flight. Nothing was changed.", diagnostics: ["SESSION_RETIRED_IN_FLIGHT"] };
+    }
+    // Every executor check and the dry run precede its submit: a rejection mutated nothing.
+    if (result.status === "rejected") return refuse(result.reasonCode, `The canonical executor refused the ${request.direction} (${result.reasonCode}). Nothing was changed.`, result.diagnostics);
+    const mapped = this.applyExecutionResult({ commandId: REPLAY_COMMAND_ID, label: request.label, metadata: request.metadata, buildOperations: () => [] }, result);
+    if (mapped.ok && mapped.status === "executed") {
+      await this.persistEnvelope();
+      if (canonicalLineageDigest(this.delegate.committedPresent) !== canonicalLineageDigest(service.currentProject().pcb) || !this.replayResultVerified(request.direction, request.referencedTransactionId, mapped.transactionId ?? "")) {
+        throw new Error("REPLAY_RESULT_UNVERIFIED");
+      }
+    }
+    return mapped;
   }
 
   private async runCommit(request: CanonicalCommitRequest): Promise<CanonicalCommitResult> {

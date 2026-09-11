@@ -49,6 +49,11 @@ export const GRANTED_EXECUTION_TOOLS: readonly GrantedExecutionTool[] = Object.f
     family: "pcb.dimension",
     reason: "B18-C I7 — dimension annotations add / update / remove through the editor's own dimension commands (documentation layers only: never copper, never connectivity); re-tiered permission Tier 1 (reversible, edit_placement) per the runbook's PCB Tier 1 list (OD-13); deterministic add ids; an update never moves the measured points; confirmation-only (no explicit grammar)",
   }),
+  Object.freeze({
+    toolId: "sirkit.pcb.undo-redo-granted",
+    family: "pcb.undo-redo-canonical",
+    reason: "B18-C I8 — undo or redo the exact last AI change (the runbook's PCB Tier 1 'undo/redo the exact last eligible operation'; OD-14): the server resolves the reference from the principal's own settled grants at the verified head; the browser replays the durable record through the canonical executor (verified before any mutation; one new history entry); grant-only; explicit only for a whole-message undo or redo",
+  }),
 ] as GrantedExecutionTool[]);
 
 export const GRANTED_EXECUTION_TOOL_IDS: readonly string[] = Object.freeze(GRANTED_EXECUTION_TOOLS.map((tool) => tool.toolId).sort());
@@ -69,7 +74,7 @@ export const NEVER_GRANTED_COMMAND_IDS: readonly string[] = Object.freeze([
 export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
   /\.release$/,               // manufacturing release
   /qualif/i,                  // qualification
-  /undo-redo/,                // canonical replay
+  /^sirkit\.pcb\.undo-redo-canonical$/, // the internal canonical replay primitive ([B18-C I8] exact: the granted replay is reviewed above)
   /^sirkit\.pcb\.(edit-track|delete-item|create-via|zone-edit)$/, // canonical mutations not reviewed as granted executions ([B18-C I7] dimension lifted)
 ]);
 

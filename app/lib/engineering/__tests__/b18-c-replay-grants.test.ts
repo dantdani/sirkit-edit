@@ -13,7 +13,7 @@
  *  - the grant carries its reference and NO operations; parse and coherence are
  *    family-aware (a replay grant with operations, a builder grant with a
  *    reference, or an altered reference never verifies);
- *  - until I8b the browser refuses a replay grant before anything durable.
+ *  - the browser half (the ritual's replay branch) is proven in `b18-c-undo-redo` (I8b).
  */
 import { describe, expect, it } from "vitest";
 import { mmToNm } from "../../pcb/units";
@@ -26,14 +26,12 @@ import { buildExecutionGrantBase, mintablePlanOf, parseExecutionArguments, sealE
 import { AI_REPLAY_NOTE, createExecutionGrantMinter } from "../../execution-grant/mint";
 import { sirkitToolRegistry } from "../tool-catalog";
 import type { ToolDescriptor } from "../tool-registry";
-import { tenderConfirmedExecution } from "../../project/granted-execution-controller.internal";
 import { AGENT_SYSTEM_PROMPT_VERSION } from "../../prompts";
-import { PRINCIPAL, PROJECT, SCOPE, call, composition, headOf, movesBy, ritual, runContext, runScenario, type Composed } from "./b18c-harness";
+import { PRINCIPAL, PROJECT, SCOPE, call, composition, headOf, movesBy, runContext, runScenario, type Composed } from "./b18c-harness";
 
-/** The replay descriptor as I8b will expose it (a test copy: the catalog gains it with the exposure). */
+/** [B18-C I8b] the catalog's grant-only replay descriptor. */
 function replayDescriptor(): ToolDescriptor {
-  const internal = sirkitToolRegistry().get("sirkit.pcb.undo-redo-canonical")!;
-  return { ...internal, toolId: "sirkit.pcb.undo-redo-granted", discovery: "discoverable", agentExposed: true, executionMode: "granted", grantOnly: true };
+  return sirkitToolRegistry().get("sirkit.pcb.undo-redo-granted")!;
 }
 
 async function mintReplay(c: Composed, direction: "undo" | "redo", message = "Undo that.") {
@@ -95,7 +93,7 @@ describe("B18-C I8a — the minter resolves the exact last AI change, server-sid
     expect(b.targets).toMatchObject({ resolvedFrom: "named", objectIds: [move.receipt.transactionId], kinds: ["transaction"] });
     expect(parsePublicExecutionGrant(JSON.parse(JSON.stringify(minted.grant)))).not.toBeNull();
     expect(verifyPublicGrantCoherence(minted.grant)).toEqual({ ok: true });
-    expect(minted.decision).toBe("preview_then_confirm"); // no undo grammar before I8b
+    expect(minted.decision).toBe("execute_explicit"); // [I8b] the undo grammar proves a whole-message "Undo that." against the resolved reference
   }, 30_000);
 
   it("refuses — minting nothing — when the head is not an AI change (a later human commit), when there is no AI undo to redo, and when the AI change was never made", async () => {
@@ -136,18 +134,5 @@ describe("B18-C I8a — parse and coherence are family-aware", () => {
     const smuggled = JSON.parse(JSON.stringify(move.grant)) as PublicExecutionGrant;
     smuggled.binding.proposal.replay = minted.grant.binding.proposal.replay;
     expect(parsePublicExecutionGrant(smuggled)).toBeNull();
-  }, 30_000);
-});
-
-describe("B18-C I8a — the browser does not execute a replay grant yet (I8b)", () => {
-  it("the ritual refuses before anything durable; the head does not move", async () => {
-    const c = await composition("execute_explicit_tier1");
-    await aiMove(c);
-    const minted = await mintReplay(c, "undo");
-    if (!minted.ok) throw new Error(minted.diagnostics.join("; "));
-    const before = headOf(c).headSequence;
-    expect(await tenderConfirmedExecution(ritual(c, minted.grant))).toMatchObject({ ok: false, code: "recompile-mismatch" });
-    expect(await c.journal.lookupByGrant(minted.grant.grantId)).toMatchObject({ kind: "absent" });
-    expect(headOf(c).headSequence).toBe(before);
   }, 30_000);
 });

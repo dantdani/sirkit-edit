@@ -660,11 +660,32 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     outputSchema: OUT_RESULT,
     requiredCapability: "edit_placement", requiredRoles: ["pcb_editor", "project_admin"],
     approvalTier: "none", requiredSelectionKinds: [],
-    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/executor.ts", symbol: "CanonicalExecutor.executeUndoRedo", canonicalCommandId: "pcb.undo-redo-canonical", notes: "Reachable ONLY through the adapter-wrapped history; generic execution is rejected (B03.1). No general tool binding exists or may be added." },
+    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/executor.ts", symbol: "CanonicalExecutor.executeUndoRedo", canonicalCommandId: "pcb.undo-redo-canonical", notes: "Reachable ONLY through the adapter-wrapped history and — the recorded B03.2 amendment (B18-C I8) — the grant-only sirkit.pcb.undo-redo-granted, which replays the exact last AI change through CanonicalEditorSession.replayUnderGrant; generic execution is rejected (B03.1). No other tool binding exists or may be added." },
     discovery: "internal-only",
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/engineering/executor.ts", "artifacts/ai-control-plane-b03-2/lineage-and-channel-boundary.md"],
     versionNotes: "Internal-only; excluded from every discovery channel.",
+  },
+  // ── [B18-C I8] Undo / redo of the assistant's own latest change — a reviewed granted execution (grant-only) ──
+  {
+    ...canonicalMutation,
+    toolId: "sirkit.pcb.undo-redo-granted", version: "1.0.0",
+    owningCommandId: "pcb.undo-redo-canonical",
+    title: "Undo or redo your latest change",
+    description: "EXECUTION tool: undo the latest change YOU (the assistant) made to the board through an execution tool, or redo the change your latest undo reverted. It takes only the direction — the server finds the exact change, and only while it is still the latest change on the board (any later edit, by the user or by you, refuses). Calling it never changes the board by itself: the server issues a one-shot grant, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly \"undo\" or \"redo\" (optionally \"that\" or \"the last change\"), commits it. An undo or redo you perform is itself a NEW history entry: the user's own Undo afterwards re-applies the change.",
+    category: "pcb", operationClass: "mutate",
+    inputSchema: obj({ direction: { type: "string", enum: ["undo", "redo"], description: "undo your latest change, or redo the change your latest undo reverted." } }, ["direction"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "edit_placement", requiredRoles: ["pcb_editor", "project_admin"],
+    // [B18-C I8] approvalTier "none" on a mutate tool is the exact-last-operation replay family: permission Tier 1 by derivation.
+    approvalTier: "none", requiredSelectionKinds: [],
+    agentExposed: true, executionMode: "granted", grantOnly: true,
+    validationStrategy: "the server resolves the reference from the principal's own settled grants at the verified head; the canonical executor verifies the durable record, the lineage position and a pure dry run before any mutation",
+    verificationStrategy: "the replay's durable record links the referenced transaction and direction, and its recorded semantic result equals the referenced change's other side",
+    binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.replayUnderGrant", canonicalCommandId: "pcb.undo-redo-canonical", notes: "Grant-only: absent from interactive-ui, api and automation discovery. The browser replays the durable record through CanonicalExecutor.executeUndoRedo (canonical first; one new history entry); the internal sirkit.pcb.undo-redo-canonical stays internal-only." },
+    timeoutMs: 5_000,
+    sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "app/lib/engineering/executor.ts", "app/lib/execution-grant/mint.ts", "app/lib/engineering/granted-executions.ts", "artifacts/ai-control-plane-b18/safe-mutation-contract.md"],
+    versionNotes: "1.0.0 (B18-C I8): undo / redo of the assistant's own latest change as a reviewed granted execution (OD-14); grant-only; explicit only for a whole-message undo or redo.",
   },
   // ── Manufacturing release — API-only, MFG01-owned, never a tool ───────────
   {

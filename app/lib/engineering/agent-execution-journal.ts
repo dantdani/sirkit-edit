@@ -20,7 +20,7 @@
  * and recovery adopts a commit ONLY when `durableIdempotencyEvidence` proves
  * it landed under this grant id.
  */
-import { EXECUTION_RECEIPT_SCHEMA, executionCommitmentFor, parsePublicExecutionGrant, type ExecutionDecisionMode, type ExecutionFamily, type PublicExecutionGrant } from "./execution-grant";
+import { REPLAY_FAMILY, EXECUTION_RECEIPT_SCHEMA, executionCommitmentFor, parsePublicExecutionGrant, type ExecutionDecisionMode, type ExecutionFamily, type PublicExecutionGrant } from "./execution-grant";
 import { engineeringDigest } from "./stable";
 
 export const AGENT_EXECUTION_JOURNAL_SCHEMA = "sirkit.agent-execution-journal.v1" as const;
@@ -251,7 +251,9 @@ export class AgentExecutionJournal {
       || typeof policy.rulesDigest !== "string" || !ENG_DIGEST.test(policy.rulesDigest)) return "VALIDATION_POLICY_INVALID";
     if (!isWellFormedAuthorization(record.authorization)) return "AUTHORIZATION_INVALID";
     if (record.originRunId !== null && (typeof record.originRunId !== "string" || record.originRunId.length > 128)) return "ORIGIN_RUN_INVALID";
-    if (typeof record.operationCount !== "number" || !Number.isInteger(record.operationCount) || record.operationCount < 1 || record.operationCount > 16) return "OPERATION_COUNT_INVALID";
+    // [B18-C I8] a replay entry carries no operations (its grant carries a reference); every other family carries 1–16.
+    const replayEntry = record.family === REPLAY_FAMILY;
+    if (typeof record.operationCount !== "number" || !Number.isInteger(record.operationCount) || (replayEntry ? record.operationCount !== 0 : record.operationCount < 1) || record.operationCount > 16) return "OPERATION_COUNT_INVALID";
     if (typeof record.operationsDigest !== "string" || !ENG_DIGEST.test(record.operationsDigest)) return "OPERATIONS_DIGEST_INVALID";
     if (typeof record.previewDigest !== "string" || !ENG_DIGEST.test(record.previewDigest)) return "PREVIEW_DIGEST_INVALID";
     const grant = parsePublicExecutionGrant(record.grant);

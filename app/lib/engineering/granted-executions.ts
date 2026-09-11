@@ -32,8 +32,8 @@ import type { ExecutionGrantTransport, TenderBody } from "../project/execution-g
 import type { ProjectSelectorScope } from "../project/project-selector";
 import { AgentExecutionJournal, buildExecutionReceipt, type AgentExecutionJournalEntry, type ExecutionReceipt } from "./agent-execution-journal";
 import { canonicalSessionFor, historyBindingState, type CanonicalEditorSession } from "./editor-adapter";
-import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence } from "./execution-grant";
-import { buildExecutionOperations, planFromOperations } from "./execution-operations";
+import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence, REPLAY_FAMILY } from "./execution-grant";
+import { buildExecutionOperations, planFromOperations, type BuiltExecution } from "./execution-operations";
 import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { KERNEL_OPERATION_BINDINGS } from "./executor";
 import type { ProjectCommitInterlock } from "./project-commit-interlock";
@@ -160,10 +160,18 @@ export function undoEligibleFor(history: PcbHistory, transactionId: string): boo
   return applied.at(-1)?.metadata.transactionId === transactionId;
 }
 
+/** [B18-C I8] The provenance a landed commit of this entry carries: the chain-protected commitment for a builder family; for a
+ *  replay, the executor's own link `<direction>:<referenced transaction>` (the replay is bound to its grant by the idempotency
+ *  key — the grant id — which is exactly what the evidence lookup matches). */
+function expectedProvenanceFor(entry: AgentExecutionJournalEntry): string {
+  const replay = entry.family === REPLAY_FAMILY ? entry.grant.binding.proposal.replay : undefined;
+  return replay ? `${replay.direction}:${replay.referencedTransactionId}` : entry.commitment;
+}
+
 /** Adopt a landed commit proven by canonical evidence: committed → adopted → receipt; returns the receipt. */
 async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; kind: "mismatch" | "journal"; detail: string }> {
   const { journal, entry, evidence } = input;
-  if (evidence.provenanceCandidateId !== entry.commitment) return { ok: false, kind: "mismatch", detail: "the canonical record's chain-protected commitment does not match this grant's journal entry" };
+  if (evidence.provenanceCandidateId !== expectedProvenanceFor(entry)) return { ok: false, kind: "mismatch", detail: "the canonical record's chain-protected commitment does not match this grant's journal entry" };
   if (evidence.resultHeadSequence !== null && evidence.resultHeadSequence !== entry.baseHeadSequence + 1) return { ok: false, kind: "mismatch", detail: "the canonical record's result head does not match the expected single advance" };
   let current = entry;
   if (current.state === "grant-consumed") {
@@ -323,12 +331,21 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     }
 
     // 7. RECOMPILE through the shared builder against the live board; byte-match; kinds inside the family's kernel binding.
-    const plan = planFromOperations(b.operation.family, b.proposal.operations);
-    const built = plan ? buildExecutionOperations(liveBoard, plan) : null;
-    if (!built || !built.ok) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The grant's operations no longer compile against the live board${built && !built.ok ? ` (${built.code})` : ""}. Ask again. Nothing was changed.`); }
-    if (built.operationsDigest !== b.proposal.operationsDigest || built.previewDigest !== b.proposal.previewDigest || built.resultRevision !== b.proposal.expectedPcbRevisionAfter) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
-    const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[b.operation.family] ?? [];
-    if (built.operations.some((operation: EngineeringOperation) => !allowed.includes(operation.kind))) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "An operation kind is outside the family's kernel binding. Nothing was changed."); }
+    //    [B18-C I8] a replay grant has no operations: the session confirms, from its durable records, that the referenced
+    //    change is still the one to undo (the head) or to redo (the head is the undo that reverted it).
+    const replay = b.operation.family === REPLAY_FAMILY ? (b.proposal.replay ?? null) : null;
+    let built: BuiltExecution | null = null;
+    if (b.operation.family === REPLAY_FAMILY) {
+      if (!replay || !session.isReplayEligible(replay.direction, replay.referencedTransactionId)) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The change to ${replay?.direction ?? "replay"} is no longer the latest change on the board. Ask again. Nothing was changed.`); }
+    } else {
+      const plan = planFromOperations(b.operation.family, b.proposal.operations);
+      const rebuilt = plan ? buildExecutionOperations(liveBoard, plan) : null;
+      if (!rebuilt || !rebuilt.ok) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", `The grant's operations no longer compile against the live board${rebuilt && !rebuilt.ok ? ` (${rebuilt.code})` : ""}. Ask again. Nothing was changed.`); }
+      if (rebuilt.operationsDigest !== b.proposal.operationsDigest || rebuilt.previewDigest !== b.proposal.previewDigest || rebuilt.resultRevision !== b.proposal.expectedPcbRevisionAfter) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "The recompiled operations do not byte-match the grant. Ask again. Nothing was changed."); }
+      const allowed = (KERNEL_OPERATION_BINDINGS as Record<string, readonly string[]>)[b.operation.family] ?? [];
+      if (rebuilt.operations.some((operation: EngineeringOperation) => !allowed.includes(operation.kind))) { registry.release(identityKey); return refuseExplicit("recompile-mismatch", "An operation kind is outside the family's kernel binding. Nothing was changed."); }
+      built = rebuilt;
+    }
 
     // 8. Durable PREPARE (reusing an earlier prepared attempt exactly).
     if (!entry) {
@@ -398,17 +415,23 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     let commit: Awaited<ReturnType<CanonicalEditorSession["commit"]>>;
     commitAttempted = true;
     try {
-      commit = await session.commit({
-        commandId: b.operation.family,
-        label: `AI: ${b.proposal.preview.after}`.slice(0, 120),
-        idempotencyKey: grant.grantId,
-        provenanceCandidateId: entry.commitment,
-        metadata: { actor: "ai", reason: `Granted execution ${grant.grantId} (${b.operation.decision})` },
-        buildOperations: (board: PcbBoard) => {
-          if (pcbRevisionId(board) !== base.pcbRevisionId) throw new Error("The board changed at the serialized commit position; the grant base is stale.");
-          return built.operations;
-        },
-      });
+      const metadata = { actor: "ai" as const, reason: `Granted execution ${grant.grantId} (${b.operation.decision})` };
+      const label = `AI: ${b.proposal.preview.after}`.slice(0, 120);
+      // [B18-C I8] a replay goes through the session's verified replay path (canonical first); every other family commits
+      // its grant's exact operations.
+      commit = replay
+        ? await session.replayUnderGrant({ direction: replay.direction, referencedTransactionId: replay.referencedTransactionId, idempotencyKey: grant.grantId, expectedBaseHeadSequence: base.headSequence, label, metadata })
+        : await session.commit({
+          commandId: b.operation.family,
+          label,
+          idempotencyKey: grant.grantId,
+          provenanceCandidateId: entry.commitment,
+          metadata,
+          buildOperations: (board: PcbBoard) => {
+            if (pcbRevisionId(board) !== base.pcbRevisionId) throw new Error("The board changed at the serialized commit position; the grant base is stale.");
+            return built!.operations;
+          },
+        });
     } catch (error) {
       // [B18-C review V4] the commit promise REJECTED instead of answering. A disposed session rejects before its queued task
       // starts (provably nothing ran); otherwise the canonical ledger decides whether anything landed for this grant.
@@ -449,7 +472,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     const afterHead = session.headMetadataFor(afterBoard);
     // [B18-C review V0] "exactly the grant landed" is decided in the fill-normalized semantic domain (the kernel re-marks zone
     // fills dirty and the editor may refill them before this runs); the head advance and the lineage stay exact.
-    if (canonicalLineageDigest(afterBoard) !== built.resultLineageDigest || !afterHead || afterHead.headSequence !== base.headSequence + 1 || afterHead.lineageId !== base.lineageId) {
+    // [B18-C I8] a replay lands exactly when two durable records agree (the replay's recorded result is the referenced change's other side).
+    const landedExactly = replay ? session.replayResultVerified(replay.direction, replay.referencedTransactionId, transactionId) : canonicalLineageDigest(afterBoard) === built!.resultLineageDigest;
+    if (!landedExactly || !afterHead || afterHead.headSequence !== base.headSequence + 1 || afterHead.lineageId !== base.lineageId) {
       registry.poison(identityKey); await input.journal.poison(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry, settlement: POISONED, signal: input.signal });
       return refuse("recovery-required", "The commit landed but its result does not match the grant; recovery required. The board HAS changed — inspect the canonical history.", { changed: true });

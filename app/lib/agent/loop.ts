@@ -18,6 +18,7 @@
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
 import type { ExecutionDecisionMode, PublicExecutionGrant } from "../engineering/execution-grant";
+import { REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
 import type { AgentTraceRecorder } from "./trace-recorder";
@@ -560,9 +561,11 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
                   },
                   undo: {
                     eligible: settlement.undoEligible,
-                    how: settlement.undoEligible
-                      ? "The user can undo it with the editor's Undo (one step) while it is still the latest change."
-                      : "It is no longer the latest change (or undo is unavailable); the user reverts it from the revision history.",
+                    how: !settlement.undoEligible
+                      ? "It is no longer the latest change (or undo is unavailable); the user reverts it from the revision history."
+                      : grant.binding.operation.family === REPLAY_FAMILY
+                        ? "This undo or redo is itself a new history entry: the editor's Undo (one step) reverses it — re-applying the change — while it is still the latest change."
+                        : "The user can undo it with the editor's Undo (one step), or ask you to undo it, while it is still the latest change.",
                   },
                   note: "The user's editor committed exactly this change through its canonical session (one transaction, one undo entry). Say what changed, the DRC result and how to undo it; never call the board safe or manufacturing-ready.",
                 }),

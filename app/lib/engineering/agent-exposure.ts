@@ -36,6 +36,7 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.pcb.arrange",                           // B18-C I5 — reviewed granted execution (align / distribute / snap-to-grid; confirmation-only)
   "sirkit.pcb.silkscreen-text",                   // B18-C I6 — reviewed granted execution (silkscreen TEXT only; confirmation-only)
   "sirkit.pcb.dimension",                         // B18-C I7 — reviewed granted execution (dimension annotations; re-tiered Tier 1 per OD-13; confirmation-only)
+  "sirkit.pcb.undo-redo-granted",                 // B18-C I8 — reviewed granted execution (undo / redo of the assistant's own latest change; grant-only)
   "sirkit.pcb.propose-bounded-edit",              // B15.3 — sealed bounded PCB proposal
   "sirkit.pcb.revision-inspect",
   "sirkit.placement.propose",                     // B17-F — the shared revision-bound layout candidate (human applies it in the placement panel)

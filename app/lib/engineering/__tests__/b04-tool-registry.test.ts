@@ -302,6 +302,14 @@ describe("truthful classification", () => {
     // Non-UI channels do not even learn it exists.
     const agent = discoverTools(registry, editorContext({ channel: "assistant-agent" }));
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.pcb.undo-redo-canonical")).toBe(false);
+    // [B18-C I8] the GRANTED replay is grant-only: absent from interactive-ui / api / automation, present on the agent channel
+    // only with the server-derived grant context.
+    for (const channel of ["interactive-ui", "automation", "api"] as const) {
+      expect(discoverTools(registry, editorContext({ channel })).included.some((item) => item.toolId === "sirkit.pcb.undo-redo-granted"), channel).toBe(false);
+    }
+    const grantContext: Partial<DiscoveryContext> = { grantedCapabilities: ["read_project"], grantableCapabilities: ["edit_placement"], grantLineageId: "lin1-pcb", riskCeiling: "mutate", approvalsAvailable: ["reversible"] };
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent" })).included.some((item) => item.toolId === "sirkit.pcb.undo-redo-granted")).toBe(false);
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", ...grantContext })).included.map((item) => item.toolId)).toContain("sirkit.pcb.undo-redo-granted");
   });
 
   it("23. manufacturing release is not agent executable and not callable as a tool", () => {
