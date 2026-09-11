@@ -522,3 +522,8 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Found while writing them: no free-text reason exists in the explicit-proof record (the unproven sentence is generic); a header phrase ("fails safe to") matched the copy gate's prohibited list — reworded; both source files are now scanned by the new tests.
 - Gates: B17 577 controls and the B01 fingerprint unchanged (I3 adds no UI); the broad run includes the AST import gates, green with the two new SAFE modules. Local Playwright not run for I3: nothing is wired into the page (the browser spec runs in CI on every push).
 - Tests: `b18-d-execution-display` 7/7, `b18-d-chat-run-view` 9/9 (CI list); broad run: 234 files / 3254 passed, 10 skipped (the 9 live Supabase matrix tests and the opt-in database-qualification test); tsc 0; eslint 0.
+
+### Test timing — the assignment workbench's preview wait (CONFIRMED, 2026-09-11 local, solo; this commit)
+
+- `app/components/pcb/__tests__/assignment-queue-panel.test.tsx:29` waited for "Exact decision preview" with testing-library's default one-second `findByText`. It failed twice, only inside broad parallel runs: 1.24 s in I2's first run and 1.26 s in I4's. Alone it passed 3/3 both times, and nothing on this branch touches the panel, its test or its imports.
+- After the recurrence (as recorded in I2) the wait is explicit — 5 s, with the reason in the test. The assertion is unchanged: the preview must still appear, the commit button must still start disabled.

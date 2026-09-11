@@ -26,7 +26,9 @@ describe("physical assignment workbench", () => {
     fireEvent.click(candidate);
     fireEvent.change(screen.getByLabelText("Decision reason"), { target: { value: "Reviewed exact package and mapping evidence." } });
     fireEvent.click(screen.getByRole("button", { name: "Select exact candidate" }));
-    await screen.findByText("Exact decision preview");
+    // The preview renders after the mocked decision round-trip; under a broad parallel run it has taken ~1.25 s, past
+    // testing-library's default one-second wait (it failed twice at 1.24-1.26 s, never alone), so the wait is explicit.
+    await screen.findByText("Exact decision preview", {}, { timeout: 5_000 });
     const commit = screen.getByRole("button", { name: "Commit exact plan" }) as HTMLButtonElement;
     expect(commit.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox"));
