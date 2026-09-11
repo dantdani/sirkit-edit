@@ -16,11 +16,12 @@
  */
 import type { PcbBoard } from "../pcb/types";
 import { canonicalReference } from "../pcb/integrity";
-import { buildExecutionOperations, type ExecutionPlan } from "./execution-operations";
+import { buildExecutionOperations, editorFlipRotation, type ExecutionPlan } from "./execution-operations";
 import { MAX_INSTRUCTION_EXCERPT, type ExecutionFamily, type ExecutionGrantExplicitness } from "./execution-grant";
 
-/** [B18-C I5] 1.1.0: + rotate (angle with a REQUIRED direction word) and flip (onto a named side) for pcb.rotate-side-footprint. */
-export const EXPLICIT_GRAMMAR_VERSION = "1.1.0";
+/** [B18-C I5] 1.1.0: + rotate (angle with a REQUIRED direction word) and flip (onto a named side) for pcb.rotate-side-footprint.
+ *  [B18-C review 2] 1.2.0: a flip derives the editor's own Flip (rotation 360 − r); "put" needs the side or layer word. */
+export const EXPLICIT_GRAMMAR_VERSION = "1.2.0";
 
 const REFUSAL_TOKENS = /\b(don'?t|do not|never|not|instead|but|rather|except|unless|if|later|afterwards?|after|before|first|then|what if|would|could|should|can you|maybe|perhaps|probably|and then|also)\b|\?|\n|\r/i;
 const UNIT_NM: Readonly<Record<string, number>> = Object.freeze({ mm: 1_000_000, millimeter: 1_000_000, millimeters: 1_000_000, millimetre: 1_000_000, millimetres: 1_000_000, um: 1_000, µm: 1_000, micron: 1_000, microns: 1_000, mil: 25_400, mils: 25_400, cm: 10_000_000 });
@@ -31,8 +32,10 @@ const DIRECTIONS: Readonly<Record<string, { x: number; y: number }>> = Object.fr
 const MOVE_PATTERN = /^(?:please\s+)?(?:move|shift|nudge)\s+([a-z][a-z0-9]*\d)\s+(?:by\s+)?(\d+(?:\.\d+)?)\s*(mm|millimet(?:er|re)s?|um|µm|microns?|mils?|cm)\s+(?:to\s+the\s+|towards?\s+the\s+)?(right|left|up|down)$/i;
 /** [B18-C I5] 1 = reference designator, 2 = whole degrees, 3 = the REQUIRED direction word. */
 const ROTATE_PATTERN = /^(?:please\s+)?(?:rotate|turn)\s+([a-z][a-z0-9]*\d)\s+(?:by\s+)?(\d{1,3})\s*(?:°|degrees?|deg)?\s+(clockwise|cw|counter-?clockwise|anti-?clockwise|ccw)$/i;
-/** [B18-C I5] 1 = reference designator, 2 = the side. */
-const FLIP_PATTERN = /^(?:please\s+)?(?:flip|put)\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+(?:side|layer))?$/i;
+/** [B18-C I5] 1 = reference designator, 2 = the side. [B18-C review 2] "flip" implies a side change; "put … to the top" also
+ *  reads as a position, so "put" needs the side or layer word. */
+const FLIP_PATTERN = /^(?:please\s+)?flip\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+(?:side|layer))?$/i;
+const PUT_PATTERN = /^(?:please\s+)?put\s+([a-z][a-z0-9]*\d)\s+(?:on)?to\s+the\s+(top|bottom)\s+(?:side|layer)$/i;
 
 export interface ExplicitProofInput {
   userMessage: string;
@@ -84,7 +87,7 @@ export function deriveExplicitPlan(userMessage: string, family: ExecutionFamily,
  *  an ABSOLUTE plan in the editor's own convention (positive = counter-clockwise on screen, so a clockwise turn subtracts). */
 function deriveRotateSide(normalized: string, board: PcbBoard, excerpt: string): { plan: ExecutionPlan; excerpt: string } | { refusal: string; excerpt: string } {
   const rotate = ROTATE_PATTERN.exec(normalized);
-  const flip = rotate ? null : FLIP_PATTERN.exec(normalized);
+  const flip = rotate ? null : (FLIP_PATTERN.exec(normalized) ?? PUT_PATTERN.exec(normalized));
   if (!rotate && !flip) return { refusal: "the instruction is not one whole rotate clause (verb, reference designator, angle, direction word) or flip clause (verb, reference designator, top or bottom)", excerpt };
   const ref = (rotate ?? flip)![1]!;
   // [B18-C review V2] the reference must name EXACTLY one footprint.
@@ -100,7 +103,8 @@ function deriveRotateSide(normalized: string, board: PcbBoard, excerpt: string):
     return { plan: { family: "pcb.rotate-side-footprint", targets: [{ footprintId: footprint.id, rotationDeg, side: footprint.side }] }, excerpt };
   }
   const side = flip![2]!.toLowerCase() as "top" | "bottom";
-  return { plan: { family: "pcb.rotate-side-footprint", targets: [{ footprintId: footprint.id, rotationDeg: footprint.rotationDeg, side }] }, excerpt };
+  // [B18-C review 2] the editor's own Flip: the side toggles and the rotation becomes 360 − r (onto the same side: no change).
+  return { plan: { family: "pcb.rotate-side-footprint", targets: [{ footprintId: footprint.id, rotationDeg: side !== footprint.side ? editorFlipRotation(footprint.rotationDeg) : footprint.rotationDeg, side }] }, excerpt };
 }
 
 /** The proof: derive, build with the SAME builder, compare digests byte for byte. */

@@ -73,6 +73,10 @@ export type DimensionChange = { op: "add"; item: BoardDimension } | { op: "repla
 export type DimensionPlan = { family: "pcb.dimension"; edits: DimensionEdit[] } | { family: "pcb.dimension"; mode: "pinned"; changes: DimensionChange[] };
 export type ExecutionPlan = MoveFootprintPlan | RotateSidePlan | ArrangePlan | SilkTextPlan | DimensionPlan;
 
+/** [B18-C review 2] The editor's own Flip (select-move.ts `flipSelection`) turns a part over about its origin: the side toggles
+ *  and the rotation becomes 360 − r. A side change that states no rotation follows it (the seal's fill and the grammar). */
+export const editorFlipRotation = (rotationDeg: number): number => (360 - rotationDeg) % 360;
+
 export const SILK_TEXT_MAX_CHARS = 64;
 /** The editor's own silk tool never places text shorter than 0.1 mm (useSilkTool). */
 export const SILK_TEXT_MIN_HEIGHT_NM = 100_000;
@@ -113,7 +117,9 @@ export interface BuiltExecution {
 }
 export interface BuildRefusal { ok: false; code: "empty" | "too_many" | "unknown_target" | "locked_target" | "invalid_geometry" | "compile_failed" | "no_change" | "unsupported_family"; message: string }
 
-const fmt = (nm: number): string => nmToMm(nm).toFixed(3);
+/** [B18-C review 2] exact to the nanometre: three decimals for whole micrometres, six otherwise — a sub-micron change never
+ *  reads the same before and after. */
+const fmt = (nm: number): string => nmToMm(nm).toFixed(Number.isInteger(nm / 1000) ? 3 : 6);
 const refusal = (code: BuildRefusal["code"], message: string): BuildRefusal => ({ ok: false, code, message });
 const footprintRef = (id: string): SelectionRef => ({ kind: "footprint", id });
 
@@ -133,6 +139,8 @@ function finishCandidate(board: PcbBoard, family: ExecutionFamily, candidate: Pc
   // pinned recompile — which replays the operations, not the model's edit order — describe the identical change.
   if (describe) ({ before, after } = describe(operations));
   if (operations.length === 0) return refusal("no_change", noChange);
+  // [B18-C review 2] the preview is the only confirmation surface: a change it cannot show is never issued.
+  if (before.some((text, index) => text === after[index])) return refusal("compile_failed", "Part of this change reads the same before and after in the preview, so it cannot be confirmed; nothing was issued.");
   if (operations.length !== delta.operations.length) return refusal("compile_failed", `The plan compiled to operations outside the ${family.replace(/^pcb\./, "")} family.`);
   // [B18-C review V0] the expected result is what the canonical KERNEL commits from these exact operations — not the
   // editor mutator's board. A kernel refusal here refuses the plan before any grant exists.
@@ -157,18 +165,33 @@ function buildPositions(board: PcbBoard, family: "pcb.move-footprint" | "pcb.arr
   const before: string[] = [];
   const after: string[] = [];
   const seen = new Set<string>();
-  for (const move of moves) {
+  const moved: string[] = [];
+  // [B18-C review 2] in BOARD order — the order the canonical delta (and so the browser's recompile from the grant's
+  // operations) lists them — so the preview reads identically on both sides; a move to where the footprint already is is no
+  // target (it would stay in the preview and the targets while the operations drop it).
+  for (const move of inBoardOrder(board, moves, (item) => item.footprintId)) {
     if (typeof move.footprintId !== "string" || move.footprintId.length === 0 || seen.has(move.footprintId)) return refusal("unknown_target", "Each move must name one distinct footprint id.");
     seen.add(move.footprintId);
     const footprint = board.footprints.find((item) => item.id === move.footprintId);
     if (!footprint) return refusal("unknown_target", `Footprint ${move.footprintId} is not on this board.`);
     if (footprint.locked) return refusal("locked_target", `Footprint ${footprint.ref} is locked; a locked footprint is never moved by an agent.`);
     if (!Number.isSafeInteger(move.x) || !Number.isSafeInteger(move.y)) return refusal("invalid_geometry", "Targets must be integer nanometres.");
+    if (move.x === footprint.at.x && move.y === footprint.at.y) continue;
+    moved.push(footprint.id);
     commands.push({ op: "set-position", ref: footprintRef(footprint.id), atNm: { x: move.x, y: move.y } });
     before.push(`${footprint.ref} at (${fmt(footprint.at.x)}, ${fmt(footprint.at.y)}) mm`);
     after.push(`${footprint.ref} at (${fmt(move.x)}, ${fmt(move.y)}) mm`);
   }
-  return finish(board, family, commands, [...seen], before, after, "The plan changes nothing (every footprint is already at its target).");
+  if (commands.length === 0) return refusal("no_change", "The plan changes nothing (every footprint is already at its target).");
+  return finish(board, family, commands, moved, before, after, "The plan changes nothing (every footprint is already at its target).");
+}
+
+/** [B18-C review 2] Items in the board's footprint order (unknown ids last, in the given order — they refuse anyway). */
+function inBoardOrder<T>(board: PcbBoard, items: readonly T[], idOf: (item: T) => unknown): T[] {
+  if (!Array.isArray(items)) return [];
+  const order = new Map(board.footprints.map((footprint, index) => [footprint.id, index]));
+  const rank = (item: T): number => order.get(idOf(item) as string) ?? Number.MAX_SAFE_INTEGER;
+  return items.map((item, index) => ({ item, index })).sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index).map(({ item }) => item);
 }
 
 /** [B18-C I5] Absolute rotation / board side through `set-footprint-props`; the preview names only the fields that change. */
@@ -180,7 +203,7 @@ function buildRotateSide(board: PcbBoard, plan: RotateSidePlan): BuiltExecution 
   const before: string[] = [];
   const after: string[] = [];
   const seen = new Set<string>();
-  for (const target of targets) {
+  for (const target of inBoardOrder(board, targets, (item) => item.footprintId)) { // [B18-C review 2] board order (see buildPositions)
     if (typeof target.footprintId !== "string" || target.footprintId.length === 0 || seen.has(target.footprintId)) return refusal("unknown_target", "Each target must name one distinct footprint id.");
     seen.add(target.footprintId);
     const footprint = board.footprints.find((item) => item.id === target.footprintId);
@@ -241,11 +264,22 @@ const silkTextOf = (board: PcbBoard, id: string): SilkTextItem | null => {
   const item = (board.silkItems ?? []).find((candidate) => candidate.id === id);
   return item && item.kind === "text" ? item : null;
 };
-const describeSilk = (item: SilkTextItem): string => `silk text "${item.text}" at (${fmt(item.position.x)}, ${fmt(item.position.y)}) mm on ${item.layer === "silkBottom" ? "bottom" : "top"}, ${fmt(item.heightNm)} mm high`;
+/** [B18-C review 2] every field an edit can change (text, layer, height, stroke), the text quoted exactly (escaped quotes cannot
+ *  forge a second item in the preview), and placement that differs from the editor tool's defaults. */
+function describeSilk(item: SilkTextItem): string {
+  const bottom = item.layer === "silkBottom";
+  const extras = [
+    ...(item.mirror !== bottom ? [item.mirror ? "mirrored" : "not mirrored"] : []),
+    ...(item.rotationDeg !== 0 ? [`rotated ${item.rotationDeg}°`] : []),
+    ...(item.anchor !== "center" ? [`anchored ${item.anchor}`] : []),
+  ];
+  return `silk text ${JSON.stringify(item.text)} at (${fmt(item.position.x)}, ${fmt(item.position.y)}) mm on ${bottom ? "bottom" : "top"}, ${fmt(item.heightNm)} mm high, ${fmt(item.strokeWidthNm)} mm stroke${extras.length > 0 ? `, ${extras.join(", ")}` : ""}`;
+}
 function silkTextProblem(text: unknown): string | null {
   if (typeof text !== "string" || text.length === 0) return "Silk text can't be empty.";
   if (text.length > SILK_TEXT_MAX_CHARS) return `Silk text is at most ${SILK_TEXT_MAX_CHARS} characters.`;
   if (!PRINTABLE_ASCII.test(text)) return "Silk text must be printable ASCII (the silkscreen font has no other glyphs).";
+  if (text.trim() !== text) return "Silk text can't start or end with spaces (the editor's silk tool trims them).";
   return null;
 }
 function silkSizeProblem(heightNm: unknown, strokeWidthNm: unknown): string | null {
@@ -295,22 +329,43 @@ function buildSilkText(board: PcbBoard, plan: SilkTextPlan): BuiltExecution | Bu
       changes.push({ op: "replace", item: silkTextOf(compiled.result, edit.silkId)! });
     }
   }
-  // Validate every change against the base board (a pinned plan is re-checked here too), then build the candidate with the
-  // editor's own silk commands.
+  // Validate every change against the base board — a pinned plan is re-checked for CONTENT too, as the editor's silk tool would
+  // place an item and its set-text-props would edit one [B18-C review 2] — then build the candidate with the editor's own silk
+  // commands. A no-op update is not a target.
   const touched = new Set<string>();
+  const applied: SilkTextChange[] = [];
   for (const change of changes) {
-    const id = change.op === "remove" ? change.silkId : change.item.id;
+    const id = change.op === "remove" ? change.silkId : (change.item as { id?: unknown } | undefined)?.id;
     if (typeof id !== "string" || id.length === 0 || touched.has(id)) return refusal("unknown_target", "Each silk text may appear once per plan.");
     touched.add(id);
+    if (change.op === "remove") {
+      if (!silkTextOf(board, id)) return refusal("unknown_target", `Silk text ${id.slice(0, 60)} is not on this board (only silkscreen TEXT items can be edited or removed).`);
+      applied.push(change);
+      continue;
+    }
+    const item = change.item;
+    if (item.kind !== "text") return refusal("unknown_target", "Only silkscreen TEXT items are in scope.");
+    if (!SILK_LAYERS.includes(item.layer)) return refusal("invalid_geometry", "Silk text can only sit on a silkscreen layer (silkTop or silkBottom).");
     if (change.op === "add") {
       if ((board.silkItems ?? []).some((existing) => existing.id === id)) return refusal("unknown_target", `The derived silk id ${id} already exists on this board.`);
-      if (change.item.kind !== "text") return refusal("unknown_target", "Only silkscreen TEXT items are in scope.");
-    } else if (!silkTextOf(board, id)) {
-      return refusal("unknown_target", `Silk text ${id.slice(0, 60)} is not on this board (only silkscreen TEXT items can be edited or removed).`);
+      const problem = silkTextProblem(item.text) ?? silkSizeProblem(item.heightNm, item.strokeWidthNm);
+      if (problem) return refusal("invalid_geometry", problem);
+      if (!Number.isSafeInteger(item.position?.x) || !Number.isSafeInteger(item.position?.y)) return refusal("invalid_geometry", "The text position must be integer nanometres.");
+      if (item.rotationDeg !== 0 || item.anchor !== "center" || item.mirror !== (item.layer === "silkBottom")) return refusal("invalid_geometry", "AI silk text is placed the way the editor's silk tool places it: unrotated, centred, mirrored only on the bottom side.");
+      applied.push(change);
+      continue;
     }
+    const current = silkTextOf(board, id);
+    if (!current) return refusal("unknown_target", `Silk text ${id.slice(0, 60)} is not on this board (only silkscreen TEXT items can be edited or removed).`);
+    const mirrorFollows = item.layer !== current.layer ? item.mirror === (item.layer === "silkBottom") : item.mirror === current.mirror;
+    if (item.position?.x !== current.position.x || item.position?.y !== current.position.y || item.rotationDeg !== current.rotationDeg || item.anchor !== current.anchor || !mirrorFollows) return refusal("invalid_geometry", "An update changes only the text, the layer, the height or the stroke (the editor's set-text-props; the mirror follows the layer).");
+    const problem = (item.text !== current.text ? silkTextProblem(item.text) : null) ?? silkSizeProblem(item.heightNm !== current.heightNm ? item.heightNm : undefined, item.strokeWidthNm !== current.strokeWidthNm ? item.strokeWidthNm : undefined);
+    if (problem) return refusal("invalid_geometry", problem);
+    if (engineeringDigest(item) === engineeringDigest(current)) continue;
+    applied.push(change);
   }
   const candidate = produce(board, (draft) => {
-    for (const change of changes) {
+    for (const change of applied) {
       if (change.op === "add") mutateBoardWithSilkCommand(draft, { kind: "AddSilk", item: change.item });
       else if (change.op === "replace") mutateBoardWithSilkCommand(draft, { kind: "EditSilk", id: change.item.id, before: silkTextOf(board, change.item.id)!, after: change.item });
       else mutateBoardWithSilkCommand(draft, { kind: "DeleteSilk", before: silkTextOf(board, change.silkId)! });
@@ -326,11 +381,12 @@ function buildSilkText(board: PcbBoard, plan: SilkTextPlan): BuiltExecution | Bu
     }
     return { before, after };
   };
-  return finishCandidate(board, plan.family, candidate, commands, [...touched], [], [], "The plan changes nothing (every silk text already reads that way).", SILK_KINDS, ["text"], [], describe);
+  const targetIds = applied.map((change) => (change.op === "remove" ? change.silkId : change.item.id));
+  return finishCandidate(board, plan.family, candidate, commands, targetIds, [], [], "The plan changes nothing (every silk text already reads that way).", SILK_KINDS, ["text"], [], describe);
 }
 
 const dimensionOf = (board: PcbBoard, id: string): BoardDimension | null => (board.dimensions ?? []).find((candidate) => candidate.id === id) ?? null;
-const describeDimension = (item: BoardDimension): string => `${item.kind} dimension ${formatDimensionValue(item)} from (${fmt(item.a.x)}, ${fmt(item.a.y)}) to (${fmt(item.b.x)}, ${fmt(item.b.y)}) mm, offset ${fmt(item.offsetNm)} mm, on ${item.layer}`;
+const describeDimension = (item: BoardDimension): string => `${item.kind} dimension ${formatDimensionValue(item)} from (${fmt(item.a.x)}, ${fmt(item.a.y)}) to (${fmt(item.b.x)}, ${fmt(item.b.y)}) mm, offset ${fmt(item.offsetNm)} mm, on ${item.layer}, text ${fmt(item.textHeightNm)} mm, stroke ${fmt(item.strokeWidthNm)} mm`;
 /** Everything an in-place edit may change (the id and the measured points never change in place). */
 const dimensionStyleOf = (item: BoardDimension): DimensionPatch => ({ kind: item.kind, offsetNm: item.offsetNm, layer: item.layer, unit: item.unit, precision: item.precision, textHeightNm: item.textHeightNm, strokeWidthNm: item.strokeWidthNm });
 const isDimensionShaped = (item: unknown): item is BoardDimension => {

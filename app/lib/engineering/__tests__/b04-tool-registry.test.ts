@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { renderActionToolabilityCsv } from "../action-registry";
+import { ACTION_COVERAGE_REGISTRY, renderActionToolabilityCsv } from "../action-registry";
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
 import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
 import { resolveReadBinding } from "../tool-bindings-readonly";
@@ -457,5 +457,9 @@ describe("generated artifacts + B01 consistency", () => {
     // [B18-C I6] pcb.silkscreen-text is referenced by its granted-execution descriptor; every reviewed family is referenced.
     expect(coverage.unreferencedMutationCapableCommands).not.toContain("pcb.silkscreen-text");
     for (const tool of GRANTED_EXECUTION_TOOLS) expect(coverage.referencedCommandIds, tool.family).toContain(tool.family);
+    // [review 2] the report still NAMES the unmigrated mutation surface (a positive pin beside the negative above).
+    expect(coverage.unreferencedMutationCapableCommands.length).toBeGreaterThan(0);
+    const unmigrated = ACTION_COVERAGE_REGISTRY.find((record) => (record.kind === "mutate" || record.kind === "destructive") && !SIRKIT_TOOL_CATALOG.some((descriptor) => descriptor.owningCommandId === record.id || descriptor.binding.canonicalCommandId === record.id))!;
+    expect(coverage.unreferencedMutationCapableCommands).toContain(unmigrated.id);
   });
 });

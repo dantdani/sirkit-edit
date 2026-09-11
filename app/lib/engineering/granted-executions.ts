@@ -27,10 +27,11 @@ import { runDrc } from "../pcb/drc/run-drc";
 import type { DrcPresetId } from "../pcb/drc/types";
 import type { PcbHistory } from "../pcb/history";
 import type { PcbBoard } from "../pcb/types";
+import { refillZoneFillsAtomically, zoneFillIsCurrent } from "../pcb/zones/fill-lifecycle"; // [B18-C review 2]
 import type { ExecutionGrantTransport, TenderBody } from "../project/execution-grant-client";
 import type { ProjectSelectorScope } from "../project/project-selector";
 import { AgentExecutionJournal, buildExecutionReceipt, type AgentExecutionJournalEntry, type ExecutionReceipt } from "./agent-execution-journal";
-import { canonicalSessionFor, type CanonicalEditorSession } from "./editor-adapter";
+import { canonicalSessionFor, historyBindingState, type CanonicalEditorSession } from "./editor-adapter";
 import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence } from "./execution-grant";
 import { buildExecutionOperations, planFromOperations } from "./execution-operations";
 import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
@@ -137,7 +138,11 @@ export function settlementValidations(board: PcbBoard, presetId: string): { drc:
   const resolved = resolvePcbValidationPolicy(presetId);
   if (!resolved) return { drc: { ran: false, violations: 0 } };
   try {
-    const result = runDrc(board, resolved.rules, { presetId: presetId as DrcPresetId }); // the resolver just proved it names a real preset
+    // [B18-C review 2] the kernel empties every zone fill it re-marks, and a net whose pour is not current is "unknown" to the
+    // connectivity check (its incomplete-net errors are skipped) — so the count is taken on the board the editor holds once its
+    // refill lands: the same pure refill (computeZoneFillCandidate / applyZoneFillCandidate) its zone-fill hook runs.
+    const evaluated = board.zones.some((zone) => !zoneFillIsCurrent(board, zone)) ? refillZoneFillsAtomically(board) : board;
+    const result = runDrc(evaluated, resolved.rules, { presetId: presetId as DrcPresetId }); // the resolver just proved it names a real preset
     if (result.execution !== "completed") return { drc: { ran: false, violations: 0 } };
     return { drc: { ran: true, violations: result.violations.filter((violation) => violation.severity === "error").length } };
   } catch {
@@ -145,8 +150,11 @@ export function settlementValidations(board: PcbBoard, presetId: string): { drc:
   }
 }
 
-/** [B18-C I4] Undo eligibility DERIVED from the live history: undo is available and the latest applied entry is this transaction. */
+/** [B18-C I4] Undo eligibility DERIVED from the live history: undo is available and the latest applied entry is this transaction.
+ *  [B18-C review 2] only the LIVE bound history counts — a board-lifecycle adoption retires the session, and the editor's Undo
+ *  can no longer reach the change even though the retired history still lists it. */
 export function undoEligibleFor(history: PcbHistory, transactionId: string): boolean {
+  if (historyBindingState(history) !== "active") return false;
   if (!history.canUndo) return false;
   const applied = history.entries.filter((entry) => entry.state === "applied");
   return applied.at(-1)?.metadata.transactionId === transactionId;
@@ -468,7 +476,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (input.settleAutosave) { try { autosaveSettled = input.settleAutosave() === true; } catch { autosaveSettled = false; } }
 
     // 18. SETTLE on the server from the receipt (best-effort, one retry; the sweep re-settles from the finalized entry).
-    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null, settlementValidations(afterBoard, base.validationPolicy.presetId), undoEligibleFor(input.history, transactionId)), signal: input.signal, journal: input.journal });
+    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null, settlementValidations(afterBoard, base.validationPolicy.presetId), input.stillCurrent() && !input.interlock.retired && undoEligibleFor(input.history, transactionId)), signal: input.signal, journal: input.journal });
     return { ok: true, status: "committed", receipt, autosaveSettled, settled: settled ? "settled" : "settle-failed" };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

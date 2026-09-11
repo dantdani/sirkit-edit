@@ -92,6 +92,24 @@ describe("B18-C review V0 — a zone-bearing board: the kernel predicts the resu
     expect(headOf(c).headSequence).toBe(before + 1);
     expect(c.history.committedPresent.zones[0]).toMatchObject({ dirty: false }); // refilled after the commit
   }, 30_000);
+
+  it("[review 2] the fill-normalized postcondition still catches a SEMANTIC difference that lands with the commit: poisoned, never executed", async () => {
+    const c = await composition("execute_explicit_tier1", { zone: true });
+    const session = canonicalSessionFor(c.history)!;
+    const realCommit = session.commit.bind(session);
+    session.commit = async (request) => {
+      const result = await realCommit(request);
+      // Something other than the grant lands in the same breath (here: R4 nudged by 1 nm with no history entry).
+      c.history.applyDerived("not the grant", (draft) => { const r4 = draft.footprints.find((f) => f.ref === "R4")!; r4.at = { x: r4.at.x + 1, y: r4.at.y }; });
+      return result;
+    };
+    const x0 = r3Of(c).at.x;
+    const { adapter, rituals, grants } = await runScenario(c, moveScript(c));
+    expect(rituals[0]).toMatchObject({ ok: false, code: "recovery-required", changed: true });
+    expect(answerOf(adapter)).toMatchObject({ ok: false, status: "execution_poisoned" });
+    expect((await c.store.load(SCOPE, grants[0]!.grantId, c.now()))!.record.state).toMatchObject({ status: "settled", settlement: { outcome: "poisoned" } });
+    expect(r3Of(c).at.x).toBe(x0 + mmToNm(2)); // the grant's move landed: the board HAS changed, as the model is told
+  }, 30_000);
 });
 
 describe("B18-C review V1 — a poisoned settlement guards a retry", () => {
@@ -153,6 +171,19 @@ describe("B18-C review V4 — a commit that rejects after the consume is settled
       expect(headOf(c).headSequence).toBe(before);
     }, 30_000);
   }
+
+  it("[review 2] a commit that LANDS and then rejects (the canonical ledger finds the transaction) is poisoned: the model is never told nothing changed", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const session = canonicalSessionFor(c.history)!;
+    const realCommit = session.commit.bind(session);
+    session.commit = async (request) => { await realCommit(request); throw new Error("post-commit failure"); };
+    const before = headOf(c).headSequence;
+    const { adapter, rituals, grants } = await runScenario(c, moveScript(c));
+    expect(rituals[0]).toMatchObject({ ok: false, code: "recovery-required", changed: true });
+    expect(answerOf(adapter)).toMatchObject({ ok: false, status: "execution_poisoned" });
+    expect((await c.store.load(SCOPE, grants[0]!.grantId, c.now()))!.record.state).toMatchObject({ status: "settled", settlement: { outcome: "poisoned" } });
+    expect(headOf(c).headSequence).toBe(before + 1);
+  }, 30_000);
 });
 
 describe("B18-C review V8 / U0 / U1 — isolating gate pins", () => {

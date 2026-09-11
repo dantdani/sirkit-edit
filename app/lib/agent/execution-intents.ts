@@ -17,7 +17,7 @@
  */
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { EXECUTION_FAMILIES, MAX_GRANT_OPERATIONS, TIER1_GRANTABLE_CAPABILITIES, executionBoardDigest, isExecutionFamily, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantTargets, type GrantableCapability } from "../engineering/execution-grant";
-import { ARRANGE_EDGES, buildExecutionOperations, type ArrangeEdge, type DimensionEdit, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
+import { ARRANGE_EDGES, buildExecutionOperations, editorFlipRotation, type ArrangeEdge, type DimensionEdit, type ExecutionPlan, type SilkTextEdit } from "../engineering/execution-operations";
 import { DIMENSION_DEFAULTS, DIMENSION_KINDS } from "../pcb/dimensions/commands";
 import { DEFAULT_SILK_STROKE_NM, DEFAULT_SILK_TEXT_HEIGHT_NM } from "../pcb/silk/types";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
@@ -86,7 +86,8 @@ export function parseExecutionArguments(family: ExecutionFamily, args: Record<st
 const absent = (value: unknown): boolean => value === undefined || value === null;
 const argumentRefusal = (...diagnostics: string[]): { ok: false; diagnostics: string[] } => ({ ok: false, diagnostics });
 
-/** [B18-C I5] `{ targets: [{ footprintId, rotationDeg?, side? }] }` — absolute whole degrees 0–359 (counter-clockwise on screen). */
+/** [B18-C I5] `{ targets: [{ footprintId, rotationDeg?, side? }] }` — absolute whole degrees 0–359 (counter-clockwise on screen).
+ *  [B18-C review 2] a side change with no rotation turns the part over the way the editor's own Flip does (360 − r). */
 function parseRotateSideArguments(args: Record<string, unknown>, board: PcbBoard | null): { ok: true; plan: ExecutionPlan } | { ok: false; diagnostics: string[] } {
   const unknown = Object.keys(args).filter((key) => key !== "targets");
   if (unknown.length > 0) return argumentRefusal(`Unexpected argument "${unknown[0]!.slice(0, 40)}" — rotate/flip accepts only targets.`);
@@ -106,7 +107,9 @@ function parseRotateSideArguments(args: Record<string, unknown>, board: PcbBoard
     if (side !== null && side !== "top" && side !== "bottom") return argumentRefusal("side must be top or bottom.");
     const footprint = board?.footprints.find((candidate) => candidate.id === item.footprintId);
     if (!footprint && (rotation === null || side === null)) return argumentRefusal(`Footprint ${String(item.footprintId).slice(0, 60)} is not on this board.`);
-    parsed.push({ footprintId: item.footprintId, rotationDeg: rotation === null ? footprint!.rotationDeg : (rotation as number), side: (side === null ? footprint!.side : side) as "top" | "bottom" });
+    const nextSide = (side === null ? footprint!.side : side) as "top" | "bottom";
+    const filledRotation = rotation !== null ? (rotation as number) : nextSide !== footprint!.side ? editorFlipRotation(footprint!.rotationDeg) : footprint!.rotationDeg;
+    parsed.push({ footprintId: item.footprintId, rotationDeg: filledRotation, side: nextSide });
   }
   return { ok: true, plan: { family: "pcb.rotate-side-footprint", targets: parsed } };
 }

@@ -70,7 +70,7 @@ describe("B18-C I6 — silkscreen text builds", () => {
       expect(built.operations.every((operation) => allowed.includes(operation.kind) && !operation.kind.endsWith("_text")), label).toBe(true);
       expect(built.targets.kinds, label).toEqual(["text"]);
     }
-    expect(ok(build([ADD])).preview).toMatchObject({ before: "(new)", after: 'silk text "REV B" at (10.000, 10.000) mm on top, 1.000 mm high' });
+    expect(ok(build([ADD])).preview).toMatchObject({ before: "(new)", after: 'silk text "REV B" at (10.000, 10.000) mm on top, 1.000 mm high, 0.150 mm stroke' }); // [review 2] the stroke is named
     expect(ok(build([{ op: "remove", silkId: "silk-rev" }])).preview).toMatchObject({ after: "(removed)" });
     const flipped = ok(build([{ op: "update", silkId: "silk-rev", layer: "silkBottom" }]));
     const operation = flipped.operations[0]!;

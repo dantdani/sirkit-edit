@@ -534,7 +534,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   },
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.rotate-side-footprint", version: "1.1.0",
+    toolId: "sirkit.pcb.rotate-side-footprint", version: "1.2.0",
     owningCommandId: "pcb.rotate-side-footprint",
     title: "Rotate or flip footprint",
     description: "EXECUTION tool: set footprints' ABSOLUTE rotation (whole degrees 0–359, counter-clockwise as seen on screen) and/or board side. To rotate BY an angle, add it to the current rotation from board-inspect (clockwise subtracts). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by the stable ids from board-inspect results; 1–16 targets; locked footprints refuse.",
@@ -545,7 +545,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
         description: "1–16 footprints, each with its new absolute rotation, its new side, or both.",
         items: obj({
           footprintId: { type: "string", description: "The stable footprint id from board-inspect (not the reference designator)." },
-          rotationDeg: { type: "integer", description: "The new ABSOLUTE rotation in whole degrees 0–359, counter-clockwise as seen on screen. null keeps the current rotation." },
+          rotationDeg: { type: "integer", description: "The new ABSOLUTE rotation in whole degrees 0–359, counter-clockwise as seen on screen. null with a side change turns the part over the way the editor's Flip does (the rotation becomes 360 minus the current rotation); null without one keeps the current rotation." },
           side: { enum: ["top", "bottom"], description: "The board side to place the footprint on. null keeps the current side." },
         }, ["footprintId"]),
       },
@@ -558,7 +558,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.rotate-side-footprint", notes: "Commits ONLY inside the trusted interactive editor session; the agent reaches it solely through a server-minted one-shot execution grant (B18-B/C)." },
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
-    versionNotes: "1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution; absolute integer rotation and a nullable side; no selection gate (named targets). 1.0.0: trusted-UI only.",
+    versionNotes: "1.2.0 (B18-C review 2): a side change with a null rotation follows the editor's own Flip (rotation 360 − r), so a flip at 90° or 270° no longer lands turned 180° from what the editor's Flip produces. 1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution; absolute integer rotation and a nullable side; no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
   {
     ...canonicalMutation,
@@ -619,10 +619,10 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── [B18-C I6] Silkscreen TEXT — a reviewed granted execution (confirmation-only) ──
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.silkscreen-text", version: "1.0.0",
+    toolId: "sirkit.pcb.silkscreen-text", version: "1.0.1",
     owningCommandId: "pcb.silkscreen-text",
     title: "Add, edit or remove silkscreen text",
-    description: "EXECUTION tool: add silkscreen TEXT (a label, revision mark or note) at a board position, change an existing silk text's text, size, stroke or layer, or remove one. Only silkscreen TEXT items (never lines, rectangles, circles or copper text). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor shows the exact change for the user to confirm; nothing is committed until they do. Name existing silk text by the stable ids from board-inspect; 1–16 edits; bottom-side text is mirrored automatically.",
+    description: "EXECUTION tool: add silkscreen TEXT (a label, revision mark or note) at a board position, change an existing silk text's text, size, stroke or layer, or remove one. Only silkscreen TEXT items (never lines, rectangles, circles or copper text). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor shows the exact change for the user to confirm; nothing is committed until they do. Name an existing silk text by its stable id (selection-inspect lists the silk text the user selected; an executed result lists the ids it added); 1–16 edits; text is 1–64 printable characters without leading or trailing spaces; bottom-side text is mirrored automatically.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({
       edits: {
@@ -630,7 +630,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
         description: "1–16 silkscreen TEXT edits, applied together as one change.",
         items: obj({
           op: { type: "string", enum: ["add", "update", "remove"], description: "add a new silk text; update an existing silk text; remove one." },
-          silkId: { type: "string", description: "update / remove only: the stable id of an existing silk TEXT item from board-inspect; null for add." },
+          silkId: { type: "string", description: "update / remove only: the stable id of an existing silk TEXT item (from selection-inspect or an earlier executed result); null for add." },
           text: { type: "string", description: "add (required) / update: 1–64 printable ASCII characters; null keeps the text on update." },
           layer: { enum: ["silkTop", "silkBottom"], description: "add (required) / update: the silkscreen layer; null keeps the layer on update." },
           atNm: { ...obj({ x: { type: "integer", description: "X of the text centre in integer nanometres (+x right)." }, y: { type: "integer", description: "Y of the text centre in integer nanometres (+y down)." } }, ["x", "y"]), description: "add only: where the text is centred; null for update / remove." },
@@ -646,7 +646,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.silkscreen-text", notes: "Trusted UI: the silk tool through the PCB commit gateway. The agent reaches it solely through a server-minted one-shot execution grant (B18-B/C); the ritual commits the grant's exact silk operations through CanonicalEditorSession.commit." },
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/pcb/silk/commands.ts", "app/components/pcb/hooks/useSilkTool.ts", "app/lib/engineering/editor-adapter.ts", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
-    versionNotes: "1.0.0 (B18-C I6): the first descriptor for pcb.silkscreen-text — silk TEXT only (board text is not silk and stays out of scope); deterministic add ids; confirmation-only (no explicit grammar).",
+    versionNotes: "1.0.1 (B18-C review 2): the id sources are selection-inspect and executed results (the AI board snapshot lists no silk items); text without leading or trailing spaces. 1.0.0 (B18-C I6): the first descriptor for pcb.silkscreen-text — silk TEXT only (board text is not silk and stays out of scope); deterministic add ids; confirmation-only (no explicit grammar).",
   },
   // ── Canonical undo/redo — INTERNAL, never discoverable ────────────────────
   {

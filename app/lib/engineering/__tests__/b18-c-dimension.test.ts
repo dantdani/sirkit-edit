@@ -78,9 +78,9 @@ describe("B18-C I7 — dimension builds", () => {
       expect(built.operations.every((operation) => allowed.includes(operation.kind)), label).toBe(true);
       expect(built.targets.kinds, label).toEqual(["dimension"]);
     }
-    expect(ok(build([ADD])).preview).toMatchObject({ before: "(new)", after: "horizontal dimension 10.00 mm from (5.000, 20.000) to (15.000, 20.000) mm, offset 2.000 mm, on silkTop" });
-    expect(ok(build([{ op: "remove", dimensionId: "dim-width" }])).preview).toMatchObject({ before: "horizontal dimension 40.00 mm from (0.000, 0.000) to (40.000, 0.000) mm, offset -3.000 mm, on fabTop", after: "(removed)" });
-    expect(ok(build([{ op: "update", dimensionId: "dim-width", unit: "in", precision: 3 }])).preview).toMatchObject({ after: "horizontal dimension 1.575 in from (0.000, 0.000) to (40.000, 0.000) mm, offset -3.000 mm, on fabTop" });
+    expect(ok(build([ADD])).preview).toMatchObject({ before: "(new)", after: "horizontal dimension 10.00 mm from (5.000, 20.000) to (15.000, 20.000) mm, offset 2.000 mm, on silkTop, text 1.000 mm, stroke 0.150 mm" });
+    expect(ok(build([{ op: "remove", dimensionId: "dim-width" }])).preview).toMatchObject({ before: "horizontal dimension 40.00 mm from (0.000, 0.000) to (40.000, 0.000) mm, offset -3.000 mm, on fabTop, text 1.000 mm, stroke 0.150 mm", after: "(removed)" });
+    expect(ok(build([{ op: "update", dimensionId: "dim-width", unit: "in", precision: 3 }])).preview).toMatchObject({ after: "horizontal dimension 1.575 in from (0.000, 0.000) to (40.000, 0.000) mm, offset -3.000 mm, on fabTop, text 1.000 mm, stroke 0.150 mm" });
   });
 
   it("an add's id is DETERMINISTIC (base revision + index + content) and the dimension is exactly what the editor's own tool places", () => {

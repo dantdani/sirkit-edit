@@ -6,8 +6,8 @@
  *  - "Rotate R3 90 degrees clockwise." under execute_explicit_tier1: the
  *    model's absolute rotation is proven, ONE transaction lands and the model
  *    is told `executed`; the position is untouched;
- *  - "Flip R3 to the bottom." with a null rotation: the seal keeps the verified
- *    rotation; the side changes;
+ *  - "Flip R3 to the bottom." with a null rotation: the seal follows the
+ *    editor's own Flip (rotation 360 − r; R3 at 0° stays 0°); the side changes;
  *  - a rotation that differs from the sentence is only previewed;
  *  - arrange has no explicit grammar: even under execute_explicit_tier1 it is
  *    previewed, and the human's Confirm commits exactly the editor's own
@@ -37,7 +37,7 @@ describe("B18-C I5 — rotate / flip end to end", () => {
     expect(headOf(c).headSequence).toBe(before + 1);
   }, 30_000);
 
-  it("'Flip R3 to the bottom.' with a null rotation — the seal keeps the verified rotation; the side changes", async () => {
+  it("'Flip R3 to the bottom.' with a null rotation — the seal follows the editor's Flip (R3 at 0° stays 0°); the side changes", async () => {
     const c = await composition("execute_explicit_tier1");
     const r3 = footprint(c, "R3");
     const { adapter, rituals } = await runScenario(c, (_move, tool) => [() => ({ toolCalls: [call("c1", tool(ROTATE), JSON.stringify({ targets: [{ footprintId: r3.id, rotationDeg: null, side: "bottom" }] }))] }), () => ({ text: "done" })], { message: "Flip R3 to the bottom." });

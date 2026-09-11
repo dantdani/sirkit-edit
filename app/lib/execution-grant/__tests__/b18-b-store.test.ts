@@ -193,7 +193,11 @@ describe("B18-B — the durable execution-grant store", () => {
     if (!consumedSecond.ok) throw new Error("consume");
     const overdue = (await store.load(SCOPE, second.grantId, at(7 + GRANT_COMMIT_WINDOW_MS + GRANT_SETTLE_GRACE_MS + 1)))!;
     expect(overdue.record.state).toMatchObject({ status: "retired", retirement: { reason: "consumed_unsettled" } });
+    // [review 2] a consumed grant whose outcome the server never learned guards a retry: it may have changed the board…
+    expect(await store.recentIdenticalExecution(SCOPE, "u-1", "pcb", probe, at(7 + GRANT_COMMIT_WINDOW_MS + GRANT_SETTLE_GRACE_MS + 2))).toMatchObject({ grantId: second.grantId, outcome: "unknown" });
     const lateReport = await store.settle(SCOPE, overdue, { ...settlement, outcome: "not-committed", transactionId: null, revisionAfter: null, undoEligible: false }, iso(8));
     expect(lateReport.ok && lateReport.grant.record.state.settlement).toMatchObject({ outcome: "not-committed", late: true });
+    // …and a truthful late not-committed report lifts the guard.
+    expect(await store.recentIdenticalExecution(SCOPE, "u-1", "pcb", probe, at(9))).toBeNull();
   });
 });

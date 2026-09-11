@@ -42,7 +42,7 @@ const editorTurn = (quarterTurns: 1 | -1): number => compileEdits(B, [{ op: "rot
 
 describe("B18-C I5 — rotate", () => {
   it("clockwise and counter-clockwise quarter turns derive EXACTLY the rotation the editor's own rotate command produces", () => {
-    expect(EXPLICIT_GRAMMAR_VERSION).toBe("1.1.0");
+    expect(EXPLICIT_GRAMMAR_VERSION).toBe("1.2.0"); // [review 2] the flip follows the editor's Flip; "put" needs the side word
     const cases: Array<[string, 1 | -1]> = [
       ["Rotate R3 90 degrees clockwise.", 1], ["rotate r3 by 90° cw", 1], ["Please turn R3 90 deg clockwise", 1],
       ["Turn R3 90 counterclockwise", -1], ["Rotate R3 90 degrees counter-clockwise", -1], ["please rotate R3 by 90 degrees anti-clockwise", -1], ["rotate R3 90 ccw", -1],
@@ -65,7 +65,7 @@ describe("B18-C I5 — rotate", () => {
 });
 
 describe("B18-C I5 — flip", () => {
-  it("flipping onto a named side is proven and keeps the rotation; flipping onto the side it is already on changes nothing and is never proven", () => {
+  it("flipping onto a named side is proven (R3 at 0°: the editor's Flip rule 360 − r keeps 0°); flipping onto the side it is already on changes nothing and is never proven", () => {
     for (const text of ["Flip R3 to the bottom.", "flip r3 onto the bottom side", "Put R3 to the bottom layer", "please flip R3 to the bottom"]) {
       expect(prove(text, rotateTo(R3.rotationDeg, "bottom")), text).toMatchObject({ proven: true, coverage: "whole-message" });
     }
