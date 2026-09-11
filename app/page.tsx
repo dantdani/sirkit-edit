@@ -59,6 +59,7 @@ import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
+import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -201,17 +202,6 @@ function isSupportSuggestion(s: { title: string; detail: string; category?: stri
 
 function isGuardedSupportApplyInstruction(text: string): boolean {
   return text.startsWith("Apply ONLY the bounded support-circuit suggestions below.");
-}
-
-function inferComposerAction(text: string, hasSchematic: boolean): "ask" | "edit" | "generate" {
-  const t = text.trim().toLowerCase();
-  if (!t) return "ask";
-  if (!hasSchematic) return "generate";
-  if (/^(generate|create|design|build|make|draw)\b/.test(t)) return "generate";
-  if (/^(edit|change|set|rename|delete|remove|add|replace|swap|connect|disconnect|rewire|fix|update|make\s+(r|c|u|d|led|j|sw)\d+\b)/.test(t)) {
-    return "edit";
-  }
-  return "ask";
 }
 
 // Hit-test radius for net labels (delete / drag).
@@ -2558,6 +2548,8 @@ function KicadMetaRow({ label, value }: { label: string; value: string }) {
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]       = useState("");
+  // [B18-D I1] the user's choice to send a suggested schematic edit or generation to the assistant instead (reset on submit).
+  const [composerRouteOverride, setComposerRouteOverride] = useState<ComposerRoute | null>(null);
   const [loading, setLoading]   = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode]         = useState<Mode>("build");
@@ -5710,7 +5702,9 @@ export default function Home() {
     const text = input.trim();
     if (!text || loading || isGenerating || isEditing) return;
     const hasSchematic = components.length > 0 || kicadComponents.length > 0;
-    const action = inferComposerAction(text, hasSchematic);
+    // [B18-D I1] the shown route, or the user's override — routing only; the server loop or the proposal review decides.
+    const action = composerRouteOverride ?? routeComposerMessage(text, hasSchematic).route;
+    setComposerRouteOverride(null);
     if (action !== "ask") setInput("");
     if (action === "generate") void handleGenerateSchematic(text);
     else if (action === "edit") void handleEditSchematic(text);
@@ -5719,7 +5713,9 @@ export default function Home() {
 
   const composerText = input.trim();
   const hasSchematicForComposer = components.length > 0 || kicadComponents.length > 0;
-  const composerAction = inferComposerAction(composerText, hasSchematicForComposer);
+  const composerRouting = routeComposerMessage(composerText, hasSchematicForComposer);
+  const composerAction = composerRouteOverride ?? composerRouting.route;
+  const overrideComposerRoute = (): void => setComposerRouteOverride((current) => (current ? null : "ask"));
   const composerBusy = loading || isGenerating || isEditing;
   const composerDisabled = !composerText || composerBusy;
   const showComposerButton = composerAction !== "ask" || isGenerating || isEditing;
@@ -6812,6 +6808,23 @@ export default function Home() {
                   : "Type a question, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to generate"}
                 disabled={loading || isGenerating || isEditing}
               />
+              {/* [B18-D I1] where Enter sends this message, shown before sending; the override sends a suggested schematic
+                  edit or generation to the assistant instead (and back). Routing only: nothing here makes a change. */}
+              {composerText && (
+                <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-zinc-500">
+                  <span data-testid="composer-route" data-route={composerAction} title={composerRouting.reason}>
+                    Sirkit will: {COMPOSER_ROUTE_LABELS[composerAction]}{composerRouteOverride ? " (your choice)" : ""}
+                  </span>
+                  {composerRouting.route !== "ask" && (
+                    <button type="button" data-testid="composer-route-override" onClick={overrideComposerRoute} className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200">
+                      {composerRouteOverride ? `${COMPOSER_ROUTE_LABELS[composerRouting.route].replace(/^./, (c) => c.toUpperCase())} instead` : "Ask the assistant instead"}
+                    </button>
+                  )}
+                  {composerRouting.hints.includes("tier3-release") && (
+                    <span data-testid="composer-tier3-hint" className="text-amber-400/90">Release, qualification and ordering are never done by the assistant — use the release workflow.</span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-xs text-zinc-500">
                   {isTidying

@@ -14,9 +14,9 @@
  *  4. A grant altered in transit (the chat stream rewritten) is dropped by the page's SAFE receiver: no card, no change.
  *
  * The board is read from the editor-context snapshot every chat request carries (the PCB editor's exact working copy,
- * which the server revalidates); "Status." is a plain turn that only captures it. The composer sends a message beginning
- * with "add" to the SCHEMATIC editor (`inferComposerAction`), so the silkscreen instruction begins with "Please" — recorded
- * for B18-D's chat execution UX.
+ * which the server revalidates); "Status." is a plain turn that only captures it. [B18-D I1] The composer routes a PCB
+ * change phrased as an edit ("Add silkscreen text …") to the assistant (`routeComposerMessage`); the route is shown before
+ * sending and the user can override it.
  */
 import { mkdirSync } from "node:fs";
 import { expect, test, type BrowserContext, type Page, type Request } from "@playwright/test";
@@ -227,7 +227,7 @@ test("B18-C silkscreen add with the card; 'Undo that.' undoes it; after a RELOAD
   const start = await board();
   const at = centroidMm(start);
   expect(silkTexts(start)).not.toContain("REV B");
-  await chat(`Please add silkscreen text REV B at ${at.x}, ${at.y}.`);
+  await chat(`Add silkscreen text REV B at ${at.x}, ${at.y}.`);
   const card = page.getByTestId("granted-execution-card");
   await expect(card).toBeVisible();
   await expect(card).toContainText("pcb.silkscreen-text");
@@ -273,7 +273,7 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
     await route.fulfill({ response, body });
   });
   try {
-    await chat(`Please add silkscreen text FORGED at ${at.x}, ${at.y}.`);
+    await chat(`Add silkscreen text FORGED at ${at.x}, ${at.y}.`);
   } finally {
     await page.unroute("**/api/chat");
   }
@@ -287,4 +287,25 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
   expect(silkTexts(after)).not.toContain("FORGED");
   expect(silkTexts(after)).toEqual(silkTexts(start));
   expect(r3(after)).toEqual(r3(start));
+});
+
+test("B18-D I1 composer routing: the route is shown before sending and can be overridden; a PCB change phrased as an edit reaches the assistant", async () => {
+  await openChat();
+  const prompt = page.getByTestId("prompt-input");
+  const routeChip = page.getByTestId("composer-route");
+  await prompt.fill("set R1 to 4.7k");
+  await expect(routeChip).toHaveAttribute("data-route", "edit");
+  await expect(routeChip).toContainText("Sirkit will: edit the schematic");
+  await page.getByTestId("composer-route-override").click();
+  await expect(routeChip).toHaveAttribute("data-route", "ask");
+  await page.getByTestId("composer-route-override").click();
+  await expect(routeChip).toHaveAttribute("data-route", "edit");
+  await prompt.fill("Draw a dimension from U1 to J1.");
+  await expect(routeChip).toHaveAttribute("data-route", "ask");
+  await expect(routeChip).toContainText("Sirkit will: ask the assistant");
+  await prompt.fill("");
+  // Outside the scripted set: the scripted agent's plain reply proves the message reached the assistant (a misroute would
+  // never produce a chat request, and this turn would time out).
+  await chat("Draw a dimension from U1 to J1.");
+  await expect(page.getByTestId("schematic-proposal-review")).toBeHidden();
 });
