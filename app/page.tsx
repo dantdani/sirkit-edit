@@ -4385,6 +4385,16 @@ export default function Home() {
     });
   }, []);
 
+  // [B18-D I9] Stop (chat-execution-ux.md §8 I9): send() registers its run here; Stop cancels the response reader and
+  // carries nothing — the route aborts the run, and the loop retires its still-issued explicit grants. An AI change the
+  // editor had already started still finishes and is reported in its entry.
+  const activeChatRunRef = useRef<{ requestId: string; reader: ReadableStreamDefaultReader<Uint8Array> | null; stopped: boolean } | null>(null);
+  const stopChatRun = useCallback(() => {
+    const run = activeChatRunRef.current;
+    if (!run || run.stopped) return;
+    run.stopped = true;
+    if (run.reader) void run.reader.cancel().catch(() => undefined);
+  }, []);
   // [B18-D I8] "Undo this change" on a committed entry (chat-execution-ux.md §1 item 10): available only for a change
   // still undoable and still the timeline's newest operation, with no AI change in flight. The click carries only the
   // entry's grant id; the page looks up its transaction, the timeline undoes exactly that transaction (NOT_LATEST
@@ -4438,6 +4448,8 @@ export default function Home() {
     setInput("");
     activeChatRef.current = scope.requestId;
     setLoading(true);
+    const chatRun: { requestId: string; reader: ReadableStreamDefaultReader<Uint8Array> | null; stopped: boolean } = { requestId: scope.requestId, reader: null, stopped: false }; // [B18-D I9]
+    activeChatRunRef.current = chatRun;
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void send(text);
 
@@ -4497,6 +4509,8 @@ export default function Home() {
       if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
+      chatRun.reader = reader; // [B18-D I9] Stop cancels this reader (a Stop pressed before the response arrived cancels it now)
+      if (chatRun.stopped) void reader.cancel().catch(() => undefined);
       const dec    = new TextDecoder();
       appendActivityStep(logId, "Streaming response");
       // B09 — versioned NDJSON agent-event protocol: every event is applied
@@ -4660,6 +4674,12 @@ export default function Home() {
         for (const note of projected.notes) appendActivityStep(logId, note, "done");
         if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
       }
+      // [B18-D I9] a stopped run says so — and that a change the editor had already started still finishes and is reported here.
+      if (chatRun.stopped && scope.isCurrent()) {
+        const stopped = "Stopped. An AI change your editor had already started still finishes and is reported here.";
+        appendActivityStep(logId, "Stopped by you — the assistant's run was cancelled.", "done");
+        setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content ? `${m.content}\n\n${stopped}` : stopped } : m)));
+      }
       if (runFailure !== null && scope.isCurrent()) {
         const failure = runFailure as { reason: string; message: string };
         failActivityLog(logId, failure.message);
@@ -4714,6 +4734,7 @@ export default function Home() {
           };
         });
       });
+      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; // [B18-D I9]
       // Only THIS request may clear the busy flag it set.
       if (activeChatRef.current === scope.requestId) {
         activeChatRef.current = null;
@@ -6903,6 +6924,11 @@ export default function Home() {
                         : "Enter to submit - Shift+Enter newline"}
                 </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
+                  {loading && (
+                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's run" onClick={stopChatRun}>
+                      Stop
+                    </Button>
+                  )}
                   {showComposerButton && (
                     <Button
                       size="sm"

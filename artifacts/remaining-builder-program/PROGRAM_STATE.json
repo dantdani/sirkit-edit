@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "ab71fe2",
+  "lastGreenSha": "ddf0526",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I9 Stop (the run reader's cancel, a stopChatRun handler, a B17 rule, a route test), then optional I10/I11, I12 closeout; then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T07:36:12-04:00"
+  "nextAction": "B18-D I10 (optional: show the loop's silent refusals as an untraced event) and I11 (optional: the autonomy indicator and admin toggle), then the I12 closeout (full Playwright, adversarial review, closing record); then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T07:45:59-04:00"
 }

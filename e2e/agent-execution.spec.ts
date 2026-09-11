@@ -343,10 +343,35 @@ test("B18-D I8 Undo in chat: a committed AI move that is still the latest is und
   await expect(entry).toContainText("Undone by you — the editor's own Undo reversed this change (one history step).");
   await expect(undo).toBeDisabled(); // a second click is refused
   await expect(entry.getByTestId("execution-undo-reason")).toHaveText("Already undone — the editor's Redo brings it back.");
+  await entry.scrollIntoViewIfNeeded(); // the frame shows the entry itself: its result row and the disabled Undo with its reason
   await page.screenshot({ path: `${EVIDENCE}/chat-undo-entry.png`, fullPage: false });
 
   await page.getByRole("button", { name: "Revision history" }).click();
   await expect(pcbUndos).toHaveCount(undosBefore + 1);
   await page.keyboard.press("Escape");
   expect(r3(await board()).at.x).toBe(x0); // exactly the AI change reversed
+});
+
+test("B18-D I9 Stop: Stop during a chat run cancels it and sends nothing; the chat says it stopped and that a change the editor already started still finishes", async () => {
+  await openChat();
+  const prompt = page.getByTestId("prompt-input");
+  await expect(prompt).toBeEnabled({ timeout: 90_000 });
+  // Hold the next chat request so the run is certainly in progress when Stop is pressed.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/chat", async (route) => { await held; await route.continue(); }, { times: 1 });
+  const sent = chatBodies.length;
+  await prompt.fill("Status.");
+  await prompt.press("Enter");
+  await expect.poll(() => chatBodies.length, { timeout: 30_000 }).toBeGreaterThan(sent);
+  const stop = page.getByTestId("chat-stop");
+  await expect(stop).toBeVisible();
+  const requests = chatBodies.length;
+  await stop.click();
+  release(); // the held request reaches the server; the page cancels its reader as soon as the response arrives
+  await expect(page.getByText("Stopped. An AI change your editor had already started still finishes and is reported here.").last()).toBeVisible();
+  await expect(stop).toBeHidden();
+  await expect(prompt).toBeEnabled();
+  expect(chatBodies.length, "Stop sends nothing").toBe(requests);
+  await page.screenshot({ path: `${EVIDENCE}/chat-stop.png`, fullPage: false });
 });

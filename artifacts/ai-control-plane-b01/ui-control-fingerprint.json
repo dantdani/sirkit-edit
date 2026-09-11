@@ -38,6 +38,7 @@
       "Save project to a local .sirkit.json file",
       "Select",
       "Sheet size — also sets the KiCad export page",
+      "Stop the assistant's run",
       "Toggle AI chat",
       "Undo schematic action",
       "Wire"
