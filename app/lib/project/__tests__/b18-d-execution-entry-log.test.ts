@@ -41,7 +41,7 @@ describe("B18-D I6 — the chat execution entry as a persistable log message", (
     const message = entryToLogMessage(committed);
     const rows = texts(message);
     expect(message.status).toBe("done");
-    expect(count(rows, /^AI change committed by your editor \(one canonical transaction, undoable\) — design rule check \(jlcpcb-2l\): 7 errors/)).toBe(1);
+    expect(count(rows, /^AI change committed by your editor \(one canonical transaction\) — design rule check \(jlcpcb-2l\): 7 errors/)).toBe(1);
     expect(count(rows, /Change ready for your confirmation/)).toBe(0);
     expect(count(rows, /^Transaction tx:pcb\.move-footprint:1 · revision pcb2-a+… → pcb2-b+… · history #2 · server record: settled$/)).toBe(1);
     expect(count(rows, /^Undo: while it is the latest change — “Undo this change” here, the editor's Undo \(one step\), or say “Undo that\.”$/)).toBe(1); // [B18-D review] pin moved: not a present-tense claim

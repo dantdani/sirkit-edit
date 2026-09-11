@@ -20,6 +20,7 @@ describe("B18-D I8 — Undo this change", () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
     expect(onUndo).toHaveBeenCalledWith();
     expect(screen.queryByTestId("execution-undo-reason")).toBeNull();
+    expect(button.hasAttribute("aria-describedby")).toBe(false);
     expect(document.body.querySelectorAll("input, textarea, select, [contenteditable]").length).toBe(0);
   });
 
@@ -31,5 +32,6 @@ describe("B18-D I8 — Undo this change", () => {
     fireEvent.click(button);
     expect(onUndo).not.toHaveBeenCalled();
     expect(screen.getByTestId("execution-undo-reason").textContent).toBe("no longer the latest operation — use the revision history");
+    expect(button.getAttribute("aria-describedby")).toBe(screen.getByTestId("execution-undo-reason").id); // [B18-D review]
   });
 });

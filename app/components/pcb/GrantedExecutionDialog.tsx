@@ -23,6 +23,7 @@
  * The card stays inert: no inputs; Confirm and Cancel take no arguments.
  */
 
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import type { PublicExecutionGrant } from "@/app/lib/engineering/execution-grant";
@@ -43,6 +44,7 @@ export interface GrantedExecutionDialogProps {
 }
 
 export function GrantedExecutionDialog({ grant, note, busy, disableReason, onConfirm, onCancel, board }: GrantedExecutionDialogProps) {
+  const disableReasonId = useId(); // [B18-D review] the disabled Confirm is described by its reason
   const base = grant?.binding.base.pcb ?? null;
   const refOf = (objectId: string): string | null => board?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
   const targets = grant ? targetLines(grant, refOf) : null;
@@ -95,7 +97,7 @@ export function GrantedExecutionDialog({ grant, note, busy, disableReason, onCon
               )}
             </div>
             {disableReason !== null && (
-              <p className="text-red-400/90 text-xs" data-testid="granted-execution-disable-reason">
+              <p id={disableReasonId} className="text-red-400/90 text-xs" data-testid="granted-execution-disable-reason">
                 Confirmation unavailable: {disableReason}
               </p>
             )}
@@ -103,7 +105,7 @@ export function GrantedExecutionDialog({ grant, note, busy, disableReason, onCon
         )}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onCancel()} disabled={busy}>Cancel — change nothing</Button>
-          <Button variant="destructive" onClick={() => onConfirm()} disabled={busy || disableReason !== null} data-testid="granted-execution-confirm">
+          <Button variant="destructive" onClick={() => onConfirm()} disabled={busy || disableReason !== null} aria-describedby={disableReason !== null ? disableReasonId : undefined} data-testid="granted-execution-confirm">
             {busy ? "Applying…" : "Confirm and apply"}
           </Button>
         </DialogFooter>

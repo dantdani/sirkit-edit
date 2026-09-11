@@ -152,6 +152,8 @@ export interface ExecutionEntry {
   undoResult?: { ok: boolean; text: string } | null;
   /** [B18-D review] the last confirmed attempt was refused for a transient reason (nothing changed; the card stays). */
   attempt?: string | null;
+  /** [B18-D review] an AI undo or redo (a replay): its undo hint follows the direction. */
+  replay?: "undo" | "redo" | null;
 }
 
 /** The entry for a received grant (preview: awaiting your confirmation; explicit: issued). */
@@ -178,6 +180,7 @@ export function entryFromGrant(received: { grant: PublicExecutionGrant; decision
     failure: null,
     recovery: null,
     undoEligible: false,
+    replay: binding.proposal?.replay?.direction === "undo" || binding.proposal?.replay?.direction === "redo" ? binding.proposal.replay.direction : null,
   };
 }
 
@@ -199,7 +202,10 @@ export function entryEditorOutcome(entry: ExecutionEntry, outcome: EditorOutcome
       undoEligible: outcome.undoEligible === true,
     };
   }
-  const sentence = refusalSentence(outcome.code, outcome.changed);
+  // [B18-D review] the editor's live pre-check names its own reason (never a generic "replaced")
+  const sentence = outcome.code === "precheck-refused" && typeof outcome.message === "string" && outcome.message.trim() !== ""
+    ? { headline: `Not made: ${outcome.message.trim().replace(/[.\s]+$/, "").slice(0, 300)}. Nothing was changed.`, next: "Ask again once that is resolved." }
+    : refusalSentence(outcome.code, outcome.changed);
   return { ...entry, state: outcome.changed ? "landed_unverified" : outcome.code === "already-in-flight" ? entry.state : "not_made", failure: { ...sentence, code: outcome.code }, undoEligible: false };
 }
 
@@ -220,6 +226,7 @@ export function entrySettled(entry: ExecutionEntry, received: Pick<ReceivedExecu
   }
   if (received.status === "settled" || received.status === "retired") {
     if (disagrees) return { ...entry, state: "landed_unverified", failure: { ...refusalSentence(null, true), code: "records-disagree" }, undoEligible: false };
+    if (TERMINAL.has(entry.state)) return entry; // [B18-D review] the editor's own terminal report is more specific than a later server retirement
     const headline = received.status === "retired" ? retirementSentence(received.reason) : "Not made — nothing changed.";
     return { ...entry, state: "not_made", failure: { headline, next: "Ask again.", code: received.reason ?? received.outcome ?? null }, undoEligible: false };
   }
@@ -268,7 +275,7 @@ export const entryUndoResult = (entry: ExecutionEntry, result: { ok: true } | { 
 // live Undo). The pinned phrases appear in the entry exactly once each:
 //  - awaiting confirmation: "Change ready for your confirmation in the PCB editor — <after>; nothing has changed yet"
 //  - executing:             "Executing in the PCB editor — <after> (one canonical transaction, undoable) — awaiting the editor's settlement"
-//  - committed:             "AI change committed by your editor (one canonical transaction[, undoable])[ — DRC: N errors]"
+//  - committed:             "AI change committed by your editor (one canonical transaction)[ — DRC: N errors]"
 
 export const EXECUTION_ENTRY_ID_PREFIX = "xlog-";
 const STATE_MARK = ":state:";
@@ -285,11 +292,19 @@ function stateSentence(entry: ExecutionEntry): string {
     case "awaiting_confirmation": return `Change ready for your confirmation in the PCB editor — ${after}; nothing has changed yet`;
     case "issued": return `Issued — your editor executes it now (one canonical transaction, undoable)`;
     case "executing": return `Executing in the PCB editor — ${after} (one canonical transaction, undoable) — awaiting the editor's settlement`;
-    case "committed": return `AI change committed by your editor (one canonical transaction${entry.undoEligible ? ", undoable" : ""})${entry.checks ? ` — ${entry.checks.replace(/^Checks: /, "")}` : ""}`;
+    case "committed": return `AI change committed by your editor (one canonical transaction)${entry.checks ? ` — ${entry.checks.replace(/^Checks: /, "")}` : ""}`;
     case "landed_unverified": return entry.failure?.headline ?? "The change LANDED but could not be verified — the board MAY have changed.";
     case "outcome_unknown": return entry.failure?.headline ?? "Outcome not yet known — the editor did not report in time.";
     default: return entry.failure?.headline ?? "Not made. Nothing was changed.";
   }
+}
+
+/** [B18-D review] The undo hint: conditional (never a present-tense claim), and following an AI undo/redo's direction. */
+function undoHint(entry: ExecutionEntry): string {
+  if (!entry.undoEligible) return "Undo: it was no longer the latest change when it settled — use the revision history.";
+  if (entry.replay === "undo") return "Undo: while it is the latest change — “Undo this change” here or the editor's Undo (one step) re-applies the change; or say “Redo.”";
+  if (entry.replay === "redo") return "Undo: while it is the latest change — “Undo this change” here or the editor's Undo (one step) removes the change again; or say “Undo that.”";
+  return "Undo: while it is the latest change — “Undo this change” here, the editor's Undo (one step), or say “Undo that.”";
 }
 
 /** The entry as a persistable chat log message (rebuilt on every transition). */
@@ -315,7 +330,7 @@ export function entryToLogMessage(entry: ExecutionEntry): EntryLogMessage {
   if (entry.recovery) rows.push(row("recovery", entry.recovery));
   if (entry.state === "committed") {
     // [B18-D I8] once the chat's Undo was used, its result replaces the hint
-    const undo = entry.undoResult ?? { ok: true, text: entry.undoEligible ? "Undo: while it is the latest change — “Undo this change” here, the editor's Undo (one step), or say “Undo that.”" : "Undo: it was no longer the latest change when it settled — use the revision history." };
+    const undo = entry.undoResult ?? { ok: true, text: undoHint(entry) };
     rows.push(row("undo", undo.text, undo.ok ? "done" : "error"));
   }
   return { id, role: "log", title: `AI change — ${entry.understood}`.slice(0, 160), status, entries: rows };

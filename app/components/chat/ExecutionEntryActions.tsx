@@ -6,6 +6,7 @@
  * operation only if it is still exactly that transaction (NOT_LATEST otherwise) — the PCB store's own Undo, one history
  * step. It applies nothing and holds no authority; when the change can no longer be undone from here it says why.
  */
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 
 export interface ExecutionEntryActionsProps {
@@ -17,12 +18,14 @@ export interface ExecutionEntryActionsProps {
 }
 
 export function ExecutionEntryActions({ eligible, reason, onUndo }: ExecutionEntryActionsProps) {
+  const reasonId = useId(); // [B18-D review] the disabled button is described by its reason for assistive technology
+  const showReason = !eligible && Boolean(reason);
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-2" data-testid="execution-entry-actions">
-      <Button size="sm" variant="outline" data-testid="execution-undo" disabled={!eligible} onClick={() => onUndo()}>
+      <Button size="sm" variant="outline" data-testid="execution-undo" disabled={!eligible} aria-describedby={showReason ? reasonId : undefined} onClick={() => onUndo()}>
         Undo this change
       </Button>
-      {!eligible && reason ? <span className="text-[11px] text-zinc-500" data-testid="execution-undo-reason">{reason}</span> : null}
+      {showReason ? <span id={reasonId} className="text-[11px] text-zinc-500" data-testid="execution-undo-reason">{reason}</span> : null}
     </div>
   );
 }

@@ -82,3 +82,14 @@ describe("B18-D I5 — the confirmation card", () => {
     expect(text("granted-execution-disable-reason")).toContain("the live board changed");
   });
 });
+
+describe("B18-D review — a disabled Confirm is described by its reason", () => {
+  it("aria-describedby points at the visible reason", () => {
+    render(<GrantedExecutionDialog grant={grant()} note={null} busy={false} disableReason="the board changed since the assistant prepared it" onConfirm={() => undefined} onCancel={() => undefined} />);
+    const confirm = screen.getByTestId("granted-execution-confirm") as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    const reason = screen.getByTestId("granted-execution-disable-reason");
+    expect(reason.textContent).toContain("the board changed since the assistant prepared it");
+    expect(confirm.getAttribute("aria-describedby")).toBe(reason.id);
+  });
+});

@@ -63,7 +63,8 @@ export type GrantedExecutionRefusalCode =
   | "grant-invalid" | "grant-expired" | "confirmation-required" | "session-superseded" | "foreign-scope"
   | "already-in-flight" | "identity-poisoned" | "recovery-required"
   | "stale-revision" | "stale-history" | "stale-lineage" | "stale-selection" | "policy-mismatch" | "recompile-mismatch"
-  | "consume-refused" | "commit-rejected" | "execution-failed";
+  | "consume-refused" | "commit-rejected" | "execution-failed"
+  | "precheck-refused"; // [B18-D review] the editor's live pre-check refused an explicit grant before any ritual ran
 
 export type GrantedExecutionOutcome =
   /** [B18-D I4] `validations` and `undoEligible`: exactly what the server settlement received — the checks the editor ran on the

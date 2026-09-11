@@ -174,6 +174,7 @@ const REFUSALS: Readonly<Record<string, { headline: string; next: string }>> = O
   "consume-refused": { headline: `Not made — the server refused the change (it was cancelled, expired or altered). ${NOTHING_CHANGED}`, next: "Ask again." },
   "commit-rejected": { headline: `Not made — the editor's canonical executor refused the change. ${NOTHING_CHANGED}`, next: "Ask again." },
   "execution-failed": { headline: `Not made — the change failed before it was applied. ${NOTHING_CHANGED}`, next: "Ask again." },
+  "precheck-refused": { headline: `Not made — the editor's live check refused it. ${NOTHING_CHANGED}`, next: "Ask again once that is resolved." }, // [B18-D review]
 });
 
 /** The ritual's refusal as a headline and a next step. `changed` wins over every code: the board MAY have changed. */

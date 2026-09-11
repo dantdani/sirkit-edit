@@ -515,6 +515,10 @@ export default function PcbEditor({
   const subscribeEditorRuntime = useCallback((listener: () => void) => editorRuntime.subscribe(listener), [editorRuntime]);
   const getEditorRuntimeSnapshot = useCallback(() => editorRuntime.getSnapshot(), [editorRuntime]);
   const visibleHistory = useSyncExternalStore(subscribeEditorRuntime, getEditorRuntimeSnapshot, getEditorRuntimeSnapshot);
+  // [B18-D review] why undo/redo are paused (the history hold's reason), for the toolbar's disabled buttons; the snapshot
+  // above re-renders this whenever a hold starts or ends.
+  const heldHistory = editorRuntime.getHistory();
+  const historyPausedReason = heldHistory ? canonicalSessionFor(heldHistory)?.historyHoldReason() ?? null : null;
   // Bumped by every lifecycle adoption — drives the hook invalidation
   // effect and the AssistBox remount key (old previews/candidates/pending
   // chips are discarded the moment the board is replaced).
@@ -1626,7 +1630,8 @@ export default function PcbEditor({
       void Promise.resolve().then(async () => {
         if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "session_superseded" }).catch(() => undefined);
         setToast(`AI change not made: ${reason} Nothing was changed.`);
-        onExecutionGrantSettled?.(grant.grantId, "retired");
+        // [B18-D review] the entry names the live check's reason (never a generic "replaced")
+        onExecutionGrantSettled?.(grant.grantId, "retired", { ok: false, status: "refused", code: "precheck-refused", message: reason, changed: false, serverCode: null });
       });
       return;
     }
@@ -2505,6 +2510,7 @@ export default function PcbEditor({
           canRedo={visibleHistory.canRedo}
           undoLabel={visibleHistory.undoLabel}
           redoLabel={visibleHistory.redoLabel}
+          historyPausedReason={historyPausedReason}
           historyEntries={visibleHistory.entries}
           readiness={liveReadiness}
           onExportKicad={() => { const b = init.demo ? boardRef.current : authorityRef.current?.board; if (b) void downloadKicadPcb(b, liveNetlist, undefined, setToast); else setToast("Export requires a verified authoritative board."); }} // Stage 13

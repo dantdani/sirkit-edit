@@ -497,7 +497,11 @@ test("B18-D P2: while an AI change is being made the editor's Undo and Redo wait
     await prompt.fill("Move R3 3 mm to the left.");
     await prompt.press("Enter");
     await expect.poll(() => tenders, { timeout: 60_000 }).toBe(1);
-    await expect(page.getByTestId("pcb-editor").locator('button[title$="(Ctrl+Z)"], button[title="Nothing to undo"]')).toBeDisabled();
+    // [B18-D review] the disabled toolbar Undo and Redo name the hold's reason
+    const paused = page.getByTestId("pcb-editor").locator('button[title="Undo and redo are paused: an AI change is being made"]');
+    await expect(paused).toHaveCount(2);
+    await expect(paused.first()).toBeDisabled();
+    await expect(paused.last()).toBeDisabled();
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // the editor's Ctrl+Z ignores editable targets
     await page.keyboard.press("Control+z");
     await expect(page.getByText("Undo and redo are paused: an AI change is being made. Try again when it finishes.")).toBeVisible();

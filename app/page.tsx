@@ -6930,6 +6930,8 @@ export default function Home() {
                 <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-zinc-500">
                   <span data-testid="composer-route" data-route={composerAction} title={composerRouting.reason}>
                     Sirkit will: {COMPOSER_ROUTE_LABELS[composerAction]}{composerRouteOverride ? " (your choice)" : ""}
+                    {/* [B18-D review] the reason is readable without the tooltip */}
+                    <span className="sr-only"> — {composerRouting.reason}</span>
                   </span>
                   {composerRouting.route !== "ask" && (
                     <button type="button" data-testid="composer-route-override" onClick={overrideComposerRoute} className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200">
