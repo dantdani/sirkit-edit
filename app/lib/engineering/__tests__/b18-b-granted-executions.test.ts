@@ -229,7 +229,7 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     const head = headOf(c).headSequence;
     const drifted = await tenderExplicitExecution(deps(c, grant, transport));
     expect(drifted).toMatchObject({ ok: false, code: "stale-revision", changed: false });
-    expect(await serverState(c, grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "refused_before_execution" } }); // [B18-D review 2] pin moved: the reason names what happened
+    expect(await serverState(c, grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "revision_drift" } }); // [B18-E E2] pin moved: the drift itself
     expect(transport.calls).toEqual(["cancel"]);
     expect(headOf(c).headSequence).toBe(head);
     expect(await c.journal.pending()).toEqual({ ok: true, entries: [] });
@@ -263,7 +263,7 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     const head = headOf(c).headSequence;
     const changed = transportOver(c, { principal: { sessionIdentity: "sess-2" } });
     const refused = await tenderExplicitExecution(deps(c, grant, changed));
-    expect(refused).toMatchObject({ ok: false, code: "consume-refused", serverCode: "session_changed", changed: false });
+    expect(refused).toMatchObject({ ok: false, code: "consume-refused", serverCode: "session_changed", serverStatus: 409, changed: false }); // [B18-E E2] the server's HTTP status travels with its reason
     expect(await serverState(c, grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "session_changed" } });
     expect(await c.journal.lookupByGrant(grant.grantId)).toMatchObject({ kind: "entry", entry: { state: "abandoned" } });
     expect(headOf(c).headSequence).toBe(head);

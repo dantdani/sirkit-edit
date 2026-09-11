@@ -17,7 +17,7 @@ import { evaluateMembershipReauthorization } from "../project/membership-reautho
 import { KERNEL_OPERATION_BINDINGS } from "../engineering/executor";
 import { ACTION_COVERAGE_REGISTRY } from "../engineering/action-registry";
 import { permissionTierOfAction, TIER1_EXECUTE_ROLES, type AgentAutonomySetting } from "../engineering/permission-tiers";
-import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type ExecutionGrantConsumption, type ExecutionGrantState, type PublicExecutionGrant, type RetirementReason, REPLAY_FAMILY } from "../engineering/execution-grant";
+import { GRANT_COMMIT_WINDOW_MS, isAttemptId, isGrantId, publicExecutionGrant, type CancelRetirementReason, type ExecutionGrantConsumption, type ExecutionGrantState, type PublicExecutionGrant, type RetirementReason, REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ProjectRole } from "../engineering/types";
 import type { DurableWorkflowScope } from "../durable-workflow/types";
 import type { ExecutionGrantStore, LoadedGrant } from "./store";
@@ -33,7 +33,7 @@ export interface ConsumeTender {
 
 export type ConsumeRequest =
   | { kind: "tender"; grantId: string; grantDigest: string; attemptId: string; tender: ConsumeTender }
-  | { kind: "cancel"; grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" | "superseded_by_new_grant" | "refused_before_execution" }; // [B18-D review 2] the last two
+  | { kind: "cancel"; grantId: string; grantDigest: string; reason: CancelRetirementReason }; // [B18-D review 2, B18-E E2] the shared cancel vocabulary
 
 export type ConsumeOutcome =
   | { ok: true; grant: PublicExecutionGrant; consumption: ExecutionGrantConsumption; live: ConsumeTender extends never ? never : { principalId: string; role: ProjectRole; membershipRevision: string }; idempotent: boolean }

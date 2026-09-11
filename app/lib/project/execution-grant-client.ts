@@ -6,7 +6,7 @@
  * answered by the server's own checks, and every response is parsed
  * fail-closed (a malformed grant is a refusal, never a grant).
  */
-import { parsePublicExecutionGrant, type ExecutionGrantConsumption, type ExecutionGrantSettlement, type PublicExecutionGrant } from "../engineering/execution-grant";
+import { parsePublicExecutionGrant, type CancelRetirementReason, type ExecutionGrantConsumption, type ExecutionGrantSettlement, type PublicExecutionGrant } from "../engineering/execution-grant";
 import { readBoundedStream } from "../http/bounded-stream";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "./project-selector";
 
@@ -25,7 +25,7 @@ export interface TenderBody {
   attemptId: string;
   tender: { operationsDigest: string; commitment: string; confirmation: { actionId: string; previewDigest: string } | null; live: { pcbRevisionId?: string | null; headSequence?: number | null; lineageId?: string | null; selectionDigest?: string | null } | null };
 }
-export interface CancelBody { grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" | "superseded_by_new_grant" | "refused_before_execution" } // [B18-D review 2] the last two
+export interface CancelBody { grantId: string; grantDigest: string; reason: CancelRetirementReason } // [B18-E E2] the shared cancel vocabulary
 export interface SettleBody {
   grantId: string;
   grantDigest: string;

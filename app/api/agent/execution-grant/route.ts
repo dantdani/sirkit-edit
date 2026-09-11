@@ -21,7 +21,7 @@ import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route
 import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
 import { resolveExecutionGrantStore } from "@/app/lib/execution-grant/store";
 import { consumeExecutionGrant, loadOwnGrant, type ConsumeRequest, type ConsumeTender } from "@/app/lib/execution-grant/consume";
-import { isAttemptId, isGrantId } from "@/app/lib/engineering/execution-grant";
+import { CANCEL_RETIREMENT_REASONS, isAttemptId, isGrantId } from "@/app/lib/engineering/execution-grant";
 import { ENGINEERING_DIGEST_PATTERN as DIGEST, EXECUTION_GRANT_AUTHORITY_SHAPED_KEYS } from "@/app/lib/execution-grant/route-contract";
 
 export const runtime = "nodejs";
@@ -31,10 +31,11 @@ const TENDER_KEYS: ReadonlySet<string> = new Set(["kind", "grantId", "grantDiges
 const CANCEL_KEYS: ReadonlySet<string> = new Set(["kind", "grantId", "grantDigest", "reason"]);
 const TENDER_BLOCK_KEYS: ReadonlySet<string> = new Set(["operationsDigest", "commitment", "confirmation", "live"]);
 const LIVE_KEYS: ReadonlySet<string> = new Set(["pcbRevisionId", "headSequence", "lineageId", "selectionDigest"]);
-// [B18-D review 2] also a preview replaced by a newer grant, and a grant the editor's checks refused before making it: the
-// retirement names what happened. Every value is in the closed RETIREMENT_REASONS vocabulary, and a cancel retires only an
-// ISSUED grant (a consumed one retires only with the consumed reasons — the store refuses the rest).
-const CANCEL_REASONS = new Set(["cancelled_by_user", "session_superseded", "superseded_by_new_grant", "refused_before_execution"]);
+// [B18-D review 2, B18-E E2] the retirement names what happened: the user's cancel, a replaced session or preview, the editor's
+// checks refusing it, or the drift itself — one shared vocabulary (CANCEL_RETIREMENT_REASONS, inside the closed
+// RETIREMENT_REASONS). A cancel retires only an ISSUED grant (a consumed one retires only with the consumed reasons — the store
+// refuses the rest).
+const CANCEL_REASONS: ReadonlySet<string> = new Set(CANCEL_RETIREMENT_REASONS);
 const MAX_ID = 200;
 
 function refusal(status: number, code: string, error: string, extra: Record<string, unknown> = {}): Response {

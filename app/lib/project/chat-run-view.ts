@@ -14,7 +14,7 @@
 import type { PublicExecutionGrant } from "../engineering/execution-grant";
 import { EXECUTION_SETTLEMENT_TIMEOUT_MS } from "../engineering/execution-grant"; // [B18-D review] the wait for the editor, shown (§1 item 6)
 import type { ReceivedExecutionSettlement } from "./execution-grant-events";
-import { checksLine, confirmationReason, operationLines, refusalSentence, retirementSentence, recoverySentence, targetLines, tierLabel, type RefOf } from "./execution-display";
+import { checksLine, confirmationReason, operationLines, refusalSentence, retirementSentence, recoverySentence, serverRefusalSentence, targetLines, tierLabel, type RefOf } from "./execution-display";
 import type { ProjectOperation } from "./operation-timeline"; // [B18-D I8]
 
 export const LABEL_BEFORE_CHANGE = "Written before the outcome of this change was confirmed — the entry above is authoritative."; // [B18-D review] true also when the change was made but not yet confirmed
@@ -212,7 +212,7 @@ export const entryExecuting = (entry: ExecutionEntry): ExecutionEntry => (entry.
 /** The editor's ritual outcome (structural: the page passes what the ritual returned). */
 export type EditorOutcome =
   | { ok: true; status: "committed" | "already-applied"; receipt: { transactionId: string; pcbRevisionBefore: string; pcbRevisionAfter: string; headSequenceAfter: number }; settled: "settled" | "settle-failed"; validations?: { drc?: unknown } | null; undoEligible?: boolean; presetId?: string | null }
-  | { ok: false; code: string; changed: boolean; message?: string; grantConsumed?: true };
+  | { ok: false; code: string; changed: boolean; message?: string; grantConsumed?: true; serverCode?: string | null; serverStatus?: number | null };
 
 export function entryEditorOutcome(entry: ExecutionEntry, outcome: EditorOutcome): ExecutionEntry {
   if (outcome.ok) {
@@ -230,7 +230,10 @@ export function entryEditorOutcome(entry: ExecutionEntry, outcome: EditorOutcome
     // [B18-D review 2] a grant already consumed and settled as not committed: nothing is left to recover or retry
     : outcome.grantConsumed === true && !outcome.changed
       ? { headline: "Not made — the grant was used and settled as not committed, so it cannot be retried. Nothing was changed.", next: "Ask again." }
-      : refusalSentence(outcome.code, outcome.changed);
+      // [B18-E E2] the server's refusal of the tender names its cause
+      : outcome.code === "consume-refused" && !outcome.changed
+        ? serverRefusalSentence(outcome.serverCode, outcome.serverStatus)
+        : refusalSentence(outcome.code, outcome.changed);
   return { ...entry, state: outcome.changed ? "landed_unverified" : outcome.code === "already-in-flight" ? entry.state : "not_made", failure: { ...sentence, code: outcome.code }, undoEligible: false };
 }
 

@@ -63,7 +63,7 @@ function grantOf(decision: "execute_explicit" | "preview_then_confirm"): PublicE
   return publicExecutionGrant(record);
 }
 const settledGrant = (grant: PublicExecutionGrant, outcome: "committed" | "not-committed" | "poisoned"): PublicExecutionGrant => ({ ...grant, state: { status: "settled", consumption: { attemptId: "eng1-0000000000000001", consumedAt: T0, commitDeadline: T0, commitment: "eng1-0000000000000002", live: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" } }, settlement: { outcome, attestation: "browser-attested", transactionId: outcome === "committed" ? "tx:7" : null, revisionBefore: "pcb2-abc", revisionAfter: outcome === "committed" ? "pcb2-def" : null, headSequenceAfter: 5, changeSetDigest: null, receiptDigest: null, validations: { drc: { ran: true, violations: 0 } }, undoEligible: outcome === "committed", late: false, at: T0 }, retirement: null } });
-const retiredGrant = (grant: PublicExecutionGrant): PublicExecutionGrant => ({ ...grant, state: { status: "retired", consumption: null, settlement: null, retirement: { reason: "session_changed", detail: "x", at: T0, observedBy: "server" } } });
+const retiredGrant = (grant: PublicExecutionGrant, reason: "session_changed" | "revision_drift" = "session_changed"): PublicExecutionGrant => ({ ...grant, state: { status: "retired", consumption: null, settlement: null, retirement: { reason, detail: "x", at: T0, observedBy: "server" } } });
 const consumedGrant = (grant: PublicExecutionGrant): PublicExecutionGrant => ({ ...grant, state: { status: "consumed", consumption: { attemptId: "eng1-0000000000000001", consumedAt: T0, commitDeadline: T0, commitment: "eng1-0000000000000002", live: { principalId: "u-1", role: "pcb_editor", membershipRevision: "mbr1-a" } }, settlement: null, retirement: null } });
 
 type StepScript = (input: { results?: readonly AgentToolResult[] }) => Partial<AgentStep> | Promise<Partial<AgentStep>>;
@@ -157,6 +157,7 @@ describe("B18-B — the loop and a server-minted execution grant", () => {
       // A LANDED but unverifiable commit is never "nothing changed".
       [{ status: "settled", grant: settledGrant(grant, "poisoned") }, { ok: false, status: "execution_poisoned", outcome: "poisoned" }, []],
       [{ status: "retired", grant: retiredGrant(grant) }, { ok: false, status: "execution_retired", reason: "session_changed" }, []],
+      [{ status: "retired", grant: retiredGrant(grant, "revision_drift") }, { ok: false, status: "execution_retired", reason: "revision_drift" }, []], // [B18-E E2] a drift cancel reaches the model as the drift
       [{ status: "in_flight", grant: consumedGrant(grant) }, { ok: false, status: "execution_unsettled" }, []],
       [{ status: "unsettled", grant }, { ok: false, status: "execution_unsettled" }, [["run_unsettled", true]]],
     ];

@@ -32,7 +32,7 @@ import type { ExecutionGrantTransport, TenderBody } from "../project/execution-g
 import type { ProjectSelectorScope } from "../project/project-selector";
 import { AgentExecutionJournal, buildExecutionReceipt, type AgentExecutionJournalEntry, type ExecutionReceipt } from "./agent-execution-journal";
 import { canonicalSessionFor, historyBindingState, type CanonicalEditorSession } from "./editor-adapter";
-import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence, REPLAY_FAMILY } from "./execution-grant";
+import { GRANT_SETTLE_GRACE_MS, attemptIdFor, isExecutionFamily, parsePublicExecutionGrant, verifyPublicGrantCoherence, REPLAY_FAMILY, type CancelRetirementReason } from "./execution-grant";
 import { buildExecutionOperations, planFromOperations, type BuiltExecution } from "./execution-operations";
 import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { KERNEL_OPERATION_BINDINGS } from "./executor";
@@ -71,12 +71,15 @@ export type GrantedExecutionOutcome =
    *  committed board (null for an execution that was already applied) and whether it is still the latest, undoable change. */
   | { ok: true; status: "committed" | "already-applied"; receipt: ExecutionReceipt; autosaveSettled: boolean; settled: "settled" | "settle-failed"; validations: { drc: { ran: boolean; violations: number } } | null; undoEligible: boolean }
   /** `changed`: whether the board changed (true only after a landed commit that could not be verified). */
-  | { ok: false; status: "refused"; code: GrantedExecutionRefusalCode; message: string; changed: boolean; serverCode: string | null; /** [B18-D review 2] the grant was consumed on the server and settled as not committed: a retry can only be refused */ grantConsumed?: true };
+  | { ok: false; status: "refused"; code: GrantedExecutionRefusalCode; message: string; changed: boolean; serverCode: string | null; /** [B18-E E2] the HTTP status of the server's refusal of the tender, when it answered */ serverStatus?: number | null; /** [B18-D review 2] the grant was consumed on the server and settled as not committed: a retry can only be refused */ grantConsumed?: true };
 
 /** [B18-C review U3, B18-D review 2] Whether a refused Confirm of a preview grant keeps its card for a retry: only when nothing
  *  changed, the grant was not consumed, and the reason is transient. A consumed grant can only be refused again. */
 export const refusalKeepsPreviewCard = (outcome: Extract<GrantedExecutionOutcome, { ok: false }>): boolean =>
   !outcome.changed && outcome.grantConsumed !== true && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
+
+/** [B18-E E2] The durable reason a drift cancel records: the drift itself, where the retirement vocabulary has one. */
+const DRIFT_RETIREMENTS: Partial<Record<GrantedExecutionRefusalCode, CancelRetirementReason>> = Object.freeze({ "stale-revision": "revision_drift", "stale-history": "history_drift", "stale-lineage": "lineage_drift" });
 
 export interface GrantedExecutionInput {
   /** The received public grant (bounded, re-parsed here; never trusted by reference). */
@@ -103,8 +106,8 @@ export interface GrantedExecutionInput {
   signal?: AbortSignal;
 }
 
-const refuse = (code: GrantedExecutionRefusalCode, message: string, extra: { changed?: boolean; serverCode?: string | null; grantConsumed?: true } = {}): GrantedExecutionOutcome =>
-  ({ ok: false, status: "refused", code, message, changed: extra.changed ?? false, serverCode: extra.serverCode ?? null, ...(extra.grantConsumed ? { grantConsumed: true as const } : {}) });
+const refuse = (code: GrantedExecutionRefusalCode, message: string, extra: { changed?: boolean; serverCode?: string | null; serverStatus?: number | null; grantConsumed?: true } = {}): GrantedExecutionOutcome =>
+  ({ ok: false, status: "refused", code, message, changed: extra.changed ?? false, serverCode: extra.serverCode ?? null, ...(extra.serverStatus !== undefined ? { serverStatus: extra.serverStatus } : {}), ...(extra.grantConsumed ? { grantConsumed: true as const } : {}) });
 
 function randomNonce(): string {
   const bytes = new Uint8Array(16);
@@ -349,7 +352,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (drifted) {
       registry.release(identityKey);
       // Drift retires the grant durably so it cannot be spent later (best-effort; the server's own checks would burn it anyway).
-      if (!entry) { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: "refused_before_execution" }, input.signal); } catch { /* the grant expires lazily */ } } // [B18-D review 2] the editor's drift check refused it
+      if (!entry) { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: DRIFT_RETIREMENTS[drifted.code] ?? "refused_before_execution" }, input.signal); } catch { /* the grant expires lazily */ } } // [B18-E E2] the durable reason names the drift
       return refuse(drifted.code, drifted.message);
     }
 
@@ -405,7 +408,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       registry.release(identityKey);
       await input.journal.abandon(identityKey, `consume refused: ${consumed.code}`);
       const reason = consumed.reason ? ` (${consumed.reason})` : "";
-      return refuse("consume-refused", `The server refused the execution${reason}: ${consumed.message} Nothing was changed.`, { serverCode: consumed.reason ?? consumed.code });
+      return refuse("consume-refused", `The server refused the execution${reason}: ${consumed.message} Nothing was changed.`, { serverCode: consumed.reason ?? consumed.code, serverStatus: consumed.status });
     }
     consumedOnServer = true;
     // 11. Journal grant-consumed.

@@ -67,6 +67,10 @@ export type RetirementReason = (typeof RETIREMENT_REASONS)[number];
 export const isRetirementReason = (value: unknown): value is RetirementReason => typeof value === "string" && (RETIREMENT_REASONS as readonly string[]).includes(value);
 /** The only reasons that may retire an already-CONSUMED grant (the commit never happened, or its outcome is unknown). */
 export const CONSUMED_RETIREMENT_REASONS: readonly RetirementReason[] = Object.freeze(["commit_rejected", "recovery_required", "consumed_unsettled", "session_superseded"]);
+/** [B18-E E2] The reasons the bound principal's cancel may record — each names what happened. A cancel retires only an ISSUED
+ *  grant; a consumed grant retires only with CONSUMED_RETIREMENT_REASONS, which the store enforces. */
+export const CANCEL_RETIREMENT_REASONS = Object.freeze(["cancelled_by_user", "session_superseded", "superseded_by_new_grant", "refused_before_execution", "revision_drift", "history_drift", "lineage_drift"] as const satisfies readonly RetirementReason[]);
+export type CancelRetirementReason = (typeof CANCEL_RETIREMENT_REASONS)[number];
 
 export const SETTLEMENT_OUTCOMES = Object.freeze(["committed", "not-committed", "poisoned"] as const);
 export type SettlementOutcome = (typeof SETTLEMENT_OUTCOMES)[number];

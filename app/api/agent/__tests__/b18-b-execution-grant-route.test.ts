@@ -256,4 +256,19 @@ describe("B18-B — the grant lifecycle through the routes", () => {
     expect(await json(await POST(post(tenderOf(explicit))))).toMatchObject({ code: "EXECUTION_GRANT_RETIRED", reason: "autonomy_changed" });
     void setting;
   });
+
+  it("[B18-E E2] a cancel may name the drift that refused it (the bound principal's issued grant only); a retirement reason that is not a cancel reason is refused by name", async () => {
+    authed("editor");
+    const drifted = await mintFor("proposal_only");
+    expect(await json(await POST(post({ kind: "cancel", grantId: drifted.grantId, grantDigest: drifted.grantDigest, reason: "revision_drift" })))).toMatchObject({ ok: true, cancelled: true, grant: { state: { status: "retired", retirement: { reason: "revision_drift" } } } });
+    const other = await mintFor("proposal_only");
+    for (const reason of ["expired", "proposal_altered", "commit_rejected"]) {
+      const res = await POST(post({ kind: "cancel", grantId: other.grantId, grantDigest: other.grantDigest, reason }));
+      expect(res.status, reason).toBe(400);
+      expect((await json(res)).code, reason).toBe("EXECUTION_GRANT_BODY_INVALID");
+    }
+    resetInjectedIdentity(); injectAuthorizedPrincipal({ userId: "u2", tenantId: SCOPE.tenantId, projectId: SCOPE.projectId, role: "editor", sessionId: "sess-2" });
+    expect((await POST(post({ kind: "cancel", grantId: other.grantId, grantDigest: other.grantDigest, reason: "history_drift" }))).status).toBe(404);
+    expect((await store.load(SCOPE, other.grantId, Date.now()))?.record.state.status).toBe("issued"); // zero writes
+  });
 });

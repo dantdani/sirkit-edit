@@ -216,6 +216,18 @@ export function retirementSentence(reason: unknown): string {
   return `Not made — ${why ?? "the server retired it"}. ${NOTHING_CHANGED}`;
 }
 
+/** [B18-E E2] The server's refusal of a tender, in words: a retirement reason names what happened; 401/403 the lost
+ *  authorization; 404 a change the server does not know; a replay the other attempt (which may have changed the board, so it
+ *  never says nothing changed). Anything else keeps the generic sentence. The retirement test reads this module's own table
+ *  (type-only imports stay; the vocabulary test pins that the table covers every reason). */
+export function serverRefusalSentence(serverCode: unknown, serverStatus: unknown): { headline: string; next: string } {
+  if (typeof serverCode === "string" && Object.prototype.hasOwnProperty.call(RETIREMENTS, serverCode)) return { headline: retirementSentence(serverCode), next: "Ask again." };
+  if (serverStatus === 401 || serverStatus === 403) return { headline: `Not made — the server no longer authorizes you for this project. ${NOTHING_CHANGED}`, next: "Sign in again, or ask a project administrator." };
+  if (serverCode === "EXECUTION_GRANT_UNKNOWN" || serverStatus === 404) return { headline: `Not made — the server does not know this change. ${NOTHING_CHANGED}`, next: "Ask again." };
+  if (serverCode === "EXECUTION_GRANT_REPLAYED") return { headline: "Not made here — another attempt had already started this change.", next: "Check the board and the revision history." };
+  return REFUSALS["consume-refused"]!;
+}
+
 const RECOVERIES: Readonly<Record<string, string>> = Object.freeze({
   "adopted-and-settled": "Recovered: an AI change that landed before an interruption was verified from the durable records and reported.",
   "settled-from-receipt": "Recovered: the server record of a finished AI change was completed.",
