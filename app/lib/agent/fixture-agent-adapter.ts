@@ -40,6 +40,10 @@ const FLIP = /^(?:please\s+)?flip\s+([a-z]+\d+)\s+(?:on)?to\s+the\s+(top|bottom)
 const SILK = /^(?:please\s+)?add\s+silkscreen\s+text\s+(.{1,64}?)\s+at\s+(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*mm)?$/i;
 const REPLAY = /^(?:please\s+)?(undo|redo)(?:\s+that)?$/i;
 const VECTORS: Readonly<Record<string, readonly [number, number]>> = Object.freeze({ right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] });
+/** [B18-D I6] A model may write text beside an execution call that claims the change is made; the scripted agent does, so
+ *  the browser proof can show it never reaches the answer (it is released as a note once the run ends). */
+export const FIXTURE_INTERIM_TEXT = "(fixture interim) Done — the change is already made.";
+const EXECUTION_TOOL_IDS: ReadonlySet<string> = new Set(["sirkit.pcb.move-footprint", "sirkit.pcb.rotate-side-footprint", "sirkit.pcb.silkscreen-text", "sirkit.pcb.undo-redo-granted"]);
 
 /** The scripted plan for one whole instruction (exported for the harness's unit proofs). */
 export function planFixtureInstruction(message: string): Planned {
@@ -104,7 +108,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
     const declaration = tools.find((tool) => tool.toolId === toolId);
     if (!declaration) return this.step({ text: `(fixture agent) ${toolId} is not available to this run; nothing was done.` });
     this.seq += 1;
-    return this.step({ toolCalls: [{ callId: `fx-${this.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
+    return this.step({ text: EXECUTION_TOOL_IDS.has(toolId) ? FIXTURE_INTERIM_TEXT : "", toolCalls: [{ callId: `fx-${this.seq}`, providerName: declaration.providerName, argumentsText: JSON.stringify(args) }] });
   }
 
   async start(input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep> {

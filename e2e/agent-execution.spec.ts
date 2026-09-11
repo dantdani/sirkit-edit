@@ -31,7 +31,7 @@ const NM_PER_MM = 1_000_000;
 interface Footprint { id: string; ref: string; at: { x: number; y: number }; side: "top" | "bottom" }
 interface SilkItem { kind: string; text?: string }
 interface Board { footprints: Footprint[]; silkItems: SilkItem[] }
-interface ChatBody { scope: { tenantId: string; projectId: string; branchId: string }; editorContext?: { board: { footprints: Footprint[]; silkItems?: SilkItem[] } } }
+interface ChatBody { scope: { tenantId: string; projectId: string; branchId: string }; messages?: Array<{ role: string; content: string }>; editorContext?: { board: { footprints: Footprint[]; silkItems?: SilkItem[] } } }
 
 let context: BrowserContext;
 let page: Page;
@@ -175,6 +175,8 @@ test("B18-C preview: under proposal_only an AI move is shown on the confirmation
   // The editor's own outcome notice (transient: it clears after 6 s, so its recorded history is read, not one poll).
   await expect.poll(notices, { timeout: 30_000 }).toEqual(expect.arrayContaining([expect.stringMatching(/^AI change made as ONE canonical transaction/)]));
   await expect(page.getByTitle(/^Undo: AI: R3 at/)).toBeVisible(); // ONE history entry, labelled as the AI's
+  // [B18-D I6] the chat's entry for this grant follows the editor's outcome to "committed".
+  await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "committed");
 
   await page.getByRole("button", { name: "Revision history" }).click();
   const aiEntries = page.getByTestId("project-timeline-entry").filter({ hasText: "AI: R3 at" });
@@ -212,6 +214,7 @@ test("B18-C explicit: an administrator opts the project into execute_explicit_ti
   await chat("Move R3 1 mm to the left.");
   await expect(committedLines()).toHaveCount(before + 1);
   await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "committed"); // [B18-D I6]
   await select("R3");
   await chat("Flip R3 to the bottom.");
   await expect(committedLines()).toHaveCount(before + 2);
@@ -221,6 +224,10 @@ test("B18-C explicit: an administrator opts the project into execute_explicit_ti
   const after = r3(await board());
   expect(after.at.x).toBe(x0 - NM_PER_MM);
   expect(after.side).toBe("bottom");
+  // [B18-D I6] Rule 2 on the page: the scripted agent wrote "(fixture interim) Done — the change is already made." beside each
+  // execution call; it appears only as a note once the run ended, and never in an answer or the history a request carries.
+  await expect(page.getByText(/^Assistant note \(written before the result\): \(fixture interim\)/).first()).toBeVisible();
+  expect(JSON.stringify(chatBodies.at(-1)!.messages ?? [])).not.toContain("(fixture interim)");
 });
 
 test("B18-C silkscreen add with the card; 'Undo that.' undoes it; after a RELOAD 'Redo.' re-applies it from the durable records", async () => {
@@ -261,6 +268,7 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
   const start = await board();
   const at = centroidMm(start);
   let rewritten = 0;
+  const entriesBefore = await page.getByTestId("chat-execution-entry").count(); // [B18-D I6]
   await page.route("**/api/chat", async (route) => {
     const response = await route.fetch();
     const body = (await response.text()).split("\n").map((line) => {
@@ -278,6 +286,7 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
     await page.unroute("**/api/chat");
   }
   expect(rewritten).toBe(1);
+  await expect(page.getByTestId("chat-execution-entry")).toHaveCount(entriesBefore); // a dropped grant creates no entry
   await expect(page.getByText(/the tool answered execution_preview_issued/).last()).toBeVisible();
   await expect(page.getByTestId("granted-execution-card")).toBeHidden();
   await expect(page.getByText(/Change ready for your confirmation in the PCB editor — \(nothing at all\)/)).toHaveCount(0);

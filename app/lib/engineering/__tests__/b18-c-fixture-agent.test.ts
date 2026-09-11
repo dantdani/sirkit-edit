@@ -16,7 +16,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentAdapterFor } from "../../agent/adapters";
-import { FixtureAgentAdapter, planFixtureInstruction } from "../../agent/fixture-agent-adapter";
+import { FixtureAgentAdapter, planFixtureInstruction, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
 import type { ProviderToolDeclaration } from "../../agent/contracts";
 import { mmToNm } from "../../pcb/units";
 import { composition, headOf, r3Of, runWithAdapter } from "./b18c-harness";
@@ -80,6 +80,7 @@ describe("B18-C I10a — the script", () => {
     const selection = JSON.stringify({ ok: true, output: { items: [{ kind: "footprint", id: "fp-r3", ref: "R3", x: 5_000_000, y: 6_000_000, side: "top", units: "nm" }] } });
     const second = await adapter.continueWith({ continuation: first.continuation, results: [{ callId: "fx-1", outputText: selection, isError: false }], tools });
     expect(second.toolCalls[0]).toMatchObject({ callId: "fx-2", providerName: "mv" });
+    expect(second.text).toBe(FIXTURE_INTERIM_TEXT); // [B18-D I6] an execution call carries interim text (it never reaches the answer)
     expect(JSON.parse(second.toolCalls[0]!.argumentsText)).toEqual({ moves: [{ footprintId: "fp-r3", x: 7_000_000, y: 6_000_000 }] });
     const third = await adapter.continueWith({ continuation: second.continuation, results: [{ callId: "fx-2", outputText: JSON.stringify({ ok: true, status: "executed" }), isError: false }], tools });
     expect(third).toMatchObject({ toolCalls: [], text: expect.stringMatching(/executed/) });

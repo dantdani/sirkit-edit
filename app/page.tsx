@@ -60,6 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
+import { EXECUTION_ENTRY_ID_PREFIX, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, initialRunView, projectRunView, reduceRunView, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -4367,6 +4368,20 @@ export default function Home() {
     setMessages(build);
   }
 
+  // [B18-D I6] one chat execution entry per grant (display only). Kept by grant id so the preview outcome, the explicit
+  // settlement and recovery update the same entry; persisted through the existing chat log shape (a reloaded entry is a
+  // static record).
+  const executionEntriesRef = useRef<Map<string, ExecutionEntry>>(new Map());
+  const upsertExecutionEntry = useCallback((entry: ExecutionEntry, insertBeforeId?: string) => {
+    executionEntriesRef.current.set(entry.grantId, entry);
+    const message = entryToLogMessage(entry);
+    setMessages((prev) => {
+      if (prev.some((existing) => existing.id === message.id)) return prev.map((existing) => (existing.id === message.id ? message : existing));
+      const at = insertBeforeId ? prev.findIndex((existing) => existing.id === insertBeforeId) : -1;
+      return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
+    });
+  }, []);
+
   async function send(retryText?: string) {
     const text = (retryText ?? input).trim();
     if (!text || loading) return;
@@ -4460,21 +4475,27 @@ export default function Home() {
       // the route emits only the typed event protocol.
       let ndjsonBuffer = "";
       let runFailure: { reason: string; message: string } | null = null;
+      // [B18-D I6] the page half of Rule 2: every event folds into the run view; the answer bubble shows ONLY the final text
+      // (labelled while a change the run started is unresolved); interim text is released as notes when the run ends.
+      let runView = initialRunView();
+      const boardForRefs = chatEditorContext?.board ?? null;
+      const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
         if (!scope.isCurrent()) return;
+        runView = reduceRunView(runView, event);
         switch (event.type) {
           case "text_delta": {
-            const text = typeof event.text === "string" ? event.text : "";
-            if (text) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content + text } : m)));
+            const answer = projectRunView(runView).answer;
+            setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: answer } : m)));
             return;
           }
           case "tool_started": {
-            appendActivityStep(logId, `Running Sirkit tool: ${typeof event.title === "string" ? event.title : "tool"}`);
+            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : "";
+            appendActivityStep(logId, `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`);
             return;
           }
           case "tool_finished": {
-            const title = typeof event.title === "string" ? event.title : "tool";
-            appendActivityStep(logId, event.ok === true ? `${title} — succeeded` : `${title} — refused (${typeof event.status === "string" ? event.status : "error"})`, event.ok === true ? "done" : "error");
+            appendActivityStep(logId, toolLineLabel(event), event.ok === true ? "done" : "error");
             return;
           }
           case "proposal_ready": {
@@ -4546,9 +4567,11 @@ export default function Home() {
             const received = receiveExecutionGrantReadyEvent(event);
             if (received) {
               setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
-              // An explicit grant is RUNNING until the settlement event says otherwise; a preview grant is done arriving (nothing has changed).
-              if (received.decision === "execute_explicit") appendActivityStep(logId, `Executing in the PCB editor — ${received.grant.binding.proposal.preview.after} (one canonical transaction, undoable) — awaiting the editor's settlement`, "running");
-              else appendActivityStep(logId, `Change ready for your confirmation in the PCB editor — ${received.grant.binding.proposal.preview.after}; nothing has changed yet`, "done");
+              // [B18-D I6] ONE execution entry per grant (just before this run's answer) carries the state, the tier, what was
+              // asked and understood, the targets, the operations and why a confirmation is (not) required; the run log points to it.
+              upsertExecutionEntry(entryFromGrant({ grant: received.grant, decision: received.decision, note: received.note }, refOf), assistantId);
+              if (received.decision === "execute_explicit") appendActivityStep(logId, "AI change issued — your editor executes it now; its entry below follows it", "running");
+              else appendActivityStep(logId, "AI change prepared — confirm or cancel it on the card; its entry below follows it", "done");
             }
             return;
           }
@@ -4556,15 +4579,11 @@ export default function Home() {
             // [B18-B] what the run learned from the DURABLE record (display only — never a claim of its own).
             const settled = receiveExecutionSettledEvent(event);
             if (settled) {
+              // [B18-D I6] the durable settlement updates the grant's entry (its state row says what happened); the log points to it.
               const committed = settled.status === "settled" && settled.outcome === "committed";
-              // [B18-C I4] the durable settlement's own DRC result and undo eligibility (display only).
-              const drcText = settled.settlement?.drc ? (settled.settlement.drc.ran ? ` — DRC: ${settled.settlement.drc.violations} error${settled.settlement.drc.violations === 1 ? "" : "s"}` : " — DRC did not run") : "";
-              const text = committed ? `AI change committed by your editor (one canonical transaction${settled.settlement?.undoEligible ? ", undoable" : ""})${drcText}`
-                : settled.status === "settled" && settled.outcome === "poisoned" ? "AI change LANDED but could not be verified — the board may have changed; check the board and the revision history (undo restores it)"
-                : settled.status === "settled" ? "AI change not committed — nothing changed"
-                : settled.status === "retired" ? `AI change not made — the grant was retired (${settled.reason ?? "unknown"})`
-                : "AI change unsettled — the editor did not report the outcome in time; check the board and the revision history";
-              appendActivityStep(logId, text, committed ? "done" : "error");
+              const entry = executionEntriesRef.current.get(settled.grantId);
+              if (entry) upsertExecutionEntry(entrySettled(entry, settled));
+              appendActivityStep(logId, committed ? "AI change settled — see its entry" : "AI change not completed — see its entry", committed ? "done" : "error");
             }
             return;
           }
@@ -4603,6 +4622,12 @@ export default function Home() {
             applyAgentEvent(event);
           } catch { /* malformed line: skipped, never rendered raw */ }
         }
+      }
+      // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
+      if (scope.isCurrent()) {
+        const projected = projectRunView(runView);
+        for (const note of projected.notes) appendActivityStep(logId, note, "done");
+        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
       }
       if (runFailure !== null && scope.isCurrent()) {
         const failure = runFailure as { reason: string; message: string };
@@ -6307,7 +6332,18 @@ export default function Home() {
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
                     executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
-                    onExecutionGrantSettled={(grantId) => setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current))}
+                    onExecutionGrantSettled={(grantId, outcome, detail) => {
+                      setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current));
+                      // [B18-D I6] the editor's outcome updates the grant's entry (display only).
+                      const entry = executionEntriesRef.current.get(grantId);
+                      if (!entry) return;
+                      if (detail) upsertExecutionEntry(entryEditorOutcome(entry, detail));
+                      else if (outcome === "cancelled") upsertExecutionEntry(entryCancelled(entry));
+                      else if (outcome === "retired") upsertExecutionEntry(entrySuperseded(entry));
+                      else if (outcome === "failed") upsertExecutionEntry(entryEditorOutcome(entry, { ok: false, code: "session-superseded", changed: false }));
+                    }}
+                    onExecutionGrantProgress={(grantId) => { const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryExecuting(entry)); }}
+                    onExecutionRecovery={(results) => { for (const result of results) { const entry = executionEntriesRef.current.get(result.grantId); if (entry && result.action !== "left-in-flight") upsertExecutionEntry(entryRecovery(entry, result.action)); } }}
                   />
                 </div>
               )}
@@ -8210,8 +8246,9 @@ function MessageBubble({ message }: { message: Message }) {
   }
   if (message.role === "log") {
     const StatusIcon = message.status === "running" ? Loader2 : message.status === "error" ? X : Check;
+    const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; no controls)
     return (
-      <div className="flex justify-start w-full">
+      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />

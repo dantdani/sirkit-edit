@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "603fe9f",
+  "lastGreenSha": "0984bc8",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I6 the chat execution entry and the page half of Rule 2 (the run view reducer in the page: interim text out of the answer, the label, one entry per grant fed by the grant, the editor's progress/outcome/recovery and the settlement; persisted through the existing log shape), then I7 history hold, I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
-  "updatedAt": "2026-09-11T06:55:57-04:00"
+  "nextAction": "B18-D I7 the history hold (P2): a probe test first (an Undo during an in-flight granted commit), then CanonicalEditorSession.holdHistorySteps taken by the ritual, the timeline's STORE_BUSY, the toolbar and Ctrl+Z notices; then I8 undo in chat, I9 Stop, optional I10/I11, I12 closeout; then B18-E and B18 validation.",
+  "updatedAt": "2026-09-11T07:03:50-04:00"
 }

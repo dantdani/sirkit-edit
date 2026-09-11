@@ -203,3 +203,66 @@ export const entryCancelled = (entry: ExecutionEntry): ExecutionEntry => (TERMIN
 export const entrySuperseded = (entry: ExecutionEntry): ExecutionEntry => (TERMINAL.has(entry.state) ? entry : { ...entry, state: "superseded", failure: { headline: "Replaced — a newer change or a board change superseded it. Nothing was changed.", next: "Ask again.", code: "superseded" } });
 export const entryRecovery = (entry: ExecutionEntry, action: unknown): ExecutionEntry => ({ ...entry, recovery: recoverySentence(action) });
 export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(entry.state);
+
+// The execution entry as a chat log message. It persists through the EXISTING stored-chat log shape (no schema
+// change): id `xlog-<grantId>`, a title, a status and rows of { id, text, status }. The entry's state rides in the
+// first row's id (`xlog-<grantId>:state:<state>`) so a reloaded record still renders its state (a static record: no
+// live Undo). The pinned phrases appear in the entry exactly once each:
+//  - awaiting confirmation: "Change ready for your confirmation in the PCB editor — <after>; nothing has changed yet"
+//  - executing:             "Executing in the PCB editor — <after> (one canonical transaction, undoable) — awaiting the editor's settlement"
+//  - committed:             "AI change committed by your editor (one canonical transaction[, undoable])[ — DRC: N errors]"
+
+export const EXECUTION_ENTRY_ID_PREFIX = "xlog-";
+const STATE_MARK = ":state:";
+
+export interface EntryLogRow { id: string; text: string; status: "running" | "done" | "error" }
+export interface EntryLogMessage { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: EntryLogRow[] }
+
+const RUNNING_STATES: ReadonlySet<ExecutionEntryState> = new Set(["awaiting_confirmation", "issued", "executing", "outcome_unknown"]);
+const ERROR_STATES: ReadonlySet<ExecutionEntryState> = new Set(["not_made", "landed_unverified", "cancelled", "superseded"]);
+
+function stateSentence(entry: ExecutionEntry): string {
+  const after = entry.understood.replace(/^[^—]*— /, "");
+  switch (entry.state) {
+    case "awaiting_confirmation": return `Change ready for your confirmation in the PCB editor — ${after}; nothing has changed yet`;
+    case "issued": return `Issued — your editor executes it now (one canonical transaction, undoable)`;
+    case "executing": return `Executing in the PCB editor — ${after} (one canonical transaction, undoable) — awaiting the editor's settlement`;
+    case "committed": return `AI change committed by your editor (one canonical transaction${entry.undoEligible ? ", undoable" : ""})${entry.checks ? ` — ${entry.checks.replace(/^Checks: /, "")}` : ""}`;
+    case "landed_unverified": return entry.failure?.headline ?? "The change LANDED but could not be verified — the board MAY have changed.";
+    case "outcome_unknown": return entry.failure?.headline ?? "Outcome not yet known — the editor did not report in time.";
+    default: return entry.failure?.headline ?? "Not made. Nothing was changed.";
+  }
+}
+
+/** The entry as a persistable chat log message (rebuilt on every transition). */
+export function entryToLogMessage(entry: ExecutionEntry): EntryLogMessage {
+  const id = `${EXECUTION_ENTRY_ID_PREFIX}${entry.grantId}`;
+  const status = RUNNING_STATES.has(entry.state) ? "running" : ERROR_STATES.has(entry.state) ? "error" : "done";
+  const row = (key: string, text: string, rowStatus: EntryLogRow["status"] = "done"): EntryLogRow => ({ id: `${id}:${key}`, text, status: rowStatus });
+  const rows: EntryLogRow[] = [
+    { id: `${id}${STATE_MARK}${entry.state}`, text: stateSentence(entry), status },
+    row("tier", entry.tier),
+    row("asked", `You asked (as recorded): “${entry.asked}”`),
+    row("understood", `Sirkit understood: ${entry.understood}`),
+    row("targets", `Targets: ${entry.targets.join(", ")} · ${entry.nets}`),
+    ...entry.operations.map((line, index) => row(`op${index}`, `Operation ${index + 1}: ${line}`)),
+    row("confirmation", `Confirmation: ${entry.confirmation}`),
+  ];
+  if (entry.transaction) {
+    const t = entry.transaction;
+    rows.push(row("transaction", `Transaction ${t.id} · revision ${(t.revisionBefore ?? "?").slice(0, 16)}… → ${(t.revisionAfter ?? "?").slice(0, 16)}… · history #${t.headSequenceAfter ?? "?"} · server record: ${entry.serverRecord ?? "not yet recorded"}`));
+  }
+  if (entry.failure && entry.state !== "committed") rows.push(row("next", `Next: ${entry.failure.next}`, "error"));
+  if (entry.recovery) rows.push(row("recovery", entry.recovery));
+  if (entry.state === "committed") rows.push(row("undo", entry.undoEligible ? "Undo: the editor's Undo (one step), or say “Undo that.”" : "Undo: no longer the latest change — use the revision history."));
+  return { id, role: "log", title: `AI change — ${entry.understood}`.slice(0, 160), status, entries: rows };
+}
+
+/** The entry state of a (possibly reloaded) log message, or null when it is not an execution entry. */
+export function entryStateOfLogMessage(message: { id: string; entries: ReadonlyArray<{ id: string }> }): ExecutionEntryState | null {
+  if (!message.id.startsWith(EXECUTION_ENTRY_ID_PREFIX)) return null;
+  const first = message.entries[0]?.id ?? "";
+  const index = first.indexOf(STATE_MARK);
+  const state = index >= 0 ? first.slice(index + STATE_MARK.length) : "";
+  return (["awaiting_confirmation", "issued", "executing", "committed", "not_made", "landed_unverified", "outcome_unknown", "cancelled", "superseded"] as const).find((candidate) => candidate === state) ?? null;
+}
