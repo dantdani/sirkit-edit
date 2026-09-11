@@ -23,6 +23,8 @@
 import { pcbBoardInstanceId } from "../pcb/board-identity";
 import { pcbRevisionId } from "../pcb/revision";
 import { resolvePcbValidationPolicy } from "../pcb/proposal/sealed-pcb-edit-proposal";
+import { runDrc } from "../pcb/drc/run-drc";
+import type { DrcPresetId } from "../pcb/drc/types";
 import type { PcbHistory } from "../pcb/history";
 import type { PcbBoard } from "../pcb/types";
 import type { ExecutionGrantTransport, TenderBody } from "../project/execution-grant-client";
@@ -130,7 +132,35 @@ async function settleOnServer(input: { transport: ExecutionGrantTransport; scope
 type TenderSettlement = Parameters<ExecutionGrantTransport["settle"]>[1]["settlement"];
 const NOT_COMMITTED = (detail: string): TenderSettlement => ({ outcome: "not-committed", transactionId: null, revisionBefore: null, revisionAfter: null, headSequenceAfter: null, changeSetDigest: null, receiptDigest: detail.slice(0, 60) === "" ? null : null, validations: null, undoEligible: false });
 const POISONED: TenderSettlement = { outcome: "poisoned", transactionId: null, revisionBefore: null, revisionAfter: null, headSequenceAfter: null, changeSetDigest: null, receiptDigest: null, validations: null, undoEligible: false };
-const committedSettlement = (receipt: ExecutionReceipt, changeSetDigest: string | null): TenderSettlement => ({ outcome: "committed", transactionId: receipt.transactionId, revisionBefore: receipt.pcbRevisionBefore, revisionAfter: receipt.pcbRevisionAfter, headSequenceAfter: receipt.headSequenceAfter, changeSetDigest, receiptDigest: receipt.receiptId, validations: null, undoEligible: true });
+/** [B18-C I4] `validations`: the DRC the ritual ran on the committed board (null when none ran for THIS commit — a recovery
+ *  settlement); `undoEligible`: DERIVED from the live history (the latest applied entry is this transaction). */
+const committedSettlement = (receipt: ExecutionReceipt, changeSetDigest: string | null, validations: TenderSettlement["validations"], undoEligible: boolean): TenderSettlement => ({ outcome: "committed", transactionId: receipt.transactionId, revisionBefore: receipt.pcbRevisionBefore, revisionAfter: receipt.pcbRevisionAfter, headSequenceAfter: receipt.headSequenceAfter, changeSetDigest, receiptDigest: receipt.receiptId, validations, undoEligible });
+
+/**
+ * [B18-C I4] The settlement's validations: the SAME DRC engine and preset rules the editor's own DRC uses (`runDrc` under the
+ * grant's validation policy), run synchronously on the committed board. `violations` counts ERRORS (the fab gate's measure;
+ * warnings are not counted). A preset that no longer resolves, an aborted run or an engine fault reports `ran: false` — never
+ * a fabricated count. Zones whose derived fill is not current (the kernel re-marks them on a move) are evaluated once the
+ * editor refills them.
+ */
+export function settlementValidations(board: PcbBoard, presetId: string): { drc: { ran: boolean; violations: number } } {
+  const resolved = resolvePcbValidationPolicy(presetId);
+  if (!resolved) return { drc: { ran: false, violations: 0 } };
+  try {
+    const result = runDrc(board, resolved.rules, { presetId: presetId as DrcPresetId }); // the resolver just proved it names a real preset
+    if (result.execution !== "completed") return { drc: { ran: false, violations: 0 } };
+    return { drc: { ran: true, violations: result.violations.filter((violation) => violation.severity === "error").length } };
+  } catch {
+    return { drc: { ran: false, violations: 0 } };
+  }
+}
+
+/** [B18-C I4] Undo eligibility DERIVED from the live history: undo is available and the latest applied entry is this transaction. */
+export function undoEligibleFor(history: PcbHistory, transactionId: string): boolean {
+  if (!history.canUndo) return false;
+  const applied = history.entries.filter((entry) => entry.state === "applied");
+  return applied.at(-1)?.metadata.transactionId === transactionId;
+}
 
 /** Adopt a landed commit proven by canonical evidence: committed → adopted → receipt; returns the receipt. */
 async function adoptProvenCommit(input: { journal: AgentExecutionJournal; entry: AgentExecutionJournalEntry; evidence: { transactionId: string; resultHeadSequence: number | null; resultCanonicalStateDigest: string | null; provenanceCandidateId: string | null }; now: number }): Promise<{ ok: true; receipt: ExecutionReceipt } | { ok: false; kind: "mismatch" | "journal"; detail: string }> {
@@ -210,7 +240,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       // The journal, not memory, says whether the server holds the report; a finalized-but-unsettled entry is re-sent now.
       const lookup = await input.journal.lookup(identityKey);
       const finalized = lookup.kind === "entry" && lookup.entry.state === "receipt-finalized" ? lookup.entry : null;
-      const settled = finalized ? await settleOnServer({ transport: input.transport, scope, entry: finalized, settlement: committedSettlement(claim.receipt, null), signal: input.signal, journal: input.journal }) : true;
+      const settled = finalized ? await settleOnServer({ transport: input.transport, scope, entry: finalized, settlement: committedSettlement(claim.receipt, null, null, undoEligibleFor(input.history, claim.receipt.transactionId)), signal: input.signal, journal: input.journal }) : true;
       return { ok: true, status: "already-applied", receipt: claim.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
     }
     if (claim.code === "already-in-flight") return refuse("already-in-flight", "This grant is already being executed. Nothing further was changed.");
@@ -250,7 +280,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
             return refuse("recovery-required", `${adopted.detail}; recovery is refused. The board HAS changed — inspect the canonical history.`, { changed: true });
           }
           registry.consume(identityKey, adopted.receipt);
-          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal, journal: input.journal });
+          const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligibleFor(input.history, adopted.receipt.transactionId)), signal: input.signal, journal: input.journal });
           return { ok: true, status: "already-applied", receipt: adopted.receipt, autosaveSettled: true, settled: settled ? "settled" : "settle-failed" };
         }
         if (entry.state === "grant-consumed") {
@@ -448,7 +478,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (input.settleAutosave) { try { autosaveSettled = input.settleAutosave() === true; } catch { autosaveSettled = false; } }
 
     // 18. SETTLE on the server from the receipt (best-effort, one retry; the sweep re-settles from the finalized entry).
-    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null), signal: input.signal, journal: input.journal });
+    const settled = await settleOnServer({ transport: input.transport, scope, entry, settlement: committedSettlement(receipt, commit.changeSetDigest ?? null, settlementValidations(afterBoard, base.validationPolicy.presetId), undoEligibleFor(input.history, transactionId)), signal: input.signal, journal: input.journal });
     return { ok: true, status: "committed", receipt, autosaveSettled, settled: settled ? "settled" : "settle-failed" };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
@@ -501,7 +531,7 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
     if (evidence.kind === "unavailable" || evidence.kind === "corrupt") { push("unavailable", `canonical evidence ${evidence.kind}`); continue; }
     if (entry.state === "receipt-finalized" && entry.receipt) {
       // The commit is finalized locally; only the server's report is missing — re-send it from the receipt (idempotent on the server).
-      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null), signal: input.signal, journal: input.journal });
+      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(entry.receipt, null, null, undoEligibleFor(input.history, entry.receipt.transactionId)), signal: input.signal, journal: input.journal });
       push("settled-from-receipt", settled ? "settled committed from the finalized receipt" : "settle failed; retry later"); continue;
     }
     if (entry.state === "prepared") {
@@ -528,7 +558,7 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
         await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
         push("refused-poisoned", adopted.detail); continue;
       }
-      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null), signal: input.signal, journal: input.journal });
+      const settled = await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: committedSettlement(adopted.receipt, null, null, undoEligibleFor(input.history, adopted.receipt.transactionId)), signal: input.signal, journal: input.journal });
       push(entry.state === "grant-consumed" ? "adopted-and-settled" : "settled-from-receipt", settled ? "settled committed" : "settle failed; retry later"); continue;
     }
     // grant-consumed / committed / adopted with NO canonical evidence.

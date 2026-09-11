@@ -131,7 +131,7 @@ describe("B18-B — the loop and a server-minted execution grant", () => {
     expect(JSON.stringify(events)).not.toContain("nonce");
     expect(minter.waits).toEqual([{ grantId: grant.grantId, timeoutMs: 5 }]);
     expect(minter.retired).toEqual([]);
-    expect(resultsOf(adapter)[0]).toMatchObject({ ok: true, status: "executed", grantId: grant.grantId, transactionId: "tx:7", revisionAfter: "pcb2-def", undoEligible: true, drc: { ran: true, violations: 0 } });
+    expect(resultsOf(adapter)[0]).toMatchObject({ ok: true, status: "executed", grantId: grant.grantId, transactionId: "tx:7", revisionAfter: "pcb2-def", revisionBefore: "pcb2-abc", headSequenceAfter: 5, validations: { drc: { ran: true, violations: 0 } }, undo: { eligible: true } }); // [B18-C I4] the result contract
     const invocation = toolTrace(trace)[0]!;
     expect(invocation).toMatchObject({ outcomeClass: "execution_grant", status: "execution_grant_issued", proposalId: grant.grantId, proposalDigest: grant.binding.proposal.operationsDigest });
     expect(JSON.stringify(trace)).not.toContain("move_footprint"); // digests and identities only

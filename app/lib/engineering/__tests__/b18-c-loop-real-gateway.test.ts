@@ -208,7 +208,7 @@ describe("B18-C I3 — scenario 1 end to end: loop → real gateway → real min
     expect(outcome).toMatchObject({ ok: true, status: "committed", settled: "settled" });
     if (!outcome.ok) throw new Error("unreachable");
     const answer = JSON.parse(adapter.continueInputs[0]![0]!.outputText) as Record<string, unknown>;
-    expect(answer).toMatchObject({ ok: true, status: "executed", grantId: grants[0]!.grantId, transactionId: outcome.receipt.transactionId, revisionAfter: outcome.receipt.pcbRevisionAfter, undoEligible: true });
+    expect(answer).toMatchObject({ ok: true, status: "executed", grantId: grants[0]!.grantId, transactionId: outcome.receipt.transactionId, revisionAfter: outcome.receipt.pcbRevisionAfter, undo: { eligible: true } }); // [B18-C I4] the result contract moved undo eligibility under `undo`
     expect(headOf(c).headSequence).toBe(before + 1);
     expect(r3Of(c).at.x).toBe(x0 + mmToNm(2));
     expect(c.history.entries.length).toBe(entries0 + 1);

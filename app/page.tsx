@@ -4565,7 +4565,9 @@ export default function Home() {
             const settled = receiveExecutionSettledEvent(event);
             if (settled) {
               const committed = settled.status === "settled" && settled.outcome === "committed";
-              const text = committed ? "AI change committed by your editor (one canonical transaction, undoable)"
+              // [B18-C I4] the durable settlement's own DRC result and undo eligibility (display only).
+              const drcText = settled.settlement?.drc ? (settled.settlement.drc.ran ? ` — DRC: ${settled.settlement.drc.violations} error${settled.settlement.drc.violations === 1 ? "" : "s"}` : " — DRC did not run") : "";
+              const text = committed ? `AI change committed by your editor (one canonical transaction${settled.settlement?.undoEligible ? ", undoable" : ""})${drcText}`
                 : settled.status === "settled" && settled.outcome === "poisoned" ? "AI change LANDED but could not be verified — the board may have changed; check the board and the revision history (undo restores it)"
                 : settled.status === "settled" ? "AI change not committed — nothing changed"
                 : settled.status === "retired" ? `AI change not made — the grant was retired (${settled.reason ?? "unknown"})`

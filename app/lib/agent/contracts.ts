@@ -298,6 +298,16 @@ export interface AgentExecutionSettlement {
   grant: PublicExecutionGrant | null;
 }
 
+/** [B18-C I4] what the DURABLE settlement says about an execution — display data for the page (never a claim of its own). */
+export interface AgentExecutionSettledSummary {
+  transactionId: string | null;
+  revisionBefore: string | null;
+  revisionAfter: string | null;
+  headSequenceAfter: number | null;
+  validations: { drc: { ran: boolean; violations: number } } | null;
+  undoEligible: boolean;
+}
+
 /** The ONLY authority the agent layer ever holds over execution: a closure
  *  the `/api/chat` composition root builds from the trusted request context
  *  (app/lib/execution-grant/mint.ts). It never receives an instruction, a
@@ -384,7 +394,7 @@ export type AgentRunEvent =
    *  DURABLE record before answering the model (never from the browser
    *  directly): settled with an outcome, retired with a reason, still in
    *  flight (consumed, unsettled) or unsettled (never tendered in time). */
-  | { type: "execution_settled"; runId: string; toolId: string; grantId: string; status: AgentExecutionSettlement["status"]; outcome: SettlementOutcome | null; reason: RetirementReason | null }
+  | { type: "execution_settled"; runId: string; toolId: string; grantId: string; status: AgentExecutionSettlement["status"]; outcome: SettlementOutcome | null; reason: RetirementReason | null; settlement: AgentExecutionSettledSummary | null }
   | { type: "warning"; runId: string; message: string }
   | { type: "run_failed"; runId: string; reason: string; message: string }
   | {

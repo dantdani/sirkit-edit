@@ -17,6 +17,7 @@
 
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
+import type { ExecutionDecisionMode, PublicExecutionGrant } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
 import type { AgentTraceRecorder } from "./trace-recorder";
@@ -96,6 +97,21 @@ export function availableResourceKinds(context: AgentRunContext): Set<ReadResour
     }
   }
   return kinds;
+}
+
+/** [B18-C I4] What the model is told about a grant's intent — read from the server-bound record, never the model's own claim. */
+function describeGrant(grant: PublicExecutionGrant, decision: ExecutionDecisionMode) {
+  const b = grant.binding;
+  return {
+    family: b.operation.family,
+    tier: b.operation.tier,
+    decision,
+    understood: { excerpt: b.instruction.excerpt, coverage: b.instruction.explicit.coverage },
+    targets: { objectIds: [...b.targets.objectIds], netIds: [...b.targets.netIds], kinds: [...b.targets.kinds] },
+    before: b.proposal.preview.before,
+    after: b.proposal.preview.after,
+    compileWarnings: [...b.proposal.preview.warnings],
+  };
 }
 
 /** [B17-F] the layout proposals need ONLY a verified canonical board (no schematic head mark). */
@@ -492,7 +508,9 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
                 ok: true,
                 status: "execution_preview_issued",
                 grantId: grant.grantId,
+                ...describeGrant(grant, outcome.decision),
                 expiresAt: grant.binding.expiresAt,
+                confirmationRequired: true,
                 preview: grant.binding.proposal.preview,
                 ...(outcome.note ? { note: outcome.note } : {}),
                 guidance: "The exact change is shown to the user for confirmation — NOTHING has changed. Tell the user to confirm or cancel it in the editor; never claim the edit happened.",
@@ -515,7 +533,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             }
             const settlement = settled.grant?.state.settlement ?? null;
             const retirement = settled.grant?.state.retirement ?? null;
-            emitOnce({ type: "execution_settled", runId: request.runId, toolId: resolved.toolId, grantId: grant.grantId, status: settled.status, outcome: settlement?.outcome ?? null, reason: retirement?.reason ?? null });
+            emitOnce({ type: "execution_settled", runId: request.runId, toolId: resolved.toolId, grantId: grant.grantId, status: settled.status, outcome: settlement?.outcome ?? null, reason: retirement?.reason ?? null, settlement: settlement ? { transactionId: settlement.transactionId, revisionBefore: settlement.revisionBefore, revisionAfter: settlement.revisionAfter, headSequenceAfter: settlement.headSequenceAfter, validations: settlement.validations, undoEligible: settlement.undoEligible } : null });
             // [B18-C / R18-7] the trace mirrors what the run learned from the DURABLE record, on the SAME call id.
             recordTrace("execution_grant", settled.status === "settled" && settlement ? `execution_settled:${settlement.outcome}` : `execution_settled:${settled.status}`, {
               verification: settled.status === "retired" ? `retired ${retirement?.reason ?? "unknown"}` : settlement?.transactionId ? `transaction ${settlement.transactionId}` : null,
@@ -528,21 +546,35 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
                   ok: true,
                   status: "executed",
                   grantId: grant.grantId,
+                  ...describeGrant(grant, outcome.decision),
                   transactionId: settlement.transactionId,
+                  revisionBefore: settlement.revisionBefore,
                   revisionAfter: settlement.revisionAfter,
-                  undoEligible: settlement.undoEligible,
-                  drc: settlement.validations?.drc ?? null,
-                  note: "The user's editor committed exactly this change through its canonical session (one transaction, one undo entry). Say what changed and that it can be undone; never call the board safe or manufacturing-ready.",
+                  headSequenceAfter: settlement.headSequenceAfter,
+                  changeSetDigest: settlement.changeSetDigest,
+                  validations: {
+                    drc: settlement.validations?.drc ?? { ran: false, violations: 0 },
+                    attestation: settlement.validations?.drc.ran
+                      ? "browser-attested: the user's editor ran its design rule check (the project's active preset) on the committed board; violations counts errors; copper zones are re-evaluated once the editor refills them; edit-time compile warnings are listed separately"
+                      : "no design rule check was reported for this commit; do not claim the board passes DRC",
+                  },
+                  undo: {
+                    eligible: settlement.undoEligible,
+                    how: settlement.undoEligible
+                      ? "The user can undo it with the editor's Undo (one step) while it is still the latest change."
+                      : "It is no longer the latest change (or undo is unavailable); the user reverts it from the revision history.",
+                  },
+                  note: "The user's editor committed exactly this change through its canonical session (one transaction, one undo entry). Say what changed, the DRC result and how to undo it; never call the board safe or manufacturing-ready.",
                 }),
                 isError: false,
               });
             } else if (settled.status === "settled" && settlement?.outcome === "poisoned") {
               // A transaction LANDED but could not be verified against the grant: the board may have changed. Never "nothing changed".
-              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_poisoned", grantId: grant.grantId, outcome: "poisoned", note: "A transaction LANDED in the user's editor under this grant but could NOT be verified against it; the board may have changed and this grant is permanently refused. Do NOT say nothing changed: tell the user to inspect the board and the revision history, undo the last AI transaction if it is wrong, and repeat the request if they still want it." }), isError: true });
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_poisoned", grantId: grant.grantId, intended: grant.binding.proposal.preview.after, outcome: "poisoned", note: "A transaction LANDED in the user's editor under this grant but could NOT be verified against it; the board may have changed and this grant is permanently refused. Do NOT say nothing changed: tell the user to inspect the board and the revision history, undo the last AI transaction if it is wrong, and repeat the request if they still want it." }), isError: true });
             } else if (settled.status === "settled") {
-              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_not_committed", grantId: grant.grantId, outcome: settlement?.outcome ?? null, note: "The user's editor did NOT commit the change (it refused or the commit failed). Nothing changed; say so." }), isError: true });
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_not_committed", grantId: grant.grantId, intended: grant.binding.proposal.preview.after, outcome: settlement?.outcome ?? null, note: "The user's editor did NOT commit the change (it refused or the commit failed). Nothing changed; say so." }), isError: true });
             } else if (settled.status === "retired") {
-              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_retired", grantId: grant.grantId, reason: retirement?.reason ?? null, note: "The grant was retired before the change was committed. Nothing changed; say so and, if the user still wants it, ask them to repeat the request." }), isError: true });
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_retired", grantId: grant.grantId, intended: grant.binding.proposal.preview.after, reason: retirement?.reason ?? null, note: "The grant was retired before the change was committed. Nothing changed; say so and, if the user still wants it, ask them to repeat the request." }), isError: true });
             } else {
               // Still issued (never tendered) or consumed but unsettled: the run
               // does not wait longer. An untendered grant is retired so it can
@@ -551,7 +583,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
               if (settled.status === "unsettled" && deps.executionGrants) {
                 try { await deps.executionGrants.retireIssued("run_unsettled", true); } catch { /* the grant expires lazily */ }
               }
-              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_unsettled", grantId: grant.grantId, note: "The user's editor did not report the outcome in time. Do NOT claim the change happened; tell the user to check the board and the revision history." }), isError: true });
+              results.push({ callId: call.callId, outputText: resultText({ ok: false, status: "execution_unsettled", grantId: grant.grantId, intended: grant.binding.proposal.preview.after, note: "The user's editor did not report the outcome in time. Do NOT claim the change happened; tell the user to check the board and the revision history." }), isError: true });
             }
           }
         } else if (outcome.kind === "pcb-proposal" && outcome.ok) {

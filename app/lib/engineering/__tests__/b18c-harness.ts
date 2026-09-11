@@ -84,8 +84,9 @@ export interface Core {
 export type Composed = Core & { transport: ExecutionGrantTransport };
 
 /** The transport double: the REAL consume/settle services over the same store, answering as the routes do. */
-export function transportOver(c: Core): ExecutionGrantTransport {
+export function transportOver(c: Core, options: { failSettle?: number } = {}): ExecutionGrantTransport {
   const autonomy = async () => c.autonomy;
+  let settleFailures = options.failSettle ?? 0;
   return {
     async get(scope, grantId) {
       const grant = await loadOwnGrant(c.store, scope, PRINCIPAL.principalId, grantId, c.now());
@@ -103,6 +104,7 @@ export function transportOver(c: Core): ExecutionGrantTransport {
       return { ok: false, status: outcome.status === "forged" ? 404 : 409, code: `EXECUTION_GRANT_${outcome.status.toUpperCase()}`, message: outcome.message, reason: outcome.reason, grant: outcome.grant };
     },
     async settle(scope, body) {
+      if (settleFailures > 0) { settleFailures -= 1; return { ok: false, status: null, code: "unreachable", message: "The execution-grant endpoint could not be reached.", reason: null, grant: null }; }
       const outcome = await settleExecutionGrant({ store: c.store, scope, principalId: PRINCIPAL.principalId, now: c.now(), request: body });
       if (outcome.ok) return { ok: true, status: 200, body: { grant: outcome.grant, idempotent: outcome.idempotent, late: outcome.late } };
       return { ok: false, status: outcome.status === "forged" ? 404 : 409, code: `EXECUTION_GRANT_${outcome.status.toUpperCase()}`, message: outcome.message, reason: null, grant: outcome.grant };
@@ -110,7 +112,7 @@ export function transportOver(c: Core): ExecutionGrantTransport {
   };
 }
 
-export async function composition(mode: AgentAutonomySetting["mode"], options: BoardOptions = {}): Promise<Composed> {
+export async function composition(mode: AgentAutonomySetting["mode"], options: BoardOptions & { failSettle?: number } = {}): Promise<Composed> {
   const raw = createHistory(fixtureBoard(options));
   const bound = bindCanonicalEditorSession(raw, SCOPE, { durableStore: new InMemoryAtomicProjectStore() });
   const history = bound.history;
@@ -130,7 +132,7 @@ export async function composition(mode: AgentAutonomySetting["mode"], options: B
     store: new ExecutionGrantStore(new InMemoryDurableWorkflowRepository()), interlock: new ProjectCommitInterlock(), registry: new GrantedExecutionRegistry(),
     journal: new AgentExecutionJournal(new InMemoryAgentExecutionJournalStore(), { ...SCOPE, boardInstanceId: pcbBoardInstanceId(PROJECT), editor: "pcb" }),
   };
-  return { ...core, transport: transportOver(core) };
+  return { ...core, transport: transportOver(core, { failSettle: options.failSettle }) };
 }
 
 export const headOf = (c: Composed) => c.session.headMetadataFor(c.history.committedPresent)!;
@@ -175,7 +177,7 @@ export const call = (callId: string, providerName: string, args: string): AgentS
 
 let runSeq = 0;
 /** One chat run: the page auto-runs the ritual for an execute_explicit grant exactly as PcbEditor does. */
-export async function runScenario(c: Composed, script: (moveTool: string) => Array<() => Partial<AgentStep>>, options: { message?: string } = {}) {
+export async function runScenario(c: Composed, script: (moveTool: string) => Array<() => Partial<AgentStep>>, options: { message?: string; settlementTimeoutMs?: number } = {}) {
   const runId = `run-${(runSeq += 1)}`;
   const message = options.message ?? MESSAGE;
   const registry = sirkitToolRegistry();
@@ -191,7 +193,7 @@ export async function runScenario(c: Composed, script: (moveTool: string) => Arr
   const grants: PublicExecutionGrant[] = [];
   const adapter = new FakeAdapter(script(move.providerName));
   const result = await runAgentLoop(
-    { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: 10_000 } },
+    { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: options.settlementTimeoutMs ?? 10_000 } },
     {
       adapter, registry, context, system: AGENT_SYSTEM_PROMPT, executionGrants: minter,
       gateway: createAgentToolGateway(registry, { executionGrants: minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION }),

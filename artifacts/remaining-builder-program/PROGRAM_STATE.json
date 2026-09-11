@@ -6,13 +6,13 @@
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "69ebb7b",
+  "lastGreenSha": "e13c87c",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-C I4: the model-facing result contract \u2014 the ritual's settlement carries a synchronous DRC run on the committed board (the editor's engine and preset) and undo eligibility DERIVED from the live history; the loop's executed / preview / refusal payloads carry understood, targets, before/after, compile warnings, revisions, validations and how to undo; the execution_settled event and the page receiver print them. Then I5 rotate/flip + arrange, I6 silkscreen text, I7 dimension (owner-gated), I8 undo/redo, I9 Tier-2 truth + hardening, I10 browser harness + closeout; each committed, pushed and CI-watched.",
-  "updatedAt": "2026-09-11T06:00:00-04:00"
+  "nextAction": "B18-C I5: rotate/flip + arrange \u2014 the plan union and per-family builders (set-footprint-props with absolute rotation/side filled from the verified board; align / distribute / snap-to-grid with footprint refs), planFromOperations as the one inverse (the ritual's private planOf deleted), null-tolerant strict parsers, grammar 1.1.0 (rotate with a required direction word pinned against the mutator in both directions; flip to top/bottom), catalog 1.1.0 for both descriptors, the reviewed rows, both families removed from the never-exposed pattern, artifacts regenerated; then I6 silkscreen text, I7 dimension (owner-gated), I8 undo/redo, I9 Tier-2 truth + hardening, I10 browser harness + closeout.",
+  "updatedAt": "2026-09-11T07:00:00-04:00"
 }
