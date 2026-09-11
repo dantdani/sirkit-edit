@@ -42,6 +42,8 @@ const grantLog: Array<{ url: string; status: number; request: unknown; response:
 const consoleErrors: string[] = [];
 /** Every outcome notice the editor showed, in order, across reloads (reported by the page through a binding). */
 const noticeLog: string[] = [];
+/** [B18-D S5] every appearance of the scripted agent's interim text, with the chat's execution-entry states at that moment. */
+const interimLog: Array<{ text: string; entries: string[] }> = [];
 
 test.beforeAll(async ({ browser, baseURL }) => {
   origin = baseURL!;
@@ -77,6 +79,34 @@ test.beforeAll(async ({ browser, baseURL }) => {
         for (const mutation of mutations) {
           if (mutation.type === "characterData") note(mutation.target.parentElement?.textContent);
           for (const node of Array.from(mutation.addedNodes)) note(node.textContent);
+        }
+      }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
+    };
+    if (document.documentElement) observe(); else document.addEventListener("DOMContentLoaded", observe, { once: true });
+  });
+  // [B18-D S5] record every appearance of the scripted agent's interim text on every document the page loads, with the
+  // execution entries' states at that moment (Rule 2 across all flows is asserted by the last test).
+  await context.exposeBinding("__sirkitInterim", (_source, record: { text: string; entries: string[] }) => { interimLog.push(record); });
+  await context.addInitScript(() => {
+    const host = window as unknown as { __sirkitInterim?: (record: { text: string; entries: string[] }) => void };
+    const seen = new WeakSet<Element>();
+    const check = (node: Node): void => {
+      const root = node.nodeType === 1 ? (node as Element) : node.parentElement;
+      if (!root) return;
+      for (const element of [root, ...Array.from(root.querySelectorAll("*"))]) {
+        if (element.childElementCount !== 0 || seen.has(element)) continue;
+        const text = element.textContent ?? "";
+        if (!text.includes("(fixture interim)")) continue;
+        seen.add(element);
+        const entries = Array.from(document.querySelectorAll('[data-testid="chat-execution-entry"]')).map((entry) => entry.getAttribute("data-state") ?? "");
+        void host.__sirkitInterim?.({ text: text.slice(0, 300), entries });
+      }
+    };
+    const observe = (): void => {
+      new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type === "characterData") check(mutation.target);
+          for (const node of Array.from(mutation.addedNodes)) check(node);
         }
       }).observe(document.documentElement, { subtree: true, childList: true, characterData: true });
     };
@@ -167,6 +197,8 @@ test("B18-C preview: under proposal_only an AI move is shown on the confirmation
   await expect(card).toContainText("Nothing has been changed yet.");
   await expect(page.getByTestId("granted-execution-preview")).toContainText("R3 at (");
   await expect(page.getByText(/Change ready for your confirmation in the PCB editor — R3 at/)).toBeVisible();
+  // [B18-D S5] the preview run's answer opens with its label paragraph: it was written before any change was made.
+  await expect(page.getByText("Written before any change was made — the status above is authoritative.").last()).toBeVisible();
   await expect(page.getByTitle(/^Undo: AI: /)).toHaveCount(0); // the card is a preview: no AI entry exists yet
   await page.screenshot({ path: `${EVIDENCE}/granted-preview-card.png`, fullPage: false });
 
@@ -177,6 +209,9 @@ test("B18-C preview: under proposal_only an AI move is shown on the confirmation
   await expect(page.getByTitle(/^Undo: AI: R3 at/)).toBeVisible(); // ONE history entry, labelled as the AI's
   // [B18-D I6] the chat's entry for this grant follows the editor's outcome to "committed".
   await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "committed");
+  // [B18-D §7] the committed entry names its transaction, the revisions and what the editor's checks said.
+  await expect(page.getByTestId("chat-execution-entry").last()).toContainText(/Transaction tx:\S+ · revision pcb2-/);
+  await expect(page.getByTestId("chat-execution-entry").last()).toContainText(/design rule check|did not run — no design-rule claim/);
 
   await page.getByRole("button", { name: "Revision history" }).click();
   const aiEntries = page.getByTestId("project-timeline-entry").filter({ hasText: "AI: R3 at" });
@@ -242,6 +277,7 @@ test("B18-C silkscreen add with the card; 'Undo that.' undoes it; after a RELOAD
   await page.getByTestId("granted-execution-confirm").click();
   await expect(card).toBeHidden();
   await expect(page.getByTitle(/^Undo: AI: .*REV B/)).toBeVisible();
+  await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "committed"); // [B18-D §7]
   expect(silkTexts(await board())).toContain("REV B");
 
   const before = await committedLines().count();
@@ -412,4 +448,74 @@ test("B18-D I11 the agent autonomy in the chat: the editor sees the mode and why
   await openChat();
   await expect(committedLines()).toHaveCount(committedBefore);
   await expect(page.getByTestId("chat-execution-entry")).toHaveCount(entriesBefore);
+});
+
+test("B18-D card Cancel: Cancel on the confirmation card changes nothing, and the entry says so", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  await chat(`Add silkscreen text CANCELLED at ${at.x}, ${at.y}.`);
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card).toBeVisible();
+  await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(card).toBeHidden();
+  const entry = page.getByTestId("chat-execution-entry").last();
+  await expect(entry).toHaveAttribute("data-state", "cancelled");
+  await expect(entry).toContainText("Cancelled — nothing was changed.");
+  await entry.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${EVIDENCE}/card-cancelled-entry.png`, fullPage: false });
+  expect(silkTexts(await board())).toEqual(silkTexts(start));
+});
+
+test("B18-D P2: while an AI change is being made the editor's Undo and Redo wait — the toolbar Undo is disabled and Ctrl+Z says why; afterwards ONE commit and the earlier entry intact", async () => {
+  const start = await board();
+  const x0 = r3(start).at.x;
+  const before = await committedLines().count();
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  const priorState = entriesBefore > 0 ? await entries.nth(entriesBefore - 1).getAttribute("data-state") : null;
+  // Hold the editor's tender (the grant's consume POST): the ritual takes the history hold before it tenders.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  let tenders = 0;
+  const isTender = (url: URL): boolean => url.pathname === "/api/agent/execution-grant";
+  await page.route(isTender, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    tenders += 1;
+    await held;
+    await route.fallback();
+  });
+  try {
+    await select("R3");
+    await openChat();
+    const prompt = page.getByTestId("prompt-input");
+    await expect(prompt).toBeEnabled({ timeout: 90_000 });
+    // A fresh instruction: the minter asks for confirmation before repeating an instruction identical to one already
+    // executed (scenario 2 moved R3 1 mm to the left), and this check needs the explicit path, where the editor tenders at once.
+    await prompt.fill("Move R3 3 mm to the left.");
+    await prompt.press("Enter");
+    await expect.poll(() => tenders, { timeout: 60_000 }).toBe(1);
+    await expect(page.getByTestId("pcb-editor").locator('button[title$="(Ctrl+Z)"], button[title="Nothing to undo"]')).toBeDisabled();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()); // the editor's Ctrl+Z ignores editable targets
+    await page.keyboard.press("Control+z");
+    await expect(page.getByText("Undo and redo are paused: an AI change is being made. Try again when it finishes.")).toBeVisible();
+    await page.screenshot({ path: `${EVIDENCE}/undo-paused-during-ai-change.png`, fullPage: false });
+  } finally {
+    release();
+  }
+  await expect(committedLines()).toHaveCount(before + 1);
+  await page.unroute(isTender);
+  await expect(entries).toHaveCount(entriesBefore + 1);
+  await expect(entries.last()).toHaveAttribute("data-state", "committed");
+  if (priorState !== null) await expect(entries.nth(entriesBefore - 1)).toHaveAttribute("data-state", priorState);
+  await expect(page.getByTestId("prompt-input")).toBeEnabled({ timeout: 90_000 });
+  expect(r3(await board()).at.x).toBe(x0 - 3 * NM_PER_MM); // committed once; the refused Ctrl+Z changed nothing
+});
+
+test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, while an execution entry existed, and never in a request's history", async () => {
+  expect(interimLog.length, "the scripted agent wrote interim text beside its execution calls").toBeGreaterThan(0);
+  for (const record of interimLog) {
+    expect(record.text.startsWith("Assistant note (written before the result): (fixture interim)"), record.text).toBe(true);
+    expect(record.entries.length, `an execution entry existed when "${record.text}" appeared`).toBeGreaterThan(0);
+  }
+  for (const body of chatBodies) expect(JSON.stringify(body.messages ?? [])).not.toContain("(fixture interim)");
 });

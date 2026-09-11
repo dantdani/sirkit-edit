@@ -9,7 +9,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const scope = { tenantId: "tenant-1", projectId: "project-1", branchId: "main", assemblyVariantId: "variant-default" };
 
 describe("physical assignment workbench", () => {
-  it("does not preselect a candidate and requires preview plus explicit exact-plan confirmation", async () => {
+  it("does not preselect a candidate and requires preview plus explicit exact-plan confirmation", { timeout: 20_000 }, async () => {
     const item = materializeAssignment(sourceBundle()).item!;
     const calls: Array<{ url: string; body?: Record<string, unknown> }> = [];
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -20,15 +20,16 @@ describe("physical assignment workbench", () => {
       return new Response(JSON.stringify({ ok: false }), { status: 400 });
     }));
     render(<AssignmentQueuePanel scope={scope} onClose={vi.fn()} />);
-    await screen.findByText("ABC123");
+    await screen.findByText("ABC123", {}, { timeout: 15_000 });
     const candidate = screen.getByRole("radio") as HTMLInputElement;
     expect(candidate.checked).toBe(false);
     fireEvent.click(candidate);
     fireEvent.change(screen.getByLabelText("Decision reason"), { target: { value: "Reviewed exact package and mapping evidence." } });
     fireEvent.click(screen.getByRole("button", { name: "Select exact candidate" }));
-    // The preview renders after the mocked decision round-trip; under a broad parallel run it has taken ~1.25 s, past
-    // testing-library's default one-second wait (it failed twice at 1.24-1.26 s, never alone), so the wait is explicit.
-    await screen.findByText("Exact decision preview", {}, { timeout: 5_000 });
+    // The preview renders after the mocked decision round-trip. Alone the whole test takes ~0.3 s. Under a loaded broad run
+    // the preview once took ~1.25 s (past testing-library's one-second default), and once the whole test passed vitest's
+    // 5 s default, so the earlier explicit 5 s wait could never apply. The test and its waits get room; no assertion changed.
+    await screen.findByText("Exact decision preview", {}, { timeout: 15_000 });
     const commit = screen.getByRole("button", { name: "Commit exact plan" }) as HTMLButtonElement;
     expect(commit.disabled).toBe(true);
     fireEvent.click(screen.getByRole("checkbox"));
@@ -41,11 +42,11 @@ describe("physical assignment workbench", () => {
     expect(screen.getByText(/Board changed: no/)).toBeTruthy();
   });
 
-  it("requires an explicit assignee for the reviewer assignment action", async () => {
+  it("requires an explicit assignee for the reviewer assignment action", { timeout: 20_000 }, async () => {
     const item = materializeAssignment(sourceBundle()).item!;
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true, items: [item], nextCursor: null }), { status: 200 })));
     render(<AssignmentQueuePanel scope={scope} onClose={vi.fn()} />);
-    await screen.findByLabelText("Reviewer or group ID");
+    await screen.findByLabelText("Reviewer or group ID", {}, { timeout: 15_000 }); // the same initial-load path as above
     fireEvent.change(screen.getByLabelText("Decision reason"), { target: { value: "Send to package reviewer." } });
     const assign = screen.getByRole("button", { name: "Assign reviewer" }) as HTMLButtonElement;
     expect(assign.disabled).toBe(true);

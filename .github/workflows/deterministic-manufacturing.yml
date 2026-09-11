@@ -99,6 +99,7 @@ jobs:
           app/lib/project/__tests__/b18-d-timeline-store-busy.test.ts
           app/lib/project/__tests__/b18-d-chat-undo-timeline.test.ts
           app/lib/project/__tests__/b18-d-refused-line.test.ts
+          app/lib/project/__tests__/b18-d-ui-gates.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
           app/api/chat/__tests__/b18-d-chat-stop.test.ts
           app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
