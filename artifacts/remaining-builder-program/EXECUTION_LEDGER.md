@@ -708,3 +708,24 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Gates: B17 581 controls and the B01 fingerprint unchanged (no new control); the CI list gains b18-e-refusal-causes.
 - Tests: the affected files 19/19 (121 tests), including the new b18-e-refusal-causes, a route drift-cancel case, the ritual's drift and HTTP-status pins and a loop row; broad run: 255 files / 3340 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); `agent-execution`: 16/16 passed (4.8 min); tsc 0; eslint clean on the changed files (`page.tsx` 14 and `PcbEditor.tsx` 1 pre-existing problems, the same rules as before).
 - The first broad run of this increment FAILED — 6 tests in 5 files: the repo-wide AST and import gates (`b16-0-identity-header-gate`, `b14-4-ast-import-gates`, `b14-2-settlement-and-boundaries` ×2, `b11-3-generated-pcb-shape`) and one replay-recovery case (`b18-c-review-3`). It was not the code: each of those files passes alone (5 files / 86 tests, exit 0), and that run reported per-test durations of up to 2.3 hours — longer than the run itself lasted — so its workers were starved or suspended. Two measurement processes of mine (the board-inspect sizing for E3) ran alongside it, which is the likely cause; nothing else ran during the repeat above. Recorded rather than dismissed: the gates and deadlines are real, and a run under that load proves nothing either way. The runner script now keeps the full vitest output, because that failing run's assertions were filtered away and had to be recovered by re-running.
+
+### B18-E E3 — scenario 1: what the model can read, and what it is told to read (2026-09-11 local, solo; this commit)
+
+- Measured (A23's open question): `board-inspect` answers 40,410 characters on a PLACED board (67% of the loop's 60,000-character
+  budget) and 70,173 / 72,453 on the two recorded ROUTED boards — over the budget, so the loop answers
+  `output_too_large_for_model` and the model gets no board facts. CONFIRMED by measurement; how much copper it takes to cross is
+  UNKNOWN. `b18-e-board-inspect-budget` (new, in the CI list) pins both directions against the loop's exported constant.
+- Fixed: all three footprint execution tools named board-inspect as the only id source; they now also name
+  `sirkit.selection.inspect` (move-footprint 1.1.1, rotate-side-footprint 1.2.1, arrange 1.1.1 — descriptions, id arguments and
+  version notes; arguments, schema shape and reach unchanged). Artifacts regenerated: B04 tool-registry and provider parity, B09
+  manifest (json + csv), activation audit, provider parity and replay fixtures, B11 evaluation results and replay-trace pins. The
+  B01 fingerprint and the B17 inventory (581 controls) are unchanged. Pins moved: `b18-c-gateway-execution`, `b18-c-exposure-lift`.
+- Added through the real loop (`b18-c-fixture-agent`): the same exact sentence a second time is previewed with the retry note and
+  the board moves once; with nothing selected there is no grant and nothing changes. Composer pins for the mandatory sentences
+  (`b18-d-composer-routing`): scenarios 1, 2, 3, 5, 6 ask; scenario 4 still routes to the schematic edit (E15).
+- Reproduced first: `b18-c-exposure-lift` and `b18-c-gateway-execution` failed on the version bump (the pins they carry), and the
+  budget test was written from measurements taken before it existed (70,173 / 72,453 against 60,000).
+- Tests: the agent, engineering and route suites (144 files / 2366 tests) — the one failure was the b18-c-exposure-lift version pin, which moved with the bump and re-ran green in the broad run; broad run: 256 files / 3344 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean on the changed files.
+- No local browser run for this increment: nothing the browser renders changed — the descriptor text is model-facing, and the
+  scripted fixture agent never reads it — so a browser run would prove nothing here. CI's page-browser-e2e runs the full suite
+  over this commit anyway.

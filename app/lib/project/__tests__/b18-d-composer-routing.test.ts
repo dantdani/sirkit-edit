@@ -35,6 +35,20 @@ describe("B18-D I1 — the composer routes by the first words; PCB changes reach
     }
   });
 
+  it("[B18-E E3] the runbook's mandatory scenario sentences: five reach the assistant; the replacement sentence still goes to the schematic editor", () => {
+    for (const text of [
+      "Move R3 2 mm to the right.",
+      "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill.",
+      "Add horizontal and vertical dimensions for the board and mounting holes.",
+      "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed.",
+      "Undo that.",
+      "Redo.",
+    ]) expect(route(text), text).toBe("ask");
+    // Scenario 4 is the one the composer still sends to the legacy schematic edit (found by B18-E's discovery); E15 routes it to
+    // the assistant, and this pin moves with it.
+    expect(route("Delete U1 and replace it with the approved lower-power part while preserving compatible nets.")).toBe("edit");
+  });
+
   it("a release / order / qualify word adds the display-only Tier 3 hint and never changes the route", () => {
     expect(routeComposerMessage("Release the board to manufacturing", true)).toMatchObject({ route: "ask", hints: ["tier3-release"] });
     expect(routeComposerMessage("set R1 to 4.7k and order it", true)).toMatchObject({ route: "edit", hints: ["tier3-release"] });

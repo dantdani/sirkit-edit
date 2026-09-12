@@ -4,7 +4,7 @@
  *
  *  - the B18-C additions to the intentional set are EXACTLY the reviewed
  *    granted-execution ids (derived from the list, never a count);
- *  - the lifted descriptor's reviewed shape (1.1.0, granted, Tier 1,
+ *  - the lifted descriptor's reviewed shape (1.1.1 since B18-E E3, granted, Tier 1,
  *    edit_placement, engineering-state, bound to the canonical editor session,
  *    named targets with no selection gate, an integer-nanometre schema that is
  *    strict-representable for both providers);
@@ -57,7 +57,7 @@ describe("B18-C I3 — the exposure lift", () => {
   it("the lifted descriptor has the reviewed shape and renders the exact strict schema both providers receive", () => {
     const move = registry.get(MOVE_ID)!;
     expect(move).toMatchObject({
-      version: "1.1.0", operationClass: "mutate", agentExposed: true, executionMode: "granted", requiredCapability: "edit_placement",
+      version: "1.1.1", operationClass: "mutate", agentExposed: true, executionMode: "granted", requiredCapability: "edit_placement", // [B18-E E3] pin moved with the id-source wording
       requiredRoles: ["pcb_editor", "project_admin"], approvalTier: "reversible", requiredSelectionKinds: [], sideEffects: "engineering-state",
       callability: "callable", lifecycle: "active", discovery: "discoverable", requiresExpectedRevision: true, requiresLineage: true,
       binding: { status: "bound-mutation-editor-session", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.move-footprint" },

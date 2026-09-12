@@ -110,4 +110,31 @@ describe("B18-C I10a — end to end through the real loop", () => {
     expect(r3Of(c).at.x).toBe(x0 + mmToNm(2));
     expect(headOf(c).headSequence).toBe(before + 1);
   }, 30_000);
+
+  it("[B18-E E3] the same sentence again is previewed with the retry note, and the board moves only once", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const r3 = r3Of(c);
+    const x0 = r3.at.x;
+    const selection = { refs: [{ kind: "footprint" as const, id: r3.id }], primary: { kind: "footprint" as const, id: r3.id } };
+    const first = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Move R3 2 mm to the right.", selection });
+    expect(first.grants[0]!.binding.operation.decision).toBe("execute_explicit");
+    expect(r3Of(c).at.x).toBe(x0 + mmToNm(2));
+    const head = headOf(c).headSequence;
+    const again = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Move R3 2 mm to the right.", selection: { refs: [{ kind: "footprint" as const, id: r3.id }], primary: { kind: "footprint" as const, id: r3.id } } });
+    expect(again.grants[0]!.binding.operation.decision, "an identical instruction that already executed asks first").toBe("preview_then_confirm");
+    expect(again.rituals, "nothing runs until the human confirms").toEqual([]);
+    expect(r3Of(c).at.x, "the board moved once").toBe(x0 + mmToNm(2));
+    expect(headOf(c).headSequence).toBe(head);
+  }, 40_000);
+
+  it("[B18-E E3] with nothing selected the scripted agent asks for a selection: no grant, no change", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const x0 = r3Of(c).at.x;
+    const head = headOf(c).headSequence;
+    const run = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Move R3 2 mm to the right." });
+    expect(run.grants).toEqual([]);
+    expect(run.rituals).toEqual([]);
+    expect(r3Of(c).at.x).toBe(x0);
+    expect(headOf(c).headSequence).toBe(head);
+  }, 30_000);
 });

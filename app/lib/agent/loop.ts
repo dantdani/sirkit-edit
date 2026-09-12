@@ -45,7 +45,8 @@ import type {
   ProviderToolDeclaration,
 } from "./contracts";
 
-const MAX_RESULT_CHARS = 60_000;
+/** [B18-E E3] The model transfer budget for one tool result, exported so a test can measure real results against it. */
+export const MAX_RESULT_CHARS = 60_000;
 const MAX_ARGUMENT_CHARS = 20_000;
 
 export interface AgentLoopDeps {

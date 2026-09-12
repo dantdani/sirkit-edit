@@ -506,17 +506,17 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── Migrated PCB mutations (B03 slice — trusted editor session ONLY) ──────
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.move-footprint", version: "1.1.0",
+    toolId: "sirkit.pcb.move-footprint", version: "1.1.1",
     owningCommandId: "pcb.move-footprint",
     title: "Move footprint",
-    description: "EXECUTION tool: move footprints to absolute board positions (integer nanometres; +x right, +y down). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact move for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by the stable ids from board-inspect results (never reference designators); 1–16 moves; locked footprints refuse.",
+    description: "EXECUTION tool: move footprints to absolute board positions (integer nanometres; +x right, +y down). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact move for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by their stable ids — from a selection.inspect result or from board-inspect (never reference designators); 1–16 moves; locked footprints refuse.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({
       moves: {
         type: "array",
         description: "1–16 footprint moves, each to an absolute position.",
         items: obj({
-          footprintId: { type: "string", description: "The stable footprint id from board-inspect (not the reference designator)." },
+          footprintId: { type: "string", description: "The stable footprint id from selection.inspect or board-inspect (not the reference designator)." },
           x: { type: "integer", description: "Absolute X of the footprint origin in integer nanometres (+x right)." },
           y: { type: "integer", description: "Absolute Y of the footprint origin in integer nanometres (+y down, so moving up means a smaller y)." },
         }, ["footprintId", "x", "y"]),
@@ -530,21 +530,21 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.move-footprint", notes: "Commits ONLY inside the trusted interactive editor session. The agent reaches it solely through a server-minted one-shot execution grant (B18-B/C): the gateway seals and mints; the user's editor tenders the grant and commits through this session; nothing server-side invokes it." },
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
-    versionNotes: "1.1.0 (B18-C I3): agent-exposed as the first reviewed granted execution (executionMode granted); integer-nanometre schema with model-facing descriptions; no selection gate (named targets). 1.0.0: trusted-UI only.",
+    versionNotes: "1.1.1 (B18-E E3): the id sources also name sirkit.selection.inspect — board-inspect can exceed the model's result budget on a routed board (measured: 70,173 characters against 60,000), so naming it alone can leave the model with no ids at all; arguments, schema shape and reach unchanged. 1.1.0 (B18-C I3): agent-exposed as the first reviewed granted execution (executionMode granted); integer-nanometre schema with model-facing descriptions; no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.rotate-side-footprint", version: "1.2.0",
+    toolId: "sirkit.pcb.rotate-side-footprint", version: "1.2.1",
     owningCommandId: "pcb.rotate-side-footprint",
     title: "Rotate or flip footprint",
-    description: "EXECUTION tool: set footprints' ABSOLUTE rotation (whole degrees 0–359, counter-clockwise as seen on screen) and/or board side. To rotate BY an angle, add it to the current rotation from board-inspect (clockwise subtracts). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by the stable ids from board-inspect results; 1–16 targets; locked footprints refuse.",
+    description: "EXECUTION tool: set footprints' ABSOLUTE rotation (whole degrees 0–359, counter-clockwise as seen on screen) and/or board side. To rotate BY an angle, add it to the current rotation from board-inspect (clockwise subtracts). Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Name footprints by their stable ids — from a selection.inspect result or from board-inspect; 1–16 targets; locked footprints refuse.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({
       targets: {
         type: "array",
         description: "1–16 footprints, each with its new absolute rotation, its new side, or both.",
         items: obj({
-          footprintId: { type: "string", description: "The stable footprint id from board-inspect (not the reference designator)." },
+          footprintId: { type: "string", description: "The stable footprint id from selection.inspect or board-inspect (not the reference designator)." },
           rotationDeg: { type: "integer", description: "The new ABSOLUTE rotation in whole degrees 0–359, counter-clockwise as seen on screen. null with a side change turns the part over the way the editor's Flip does (the rotation becomes 360 minus the current rotation); null without one keeps the current rotation." },
           side: { enum: ["top", "bottom"], description: "The board side to place the footprint on. null keeps the current side." },
         }, ["footprintId"]),
@@ -558,7 +558,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "CanonicalEditorSession.commit", canonicalCommandId: "pcb.rotate-side-footprint", notes: "Commits ONLY inside the trusted interactive editor session; the agent reaches it solely through a server-minted one-shot execution grant (B18-B/C)." },
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
-    versionNotes: "1.2.0 (B18-C review 2): a side change with a null rotation follows the editor's own Flip (rotation 360 − r), so a flip at 90° or 270° no longer lands turned 180° from what the editor's Flip produces. 1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution; absolute integer rotation and a nullable side; no selection gate (named targets). 1.0.0: trusted-UI only.",
+    versionNotes: "1.2.1 (B18-E E3): the id sources also name sirkit.selection.inspect (board-inspect can exceed the model's result budget on a routed board); arguments, schema shape and reach unchanged. 1.2.0 (B18-C review 2): a side change with a null rotation follows the editor's own Flip (rotation 360 − r), so a flip at 90° or 270° no longer lands turned 180° from what the editor's Flip produces. 1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution; absolute integer rotation and a nullable side; no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
   {
     ...canonicalMutation,
@@ -594,14 +594,14 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   },
   {
     ...canonicalMutation,
-    toolId: "sirkit.pcb.arrange", version: "1.1.0",
+    toolId: "sirkit.pcb.arrange", version: "1.1.1",
     owningCommandId: "pcb.arrange",
     title: "Align/distribute/snap footprints",
-    description: "EXECUTION tool: align footprints on an edge or centre line, distribute them evenly along an axis, or snap them to a grid, with the editor's own arrangement commands. Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Always previewed for the user's confirmation. Name footprints by the stable ids from board-inspect results; locked footprints refuse.",
+    description: "EXECUTION tool: align footprints on an edge or centre line, distribute them evenly along an axis, or snap them to a grid, with the editor's own arrangement commands. Calling it never changes the board by itself — the server issues a one-shot grant bound to the current board revision, and the user's editor either shows the exact change for the user to confirm or, when the project opted in and the user's whole message is exactly this request, commits it as one transaction with one undo entry. Always previewed for the user's confirmation. Name footprints by their stable ids — from a selection.inspect result or from board-inspect; locked footprints refuse.",
     category: "pcb", operationClass: "mutate",
     inputSchema: obj({
       mode: { type: "string", enum: ["align", "distribute", "snap-to-grid"], description: "align: line the footprints up on one edge or centre line (2 or more); distribute: space them evenly along an axis (3 or more); snap-to-grid: move each onto the grid." },
-      footprintIds: { type: "array", items: { type: "string" }, description: "The stable footprint ids from board-inspect (1–16)." },
+      footprintIds: { type: "array", items: { type: "string" }, description: "The stable footprint ids from selection.inspect or board-inspect (1–16)." },
       edge: { enum: ["left", "right", "top", "bottom", "centerH", "centerV"], description: "align only: the edge or centre line to align to; null otherwise." },
       axis: { enum: ["h", "v"], description: "distribute only: h = horizontally, v = vertically; null otherwise." },
       gridNm: { type: "integer", description: "snap-to-grid only: the grid pitch in whole nanometres; null otherwise." },
@@ -614,7 +614,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     binding: { status: "bound-mutation-editor-session", module: "app/lib/engineering/editor-adapter.ts", symbol: "applyEditsCanonical", canonicalCommandId: "pcb.arrange", notes: "Trusted UI: applyEditsCanonical. The agent reaches it solely through a server-minted one-shot execution grant (B18-B/C), whose ritual commits the pinned positions through CanonicalEditorSession.commit." },
     timeoutMs: 5_000,
     sourceEvidence: ["app/lib/engineering/editor-adapter.ts", "artifacts/ai-control-plane-b03/mutation-migration-matrix.csv", "app/lib/agent/execution-dispatch.ts", "app/lib/engineering/granted-executions.ts"],
-    versionNotes: "1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); the mode's parameter is explicit (edge / axis / gridNm); no selection gate (named targets). 1.0.0: trusted-UI only.",
+    versionNotes: "1.1.1 (B18-E E3): the id sources also name sirkit.selection.inspect (board-inspect can exceed the model's result budget on a routed board); arguments, schema shape and reach unchanged. 1.1.0 (B18-C I5): agent-exposed as a reviewed granted execution (confirmation-only: no explicit grammar); the mode's parameter is explicit (edge / axis / gridNm); no selection gate (named targets). 1.0.0: trusted-UI only.",
   },
   // ── [B18-C I6] Silkscreen TEXT — a reviewed granted execution (confirmation-only) ──
   {

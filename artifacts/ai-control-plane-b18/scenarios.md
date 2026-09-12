@@ -47,7 +47,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E0 | This record, the harness limits, two record corrections | all | this commit |
 | E1 | Scenario 6 truth: the redo hint and reloaded entries | 6 | CONFIRMED — see §6 |
 | E2 | Refusal causes the chat and the model can trust (drift reasons, server refusals) | 7b, 7c, 7f, 7h | CONFIRMED — see §6 |
-| E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | planned |
+| E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | CONFIRMED — see §6 |
 | E4 | Scenario 6's refresh proven in integration | 6 | planned |
 | E5 | Scenario 7 integration closures | 7a, 7c–7g | planned |
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | planned |
@@ -88,3 +88,27 @@ OD-20 to OD-30 (`artifacts/remaining-builder-program/OWNER_DECISIONS.md`) record
 - **One cancel vocabulary.** `CANCEL_RETIREMENT_REASONS` (seven reasons, all inside the closed retirement vocabulary; only `session_superseded` is also a consumed grant's reason) is shared by the route, the consume request, the transport and the controller. A cancel still retires only the bound principal's ISSUED grant.
 - Reproduced first: on the pre-E2 code six tests failed — the route refused a revision_drift cancel (400), the ritual's drift cancel recorded refused_before_execution instead of the drift, the entry read the generic “the server refused the change (it was cancelled, expired or altered)” where it should say “the board changed”, and the four new refusal-cause tests failed
 - Tests: the affected files 19/19 (121 tests), including the new b18-e-refusal-causes, a route drift-cancel case, the ritual's drift and HTTP-status pins and a loop row; `agent-execution`: 16/16 passed (4.8 min).
+- CI green at `36b6697` (deterministic-manufacturing 34659860318 incl. page-browser-e2e, benchmark-quality 34659860191).
+
+### E3 — scenario 1: what the model can read, and what it is told to read (CONFIRMED)
+
+- **board-inspect against the model's budget — measured, the open A23 question answered.** One tool result may be at most 60,000
+  characters (`MAX_RESULT_CHARS`); a larger one is replaced by `output_too_large_for_model`, so the model gets no board facts at
+  all. Measured on real boards: a PLACED board — the unit golden blinker, and the shape the browser scenarios bootstrap — is
+  40,410 characters (67% of the budget); each recorded ROUTED board is 70,173 and 72,453 characters, over it. A23 recorded the
+  snapshot as "not bounded below" the budget and never measured it; it is now CONFIRMED that a routed board exceeds it, and
+  UNKNOWN only how much copper it takes to cross. `b18-e-board-inspect-budget` pins both directions against the loop's own
+  constant (exported for it), so a later change that shrinks the snapshot says so instead of passing silently.
+- **What the execution tools tell the model.** All three footprint execution tools named board-inspect as the only id source,
+  which is the read that can be unreadable. They now name `sirkit.selection.inspect` as well: `sirkit.pcb.move-footprint` 1.1.1,
+  `sirkit.pcb.rotate-side-footprint` 1.2.1 and `sirkit.pcb.arrange` 1.1.1 (descriptions, the id arguments and the version notes;
+  arguments, schema shape and reach unchanged). The B04, B09 and B11 artifacts are regenerated in this commit; two pins moved
+  (`b18-c-gateway-execution` toolVersion, `b18-c-exposure-lift` shape). The B01 fingerprint and the B17 inventory are unchanged.
+- **Scenario 1 through the real loop.** Two cases were missing and now exist in `b18-c-fixture-agent`: sending the exact sentence
+  a second time is previewed with the retry note and the board moves only once (nothing runs until the human confirms); with
+  nothing selected the scripted agent asks for a selection — no grant, no ritual, the head unchanged.
+- **The composer.** The runbook's mandatory sentences for scenarios 1, 2, 3, 5 and 6 reach the assistant; scenario 4's sentence
+  still goes to the legacy schematic edit, which E15 fixes — both pinned in `b18-d-composer-routing`, so E15's fix moves a pin.
+- Consequence recorded for the scenarios: a routed project cannot be read through board-inspect, so scenario 1's ids come from
+  the selection (OD-22's recorded precondition) or from the bounded reads E10 and E13 propose. Every browser proof runs on a
+  placed board, which fits — that is why none of them has hit this.

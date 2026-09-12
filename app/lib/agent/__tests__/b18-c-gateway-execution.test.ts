@@ -75,7 +75,7 @@ describe("B18-C I3 — scenario 1 through the production registry", () => {
     const outcome = await invoke(createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION }));
     expect(outcome).toMatchObject({ kind: "execution-grant", ok: true, decision: "execute_explicit" });
     if (outcome.kind !== "execution-grant") throw new Error("unreachable");
-    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.0", registryDigest: registry.digest(), promptVersion: "1.2.1" });
+    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.1", registryDigest: registry.digest(), promptVersion: "1.2.1" });
     expect(outcome.grant.binding.instruction.explicit).toMatchObject({ proven: true, coverage: "whole-message" });
     expect(outcome.grant.binding.proposal.preview).toEqual({ before: "R3 at (5.000, 5.000) mm", after: "R3 at (7.000, 5.000) mm", warnings: [] });
     expect(m.calls).toBe(1);
