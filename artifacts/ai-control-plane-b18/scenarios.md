@@ -72,7 +72,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | CONFIRMED — see §6 |
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | CONFIRMED — see §6 |
 | E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | CONFIRMED — see §6 |
-| E17 | Scenario 5, part 1: truthful layout reporting | 5 | planned |
+| E17 | Scenario 5, part 1: truthful layout reporting | 5 | CONFIRMED — see §6 |
 | E18 | Scenario 5, part 2: integration, scripted layout plans, browser | 5 | planned |
 | E19 | Closeout | all | planned |
 
@@ -506,3 +506,34 @@ proven densely and were not rebuilt. Three things were missing, and they are wha
   the result.
 - Tests: b18-e-fixture-authority 6/6, b18-e-replacement-apply-breadth 3/3 (both new), b18-c-fixture-agent 19/19 (4 new);
   browser: agent-execution 28/28 (2 new), 4.8 min; broad run: 266 files, 3420 passed, 10 expected skips
+
+### E17 — scenario 5, part 1: what a layout candidate is allowed to say (CONFIRMED)
+
+Scenario 5 is "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed." Five
+readers mapped it first (workflow `wf_b27e76cc-6c8`: the candidate path, the routing engine seam, what the objectives can
+express, the agent surfaces, and the existing coverage — 72 findings, 31 gaps). The Tier 2 contract underneath is strong
+and was not rebuilt: the candidate is digest-sealed and revision-bound, applying it is one canonical transaction, and the
+argument surface refuses authority-shaped keys by name. What was wrong is what anyone was TOLD.
+
+- **The last clause went unanswered.** A routing candidate carries, per unresolved connection, the net, why it failed,
+  what blocked it and what to try. The model was handed `unresolved: 7` — a count — and the person was told only that a
+  candidate was ready. "Show me anything that failed" was answerable only by opening the editor panel. The model now
+  receives the failures themselves (bounded to 8, with the TRUE count beside them), and the page's own sentence names the
+  nets that could not be routed — or says plainly that everything in scope was.
+- **An objective nobody could evaluate read as a pass.** Every placement objective carries a state — evaluated, unknown,
+  unsupported, not applicable — with its measured value and its own limitations, and the whole report was dropped before
+  the model saw it. It is now reported, including the objectives the engine could NOT evaluate, by name. The decoupling
+  clause of the sentence is answerable only because "we could not measure this" is a reportable result.
+- **What the tools cannot do is said out loud (OD-24).** `sirkit.placement.propose` takes exactly `instanceIds`,
+  `candidateCount`, `maxIterations`; there is no compactness, spacing or objective-weight argument, and none was added.
+  The result note now says so, so a run can never report a board as having been made compact or as having prioritized
+  decoupling — and a test pins the note against the tool's real argument surface, not against a promise.
+- **"Placement and routing take turns" had never run.** The claim was proven only placement-then-placement. A run that
+  places AND routes now seals exactly ONE candidate; the second call is refused `proposal_exists`, and the board is
+  unchanged either way.
+- **Two modules with no test at all now have one**: `routing-server.ts`, the seam that turns a router response into a
+  sealed candidate (complete, partial with failures, a net that is not on the board, a router that accepted no pass), and
+  the page's SAFE receiver for layout candidates — scenario 7g's altered-artifact invariant, which held for grants and
+  PCB proposals but had never been checked for this artifact type. An altered stat, a rewritten digest, a forged producer
+  and a malformed payload are all dropped.
+- Tests: b18-e-scenario-5 10/10 (new, in the CI list); broad run: 267 files, 3430 passed, 10 expected skips

@@ -26,6 +26,7 @@ import type { AgentTraceRecorder } from "./trace-recorder";
 import type { ReadResourceKind } from "../engineering/resource-envelopes";
 import { REPLACEMENT_PROPOSAL_SCHEMA } from "../engineering/replacement-proposals";
 import { engineeringDigest } from "../engineering/stable";
+import { LAYOUT_CANDIDATE_NOTE, placementReport, routingReport } from "./layout-report"; // [B18-E E17] what a candidate may say
 import { LLMProviderError } from "../llm/errors";
 import {
   buildAgentToolDeclarations,
@@ -494,9 +495,14 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
           recordTrace("layout_candidate", "layout_candidate_ready", { proposal: { proposalId: candidate.candidateId, operationsDigest: candidate.digest } });
           emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "layout_candidate_ready" });
           emitOnce({ type: "layout_candidate_ready", runId: request.runId, toolId: resolved.toolId, candidate });
+          // [B18-E E17] the model is handed what the candidate MEASURED, bounded: every placement objective's state (an
+          // objective the engine could not evaluate is reported as unknown, never as met) and, for routing, the
+          // unresolved connections themselves — which net, why, what blocked it, what to try — not only their count.
+          // "Show me anything that failed" is the last clause of scenario 5's sentence, and it is answerable only from
+          // these facts; without them the model could report a number and nothing else.
           const summary = candidate.kind === "placement"
-            ? { kind: "placement", scope: candidate.scope.instanceIds === "all" ? "whole board" : `${candidate.scope.instanceIds.length} footprint(s)`, legal: candidate.legal, termination: candidate.run.termination, candidateCount: candidate.run.candidateCount }
-            : { kind: "routing", scope: candidate.scope.netIds === "all" ? "every incomplete net" : `${candidate.scope.netIds.length} net(s)`, completion: candidate.completion.status, tracks: candidate.stats.tracks, vias: candidate.stats.vias, unresolved: candidate.completion.failures.length };
+            ? { kind: "placement", scope: candidate.scope.instanceIds === "all" ? "whole board" : `${candidate.scope.instanceIds.length} footprint(s)`, termination: candidate.run.termination, candidateCount: candidate.run.candidateCount, ...placementReport(candidate) }
+            : { kind: "routing", scope: candidate.scope.netIds === "all" ? "every incomplete net" : `${candidate.scope.netIds.length} net(s)`, ...routingReport(candidate) };
           results.push({
             callId: call.callId,
             outputText: resultText({
@@ -506,7 +512,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
               baseRevision: candidate.base.revision,
               expiresAt: candidate.expiresAt,
               ...summary,
-              note: "The candidate is awaiting the user's explicit review in the PCB editor's placement/routing panel — NOTHING on the board has changed. Tell the user to preview and apply or discard it; never claim it was applied, and never call it manufacturing-ready.",
+              note: LAYOUT_CANDIDATE_NOTE,
             }),
             isError: false,
           });

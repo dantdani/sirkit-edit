@@ -60,6 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
+import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
 import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
@@ -4622,7 +4623,10 @@ export default function Home() {
             const received = receiveLayoutCandidateEvent(event);
             if (received) {
               setPendingLayoutCandidate({ candidate: received.candidate, originRunId: received.runId });
-              appendActivityStep(logId, `${received.candidate.kind === "placement" ? "Placement" : "Routing"} candidate ready — review it in the PCB editor's ${received.candidate.kind} panel; the board is unchanged until you apply it`, "done");
+              // [B18-E E17] the page's own sentence names what the candidate measured and, for routing, what could not be
+              // routed — "show me anything that failed" is the last clause of the request, and it is answered here rather
+              // than left to the model's prose or to the panel the person may not open.
+              appendActivityStep(logId, layoutCandidateChatLine(received.candidate), "done");
             }
             return;
           }

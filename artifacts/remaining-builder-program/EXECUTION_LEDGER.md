@@ -1030,3 +1030,22 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b18-e-fixture-authority 6/6, b18-e-replacement-apply-breadth 3/3 (new), b18-c-fixture-agent 19/19 (4 new);
   browser agent-execution 28/28 (2 new), 4.8 min; broad run: 266 files, 3420 passed, 10 expected skips; tsc 0; eslint clean.
 - E15's CI: green at `beee5c9` (deterministic-manufacturing 34678943429 and benchmark-quality 34678943506, both success).
+
+### B18-E E17 — scenario 5, part 1: what a layout candidate is allowed to say (2026-09-12 local, solo; this commit)
+
+- Discovery first: five readers over the candidate path, the routing seam, the objective vocabulary, the agent surfaces
+  and the existing tests (72 findings, 31 gaps). The Tier 2 contract beneath the scenario is strong and was left alone.
+- The scenario's last clause was unanswered by everything except the editor panel. A routing candidate knows, per
+  unresolved connection, the net, the reason, the blockers and the suggested repair; the model got a count and the person
+  got nothing. Both now get the failures themselves, bounded, with the true count beside them.
+- An objective the engine could not evaluate was invisible, which reads as a pass. Every objective's state is now
+  reported, including unknown and unsupported ones, by name.
+- OD-24 said the chat should report truthfully rather than widen the agent's controls. The tools genuinely have no
+  compactness, spacing or objective-weight argument, so the note now says so and a test pins it against the real argument
+  surface — a run can never report a board as having been made compact.
+- "Placement and routing take turns" was a claim in the chapter record that had never been run; it runs now (one
+  candidate, the second call refused `proposal_exists`, nothing changed).
+- `routing-server.ts` and the page's SAFE receiver for layout candidates had no tests at all. Both do now, including
+  scenario 7g's altered-artifact invariant for this artifact type.
+- Tests: b18-e-scenario-5 10/10 (new, added to the CI list); broad run: 267 files, 3430 passed, 10 expected skips; tsc 0; eslint clean.
+- E16's CI: green at `48c3576` (deterministic-manufacturing 34680864313 and benchmark-quality 34680864293, both success).

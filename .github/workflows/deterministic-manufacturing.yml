@@ -116,6 +116,7 @@ jobs:
           app/lib/engineering/__tests__/b18-e-via-facts.test.ts
           app/api/chat/__tests__/b18-e-scenario-4-route.test.ts
           app/lib/project/__tests__/b18-e-scenario-4-chat.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-5.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
           app/api/chat/__tests__/b18-d-chat-stop.test.ts
