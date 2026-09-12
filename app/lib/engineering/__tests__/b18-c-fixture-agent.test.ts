@@ -19,7 +19,7 @@ import { agentAdapterFor } from "../../agent/adapters";
 import { FixtureAgentAdapter, planFixtureInstruction, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
 import type { ProviderToolDeclaration } from "../../agent/contracts";
 import { mmToNm } from "../../pcb/units";
-import { composition, headOf, r3Of, runWithAdapter } from "./b18c-harness";
+import { composition, headOf, POWER_NET_NAME, r3Of, runWithAdapter } from "./b18c-harness";
 
 const SAVED_ENV = { ...process.env };
 afterEach(() => {
@@ -193,5 +193,77 @@ describe("[B18-E E7] the scripted agent's refusal scripts", () => {
     expect(twice.rituals, "a preview is not auto-run").toEqual([]);
     expect(twice.events.filter((event) => event.type === "tool_refused").map((event) => String((event as { status?: unknown }).status))).toEqual(["execution_exists"]);
     expect(headOf(c).headSequence, "nothing is committed until the human confirms").toBe(head);
+  }, 40_000);
+});
+
+// ─── [B18-E E14] scenario 2: the scripted agent reads the vias, then says what is actually possible ──────────────────
+
+describe("[B18-E E14] the scripted agent's via plan (scenario 2)", () => {
+  const SENTENCE = "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill.";
+  /** The run's final sentence — what the person actually reads. */
+  const answerOf = (run: { events: readonly { type: string }[] }): string =>
+    String((run.events.find((event) => event.type === "run_completed") as { finalText?: unknown } | undefined)?.finalText ?? "");
+
+  it("reads the net FIRST — the plan is a call to the bounded via read carrying the name the person used, nothing else", () => {
+    const planned = planFixtureInstruction(SENTENCE);
+    expect(planned.kind).toBe("via-then");
+    expect((planned as { netName: string }).netName, "the name is taken from the sentence, never re-spelled").toBe("5 V");
+    expect(planFixtureInstruction("Use the Power via 0.8/0.4 padstack for every via on the /root/VCC net").kind).toBe("via-then");
+  });
+
+  it("the verbatim sentence on a board with no such net: the nets that DO carry vias are named, nothing is called, nothing changes", async () => {
+    const c = await composition("execute_explicit_tier1", { vias: true });
+    const head = headOf(c).headSequence;
+    const run = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: SENTENCE });
+    expect(finishedOf(run, "sirkit.pcb.via-inspect"), "the read ran").toMatchObject({ ok: true });
+    expect(run.events.some((event) => event.type === "pcb_proposal_ready"), "nothing was proposed").toBe(false);
+    expect(run.grants, "and nothing was granted — via edits are never Tier 1").toEqual([]);
+    const answer = answerOf(run);
+    expect(answer).toContain('no net called "5 V"');
+    expect(answer, "it names what the board actually has").toContain(POWER_NET_NAME);
+    expect(answer).toContain("Nothing was changed");
+    expect(headOf(c).headSequence).toBe(head);
+  }, 30_000);
+
+  it("asked by the board's OWN net name, it refuses truthfully: the vias take their geometry from a padstack, and 0.7/0.35 is not one that exists", async () => {
+    const c = await composition("execute_explicit_tier1", { vias: true });
+    const head = headOf(c).headSequence;
+    const run = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: `Change every via on the ${POWER_NET_NAME} net to 0.7 mm diameter and 0.35 mm drill.` });
+    const answer = answerOf(run);
+    expect(answer).toContain("take their size and drill from a padstack");
+    expect(answer, "the padstack the vias are bound to is named").toContain("Via 0.6/0.3");
+    expect(answer, "so are the ones that do exist, so the person can choose").toContain("Power via 0.8/0.4");
+    expect(answer, "and where the fork lives — a human step, never the agent's").toContain("create-padstack");
+    expect(run.events.some((event) => event.type === "pcb_proposal_ready"), "a refusal proposes nothing").toBe(false);
+    expect(run.grants).toEqual([]);
+    expect(headOf(c).headSequence).toBe(head);
+  }, 30_000);
+
+  it("the lawful ask — retarget onto a padstack that exists — seals ONE Tier 2 proposal whose review states the geometry, and still changes nothing", async () => {
+    const c = await composition("execute_explicit_tier1", { vias: true });
+    const head = headOf(c).headSequence;
+    const run = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: `Use the Power via 0.8/0.4 padstack for every via on the ${POWER_NET_NAME} net` });
+    const ready = run.events.filter((event) => event.type === "pcb_proposal_ready");
+    expect(ready, "exactly one sealed proposal").toHaveLength(1);
+    expect(run.grants, "a Tier 2 proposal is never a grant").toEqual([]);
+    const proposal = (ready[0] as unknown as { proposal: { operations: unknown[]; impact: { operationSummaries: string[] } } }).proposal;
+    expect(proposal.operations).toHaveLength(3);
+    expect(proposal.impact.operationSummaries, "[E12] the human reads the numbers they are approving").toEqual([
+      "Update via via-vcc-1 — padstack Power via 0.8/0.4 (0.800 mm pad / 0.400 mm drill)",
+      "Update via via-vcc-2 — padstack Power via 0.8/0.4 (0.800 mm pad / 0.400 mm drill)",
+      "Update via via-vcc-3 — padstack Power via 0.8/0.4 (0.800 mm pad / 0.400 mm drill)",
+    ]);
+    expect(headOf(c).headSequence, "sealing a proposal commits nothing").toBe(head);
+  }, 30_000);
+
+  it("a board with no vias at all is answered as such, and a padstack the board does not have is named as missing", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const empty = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: SENTENCE });
+    expect(answerOf(empty)).toContain("no vias at all");
+    const withVias = await composition("execute_explicit_tier1", { vias: true });
+    const missing = await runWithAdapter(withVias, new FixtureAgentAdapter("openai"), { message: `Use the Gold via padstack for every via on the ${POWER_NET_NAME} net` });
+    expect(answerOf(missing)).toContain('no padstack called "Gold via"');
+    expect(answerOf(missing), "and it lists the ones it has").toContain("Power via 0.8/0.4");
+    expect(missing.events.some((event) => event.type === "pcb_proposal_ready")).toBe(false);
   }, 40_000);
 });

@@ -960,3 +960,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   artifact manifests regenerated; the 158-route ratchet untouched (a tool, not a route).
 - Tests: b18-e-via-facts 9/9 (new, added to the CI list); broad run: 262 files, 3389 passed, 10 expected skips; tsc 0; eslint clean.
 - E12's CI: green at `9f22e6f` (deterministic-manufacturing 34675746967 and benchmark-quality 34675746960, both success).
+
+### B18-E E14 — scenario 2, part 3: the scripted via plan, and the browser's honest half (2026-09-12 local, solo; this commit)
+
+- The scripted agent now reads the vias before it answers anything. Its plan is built from the read's four real outcomes:
+  no such net, vias whose geometry belongs to a padstack the asked-for pair is not, more vias than one proposal holds, and
+  the case where the change really is proposable. A second grammar asks for the lawful move directly — retarget a net's
+  vias onto a padstack that already exists.
+- Five harness cases on the via-bearing board: the verbatim sentence names the rail the board really has and changes
+  nothing; asked by that name the refusal names the bound padstack, the padstacks that exist and where the human fork
+  lives; the lawful ask seals ONE proposal whose review lines carry E12's geometry; no run mints a grant or moves the head.
+- The browser (agent-execution, 26/26): the run log shows the bounded via read running for real and the answer is "this
+  board has no vias at all… Nothing was changed" — no card, no proposal, no transaction, nothing moved. Evidence PNG
+  committed.
+- Found by running it: the browser journey's board CANNOT be routed on this machine. Qualification answers
+  `ROUTE_FIXTURE_MISS:pcb2-d5bd2f299ef57ca0 (recorded: 2)` and writes nothing durable, and re-recording needs the real
+  bundled FreeRouting, which needs a JRE this machine does not have. Recorded as LB-8 and as a harness limit, with the
+  measured revision and the two recorded executions — not worked around. Nothing was fabricated into the route fixture and
+  no assertion was softened to make a routed board appear; a draft spec that assumed one was deleted rather than left
+  half-passing.
+- Tests: b18-c-fixture-agent 15/15 (5 new); browser: 26/26 (1 new), 4.5 min; broad run: 262 files, 3394 passed, 10 expected skips; tsc 0; eslint clean.
+- E13's CI: green at `4342c91` (deterministic-manufacturing 34676531955 and benchmark-quality 34676531968, both success).

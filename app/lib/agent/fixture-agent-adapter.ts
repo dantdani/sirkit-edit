@@ -45,12 +45,24 @@ type Planned =
   /** [B18-E E7] the same execution call twice in one step, with distinct call ids (scenario 7's double call). */
   | { kind: "twice"; toolId: string; args: Record<string, unknown> }
   /** [B18-E E10] scenario 3: read the board first, then dimension what the snapshot actually showed. */
-  | { kind: "board-then"; build: (board: BoardFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
+  | { kind: "board-then"; build: (board: BoardFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } }
+  /** [B18-E E14] scenario 2: read the net's vias first, then say what is actually possible — or propose it. */
+  | { kind: "via-then"; netName: string; build: (facts: NetViaFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
 
 /** [B18-E E10/E11] what the scripted agent reads out of the mechanical read (the same fields a model would use). */
 export interface BoardFacts {
   outline: { originMm: { x: number; y: number }; widthMm: number; heightMm: number } | null;
   mountingHoles: Array<{ id: string; reference: string; positionMm: { x: number; y: number } }>;
+}
+
+/** [B18-E E14] what the scripted agent reads out of the bounded VIA read. */
+export interface NetViaFacts {
+  /** The net the read matched, or null when the asked-for name is not a net on this board. */
+  net: { netId: number; name: string } | null;
+  netsWithVias: Array<{ name: string; viaCount: number }>;
+  vias: Array<{ id: string; diameterMm: number; drillMm: number; padstack: { id: string; name: string; outerMm: number; drillMm: number } | null }>;
+  viaCount: number;
+  viaPadstacks: Array<{ id: string; name: string; outerMm: number; drillMm: number }>;
 }
 
 const MOVE = /^(?:please\s+)?move\s+([a-z]+\d+)\s+(\d+(?:\.\d+)?)\s*mm\s+(?:to\s+the\s+)?(right|left|up|down)$/i;
@@ -65,6 +77,14 @@ const REPLAY = /^(?:please\s+)?(undo|redo)(?:\s+that)?$/i;
 // [B18-E E10] scenario 3, exactly as the runbook words it (the mounting-hole half is answered from what the board shows).
 const DIMENSION = /^(?:please\s+)?add\s+horizontal\s+and\s+vertical\s+dimensions\s+for\s+the\s+board(?:\s+and\s+mounting\s+holes)?$/i;
 const DIMENSION_OFFSET_NM = 2_000_000; // 2 mm clear of the outline, so the annotation is readable and never zero
+// [B18-E E14] scenario 2, exactly as the runbook words it, and the lawful follow-up a person can ask for instead.
+const VIA_RESIZE = /^(?:please\s+)?change\s+every\s+via\s+on\s+the\s+(.{1,64}?)\s+net\s+to\s+(\d+(?:\.\d+)?)\s*mm\s+diameter\s+and\s+(\d+(?:\.\d+)?)\s*mm\s+drill$/i;
+const VIA_PADSTACK = /^(?:please\s+)?use\s+the\s+(.{1,64}?)\s+padstack\s+for\s+(?:every|all|the)\s+vias?\s+on\s+the\s+(.{1,64}?)\s+net$/i;
+/** A bounded PCB proposal carries at most this many operations (`BOUNDED_EDIT_LIMITS.maxOperations`); the agent says so
+ *  rather than silently proposing part of a net. Duplicated as a literal on purpose: the fixture agent is a stand-in for a
+ *  model, and a model has no import of the server's limits either. */
+const PROPOSABLE_VIAS = 16;
+const mmText = (value: number): string => value.toFixed(3);
 const VECTORS: Readonly<Record<string, readonly [number, number]>> = Object.freeze({ right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] });
 /** [B18-D I6] A model may write text beside an execution call that claims the change is made; the scripted agent does, so
  *  the browser proof can show it never reaches the answer (it is released as a note once the run ends). */
@@ -133,9 +153,101 @@ export function planFixtureInstruction(message: string): Planned {
       },
     };
   }
+  // [B18-E E14] scenario 2: read the net's vias FIRST. What can be said next is decided by what the board answered — a net
+  // that does not exist, vias whose geometry belongs to a padstack, or vias this proposal may actually resize.
+  const viaResize = VIA_RESIZE.exec(text);
+  if (viaResize) {
+    const netName = viaResize[1]!.trim();
+    const sizeNm = Math.round(Number(viaResize[2]) * NM_PER_MM);
+    const drillNm = Math.round(Number(viaResize[3]) * NM_PER_MM);
+    return {
+      kind: "via-then", netName,
+      build: (facts) => {
+        const missing = noSuchNet(netName, facts);
+        if (missing) return { reply: missing };
+        const bound = facts.vias.filter((via) => via.padstack !== null);
+        if (bound.length > 0) {
+          // A bound via takes its size and drill FROM its padstack. The only proposable move is a retarget, and only onto a
+          // padstack that already exists — so if the asked-for pair is not in the library, the honest answer is that it cannot
+          // be done here, naming what does exist and where the fork lives.
+          const match = facts.viaPadstacks.find((padstack) => Math.round(padstack.outerMm * NM_PER_MM) === sizeNm && Math.round(padstack.drillMm * NM_PER_MM) === drillNm);
+          if (!match) {
+            const names = facts.viaPadstacks.map((padstack) => `${padstack.name} (${mmText(padstack.outerMm)}/${mmText(padstack.drillMm)} mm)`).join(", ") || "none";
+            return { reply: `(fixture agent) ${bound.length} of the ${facts.viaCount} vias on ${facts.net!.name} take their size and drill from a padstack (${bound[0]!.padstack!.name}), so I cannot set ${mmText(sizeNm / NM_PER_MM)} mm / ${mmText(drillNm / NM_PER_MM)} mm on them. This board's via padstacks are: ${names}. Creating a new one is your step in the editor (the via inspector's create-padstack, then set-via-padstack). Nothing was changed.` };
+          }
+          return retargetPlan(facts, match);
+        }
+        if (facts.viaCount > PROPOSABLE_VIAS) return { reply: `(fixture agent) ${facts.net!.name} carries ${facts.viaCount} vias and one proposal holds at most ${PROPOSABLE_VIAS}, so I will not change part of the net and call it done. Nothing was changed.` };
+        return { toolId: "sirkit.pcb.propose-bounded-edit", args: { intent: `resize the vias on ${facts.net!.name}`.slice(0, 240), operations: facts.vias.map((via) => ({ kind: "update_via", viaId: via.id, sizeNm, drillNm })) } };
+      },
+    };
+  }
+  // [B18-E E14] the lawful follow-up: retarget the net's vias onto a padstack that already exists, by its own name.
+  const viaPadstack = VIA_PADSTACK.exec(text);
+  if (viaPadstack) {
+    const padstackName = viaPadstack[1]!.trim();
+    const netName = viaPadstack[2]!.trim();
+    return {
+      kind: "via-then", netName,
+      build: (facts) => {
+        const missing = noSuchNet(netName, facts);
+        if (missing) return { reply: missing };
+        const match = facts.viaPadstacks.find((padstack) => padstack.name.toLowerCase() === padstackName.toLowerCase() || padstack.id.toLowerCase() === padstackName.toLowerCase());
+        if (!match) return { reply: `(fixture agent) this board has no padstack called "${padstackName}". It has: ${facts.viaPadstacks.map((padstack) => padstack.name).join(", ") || "none"}. Nothing was changed.` };
+        return retargetPlan(facts, match);
+      },
+    };
+  }
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+}
+
+/** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
+function noSuchNet(asked: string, facts: NetViaFacts): string | null {
+  if (facts.net) return null;
+  const carrying = facts.netsWithVias.map((net) => `${net.name} (${net.viaCount})`).join(", ");
+  return carrying.length > 0
+    ? `(fixture agent) this board has no net called "${asked}". The nets that carry vias are: ${carrying}. Nothing was changed.`
+    : `(fixture agent) this board has no vias at all, so there is nothing on "${asked}" to change. Nothing was changed.`;
+}
+
+/** [B18-E E14] The one geometry change a bound via allows: retarget onto a padstack that already exists, bounded to 16. */
+function retargetPlan(facts: NetViaFacts, padstack: NetViaFacts["viaPadstacks"][number]): { toolId: string; args: Record<string, unknown> } | { reply: string } {
+  const targets = facts.vias.filter((via) => via.padstack?.id !== padstack.id);
+  if (targets.length === 0) return { reply: `(fixture agent) every via on ${facts.net!.name} already uses ${padstack.name} (${mmText(padstack.outerMm)} mm / ${mmText(padstack.drillMm)} mm). Nothing to change.` };
+  if (targets.length > PROPOSABLE_VIAS) return { reply: `(fixture agent) ${facts.net!.name} carries ${facts.viaCount} vias and one proposal holds at most ${PROPOSABLE_VIAS}, so I will not change part of the net and call it done. Nothing was changed.` };
+  return { toolId: "sirkit.pcb.propose-bounded-edit", args: { intent: `${padstack.name} on ${facts.net!.name}`.slice(0, 240), operations: targets.map((via) => ({ kind: "update_via", viaId: via.id, padstackId: padstack.id })) } };
+}
+
+/** [B18-E E14] Read what a via plan needs out of the BOUNDED via result — only fields it states, nothing inferred. */
+export function netViaFacts(outputText: string | undefined): NetViaFacts {
+  const empty: NetViaFacts = { net: null, netsWithVias: [], vias: [], viaCount: 0, viaPadstacks: [] };
+  const padstackOf = (raw: unknown): NetViaFacts["viaPadstacks"][number] | null => {
+    const item = raw as Record<string, unknown> | null;
+    return item && typeof item.id === "string" && typeof item.name === "string" && typeof item.outerMm === "number" && typeof item.drillMm === "number"
+      ? { id: item.id, name: item.name, outerMm: item.outerMm, drillMm: item.drillMm }
+      : null;
+  };
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { vias?: unknown } };
+    const read = parsed.output?.vias as Record<string, unknown> | undefined;
+    if (!read) return empty;
+    const net = read.net as { netId?: unknown; name?: unknown } | null | undefined;
+    const vias = Array.isArray(read.vias) ? (read.vias as Array<Record<string, unknown>>) : [];
+    const nets = Array.isArray(read.netsWithVias) ? (read.netsWithVias as Array<Record<string, unknown>>) : [];
+    return {
+      net: net && typeof net.netId === "number" && typeof net.name === "string" ? { netId: net.netId, name: net.name } : null,
+      netsWithVias: nets.flatMap((entry) => (typeof entry.name === "string" && typeof entry.viaCount === "number" ? [{ name: entry.name, viaCount: entry.viaCount }] : [])),
+      vias: vias.flatMap((via) => (typeof via.id === "string" && typeof via.diameterMm === "number" && typeof via.drillMm === "number"
+        ? [{ id: via.id, diameterMm: via.diameterMm, drillMm: via.drillMm, padstack: padstackOf(via.padstack) }]
+        : [])),
+      viaCount: typeof read.viaCount === "number" ? read.viaCount : vias.length,
+      viaPadstacks: Array.isArray(read.viaPadstacks) ? (read.viaPadstacks as unknown[]).flatMap((raw) => { const padstack = padstackOf(raw); return padstack ? [padstack] : []; }) : [],
+    };
+  } catch {
+    return empty;
+  }
 }
 
 function selectedFootprints(outputText: string | undefined): SelectedFootprint[] {
@@ -189,6 +301,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   private planned: Planned = { kind: "reply", text: "" };
   private awaitingSelection = false;
   private awaitingBoard = false;
+  private awaitingVias = false;
   private seq = 0;
 
   constructor(readonly provider: LLMProviderId) {}
@@ -215,6 +328,10 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
       this.awaitingBoard = true;
       return this.call(input.tools, "sirkit.pcb.mechanical-inspect", {});
     }
+    if (this.planned.kind === "via-then") {
+      this.awaitingVias = true;
+      return this.call(input.tools, "sirkit.pcb.via-inspect", { netName: this.planned.netName });
+    }
     // [B18-E E7] a forged name skips the declaration lookup on purpose: the run must refuse a tool it never advertised, and the
     // interim claim must still only ever appear as a labelled note.
     if (this.planned.kind === "forged") {
@@ -237,6 +354,11 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
       const next = planned.build(boardFacts(outputText));
+      return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
+    }
+    if (this.awaitingVias && planned.kind === "via-then") {
+      this.awaitingVias = false;
+      const next = planned.build(netViaFacts(outputText));
       return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
     }
     if (this.awaitingSelection && planned.kind === "select-then") {

@@ -9,7 +9,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | # | Scenario | Sirkit's path (tier) | Proof at `e543cfe` | Increments |
 |---|---|---|---|---|
 | 1 | "Move R3 2 mm to the right." | Tier 1 grant (`sirkit.pcb.move-footprint`): a preview card under `proposal_only`; under `execute_explicit_tier1` the minter proves the whole message and it runs without the card. Either way ONE canonical transaction, reported from the settled record. | unit and integration yes (loop, gateway, minter, ritual); browser: the exact sentence on the preview path only — the explicit path uses a variant sentence | E3, E8 |
-| 2 | "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill." | Tier 2 sealed PCB proposal (`propose-bounded-edit`, `update_via` ×N, at most 16) that the human applies; via edits are never granted (OD-13). | the compiler in unit; nothing through the loop; no browser | E12, E13, E14 (OD-20) |
+| 2 | "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill." | Tier 2 sealed PCB proposal (`propose-bounded-edit`, `update_via` ×N, at most 16) that the human applies; via edits are never granted (OD-13). | unit, integration and the real loop; the browser proves the read and the truthful answer — its board cannot be routed here (LB-8) | E12, E13, E14 (OD-20) |
 | 3 | "Add horizontal and vertical dimensions for the board and mounting holes." | Tier 1 grant, confirmation-only (`sirkit.pcb.dimension`, OD-11): a card even under explicit autonomy. A Tier 2 route (`add_dimension`) also exists. | the builder in unit; one horizontal dimension through the loop; no browser; Sirkit has no mounting-hole object | E10, E11 (OD-21, OD-22) |
 | 4 | "Delete U1 and replace it with the approved lower-power part while preserving compatible nets." | Tier 2 sealed replacement proposal (B14) the human applies; never a grant. The composer routes the sentence to the legacy schematic edit today. | the B14 route with a hard-coded call; no browser; the fixture runtime has no component authority source | E15, E16 (OD-23) |
 | 5 | "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed." | Tier 2 layout candidates the human applies; one side-effecting artifact per run (placement and routing take turns); the routing engine is local-only. | partial integration; no browser | E17, E18 (OD-24, OD-29) |
@@ -27,6 +27,12 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 ## 2. Harness limits (recorded, not hidden)
 
 - **The scripted agent only.** Every browser and loop proof drives the real loop, gateway, minter, ritual and page with the scripted fixture agent; a real model is BLOCKED-LIVE-QUALIFICATION (OD-7, LB-7).
+- **No routed board in the browser.** Vias exist only on a ROUTED board, and the browser journey's placed board is not one the
+  committed route recording covers: qualification answers `ROUTE_FIXTURE_MISS:pcb2-d5bd2f299ef57ca0 (recorded: 2)` and writes
+  nothing (measured, E14). Re-recording needs the real bundled FreeRouting, which needs a JRE this machine does not have
+  (LB-3, now LB-8). So scenario 2's browser proof is what that board can truthfully host — the read, the answer, and the
+  absence of any change — and the padstack refusal, the sealed proposal and the review dialog are proven in integration and
+  against the real dialog component instead.
 - **The frozen fixture clock.** The fixture server's time does not advance, so grant lifetimes and the 60 s settlement wait never elapse in the browser; expiry and `execution_unsettled` are proven in integration.
 - **The board-inspect result budget.** A dimension plan must READ the board, and E3 measured the snapshot at 40,410
   characters on the PLACED board against `MAX_RESULT_CHARS` 60,000 — but 70,173 and 72,453 once the board is ROUTED.
@@ -63,7 +69,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E11 | Scenario 3, part 2: the browser proof, and the routed-board read limit | 3 | CONFIRMED — see §6 |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | CONFIRMED — see §6 |
 | E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | CONFIRMED — see §6 |
-| E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | planned |
+| E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | CONFIRMED — see §6 |
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | planned |
 | E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | planned |
 | E17 | Scenario 5, part 1: truthful layout reporting | 5 | planned |
@@ -401,3 +407,29 @@ at all, for three independent reasons, and the harness had nothing to plan again
 - The read joins the four exposure gates by NAME (never a loosened count), the B11 evaluation cases (19/19, 61/61 checks)
   and six regenerated artifact manifests. The 158-route ratchet is untouched: this is a tool, not a route.
 - Tests: b18-e-via-facts 9/9 (new, in the CI list); broad run: 262 files, 3389 passed, 10 expected skips
+
+### E14 — scenario 2, part 3: the scripted via plan, and what the browser can truthfully host (CONFIRMED)
+
+- **The scripted agent reads before it answers.** A new `via-then` plan turns the runbook's sentence into a call to the
+  bounded via read carrying the name the person used, verbatim, and then decides from what the board answered — never from
+  anything assumed. The four outcomes are all real ones: no such net (the nets that DO carry vias are named); vias bound to
+  a padstack and no padstack of the asked-for geometry (named, with the human fork — create-padstack in the via inspector);
+  more vias than one proposal holds (16, said plainly rather than changing part of a net); and, where the geometry really is
+  available, a sealed Tier 2 proposal. A second grammar asks for the lawful move directly: retarget a net's vias onto a
+  padstack that exists, by its own name.
+- **Through the real harness** (`b18-c-fixture-agent`, 5 new cases on `fixtureBoard({ vias: true })`): the verbatim sentence
+  names `/root/VCC` and changes nothing; asked by that name it refuses truthfully, naming the bound padstack, the ones the
+  board has, and where the fork lives; the lawful ask seals exactly ONE proposal whose review lines read
+  `Update via via-vcc-1 — padstack Power via 0.8/0.4 (0.800 mm pad / 0.400 mm drill)` — E12's fix, in the artifact a human
+  would approve; and no run mints a grant or moves the head.
+- **In the real app** (`agent-execution`, one new case, 26/26): the sentence goes to the assistant, the run's log shows
+  `T0 · Inspect the vias on a net — done`, and the answer is "this board has no vias at all, so there is nothing on "5 V" to
+  change. Nothing was changed." No card, no sealed proposal, no transaction, nothing moved. Evidence:
+  `evidence/scenario-2-no-vias-answer.png`.
+- **Why that is the honest browser proof, and not the whole scenario.** The journey's board is PLACED; vias exist only once
+  it is ROUTED, and qualification cannot route it here — the committed recording does not cover this journey's placed board
+  (`ROUTE_FIXTURE_MISS:pcb2-d5bd2f299ef57ca0`, 2 executions recorded), and re-recording needs the real FreeRouting, which
+  needs a JRE this machine does not have. That is recorded as LB-8 rather than worked around: no fixture was fabricated and
+  no assertion was weakened to make a routed board appear. The padstack refusal, the sealed proposal and the review dialog
+  are proven in integration and against the REAL dialog component (E12/E13).
+- Browser run: agent-execution 26/26 (1 new), 4.5 min; broad run: 262 files, 3394 passed, 10 expected skips

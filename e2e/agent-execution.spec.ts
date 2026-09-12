@@ -911,6 +911,27 @@ test("[B18-E E11] scenario 3 in the browser: the assistant reads the board and d
   expect(after.footprints, "dimensioning moves nothing").toEqual(start.footprints);
 });
 
+test("[B18-E E14] scenario 2 in the browser: the assistant reads the vias before it answers, and this board has none — so it says so, proposes nothing, and changes nothing", async () => {
+  const start = await board();
+  const committed = await committedLines().count();
+  const replies = page.getByText(/^\(fixture agent\) /);
+  await chat("Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill.");
+  // The answer is made of what the bounded via read actually returned. The browser journey's board is PLACED, never
+  // routed, so it has no vias at all — and the honest answer says exactly that instead of inventing a net.
+  const answer = (await replies.last().textContent()) ?? "";
+  expect(answer).toContain("no vias at all");
+  expect(answer).toContain("Nothing was changed");
+  expect(answer, "it never claims a change, and never names a net the board does not have").not.toContain("0.700");
+  await page.screenshot({ path: `${EVIDENCE}/scenario-2-no-vias-answer.png`, fullPage: false });
+  // Tier 2 all the way: no grant card, no execution entry, no review dialog, no transaction.
+  await expect(page.getByTestId("granted-execution-card"), "a via edit is never a Tier 1 grant").toBeHidden();
+  await expect(page.getByRole("heading", { name: "Bounded PCB edits — review before applying" }), "and nothing was sealed to review").toHaveCount(0);
+  await expect(committedLines()).toHaveCount(committed);
+  const after = await board();
+  expect(after.footprints, "nothing moved").toEqual(start.footprints);
+  expect(after.dimensions.length, "and nothing was added").toBe(start.dimensions.length);
+});
+
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
   const probeText = "(fixture interim) Done — R3 moved";
   const before = interimLog.length;
