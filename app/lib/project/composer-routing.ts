@@ -11,6 +11,9 @@
  *  5. begins with an edit verb or create / build / make / draw AND names a PCB object (silkscreen, via, track, trace,
  *     dimension, copper, zone, pour, keep-out, courtyard, drill, layer, pcb, drc, board outline) → ask — a PCB change
  *     the schematic editor cannot make ("footprint" and "board" alone are excluded: both name schematic-side things too);
+ *  5b. names a component REPLACEMENT (a replace/swap that names a part, component, MPN or alternate) → ask — swapping a
+ *     part is the server-owned sealed replacement proposal (B14), which the schematic editor cannot make; a value change
+ *     ("replace R1 with 4.7k") names no part and stays an edit;
  *  6. begins with make <reference designator> → edit;
  *  7. begins with create / build / make / draw → generate;
  *  8. begins with an edit verb (word-bounded) → edit;
@@ -33,6 +36,9 @@ const GENERATE_VERB = /^(?:create|build|make|draw)\b/;
 const EXECUTION_VERB = /^(?:please\s+)?(?:move|shift|nudge|rotate|turn|flip|put|undo|redo)\b/;
 const PCB_NOUN = /\b(?:silk(?:screen)?|vias?|tracks?|traces?|dimensions?|copper|zones?|pours?|keep-?outs?|courtyards?|drills?|layers?|pcb|drc|board outline)\b/;
 const MAKE_PART = /^make\s+(?:r|c|u|d|led|j|sw)\d+\b/;
+// [B18-E E15] scenario 4: a part SWAP is the sealed replacement proposal the assistant owns, not a schematic edit. It is
+// recognised by the pairing — a replace/swap verb anywhere with a word naming the thing being swapped IN.
+const REPLACE_PART = /\b(?:replace|replacing|swap|swapping|substitute)\b[^.!?]*\b(?:parts?|components?|mpns?|alternates?|alternatives?|chips?)\b/;
 const TIER3_WORD = /\b(?:release|publish|order|purchase|buy|qualify|upload|ship)\b/;
 
 export function routeComposerMessage(text: string, hasSchematic: boolean): ComposerRouting {
@@ -44,6 +50,7 @@ export function routeComposerMessage(text: string, hasSchematic: boolean): Compo
   if (/^(?:generate|design)\b/.test(t)) return routed("generate", "asks to generate or design a circuit");
   if (EXECUTION_VERB.test(t)) return routed("ask", "a move, rotate, flip, undo or redo request: the assistant handles it");
   if ((EDIT_VERB.test(t) || GENERATE_VERB.test(t)) && PCB_NOUN.test(t)) return routed("ask", "names a PCB object the schematic editor cannot change: the assistant handles it");
+  if (REPLACE_PART.test(t)) return routed("ask", "asks to swap a part: the assistant prepares the server-owned replacement proposal the schematic editor cannot make");
   if (MAKE_PART.test(t)) return routed("edit", "changes a named schematic part");
   if (GENERATE_VERB.test(t)) return routed("generate", "asks to create a circuit");
   if (EDIT_VERB.test(t)) return routed("edit", "an edit to the current schematic");

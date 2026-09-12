@@ -981,3 +981,29 @@ _(discovery, reproduction and results appended below as they are observed)_
   half-passing.
 - Tests: b18-c-fixture-agent 15/15 (5 new); browser: 26/26 (1 new), 4.5 min; broad run: 262 files, 3394 passed, 10 expected skips; tsc 0; eslint clean.
 - E13's CI: green at `4342c91` (deterministic-manufacturing 34676531955 and benchmark-quality 34676531968, both success).
+
+### B18-E E15 — scenario 4, part 1: the sentence reaches the assistant, and the chat says what happened (2026-09-12 local, solo; this commit)
+
+- Discovery first: five parallel readers over the sealed replacement path, the component-authority source, the composer and
+  loop, the human surfaces and the existing tests (64 findings, 36 gaps, every claim with a file:line). B14's artifact,
+  gateway contract and human apply are proven densely already and were left alone.
+- The runbook's scenario-4 sentence did not reach the assistant: the composer routed it to the legacy schematic edit route,
+  which knows nothing about component authority or replacement. So the scenario was unreachable through the product. A part
+  SWAP now routes to the assistant; a value change still belongs to the schematic editor, and both are pinned.
+- The only route-level proof hard-coded the component id and used a different sentence. The runbook's sentence now travels
+  the REAL /api/chat handler: the provider READS the schematic to resolve "U1", then sends only that id. Every identity in
+  the sealed target comes from the server-owned authority and is asserted never to appear in the model's arguments.
+- The chat was silent on two of the four outcomes: a refused apply was a transient toast (the run log went on saying a
+  proposal awaited review), and a cancel said nothing. All four sentences are now one tested pure function the page calls,
+  and the missing two reach the chat — the same standard E12 applied to the PCB path.
+- "the approved lower-power part": the authority record carries no power fact, so nothing may call the target lower-power.
+  The page states what is true — the part, the manufacturer, that the project's authority records it, the connections kept,
+  none dropped, nothing changed — and a test pins that no power claim appears in that sentence or in the model's result.
+- Corrected a sentence in the chapter record rather than proving it verbatim: "the model never chooses the target" was
+  wrong; the model names the component, never the part.
+- Found and fixed before committing: a scripted edit had rewritten `app/page.tsx` line endings CRLF-wide, which broke a
+  B16.0.2 source gate locally. The working tree was normalized back to LF; the earlier commits on this branch are clean
+  (git normalized them on commit, verified against HEAD).
+- Tests: b18-e-scenario-4-route 6/6, b18-e-scenario-4-chat 8/8 (both new, added to the CI list); broad run: 264 files, 3407 passed, 10 expected skips;
+  tsc 0; eslint clean on the changed files (page.tsx's pre-existing react-hooks findings unchanged in count).
+- E14's CI: green at `40b22dd` (deterministic-manufacturing 34677824967 and benchmark-quality 34677824886, both success).

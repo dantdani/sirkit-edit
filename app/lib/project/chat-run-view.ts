@@ -299,6 +299,37 @@ export function editProposalMessages(note: unknown): { answer: string; note: str
   };
 }
 
+/**
+ * [B18-E E15] The chat's own sentences for a sealed COMPONENT REPLACEMENT (scenario 4), so what the human is told is a
+ * tested string rather than a literal buried in the page. Each states what really happened and nothing more:
+ *
+ *  - `ready` names the target AND where it came from — the project's recorded component authority, which is the only
+ *    thing that chose it. The model names the component to replace; it can never name the part (B14). No claim about the
+ *    part beyond its identity is ever made here, because the authority record carries no such fact to make one from.
+ *  - `applied` names the transaction, so the sentence points at something undoable.
+ *  - `refused` exists at all: a refused apply used to be a transient toast and nothing else, so the run log kept saying a
+ *    proposal was awaiting review and never said the attempt had failed and changed nothing.
+ *  - `discarded` closes the same loop for a cancel.
+ */
+export const replacementChatLines = Object.freeze({
+  ready(input: { partId: string; manufacturer?: string; preservedConnections: number; droppedConnections: number }): string {
+    const maker = input.manufacturer ? ` (${input.manufacturer.slice(0, 80)})` : "";
+    const kept = input.preservedConnections === 1 ? "1 connected pin keeps its connection" : `${input.preservedConnections} connected pins keep their connections`;
+    const dropped = input.droppedConnections === 0 ? "none are dropped" : `${input.droppedConnections} would be dropped`;
+    return `Replacement proposal ready — ${input.partId.slice(0, 120)}${maker}, the part this project's component authority records for this component. ${kept}, ${dropped}. Nothing has been changed; it awaits your explicit review.`;
+  },
+  applied(input: { alreadyApplied: boolean; sourcePartId: string; targetPartId: string; transactionId: string }): string {
+    return `Replacement ${input.alreadyApplied ? "was already applied" : "applied"} — ${input.sourcePartId.slice(0, 120)} → ${input.targetPartId.slice(0, 120)}, canonical transaction ${input.transactionId.slice(0, 12)}… (verified, undoable).`;
+  },
+  refused(message: unknown): string {
+    const text = typeof message === "string" && message.trim() !== "" ? message.trim().slice(0, 300) : "the editor refused it.";
+    return `Replacement NOT applied: ${text} Nothing was changed.`;
+  },
+  discarded(): string {
+    return "Replacement proposal discarded — nothing was changed.";
+  },
+});
+
 /** [B18-D review 2] The note sealed into a schematic edit proposal is the page's own sentence (as the agent path's is): the
  *  model's note never reaches the review dialog — it is only a labelled note in the run log (Rule 2, OD-18). */
 export function editRouteProvenanceNote(note: unknown): string {

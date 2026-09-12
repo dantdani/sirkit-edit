@@ -60,7 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -3862,13 +3862,15 @@ export default function Home() {
           setReplacementReceipt(outcome.receipt);
           setSelectedId(null);
           setSelectedKicadId(null);
-          const verb = outcome.status === "already-applied" ? "was already applied" : "applied";
-          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: `Replacement ${verb} — ${outcome.receipt.sourcePartId} → ${outcome.receipt.target.partId}, canonical transaction ${outcome.receipt.transactionId.slice(0, 12)}… (verified, undoable).` }]);
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.applied({ alreadyApplied: outcome.status === "already-applied", sourcePartId: outcome.receipt.sourcePartId, targetPartId: outcome.receipt.target.partId, transactionId: outcome.receipt.transactionId }) }]);
           autoRunIncludesTidy.current = false;
           setAutoRunToken((t) => t + 1);
         } else {
           if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") { setPendingReplacement(null); setPendingReplacementRunId(null); }
           showToast(outcome.message);
+          // [B18-E E15] a refused apply used to be a toast and nothing else: the run log kept saying a proposal awaited
+          // review and never said the attempt failed. The chat now says it, in the same place the success sentence lands.
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.refused(outcome.message) }]);
         }
       });
     } finally {
@@ -3881,7 +3883,9 @@ export default function Home() {
     if (pendingReplacement) approvedMutationAudit.record({ at: Date.now(), proposalId: pendingReplacement.proposalId, originRunId: pendingReplacementRunId, event: "canceled", code: null });
     setPendingReplacement(null);
     setPendingReplacementRunId(null);
-    showToast("Replacement proposal discarded — nothing was changed.");
+    showToast(replacementChatLines.discarded());
+    // [B18-E E15] and the chat is told the decision, so the run log does not keep saying a proposal awaits review.
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.discarded() }]);
   }, [replacementApplyBusy, pendingReplacement, pendingReplacementRunId]);
 
   // ── B06.2: explicit schematic-history recovery choices ─────────────────────
@@ -4567,7 +4571,14 @@ export default function Home() {
               setPendingReplacement(replacement.proposal);
               setPendingReplacementRunId(replacement.runId);
               approvedMutationAudit.record({ at: Date.now(), proposalId: replacement.proposal.proposalId, originRunId: replacement.runId, event: "approval-displayed", code: null });
-              appendActivityStep(logId, `Replacement proposal ready — ${replacement.proposal.target.partId} awaiting your explicit review`, "done");
+              // [B18-E E15] the page's own sentence: the target, where it came from (the recorded authority — never the
+              // model's choice), and what happens to the connections. Nothing has been changed at this point.
+              appendActivityStep(logId, replacementChatLines.ready({
+                partId: replacement.proposal.target.partId,
+                manufacturer: replacement.proposal.target.manufacturer,
+                preservedConnections: replacement.proposal.impact.preservedConnections.length,
+                droppedConnections: replacement.proposal.impact.droppedConnections.length,
+              }), "done");
               return;
             }
             if (proposal && proposal.schema === TIER1_PROPOSAL_SCHEMA && Array.isArray(proposal.operations)) {

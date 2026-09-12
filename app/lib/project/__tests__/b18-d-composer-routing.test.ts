@@ -43,10 +43,12 @@ describe("B18-D I1 — the composer routes by the first words; PCB changes reach
       "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed.",
       "Undo that.",
       "Redo.",
+      // [B18-E E15] scenario 4 now reaches the assistant too: swapping a part is the server-owned sealed replacement
+      // proposal (B14), which the legacy schematic edit route cannot make at all.
+      "Delete U1 and replace it with the approved lower-power part while preserving compatible nets.",
     ]) expect(route(text), text).toBe("ask");
-    // Scenario 4 is the one the composer still sends to the legacy schematic edit (found by B18-E's discovery); E15 routes it to
-    // the assistant, and this pin moves with it.
-    expect(route("Delete U1 and replace it with the approved lower-power part while preserving compatible nets.")).toBe("edit");
+    // …and only that: a VALUE change still belongs to the schematic editor, because it names no part to swap in.
+    for (const text of ["replace R1 with 4.7k", "set R1 to 4.7k", "delete C3", "rename U1 to U2"]) expect(route(text), text).toBe("edit");
   });
 
   it("a release / order / qualify word adds the display-only Tier 3 hint and never changes the route", () => {
