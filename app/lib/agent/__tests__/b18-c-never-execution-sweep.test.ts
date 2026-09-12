@@ -98,6 +98,20 @@ describe("B18-C I9 — the never-execution sweep (scenario 8)", () => {
     }
   });
 
+  it("[B18-E E6] a Tier 3 command dressed up as a reviewed execution is never granted, whatever the tool is called", () => {
+    const move = registry.get("sirkit.pcb.move-footprint")!;
+    // Scenario 8's "regardless of tool name", at the seal: these commands are outside NEVER_GRANTED_COMMAND_IDS, so they are
+    // refused by the Tier 3 family floor and the reviewed-list rule rather than by that list.
+    for (const command of ["manufacturing.release", "manufacturing.export-engineering", "pcb.qualify-route", "bom.order"]) {
+      const renamed: ToolDescriptor = { ...move, toolId: `sirkit.pcb.helpful-${command.replace(/[^a-z0-9]+/gi, "-")}`, owningCommandId: command, binding: { ...move.binding, canonicalCommandId: command } };
+      const rows: GrantedExecutionTool[] = [...GRANTED_EXECUTION_TOOLS, { toolId: renamed.toolId, family: command as ExecutionFamily, reason: "test: a reviewed-looking row for a Tier 3 command" }];
+      // Not every Tier 3 command matches the family-name floor: `manufacturing.export-engineering` is Tier 3 by its release
+      // CLASS, and `pcb.qualify-route` by the qualify family — both are refused here all the same.
+      expect(grantedExecutionViolations(renamed, rows), command).not.toEqual([]);
+      expect(sealExecutionIntent({ descriptor: renamed, args: MOVE_ARGS, context: context() }), command).toMatchObject({ ok: false });
+    }
+  });
+
   it("nested delegation — another tool, an approval, a grant or a follow-up call named in the arguments — is refused as invalid and mints nothing", async () => {
     const m = minting();
     const gateway = createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION });

@@ -760,3 +760,23 @@ _(discovery, reproduction and results appended below as they are observed)_
   of starting it, and a transport double that can refuse a tender as the route would.
 - Tests: b18-e-scenario-7 4/4 (new); the eight harness-based B18-C suites 46/46; broad run: 257 files / 3350 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: this increment is test-only; CI's page-browser-e2e
   runs the full suite over this commit anyway.
+
+### B18-E E6 — scenario 8: qualify, release and order are not reachable (2026-09-11 local, solo; this commit)
+
+- Through the real loop (`b18-e-scenario-8`, new, in the CI list): five invented provider names — including two spellings of the
+  release tool, a qualify name, an order name and a friendly-sounding one — are each refused `unknown_tool` with no tool started,
+  no grant minted and the board and head untouched; a move carrying a nested delegation to a release tool is refused before it
+  runs. At the seal (`b18-c-never-execution-sweep`): a Tier 3 command renamed as a reviewed execution is refused whatever the
+  tool is called.
+- Production route (defence in depth, narrowing only): `/api/pcb/qualify` refuses a non-human actor kind before any durable read
+  with `MFG_QUALIFY_HUMAN_REQUIRED` (403, registered in the closed manufacturing-refusal vocabulary), mirroring the release
+  route's long-standing check. No agent tool binds this route and the family is Tier 3, so the AI gains nothing; humans are
+  unaffected (the role rows are untouched); no route is added — the ratchet stays 158 = 155 + 3 + 0. Pinned by
+  `qualify-human-only` (the three non-human kinds refused, no durable read, a human passing the check) and by the B16.1C source
+  tripwire.
+- Tiers: `pcb.qualify-route` pinned Tier 3; the Tier 3 family floor matches the qualify spellings.
+- Found while writing it: (a) the B16.1C tripwire's title and header said "155 route methods = 152 canonical" although its
+  assertion has been 158 = 155 + 3 + 0 since B18-B added three canonical wrappers — the stale text is corrected; (b) not every
+  Tier 3 command matches the family-name floor: `manufacturing.export-engineering` is Tier 3 by its release class.
+- Tests: b18-e-scenario-8 6/6 and qualify-human-only 4/4 (both new; the qualify suite sits outside the broad set's paths, so it runs in the targeted set and the CI list); b18-c-never-execution-sweep with b18-a-permission-tiers 10/10; b16-1c-invariant-tripwires 7/7; broad run: 258 files / 3357 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: the change is a server route refusal and tests; CI's
+  page-browser-e2e runs the full suite over this commit anyway.

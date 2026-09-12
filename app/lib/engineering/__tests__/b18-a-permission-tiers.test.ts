@@ -55,7 +55,9 @@ describe("B18-A §1 — tiers map onto the existing approval vocabulary", () => 
     expect(actionTier("pcb.route-copper")).toBe(2);
     expect(actionTier("pcb.dimension")).toBe(1); // [B18-C I7] OD-13 — the record and the descriptor move together
     expect(actionTier("view.canvas-navigation")).toBe(0);
-    for (const id of ["manufacturing.release", "sirkit.manufacturing.release", "bom.order", "publish-authority", "external.upload", "purchase"]) expect(TIER3_FAMILY_PATTERN.test(id), id).toBe(true);
+    expect(actionTier("pcb.qualify-route")).toBe(3); // [B18-E E6] scenario 8: qualification is Tier 3, like release
+    // [B18-E E6] the family floor also catches every qualify spelling a model might invent
+    for (const id of ["manufacturing.release", "sirkit.manufacturing.release", "bom.order", "publish-authority", "external.upload", "purchase", "pcb.qualify-route", "sirkit.pcb.qualify", "qualify-board"]) expect(TIER3_FAMILY_PATTERN.test(id), id).toBe(true);
   });
 });
 

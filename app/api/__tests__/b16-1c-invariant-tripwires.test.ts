@@ -2,7 +2,9 @@
  * B16.1C §I — invariant tripwires. Any of these failing in CI means a
  * regression of a security or truth boundary this stage depends on:
  *
- *  - 155 route methods / 152 canonical wrappers / 3 approved factories / 0 raw (B18-A: + GET/POST /api/agent/autonomy);
+ *  - 158 route methods / 155 canonical wrappers / 3 approved factories / 0 raw (B18-A: + GET/POST /api/agent/autonomy; B18-B:
+ *    + GET/POST /api/agent/execution-grant and POST /api/agent/execution-grant/settle) — [B18-E E6] the title and this line
+ *    said 155 / 152 long after B18-B added its three canonical wrappers; the assertion itself was always the ratchet;
  *  - exactly the intentional agent-exposed tools (agent-exposure.ts), none of them qualification or release;
  *  - the manufacturing routes keep their policy rows (qualify: pcb_editor |
  *    project_admin; release: project_admin only) and their bounded envelopes;
@@ -37,7 +39,7 @@ function routeFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe("B16.1C §I — invariant tripwires", () => {
-  it("155 route methods = 152 canonical + 3 factories + 0 raw (B18-A: + GET/POST /api/agent/autonomy); exactly the intentional agent-exposed tools, none qualification/release", () => {
+  it("158 route methods = 155 canonical + 3 factories + 0 raw (B18-A: + the autonomy pair; B18-B: + the execution-grant trio); exactly the intentional agent-exposed tools, none qualification/release", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of routeFiles(join(ROOT, "app", "api"))) {
       const src = readFileSync(file, "utf8");
@@ -77,6 +79,9 @@ describe("B16.1C §I — invariant tripwires", () => {
     // [B16-A F2] the CAS pin now travels into the ONE atomic board+authority commit.
     expect(src).toContain("expectedBoardAggregateRevision: head.aggregateRevision");
     expect(src).toContain("MFG_QUALIFICATION_IN_PROGRESS");
+    // [B18-E E6] qualification is a human act too: the actor-kind refusal is explicit and stands before any durable read.
+    expect(src).toContain('scope.actor.actorKind !== "human"');
+    expect(src).toContain("MFG_QUALIFY_HUMAN_REQUIRED");
     expect(src).toContain("boundedManufacturingFailure(");
     expect(src).not.toMatch(/error instanceof Error \? error\.message/);
     expect(src).toContain("rc01ParityEvidenceDigest(");

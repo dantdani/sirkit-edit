@@ -45,6 +45,7 @@ export const MANUFACTURING_PUBLIC_ERRORS = Object.freeze({
   MFG_RC02_EVIDENCE_MISSING: { status: 422, message: "The selected routed candidate carries no route evidence." },
   MFG_RULE_PROFILE_STALE_AT_RELEASE: { status: 422, message: "The manufacturing rule profile evidence is older than one year at release time. Re-verify the fabrication profile before releasing." },
   MFG_RELEASE_HUMAN_REQUIRED: { status: 403, message: "Manufacturing release requires an authenticated human project administrator." },
+  MFG_QUALIFY_HUMAN_REQUIRED: { status: 403, message: "Qualification requires an authenticated human. Nothing was qualified." },
   MFG_AUTHORITY_CONFIRMATION_MISMATCH: { status: 409, message: "The manufacturing authority changed after the administrator's confirmation. Review the current authority and confirm again." },
   MFG_DURABLE_STORE_UNAVAILABLE: { status: 503, message: "The durable engineering store is unavailable. Nothing was changed." },
   MFG_QUALIFY_FAILED: { status: 500, message: "Qualification could not be completed. Nothing was released." },

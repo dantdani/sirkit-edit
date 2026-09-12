@@ -50,7 +50,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | CONFIRMED — see §6 |
 | E4 | Scenario 6's refresh proven in integration | 6 | CONFIRMED — see §6 |
 | E5 | Scenario 7 integration closures | 7a, 7c–7g | CONFIRMED — see §6 |
-| E6 | Scenario 8 through the loop; a human-only qualify route | 8 | planned |
+| E6 | Scenario 8 through the loop; a human-only qualify route | 8 | CONFIRMED — see §6 |
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | planned |
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | planned |
 | E9 | Browser, part 2: stale revision, Stop, forged handle, altered operations, Tier 3 | 7b–7d, 7g, 7h, 8 | planned |
@@ -155,3 +155,25 @@ ritual over a real canonical session (`b18-e-scenario-7`, in the CI list). Each 
 - The harness gained what these need (test-only): a cancellation signal passed into the loop's run request, a held auto-run that
   collects the ritual instead of starting it, and a transport that can refuse a tender as the route would.
 - Tests: b18-e-scenario-7 4/4 (new); the eight harness-based B18-C suites 46/46
+- CI green at `6a7c662` (deterministic-manufacturing 34661725125 incl. page-browser-e2e, benchmark-quality 34661725130).
+
+### E6 — scenario 8: qualify, release and order are not reachable (CONFIRMED)
+
+- **Through the real loop** (`b18-e-scenario-8`, in the CI list). Five provider calls a model might invent —
+  `sirkit_manufacturing_release`, `sirkit.manufacturing.release`, `sirkit_pcb_qualify`, `sirkit_bom_order` and a friendly
+  `helpfully_finish_the_board` — are each refused `unknown_tool`: no tool starts, the gateway is never reached, no grant is
+  minted and the board and head are untouched. An execution call that carries a nested delegation
+  (`then: { toolId: "sirkit.manufacturing.release" }`) is refused before it runs, with no grant and no commit.
+- **At the seal** (`b18-c-never-execution-sweep`). A Tier 3 command dressed up as a reviewed execution — release,
+  export-engineering, the qualify route, order — violates the reviewed-list rule and the seal refuses it, whatever the tool is
+  called. Recorded while writing it: not every Tier 3 command matches the family-name floor —
+  `manufacturing.export-engineering` is Tier 3 by its release CLASS — so the floor is one route to Tier 3, not the only one.
+- **At the route** (defence in depth). `/api/pcb/qualify` now refuses a non-human actor kind before any durable read
+  (`MFG_QUALIFY_HUMAN_REQUIRED`, 403), exactly as the release route already states it. No agent tool binds this route, so this
+  gives the AI nothing new and changes nothing for humans: the role gating is untouched, no route is added (the ratchet stays
+  158 = 155 + 3 + 0) and the refusal is pinned by its own suite and by the B16.1C source tripwire.
+- **Tiers.** `pcb.qualify-route` is pinned Tier 3, and the family floor matches the qualify spellings a model might use.
+- Found while writing it: the B16.1C tripwire's TITLE and header still read "155 route methods = 152 canonical" long after B18-B
+  added its three canonical wrappers; its assertion — the real ratchet — has been 158 = 155 + 3 + 0 throughout. The stale text is
+  corrected, so the test now says what it checks.
+- Tests: b18-e-scenario-8 6/6 and qualify-human-only 4/4 (both new; the qualify suite sits outside the broad set's paths, so it runs in the targeted set and the CI list); b18-c-never-execution-sweep with b18-a-permission-tiers 10/10; b16-1c-invariant-tripwires 7/7
