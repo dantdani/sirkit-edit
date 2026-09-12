@@ -33,7 +33,7 @@ import { recoverGrantedExecutionsForEditor, tenderConfirmedExecution } from "../
 import { sirkitToolRegistry } from "../tool-catalog";
 import { permissionTierOfDescriptor } from "../permission-tiers";
 import { GRANTED_EXECUTION_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, grantedExecutionViolations } from "../granted-execution-families";
-import { SCOPE, call, composition, fixtureBoard, headOf, movesBy, r3Of, ritual, runScenario, type Composed } from "./b18c-harness";
+import { SCOPE, call, composition, fixtureBoard, headOf, movesBy, r3Of, reloadEditor, ritual, runScenario, type Composed } from "./b18c-harness";
 import { entryEditorOutcome, entryFromGrant, entryToLogMessage } from "../../project/chat-run-view"; // [B18-E E1]
 
 const UNDO_TOOL = "sirkit.pcb.undo-redo-granted";
@@ -114,6 +114,45 @@ describe("B18-C I8b — undo and redo end to end", () => {
     expect(again.grants).toEqual([]);
     expect(answerOf(again.adapter)).toMatchObject({ ok: false, status: "nothing_to_replay" });
   }, 30_000);
+
+  it("[B18-E E4] after a refresh the editor's own undo stack is gone, and the assistant redoes its own change from the durable records", async () => {
+    const before = await composition("execute_explicit_tier1");
+    const x0 = r3Of(before).at.x;
+    expect((await runScenario(before, moveScript(before))).rituals[0], "the AI move").toMatchObject({ ok: true, status: "committed" });
+    expect((await runScenario(before, replayScript("undo"), { message: "Undo that." })).rituals[0], "the AI undo").toMatchObject({ ok: true, status: "committed" });
+    expect(r3Of(before).at.x).toBe(x0);
+
+    const c = await reloadEditor(before); // the refresh
+    expect(c.session.lineageId, "the reload reopened the SAME canonical lineage at its exact head").toBe(before.session.lineageId);
+    expect(c.history.canUndo, "a reloaded editor has no undo stack").toBe(false);
+    expect(c.history.canRedo, "and nothing to redo").toBe(false);
+    expect(r3Of(c).at.x, "the board is what the project persisted").toBe(x0);
+
+    const undoAgain = await runScenario(c, replayScript("undo"), { message: "Undo that." });
+    expect(undoAgain.grants, "the latest AI change is itself an AI undo").toEqual([]);
+    expect(answerOf(undoAgain.adapter)).toMatchObject({ ok: false, status: "nothing_to_replay" });
+
+    const head = headOf(c).headSequence;
+    const redo = await runScenario(c, replayScript("redo"), { message: "Redo." });
+    expect(redo.rituals[0], JSON.stringify(redo.rituals[0])).toMatchObject({ ok: true, status: "committed", settled: "settled" });
+    expect(answerOf(redo.adapter)).toMatchObject({ ok: true, status: "executed" });
+    expect(r3Of(c).at.x, "the assistant's own change is back").toBe(x0 + mmToNm(2));
+    expect(headOf(c).headSequence).toBe(head + 1);
+  }, 40_000);
+
+  it("[B18-E E4] a human change after the refresh makes the assistant's redo refuse, with nothing changed", async () => {
+    const before = await composition("execute_explicit_tier1");
+    await runScenario(before, moveScript(before));
+    await runScenario(before, replayScript("undo"), { message: "Undo that." });
+    const c = await reloadEditor(before);
+    await humanMoveR4(c);
+    const head = headOf(c).headSequence;
+    const redo = await runScenario(c, replayScript("redo"), { message: "Redo." });
+    expect(redo.grants).toEqual([]);
+    expect(redo.rituals).toEqual([]);
+    expect(answerOf(redo.adapter)).toMatchObject({ ok: false, status: "nothing_to_replay" });
+    expect(headOf(c).headSequence).toBe(head);
+  }, 40_000);
 
   it("the user's own Undo after an AI undo re-applies the change through the canonical wrapped history — reconciled, never rebased", async () => {
     const c = await composition("execute_explicit_tier1");

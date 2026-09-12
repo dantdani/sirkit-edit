@@ -48,7 +48,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E1 | Scenario 6 truth: the redo hint and reloaded entries | 6 | CONFIRMED — see §6 |
 | E2 | Refusal causes the chat and the model can trust (drift reasons, server refusals) | 7b, 7c, 7f, 7h | CONFIRMED — see §6 |
 | E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | CONFIRMED — see §6 |
-| E4 | Scenario 6's refresh proven in integration | 6 | planned |
+| E4 | Scenario 6's refresh proven in integration | 6 | CONFIRMED — see §6 |
 | E5 | Scenario 7 integration closures | 7a, 7c–7g | planned |
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | planned |
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | planned |
@@ -112,3 +112,21 @@ OD-20 to OD-30 (`artifacts/remaining-builder-program/OWNER_DECISIONS.md`) record
 - Consequence recorded for the scenarios: a routed project cannot be read through board-inspect, so scenario 1's ids come from
   the selection (OD-22's recorded precondition) or from the bounded reads E10 and E13 propose. Every browser proof runs on a
   placed board, which fits — that is why none of them has hit this.
+- CI green at `adb2647` (deterministic-manufacturing 34660509539 incl. page-browser-e2e, benchmark-quality 34660509523).
+
+### E4 — scenario 6's refresh, in integration (CONFIRMED)
+
+- The harness can now RELOAD the editor as the browser does (`reloadEditor`, test-only): a fresh `PcbHistory` over the board the
+  project persisted, reopened at the EXACT canonical head with the verified claim and the same durable store (B03.1), and a new
+  commit interlock — while the durable grant store, the execution journal and the in-flight registry stay. The test asserts the
+  reopen kept the SAME lineage, so this is the exact-head reopen and not a fresh content-equivalence lineage.
+- The scenario, end to end through the real loop, minter and ritual: an AI move, then "Undo that." (committed), then the refresh.
+  After it the editor's own undo stack is gone — `canUndo` and `canRedo` are both false — and the board is what the project
+  persisted. "Undo that." then answers `nothing_to_replay` (the latest AI change is itself an AI undo), while "Redo." executes
+  from the DURABLE records: one new head, R3 back where the AI put it, answered `executed` from the settled record. A human
+  change after the refresh makes "Redo." refuse with nothing changed.
+- Found while writing it: binding a canonical session is synchronous, but its lineage reopens on the session's own queue, so the
+  head is provable only after `whenIdle()`. The first version of the reload returned too early and the run context could not be
+  assembled at all (a null head). Recorded because a browser reload has the same shape: nothing may assume the canonical head
+  before the session has settled.
+- Tests: b18-c-undo-redo 11/11 (the two new refresh cases); the seven harness-based B18-C suites 35/35

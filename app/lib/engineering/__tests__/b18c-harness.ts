@@ -81,6 +81,8 @@ export interface Core {
   interlock: ProjectCommitInterlock;
   registry: GrantedExecutionRegistry;
   journal: AgentExecutionJournal;
+  /** [B18-E E4] the project's durable envelope store, kept so a reload can reopen at the EXACT canonical head. */
+  durableStore: InMemoryAtomicProjectStore;
 }
 export type Composed = Core & { transport: ExecutionGrantTransport };
 
@@ -114,8 +116,9 @@ export function transportOver(c: Core, options: { failSettle?: number } = {}): E
 }
 
 export async function composition(mode: AgentAutonomySetting["mode"], options: BoardOptions & { failSettle?: number } = {}): Promise<Composed> {
+  const durableStore = new InMemoryAtomicProjectStore(); // [B18-E E4] kept in Core so a reload reopens over the same project
   const raw = createHistory(fixtureBoard(options));
-  const bound = bindCanonicalEditorSession(raw, SCOPE, { durableStore: new InMemoryAtomicProjectStore() });
+  const bound = bindCanonicalEditorSession(raw, SCOPE, { durableStore });
   const history = bound.history;
   const session = canonicalSessionFor(history)!;
   const r3 = history.committedPresent.footprints.find((f) => f.ref === "R3")!;
@@ -129,11 +132,25 @@ export async function composition(mode: AgentAutonomySetting["mode"], options: B
   // One clock for every party: the frozen fixture epoch advanced by real elapsed time (bounded waits stay bounded).
   const started = Date.now();
   const core: Core = {
-    history, session, now: () => T0 + (Date.now() - started), autonomy: setting(mode),
+    history, session, durableStore, now: () => T0 + (Date.now() - started), autonomy: setting(mode),
     store: new ExecutionGrantStore(new InMemoryDurableWorkflowRepository()), interlock: new ProjectCommitInterlock(), registry: new GrantedExecutionRegistry(),
     journal: new AgentExecutionJournal(new InMemoryAgentExecutionJournalStore(), { ...SCOPE, boardInstanceId: pcbBoardInstanceId(PROJECT), editor: "pcb" }),
   };
   return { ...core, transport: transportOver(core, { failSettle: options.failSettle }) };
+}
+
+/** [B18-E E4] A RELOAD of the editor, as the browser does it: a fresh PcbHistory over the board the project persisted, reopened
+ *  at the EXACT canonical head with the verified claim and the same durable store (B03.1), and a new commit interlock — while the
+ *  durable grant store, the execution journal and the in-flight registry (the server's and the browser's records) stay. The
+ *  editor's own undo stack does NOT survive, which is what scenario 6's refresh turns on. Test-only. */
+export async function reloadEditor(c: Composed): Promise<Composed> {
+  const claim = c.session.headMetadataFor(c.history.committedPresent);
+  const board = JSON.parse(JSON.stringify(c.history.committedPresent)) as PcbBoard;
+  const bound = bindCanonicalEditorSession(createHistory(board), SCOPE, { claim, durableStore: c.durableStore });
+  const session = canonicalSessionFor(bound.history)!;
+  await session.whenIdle(); // binding is synchronous; the lineage reopens on the session's own queue, and only then is the head provable
+  const core: Core = { ...c, history: bound.history, session, interlock: new ProjectCommitInterlock() };
+  return { ...core, transport: transportOver(core) };
 }
 
 export const headOf = (c: Composed) => c.session.headMetadataFor(c.history.committedPresent)!;

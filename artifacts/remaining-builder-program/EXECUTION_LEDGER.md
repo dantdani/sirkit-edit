@@ -729,3 +729,18 @@ _(discovery, reproduction and results appended below as they are observed)_
 - No local browser run for this increment: nothing the browser renders changed — the descriptor text is model-facing, and the
   scripted fixture agent never reads it — so a browser run would prove nothing here. CI's page-browser-e2e runs the full suite
   over this commit anyway.
+
+### B18-E E4 — scenario 6's refresh, in integration (2026-09-11 local, solo; this commit)
+
+- The runbook's scenario 6 is "Undo that," followed by refresh and redo. The refresh half had no integration proof: the harness
+  kept one in-memory history for the whole scenario. `reloadEditor` (test-only) now reopens the project as the browser does — a
+  fresh history over the persisted board, the EXACT canonical head restored from the verified claim and the same durable store,
+  a new commit interlock, the durable grant store, journal and registry kept — and the test asserts the lineage is the same one.
+- Proven: after the refresh the editor's own undo stack is gone (`canUndo` and `canRedo` false); "Undo that." answers
+  `nothing_to_replay` because the latest AI change is itself an AI undo; "Redo." executes from the durable records (one new head,
+  R3 restored, `executed` read from the settled record); a human change after the refresh makes "Redo." refuse, nothing changed.
+- Found while writing it: session binding is synchronous but the lineage reopens on the session's queue, so the head is provable
+  only after `whenIdle()`; the first reload returned too early and the run context could not be assembled (null head). A browser
+  reload has the same shape — nothing may assume the canonical head before the session settles.
+- Tests: b18-c-undo-redo 11/11 (the two new refresh cases); the seven harness-based B18-C suites 35/35; broad run: 256 files / 3346 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: this increment is test-only (the harness and its
+  suite); CI's page-browser-e2e runs the full suite over this commit anyway.
