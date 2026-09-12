@@ -1,8 +1,9 @@
 /**
  * [B18-C I9] Scenario 7 — adversarial conditions a granted execution refuses
  * with nothing committed (the B18-B suites pin the server side already: an
- * altered proposal, membership revocation, forged ids at the route, provider
- * retry, cancellation):
+ * altered proposal, a membership revision or role change, forged ids at the
+ * route, mint idempotency and cancellation — [B18-E E0] not a revocation after
+ * the mint or a provider's re-emitted call, which B18-E proves):
  *
  *  - a change OUTSIDE the semantic revision between the mint and the Confirm
  *    (an unused padstack definition) is refused `stale-revision`: the revision

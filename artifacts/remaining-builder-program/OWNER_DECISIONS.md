@@ -33,3 +33,69 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Question: runbook §2.4 approves `Dandi Desta <dandidesta82@gmail.com>`; 54 B18 commits used the owner's other address `danditilahun82@gmail.com` (see the ledger's correction). Which address should the remaining chapters use?
 - Default applied: the runbook's approved `dandidesta82@gmail.com` (the repository's configured identity) from the next commit on; the earlier commits stay as they are (no history rewriting).
 - The owner may choose `danditilahun82@gmail.com` instead, for example if that address is the one linked to the GitHub account.
+
+## OD-20 — Scenario 2's wording (B18-E, 2026-09-11)
+
+- Question: the runbook says "the 5 V net"; the fixture design's rail is named `/root/VCC` (J1 is `PWR_5V`). Prove the verbatim sentence as a truthful no-match (the nets listed, nothing changed) and the change with "the VCC net", recording the deviation — or rename the rail `+5V` in the fixture (the placed-board revision changes and the router recording must be re-recorded)?
+- Default applied: the first: the verbatim sentence gets a truthful no-match and the change is proven with "the VCC net"; the deviation is recorded; the fixture is unchanged.
+- The owner may choose otherwise.
+
+## OD-21 — What a mounting hole is (scenario 3) (B18-E, 2026-09-11)
+
+- Question: Sirkit has no mounting-hole object. Which footprints count (for example, every pad `np_thru_hole`, or an unconnected plated hole with a `Mounting*` library name), and should the blinker fixture gain holes (every fixture spec and the router recording change) or should the browser prove only the board outline, with holes proven in integration?
+- Default applied: a footprint whose pads are all `np_thru_hole`; the fixture is unchanged; holes are proven in integration and the browser proves the outline.
+- The owner may choose otherwise.
+
+## OD-22 — Scenario 1's precondition (B18-E, 2026-09-11)
+
+- Question: the move takes footprint ids; a real model resolves R3 from the selection or from board-inspect, whose size on a synchronized board is unmeasured. Record "select the part first" as the precondition, or add a bounded Tier 0 footprint lookup?
+- Default applied: record the precondition now; decide on a bounded Tier 0 lookup after E3 measures board-inspect (read-only either way).
+- The owner may choose otherwise.
+
+## OD-23 — Scenario 4's meaning (B18-E, 2026-09-11)
+
+- Question: is "the approved lower-power part" the single server-owned exact authority recorded for U1 (B14), with no power claim unless a tool fact states one? And may the fixture runtime gain a CMOS 555 atomic part with an approved mapping, for the browser proof?
+- Default applied: yes to the first reading (choosing among several approved alternates would be a new selection authority and is not proposed); yes to a fixture-only part, gated to the fixture runtime with a tripwire.
+- The owner may choose otherwise.
+
+## OD-24 — Scenario 5's controls (B18-E, 2026-09-11)
+
+- Question: "compactly" and "keep decoupling close to U1" are not agent controls today. Expose the spacing preset or decoupling relationships to the agent?
+- Default applied: no widening: the chat reports truthfully (the objective's state, or not evaluated).
+- The owner may choose otherwise.
+
+## OD-25 — Scenario 6's "redo" (B18-E, 2026-09-11)
+
+- Question: the editor's own undo stack does not survive a reload. Is the runbook's redo proven as the chat's "Redo."?
+- Default applied: yes; a redo through the editor's button after a reload is outside B18.
+- The owner may choose otherwise.
+
+## OD-26 — Scenario 7a's defensive floor (B18-E, 2026-09-11)
+
+- Question: no production code supplies the live selection digest, so the `selection_stale` burn and the ritual's stale-selection refusal can never fire. Keep them as a pinned defensive floor, or delete them with their display sentence?
+- Default applied: keep them, pinned by a synthetic case (E5).
+- The owner may choose otherwise.
+
+## OD-27 — Scenario 7f in the browser (B18-E, 2026-09-11)
+
+- Question: a browser revocation proof needs a revocation switch in the fixture's local membership repository — an auth surface. Add it (fixture runtime only), or keep revocation proven in integration and prove only a clearly labelled role change in the browser?
+- Default applied: no auth-surface change: revocation is proven in integration; the browser proves what the fixture can do without one.
+- The owner may choose otherwise.
+
+## OD-28 — Scenario 8's display (B18-E, 2026-09-11)
+
+- Question: should an unknown tool name that matches the Tier 3 families show a display-only "T3" tag, and should the answer of a run with a refused call carry a label?
+- Default applied: no tag (the line reads "Unknown tool — refused before running (unknown_tool) — nothing ran") and no label; the model's prose is not checked (recorded).
+- The owner may choose otherwise.
+
+## OD-29 — Resources for live and routing proofs (B18-E, 2026-09-11)
+
+- Question: a live model run of each scenario needs provider credits (OD-7); a chat routing replay for scenario 5 needs a machine with the FreeRouting runtime to record it.
+- Default applied: BLOCKED-LIVE-QUALIFICATION until credits exist; without a recording the routing browser proof is the truthful `routing_engine_unavailable` refusal.
+- The owner may choose otherwise.
+
+## OD-30 — CI time (B18-E, 2026-09-11)
+
+- Question: each bootstrapped browser spec adds minutes to page-browser-e2e (timeout 30 min). Accept a longer job, or split it?
+- Default applied: accept a longer job while it stays well inside its timeout; split it if a run comes within five minutes of the limit.
+- The owner may choose otherwise.

@@ -683,3 +683,12 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Security invariants: one production route changed in B18-D, and no authentication file: `/api/agent/execution-grant`'s cancel accepts two further retirement labels (`superseded_by_new_grant`, `refused_before_execution`; D-A16 item 13) — a cancel still retires only an issued grant; the auth wrapper, same-origin CSRF, the role rows and the bounded reader are unchanged, the route ratchet is unchanged (158 = 155 + 3 + 0), and their gates pass in the broad run.
 - Live/fake: every proof uses the scripted fixture agent under the fixture runtime; a real model's chat execution is recorded as LB-7 (BLOCKED-LIVE-QUALIFICATION).
 - Next: B18-E (the mandatory scenario matrix), then B18 validation and the chapter PR.
+
+### B18-E E0 — the scenario record (2026-09-11 local, solo; this commit)
+
+- Discovery (`wf_7e28fb7b-bda`, read-only, at `e543cfe`): eight mappers, one per runbook scenario, each tracing Sirkit's path and every unit, integration and browser proof, then a synthesis that checked the claimed proofs itself. Result: every scenario works partly; only scenario 6's chain is shown end to end in the browser as the runbook phrases it (on a silkscreen add, not a move); scenario 1 runs explicitly in the browser only with a variant sentence.
+- Record: `artifacts/ai-control-plane-b18/scenarios.md` — the matrix (15 rows: scenario 7 split into its eight conditions), each path's tier, the harness limits (the scripted agent only; the frozen fixture clock; the retry guard per principal), the non-goals kept, increments E1–E19.
+- Corrections: `permission-tiers.md` listed `pcb.dimension` under Tier 2 (it is Tier 1 since A17, as `b18-a-permission-tiers` pins); the `b18-c-adversarial` header overstated what B18-B pins (a membership revision or role change and mint idempotency — not a revocation after the mint or a provider's re-emitted call).
+- Found by the discovery in B18-D's surfaces: an AI redo's hint offers "Undo that.", which the minter refuses for an AI replay; a reloaded entry's hint names the editor's one-step Undo, which a reload does not keep — E1. The drift and pre-check cancels' durable reason was fixed in B18-D part 5 (`refused_before_execution`); E2 makes drift cancels name the drift itself.
+- Owner decisions: OD-20 to OD-30 recorded with defaults (OD-7 and OD-13 stand).
+- Tests: none changed (records and a test header comment only).
