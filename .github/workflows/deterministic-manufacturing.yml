@@ -121,6 +121,7 @@ jobs:
           app/lib/engineering/__tests__/b18-d-ritual-outcome-report.test.ts
           app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts
           app/lib/engineering/__tests__/b18-d-repair-undo-held.test.ts
+          app/lib/engineering/__tests__/b18-d-repair-undo-bound.test.ts
           app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
           app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
           app/lib/engineering/__tests__/b18-c-result-contract.test.ts
