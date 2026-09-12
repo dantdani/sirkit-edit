@@ -51,7 +51,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E4 | Scenario 6's refresh proven in integration | 6 | CONFIRMED — see §6 |
 | E5 | Scenario 7 integration closures | 7a, 7c–7g | CONFIRMED — see §6 |
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | CONFIRMED — see §6 |
-| E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | planned |
+| E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | CONFIRMED — see §6 |
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | planned |
 | E9 | Browser, part 2: stale revision, Stop, forged handle, altered operations, Tier 3 | 7b–7d, 7g, 7h, 8 | planned |
 | E10 | Scenario 3, part 1: mounting holes, a bounded mechanical read if needed, integration | 3 | planned |
@@ -177,3 +177,27 @@ ritual over a real canonical session (`b18-e-scenario-7`, in the CI list). Each 
   added its three canonical wrappers; its assertion — the real ratchet — has been 158 = 155 + 3 + 0 throughout. The stale text is
   corrected, so the test now says what it checks.
 - Tests: b18-e-scenario-8 6/6 and qualify-human-only 4/4 (both new; the qualify suite sits outside the broad set's paths, so it runs in the targeted set and the CI list); b18-c-never-execution-sweep with b18-a-permission-tiers 10/10; b16-1c-invariant-tripwires 7/7
+- CI green at `f1e0f37` (deterministic-manufacturing 34662285630 and benchmark-quality 34662285715, both success).
+
+### E7 — the scripted agent can now attempt what it must not do (CONFIRMED)
+
+The browser scenarios need an agent that TRIES the forbidden thing; until now the scripted agent could only ever emit a tool the
+run had declared, so a Tier 3 phrase produced a plain sentence and proved nothing. Three scripts are added, all still reachable
+only under the fixture runtime AND `SIRKIT_FIXTURE_AGENT=scripted` (the gate and the source-scan tripwire are unchanged and
+green: nothing in production constructs this adapter).
+
+- **A forged Tier 3 call.** "Release the board." / "Qualify the board." / "Order the parts." emit a raw provider name
+  (`sirkit_manufacturing_release`, `sirkit_pcb_qualify`, `sirkit_bom_order`) that BYPASSES the declaration lookup, carrying the
+  interim claim "Done - the change is already made." End to end the loop refuses it `unknown_tool`: no tool starts, no grant is
+  minted, the board and head are untouched. The claim exists precisely so the browser can show Rule 2 keeping it out of the
+  answer.
+- **A delegation smuggled into a real edit.** "Move R3 2 mm to the right, then release the board." reads the selection and then
+  calls move-footprint with `then: { toolId: "sirkit.manufacturing.release" }` in its arguments. Measured, and different from
+  what E6 recorded at the gateway: the delegation never reaches an authority decision at all — move-footprint's own argument
+  contract rejects the unknown key and the call finishes `invalid_input`. The release tool is never started, nothing is granted,
+  the board does not move. The edit the sentence genuinely asked for is lost with it: strict arguments are the outer wall.
+- **The same call twice in one step.** "Add silkscreen text REV C at 10, 10 twice." emits two calls with distinct ids in a single
+  step. One grant is minted; the second call is refused `execution_exists` (the refusal E5 measured for a re-emission, here for a
+  simultaneous duplicate). The grant is `preview_then_confirm` — the product grammar cannot prove a silkscreen add explicit — so
+  nothing is auto-run and the head does not move until a human confirms.
+- Tests: b18-c-fixture-agent 10/10 (4 new)

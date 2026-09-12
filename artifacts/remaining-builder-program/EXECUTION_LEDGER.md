@@ -780,3 +780,22 @@ _(discovery, reproduction and results appended below as they are observed)_
   Tier 3 command matches the family-name floor: `manufacturing.export-engineering` is Tier 3 by its release class.
 - Tests: b18-e-scenario-8 6/6 and qualify-human-only 4/4 (both new; the qualify suite sits outside the broad set's paths, so it runs in the targeted set and the CI list); b18-c-never-execution-sweep with b18-a-permission-tiers 10/10; b16-1c-invariant-tripwires 7/7; broad run: 258 files / 3357 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: the change is a server route refusal and tests; CI's
   page-browser-e2e runs the full suite over this commit anyway.
+
+### B18-E E7 — the scripted agent attempts Tier 3, a delegation and a double call (2026-09-11 local, solo; this commit)
+
+- Why: the browser scenarios (E8-E9) need an agent that actually ATTEMPTS the forbidden call. The scripted adapter looked its tool
+  up in the run's declarations first, so it could never emit an undeclared name; a Tier 3 phrase produced a sentence, which proves
+  nothing about refusal.
+- Added three fixture-only scripts to `app/lib/agent/fixture-agent-adapter.ts`: a forged raw provider name emitted WITHOUT the
+  declaration lookup and carrying the interim success claim (release / qualify / order spellings); a move whose arguments smuggle
+  `then: { toolId: "sirkit.manufacturing.release" }`; and the same execution call twice with distinct ids in one step. Reachability
+  is unchanged - fixture runtime AND `SIRKIT_FIXTURE_AGENT=scripted` - and the B18-C gate plus the source scan (nothing in
+  production constructs this adapter) stay green.
+- Pinned end to end through the real loop in `b18-c-fixture-agent`: the forged Tier 3 call is refused `unknown_tool` with no tool
+  started, no grant and an unchanged head; the double call mints exactly ONE grant and refuses the duplicate `execution_exists`,
+  and because a silkscreen add has no explicit grammar the grant is `preview_then_confirm`, so nothing commits without a human.
+- Measured, and a correction to the assumption I wrote the script from: the smuggled delegation does not reach an authority
+  decision. move-footprint's own argument contract rejects the unknown key, so the call finishes `invalid_input` and the honest
+  edit in the same sentence is lost too. Strict tool arguments are the outer wall; E6's gateway refusal is the inner one.
+- Tests: b18-c-fixture-agent 10/10 (4 new); broad run: 258 files, 3361 passed, 10 expected skips; tsc 0; eslint clean. No browser run: this is fixture-only harness code plus tests, and the
+  browser scenarios that use it are E8-E9.

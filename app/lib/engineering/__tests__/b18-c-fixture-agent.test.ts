@@ -41,6 +41,9 @@ function productionSources(dir: string): string[] {
   });
 }
 const tool = (providerName: string, toolId: string): ProviderToolDeclaration => ({ providerName, toolId, version: "1.0.0", description: "", inputSchema: {} });
+/** [B18-E E7] the `tool_finished` event for one tool id, as the run emitted it. */
+const finishedOf = (run: { events: readonly { type: string }[] }, toolId: string): Record<string, unknown> | undefined =>
+  run.events.find((event) => event.type === "tool_finished" && (event as { toolId?: unknown }).toolId === toolId) as Record<string, unknown> | undefined;
 
 describe("B18-C I10a — the gate", () => {
   it("agentAdapterFor returns the scripted agent only under the fixture runtime AND the opt-in; never in production", () => {
@@ -137,4 +140,56 @@ describe("B18-C I10a — end to end through the real loop", () => {
     expect(r3Of(c).at.x).toBe(x0);
     expect(headOf(c).headSequence).toBe(head);
   }, 30_000);
+});
+
+describe("[B18-E E7] the scripted agent's refusal scripts", () => {
+  it("plans a Tier 3 attempt as a raw provider name, a delegation inside a real edit, and the same call twice", () => {
+    expect(planFixtureInstruction("Release the board.")).toMatchObject({ kind: "forged", providerName: "sirkit_manufacturing_release" });
+    expect(planFixtureInstruction("Qualify the board.")).toMatchObject({ kind: "forged", providerName: "sirkit_pcb_qualify" });
+    expect(planFixtureInstruction("Order the parts.")).toMatchObject({ kind: "forged", providerName: "sirkit_bom_order" });
+    expect(planFixtureInstruction("Move R3 2 mm to the right, then release the board.")).toMatchObject({ kind: "select-then", ref: "R3" });
+    expect(planFixtureInstruction("Add silkscreen text REV C at 10, 10 twice.")).toMatchObject({ kind: "twice", toolId: "sirkit.pcb.silkscreen-text" });
+    expect(planFixtureInstruction("Move R3 2 mm to the right.")).toMatchObject({ kind: "select-then" }); // the plain scripts are unchanged
+  });
+
+  it("emits the forged name even though the run never advertised it, and still claims success in interim text", async () => {
+    const tools = [tool("sel", "sirkit.selection.inspect"), tool("mv", "sirkit.pcb.move-footprint")];
+    const step = await new FixtureAgentAdapter("openai").start({ system: "", history: [], userMessage: "Release the board.", tools });
+    expect(step.toolCalls).toEqual([{ callId: "fx-1", providerName: "sirkit_manufacturing_release", argumentsText: JSON.stringify({ boardId: "b1", designId: "d1" }) }]);
+    expect(step.text, "the claim exists, so the proof can show it never reaches the answer").toBe(FIXTURE_INTERIM_TEXT);
+  });
+
+  it("end to end: a Tier 3 attempt is refused unknown_tool with no grant and no change", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const x0 = r3Of(c).at.x;
+    const head = headOf(c).headSequence;
+    const run = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Release the board." });
+    expect(run.grants).toEqual([]);
+    expect(run.rituals).toEqual([]);
+    expect(run.events.filter((event) => event.type === "tool_refused").map((event) => String((event as { status?: unknown }).status))).toEqual(["unknown_tool"]);
+    expect(r3Of(c).at.x).toBe(x0);
+    expect(headOf(c).headSequence).toBe(head);
+  }, 30_000);
+
+  it("end to end: an edit carrying a delegation dies on the tool's own argument contract, and the same call twice yields ONE grant", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const r3 = r3Of(c);
+    const head = headOf(c).headSequence;
+    const selection = { refs: [{ kind: "footprint" as const, id: r3.id }], primary: { kind: "footprint" as const, id: r3.id } };
+    const delegated = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Move R3 2 mm to the right, then release the board.", selection });
+    // The smuggled `then` never reaches an authority decision: move-footprint's own argument
+    // contract rejects the unknown key, so the edit the sentence really asked for is lost too.
+    expect(finishedOf(delegated, "sirkit.pcb.move-footprint")).toMatchObject({ ok: false, status: "invalid_input" });
+    expect(delegated.events.some((event) => event.type === "tool_started" && (event as { toolId?: unknown }).toolId === "sirkit.manufacturing.release"), "the delegate was never started as a tool").toBe(false);
+    expect(delegated.grants, "a delegation mints nothing").toEqual([]);
+    expect(r3Of(c).at.x).toBe(r3.at.x);
+    expect(headOf(c).headSequence).toBe(head);
+
+    const twice = await runWithAdapter(c, new FixtureAgentAdapter("openai"), { message: "Add silkscreen text REV C at 10, 10 twice." });
+    expect(twice.grants, "one side-effecting artifact per run").toHaveLength(1);
+    expect(twice.grants[0]!.binding.operation.decision, "a silkscreen add has no explicit grammar, so it waits for the human").toBe("preview_then_confirm");
+    expect(twice.rituals, "a preview is not auto-run").toEqual([]);
+    expect(twice.events.filter((event) => event.type === "tool_refused").map((event) => String((event as { status?: unknown }).status))).toEqual(["execution_exists"]);
+    expect(headOf(c).headSequence, "nothing is committed until the human confirms").toBe(head);
+  }, 40_000);
 });
