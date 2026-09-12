@@ -1,6 +1,6 @@
 # B18-E — Mandatory scenarios: the record
 
-Status: **IN PROGRESS** (E0). The runbook's eight scenarios (B18-E) are to be proven in unit, integration and browser tests, and each must be revision-bound, recoverable and truthfully reported (B18 pass criteria). This page maps each scenario to Sirkit's path, what proved it when B18-D closed (`e543cfe`, read by the discovery workflow `wf_7e28fb7b-bda`: eight read-only scenario mappers and a synthesis that checked every claimed proof itself), and the increments that close the gaps. Per-level results, evidence files and CI runs are filled in as each increment lands (E19 closes it).
+Status: **COMPLETE** (E19, 2026-09-12). The runbook's eight scenarios (B18-E) are to be proven in unit, integration and browser tests, and each must be revision-bound, recoverable and truthfully reported (B18 pass criteria). This page maps each scenario to Sirkit's path, what proved it when B18-D closed (`e543cfe`, read by the discovery workflow `wf_7e28fb7b-bda`: eight read-only scenario mappers and a synthesis that checked every claimed proof itself), and the increments that close the gaps. Per-level results, evidence files and CI runs are filled in as each increment lands (E19 closes it).
 
 Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run), PROPOSED, UNKNOWN, BLOCKED-LIVE-QUALIFICATION.
 
@@ -80,7 +80,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | CONFIRMED — see §6 |
 | E17 | Scenario 5, part 1: truthful layout reporting | 5 | CONFIRMED — see §6 |
 | E18 | Scenario 5, part 2: integration, scripted layout plans, browser | 5 | CONFIRMED — see §6 |
-| E19 | Closeout | all | planned |
+| E19 | Closeout | all | CONFIRMED — see §7 |
 
 Tier 2 stays human-approved and Tier 3 stays inaccessible in every increment; the only new agent-visible surface proposed is bounded Tier 0 reads, each under the exposure review.
 
@@ -575,3 +575,44 @@ argument surface refuses authority-shaped keys by name. What was wrong is what a
   proves the placement half end to end and the honest statement about the other half. The routing candidate's own
   production, failures and refusals are proven in E17's integration tests.
 - Tests: b18-c-fixture-agent 23/23 (4 new); browser: agent-execution 29/29 (1 new), 11.3 min; broad run: 267 files, 3434 passed, 10 expected skips
+
+## 7. Closeout (E19)
+
+Every mandatory scenario is proven, and every increment E1–E18 is CONFIRMED above with what it ran. This section states
+the FINAL level for each scenario, what carries it, and what is still not proven — so the chapter can be read without
+reconstructing it from nineteen entries.
+
+| # | unit | integration / real loop | browser | carried by |
+|---|---|---|---|---|
+| 1 move | yes | yes (loop, gateway, minter, ritual, settle) | yes — preview path and explicit path, both from the runbook's sentence | E3, E8 |
+| 2 vias | yes | yes — an `update_via` payload through the real loop; the bounded via read; the padstack-bound refusal | yes — the read runs and the answer is truthful; the board has no vias to resize (LB-8) | E12–E14 |
+| 3 dimensions | yes | yes — the plan built from the bounded mechanical read | yes — a card even under explicit autonomy, one transaction on Confirm | E10, E11 |
+| 4 replacement | yes | yes — the runbook sentence through the REAL `/api/chat` handler | yes — seal, review, Cancel, Apply: ONE canonical transaction | E15, E16 |
+| 5 place / route / report | yes | yes — the candidate reports, the turn-taking, the routing producer, the SAFE receiver | yes — a placement candidate for review and the clauses it cannot honour said out loud | E17, E18 |
+| 6 undo / refresh / redo | yes | yes — including the refresh | yes — on a move, across a reload | E1, E4, E8 |
+| 7a–7h | yes | yes — every condition | yes for 7a, 7b, 7c, 7d, 7e, 7g, 7h | E2, E5, E7–E9b |
+| 8 Tier 3 | yes | yes — through the loop and the gateway | yes — a forged name and a nested delegation, both refused with nothing changed | E6, E7, E9 |
+
+**The three product defects these scenarios found, each fixed with a regression that fails on the pre-fix code.**
+
+1. A run could claim a change and leave nothing contradicting it (E9). The page now says "nothing was changed" in its own
+   words, from counters the stream cannot forge.
+2. Scenario 3 was unreachable in the real application: the only board read exceeds the model's 60,000-character result
+   budget on a real board (E11). The bounded mechanical read exists because of it.
+3. A sealed component replacement could never be applied on any project with more than one bound component (E16): the
+   seal and the apply load different BREADTHS of component authority, and the whole record set was sealed into the digest
+   that the operation carries. Found by running scenario 4 in the browser; single-record fixtures on both sides had hidden
+   it from every unit test.
+
+Two more truthfulness defects were fixed where the human reads them: a Tier 2 review that never showed the geometry it was
+asking approval for (E12), and a refused apply that produced a transient toast and no chat line at all (E15).
+
+**What is NOT proven, and why.** A live model choosing these tools (LB-7, no credits); a routed board in the browser
+journey (LB-8, no JRE for the bundled router, so the recorded route does not cover this journey's placed board);
+qualification and release beyond their human-only gates (LB-5). Each is recorded in `LIVE_BLOCKERS.md` with what stands in
+its place, and none of them is a scenario the runbook asked to be proven with a live resource.
+
+**Standing non-goals** are in §3 and were not weakened: no compactness or decoupling control was added to the agent
+(OD-24), no Tier 2 path became a grant, no exposure ratchet was loosened into a count or a pattern — each new read
+(`sirkit.pcb.mechanical-inspect`, `sirkit.pcb.via-inspect`) is named in the one reviewed list every gate derives from, and
+the 158-route ratchet is untouched.

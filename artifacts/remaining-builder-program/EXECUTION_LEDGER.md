@@ -1076,3 +1076,19 @@ _(discovery, reproduction and results appended below as they are observed)_
   memory free it passes 29/29 in 11.3 minutes. No product change lies between those runs; CI runs it on a clean runner.
 - Tests: b18-c-fixture-agent 23/23 (4 new); browser agent-execution 29/29 (1 new), 11.3 min; broad run: 267 files, 3434 passed, 10 expected skips; tsc 0; eslint clean.
 - E17's CI: green at `313eafa` (deterministic-manufacturing 34681917386 and benchmark-quality 34681917398, both success).
+
+### B18-E E19 — closeout: all eight scenarios proven (2026-09-12 local, solo; this commit)
+
+- `scenarios.md` closes with §7: the FINAL level of every mandatory scenario (unit, integration, browser), what carries
+  it, and what is not proven with the reason. Every increment E1–E18 is CONFIRMED in §6 with what it actually ran.
+- All eight scenarios are proven at all three levels. The browser suite is 29 cases (`e2e/agent-execution.spec.ts`) with
+  20 evidence screenshots; the broad unit run is 267 files / 3434 tests.
+- Three product defects were found by proving the scenarios, each fixed with a regression that fails on the pre-fix code:
+  a run could claim a change with nothing contradicting it (E9); scenario 3 was unreachable in the real app because the
+  only board read exceeds the model's result budget (E11); and a sealed component replacement could never be applied on
+  any project with more than one bound component (E16) — invisible to every unit test because both sides used
+  single-record fixtures. Two further truthfulness defects were fixed where the human reads them (E12, E15).
+- Nothing was weakened to get here: the exposure ratchet names each new read in the one reviewed list, the 158-route
+  ratchet is untouched, no Tier 2 path became a grant, and no agent control was widened (OD-24).
+- Chapter totals against the base `804a08d`: 82 commits, 240 files, +22,240/-397 lines, 76 new test files.
+- Next: B18 validation artifacts, then PR #8 ready and a normal merge after green CI.

@@ -2,17 +2,17 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B18",
-  "currentCheckpoint": "B18-E",
+  "currentCheckpoint": "B18 validation",
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "9cdf842",
+  "lastGreenSha": "313eafa",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-E: turn the discovery workflow's scenario matrix into increments that prove the eight mandatory scenarios in unit, integration and browser tests; then B18 validation, mark PR #8 ready and merge after green CI.",
-  "updatedAt": "2026-09-11T23:30:00-04:00"
+  "nextAction": "B18 validation: the four validation artifacts (test-and-validation-report, changed-files, unknowns-and-owner-decisions, final-verdict), then mark PR #8 ready and merge normally after green CI; then B19.",
+  "updatedAt": "2026-09-12T06:10:00-04:00"
 }
