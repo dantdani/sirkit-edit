@@ -16,6 +16,8 @@
  *    editor's own Flip rule);
  *  - "Add silkscreen text <TEXT> at <x>, <y>." → silkscreen-text add (mm);
  *  - "Undo that." / "Redo." → undo-redo-granted { direction };
+ *  - [B18-E E10] "Add horizontal and vertical dimensions for the board[ and mounting holes]." → board-inspect, then
+ *    pcb.dimension built from the OUTLINE the snapshot returned (and from the footprints it classified as mounting holes);
  *  - [B18-E E7] "Release the board." / "Qualify the board." / "Order the parts." → a RAW provider name the run never advertised
  *    (what a model inventing a Tier 3 tool would emit), with interim text claiming success;
  *  - [B18-E E7] "Move <REF> <n> mm <direction>, then release the board." → the move with a nested delegation in its arguments;
@@ -41,7 +43,15 @@ type Planned =
   /** [B18-E E7] a raw provider name this run never advertised — what a model inventing a release, qualify or order tool emits. */
   | { kind: "forged"; providerName: string; args: Record<string, unknown> }
   /** [B18-E E7] the same execution call twice in one step, with distinct call ids (scenario 7's double call). */
-  | { kind: "twice"; toolId: string; args: Record<string, unknown> };
+  | { kind: "twice"; toolId: string; args: Record<string, unknown> }
+  /** [B18-E E10] scenario 3: read the board first, then dimension what the snapshot actually showed. */
+  | { kind: "board-then"; build: (board: BoardFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
+
+/** [B18-E E10] what the scripted agent reads out of a board-inspect snapshot (the same fields a model would use). */
+export interface BoardFacts {
+  outline: { originMm: { x: number; y: number }; widthMm: number; heightMm: number } | null;
+  mountingHoles: Array<{ id: string; reference: string; positionMm: { x: number; y: number } }>;
+}
 
 const MOVE = /^(?:please\s+)?move\s+([a-z]+\d+)\s+(\d+(?:\.\d+)?)\s*mm\s+(?:to\s+the\s+)?(right|left|up|down)$/i;
 // [B18-E E7] scenario 8's attempts and scenario 7's double call — fixture-only scripts, tested before the plain patterns.
@@ -52,6 +62,9 @@ const TIER3_PROVIDER_NAMES: Readonly<Record<string, string>> = Object.freeze({ r
 const FLIP = /^(?:please\s+)?flip\s+([a-z]+\d+)\s+(?:on)?to\s+the\s+(top|bottom)(?:\s+side)?$/i;
 const SILK = /^(?:please\s+)?add\s+silkscreen\s+text\s+(.{1,64}?)\s+at\s+(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*mm)?$/i;
 const REPLAY = /^(?:please\s+)?(undo|redo)(?:\s+that)?$/i;
+// [B18-E E10] scenario 3, exactly as the runbook words it (the mounting-hole half is answered from what the board shows).
+const DIMENSION = /^(?:please\s+)?add\s+horizontal\s+and\s+vertical\s+dimensions\s+for\s+the\s+board(?:\s+and\s+mounting\s+holes)?$/i;
+const DIMENSION_OFFSET_NM = 2_000_000; // 2 mm clear of the outline, so the annotation is readable and never zero
 const VECTORS: Readonly<Record<string, readonly [number, number]>> = Object.freeze({ right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] });
 /** [B18-D I6] A model may write text beside an execution call that claims the change is made; the scripted agent does, so
  *  the browser proof can show it never reaches the answer (it is released as a note once the run ends). */
@@ -96,9 +109,33 @@ export function planFixtureInstruction(message: string): Planned {
     const at = { x: Math.round(Number(silk[2]) * NM_PER_MM), y: Math.round(Number(silk[3]) * NM_PER_MM) };
     return { kind: "call", toolId: "sirkit.pcb.silkscreen-text", args: { edits: [{ op: "add", silkId: null, text: silk[1], layer: "silkTop", atNm: at, heightNm: null, strokeWidthNm: null }] } };
   }
+  // [B18-E E10] scenario 3: the plan is built from the board the read returned, never from anything the agent assumed.
+  if (DIMENSION.test(text)) {
+    const holesAsked = /mounting\s+holes/i.test(text);
+    return {
+      kind: "board-then",
+      build: (facts) => {
+        if (!facts.outline) return { reply: "(fixture agent) the board snapshot carries no outline, so there is nothing to dimension. Nothing was done." };
+        const { originMm, widthMm, heightMm } = facts.outline;
+        const nm = (mm: number): number => Math.round(mm * NM_PER_MM);
+        const left = nm(originMm.x), top = nm(originMm.y), right = nm(originMm.x + widthMm), bottom = nm(originMm.y + heightMm);
+        const edits: Array<Record<string, unknown>> = [
+          { op: "add", kind: "horizontal", a: { x: left, y: top }, b: { x: right, y: top }, offsetNm: -DIMENSION_OFFSET_NM },
+          { op: "add", kind: "vertical", a: { x: left, y: top }, b: { x: left, y: bottom }, offsetNm: -DIMENSION_OFFSET_NM },
+        ];
+        // The holes are whatever the snapshot CLASSIFIED as mounting holes (OD-21) — an empty list is answered, not invented.
+        if (holesAsked) {
+          for (const hole of facts.mountingHoles.slice(0, 7)) {
+            edits.push({ op: "add", kind: "horizontal", a: { x: nm(hole.positionMm.x), y: nm(hole.positionMm.y) }, b: { x: left, y: nm(hole.positionMm.y) }, offsetNm: DIMENSION_OFFSET_NM });
+          }
+        }
+        return { toolId: "sirkit.pcb.dimension", args: { edits } };
+      },
+    };
+  }
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
 }
 
 function selectedFootprints(outputText: string | undefined): SelectedFootprint[] {
@@ -116,6 +153,30 @@ function selectedFootprints(outputText: string | undefined): SelectedFootprint[]
   }
 }
 
+/** [B18-E E10] Read the board facts a dimension plan needs out of a board-inspect result — only fields the snapshot states. */
+export function boardFacts(outputText: string | undefined): BoardFacts {
+  const empty: BoardFacts = { outline: null, mountingHoles: [] };
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { snapshot?: unknown } };
+    // the snapshot states the outline under `board` and lists footprints at the top level (pcb/ai/snapshot.ts)
+    const snapshot = parsed.output?.snapshot as { board?: { outline?: unknown }; footprints?: unknown } | undefined;
+    const outlineRaw = snapshot?.board?.outline as { kind?: unknown; origin?: { x?: unknown; y?: unknown }; width?: unknown; height?: unknown } | undefined;
+    const outline = outlineRaw && typeof outlineRaw.width === "number" && typeof outlineRaw.height === "number" && typeof outlineRaw.origin?.x === "number" && typeof outlineRaw.origin?.y === "number"
+      ? { originMm: { x: outlineRaw.origin.x, y: outlineRaw.origin.y }, widthMm: outlineRaw.width, heightMm: outlineRaw.height }
+      : null;
+    const footprints = Array.isArray(snapshot?.footprints) ? (snapshot.footprints as Array<Record<string, unknown>>) : [];
+    const mountingHoles = footprints.flatMap((footprint) => {
+      const position = footprint.position as { x?: unknown; y?: unknown } | undefined;
+      return footprint.mountingHole === true && typeof footprint.id === "string" && typeof footprint.reference === "string" && typeof position?.x === "number" && typeof position.y === "number"
+        ? [{ id: footprint.id, reference: footprint.reference, positionMm: { x: position.x, y: position.y } }]
+        : [];
+    });
+    return { outline, mountingHoles };
+  } catch {
+    return empty;
+  }
+}
+
 function statusOf(outputText: string | undefined): string {
   try {
     const parsed = JSON.parse(outputText ?? "") as { status?: unknown };
@@ -128,6 +189,7 @@ function statusOf(outputText: string | undefined): string {
 export class FixtureAgentAdapter implements ProviderAgentAdapter {
   private planned: Planned = { kind: "reply", text: "" };
   private awaitingSelection = false;
+  private awaitingBoard = false;
   private seq = 0;
 
   constructor(readonly provider: LLMProviderId) {}
@@ -150,6 +212,10 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
       this.awaitingSelection = true;
       return this.call(input.tools, "sirkit.selection.inspect", {});
     }
+    if (this.planned.kind === "board-then") {
+      this.awaitingBoard = true;
+      return this.call(input.tools, "sirkit.pcb.board-inspect", {});
+    }
     // [B18-E E7] a forged name skips the declaration lookup on purpose: the run must refuse a tool it never advertised, and the
     // interim claim must still only ever appear as a labelled note.
     if (this.planned.kind === "forged") {
@@ -169,6 +235,11 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   async continueWith(input: Parameters<ProviderAgentAdapter["continueWith"]>[0]): Promise<AgentStep> {
     const planned = this.planned;
     const outputText = input.results[0]?.outputText;
+    if (this.awaitingBoard && planned.kind === "board-then") {
+      this.awaitingBoard = false;
+      const next = planned.build(boardFacts(outputText));
+      return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
+    }
     if (this.awaitingSelection && planned.kind === "select-then") {
       this.awaitingSelection = false;
       const item = selectedFootprints(outputText).find((candidate) => candidate.ref.toUpperCase() === planned.ref);

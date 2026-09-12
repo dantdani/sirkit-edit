@@ -308,11 +308,11 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   // ── PCB inspection (PCBToolService — proven reusable implementation) ──────
   {
     ...readDefaults,
-    toolId: "sirkit.pcb.board-inspect", version: "1.0.0",
+    toolId: "sirkit.pcb.board-inspect", version: "1.1.0",
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource
     owningCommandId: "pcb.board-repair",
     title: "Inspect board snapshot",
-    description: "Build the versioned exact AI PCB snapshot (millimeters) for the current board.",
+    description: "Build the versioned exact AI PCB snapshot (millimeters) for the current board: the outline, every footprint (position, bounds, stable id, and whether it is a mounting hole — a footprint whose pads are all non-plated holes), pads, nets and validations.",
     category: "pcb", operationClass: "read",
     // [B09.1] length bounds live in server-side input validation (B05
     // DEFAULT_INPUT_LIMITS), never in wire schemas (strict provider modes
@@ -325,7 +325,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     timeoutMs: 10_000,
     validationStrategy: "snapshot options schema", verificationStrategy: "snapshot pinned to the source revision; wall-clock generatedInMs normalized to 0",
     sourceEvidence: ["app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there); B18-E E10: every footprint carries `mountingHole` (OD-21: it has pads and they are ALL non-plated holes) — a classification of pads the snapshot already lists, so no new geometry and no new authority.",
   },
   {
     ...readDefaults,

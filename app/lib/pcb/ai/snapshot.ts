@@ -11,7 +11,7 @@ import { getPreset } from "../drc/presets";
 import type { DrcResult, DrcRules } from "../drc/types";
 import type { LayerId } from "../layers";
 import { LAYERS } from "../layers";
-import type { PcbBoard } from "../types";
+import type { FootprintInstance, PcbBoard } from "../types";
 import type { PcbEngineeringEvent } from "../history";
 import { normalizeDrcReport, type NormalizedDrcViolation } from "./violation-normalizer";
 import { computeElectricalTruth, type ElectricalTruthReport } from "../electrical-truth";
@@ -151,6 +151,12 @@ function serializableElectricalTruth(report: ElectricalTruthReport): unknown {
   };
 }
 
+/** [B18-E E10] OD-21: a mounting hole is a footprint whose physical pads are ALL `np_thru_hole` (and it has at least one). */
+function isMountingHole(footprint: FootprintInstance): boolean {
+  const pads = physicalPadInstances(footprint);
+  return pads.length > 0 && pads.every((instance) => instance.pad.type === "np_thru_hole");
+}
+
 function outlineSnapshot(board: PcbBoard): unknown {
   const outline = board.outline;
   if (outline.kind === "polygon") return { kind: outline.kind, points: outline.points.map(pointMm) };
@@ -202,6 +208,10 @@ export function buildAIPcbSnapshot(board: PcbBoard, options: AIPcbSnapshotOption
       placementEnvelopeSource: envelope.source,
       routingMarginMm: envelope.routingMarginNm / NM_PER_MM,
       padIds: physicalPadInstances(footprint).map((pad) => pad.id),
+      // [B18-E E10] OD-21's rule, DERIVED — a footprint whose physical pads are all non-plated holes is a mounting hole.
+      // It exposes no new geometry: only a classification of pads the snapshot already lists, so an agent asked to
+      // dimension "the mounting holes" can name them instead of guessing (or inventing them).
+      mountingHole: isMountingHole(footprint),
       pinPadMappings: footprint.pinPadMappings ?? [],
       constraints: [
         ...(footprint.locked ? ["locked"] : []),

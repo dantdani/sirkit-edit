@@ -861,3 +861,25 @@ _(discovery, reproduction and results appended below as they are observed)_
   (against ~8 minutes for the identical code in the three preceding runs), and this session's own wall clock jumped 25 minutes
   with no work in between. The E9 CI watch died in the same window with "error connecting to api.github.com" (its two
   workflows were green when re-read). The suite was re-run on the same commit and is recorded above.
+
+### B18-E E10 — scenario 3, part 1: the mounting-hole classification and the dimension plan (2026-09-11 local, solo; this commit)
+
+- Read before writing: `sirkit.pcb.measure` is a view command (its readout never reaches the model) and the board-inspect
+  snapshot listed `padIds` without pad TYPES — so nothing agent-visible could tell a mounting hole from a pad, and half of
+  scenario 3's sentence was unanswerable except by guessing.
+- Production change (one bounded Tier 0 read, under the exposure review): every snapshot footprint carries `mountingHole` —
+  true when it has physical pads and they are ALL `np_thru_hole`, exactly OD-21's default. It is a classification of pads the
+  snapshot already lists: no new geometry, no new authority, one boolean per footprint. `sirkit.pcb.board-inspect` 1.0.0 ->
+  1.1.0 with the reason in its version notes and description; the B04/B09/B11 manifests are regenerated from the catalog.
+- Harness: the scripted agent gains a `board-then` script for the runbook's exact sentence — board-inspect FIRST, then
+  `pcb.dimension` built from the outline the snapshot returned (2 mm clear), plus one dimension per classified hole; a
+  snapshot without an outline is answered in words rather than dimensioned at invented coordinates.
+- Proven end to end (`b18-e-scenario-3`, new, in the CI list): the run reads then dimensions, mints ONE grant that is
+  `preview_then_confirm` even under `execute_explicit_tier1` (OD-11), runs no ritual, and does not move the head; its two
+  operations are `add_dimension` at the board's real corners, asserted against the snapshot's own outline. The fixture board
+  has no mounting holes, so nothing is added for them — the truthful answer to that half of the sentence.
+- Tests: b18-e-scenario-3 3/3 (new), plus b10-editor-context and b05-read-invocation re-verified; broad run: 260 files, 3368 passed, 10 expected skips (after the two consequences were fixed); tsc 0; eslint clean; five generators re-run (agent artifacts, tool registry, B11,
+  toolability matrix, read-invocation fixtures). Browser: E11.
+- Two consequences the broad run caught, both fixed rather than excused: the B05 read-replay fixtures are generated from the
+  registry, so the version bump made them byte-inconsistent until `generate-read-invocation-artifacts` was re-run; and the B10
+  context-integrity test invoked board-inspect by version, so its pin moved to 1.1.0 (it still asserts the same refusal).

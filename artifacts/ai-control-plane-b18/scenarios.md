@@ -55,7 +55,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | CONFIRMED — see §6 |
 | E9 | Browser, part 2: a claim with nothing behind it, Tier 3, a delegation, a forged handle | 7h, 8 | CONFIRMED — see §6 |
 | E9b | Browser, part 3: a stale base at the card, altered operations past the receiver | 7b, 7g | CONFIRMED — see §6 |
-| E10 | Scenario 3, part 1: mounting holes, a bounded mechanical read if needed, integration | 3 | planned |
+| E10 | Scenario 3, part 1: the mounting-hole classification and the dimension plan, in integration | 3 | CONFIRMED — see §6 |
 | E11 | Scenario 3, part 2: the scripted plan, a truncation marker, browser | 3 | planned |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | planned |
 | E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | planned |
@@ -280,3 +280,30 @@ server's stored record. So the proof had to reach past it, twice, without weaken
   not committed and not landed_unverified, never committed and never "landed, unverified", and neither the honest text nor the substituted one reaches
   the board. This is the browser's proof that unforgeability rests on server storage, not on anything the page checks.
 - Browser run: agent-execution 24/24 (2 new), 9.0 min
+- CI green at `6c35a05` (deterministic-manufacturing 34668360776 and benchmark-quality 34668360771, both success).
+
+### E10 — scenario 3, part 1: dimensioning what the board actually says (CONFIRMED)
+
+The sentence is "Add horizontal and vertical dimensions for the board and mounting holes." A model can only honour it if it
+can SEE the board's extents and know which footprints are holes. Read first, then built:
+
+- **What the reads could already do.** `sirkit.pcb.measure` is a VIEW command — its readout goes to the screen, not to the
+  model — so it cannot supply coordinates. `sirkit.pcb.board-inspect` already states the outline (origin, width, height in
+  mm), so the board half of the sentence was reachable; the mounting-hole half was not: the snapshot listed `padIds` but no
+  pad TYPES, so nothing in the agent's view distinguished a non-plated hole from a pad.
+- **The exposure review, and the smallest thing that closes it.** Each snapshot footprint now carries `mountingHole`: true
+  when it has physical pads and they are ALL `np_thru_hole` — exactly OD-21's recorded default. This is a CLASSIFICATION of
+  pads the snapshot already lists: no new geometry, no pad-level detail, no new authority, one boolean per footprint (the
+  result size is unchanged in practice), on a Tier 0 read that was already agent-exposed. `board-inspect` goes to 1.1.0 with
+  the reason in its version notes, and the generated manifests are re-made from the catalog.
+- **The plan the agent makes.** The scripted agent gains a `board-then` script: it calls board-inspect FIRST and builds
+  `pcb.dimension` from the outline the snapshot returned — a horizontal dimension across the width and a vertical one down
+  the height, each offset 2 mm clear — plus one dimension per footprint the snapshot CLASSIFIED as a mounting hole. A board
+  whose snapshot carries no outline is answered in words; no coordinate is ever invented.
+- **End to end** (`b18-e-scenario-3`, in the CI list): under `execute_explicit_tier1` the run starts board-inspect and then
+  pcb.dimension, mints ONE grant whose decision is `preview_then_confirm` (OD-11: dimensions always ask, even under explicit
+  autonomy), runs no ritual, and leaves the head where it was. Its two operations are `add_dimension` at the board's real
+  corners — asserted against the snapshot's own outline, not against constants.
+- **The blinker fixture has no mounting holes** (no footprint has all-non-plated pads), so the honest run dimensions the
+  board and adds nothing for holes. That is the answer to half the sentence, and it is measured, not assumed.
+- Tests: b18-e-scenario-3 3/3 (new), plus b10-editor-context and b05-read-invocation re-verified
