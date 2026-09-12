@@ -651,3 +651,9 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Conflicts: `transaction.ts` and the held test, resolved to the branch's versions — they contain this branch's hardening and all three held cases.
 - Tests after the merge: 2 files / 6 tests passed (held 3, bound 3); broad: 251 files / 3307 tests passed, 10 skipped (the expected skips).
 - Still open, flagged by that session and outside B18-D: re-applying the same repair preview after its Undo reports success, but the executor replays the idempotent `repair:<preview id>` and nothing changes.
+
+### Correction — the assignment-panel test was a race, not slowness (2026-09-11 local; this commit)
+
+- `assignment-queue-panel.test.tsx` failed again in a loaded broad run after `82b99a9` had given it more time. The failure's DOM shows the cause: the reason was typed, but the candidate radio was unchecked and "Select exact candidate" was still disabled, so no preview could ever appear. The panel auto-selects the first item after loading and resets its per-item state (candidate, preview, confirmation) in an effect keyed on the selection; under load that reset ran after the test's first click and wiped it. The diagnosis recorded with `82b99a9` ("timing") was wrong; the longer waits never addressed it.
+- The fix: the test flushes pending effects before interacting and checks each interaction as it happens (the radio is checked; the button is enabled before it is clicked); the reviewer-assignment test gets the same flush. Alone 5/5; broad run: 251 files / 3307 tests passed, 10 skipped (the expected skips).
+- The product pattern — per-item state reset in an effect rather than with a key — predates B18 and is flagged as a separate task.
