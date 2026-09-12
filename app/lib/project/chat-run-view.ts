@@ -34,13 +34,18 @@ const TOOL_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
   execution_grant_dropped: "dropped by this page — it failed the integrity checks; nothing was changed", // [B18-D review]
 });
 
+/** [B18-E E1] A refusal the model is told in plain words gets a plain line too, never a bare code. */
+const REFUSED_TOOL_LABELS: Readonly<Record<string, string>> = Object.freeze({
+  nothing_to_replay: "nothing to undo or redo — the assistant acts only on its own latest change; nothing was changed",
+});
+
 /** One tool line: the tier tag, the title and what really happened. */
 export function toolLineLabel(input: { title?: unknown; tier?: unknown; ok?: unknown; status?: unknown }): string {
   const tier = tierLabel(input.tier);
   const tag = tier ? `T${input.tier as number} · ` : "";
   const title = typeof input.title === "string" && input.title.length > 0 ? input.title.slice(0, 120) : "tool";
   const status = typeof input.status === "string" ? input.status.slice(0, 60) : "unknown";
-  if (input.ok !== true) return `${tag}${title} — refused (${status})`;
+  if (input.ok !== true) return `${tag}${title} — ${REFUSED_TOOL_LABELS[status] ?? `refused (${status})`}`;
   if (status === "succeeded") return `${tag}${title} — done`;
   return `${tag}${title} — ${TOOL_STATUS_LABELS[status] ?? `finished (${status})`}`;
 }
@@ -395,7 +400,8 @@ function stateSentence(entry: ExecutionEntry): string {
 function undoHint(entry: ExecutionEntry): string {
   if (!entry.undoEligible) return "Undo: it was no longer the latest change when it settled — use the revision history.";
   if (entry.replay === "undo") return "Undo: while it is the latest change — the editor's Undo (one step) re-applies the change; or say “Redo.”";
-  if (entry.replay === "redo") return "Undo: while it is the latest change — the editor's Undo (one step) removes the change again; or say “Undo that.”";
+  // [B18-E E1] no chat phrase: the minter refuses to undo an AI undo or redo ("nothing to undo or redo")
+  if (entry.replay === "redo") return "Undo: while it is the latest change — the editor's Undo (one step) removes the change again.";
   return "Undo: while it is the latest change — the editor's Undo (one step), or say “Undo that.”";
 }
 
@@ -426,6 +432,24 @@ export function entryToLogMessage(entry: ExecutionEntry): EntryLogMessage {
     rows.push(row("undo", undo.text, undo.ok ? "done" : "error"));
   }
   return { id, role: "log", title: `AI change — ${entry.understood}`.slice(0, 160), status, entries: rows };
+}
+
+/** [B18-E E1] After a reload the editor starts a fresh history and the chat has no live Undo, so a committed entry's stored
+ *  undo HINT would name affordances that no longer exist. The restored entry gets a hint that stays true; a recorded Undo
+ *  result is kept (it happened), and every other message and row is returned unchanged. */
+export const RESTORED_UNDO_HINTS = Object.freeze({
+  change: "Undo: after a reload the editor's one-step Undo no longer applies — say “Undo that.” while it is the latest change, or use the revision history.",
+  undo: "Undo: after a reload the editor's one-step Undo no longer applies — say “Redo.” while it is the latest change, or use the revision history.",
+  redo: "Undo: after a reload the editor's one-step Undo no longer applies — use the revision history.",
+});
+export function restoredEntryLog<M extends { id: string; entries: ReadonlyArray<{ id: string; text: string }> }>(message: M): M {
+  if (entryStateOfLogMessage(message) !== "committed") return message;
+  const entries = message.entries.map((row) => {
+    if (!row.id.endsWith(":undo") || !row.text.startsWith("Undo: while it is the latest change")) return row;
+    const kind = row.text.includes("re-applies the change") ? "undo" : row.text.includes("removes the change again") ? "redo" : "change";
+    return { ...row, text: RESTORED_UNDO_HINTS[kind] };
+  });
+  return { ...message, entries } as M;
 }
 
 /** The entry state of a (possibly reloaded) log message, or null when it is not an execution entry. */

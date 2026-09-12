@@ -34,6 +34,7 @@ import { sirkitToolRegistry } from "../tool-catalog";
 import { permissionTierOfDescriptor } from "../permission-tiers";
 import { GRANTED_EXECUTION_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, grantedExecutionViolations } from "../granted-execution-families";
 import { SCOPE, call, composition, fixtureBoard, headOf, movesBy, r3Of, ritual, runScenario, type Composed } from "./b18c-harness";
+import { entryEditorOutcome, entryFromGrant, entryToLogMessage } from "../../project/chat-run-view"; // [B18-E E1]
 
 const UNDO_TOOL = "sirkit.pcb.undo-redo-granted";
 type Answer = Record<string, unknown>;
@@ -89,6 +90,29 @@ describe("B18-C I8b — undo and redo end to end", () => {
     expect(again.grants).toEqual([]);
     expect(answerOf(again.adapter)).toMatchObject({ ok: false, status: "nothing_to_replay" });
     expect(headOf(c).headSequence).toBe(before + 2);
+  }, 30_000);
+
+  it("[B18-E E1] every chat phrase a committed entry's undo hint names is one the minter accepts; an AI redo's hint names none", async () => {
+    const c = await composition("execute_explicit_tier1");
+    const hintOf = (run: Awaited<ReturnType<typeof runScenario>>): string => {
+      const issued = run.grants[0]!;
+      const outcome = run.rituals[0]!;
+      if (!outcome.ok) throw new Error(`the execution must commit: ${JSON.stringify(outcome)}`);
+      const entry = entryEditorOutcome(entryFromGrant({ grant: issued, decision: issued.binding.operation.decision }), { ok: true, status: outcome.status, receipt: outcome.receipt, settled: outcome.settled, undoEligible: true });
+      return entryToLogMessage(entry).entries.find((row) => row.id.endsWith(":undo"))!.text;
+    };
+    const phrasesOf = (hint: string): string[] => [...hint.matchAll(/“([^”]+)”/g)].map((match) => match[1]!);
+    const move = await runScenario(c, moveScript(c));
+    expect(phrasesOf(hintOf(move))).toEqual(["Undo that."]);
+    const undo = await runScenario(c, replayScript("undo"), { message: "Undo that." }); // the phrase the move's hint named
+    expect(undo.grants).toHaveLength(1);
+    expect(phrasesOf(hintOf(undo))).toEqual(["Redo."]);
+    const redo = await runScenario(c, replayScript("redo"), { message: "Redo." }); // the phrase the undo's hint named
+    expect(redo.grants).toHaveLength(1);
+    expect(phrasesOf(hintOf(redo))).toEqual([]); // and none after an AI redo, because:
+    const again = await runScenario(c, replayScript("undo"), { message: "Undo that." });
+    expect(again.grants).toEqual([]);
+    expect(answerOf(again.adapter)).toMatchObject({ ok: false, status: "nothing_to_replay" });
   }, 30_000);
 
   it("the user's own Undo after an AI undo re-applies the change through the canonical wrapped history — reconciled, never rebased", async () => {

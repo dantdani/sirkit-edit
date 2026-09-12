@@ -60,7 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -2960,7 +2960,8 @@ export default function Home() {
       ? {
           id: message.id, role: "log" as const, title: message.title,
           status: message.status === "running" ? ("error" as const) : message.status,
-          entries: message.entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
+          // [B18-E E1] a committed AI-change entry's undo hint is replaced by one that stays true after a reload
+          entries: restoredEntryLog(message).entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
         }
       : message);
   }

@@ -692,3 +692,10 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Found by the discovery in B18-D's surfaces: an AI redo's hint offers "Undo that.", which the minter refuses for an AI replay; a reloaded entry's hint names the editor's one-step Undo, which a reload does not keep — E1. The drift and pre-check cancels' durable reason was fixed in B18-D part 5 (`refused_before_execution`); E2 makes drift cancels name the drift itself.
 - Owner decisions: OD-20 to OD-30 recorded with defaults (OD-7 and OD-13 stand).
 - Tests: none changed (records and a test header comment only).
+
+### B18-E E1 — scenario 6's truth in the chat (2026-09-11 local, solo; this commit)
+
+- Reproduced first: the new `b18-c-undo-redo` consistency case (every chat phrase a committed entry's hint names must mint through the real loop and minter) failed on the pre-E1 code — an AI redo's hint named “Undo that.”, which the minter answers `nothing_to_replay`.
+- Fixed: an AI redo's hint names no chat phrase; a committed entry restored after a reload gets a hint that stays true (`restoredEntryLog`, called from the stored-chat restore); `nothing_to_replay` reads plainly on the tool line. The reload check, INFERRED by the discovery, is CONFIRMED in the browser: after the reload the toolbar reads "Nothing to undo" and the restored entries carry the new hint.
+- Gates: B17 581 controls and the B01 fingerprint unchanged (no new control); the CI list gains b18-e-scenario-6-truth.
+- Tests: `b18-e-scenario-6-truth`, the consistency case, a moved `b18-d-review-part3` pin and a `b18-d-ui-gates` wire; the affected files 10/10 (65 tests); broad run: 254 files / 3335 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); `agent-execution`: 16/16 passed (4.8 min), including the reload checks: the toolbar reads “Nothing to undo” and the restored entries carry the new hint; tsc 0; eslint clean on the changed files (`page.tsx` 14 pre-existing problems, the same rules as before).

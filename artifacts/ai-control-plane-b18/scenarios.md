@@ -45,7 +45,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | Id | Title | Scenarios | Status |
 |---|---|---|---|
 | E0 | This record, the harness limits, two record corrections | all | this commit |
-| E1 | Scenario 6 truth: the redo hint and reloaded entries | 6 | planned |
+| E1 | Scenario 6 truth: the redo hint and reloaded entries | 6 | CONFIRMED — see §6 |
 | E2 | Refusal causes the chat and the model can trust (drift reasons, server refusals) | 7b, 7c, 7f, 7h | planned |
 | E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | planned |
 | E4 | Scenario 6's refresh proven in integration | 6 | planned |
@@ -70,3 +70,12 @@ Tier 2 stays human-approved and Tier 3 stays inaccessible in every increment; th
 ## 5. Owner decisions
 
 OD-20 to OD-30 (`artifacts/remaining-builder-program/OWNER_DECISIONS.md`) record this chapter's open choices with the defaults applied; OD-7 (provider credits) and OD-13 (via edits stay Tier 2) stand.
+
+## 6. Results by increment
+
+### E1 — scenario 6's truth in the chat (CONFIRMED)
+
+- **An AI redo's hint** offered “Undo that.”, which the minter refuses for an AI replay ("nothing to undo or redo"). It now names no chat phrase: "Undo: while it is the latest change — the editor's Undo (one step) removes the change again." A consistency case in `b18-c-undo-redo` runs the real loop and minter: every chat phrase a committed entry's hint names mints (“Undo that.” after a move, “Redo.” after an AI undo), and an AI redo's hint names none. Reproduced first: on the pre-E1 hint that case failed (`expected [ 'Undo that.' ] to deeply equal []`).
+- **A reloaded entry.** After a reload the editor starts a fresh history and the chat has no live Undo, so a committed entry's stored hint named affordances that no longer exist. `restoredEntryLog` (called when the stored chat is restored) replaces the hint with one that stays true: "Undo: after a reload the editor's one-step Undo no longer applies — say “Undo that.” while it is the latest change, or use the revision history." (“Redo.” after an AI undo; no chat phrase after an AI redo). A recorded Undo result, the not-undoable line, a pending entry and every other message are unchanged; entries stored before these hints are restored the same way. The browser checks it after the reload: the toolbar reads "Nothing to undo" (CONFIRMED: the one-step Undo does not survive a reload) and the restored entries carry the new hint.
+- **"Nothing to undo or redo"** is said plainly on the tool line ("… — nothing to undo or redo — the assistant acts only on its own latest change; nothing was changed"), not as a bare code.
+- Tests: `b18-e-scenario-6-truth` (new, in the CI list), the `b18-c-undo-redo` consistency case, a `b18-d-review-part3` pin moved, a `b18-d-ui-gates` wire for the restore; `agent-execution`: 16/16 passed (4.8 min), including the reload checks: the toolbar reads “Nothing to undo” and the restored entries carry the new hint.

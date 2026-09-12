@@ -298,6 +298,9 @@ test("B18-C silkscreen add with the card; 'Undo that.' undoes it; after a RELOAD
   // [B18-D review 2] a reloaded entry is a static record: no live Undo, and its stored text never names the chat's button
   await expect(page.getByTestId("execution-undo")).toHaveCount(0);
   await expect(page.getByText(/“Undo this change”/)).toHaveCount(0);
+  // [B18-E E1] the editor's one-step Undo did not survive the reload, and the restored entries say so
+  await expect(page.getByTestId("pcb-editor").getByTitle("Nothing to undo")).toBeVisible();
+  await expect(page.getByText(/^Undo: after a reload the editor's one-step Undo no longer applies/).first()).toBeVisible();
   await chat("Redo.");
   await expect(committedLines()).toHaveCount(committedBeforeReload + 1);
   await expect(page.getByText(/^\(fixture agent\) the tool answered /).last()).toHaveText("(fixture agent) the tool answered executed.");

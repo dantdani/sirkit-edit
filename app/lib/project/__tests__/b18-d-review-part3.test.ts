@@ -51,6 +51,7 @@ describe("B18-D review — the committed line and the undo hint stay true", () =
 
   it("an AI undo's hint says Undo re-applies the change; an AI redo's says it removes it again", () => {
     expect(rows(committed({ direction: "undo", referencedTransactionId: "tx:0", referencedGrantId: "xg-0" }))).toContain("Undo: while it is the latest change — the editor's Undo (one step) re-applies the change; or say “Redo.”");
-    expect(rows(committed({ direction: "redo", referencedTransactionId: "tx:0", referencedGrantId: "xg-0" }))).toContain("Undo: while it is the latest change — the editor's Undo (one step) removes the change again; or say “Undo that.”");
+    // [B18-E E1] pin moved: no chat phrase after an AI redo — the minter refuses to undo an AI replay
+    expect(rows(committed({ direction: "redo", referencedTransactionId: "tx:0", referencedGrantId: "xg-0" }))).toContain("Undo: while it is the latest change — the editor's Undo (one step) removes the change again.");
   });
 });

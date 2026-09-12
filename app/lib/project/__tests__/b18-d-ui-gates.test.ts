@@ -34,6 +34,7 @@ const WIRES: ReadonlyArray<{ name: string; path: string; pattern: RegExp }> = [
   { name: "the editor reports a transient refusal", path: "app/components/pcb/PcbEditor.tsx", pattern: /\bonExecutionGrantAttemptRefused\?\.\(/g },
   { name: "the editor keeps a card only by the ritual's rule", path: "app/components/pcb/PcbEditor.tsx", pattern: /const transient = refusalKeepsPreviewCard\(outcome\);/g },
   { name: "the live pre-check names its reason", path: "app/components/pcb/PcbEditor.tsx", pattern: /code: "precheck-refused", message: reason/g },
+  { name: "a restored entry's undo hint stays true after a reload (B18-E E1)", path: "app/page.tsx", pattern: /entries: restoredEntryLog\(message\)\.entries\.map\(/g },
   { name: "the editor records the timeline through the shared step", path: "app/components/pcb/PcbEditor.tsx", pattern: /const next = pcbHistoryStep\(history, previousMark\);/g },
 ];
 const wireCount = (sources: ReadonlyMap<string, string>, wire: (typeof WIRES)[number]): number => [...(sources.get(wire.path) ?? "").matchAll(wire.pattern)].length;
