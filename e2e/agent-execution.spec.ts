@@ -20,6 +20,8 @@
  */
 import { mkdirSync } from "node:fs";
 import { expect, test, type BrowserContext, type Page, type Request } from "@playwright/test";
+// [B18-E E9b] the PURE digest formulas (no authority), so the altered-proposal case can forge a grant the PAGE cannot fault.
+import { executionOperationsDigest, executionPreviewDigest } from "../app/lib/engineering/execution-grant";
 import { bootstrapSynchronizedBoard, reloadAs } from "./fixture-journey";
 
 test.describe.configure({ mode: "serial" });
@@ -804,6 +806,88 @@ test("[B18-E E9] a forged handle: a grant whose id was rewritten in transit pass
   expect(silkTexts(after)).toEqual(silkTexts(start));
   expect(silkTexts(after)).not.toContain("FORGEDHANDLE");
   await page.screenshot({ path: `${EVIDENCE}/forged-handle-refused.png`, fullPage: false });
+  if (await card.isVisible()) await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(card).toBeHidden();
+});
+
+test("[B18-E E9b] a stale base (7b): a grant whose recorded PCB revision is not the one the editor is on cannot be confirmed — the card says why, and nothing is committed", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  const committed = await committedLines().count();
+  let rewritten = 0;
+  await page.route("**/api/chat", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).split("\n").map((line) => {
+      if (!line.includes('"execution_grant_ready"')) return line;
+      const event = JSON.parse(line) as { grant: { binding: { base: { pcb: { pcbRevisionId: string } } } } };
+      // The same condition a concurrent edit produces: the base the grant was minted against is no longer the live head.
+      // (No digest covers `base`, so the page's own coherence checks still pass — the drift check is what must catch it.)
+      event.grant.binding.base.pcb.pcbRevisionId = `pcb2-${"0".repeat(24)}`;
+      rewritten += 1;
+      return JSON.stringify(event);
+    }).join("\n");
+    await route.fulfill({ response, body });
+  });
+  try {
+    await chat(`Add silkscreen text DRIFTED at ${at.x}, ${at.y}.`);
+  } finally {
+    await page.unroute("**/api/chat");
+  }
+  expect(rewritten).toBe(1);
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card, "the grant is coherent, so the card is shown — and then refused").toBeVisible();
+  await expect(page.getByTestId("granted-execution-disable-reason")).toBeVisible();
+  await expect(page.getByTestId("granted-execution-confirm")).toBeDisabled();
+  await page.screenshot({ path: `${EVIDENCE}/stale-base-card-disabled.png`, fullPage: false });
+  await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(card).toBeHidden();
+  await expect(committedLines()).toHaveCount(committed);
+  const after = await board();
+  expect(silkTexts(after)).toEqual(silkTexts(start));
+  expect(silkTexts(after)).not.toContain("DRIFTED");
+});
+
+test("[B18-E E9b] altered operations (7g): a grant rewritten in transit WITH its digests recomputed passes the page's checks, and the SERVER refuses the tender — nothing is written", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  const committed = await committedLines().count();
+  let rewritten = 0;
+  await page.route("**/api/chat", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).split("\n").map((line) => {
+      if (!line.includes('"execution_grant_ready"')) return line;
+      const event = JSON.parse(line) as { grant: { binding: { operation: { family: string }; targets: { targetsDigest: string }; proposal: { operations: Array<Record<string, unknown>>; operationsDigest: string; preview: { before: string; after: string; warnings: string[] }; previewDigest: string } } } };
+      // the compiled operation is `{ kind: "add_silk", item: SilkItem }` (engineering/types.ts), not the tool's arguments
+      const added = event.grant.binding.proposal.operations[0] as { kind?: string; item?: { text?: string } };
+      if (added.kind !== "add_silk" || !added.item || typeof added.item.text !== "string") return line;
+      added.item.text = "SUBSTITUTED"; // what would really be written, while the human keeps reading the original preview
+      const proposal = event.grant.binding.proposal;
+      proposal.operationsDigest = executionOperationsDigest(event.grant.binding.operation.family as Parameters<typeof executionOperationsDigest>[0], proposal.operations as unknown as Parameters<typeof executionOperationsDigest>[1]);
+      proposal.previewDigest = executionPreviewDigest({ operationsDigest: proposal.operationsDigest, targetsDigest: event.grant.binding.targets.targetsDigest, preview: proposal.preview });
+      rewritten += 1;
+      return JSON.stringify(event);
+    }).join("\n");
+    await route.fulfill({ response, body });
+  });
+  try {
+    await chat(`Add silkscreen text HONEST at ${at.x}, ${at.y}.`);
+  } finally {
+    await page.unroute("**/api/chat");
+  }
+  expect(rewritten).toBe(1);
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card, "recomputed digests are self-consistent, so the page cannot tell — only the server can").toBeVisible();
+  await expect(page.getByTestId("granted-execution-preview"), "the human is still shown what the server minted").toContainText("HONEST");
+  const entry = page.getByTestId("chat-execution-entry").last();
+  await page.getByTestId("granted-execution-confirm").click();
+  await expect.poll(async () => await entry.getAttribute("data-state"), { timeout: 60_000 }).toMatch(/^(committed|not_made|cancelled|superseded|landed_unverified)$/);
+  const state = await entry.getAttribute("data-state");
+  expect(state, "the server compared the tender with what it stored").not.toBe("committed");
+  expect(state, "nothing was written, so nothing can be unverified").not.toBe("landed_unverified");
+  await expect(committedLines()).toHaveCount(committed);
+  await page.screenshot({ path: `${EVIDENCE}/altered-operations-refused.png`, fullPage: false });
+  const after = await board();
+  expect(silkTexts(after), "neither the honest text nor the substituted one reached the board").toEqual(silkTexts(start));
   if (await card.isVisible()) await page.getByRole("button", { name: "Cancel — change nothing" }).click();
   await expect(card).toBeHidden();
 });

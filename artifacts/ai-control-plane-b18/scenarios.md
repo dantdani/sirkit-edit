@@ -54,7 +54,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | CONFIRMED — see §6 |
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | CONFIRMED — see §6 |
 | E9 | Browser, part 2: a claim with nothing behind it, Tier 3, a delegation, a forged handle | 7h, 8 | CONFIRMED — see §6 |
-| E9b | Browser, part 3: stale revision from another session, altered operations past the receiver | 7b, 7g | planned |
+| E9b | Browser, part 3: a stale base at the card, altered operations past the receiver | 7b, 7g | CONFIRMED — see §6 |
 | E10 | Scenario 3, part 1: mounting holes, a bounded mechanical read if needed, integration | 3 | planned |
 | E11 | Scenario 3, part 2: the scripted plan, a truncation marker, browser | 3 | planned |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | planned |
@@ -261,3 +261,22 @@ human.
   execution runs' claims did sit beside entries; BOTH runs that prepared nothing left the page's own contradiction standing),
   and each refusal run's own test pins, for that run, that no entry was added and the contradiction is visible.
 - Browser run: agent-execution 22/22 (3 new), 7.8 min. Tests: b18-e-claimed-nothing 4/4 (new) plus the run-view and fixture-agent suites, 41/41
+- CI green at `db09732` (deterministic-manufacturing 34665896830 and benchmark-quality 34665896853, both success).
+
+### E9b — the browser, part 3: what the page cannot catch, the editor and the server do (CONFIRMED)
+
+Both cases start from the same measured fact: the page's SAFE receiver checks COHERENCE, not authenticity — it recomputes the
+operations, targets and preview digests and checks the decision and lifetime, and it cannot verify the grant against the
+server's stored record. So the proof had to reach past it, twice, without weakening anything.
+
+- **A stale base (7b).** The grant's recorded base PCB revision is rewritten in transit to one the editor is not on — the same
+  condition a concurrent edit produces, and a field no digest covers, so the page's checks still pass and the card is shown.
+  The EDITOR then refuses it: Confirm is disabled and the card states the reason (revision_drift: 'the live board changed since the grant was issued - ask again.'). Cancel leaves the board
+  exactly as it was and nothing is committed. (The four-layer drift refusal itself — the card, the explicit pre-check, the
+  ritual's recompile and the consume's burns — stays proven in unit and integration; this is its display truth.)
+- **Altered operations (7g).** The silkscreen text inside the grant's OPERATIONS is replaced and the operations and preview
+  digests are RECOMPUTED, so the forgery is self-consistent: the page cannot fault it and shows the card, still displaying the
+  preview the server minted. On Confirm the SERVER compares the tender with what it stored and refuses: the entry ends
+  not committed and not landed_unverified, never committed and never "landed, unverified", and neither the honest text nor the substituted one reaches
+  the board. This is the browser's proof that unforgeability rests on server storage, not on anything the page checks.
+- Browser run: agent-execution 24/24 (2 new), 9.0 min

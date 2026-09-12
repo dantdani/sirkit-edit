@@ -842,3 +842,22 @@ _(discovery, reproduction and results appended below as they are observed)_
   E8 measured that the card is MODAL, so drift cannot be driven from the same page; both need a second session or a rewritten
   digest set, and they are their own increment rather than a rushed addition here.
 - Browser run: agent-execution 22/22 (3 new), 7.8 min; tests: b18-e-claimed-nothing 4/4 (new) plus the run-view and fixture-agent suites, 41/41; broad run: 259 files, 3365 passed, 10 expected skips; tsc 0; eslint clean.
+
+### B18-E E9b — the browser, part 3: a stale base at the card, altered operations past the receiver (2026-09-11 local, solo; this commit)
+
+- Read first, then written: the page's SAFE receiver (`execution-grant-events.ts` + `verifyPublicGrantCoherence`) verifies
+  COHERENCE — recomputed operations/targets/preview digests, the decision, the lifetime — and cannot verify the grant against
+  the server's record. Both E9b cases exploit exactly that, so each lands on the layer that is supposed to catch it.
+- 7b in the browser: the grant's recorded base PCB revision is rewritten in transit (a field no digest covers) to one the
+  editor is not on — the condition a concurrent edit produces. The card appears and the EDITOR refuses it: Confirm disabled,
+  the reason stated on the card (revision_drift: 'the live board changed since the grant was issued - ask again.'), nothing committed, and Cancel leaves the board untouched.
+- 7g in the browser: an operation's text is replaced and the operations and preview digests are recomputed, so the page cannot
+  fault the grant; the human still sees the minted preview. Confirm tenders it and the SERVER refuses — the entry ends
+  not committed and not landed_unverified, nothing is committed, and neither text reaches the board.
+- No production code changed in this increment. Browser run: agent-execution 24/24 (2 new), 9.0 min; tsc 0; eslint clean; the vitest suites are untouched (E9's
+  broad run at db09732 was green and CI runs the full set on this commit).
+- Not dismissed as a flake: the FIRST run of these cases reported one failure — E8's scenario-6 case timed out waiting for a
+  chat reply — and the evidence says the host suspended: that single test reported 25.2 minutes and the whole suite 30.3
+  (against ~8 minutes for the identical code in the three preceding runs), and this session's own wall clock jumped 25 minutes
+  with no work in between. The E9 CI watch died in the same window with "error connecting to api.github.com" (its two
+  workflows were green when re-read). The suite was re-run on the same commit and is recorded above.
