@@ -585,9 +585,9 @@ reconstructing it from nineteen entries.
 | # | unit | integration / real loop | browser | carried by |
 |---|---|---|---|---|
 | 1 move | yes | yes (loop, gateway, minter, ritual, settle) | yes — the runbook's exact sentence on the preview path; the explicit path with a VARIANT sentence, because the retry guard turns a repeat of the same sentence into a card (§1, E8) | E3, E8 |
-| 2 vias | yes | yes — an `update_via` payload through the real loop; the bounded via read; the padstack-bound refusal | yes — the read runs and the answer is truthful; the board has no vias to resize (LB-8) | E12–E14 |
+| 2 vias | yes | yes — an `update_via` payload through the real loop; the bounded via read; the padstack-bound refusal | yes — the run log shows the bounded read finishing and the answer matches what it returned; the board has no vias to resize (LB-8) | E12–E14 |
 | 3 dimensions | yes | yes — the plan built from the bounded mechanical read | yes — a card even under explicit autonomy, one transaction on Confirm | E10, E11 |
-| 4 replacement | yes | yes — the runbook sentence through the REAL `/api/chat` handler | yes — seal, review, Cancel, Apply: ONE canonical transaction | E15, E16 |
+| 4 replacement | yes | yes — the runbook sentence through the REAL `/api/chat` handler | yes — seal, review, Cancel (nothing changed), Apply (the chat reports one verified, undoable canonical transaction by id). That it is exactly ONE history entry is counted in integration, not in the browser | E15, E16 |
 | 5 place / route / report | yes | yes — the candidate reports, the turn-taking, the routing producer, the SAFE receiver | yes — a placement candidate for review and the clauses it cannot honour said out loud | E17, E18 |
 | 6 undo / refresh / redo | yes | yes — including the refresh | yes — on a move, across a reload | E1, E4, E8 |
 | 7a–7h | yes | yes — every condition | yes for 7b, 7c, 7d, 7e, 7g, 7h. NOT 7a: the browser case proves the open card is modal, which makes a selection change impossible to attempt — that targets are bound by id and never by the selection is proven in unit and integration, where the burn is reachable (E8, OD-26) | E2, E5, E7–E9b |

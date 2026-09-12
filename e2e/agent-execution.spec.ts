@@ -22,6 +22,9 @@ import { mkdirSync } from "node:fs";
 import { expect, test, type BrowserContext, type Page, type Request } from "@playwright/test";
 // [B18-E E9b] the PURE digest formulas (no authority), so the altered-proposal case can forge a grant the PAGE cannot fault.
 import { executionOperationsDigest, executionPreviewDigest } from "../app/lib/engineering/execution-grant";
+// [B18-E validation] the page's own sentence, IMPORTED rather than copied: a duplicated string went stale the moment the
+// label was reworded, and CI caught it here instead of a reviewer catching it in the source.
+import { LABEL_NOTHING_CHANGED as NOTHING_CHANGED } from "../app/lib/project/chat-run-view";
 import { bootstrapSynchronizedBoard, reloadAs } from "./fixture-journey";
 
 test.describe.configure({ mode: "serial" });
@@ -763,8 +766,7 @@ test("[B18-E E8] the double call: two identical execution calls in one step prod
   expect(silkTexts(await board()).filter((text) => text === "REV C"), "added once, not twice").toHaveLength(1);
 });
 
-/** [B18-E E9] the page's own sentence when a run claimed something and prepared nothing (chat-run-view.ts LABEL_NOTHING_CHANGED). */
-const NOTHING_CHANGED = "Nothing was changed: this run never prepared a change. Anything said about it being done was written before the assistant had any result — the run log above says what really happened.";
+
 
 test("[B18-E E9] scenario 8 in the browser: a forged Tier 3 call is refused before anything runs — no card, no entry, nothing changed — and the page contradicts the assistant's claim", async () => {
   const start = await board();
@@ -956,6 +958,9 @@ test("[B18-E E14] scenario 2 in the browser: the assistant reads the vias before
   const answer = (await replies.last().textContent()) ?? "";
   expect(answer).toContain("no vias at all");
   expect(answer).toContain("Nothing was changed");
+  // [B18-E validation] the answer alone does not prove the READ ran — the run log's own derived line does. A truthful
+  // "no vias" and a failed read would read the same in the bubble; they do not read the same here.
+  await expect(page.getByText("T0 · Inspect the vias on a net — done")).toBeVisible();
   expect(answer, "it never claims a change, and never names a net the board does not have").not.toContain("0.700");
   await page.screenshot({ path: `${EVIDENCE}/scenario-2-no-vias-answer.png`, fullPage: false });
   // Tier 2 all the way: no grant card, no execution entry, no review dialog, no transaction.

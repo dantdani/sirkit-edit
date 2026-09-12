@@ -134,8 +134,12 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
     }
     case "execution_settled":
       // [B18-D review 2] any durable outcome resolves it (committed, not committed, poisoned, retired); an unsettled or in-flight
-      // answer does not — the model could not know the outcome
-      return event.status === "settled" || event.status === "retired" ? { ...state, resolvedExecutions: state.resolvedExecutions + 1 } : state;
+      // answer does not — the model could not know the outcome.
+      // [B18-E validation] clamped to what was actually issued: a stream carrying more settlements than grants cannot
+      // resolve a grant that is still in flight and so cannot suppress the label that says the answer came first.
+      return event.status === "settled" || event.status === "retired"
+        ? { ...state, resolvedExecutions: Math.min(state.pendingExecutions, state.resolvedExecutions + 1) }
+        : state;
     case "run_completed":
       return { ...state, terminal: state.terminal ?? "completed" };
     case "run_failed":
@@ -165,7 +169,10 @@ export function projectRunView(state: RunViewState): RunViewProjection {
   // text and writes nothing beside the call, and that answer reached the user unlabelled AND became the next run's
   // history. A refused or not-ok tool call is what makes the answer worth contradicting, whatever the model wrote where.
   const preparedNothing = state.pendingExecutions === 0 && state.receivedExecutions === 0 && state.droppedExecutions === 0 && state.pendingReviews === 0;
-  const claimedNothing = state.terminal !== null && preparedNothing && (state.interim.length > 0 || state.failedAttempts > 0);
+  // [B18-E validation] the trigger is a FAILED ATTEMPT, not the presence of prose. Keying on interim text both missed the
+  // ordinary case (the claim written in the final answer) and fired on an innocent one (a preamble beside a successful
+  // read, where "nothing was changed" is true but says nothing about a question the user only asked).
+  const claimedNothing = state.terminal !== null && preparedNothing && state.failedAttempts > 0;
   const label = state.answer.length === 0 ? null : unresolvedExecution ? (noEntry ? LABEL_DROPPED : LABEL_BEFORE_CHANGE) : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : claimedNothing ? LABEL_NOTHING_CHANGED : null;
   const answer = label ? `${label}\n\n${state.answer}` : state.answer;
   return {

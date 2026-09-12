@@ -54,6 +54,35 @@ describe("[B18-E E9] a run that claimed a change and prepared none", () => {
     expect(refusedBeforeRunning.label, "a call refused before it ran is an attempt that changed nothing").toBe(LABEL_NOTHING_CHANGED);
   });
 
+  // [B18-E validation] The same pass found the opposite error: keying on prose ALSO fired the label on an innocent run.
+  // A question answered from a successful read, with a preamble beside the call, changed nothing — saying so is true and
+  // useless, and a label people learn to ignore protects nobody. The trigger is an attempt that did not work.
+  it("stays silent on a read-only run that only answered a question, however the model wrote it", () => {
+    const readOnly = run([
+      { type: "text_delta", text: "Let me check the board.", phase: "interim" },
+      { type: "tool_finished", title: "Inspect board snapshot", tier: 0, ok: true, status: "succeeded" },
+      answer("R3 is at (52.000, 47.480) mm."),
+      { type: "run_completed" },
+    ]);
+    expect(readOnly.label, "nothing was attempted, so there is nothing to contradict").toBeNull();
+    expect(readOnly.notes, "the preamble is still released as a labelled note").toHaveLength(1);
+  });
+
+  // [B18-E validation] A stream that carries more settlements than the grants it issued cannot resolve a grant that is
+  // still in flight, and so cannot suppress the label that says the answer was written before the outcome.
+  it("cannot be talked out of the before-change label by extra settlement events", () => {
+    const forged = run([
+      { type: "tool_finished", title: "Move footprint", tier: 1, ok: true, status: "execution_grant_issued" },
+      { type: "execution_settled", status: "settled" },
+      { type: "execution_settled", status: "settled" },
+      { type: "execution_settled", status: "settled" },
+      { type: "tool_finished", title: "Move footprint", tier: 1, ok: true, status: "execution_grant_issued" },
+      answer("Both moves are done."),
+      { type: "run_completed" },
+    ]);
+    expect(forged.label, "two grants, one real settlement: the second is still unresolved").toBe(LABEL_BEFORE_CHANGE);
+  });
+
   it("says nothing about runs that made no claim, that are still running, or whose change really happened", () => {
     expect(run([answer("R3 is at (52.000, 47.480) mm."), { type: "run_completed" }]).label, "a plain answer is not labelled").toBeNull();
     expect(run([claim, refused("unknown_tool"), answer("the tool answered unknown_tool.")]).label, "not before the run ends").toBeNull();
