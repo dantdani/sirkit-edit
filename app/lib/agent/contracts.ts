@@ -374,7 +374,10 @@ export type AgentRunEvent =
    *  after its calls resolved); "final" — the closing answer. `tier` on tool events: the tool's permission tier (display only). */
   | { type: "text_delta"; runId: string; text: string; phase: "interim" | "final" }
   | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string; tier: PermissionTier | null }
-  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string; tier: PermissionTier | null }
+  /** [B18-E E12] `reason`: on a REFUSAL only, the server's own sentence for it (today: a blocked proposal's first
+   *  blocker), shown to the user so learning why never depends on the model relaying it. Display only — untraced, never
+   *  authority, and never set on a successful outcome. */
+  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string; tier: PermissionTier | null; reason?: string }
   /** [B18-D I10] a call refused BEFORE it ran (an unknown tool, the budget, invalid arguments, a repeated call, a second
    *  side-effecting artifact) — shown to the user; the model already receives the error result. UNTRACED: the run trace
    *  and the evaluation capsules are unchanged. `toolId`, `title` and `tier` are null for an unknown tool. */

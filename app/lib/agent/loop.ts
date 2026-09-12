@@ -657,8 +657,11 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             isError: false,
           });
         } else if (outcome.kind === "proposal-blocked") {
-          recordTrace("proposal_blocked", "proposal_blocked");
-          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: "proposal_blocked" });
+          recordTrace("proposal_blocked", "proposal_blocked"); // the TRACE keeps carrying the code only — never content
+          // [B18-E E12] the user is told WHY, in the compiler's own words: the first blocker's detail rides the display
+          // event (the model already receives every blocker below). Without it the chat showed a bare code and the human
+          // depended on the model's prose for the reason the change could not be prepared.
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: "proposal_blocked", ...(outcome.blockers[0]?.detail ? { reason: outcome.blockers[0].detail } : {}) });
           results.push({
             callId: call.callId,
             outputText: resultText({ ok: false, status: "proposal_blocked", blockers: outcome.blockers.slice(0, 10) }),

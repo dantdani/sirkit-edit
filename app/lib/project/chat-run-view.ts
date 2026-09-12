@@ -40,15 +40,23 @@ const TOOL_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
 /** [B18-E E1] A refusal the model is told in plain words gets a plain line too, never a bare code. */
 const REFUSED_TOOL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   nothing_to_replay: "nothing to undo or redo — the assistant acts only on its own latest change; nothing was changed",
+  // [B18-E E12] a Tier 2 proposal the compiler refused: nothing was sealed, so there is no review and nothing to apply.
+  proposal_blocked: "refused — this change could not be prepared on this board; nothing was changed",
 });
 
-/** One tool line: the tier tag, the title and what really happened. */
-export function toolLineLabel(input: { title?: unknown; tier?: unknown; ok?: unknown; status?: unknown }): string {
+/** [B18-E E12] how much of a refusal's own reason a line carries — enough for the compiler's sentence, never a payload. */
+const MAX_REASON_CHARS = 300;
+
+/** One tool line: the tier tag, the title, what really happened and — when a refusal came with one — its reason. */
+export function toolLineLabel(input: { title?: unknown; tier?: unknown; ok?: unknown; status?: unknown; reason?: unknown }): string {
   const tier = tierLabel(input.tier);
   const tag = tier ? `T${input.tier as number} · ` : "";
   const title = typeof input.title === "string" && input.title.length > 0 ? input.title.slice(0, 120) : "tool";
   const status = typeof input.status === "string" ? input.status.slice(0, 60) : "unknown";
-  if (input.ok !== true) return `${tag}${title} — ${REFUSED_TOOL_LABELS[status] ?? `refused (${status})`}`;
+  // [B18-E E12] the reason the MODEL is given is the reason the page shows: whether the human learns why a Tier 2 proposal
+  // was refused must not depend on the model choosing to relay it. Refusals only — it can never dress a failure as a result.
+  const reason = typeof input.reason === "string" ? input.reason.trim().slice(0, MAX_REASON_CHARS) : "";
+  if (input.ok !== true) return `${tag}${title} — ${REFUSED_TOOL_LABELS[status] ?? `refused (${status})`}${reason ? `. Why: ${reason}` : ""}`;
   if (status === "succeeded") return `${tag}${title} — done`;
   return `${tag}${title} — ${TOOL_STATUS_LABELS[status] ?? `finished (${status})`}`;
 }

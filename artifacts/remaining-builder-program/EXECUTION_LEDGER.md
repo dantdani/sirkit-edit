@@ -912,3 +912,30 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Recorded about this branch's history: commit `5c9d656` (E10) is RED on benchmark-quality — it bumped the board-inspect tool
   version but left out the regenerated read-replay fixtures and the test that pins that version. `781c1a4`, the very next
   commit, adds exactly those two files. The branch tip is what merges; the red commit in the middle is stated, not hidden.
+
+### B18-E E12 — scenario 2, part 1: Tier 2 truth in the review and in the chat (2026-09-12 local, solo; this commit)
+
+- Discovery first, and wide: five parallel readers over the bounded-proposal path, the via facts an agent can actually see,
+  the fixture boards, the human review/chat surfaces and the existing tests (106 findings, 46 gaps, every claim carrying a
+  file:line). Two of the gaps are defects in what the HUMAN is told, and this increment fixes exactly those two.
+- The Tier 2 review did not state what it was asking approval for: a via operation read `Update via v1`, with the new
+  diameter and drill nowhere on the dialog. It now reads `Update via v1 — 0.700 mm pad / 0.350 mm drill` — the RESULTANT
+  pair, the padstack when one is imposed, the position when it moves. Proven on the real rendered `PcbProposalReviewDialog`
+  fed by a proposal a real run sealed, not on the compiler's string.
+- A blocked Tier 2 proposal read `refused (proposal_blocked)` in the chat: a code, no statement that nothing was changed,
+  and no reason. The reason existed — the compiler writes a precise sentence naming the via, the padstack and the human
+  fork — but it went only to the MODEL, so the human depended on the model relaying it. The line is now plain words plus
+  "nothing was changed", and the server's reason rides `tool_finished.reason` (refusals only, capped, never on a success,
+  never in the trace) so the page states it itself. That is the B18-D standard applied to Tier 2.
+- Pinned because it decides what part 2 must build: a board LOAD binds every via to a padstack, so `padstack-bound` is
+  scenario 2's normal outcome on any real board, and the unbound via shape under which a resize compiles cannot survive a
+  load. 0.7/0.35 is no seeded padstack and no proposal operation can create one, so the literal request is reachable only
+  through the human fork the refusal already names.
+- First time an `update_via` payload travelled the real loop and gateway (every prior bounded-PCB proof used
+  `update_track`): one `pcb_proposal_ready`, zero grants, the board byte-identical, the answer carrying the page's own
+  before-review label.
+- Stated rather than silently left: `update_track`, `update_dimension` and `update_keepout` still summarize without their
+  values, and rejecting a Tier 2 proposal still produces nothing the human or the chat can see. Both are outside scenario
+  2's path and are named for a later increment rather than folded in here.
+- Tests: b18-e-scenario-2 12/12 (new, added to the CI list); broad run: 261 files, 3380 passed, 10 expected skips; tsc 0; eslint clean.
+- E11's CI: green at `07385e1` (deterministic-manufacturing 34674307925 and benchmark-quality 34674307838, both success).

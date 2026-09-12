@@ -61,7 +61,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E9b | Browser, part 3: a stale base at the card, altered operations past the receiver | 7b, 7g | CONFIRMED — see §6 |
 | E10 | Scenario 3, part 1: the mounting-hole classification and the dimension plan, in integration | 3 | CONFIRMED — see §6 |
 | E11 | Scenario 3, part 2: the browser proof, and the routed-board read limit | 3 | CONFIRMED — see §6 |
-| E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | planned |
+| E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | CONFIRMED — see §6 |
 | E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | planned |
 | E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | planned |
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | planned |
@@ -330,3 +330,40 @@ can SEE the board's extents and know which footprints are holes. Read first, the
   snapshot does not fit. The exposure is reviewed in `agent-exposure.ts` (the one reviewed list every gate derives from), and
   the four exposure gates that pin that set were updated to NAME it rather than to count higher.
 - Browser run: agent-execution 25/25 (1 new), 10.9 min
+
+### E12 — scenario 2, part 1: Tier 2 truth in the review and in the chat (CONFIRMED)
+
+The sentence is "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill." It is a Tier 2 sealed proposal a
+human applies; via edits are never granted (OD-13), and B18-C proved the compiler refuses and accepts the right via
+operations. Five readers mapped the whole path first (workflow `wf_d84362ac-a5b`: the bounded-proposal path, the via facts
+the model can see, the fixture boards, the human review and chat surfaces, and the existing coverage). Two of the things
+they found are defects in what the HUMAN is told, and both are fixed here.
+
+- **The review did not state what the human was approving.** A via operation summarized as the bare `Update via v1` — the
+  new diameter and the new drill appeared nowhere on the dialog, while its siblings state theirs (`Move R3 to (x, y) mm`,
+  `Add 0.400 mm track on copperTop`). The person clicking "Approve and apply PCB edits" was asked to approve exactly the
+  two numbers the surface did not show. The summary now reads `Update via v1 — 0.700 mm pad / 0.350 mm drill`, reporting
+  the RESULTANT pair (so a partial change still reads as the via they will get), the padstack when one is imposed with the
+  geometry it brings, and the position when the via moves. Proven on the REAL rendered dialog, on a proposal sealed by a
+  real run — not on the compiler's string alone.
+- **The chat said only `refused (proposal_blocked)`.** A blocked Tier 2 proposal gave the human a code, with no statement
+  that nothing was changed and no trace of the compiler's reason; the truthful sentence (which via, which padstack, which
+  human fix) went to the MODEL only, so whether the person learned it depended on the model's prose. The line now says
+  "refused — this change could not be prepared on this board; nothing was changed", and the server's own reason rides the
+  display event (`tool_finished.reason`, refusals only, 300 characters, never on a success) so the page says why itself.
+  The run TRACE still carries the code only — content stays out of it.
+- **Why the refusal is scenario 2's normal outcome, not its edge case** (pinned, because it decides what part 2 must
+  build): board LOAD binds every via to a padstack (`board-persistence` → `ensureBoardPadstacks`), so on any real board a
+  size/drill change is refused `padstack-bound`; the unbound via shape under which the change compiles — the one every
+  B15 fixture uses — cannot survive a load. And 0.7/0.35 is not one of the three seeded padstacks (0.6/0.3, 0.8/0.4,
+  1.2/0.6), while no `*_padstack` operation exists in the bounded vocabulary, so the requested pair is reachable only
+  through the human fork the refusal names. Retargeting onto an existing padstack remains the only in-proposal route.
+- **The payload travelled its own path for the first time.** Every previous loop/gateway/apply/UI proof of the bounded PCB
+  proposal used `update_track`. An `update_via` pair now goes through the real loop and gateway: exactly one
+  `pcb_proposal_ready`, zero grants, the board byte-identical, the answer carrying the page's own "written before anything
+  was applied" label, and the T2 tool line derived (not hard-coded) from the tool's tier.
+- Recorded, not fixed here: the same bare-summary shape remains on `update_track` (`Update track t1 geometry`),
+  `update_dimension` and `update_keepout`; scenario 2's operation is fixed, its siblings are named for a later increment.
+  Rejecting a Tier 2 proposal is still silent (no toast, no chat line, no audit record) and the chat is never told the
+  human's decision — there is no PCB analogue of `markGrantLineDropped`. Neither is reachable from scenario 2's own path.
+- Tests: b18-e-scenario-2 12/12 (new, in the CI list); broad run: 261 files, 3380 passed, 10 expected skips
