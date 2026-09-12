@@ -12,7 +12,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | 2 | "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill." | Tier 2 sealed PCB proposal (`propose-bounded-edit`, `update_via` ×N, at most 16) that the human applies; via edits are never granted (OD-13). | unit, integration and the real loop; the browser proves the read and the truthful answer — its board cannot be routed here (LB-8) | E12, E13, E14 (OD-20) |
 | 3 | "Add horizontal and vertical dimensions for the board and mounting holes." | Tier 1 grant, confirmation-only (`sirkit.pcb.dimension`, OD-11): a card even under explicit autonomy. A Tier 2 route (`add_dimension`) also exists. | the builder in unit; one horizontal dimension through the loop; no browser; Sirkit has no mounting-hole object | E10, E11 (OD-21, OD-22) |
 | 4 | "Delete U1 and replace it with the approved lower-power part while preserving compatible nets." | Tier 2 sealed replacement proposal (B14) the human applies; never a grant. The composer routes the sentence to the legacy schematic edit today. | unit, integration, the real route from the runbook sentence, and the BROWSER end to end (seal, review, cancel, apply — one canonical transaction) | E15, E16 (OD-23) |
-| 5 | "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed." | Tier 2 layout candidates the human applies; one side-effecting artifact per run (placement and routing take turns); the routing engine is local-only. | partial integration; no browser | E17, E18 (OD-24, OD-29) |
+| 5 | "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed." | Tier 2 layout candidates the human applies; one side-effecting artifact per run (placement and routing take turns); the routing engine is local-only. | unit, integration and the browser: the sentence produces a placement candidate for review, and the clauses the product cannot honour are said out loud; routing in the same turn is refused by the one-artifact rule | E17, E18 (OD-24, OD-29) |
 | 6 | "Undo that," then refresh, then redo. | Two Tier 1 replay grants (`sirkit.pcb.undo-redo-granted`) through `replayUnderGrant`; the minter resolves the reference from the settled grants at the head. | integration without a refresh; browser on a silkscreen add, not a move | E1, E4, E8 (OD-25) |
 | 7a | Stale selection | Targets are bound by id, never by the selection, so a selection change cannot redirect a grant; the `selection_stale` burn is unreachable (a defensive floor). | unit | E5, E8 (OD-26) |
 | 7b | Stale revision | Refused at four layers (the card's disabled Confirm, the explicit pre-check, the ritual's drift check and byte-match recompile, the consume's drift burns). | unit and integration; no browser | E2, E9 |
@@ -33,6 +33,12 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
   (LB-3, now LB-8). So scenario 2's browser proof is what that board can truthfully host — the read, the answer, and the
   absence of any change — and the padstack refusal, the sealed proposal and the review dialog are proven in integration and
   against the real dialog component instead.
+- **This machine's memory, measured.** The browser suite runs in 4.4 to 11.3 minutes when the host has memory,
+  and is unreliable when it does not: at 34.1 GB committed of a 36.5 GB limit with ~0 GB free physical it took 15.7
+  minutes and failed in its FIRST test (a Confirm that normally dismisses a card in under a second exceeded 20 s); a
+  later run timed out at 300 s in the Undo/Redo-wait case, and one never reached the fixture banner at all. No product
+  change lies between those runs and the green ones. Every run recorded in this page was taken on a host with free
+  memory, and CI's page-browser-e2e job runs the suite on a clean runner.
 - **The frozen fixture clock.** The fixture server's time does not advance, so grant lifetimes and the 60 s settlement wait never elapse in the browser; expiry and `execution_unsettled` are proven in integration.
 - **The board-inspect result budget.** A dimension plan must READ the board, and E3 measured the snapshot at 40,410
   characters on the PLACED board against `MAX_RESULT_CHARS` 60,000 — but 70,173 and 72,453 once the board is ROUTED.
@@ -73,7 +79,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | CONFIRMED — see §6 |
 | E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | CONFIRMED — see §6 |
 | E17 | Scenario 5, part 1: truthful layout reporting | 5 | CONFIRMED — see §6 |
-| E18 | Scenario 5, part 2: integration, scripted layout plans, browser | 5 | planned |
+| E18 | Scenario 5, part 2: integration, scripted layout plans, browser | 5 | CONFIRMED — see §6 |
 | E19 | Closeout | all | planned |
 
 Tier 2 stays human-approved and Tier 3 stays inaccessible in every increment; the only new agent-visible surface proposed is bounded Tier 0 reads, each under the exposure review.
@@ -537,3 +543,35 @@ argument surface refuses authority-shaped keys by name. What was wrong is what a
   PCB proposals but had never been checked for this artifact type. An altered stat, a rewritten digest, a forged producer
   and a malformed payload are all dropped.
 - Tests: b18-e-scenario-5 10/10 (new, in the CI list); broad run: 267 files, 3430 passed, 10 expected skips
+
+### E18 — scenario 5, part 2: the scripted layout plan, and the browser (CONFIRMED)
+
+- **The scripted agent plans the sentence.** "Place the board compactly, keep decoupling close to U1, route it, and show
+  me anything that failed." becomes a bounded placement proposal, and then an ATTEMPT to route — which the loop's
+  one-artifact rule refuses. The agent says so rather than dropping half the request: "I did not route: one run prepares
+  one change, and the placement candidate is it. Apply or discard it, then ask me to route."
+- **It answers the two clauses it cannot honour, out loud.** There is no compactness, spacing or objective-weight
+  argument on these tools (OD-24), so the closing answer says "I have no control over how compact a placement is and no
+  way to prioritize decoupling … I did not make the board compact — I proposed a placement and am telling you what it
+  measured." What could not be evaluated is named and called unknown, never met.
+- **In the real app** (`agent-execution`, one new case): the sentence produces a T2 tool line, the page's own candidate
+  sentence (legality and how many objectives were evaluated), and that answer — with no grant card, no transaction, and
+  every footprint where it was. Evidence: `evidence/scenario-5-placement-candidate.png`.
+- **Two things found by running it in the browser.** First, the unevaluated objectives were reported by their internal
+  ids (`placement-objective:595e443f…`) — unreadable to a person and meaningless to a model; they are resolved to
+  their kind (`decoupling`, `thermal_intent`) now, and an id with no metric keeps the id rather than being dropped.
+  Second, the agent's own failure sentence said "I could not produce a placement candidate" without saying why — the
+  same silence this increment is about. It names the tool's status now, and that is how the next fact was measured.
+- **Where the scenario is asked matters, and it is said rather than arranged around.** On the freshly synchronized
+  board — when a person actually asks to place a board — the bounded search returns a candidate. Asked at the END of
+  the browser journey, after 26 cases have moved, flipped and annotated the board, the same search truthfully answers
+  `no_candidate` and the agent says so with the status. The browser case runs FIRST for that reason (a layout
+  candidate is inert — it changes nothing until the human applies it — so it disturbs no later case), and the refusal
+  wording is pinned in the unit tests.
+- **The browser proof is bounded on purpose:** the scripted plan asks for the smallest honest search (2 candidates, 20
+  iterations — real arguments the tool takes), so the case fits CI's page-browser-e2e budget instead of running the
+  engine's full default search.
+- **Routing stays a refusal here** (OD-29): no FreeRouting runtime exists on this machine (LB-3/LB-8), so the browser
+  proves the placement half end to end and the honest statement about the other half. The routing candidate's own
+  production, failures and refusals are proven in E17's integration tests.
+- Tests: b18-c-fixture-agent 23/23 (4 new); browser: agent-execution 29/29 (1 new), 11.3 min; broad run: 267 files, 3434 passed, 10 expected skips

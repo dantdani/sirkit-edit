@@ -71,13 +71,18 @@ export function placementReport(candidate: PlacementLayoutCandidate): PlacementR
     unit: text(objective.rawUnit),
     ...(objective.state === "evaluated" && objective.limitations.length > 0 ? { limitations: objective.limitations.slice(0, 2).map(text) } : {}),
   }));
+  // [B18-E E18] measured in the browser: the report lists unevaluated objectives by ID, and an id is
+  // `placement-objective:595e443fdb5c…` — unreadable to a person and meaningless to a model. What matters is WHICH
+  // objective, so each id is resolved to its kind (`decoupling`, `thermal_intent`); an id with no metric keeps the id
+  // rather than being dropped, because an unevaluated objective nobody can name is still an unevaluated objective.
+  const kindOf = (id: string): string => report?.objectives.find((objective) => objective.id === id)?.kind ?? text(id);
   return {
     legal: candidate.legal,
     hardViolations: candidate.candidate.hardReport?.violations.length ?? 0,
     objectives,
     objectiveCount: report?.objectives.length ?? 0,
-    unknownObjectives: [...(report?.unknownObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(text),
-    unsupportedObjectives: [...(report?.unsupportedObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(text),
+    unknownObjectives: [...(report?.unknownObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(kindOf),
+    unsupportedObjectives: [...(report?.unsupportedObjectiveIds ?? [])].slice(0, MAX_REPORTED_OBJECTIVES).map(kindOf),
   };
 }
 

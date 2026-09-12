@@ -49,7 +49,9 @@ type Planned =
   /** [B18-E E14] scenario 2: read the net's vias first, then say what is actually possible — or propose it. */
   | { kind: "via-then"; netName: string; build: (facts: NetViaFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } }
   /** [B18-E E16] scenario 4: read the schematic to resolve the reference designator, then propose the replacement. */
-  | { kind: "schematic-then"; reference: string; build: (facts: SchematicComponentFacts[]) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
+  | { kind: "schematic-then"; reference: string; build: (facts: SchematicComponentFacts[]) => { toolId: string; args: Record<string, unknown> } | { reply: string } }
+  /** [B18-E E18] scenario 5: propose a placement, then say truthfully what was and was not done (and what failed). */
+  | { kind: "layout-then"; routeAsked: boolean };
 
 /** [B18-E E10/E11] what the scripted agent reads out of the mechanical read (the same fields a model would use). */
 export interface BoardFacts {
@@ -92,6 +94,9 @@ const VIA_PADSTACK = /^(?:please\s+)?use\s+the\s+(.{1,64}?)\s+padstack\s+for\s+(
  *  rather than silently proposing part of a net. Duplicated as a literal on purpose: the fixture agent is a stand-in for a
  *  model, and a model has no import of the server's limits either. */
 const PROPOSABLE_VIAS = 16;
+// [B18-E E18] scenario 5, as the runbook words it. The clauses it CANNOT honour (compactly, decoupling) are answered in
+// words from what the candidate actually measured - never by pretending the tools have a control they do not.
+const LAYOUT = /^(?:please\s+)?place\s+the\s+board\b/i;
 // [B18-E E16] scenario 4, as the runbook words it. The sentence names a reference designator; the schematic read resolves
 // it to an instance id. The agent never names the replacement part - it cannot: the tool takes only {componentId}.
 const REPLACE_COMPONENT = /^(?:please\s+)?delete\s+([a-z]+\d+)\s+and\s+replace\s+it\s+with\s+the\s+(?:approved|verified)\b[^.]*\bpart\b/i;
@@ -223,9 +228,12 @@ export function planFixtureInstruction(message: string): Planned {
       },
     };
   }
+  // [B18-E E18] scenario 5: propose the placement, then ATTEMPT the routing the sentence also asked for - the loop's
+  // one-artifact rule refuses it, and the agent says so rather than quietly dropping half the request.
+  if (LAYOUT.test(text)) return { kind: "layout-then", routeAsked: /\broute\b/i.test(text) };
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, propose a placement, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
 }
 
 /** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
@@ -273,6 +281,58 @@ export function netViaFacts(outputText: string | undefined): NetViaFacts {
   } catch {
     return empty;
   }
+}
+
+/** [B18-E E18] what the scripted agent reads out of a PLACEMENT candidate result. */
+export interface LayoutFacts {
+  ok: boolean;
+  /** [B18-E E18] what the tool actually answered when it did not produce a candidate — saying "I could not" without
+   *  saying why is the same silence this increment is about. */
+  status: string;
+  legal: boolean | null;
+  objectives: number;
+  /** The objectives the engine could not evaluate — the honest answer to a clause about decoupling. */
+  unevaluated: string[];
+}
+
+export function layoutFacts(outputText: string | undefined): LayoutFacts {
+  const empty: LayoutFacts = { ok: false, status: statusOf(outputText), legal: null, objectives: 0, unevaluated: [] };
+  try {
+    const parsed = JSON.parse(outputText ?? "") as Record<string, unknown>;
+    if (parsed.ok !== true) return empty;
+    const unknown = Array.isArray(parsed.unknownObjectives) ? (parsed.unknownObjectives as unknown[]) : [];
+    const unsupported = Array.isArray(parsed.unsupportedObjectives) ? (parsed.unsupportedObjectives as unknown[]) : [];
+    return {
+      ok: true,
+      status: typeof parsed.status === "string" ? parsed.status : "layout_candidate_ready",
+      legal: typeof parsed.legal === "boolean" ? parsed.legal : null,
+      objectives: typeof parsed.objectiveCount === "number" ? parsed.objectiveCount : 0,
+      unevaluated: [...unknown, ...unsupported].filter((value): value is string => typeof value === "string").slice(0, 6),
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * [B18-E E18] The closing answer for scenario 5. It says what was actually produced, what the tools cannot do (there is
+ * no compactness or decoupling control to use — OD-24), which objectives could not be evaluated, and why routing did not
+ * happen in the same turn. Nothing here claims a change: a candidate is a candidate until the human applies it.
+ */
+export function layoutAnswer(placement: LayoutFacts, routingStatus: string | null): string {
+  if (!placement.ok) return `(fixture agent) I could not produce a placement candidate: the tool answered ${placement.status}. Nothing was proposed and nothing was changed.`;
+  const legality = placement.legal === null ? "" : placement.legal ? " It is hard-legal." : " It is NOT hard-legal — the panel lists the violations.";
+  const control = " I have no control over how compact a placement is and no way to prioritize decoupling: those are not arguments these tools take, so I did not make the board compact — I proposed a placement and am telling you what it measured.";
+  const unevaluated = placement.unevaluated.length > 0
+    ? ` ${placement.unevaluated.length} of ${placement.objectives} objectives could not be evaluated (${placement.unevaluated.join(", ")}) — unknown, not met.`
+    : ` All ${placement.objectives} objectives were evaluated.`;
+  const routing = routingStatus === null ? ""
+    : routingStatus === "proposal_exists"
+      ? " I did not route: one run prepares one change, and the placement candidate is it. Apply or discard it, then ask me to route."
+      : routingStatus === "routing_engine_unavailable"
+        ? " I could not route at all: no routing engine is available to this run. Nothing was attempted on the copper."
+        : ` I did not route: the routing tool answered ${routingStatus}.`;
+  return `(fixture agent) A placement candidate is ready for your review — nothing on the board has changed.${legality}${unevaluated}${control}${routing}`;
 }
 
 /** [B18-E E16] Read the components out of the schematic inspect report - id and reference designator only. */
@@ -335,10 +395,13 @@ function statusOf(outputText: string | undefined): string {
 
 export class FixtureAgentAdapter implements ProviderAgentAdapter {
   private planned: Planned = { kind: "reply", text: "" };
+  private placement: LayoutFacts = { ok: false, status: "not-run", legal: null, objectives: 0, unevaluated: [] };
+  private routing = "";
   private awaitingSelection = false;
   private awaitingBoard = false;
   private awaitingVias = false;
   private awaitingSchematic = false;
+  private awaitingLayout: "placement" | "routing" | null = null;
   private seq = 0;
 
   constructor(readonly provider: LLMProviderId) {}
@@ -373,6 +436,12 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
       this.awaitingSchematic = true;
       return this.call(input.tools, "sirkit.schematic.inspect", {});
     }
+    if (this.planned.kind === "layout-then") {
+      this.awaitingLayout = "placement";
+      // A bounded search on purpose: the harness is a stand-in for a model and these are real arguments the tool takes
+      // (2–8 candidates, 1–2000 iterations). The smallest honest search keeps the browser proof inside CI's budget.
+      return this.call(input.tools, "sirkit.placement.propose", { candidateCount: 2, maxIterations: 20 });
+    }
     // [B18-E E7] a forged name skips the declaration lookup on purpose: the run must refuse a tool it never advertised, and the
     // interim claim must still only ever appear as a labelled note.
     if (this.planned.kind === "forged") {
@@ -396,6 +465,20 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
       this.awaitingBoard = false;
       const next = planned.build(boardFacts(outputText));
       return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
+    }
+    if (this.awaitingLayout && planned.kind === "layout-then") {
+      if (this.awaitingLayout === "placement") {
+        this.placement = layoutFacts(outputText);
+        // The sentence also asked to route. Ask, and let the run's own rule answer: one side-effecting artifact per run.
+        if (planned.routeAsked) {
+          this.awaitingLayout = "routing";
+          return this.call(input.tools, "sirkit.routing.propose", {});
+        }
+      } else {
+        this.routing = statusOf(outputText);
+      }
+      this.awaitingLayout = null;
+      return this.step({ text: layoutAnswer(this.placement, planned.routeAsked ? this.routing : null) });
     }
     if (this.awaitingSchematic && planned.kind === "schematic-then") {
       this.awaitingSchematic = false;

@@ -128,6 +128,10 @@ describe("[B18-E E17] what the model is told about a layout candidate", () => {
     expect([...report.unknownObjectives, ...report.unsupportedObjectives, ...report.objectives.map((objective) => objective.kind)].length).toBeGreaterThan(0);
     expect(report.legal).toBe(candidate.legal);
     expect(report.hardViolations).toBe(candidate.candidate.hardReport.violations.length);
+    // [E18, measured in the browser] an unevaluated objective is named by its KIND, not by an opaque
+    // `placement-objective:595e443f…` id: "which objective could not be measured" is the whole point of reporting it.
+    const kinds = new Set(candidate.candidate.objectiveReport.objectives.map((objective) => objective.kind));
+    for (const name of [...report.unknownObjectives, ...report.unsupportedObjectives]) expect(kinds, name).toContain(name);
   });
 
   it("the note tells the model what these tools cannot do, so a run can never report a board as made compact (OD-24)", () => {

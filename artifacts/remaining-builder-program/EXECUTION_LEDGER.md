@@ -1049,3 +1049,30 @@ _(discovery, reproduction and results appended below as they are observed)_
   scenario 7g's altered-artifact invariant for this artifact type.
 - Tests: b18-e-scenario-5 10/10 (new, added to the CI list); broad run: 267 files, 3430 passed, 10 expected skips; tsc 0; eslint clean.
 - E16's CI: green at `48c3576` (deterministic-manufacturing 34680864313 and benchmark-quality 34680864293, both success).
+
+### B18-E E18 — scenario 5, part 2: the scripted layout plan and the browser (2026-09-12 local, solo; this commit)
+
+- The scripted agent turns the runbook's sentence into a bounded placement proposal and then ATTEMPTS the routing the
+  sentence also asked for; the loop's one-artifact rule refuses it and the agent says so, rather than silently dropping
+  half the request.
+- The two clauses the product cannot honour are answered in words (OD-24): no compactness or decoupling control exists on
+  these tools, so the answer states that plainly instead of implying the board was made compact. Objectives that could not
+  be evaluated are named and called unknown, never met.
+- Browser: the sentence produces the T2 line, the page's candidate sentence and that answer, with no grant card, no
+  transaction and nothing moved. Evidence PNG committed.
+- Two things found by running it. The unevaluated objectives were reported by internal id rather than by kind —
+  unreadable to a person, meaningless to a model. And the agent's own failure sentence said "I could not produce a
+  placement candidate" without saying why, which is the same silence this increment is about; it names the tool's
+  status now. Both fixed and pinned.
+- That second fix is how the next fact was measured: on the freshly synchronized board the bounded search returns a
+  candidate, but asked at the end of the browser journey — after 26 cases have moved, flipped and annotated the
+  board — the same search truthfully answers `no_candidate`. The browser case runs first for that reason (a candidate
+  is inert and disturbs no later case), and the refusal wording is pinned in the unit tests rather than arranged away.
+- The scripted plan asks for the smallest honest search (2 candidates, 20 iterations) so the browser case fits CI's
+  budget rather than running the placement engine's full default search.
+- Recorded with numbers because it cost real time: this machine reached 34.1 GB committed of a 36.5 GB limit with ~0 GB
+  free physical while E18 was being verified, and the browser suite became unreliable — 15.7 minutes instead of 4.4
+  with a failure in its first test, a 300 s timeout in the Undo/Redo-wait case, once no fixture banner at all. With
+  memory free it passes 29/29 in 11.3 minutes. No product change lies between those runs; CI runs it on a clean runner.
+- Tests: b18-c-fixture-agent 23/23 (4 new); browser agent-execution 29/29 (1 new), 11.3 min; broad run: 267 files, 3434 passed, 10 expected skips; tsc 0; eslint clean.
+- E17's CI: green at `313eafa` (deterministic-manufacturing 34681917386 and benchmark-quality 34681917398, both success).

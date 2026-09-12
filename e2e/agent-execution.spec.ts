@@ -188,6 +188,41 @@ async function select(ref: string): Promise<void> {
 
 const committedLines = () => page.getByText(/AI change committed by your editor \(one canonical transaction/);
 
+// [B18-E E18] scenario 5 runs FIRST, on the freshly synchronized board: "place the board" is a thing a person asks
+// BEFORE they have hand-moved parts, and the engine is asked for a bounded search on that board. A layout candidate
+// is inert — it changes nothing until the human applies it in the panel — so this disturbs no later case. Asked much
+// later, after 26 cases have moved, flipped and annotated the board, the same bounded search truthfully answers
+// `no_candidate`; that refusal and its wording are proven in b18-c-fixture-agent and b18-e-scenario-5.
+test("[B18-E E18] scenario 5 in the browser: a placement candidate for review, the clauses it cannot honour said out loud, and no routing in the same turn", async () => {
+  const start = await board();
+  const committed = await committedLines().count();
+  const replies = page.getByText(/^\(fixture agent\) /);
+  await chat("Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed.");
+
+  const answer = (await replies.last().textContent()) ?? "";
+  expect(answer).toContain("A placement candidate is ready for your review");
+  expect(answer).toContain("nothing on the board has changed");
+  // The two clauses the product cannot honour are answered in words, not silently dropped (OD-24).
+  expect(answer).toContain("no control over how compact a placement is");
+  expect(answer).toContain("I did not make the board compact");
+  // What could not be measured is named by its kind — never left out, and never counted as met.
+  expect(answer).toMatch(/objectives (?:could not be evaluated|were evaluated)/);
+  if (/could not be evaluated/.test(answer)) expect(answer).toContain("unknown, not met");
+  // And the half of the request that did not happen is stated, with the reason.
+  expect(answer).toContain("one run prepares one change");
+
+  // [E17] the page's own sentence for the candidate, beside the derived T2 tool line.
+  await expect(page.getByText(/Placement candidate ready — review it in the PCB editor's placement panel/)).toBeVisible();
+  await expect(page.getByText("T2 · Propose a placement candidate — candidate ready — awaiting your review")).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/scenario-5-placement-candidate.png`, fullPage: false });
+
+  // Tier 2 all the way: no grant card, no transaction, nothing moved until the human applies it in the panel.
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  await expect(committedLines()).toHaveCount(committed);
+  const after = await board();
+  expect(after.footprints, "a candidate moves nothing").toEqual(start.footprints);
+});
+
 test("B18-C preview: under proposal_only an AI move is shown on the confirmation card and changes nothing until Confirm; Confirm commits ONE canonical transaction", async () => {
   const start = await board();
   const x0 = r3(start).at.x;

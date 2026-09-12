@@ -16,7 +16,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentAdapterFor } from "../../agent/adapters";
-import { FixtureAgentAdapter, planFixtureInstruction, schematicComponentFacts, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
+import { FixtureAgentAdapter, layoutAnswer, layoutFacts, planFixtureInstruction, schematicComponentFacts, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
 import type { ProviderToolDeclaration } from "../../agent/contracts";
 import { mmToNm } from "../../pcb/units";
 import { composition, headOf, POWER_NET_NAME, r3Of, runWithAdapter } from "./b18c-harness";
@@ -299,5 +299,47 @@ describe("[B18-E E16] the scripted agent's replacement plan (scenario 4)", () =>
     expect(schematicComponentFacts(report)).toEqual([{ id: "sch-u1", displayRef: "U1" }]);
     expect(schematicComponentFacts("not json")).toEqual([]);
     expect(schematicComponentFacts(undefined)).toEqual([]);
+  });
+});
+
+// ─── [B18-E E18] scenario 5: the scripted agent proposes a placement and says what it could NOT do ─────────────
+
+describe("[B18-E E18] the scripted agent's layout plan (scenario 5)", () => {
+  const SENTENCE = "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed.";
+
+  it("the plan is a placement proposal, and it notices that routing was asked for too", () => {
+    const planned = planFixtureInstruction(SENTENCE);
+    expect(planned).toEqual({ kind: "layout-then", routeAsked: true });
+    expect(planFixtureInstruction("Place the board")).toEqual({ kind: "layout-then", routeAsked: false });
+  });
+
+  it("the answer never claims compactness or decoupling were controlled, and names the objectives that could not be evaluated", () => {
+    const answer = layoutAnswer({ ok: true, status: "layout_candidate_ready", legal: true, objectives: 7, unevaluated: ["decoupling", "thermal_intent"] }, "proposal_exists");
+    expect(answer).toContain("A placement candidate is ready for your review");
+    expect(answer).toContain("nothing on the board has changed");
+    expect(answer).toContain("It is hard-legal.");
+    expect(answer).toContain("2 of 7 objectives could not be evaluated (decoupling, thermal_intent)");
+    expect(answer, "unknown is not a pass").toContain("unknown, not met");
+    expect(answer, "the clause it cannot honour is answered, not ignored").toContain("no control over how compact a placement is");
+    expect(answer).toContain("I did not make the board compact");
+    expect(answer, "and the half of the request it did not do is stated").toContain("I did not route: one run prepares one change");
+  });
+
+  it("a missing engine and an illegal placement are both said plainly; a failed proposal claims nothing at all", () => {
+    expect(layoutAnswer({ ok: true, status: "layout_candidate_ready", legal: false, objectives: 3, unevaluated: [] }, "routing_engine_unavailable"))
+      .toContain("It is NOT hard-legal");
+    expect(layoutAnswer({ ok: true, status: "layout_candidate_ready", legal: true, objectives: 3, unevaluated: [] }, "routing_engine_unavailable"))
+      .toContain("no routing engine is available to this run");
+    // [E18, found in the browser] a refusal must NAME itself: "I could not" without the reason is the same silence this
+    // increment is about, and it hid a real one (the placement tool is withheld once the board carries no footprints to place).
+    expect(layoutAnswer({ ok: false, status: "not_discoverable", legal: null, objectives: 0, unevaluated: [] }, null))
+      .toBe("(fixture agent) I could not produce a placement candidate: the tool answered not_discoverable. Nothing was proposed and nothing was changed.");
+  });
+
+  it("it reads only what the candidate result states, and survives a refusal or a malformed one", () => {
+    const result = JSON.stringify({ ok: true, status: "layout_candidate_ready", legal: true, objectiveCount: 5, unknownObjectives: ["decoupling"], unsupportedObjectives: ["thermal_intent"] });
+    expect(layoutFacts(result)).toEqual({ ok: true, status: "layout_candidate_ready", legal: true, objectives: 5, unevaluated: ["decoupling", "thermal_intent"] });
+    expect(layoutFacts(JSON.stringify({ ok: false, status: "refused" }))).toMatchObject({ ok: false, status: "refused" });
+    expect(layoutFacts("not json").ok).toBe(false);
   });
 });
