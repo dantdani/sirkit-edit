@@ -49,7 +49,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E2 | Refusal causes the chat and the model can trust (drift reasons, server refusals) | 7b, 7c, 7f, 7h | CONFIRMED — see §6 |
 | E3 | Scenario 1 integration gaps; the id-source wording; board-inspect measured | 1 | CONFIRMED — see §6 |
 | E4 | Scenario 6's refresh proven in integration | 6 | CONFIRMED — see §6 |
-| E5 | Scenario 7 integration closures | 7a, 7c–7g | planned |
+| E5 | Scenario 7 integration closures | 7a, 7c–7g | CONFIRMED — see §6 |
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | planned |
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | planned |
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | planned |
@@ -130,3 +130,28 @@ OD-20 to OD-30 (`artifacts/remaining-builder-program/OWNER_DECISIONS.md`) record
   assembled at all (a null head). Recorded because a browser reload has the same shape: nothing may assume the canonical head
   before the session has settled.
 - Tests: b18-c-undo-redo 11/11 (the two new refresh cases); the seven harness-based B18-C suites 35/35
+- CI green at `97e852b` (deterministic-manufacturing 34661135227 incl. page-browser-e2e, benchmark-quality 34661135312).
+
+### E5 — scenario 7's conditions, closed in integration (CONFIRMED)
+
+Four conditions now run through the real loop, gateway, minter, grant store, consume and settle services and the granted-execution
+ritual over a real canonical session (`b18-e-scenario-7`, in the CI list). Each leaves the board and the durable records untouched.
+
+- **7c and 7e, a double call and a re-emission.** A second execution call in the same run, and the provider re-emitting the very
+  same call, are both refused `execution_exists`; one grant is minted, one transaction commits, the board moves once. MEASURED
+  correction: the re-emission is refused `execution_exists`, not `repeated_call` — the run already holds its one side-effecting
+  artifact, and that check comes before the repeated-call guard (which `b18-d-tool-refused` pins for a read).
+- **7d, cancellation.** With the editor's auto-run HELD, a cancelled run leaves its explicit grant retired and nothing committed;
+  the editor's later tender is refused. MEASURED correction: the retirement reason depends on where the cancellation lands — the
+  loop was awaiting this grant's settlement, so it retires `run_unsettled`; `run_cancelled` is the reason while the loop is still
+  waiting on the provider, which the Stop proof covers. D-A9's shorthand ("the loop retires its still-issued explicit grants,
+  `run_cancelled`") is therefore true of one window, not both.
+- **7f, the server refusing the tender** (a revoked membership or a non-human principal, refused at the route before any burn).
+  The ritual reports the refusal with the server's HTTP status (E2's `serverStatus`, here 403), abandons its journal entry and
+  commits nothing; the grant is never consumed.
+- **7g, an altered proposal.** A forgery made COHERENT — the change rewritten and all three digests recomputed — passes the page's
+  own integrity check, is still refused by the editor's recompile, and is burned `proposal_altered` by the server when the altered
+  digests are tendered. Nothing is committed at any step.
+- The harness gained what these need (test-only): a cancellation signal passed into the loop's run request, a held auto-run that
+  collects the ritual instead of starting it, and a transport that can refuse a tender as the route would.
+- Tests: b18-e-scenario-7 4/4 (new); the eight harness-based B18-C suites 46/46

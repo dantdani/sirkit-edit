@@ -87,7 +87,7 @@ export interface Core {
 export type Composed = Core & { transport: ExecutionGrantTransport };
 
 /** The transport double: the REAL consume/settle services over the same store, answering as the routes do. */
-export function transportOver(c: Core, options: { failSettle?: number } = {}): ExecutionGrantTransport {
+export function transportOver(c: Core, options: { failSettle?: number; refuseTender?: { status: number; code: string; message?: string } } = {}): ExecutionGrantTransport {
   const autonomy = async () => c.autonomy;
   let settleFailures = options.failSettle ?? 0;
   return {
@@ -96,6 +96,8 @@ export function transportOver(c: Core, options: { failSettle?: number } = {}): E
       return grant ? { ok: true, status: 200, body: { grant } } : { ok: false, status: 404, code: "EXECUTION_GRANT_UNKNOWN", message: "Unknown grant.", reason: null, grant: null };
     },
     async tender(scope, body) {
+      // [B18-E E5] the server refusing the tender itself (a revoked membership, a worker principal): answered as the route does.
+      if (options.refuseTender) return { ok: false, status: options.refuseTender.status, code: options.refuseTender.code, message: options.refuseTender.message ?? "The server refused the tender.", reason: null, grant: null };
       const outcome = await consumeExecutionGrant({ store: c.store, scope, principal: PRINCIPAL, autonomy, now: c.now(), request: { kind: "tender", ...body } });
       if (outcome.ok && !("cancelled" in outcome)) return { ok: true, status: 200, body: { grant: outcome.grant, consumption: outcome.consumption, idempotent: outcome.idempotent } };
       if (!outcome.ok) return { ok: false, status: outcome.status === "forged" ? 404 : 409, code: `EXECUTION_GRANT_${outcome.status.toUpperCase()}`, message: outcome.message, reason: outcome.reason, grant: outcome.grant };
@@ -198,7 +200,15 @@ export class FakeAdapter implements ProviderAgentAdapter {
 export const call = (callId: string, providerName: string, args: string): AgentStep["toolCalls"][number] => ({ callId, providerName, argumentsText: args });
 
 let runSeq = 0;
-export interface RunOptions { message?: string; settlementTimeoutMs?: number; selection?: RunSelection }
+export interface RunOptions {
+  message?: string;
+  settlementTimeoutMs?: number;
+  selection?: RunSelection;
+  /** [B18-E E5] the caller's cancellation, exactly as `/api/chat` passes its own: the loop composes it with its deadline. */
+  signal?: AbortSignal;
+  /** [B18-E E5] hold the page's auto-run: the ritual is COLLECTED, not started, so a test can cancel or move the board first. */
+  holdAutoRun?: boolean;
+}
 
 /** One chat run over any adapter: the page auto-runs the ritual for an execute_explicit grant exactly as PcbEditor does. */
 async function runWith(c: Composed, makeAdapter: (moveTool: string, tool: (toolId: string) => string) => ProviderAgentAdapter, options: RunOptions) {
@@ -220,10 +230,12 @@ async function runWith(c: Composed, makeAdapter: (moveTool: string, tool: (toolI
   });
   const events: AgentRunEvent[] = [];
   const rituals: Array<Promise<GrantedExecutionOutcome>> = [];
+  /** [B18-E E5] the auto-runs a held run did not start, in arrival order. */
+  const held: Array<() => Promise<GrantedExecutionOutcome>> = [];
   const grants: PublicExecutionGrant[] = [];
   const adapter = makeAdapter(move.providerName, tool);
   const result = await runAgentLoop(
-    { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: options.settlementTimeoutMs ?? 10_000 } },
+    { runId, provider: "openai", history: [], userMessage: message, budget: { ...DEFAULT_AGENT_BUDGET, executionSettlementTimeoutMs: options.settlementTimeoutMs ?? 10_000 }, ...(options.signal ? { signal: options.signal } : {}) },
     {
       adapter, registry, context, system: AGENT_SYSTEM_PROMPT, executionGrants: minter,
       gateway: createAgentToolGateway(registry, { executionGrants: minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION }),
@@ -233,11 +245,13 @@ async function runWith(c: Composed, makeAdapter: (moveTool: string, tool: (toolI
         const received = receiveExecutionGrantReadyEvent(JSON.parse(JSON.stringify(event)));
         if (!received) throw new Error("the minted grant must be receivable");
         grants.push(received.grant);
-        if (event.decision === "execute_explicit") rituals.push(tenderExplicitExecution(ritual(c, received.grant, runId)));
+        if (event.decision !== "execute_explicit") return;
+        const autoRun = (): Promise<GrantedExecutionOutcome> => tenderExplicitExecution(ritual(c, received.grant, runId));
+        if (options.holdAutoRun) held.push(autoRun); else rituals.push(autoRun());
       },
     },
   );
-  return { result, events, grants, rituals: await Promise.all(rituals) };
+  return { result, events, grants, held, rituals: await Promise.all(rituals) };
 }
 
 /** One chat run driven by a scripted FakeAdapter. */

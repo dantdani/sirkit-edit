@@ -744,3 +744,19 @@ _(discovery, reproduction and results appended below as they are observed)_
   reload has the same shape — nothing may assume the canonical head before the session settles.
 - Tests: b18-c-undo-redo 11/11 (the two new refresh cases); the seven harness-based B18-C suites 35/35; broad run: 256 files / 3346 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: this increment is test-only (the harness and its
   suite); CI's page-browser-e2e runs the full suite over this commit anyway.
+
+### B18-E E5 — scenario 7's conditions, closed in integration (2026-09-11 local, solo; this commit)
+
+- New `b18-e-scenario-7` (in the CI list) drives four of scenario 7's conditions through the real loop, gateway, minter, grant
+  store, consume/settle services and the ritual over a real canonical session: a double call and a re-emission (one grant, one
+  transaction); a cancelled run with the editor's auto-run held (the grant retired, a later tender refused, nothing committed); a
+  tender the server refuses 403 (reported with its status, the journal entry abandoned, never consumed); and a coherent forgery
+  (refused by the editor's recompile, burned `proposal_altered` by the server).
+- Measured corrections to what was assumed: a provider's re-emission of the same call is refused `execution_exists`, not
+  `repeated_call` (one side-effecting artifact per run is checked first); and a cancelled run retires its untendered explicit
+  grant `run_unsettled` when the loop was awaiting its settlement — `run_cancelled` is the provider-wait window, which the Stop
+  proof covers. D-A9's shorthand covers one window only; both are recorded here.
+- Harness (test-only): a cancellation signal passed into the loop's run request, a held auto-run that collects the ritual instead
+  of starting it, and a transport double that can refuse a tender as the route would.
+- Tests: b18-e-scenario-7 4/4 (new); the eight harness-based B18-C suites 46/46; broad run: 257 files / 3350 tests passed, 10 skipped (the 9 live Supabase matrix tests and the database-qualification test); tsc 0; eslint clean. No browser run: this increment is test-only; CI's page-browser-e2e
+  runs the full suite over this commit anyway.
