@@ -13,6 +13,7 @@ import { pcbBoardInstanceId } from "../../pcb/board-identity";
 import { DEFAULT_PRESET_ID } from "../../pcb/drc/presets";
 import { makeBoard, makeInstance, makeResistorDef } from "../../pcb/__tests__/autoplace-fixture";
 import { mmToNm } from "../../pcb/units";
+import { ensureBoardPadstacks } from "../../pcb/padstack/migrate"; // [B18-E E13] what a board LOAD does to every via
 import type { PcbBoard } from "../../pcb/types";
 import type { SelectionRef } from "../../pcb/edit/commands";
 import { InMemoryDurableWorkflowRepository } from "../../durable-workflow/repository";
@@ -49,11 +50,31 @@ export const setting = (mode: AgentAutonomySetting["mode"]): AgentAutonomySettin
 export interface BoardOptions {
   /** A copper pour covering the board, with a derived fill present (as the editor's zone-fill hook leaves it). */
   zone?: boolean;
+  /** [B18-E E13] A ROUTED board's vias, left exactly as a board LOAD leaves them: a power rail named as the browser
+   *  fixture names it (`/root/VCC` — never the literal "5V" the user says), three vias on it and one on NET_1, and every
+   *  one of them bound to a seeded padstack by `ensureBoardPadstacks`. Scenario 2 cannot be walked on any other shape. */
+  vias?: boolean;
 }
+
+/** [B18-E E13] The rail the blinker fixture's +5 V net is actually called (app/lib/fixture-runtime/blinker/catalog.ts). */
+export const POWER_NET_NAME = "/root/VCC";
 
 export function fixtureBoard(options: BoardOptions = {}): PcbBoard {
   const def = makeResistorDef();
   const board = makeBoard(40, 30, [makeInstance("r3", def, { x: 5, y: 5 }, { "1": 1, "2": 2 }), makeInstance("r4", def, { x: 30, y: 22 }, { "1": 1, "2": 0 })], 2);
+  if (options.vias) {
+    const power = { id: 3, name: POWER_NET_NAME, stableId: "net:fixture-power", endpointKeys: [] };
+    board.nets.push(power);
+    const layers: ["copperTop", "copperBottom"] = ["copperTop", "copperBottom"];
+    board.vias.push(
+      { id: "via-vcc-1", at: { x: mmToNm(10), y: mmToNm(10) }, size: 600_000, drill: 300_000, netId: power.id, layers },
+      { id: "via-vcc-2", at: { x: mmToNm(20), y: mmToNm(10) }, size: 600_000, drill: 300_000, netId: power.id, layers },
+      { id: "via-vcc-3", at: { x: mmToNm(30), y: mmToNm(10) }, size: 600_000, drill: 300_000, netId: power.id, layers },
+      { id: "via-sig-1", at: { x: mmToNm(10), y: mmToNm(20) }, size: 600_000, drill: 300_000, netId: 1, layers },
+    );
+    // What board-persistence does on every load: seed the padstack library, then bind every via to a padstack.
+    ensureBoardPadstacks(board);
+  }
   if (options.zone) {
     const polygon = [{ x: 0, y: 0 }, { x: mmToNm(40), y: 0 }, { x: mmToNm(40), y: mmToNm(30) }, { x: 0, y: mmToNm(30) }];
     board.zones.push({

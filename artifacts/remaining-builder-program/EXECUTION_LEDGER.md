@@ -939,3 +939,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   2's path and are named for a later increment rather than folded in here.
 - Tests: b18-e-scenario-2 12/12 (new, added to the CI list); broad run: 261 files, 3380 passed, 10 expected skips; tsc 0; eslint clean.
 - E11's CI: green at `07385e1` (deterministic-manufacturing 34674307925 and benchmark-quality 34674307838, both success).
+
+### B18-E E13 — scenario 2, part 2: the facts a via plan needs (2026-09-12 local, solo; this commit)
+
+- The model could not plan this scenario at all. Vias exist only on a routed board, whose full snapshot exceeds the result
+  budget; and the snapshot strips `padstackId` and carries no padstack library, so the fact that decides the outcome was
+  invisible and the retarget targets were invisible with it. The only way to learn the constraint was to be refused.
+- `sirkit.pcb.via-inspect` (Tier 0 read, reviewed in `agent-exposure.ts` with its reason): the nets that carry vias, one
+  named net's vias with the padstack each is bound to, and the board's via padstack library. Nothing else; every list capped
+  beside its true count; measured under a tenth of the budget on the recorded routed boards where the full snapshot is over
+  it. It states no DRC floor — those belong to a preset a pure board read does not receive, and a guess is not a fact.
+- The net name is matched exactly and a miss is a miss: `net: null` plus every via-bearing net. That makes OD-20's truthful
+  no-match a mechanism instead of a promise — "the 5 V net" finds nothing on a board whose rail is `/root/VCC`.
+- The B18-C harness board can now hold the scenario: `fixtureBoard({ vias: true })` seeds that rail, four vias, and runs the
+  same padstack normalization a board LOAD runs, so every via is bound as reality leaves it.
+- Proven through the real loop and gateway, read first: the no-match run changes nothing and seals nothing; a proposal built
+  FROM the read seals the lawful retarget; the resize the sentence literally asks for is blocked and the chat line carries
+  the padstack reason E12 added.
+- Four exposure gates updated to NAME the read, never loosened to a count; B11 evaluation 19/19 cases and 61/61 checks; six
+  artifact manifests regenerated; the 158-route ratchet untouched (a tool, not a route).
+- Tests: b18-e-via-facts 9/9 (new, added to the CI list); broad run: 262 files, 3389 passed, 10 expected skips; tsc 0; eslint clean.
+- E12's CI: green at `9f22e6f` (deterministic-manufacturing 34675746967 and benchmark-quality 34675746960, both success).

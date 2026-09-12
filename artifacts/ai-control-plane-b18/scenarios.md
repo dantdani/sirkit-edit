@@ -62,7 +62,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E10 | Scenario 3, part 1: the mounting-hole classification and the dimension plan, in integration | 3 | CONFIRMED — see §6 |
 | E11 | Scenario 3, part 2: the browser proof, and the routed-board read limit | 3 | CONFIRMED — see §6 |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | CONFIRMED — see §6 |
-| E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | planned |
+| E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | CONFIRMED — see §6 |
 | E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | planned |
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | planned |
 | E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | planned |
@@ -367,3 +367,37 @@ they found are defects in what the HUMAN is told, and both are fixed here.
   Rejecting a Tier 2 proposal is still silent (no toast, no chat line, no audit record) and the chat is never told the
   human's decision — there is no PCB analogue of `markGrantLineDropped`. Neither is reachable from scenario 2's own path.
 - Tests: b18-e-scenario-2 12/12 (new, in the CI list); broad run: 261 files, 3380 passed, 10 expected skips
+
+### E13 — scenario 2, part 2: the facts a via plan needs, and a board to walk them on (CONFIRMED)
+
+E12 made the human surfaces truthful. This closes the other half the discovery measured: the model could not PLAN scenario 2
+at all, for three independent reasons, and the harness had nothing to plan against.
+
+- **What was missing.** Vias exist only on a ROUTED board, and every recorded routed board's full snapshot measures 70,173 /
+  72,453 characters against the 60,000-character result budget — so the one read that carries net names returns
+  `output_too_large_for_model` and "the 5 V net" cannot be resolved to via ids at all. And even where the snapshot fits, its
+  via rows STRIP `padstackId` and it carries no padstack library, so the fact that decides the outcome — a bound via takes
+  its size and drill FROM its padstack, and board LOAD binds every via — was invisible, as were the only padstacks a bound
+  via could be retargeted onto. The model could discover the constraint only by being refused.
+- **The bounded via read.** `sirkit.pcb.via-inspect` (Tier 0, read, reviewed in `agent-exposure.ts`) answers exactly those
+  facts: every net that carries vias with its name and via count, the named net's vias (id, position, diameter, drill, layer
+  span, locked, and the padstack each is bound to), and every via padstack the board has. Nothing else — no tracks, pads,
+  zones, footprints or validations — with each list capped (64 nets, 64 vias, 32 padstacks) beside its TRUE count, so a cap
+  is never mistaken for the whole net. Measured on the recorded routed boards: under a tenth of the budget where the full
+  snapshot is over it.
+- **It states no DRC floor.** The floors belong to the active preset, which a pure board read does not receive; board-inspect
+  already carries them per net, and the compiler refuses `weakened-minimum` truthfully. A guess is not a fact.
+- **The name is matched exactly** (case and surrounding space forgiven, nothing reinterpreted). A name that matches nothing
+  returns `net: null` with every via-bearing net listed — which is precisely OD-20's truthful no-match, now a mechanism
+  rather than a promise: the verbatim "5 V" finds no such net and the answer is made of the names that do exist.
+- **The harness can hold the scenario.** `fixtureBoard({ vias: true })` seeds a rail named as the browser fixture names it
+  (`/root/VCC` — never the literal "5V" a person says), three vias on it and one on NET_1, and then runs the same
+  `ensureBoardPadstacks` a board LOAD runs, so every via is padstack-bound exactly as reality leaves them.
+- **Read first, then propose — through the real loop and gateway.** A run asks for "5 V" (no such net; the nets are listed),
+  asks again by the board's own name (three vias, all bound; 0.7/0.35 is not in the library), and stops: nothing sealed,
+  nothing granted, the board byte-identical. A second run proposes the retarget the read showed was lawful and seals ONE
+  proposal; a third proposes the resize the sentence asked for and is blocked, with the padstack reason on the chat line
+  E12 built.
+- The read joins the four exposure gates by NAME (never a loosened count), the B11 evaluation cases (19/19, 61/61 checks)
+  and six regenerated artifact manifests. The 158-route ratchet is untouched: this is a tool, not a route.
+- Tests: b18-e-via-facts 9/9 (new, in the CI list); broad run: 262 files, 3389 passed, 10 expected skips

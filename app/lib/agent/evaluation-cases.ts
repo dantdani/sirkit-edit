@@ -54,6 +54,7 @@ const ALL_READS = [
   "sirkit.manufacturing.readiness-inspect",
   "sirkit.pcb.board-inspect",
   "sirkit.pcb.mechanical-inspect", // [B18-E E11] the bounded mechanical read: exposed wherever the full board snapshot is
+  "sirkit.pcb.via-inspect", // [B18-E E13] the bounded via read: the same board resource, so it is discovered wherever the snapshot is
   "sirkit.pcb.revision-inspect",
   "sirkit.project.canonical-revision-inspect",
   "sirkit.schematic.inspect",

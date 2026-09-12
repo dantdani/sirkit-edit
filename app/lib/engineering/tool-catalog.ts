@@ -349,6 +349,28 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     versionNotes: "1.0.0 (B18-E E11): first exposure, reviewed in `agent-exposure.ts`. It states nothing the full snapshot did not already state; it exists because the full snapshot does not fit in a tool result on a real board.",
   },
   {
+    // [B18-E E13] The BOUNDED via read. Vias exist only on a ROUTED board, where the full snapshot exceeds the model's
+    // result budget — and even where it fits it strips the padstack binding, the fact that decides whether a size/drill
+    // change is possible at all. This read carries that fact and the library a bound via can be retargeted onto.
+    ...readDefaults,
+    toolId: "sirkit.pcb.via-inspect", version: "1.0.0",
+    agentExposed: true,
+    owningCommandId: "pcb.board-repair",
+    title: "Inspect the vias on a net",
+    description: "Read a board's VIA facts only, in millimetres: every net that carries vias (name and count, so a net name can be resolved or truthfully found absent), the named net's vias (stable id, position, diameter, drill, layer span, locked, and the padstack each is bound to), and every via padstack the board has. A via bound to a padstack takes its size and drill FROM that padstack: changing them is refused, and the only proposable route is retargeting onto a padstack in this list — creating one is a human step in the editor. The net name is matched exactly; nothing is guessed. Carries no tracks, pads, zones, footprints or validations.",
+    category: "pcb", operationClass: "read",
+    // [B09.1] length bounds live in server-side input validation (B05 DEFAULT_INPUT_LIMITS), never in wire schemas.
+    inputSchema: obj({ netName: { type: "string" } }), outputSchema: obj({ vias: { type: "object" } }, ["vias"]),
+    requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/pcb/ai/vias.ts", symbol: "buildViaSnapshot", notes: "Pure builder over the verified canonical board; no session state, no timing, no authority." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "optional netName string", verificationStrategy: "derived from the canonical board revision; sizes bounded by the net, via and padstack caps, each reported beside its true count",
+    sourceEvidence: ["app/lib/pcb/ai/vias.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
+    versionNotes: "1.0.0 (B18-E E13): first exposure, reviewed in `agent-exposure.ts`. The vias and net names are already in the full snapshot; the padstack binding and the padstack library are NEW to the agent's view — read-only facts about the user's own board, and the only way a via proposal can be planned instead of discovered by refusal.",
+  },
+  {
     ...readDefaults,
     toolId: "sirkit.validation.drc-run", version: "1.0.0",
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource

@@ -51,7 +51,7 @@ describe("B18-C I3 — the exposure lift", () => {
     expect(B17_BASELINE.every((id) => INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.includes(id))).toBe(true);
     // [B18-E E11] one reviewed READ was added after B18-C (the bounded mechanical read scenario 3 needs); the set stays
     // EXACT — every other addition beyond the B17 baseline is still a reviewed granted execution.
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !B17_BASELINE.includes(id))).toEqual([...GRANTED_EXECUTION_TOOL_IDS, "sirkit.pcb.mechanical-inspect"].sort());
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !B17_BASELINE.includes(id))).toEqual([...GRANTED_EXECUTION_TOOL_IDS, "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect"].sort());
     for (const tool of GRANTED_EXECUTION_TOOLS) expect(tool.reason.length, tool.toolId).toBeGreaterThan(40);
     expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [] });
   });
