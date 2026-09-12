@@ -15,13 +15,14 @@
 import { describe, expect, it } from "vitest";
 import { FixtureAgentAdapter, boardFacts, planFixtureInstruction } from "../../agent/fixture-agent-adapter";
 import { buildAIPcbSnapshot } from "../../pcb/ai/snapshot";
+import { buildMechanicalSnapshot } from "../../pcb/ai/mechanical";
 import { composition, headOf, runWithAdapter } from "./b18c-harness";
 
 const SENTENCE = "Add horizontal and vertical dimensions for the board and mounting holes.";
 const NM_PER_MM = 1_000_000;
 
 describe("[B18-E E10] scenario 3 — dimensioning what the board actually says", () => {
-  it("the snapshot classifies mounting holes by OD-21's rule, and the blinker fixture has none", async () => {
+  it("the snapshot and the bounded mechanical read classify mounting holes by OD-21's rule; the blinker fixture has none", async () => {
     const c = await composition("execute_explicit_tier1");
     const snapshot = buildAIPcbSnapshot(c.history.committedPresent) as unknown as { board: { outline: { width: number; height: number } }; footprints: Array<{ reference: string; mountingHole: unknown }> };
     expect(snapshot.footprints.length).toBeGreaterThan(0);
@@ -29,12 +30,20 @@ describe("[B18-E E10] scenario 3 — dimensioning what the board actually says",
     expect(snapshot.footprints.filter((footprint) => footprint.mountingHole === true), "the fixture board carries no non-plated-hole footprint").toEqual([]);
     expect(snapshot.board.outline.width).toBeGreaterThan(0);
     expect(snapshot.board.outline.height).toBeGreaterThan(0);
+    // [B18-E E11] the bounded read states the same two facts and stays small: no nets, tracks, pads, zones or validations.
+    const mechanical = buildMechanicalSnapshot(c.history.committedPresent, { boardRevisionId: "rev-1" });
+    expect(mechanical.mountingHoles).toEqual([]);
+    expect(mechanical.mountingHoleCount).toBe(0);
+    expect(mechanical.outline.widthMm).toBeGreaterThan(0);
+    expect(mechanical.outline.heightMm).toBeGreaterThan(0);
+    const fullChars = JSON.stringify(snapshot).length, boundedChars = JSON.stringify(mechanical).length;
+    expect(boundedChars, `the bounded read is a fraction of the full snapshot (${boundedChars} vs ${fullChars} characters)`).toBeLessThan(fullChars / 20);
   }, 30_000);
 
   it("the plan reads the board first and builds its dimensions from the snapshot's own outline", async () => {
     const plan = planFixtureInstruction(SENTENCE);
     expect(plan.kind).toBe("board-then");
-    const facts = boardFacts(JSON.stringify({ output: { snapshot: { board: { outline: { kind: "rect", origin: { x: 10, y: 20 }, width: 30, height: 40 } }, footprints: [{ id: "fp-h1", reference: "H1", position: { x: 12, y: 22 }, mountingHole: true }, { id: "fp-r3", reference: "R3", position: { x: 15, y: 25 }, mountingHole: false }] } } }));
+    const facts = boardFacts(JSON.stringify({ output: { mechanical: { units: "mm", outline: { kind: "rect", originMm: { x: 10, y: 20 }, widthMm: 30, heightMm: 40, pointsMm: [], pointCount: 0 }, mountingHoles: [{ id: "fp-h1", reference: "H1", positionMm: { x: 12, y: 22 } }], mountingHoleCount: 1 } } }));
     expect(facts.outline).toEqual({ originMm: { x: 10, y: 20 }, widthMm: 30, heightMm: 40 });
     expect(facts.mountingHoles).toEqual([{ id: "fp-h1", reference: "H1", positionMm: { x: 12, y: 22 } }]);
     const built = (plan as Extract<ReturnType<typeof planFixtureInstruction>, { kind: "board-then" }>).build(facts);
@@ -44,6 +53,10 @@ describe("[B18-E E10] scenario 3 — dimensioning what the board actually says",
     expect(edits[0]).toMatchObject({ op: "add", kind: "horizontal", a: { x: 10 * NM_PER_MM, y: 20 * NM_PER_MM }, b: { x: 40 * NM_PER_MM, y: 20 * NM_PER_MM } });
     expect(edits[1]).toMatchObject({ op: "add", kind: "vertical", a: { x: 10 * NM_PER_MM, y: 20 * NM_PER_MM }, b: { x: 10 * NM_PER_MM, y: 60 * NM_PER_MM } });
     expect(edits.every((edit) => edit.offsetNm !== 0), "a dimension line must stand clear of what it measures").toBe(true);
+    // [B18-E E11] the read the plan depends on can be refused (the full snapshot exceeded the model budget on the real board,
+    // which is why the bounded mechanical read exists): the plan then says so instead of inventing coordinates.
+    const oversized = boardFacts(JSON.stringify({ ok: false, status: "output_too_large_for_model", note: "The tool result exceeded the model transfer budget; ask a narrower question." }));
+    expect(oversized, "a refused or oversized read is answered in words, never guessed around").toEqual({ outline: null, mountingHoles: [] });
     // a board with no outline is answered in words, never dimensioned at invented coordinates
     expect((plan as Extract<ReturnType<typeof planFixtureInstruction>, { kind: "board-then" }>).build({ outline: null, mountingHoles: [] })).toMatchObject({ reply: expect.stringContaining("no outline") });
   });
@@ -72,6 +85,6 @@ describe("[B18-E E10] scenario 3 — dimensioning what the board actually says",
     expect(operations[1]!.dimension).toMatchObject({ kind: "vertical", a: { x: left, y: top }, b: { x: left, y: bottom } });
     // the board was READ before it was dimensioned: the snapshot tool ran first in this very run
     const started = run.events.filter((event) => event.type === "tool_started").map((event) => String((event as { toolId?: unknown }).toolId));
-    expect(started).toEqual(["sirkit.pcb.board-inspect", "sirkit.pcb.dimension"]);
+    expect(started).toEqual(["sirkit.pcb.mechanical-inspect", "sirkit.pcb.dimension"]);
   }, 40_000);
 });

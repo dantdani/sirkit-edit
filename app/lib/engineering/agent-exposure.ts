@@ -31,6 +31,7 @@ export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS: readonly string[] = Object.free
   "sirkit.component-authority.inspect",           // B13 — server-owned authority resource gates per-run availability
   "sirkit.manufacturing.readiness-inspect",       // read: a readiness REPORT; never authorizes a release
   "sirkit.pcb.board-inspect",
+  "sirkit.pcb.mechanical-inspect",                // B18-E E11 — read: the board's extents and its mounting holes ONLY, because the full snapshot exceeds the model's result budget on a real board (scenario 3 could not otherwise be planned); no geometry the full snapshot did not already state
   "sirkit.pcb.move-footprint",                    // B18-C I3 — the first reviewed granted execution (server-minted one-shot grant: a preview to confirm, or the exact requested move)
   "sirkit.pcb.rotate-side-footprint",             // B18-C I5 — reviewed granted execution (absolute rotation / board side; explicit rotate and flip grammar)
   "sirkit.pcb.arrange",                           // B18-C I5 — reviewed granted execution (align / distribute / snap-to-grid; confirmation-only)

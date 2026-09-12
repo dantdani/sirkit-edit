@@ -883,3 +883,32 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Two consequences the broad run caught, both fixed rather than excused: the B05 read-replay fixtures are generated from the
   registry, so the version bump made them byte-inconsistent until `generate-read-invocation-artifacts` was re-run; and the B10
   context-integrity test invoked board-inspect by version, so its pin moved to 1.1.0 (it still asserts the same refusal).
+
+### B18-E E11 — scenario 3, part 2: the browser proof and the routed-board read limit (2026-09-11 local, solo; this commit)
+
+- Browser (real app, scripted agent): the runbook's sentence yields a confirmation CARD even under `execute_explicit_tier1`
+  (OD-11), naming `pcb.dimension` with exactly two operations; Confirm commits ONE transaction, the entry ends `committed`,
+  and the next chat snapshot carries exactly `horizontal` and `vertical` dimensions with no footprint moved. No hole dimension
+  is added because the board has none.
+- Recorded limit (harness limits, with numbers): the dimension plan depends on the board-inspect snapshot, measured in E3 at
+  40,410 characters on the placed board against a 60,000-character result budget but 70,173 / 72,453 once routed. Scenario 3 is
+  proven on the placed board; on a routed board the read would be refused as oversized and a bounded mechanical read would be
+  needed. No production change was made for that case in this chapter.
+- The browser helper now reads `dimensions` out of the editor context the chat request already carries, so the proof is the
+  editor's own working copy rather than the UI's wording. Browser run: agent-execution 25/25 (1 new), 10.9 min; broad run: 260 files, 3368 passed, 10 expected skips; tsc 0; eslint clean.
+- Found by RUNNING it, twice, and fixed rather than worked around. First: the synchronized board's outline is a POLYGON, which
+  states points rather than a size, so the plan read "no outline" and truthfully did nothing. Second, and the real cause: the
+  full board-inspect snapshot on that board exceeds the model's 60,000-character result budget, so the read returns
+  `output_too_large_for_model` and no plan is possible. The answer is the bounded mechanical read the chapter's plan
+  anticipated — `sirkit.pcb.mechanical-inspect` (Tier 0): the outline (kind, origin, size, up to 64 vertices with the true
+  count) and the mounting holes (id, reference, position, bounds), and nothing else; a unit pin measures it at under a
+  twentieth of the full snapshot. It states nothing the full snapshot did not; it exists because that one does not fit.
+- The exposure is a REVIEWED addition in `agent-exposure.ts` with its reason. Four gates pin that set and all four were updated
+  to name the new id — B09.1's declaration count, B17-F's "additions are exactly these" filter, B18-C's "additions beyond the
+  B17 baseline are exactly the granted executions", and B10's exposure test (whose title named a number and now names the
+  reviewed list). None was loosened into a count or a pattern.
+- The B11 evaluation cases pin the tools each context discovers; the new read was added to their ALL_READS list and all 19
+  cases / 60 checks pass. Five artifact generators were re-run.
+- Recorded about this branch's history: commit `5c9d656` (E10) is RED on benchmark-quality — it bumped the board-inspect tool
+  version but left out the regenerated read-replay fixtures and the test that pins that version. `781c1a4`, the very next
+  commit, adds exactly those two files. The branch tip is what merges; the red commit in the middle is stated, not hidden.

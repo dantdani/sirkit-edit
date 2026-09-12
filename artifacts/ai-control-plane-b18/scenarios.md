@@ -28,6 +28,10 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 
 - **The scripted agent only.** Every browser and loop proof drives the real loop, gateway, minter, ritual and page with the scripted fixture agent; a real model is BLOCKED-LIVE-QUALIFICATION (OD-7, LB-7).
 - **The frozen fixture clock.** The fixture server's time does not advance, so grant lifetimes and the 60 s settlement wait never elapse in the browser; expiry and `execution_unsettled` are proven in integration.
+- **The board-inspect result budget.** A dimension plan must READ the board, and E3 measured the snapshot at 40,410
+  characters on the PLACED board against `MAX_RESULT_CHARS` 60,000 — but 70,173 and 72,453 once the board is ROUTED.
+  So scenario 3 is proven on the journey's placed board, where the read fits; on a routed board the same plan would be
+  refused for an oversized result and would need a bounded mechanical read. That is a recorded LIMIT, not a silent one.
 - **The retry guard** is per principal and lasts five minutes: an identical instruction that already executed gets a card with a note. A browser spec that needs the exact sentence to run directly uses its own bootstrap namespace.
 
 ## 3. What Sirkit deliberately does not do (kept)
@@ -56,7 +60,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E9 | Browser, part 2: a claim with nothing behind it, Tier 3, a delegation, a forged handle | 7h, 8 | CONFIRMED — see §6 |
 | E9b | Browser, part 3: a stale base at the card, altered operations past the receiver | 7b, 7g | CONFIRMED — see §6 |
 | E10 | Scenario 3, part 1: the mounting-hole classification and the dimension plan, in integration | 3 | CONFIRMED — see §6 |
-| E11 | Scenario 3, part 2: the scripted plan, a truncation marker, browser | 3 | planned |
+| E11 | Scenario 3, part 2: the browser proof, and the routed-board read limit | 3 | CONFIRMED — see §6 |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | planned |
 | E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | planned |
 | E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | planned |
@@ -307,3 +311,22 @@ can SEE the board's extents and know which footprints are holes. Read first, the
 - **The blinker fixture has no mounting holes** (no footprint has all-non-plated pads), so the honest run dimensions the
   board and adds nothing for holes. That is the answer to half the sentence, and it is measured, not assumed.
 - Tests: b18-e-scenario-3 3/3 (new), plus b10-editor-context and b05-read-invocation re-verified
+- CI green at `781c1a4` (deterministic-manufacturing 34669196770 and benchmark-quality 34669196548, both success).
+
+### E11 — scenario 3, part 2: the browser, and the limit the routed board imposes (CONFIRMED)
+
+- **In the real app** (`agent-execution`, one new case): under `execute_explicit_tier1` the runbook's sentence produces a CARD
+  — dimensions ask even where a move would not (OD-11) — naming `pcb.dimension` with exactly TWO operations: the board's width
+  and its height. Confirm commits ONE canonical transaction, the entry ends `committed`, and the next chat snapshot carries
+  exactly two dimensions (`horizontal`, `vertical`) with every footprint unmoved. No mounting-hole dimension is added, because
+  the board has no mounting holes — the honest half of the answer, visible as a count, not a claim.
+- **The limit, measured — and then closed.** The first version of this case FAILED in the browser: the plan reads the board,
+  and the full board-inspect snapshot on the journey's synchronized board exceeds the loop's 60,000-character result budget,
+  so the model receives `output_too_large_for_model` and the honest agent answered "there is nothing to dimension". Scenario 3
+  was therefore not reachable in the real app at all. The fix is the bounded mechanical read this chapter's plan anticipated:
+  `sirkit.pcb.mechanical-inspect` (Tier 0, read) states the outline (kind, origin, size, up to 64 vertices with the true
+  count) and every mounting hole (id, reference, position, bounds) — nothing else, so its size depends only on the outline's
+  vertices and the hole count. It exposes no geometry the full snapshot did not already state; it exists because the full
+  snapshot does not fit. The exposure is reviewed in `agent-exposure.ts` (the one reviewed list every gate derives from), and
+  the four exposure gates that pin that set were updated to NAME it rather than to count higher.
+- Browser run: agent-execution 25/25 (1 new), 10.9 min

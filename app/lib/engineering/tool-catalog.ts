@@ -328,6 +328,27 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there); B18-E E10: every footprint carries `mountingHole` (OD-21: it has pads and they are ALL non-plated holes) — a classification of pads the snapshot already lists, so no new geometry and no new authority.",
   },
   {
+    // [B18-E E11] The BOUNDED mechanical read. The full snapshot above is the whole board and, measured on the browser
+    // journey's synchronized board, exceeds the loop's 60,000-character result budget — the model receives
+    // `output_too_large_for_model` and cannot plan a dimension at all. This read answers only what a dimension needs.
+    ...readDefaults,
+    toolId: "sirkit.pcb.mechanical-inspect", version: "1.0.0",
+    agentExposed: true,
+    owningCommandId: "pcb.board-repair",
+    title: "Inspect board extents and mounting holes",
+    description: "Read the board's MECHANICAL facts only, in millimetres: the outline (kind, origin, width, height, and up to 64 vertices with the true vertex count) and every mounting hole (a footprint whose pads are all non-plated holes) with its stable id, reference, position and bounds. Use this to place dimensions; it carries no nets, tracks, pads, zones or validations, so it stays within the model's result budget on boards whose full snapshot does not.",
+    category: "pcb", operationClass: "read",
+    inputSchema: obj({}), outputSchema: obj({ mechanical: { type: "object" } }, ["mechanical"]),
+    requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    binding: { status: "bound-read", module: "app/lib/pcb/ai/mechanical.ts", symbol: "buildMechanicalSnapshot", notes: "Pure builder over the verified canonical board; no session state, no timing, no authority." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 10_000,
+    validationStrategy: "empty input schema", verificationStrategy: "derived from the canonical board revision; sizes bounded by the outline vertex cap and the mounting-hole count",
+    sourceEvidence: ["app/lib/pcb/ai/mechanical.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
+    versionNotes: "1.0.0 (B18-E E11): first exposure, reviewed in `agent-exposure.ts`. It states nothing the full snapshot did not already state; it exists because the full snapshot does not fit in a tool result on a real board.",
+  },
+  {
     ...readDefaults,
     toolId: "sirkit.validation.drc-run", version: "1.0.0",
     agentExposed: true, // B09 — statically exposed; per-run availability requires the canonical-state resource

@@ -283,7 +283,7 @@ describe("B09.1 §4 — fail-closed strict wire subset", () => {
     const toolset = buildRunToolset(registry, assembly.context, (message) => warnings.push(message));
     expect(toolset.declarations.some((declaration) => declaration.toolId === "sirkit.schematic.future-bad")).toBe(false);
     expect(warnings.some((message) => message.includes("sirkit.schematic.future-bad"))).toBe(true);
-    expect(toolset.declarations).toHaveLength(10); // B10: selection.inspect needs the selection-snapshot resource, absent in this fixture context; B17-F: + placement/routing proposals (board only); view tools need a captured view context, absent here
+    expect(toolset.declarations).toHaveLength(11); // B18-E E11: + the bounded mechanical read; B10: selection.inspect needs the selection-snapshot resource, absent in this fixture context; B17-F: + placement/routing proposals (board only); view tools need a captured view context, absent here
   });
 });
 

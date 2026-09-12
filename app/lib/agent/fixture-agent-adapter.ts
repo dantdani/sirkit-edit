@@ -17,7 +17,7 @@
  *  - "Add silkscreen text <TEXT> at <x>, <y>." → silkscreen-text add (mm);
  *  - "Undo that." / "Redo." → undo-redo-granted { direction };
  *  - [B18-E E10] "Add horizontal and vertical dimensions for the board[ and mounting holes]." → board-inspect, then
- *    pcb.dimension built from the OUTLINE the snapshot returned (and from the footprints it classified as mounting holes);
+ *    pcb.dimension built from the OUTLINE and mounting holes the BOUNDED mechanical read returned;
  *  - [B18-E E7] "Release the board." / "Qualify the board." / "Order the parts." → a RAW provider name the run never advertised
  *    (what a model inventing a Tier 3 tool would emit), with interim text claiming success;
  *  - [B18-E E7] "Move <REF> <n> mm <direction>, then release the board." → the move with a nested delegation in its arguments;
@@ -47,7 +47,7 @@ type Planned =
   /** [B18-E E10] scenario 3: read the board first, then dimension what the snapshot actually showed. */
   | { kind: "board-then"; build: (board: BoardFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
 
-/** [B18-E E10] what the scripted agent reads out of a board-inspect snapshot (the same fields a model would use). */
+/** [B18-E E10/E11] what the scripted agent reads out of the mechanical read (the same fields a model would use). */
 export interface BoardFacts {
   outline: { originMm: { x: number; y: number }; widthMm: number; heightMm: number } | null;
   mountingHoles: Array<{ id: string; reference: string; positionMm: { x: number; y: number } }>;
@@ -153,22 +153,21 @@ function selectedFootprints(outputText: string | undefined): SelectedFootprint[]
   }
 }
 
-/** [B18-E E10] Read the board facts a dimension plan needs out of a board-inspect result — only fields the snapshot states. */
+/** [B18-E E11] Read the board facts a dimension plan needs out of the BOUNDED mechanical result — only fields it states. */
 export function boardFacts(outputText: string | undefined): BoardFacts {
   const empty: BoardFacts = { outline: null, mountingHoles: [] };
   try {
-    const parsed = JSON.parse(outputText ?? "") as { output?: { snapshot?: unknown } };
-    // the snapshot states the outline under `board` and lists footprints at the top level (pcb/ai/snapshot.ts)
-    const snapshot = parsed.output?.snapshot as { board?: { outline?: unknown }; footprints?: unknown } | undefined;
-    const outlineRaw = snapshot?.board?.outline as { kind?: unknown; origin?: { x?: unknown; y?: unknown }; width?: unknown; height?: unknown } | undefined;
-    const outline = outlineRaw && typeof outlineRaw.width === "number" && typeof outlineRaw.height === "number" && typeof outlineRaw.origin?.x === "number" && typeof outlineRaw.origin?.y === "number"
-      ? { originMm: { x: outlineRaw.origin.x, y: outlineRaw.origin.y }, widthMm: outlineRaw.width, heightMm: outlineRaw.height }
+    const parsed = JSON.parse(outputText ?? "") as { output?: { mechanical?: unknown } };
+    const mechanical = parsed.output?.mechanical as { outline?: { originMm?: { x?: unknown; y?: unknown }; widthMm?: unknown; heightMm?: unknown }; mountingHoles?: unknown } | undefined;
+    const raw = mechanical?.outline;
+    const outline = raw && typeof raw.widthMm === "number" && typeof raw.heightMm === "number" && typeof raw.originMm?.x === "number" && typeof raw.originMm?.y === "number" && raw.widthMm > 0 && raw.heightMm > 0
+      ? { originMm: { x: raw.originMm.x, y: raw.originMm.y }, widthMm: raw.widthMm, heightMm: raw.heightMm }
       : null;
-    const footprints = Array.isArray(snapshot?.footprints) ? (snapshot.footprints as Array<Record<string, unknown>>) : [];
-    const mountingHoles = footprints.flatMap((footprint) => {
-      const position = footprint.position as { x?: unknown; y?: unknown } | undefined;
-      return footprint.mountingHole === true && typeof footprint.id === "string" && typeof footprint.reference === "string" && typeof position?.x === "number" && typeof position.y === "number"
-        ? [{ id: footprint.id, reference: footprint.reference, positionMm: { x: position.x, y: position.y } }]
+    const holes = Array.isArray(mechanical?.mountingHoles) ? (mechanical.mountingHoles as Array<Record<string, unknown>>) : [];
+    const mountingHoles = holes.flatMap((hole) => {
+      const position = hole.positionMm as { x?: unknown; y?: unknown } | undefined;
+      return typeof hole.id === "string" && typeof hole.reference === "string" && typeof position?.x === "number" && typeof position.y === "number"
+        ? [{ id: hole.id, reference: hole.reference, positionMm: { x: position.x, y: position.y } }]
         : [];
     });
     return { outline, mountingHoles };
@@ -214,7 +213,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
     }
     if (this.planned.kind === "board-then") {
       this.awaitingBoard = true;
-      return this.call(input.tools, "sirkit.pcb.board-inspect", {});
+      return this.call(input.tools, "sirkit.pcb.mechanical-inspect", {});
     }
     // [B18-E E7] a forged name skips the declaration lookup on purpose: the run must refuse a tool it never advertised, and the
     // interim claim must still only ever appear as a labelled note.

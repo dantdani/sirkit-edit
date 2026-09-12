@@ -32,8 +32,8 @@ const NM_PER_MM = 1_000_000;
 
 interface Footprint { id: string; ref: string; at: { x: number; y: number }; side: "top" | "bottom" }
 interface SilkItem { kind: string; text?: string }
-interface Board { footprints: Footprint[]; silkItems: SilkItem[] }
-interface ChatBody { scope: { tenantId: string; projectId: string; branchId: string }; messages?: Array<{ role: string; content: string }>; editorContext?: { board: { footprints: Footprint[]; silkItems?: SilkItem[] } } }
+interface Board { footprints: Footprint[]; silkItems: SilkItem[]; dimensions: Array<{ kind?: string }> }
+interface ChatBody { scope: { tenantId: string; projectId: string; branchId: string }; messages?: Array<{ role: string; content: string }>; editorContext?: { board: { footprints: Footprint[]; silkItems?: SilkItem[]; dimensions?: Array<{ kind?: string }> } } }
 
 let context: BrowserContext;
 let page: Page;
@@ -160,7 +160,7 @@ async function chat(text: string): Promise<ChatBody> {
 async function board(): Promise<Board> {
   const body = await chat("Status.");
   expect(body.editorContext, "the chat request carries the PCB editor's working copy").toBeTruthy();
-  return { footprints: body.editorContext!.board.footprints, silkItems: body.editorContext!.board.silkItems ?? [] };
+  return { footprints: body.editorContext!.board.footprints, silkItems: body.editorContext!.board.silkItems ?? [], dimensions: body.editorContext!.board.dimensions ?? [] };
 }
 
 const r3 = (b: Board): Footprint => b.footprints.find((f) => f.ref === "R3")!;
@@ -890,6 +890,25 @@ test("[B18-E E9b] altered operations (7g): a grant rewritten in transit WITH its
   expect(silkTexts(after), "neither the honest text nor the substituted one reached the board").toEqual(silkTexts(start));
   if (await card.isVisible()) await page.getByRole("button", { name: "Cancel — change nothing" }).click();
   await expect(card).toBeHidden();
+});
+
+test("[B18-E E11] scenario 3 in the browser: the assistant reads the board and dimensions ITS extents — a card even under explicit autonomy, one transaction on Confirm, and no hole the board does not have", async () => {
+  const start = await board();
+  expect(start.dimensions, "the fixture board starts undimensioned").toEqual([]);
+  const committed = await committedLines().count();
+  await chat("Add horizontal and vertical dimensions for the board and mounting holes.");
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card, "OD-11: dimensions ask even when the project allows direct edits").toBeVisible();
+  await expect(card).toContainText("pcb.dimension");
+  await expect(page.getByTestId("granted-execution-operations").locator("li"), "two dimensions: the board's width and height — the fixture has no mounting holes").toHaveCount(2);
+  await page.screenshot({ path: `${EVIDENCE}/scenario-3-dimension-card.png`, fullPage: false });
+  await page.getByTestId("granted-execution-confirm").click();
+  await expect(card).toBeHidden();
+  await expect(committedLines()).toHaveCount(committed + 1);
+  await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "committed");
+  const after = await board();
+  expect(after.dimensions.map((dimension) => dimension.kind), "the board now carries exactly the two dimensions that were previewed").toEqual(["horizontal", "vertical"]);
+  expect(after.footprints, "dimensioning moves nothing").toEqual(start.footprints);
 });
 
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
