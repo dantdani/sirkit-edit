@@ -1,18 +1,18 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B18",
-  "currentCheckpoint": "B18 validation complete",
+  "currentChapter": "B19",
+  "currentCheckpoint": "B19 discovery",
   "status": "in_progress",
-  "baseSha": "804a08d",
-  "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "313eafa",
+  "baseSha": "5a59a1f",
+  "branch": "chapter/b19-external-acquisition",
+  "lastGreenSha": "cf8ad68",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "Mark PR #8 ready and merge normally once CI is green on the final commit; then B19 (external component and evidence acquisition).",
-  "updatedAt": "2026-09-12T10:30:00-04:00"
+  "nextAction": "B19 I1: the bounded outbound boundary - wire the existing SSRF guard and bounded reader into one server-side egress helper with per-source allowlists, deadlines, redirect revalidation and redacted errors; reproduce D19-1..D19-6 first.",
+  "updatedAt": "2026-09-12T11:00:00-04:00"
 }

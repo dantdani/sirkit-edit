@@ -1113,3 +1113,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   `final-verdict.md`. Verdict: **B18 PASSES its deterministic gate.**
 - Measured on the final tree: broad 268 files / 3439 passed / 10 expected skips; browser 29/29 in 11.1 min; tsc 0;
   eslint clean; seven generators idempotent with zero drift; 158-route ratchet and the exposure ratchet intact.
+
+### B19 — chapter start and discovery (2026-09-12 local, solo; this commit)
+
+- B18 merged normally into `main` as `5a59a1f` (PR #8) with both workflows green on `cf8ad68`. B19 opens from that base
+  on `chapter/b19-external-acquisition`.
+- Discovery by six parallel read-only readers (workflow `wf_30aa690a-0c4`): the connectors, the outbound boundary, the
+  quarantine-to-authority pipeline, inbound import security, the product/agent surfaces and the existing tests — 113
+  findings, 53 gaps, every claim with a file:line. Recorded in `artifacts/ai-control-plane-b19/discovery.md`.
+- What exists: three live distributor clients (DigiKey V4 OAuth, Mouser v1, Nexar GraphQL) and an LCSC stub, all in one
+  directory; the back half of the authority pipeline (atomic revisions, mapping certificates, physical bindings) is
+  strong; there is NO purchase path anywhere, which is the state the runbook wants kept.
+- The most useful single finding: a complete, unit-tested SSRF guard already exists (`app/lib/atomic/security.ts:121`)
+  with ZERO production callers, and a bounded response reader exists that no server-side outbound call uses. B19 wires
+  them rather than writing new ones — with two gaps to close while wiring (hostname-string validation with no resolved-IP
+  check; an IPv4-only private-range table).
+- Seven defects recorded to reproduce first: a PUBLIC, CSRF-free `/api/bom` whose caller-supplied `forceRefresh` can
+  drain a paid monthly quota anonymously; that route reflecting raw distributor errors; the Mouser API key travelling in
+  the URL query string; no timeout on any distributor call; unbounded response reads everywhere; the cross-verify
+  endpoint following redirects with its bearer attached and reflecting 200 bytes of the remote body; and license enforced
+  at publication but not at export.
+- Increments I1–I7 planned in `discovery.md` §4, one per runbook checkpoint plus validation.
