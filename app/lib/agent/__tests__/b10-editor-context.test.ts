@@ -218,7 +218,7 @@ describe("B10 §B — server-side context assembly over the editor context", () 
     ];
     for (const context of tampered) {
       expect(verifyAgentContextIntegrity(context).length).toBeGreaterThan(0);
-      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.pcb.board-inspect", version: "1.0.0", args: {}, context, timeoutMs: 3000 });
+      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.pcb.board-inspect", version: "1.1.0", args: {}, context, timeoutMs: 3000 });
       expect(outcome).toMatchObject({ kind: "refused", status: "context_integrity" });
     }
   });
