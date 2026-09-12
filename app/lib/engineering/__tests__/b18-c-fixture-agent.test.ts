@@ -167,6 +167,8 @@ describe("[B18-E E7] the scripted agent's refusal scripts", () => {
     expect(run.grants).toEqual([]);
     expect(run.rituals).toEqual([]);
     expect(run.events.filter((event) => event.type === "tool_refused").map((event) => String((event as { status?: unknown }).status))).toEqual(["unknown_tool"]);
+    // [B18-E E9] the run still ENDS in words (the browser waits for this sentence), and the sentence is not the claim
+    expect(String((run.events.find((event) => event.type === "run_completed") as { finalText?: unknown } | undefined)?.finalText)).toBe("(fixture agent) the tool answered unknown_tool.");
     expect(r3Of(c).at.x).toBe(x0);
     expect(headOf(c).headSequence).toBe(head);
   }, 30_000);

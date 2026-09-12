@@ -819,3 +819,26 @@ _(discovery, reproduction and results appended below as they are observed)_
   duplicate was refused before running (`execution_exists`), and exactly one committed transaction.
 - Browser run: agent-execution 19/19 (3 new), 6.8 min, port 3100. Broad vitest: not re-run for this increment: no source file changed (only the browser spec and records); E7's broad run at 9cdf842 was green and CI runs the full set on this commit; tsc 0; eslint clean. Evidence: two new PNGs; re-taken PNGs from unchanged cases
   were restored so the committed evidence changes only where the proof changed.
+
+### B18-E E9 — the browser, part 2: a claim with nothing behind it, Tier 3, a delegation, a forged handle (2026-09-11 local, solo; this commit)
+
+- Defect found and reproduced on pre-fix code: a run that CLAIMED a change and prepared none (E7's forged Tier 3 call and its
+  smuggled delegation) left the claim standing. Rule 2 labelled it as written-before-the-result, but there was no execution
+  entry to read and no label on the answer, because every existing label assumed a pending execution or review.
+- Fix (production, display only): `LABEL_NOTHING_CHANGED` in `chat-run-view.ts` — when a run ends having written interim text
+  and having prepared nothing at all (no execution pending/received/dropped, no review), the page labels the answer with its
+  OWN sentence saying nothing was changed and pointing at the run log. Pinned by `b18-e-claimed-nothing` (the two refusal
+  shapes; that it never displaces `LABEL_BEFORE_CHANGE`, `LABEL_DROPPED` or `LABEL_BEFORE_REVIEW`; that it is silent for runs
+  that made no claim, are still running, or really committed).
+- Browser (real app, scripted agent): scenario 8 refused `unknown_tool` with no card, no entry, nothing committed and the
+  claim absent from the next request's history; the delegation refused `invalid_input` with the honest edit lost too; a grant
+  whose HANDLE was rewritten in transit passes the page's checks and is refused by the server at the tender — the entry ends
+  not_made, never "landed, unverified", and the board is untouched.
+- Second finding, in the test harness itself: the S5 observer records the states of EVERY execution entry in the chat log, not
+  the entry belonging to the run that wrote the claim. Its clause "an execution entry existed" has therefore been trivially
+  true for every claim since the first entry existed. The invariant now asserts what is genuinely checkable chat-wide, and the
+  per-run truth (no entry added; the page's contradiction visible) is pinned in each refusal run's own test.
+- Deferred with a reason (new row E9b): 7b's stale revision at the card and 7g's altered operations past the page's receiver.
+  E8 measured that the card is MODAL, so drift cannot be driven from the same page; both need a second session or a rewritten
+  digest set, and they are their own increment rather than a rushed addition here.
+- Browser run: agent-execution 22/22 (3 new), 7.8 min; tests: b18-e-claimed-nothing 4/4 (new) plus the run-view and fixture-agent suites, 41/41; broad run: 259 files, 3365 passed, 10 expected skips; tsc 0; eslint clean.

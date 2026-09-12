@@ -726,6 +726,88 @@ test("[B18-E E8] the double call: two identical execution calls in one step prod
   expect(silkTexts(await board()).filter((text) => text === "REV C"), "added once, not twice").toHaveLength(1);
 });
 
+/** [B18-E E9] the page's own sentence when a run claimed something and prepared nothing (chat-run-view.ts LABEL_NOTHING_CHANGED). */
+const NOTHING_CHANGED = "Nothing was changed: this run never prepared a change. Anything said about it being done was written before the assistant had any result — the run log above says what really happened.";
+
+test("[B18-E E9] scenario 8 in the browser: a forged Tier 3 call is refused before anything runs — no card, no entry, nothing changed — and the page contradicts the assistant's claim", async () => {
+  const start = await board();
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  const committed = await committedLines().count();
+  await chat("Release the board."); // the scripted agent emits a provider name this run never advertised
+  await expect(page.getByText(/Unknown tool — refused before running \(unknown_tool\) — nothing ran/).last()).toBeVisible();
+  await expect(entries, "nothing was prepared, so there is no execution entry").toHaveCount(entriesBefore);
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  // Rule 2: the claim is kept as a labelled note — and the PAGE says, in its own words, that nothing was changed
+  await expect(page.getByText(/^Assistant note \(written before the result\): \(fixture interim\)/).last()).toBeVisible();
+  await expect(page.getByText(NOTHING_CHANGED).last()).toBeVisible();
+  await expect(committedLines()).toHaveCount(committed);
+  await page.screenshot({ path: `${EVIDENCE}/tier3-refused-nothing-changed.png`, fullPage: false });
+  const after = await board();
+  expect(after.footprints).toEqual(start.footprints);
+  expect(silkTexts(after)).toEqual(silkTexts(start));
+  expect(JSON.stringify(chatBodies.at(-1)!.messages ?? []), "the claim never enters the history a later run receives").not.toContain("(fixture interim)");
+});
+
+test("[B18-E E9] a release smuggled into a real edit's arguments: the edit dies on its own argument contract, the release never starts, and the board does not move", async () => {
+  const start = await board();
+  const x0 = r3(start).at.x;
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  const committed = await committedLines().count();
+  await select("R3");
+  await chat("Move R3 2 mm to the right, then release the board.");
+  await expect(page.getByText(/Move footprint — refused \(invalid_input\)/).last(), "strict arguments are the outer wall").toBeVisible();
+  await expect(entries).toHaveCount(entriesBefore);
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  await expect(page.getByText(NOTHING_CHANGED).last()).toBeVisible();
+  await expect(committedLines()).toHaveCount(committed);
+  expect(r3(await board()).at.x, "the honest edit in the same sentence is lost with the delegation").toBe(x0);
+});
+
+test("[B18-E E9] a forged handle: a grant whose id was rewritten in transit passes the page's checks but the SERVER refuses the tender — nothing is written and the entry ends terminal, never 'landed unverified'", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  const entriesBefore = await page.getByTestId("chat-execution-entry").count();
+  const committed = await committedLines().count();
+  let rewritten = 0;
+  await page.route("**/api/chat", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.text()).split("\n").map((line) => {
+      if (!line.includes('"execution_grant_ready"')) return line;
+      const event = JSON.parse(line) as { grant: { grantId: string } };
+      event.grant.grantId = `xg-${"f".repeat(32)}`; // a handle the server never issued; the digest still binds the rest
+      rewritten += 1;
+      return JSON.stringify(event);
+    }).join("\n");
+    await route.fulfill({ response, body });
+  });
+  try {
+    await chat(`Add silkscreen text FORGEDHANDLE at ${at.x}, ${at.y}.`);
+  } finally {
+    await page.unroute("**/api/chat");
+  }
+  expect(rewritten).toBe(1);
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card, "only the handle was changed, so the page's own checks still pass").toBeVisible();
+  const entry = page.getByTestId("chat-execution-entry").last();
+  await expect(page.getByTestId("chat-execution-entry")).toHaveCount(entriesBefore + 1);
+  await page.getByTestId("granted-execution-confirm").click();
+  // the ritual runs (the entry passes through "executing"), so wait for the entry to SETTLE, not merely to change
+  await expect.poll(async () => await entry.getAttribute("data-state"), { timeout: 60_000 }).toMatch(/^(committed|not_made|cancelled|superseded|landed_unverified)$/);
+  const state = await entry.getAttribute("data-state");
+  expect(state, "a handle the server never issued cannot have committed anything").not.toBe("committed");
+  expect(state, "the server refused a handle it never issued, so nothing can be unverified").not.toBe("landed_unverified");
+  expect(["not_made", "cancelled"], `the entry ended '${state}'`).toContain(state);
+  await expect(committedLines()).toHaveCount(committed);
+  const after = await board();
+  expect(silkTexts(after)).toEqual(silkTexts(start));
+  expect(silkTexts(after)).not.toContain("FORGEDHANDLE");
+  await page.screenshot({ path: `${EVIDENCE}/forged-handle-refused.png`, fullPage: false });
+  if (await card.isVisible()) await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(card).toBeHidden();
+});
+
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
   const probeText = "(fixture interim) Done — R3 moved";
   const before = interimLog.length;
@@ -743,11 +825,16 @@ test("B18-D review 2: the S5 observer records interim text inside mixed markup, 
   for (let index = interimLog.length - 1; index >= before; index -= 1) if (interimLog[index]!.text === probeText) interimLog.splice(index, 1);
 });
 
-test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, while an execution entry existed, and never in a request's history", async () => {
+test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, answered by an execution entry or by the page's own 'nothing was changed', and never in a request's history", async () => {
   expect(interimLog.length, "the scripted agent wrote interim text beside its execution calls").toBeGreaterThan(0);
   for (const record of interimLog) {
     expect(record.text.startsWith("Assistant note (written before the result): (fixture interim)"), record.text).toBe(true);
-    expect(record.entries.length, `an execution entry existed when "${record.text}" appeared`).toBeGreaterThan(0);
   }
+  // [B18-E E9] measured while adding the refusal runs: `record.entries` is the state of EVERY execution entry in the chat
+  // log, not this run's — so once any run has made one, "an entry existed" is true for every later claim and proves little.
+  // What each run's claim is answered by is pinned in that run's own test (a new entry, or the page's contradiction); here,
+  // chat-wide, both refusal runs must have left the page's own sentence standing beside their claim.
+  expect(interimLog.some((record) => record.entries.length > 0), "the execution runs' claims sat beside their entries").toBe(true);
+  expect(await page.getByText(NOTHING_CHANGED).count(), "both runs that prepared nothing are contradicted by the page itself").toBeGreaterThanOrEqual(2);
   for (const body of chatBodies) expect(JSON.stringify(body.messages ?? [])).not.toContain("(fixture interim)");
 });

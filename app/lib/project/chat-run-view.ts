@@ -21,6 +21,9 @@ export const LABEL_BEFORE_CHANGE = "Written before the outcome of this change wa
 export const LABEL_BEFORE_REVIEW = "Written before anything was applied — the proposal above awaits your review.";
 /** [B18-D review 2] The run's only execution grants were dropped by this page: there is no entry to point at. */
 export const LABEL_DROPPED = "Written without knowing that this page dropped the change — nothing was changed; the run log above says why.";
+/** [B18-E E9] The run claimed something before it had a result and then prepared no change at all (a refused tool, an
+ *  invalid call): there is no entry to point at, so the PAGE contradicts the claim in its own words. */
+export const LABEL_NOTHING_CHANGED = "Nothing was changed: this run never prepared a change. Anything said about it being done was written before the assistant had any result — the run log above says what really happened.";
 export const NOTE_PREFIX = "Assistant note (written before the result): ";
 
 // ── tool lines ────────────────────────────────────────────────────────────────
@@ -136,7 +139,10 @@ export function projectRunView(state: RunViewState): RunViewProjection {
   const unresolvedExecution = state.pendingExecutions > state.resolvedExecutions;
   // [B18-D review 2] "the entry above" only when an entry exists: a run whose only grants this page dropped has none
   const noEntry = state.droppedExecutions > 0 && state.receivedExecutions === 0;
-  const label = state.answer.length === 0 ? null : unresolvedExecution ? (noEntry ? LABEL_DROPPED : LABEL_BEFORE_CHANGE) : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : null;
+  // [B18-E E9] the run ENDED having claimed something and having prepared nothing at all: no execution, no review, nothing
+  // dropped. Counters only the page owns, so a stream cannot talk the page out of saying it.
+  const claimedNothing = state.terminal !== null && state.interim.length > 0 && state.pendingExecutions === 0 && state.receivedExecutions === 0 && state.droppedExecutions === 0 && state.pendingReviews === 0;
+  const label = state.answer.length === 0 ? null : unresolvedExecution ? (noEntry ? LABEL_DROPPED : LABEL_BEFORE_CHANGE) : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : claimedNothing ? LABEL_NOTHING_CHANGED : null;
   const answer = label ? `${label}\n\n${state.answer}` : state.answer;
   return {
     answer,

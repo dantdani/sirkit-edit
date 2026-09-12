@@ -53,7 +53,8 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | CONFIRMED — see §6 |
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | CONFIRMED — see §6 |
 | E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | CONFIRMED — see §6 |
-| E9 | Browser, part 2: stale revision, Stop, forged handle, altered operations, Tier 3 | 7b–7d, 7g, 7h, 8 | planned |
+| E9 | Browser, part 2: a claim with nothing behind it, Tier 3, a delegation, a forged handle | 7h, 8 | CONFIRMED — see §6 |
+| E9b | Browser, part 3: stale revision from another session, altered operations past the receiver | 7b, 7g | planned |
 | E10 | Scenario 3, part 1: mounting holes, a bounded mechanical read if needed, integration | 3 | planned |
 | E11 | Scenario 3, part 2: the scripted plan, a truncation marker, browser | 3 | planned |
 | E12 | Scenario 2, part 1: Tier 2 truth in the review and the chat | 2 (4, 5) | planned |
@@ -225,3 +226,38 @@ driven by the scripted agent). They close what scenario 1's browser proof left t
   entry, the run log says the duplicate was refused before running (`execution_exists`), and Confirm commits exactly one
   transaction — the text is added once, not twice.
 - Browser run: agent-execution 19/19 (3 new), 6.8 min, port 3100
+- CI green at `8b6e8f5` (deterministic-manufacturing 34664080017 and benchmark-quality 34664080022, both success).
+
+### E9 — the browser, part 2: a claim with nothing behind it (CONFIRMED)
+
+Scenario 8 and the forged handle are now proven in the real app, and writing them found a real gap in what the page told the
+human.
+
+- **The gap, reproduced first.** E7 taught the scripted agent to claim "Done - the change is already made." on a run that
+  prepares NOTHING (a forged Tier 3 name refused `unknown_tool`; a delegation smuggled into an edit's arguments, refused
+  `invalid_input`). Rule 2 kept the claim out of the answer and released it as a labelled note — but nothing on the page
+  contradicted it: there is no execution entry to read, and `projectRunView` gave the answer no label at all, because every
+  label it had assumed an execution or a review was pending. A unit test written against the old code failed exactly there.
+- **The fix (page-authored, never the model's words).** `LABEL_NOTHING_CHANGED`: when a run ENDS having written interim text
+  and having prepared nothing — no execution pending, none received, none dropped, no review — the answer is labelled
+  "Nothing was changed: this run never prepared a change. Anything said about it being done was written before the assistant
+  had any result — the run log above says what really happened." The condition reads only counters the page owns, so a stream
+  cannot talk it out of appearing; it never displaces a label that says more (a pending change, a dropped grant, a proposal
+  awaiting review) and never appears for a run that made no claim, is still running, or really did commit.
+- **Scenario 8 in the browser.** "Release the board." → the run log shows `Unknown tool — refused before running
+  (unknown_tool) — nothing ran`, no card, NO execution entry, no committed line, the board and silkscreen unchanged, the claim
+  present only as a labelled note, the page's contradiction visible, and the claim absent from the history the next request
+  carries.
+- **The delegation in the browser.** "Move R3 2 mm to the right, then release the board." → `Move footprint — refused
+  (invalid_input)`: the release never starts, nothing is granted, and the honest edit in the same sentence is lost with it.
+- **A forged handle (7h).** The grant's id is rewritten in transit to one the server never issued. The page's own checks still
+  pass (the digest binds the binding, not the handle), so the card appears — and the SERVER refuses the tender: the entry ends
+  `not_made`, never "landed, unverified", nothing is committed and the text never reaches the board.
+- **Rule 2 across every flow (S5), corrected and strengthened.** Two things were found here. First, the page was changed (see
+  above) so a claim with nothing behind it is contradicted. Second — measured, not assumed — the suite's S5 observer records
+  the states of EVERY execution entry in the chat log, not the entry of the run that wrote the claim: so its clause "an
+  execution entry existed" has been trivially true for every claim since the first run made an entry, and proved much less
+  than it read. The invariant now asserts what is actually checkable chat-wide (every appearance is a labelled note; the
+  execution runs' claims did sit beside entries; BOTH runs that prepared nothing left the page's own contradiction standing),
+  and each refusal run's own test pins, for that run, that no entry was added and the contradiction is visible.
+- Browser run: agent-execution 22/22 (3 new), 7.8 min. Tests: b18-e-claimed-nothing 4/4 (new) plus the run-view and fixture-agent suites, 41/41
