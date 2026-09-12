@@ -127,6 +127,10 @@ export const POST = authenticatedJsonRoute({ maxBytes: PCB_SYNC_API_MAX_BYTES, d
   if (forbidden) return forbidden;
   const scope = pcbSyncScopeFromContext(context);
   const correlationId = context.correlationId;
+  // [B18-E E6] human truth, as the release route already states it: qualification is a human act. No agent tool binds this route
+  // (the gateway exposes none, and the family is Tier 3), so this is defence in depth — it refuses a non-human actor BEFORE any
+  // durable read and pins the invariant for any future actor minting. It gives the AI nothing new and changes nothing for humans.
+  if (scope.actor.actorKind !== "human") return manufacturingRefusal("MFG_QUALIFY_HUMAN_REQUIRED", { correlationId });
   // [B16-A F3] closed body: an undeclared key (e.g. the former `seeds`) is refused, never ignored.
   const unknownFields = Object.keys(body).filter((key) => !QUALIFY_BODY_KEYS.has(key)).sort();
   if (unknownFields.length > 0) return manufacturingRefusal("MFG_API_UNKNOWN_FIELD", { correlationId, extra: { fields: unknownFields } });

@@ -18,8 +18,8 @@ import type { PcbHistory } from "@/app/lib/pcb/history";
 import type { Vec2 } from "@/app/lib/pcb/geometry";
 import { NM_PER_MM } from "@/app/lib/pcb/units";
 import { ACCENT_COLOR } from "@/app/lib/pcb/render/colors";
-import { DEFAULT_SILK_STROKE_NM, DEFAULT_SILK_TEXT_HEIGHT_NM } from "@/app/lib/pcb/silk/types";
-import type { BoardDimension, DimensionKind } from "@/app/lib/pcb/types";
+import { mutateBoardWithDimensionCommand, newBoardDimension } from "@/app/lib/pcb/dimensions/commands";
+import type { DimensionKind } from "@/app/lib/pcb/types";
 
 const mm = (nm: number): number => nm / NM_PER_MM;
 
@@ -61,23 +61,19 @@ export function useDimensionTool({ scene, active, getHistory, toast }: Dimension
       offsetNm = Math.round(((offsetPoint.x - a.x) * (-dy / len)) + ((offsetPoint.y - a.y) * (dx / len)));
     }
     if (offsetNm === 0) offsetNm = Math.round(2 * NM_PER_MM);
-    const dimension: BoardDimension = {
+    // [B18-C I7] the shared pure constructor and command — the agent's granted dimension execution uses the same ones.
+    const dimension = newBoardDimension({
       id: freshDimensionId(),
       kind: dimensionKind,
       a: { x: Math.round(a.x), y: Math.round(a.y) },
       b: { x: Math.round(b.x), y: Math.round(b.y) },
       offsetNm,
-      layer: "silkTop",
-      unit: "mm",
-      precision: 2,
-      textHeightNm: DEFAULT_SILK_TEXT_HEIGHT_NM,
-      strokeWidthNm: DEFAULT_SILK_STROKE_NM,
-    };
+    });
     void commitPcbCandidate(h, {
       commandId: "pcb.dimension",
       label: "Add dimension",
       buildCandidate: (board) => produce(board, (draft) => {
-        (draft.dimensions ??= []).push(dimension);
+        mutateBoardWithDimensionCommand(draft, { kind: "AddDimension", item: dimension });
       }),
     }).then((result) => {
       if (!result.ok) stateRef.current.toast?.(result.message);

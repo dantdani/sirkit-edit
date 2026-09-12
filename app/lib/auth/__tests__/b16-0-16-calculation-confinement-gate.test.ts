@@ -96,7 +96,7 @@ describe("B16.0.16 §G — no misleading authority", () => {
       expect(src, rel).not.toMatch(/releaseManufacturingPackage|manufacturing\/release|manufacturing\.release/);
     }
   });
-  it("no calculation route is agent-exposed and total exposed tools remain EXACTLY 12", () => {
+  it("no calculation route is agent-exposed and the exposed tools equal the intentional list", () => {
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(JSON.stringify(exposed)).not.toMatch(/api\/calculation|calculation\.(propose|evaluate|report|transaction|export)/);

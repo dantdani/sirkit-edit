@@ -2,8 +2,10 @@
  * B16.1C §I — invariant tripwires. Any of these failing in CI means a
  * regression of a security or truth boundary this stage depends on:
  *
- *  - 153 route methods / 150 canonical wrappers / 3 approved factories / 0 raw;
- *  - exactly 12 agent-exposed tools, none of them qualification or release;
+ *  - 158 route methods / 155 canonical wrappers / 3 approved factories / 0 raw (B18-A: + GET/POST /api/agent/autonomy; B18-B:
+ *    + GET/POST /api/agent/execution-grant and POST /api/agent/execution-grant/settle) — [B18-E E6] the title and this line
+ *    said 155 / 152 long after B18-B added its three canonical wrappers; the assertion itself was always the ratchet;
+ *  - exactly the intentional agent-exposed tools (agent-exposure.ts), none of them qualification or release;
  *  - the manufacturing routes keep their policy rows (qualify: pcb_editor |
  *    project_admin; release: project_admin only) and their bounded envelopes;
  *  - qualification derives package class ONLY from server-owned binding
@@ -22,7 +24,7 @@ import { policyFor } from "@/app/lib/auth/route-policy";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { MANUFACTURING_PUBLIC_ERRORS } from "@/app/lib/pcb/fab/manufacturing-errors";
 import { QUALIFICATION_PACKAGE_VOCABULARY } from "@/app/lib/pcb/fab/qualification-authority";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const ROOT = process.cwd();
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
@@ -37,7 +39,7 @@ function routeFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe("B16.1C §I — invariant tripwires", () => {
-  it("153 route methods = 150 canonical + 3 factories + 0 raw; exactly 12 agent-exposed tools, none qualification/release", () => {
+  it("158 route methods = 155 canonical + 3 factories + 0 raw (B18-A: + the autonomy pair; B18-B: + the execution-grant trio); exactly the intentional agent-exposed tools, none qualification/release", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of routeFiles(join(ROOT, "app", "api"))) {
       const src = readFileSync(file, "utf8");
@@ -47,13 +49,13 @@ describe("B16.1C §I — invariant tripwires", () => {
         if (form === "canonical-wrapper") canonical += 1; else if (form === "factory") factories += 1; else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 153, canonical: 150, factories: 3, raw: 0 });
+    expect({ total, canonical, factories, raw }).toEqual({ total: 158, canonical: 155, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle (canonical wrappers; 0 raw stays 0)
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((descriptor) => descriptor.agentExposed);
     expect(exposed.map((descriptor) => descriptor.toolId).sort()).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     // (sirkit.manufacturing.readiness-inspect is a read-only readiness report and stays exposed; nothing that qualifies or releases is.)
     expect(exposed.some((descriptor) => /qualif|\.release$/i.test(descriptor.toolId))).toBe(false);
-    expect(exposed.every((descriptor) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass))).toBe(true);
+    expect(exposed.every((descriptor) => isAgentExposableDescriptor(descriptor))).toBe(true);
     expect(registry.list().filter((descriptor) => descriptor.callability === "callable" && /qualif|release/i.test(descriptor.toolId))).toEqual([]);
     const releaseTool = registry.list().find((descriptor) => descriptor.toolId === "sirkit.manufacturing.release");
     expect(releaseTool).toMatchObject({ agentExposed: false, callability: "not-callable" });
@@ -77,6 +79,9 @@ describe("B16.1C §I — invariant tripwires", () => {
     // [B16-A F2] the CAS pin now travels into the ONE atomic board+authority commit.
     expect(src).toContain("expectedBoardAggregateRevision: head.aggregateRevision");
     expect(src).toContain("MFG_QUALIFICATION_IN_PROGRESS");
+    // [B18-E E6] qualification is a human act too: the actor-kind refusal is explicit and stands before any durable read.
+    expect(src).toContain('scope.actor.actorKind !== "human"');
+    expect(src).toContain("MFG_QUALIFY_HUMAN_REQUIRED");
     expect(src).toContain("boundedManufacturingFailure(");
     expect(src).not.toMatch(/error instanceof Error \? error\.message/);
     expect(src).toContain("rc01ParityEvidenceDigest(");

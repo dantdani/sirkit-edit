@@ -5,11 +5,13 @@
  * no routing without a board, no proposals to a viewer).
  */
 import { describe, expect, it } from "vitest";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, agentExposureReport } from "../agent-exposure";
+import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS, agentExposureReport, isAgentExposableDescriptor } from "../agent-exposure";
 import { sirkitToolRegistry, SIRKIT_TOOL_CATALOG } from "../tool-catalog";
 import { discoverTools, type DiscoveryContext } from "../tool-discovery";
 import { ToolRegistry, validateToolDescriptor, type ToolDescriptor } from "../tool-registry";
 import { ACTION_COVERAGE_REGISTRY } from "../action-registry";
+import { GRANTED_EXECUTION_TOOL_IDS } from "../granted-execution-families"; // [B18-C I3]
+import { permissionTierOfDescriptor } from "../permission-tiers";
 import { serverViewCommands } from "../../agent/view-context";
 import { VIEW_EDITORS } from "../../view-session/types";
 
@@ -42,16 +44,23 @@ describe("B17-F §1 — the intentional exposure set is derived, reviewed and ex
     expect(registry.coverageReport().agentExposedCount).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });
 
-  it("only read / propose / view-session classes are exposable; every exposed tool is active, discoverable, callable and bound", () => {
+  it("only read / propose / view-session classes — or a reviewed Tier 1 granted execution — are exposable; every exposed tool is active, discoverable, callable and bound", () => {
     expect([...AGENT_EXPOSABLE_OPERATION_CLASSES]).toEqual(["read", "propose", "view-session"]);
     for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
-      expect((AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(descriptor.operationClass), descriptor.toolId).toBe(true);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
       expect(descriptor.lifecycle, descriptor.toolId).toBe("active");
       expect(descriptor.discovery, descriptor.toolId).toBe("discoverable");
       expect(descriptor.callability, descriptor.toolId).toBe("callable");
       expect(descriptor.binding.status, descriptor.toolId).not.toBe("unbound");
-      expect(["none", "derived-cache", "proposal-artifact", "session-state"], descriptor.toolId).toContain(descriptor.sideEffects);
-      expect(descriptor.approvalTier, descriptor.toolId).toBe("none");
+      if (GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId)) {
+        // [B18-C I3] a granted execution changes engineering state ONLY under a server-minted grant; Tier 1 by derivation.
+        expect(descriptor.sideEffects, descriptor.toolId).toBe("engineering-state");
+        expect(["reversible", "none"], descriptor.toolId).toContain(descriptor.approvalTier);
+        expect(permissionTierOfDescriptor(descriptor), descriptor.toolId).toBe(1);
+      } else {
+        expect(["none", "derived-cache", "proposal-artifact", "session-state"], descriptor.toolId).toContain(descriptor.sideEffects);
+        expect(descriptor.approvalTier, descriptor.toolId).toBe("none");
+      }
     }
   });
 
@@ -60,9 +69,13 @@ describe("B17-F §1 — the intentional exposure set is derived, reviewed and ex
     for (const descriptor of exposed) {
       for (const pattern of NEVER_EXPOSED_TOOL_PATTERNS) expect(pattern.test(descriptor.toolId), `${descriptor.toolId} vs ${pattern}`).toBe(false);
       expect(descriptor.toolId).not.toMatch(/process|exec|shell|database|db\.|file\.|replace-state|import-state/i);
-      expect(["mutate", "destructive", "release"], descriptor.toolId).not.toContain(descriptor.operationClass);
+      expect(["destructive", "release"], descriptor.toolId).not.toContain(descriptor.operationClass);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
+      if (descriptor.operationClass === "mutate") expect(GRANTED_EXECUTION_TOOL_IDS, descriptor.toolId).toContain(descriptor.toolId);
     }
-    for (const id of ["sirkit.manufacturing.release", "sirkit.pcb.undo-redo-canonical", "sirkit.pcb.move-footprint", "sirkit.pcb.delete-item"]) {
+    // [B18-C I3] every reviewed granted execution is exposed; release, the replay primitive and the never-granted mutations never are.
+    for (const id of GRANTED_EXECUTION_TOOL_IDS) expect(exposed.map((item) => item.toolId), id).toContain(id);
+    for (const id of ["sirkit.manufacturing.release", "sirkit.pcb.undo-redo-canonical", "sirkit.pcb.delete-item", "sirkit.pcb.edit-track"]) {
       const descriptor = registry.list().find((item) => item.toolId === id);
       expect(descriptor, id).toBeDefined();
       expect(descriptor!.agentExposed, id).toBe(false);
@@ -70,7 +83,9 @@ describe("B17-F §1 — the intentional exposure set is derived, reviewed and ex
   });
 
   it("the B17-F additions are exactly the view/session reads, the six view-session tools, the timeline read and the two layout proposals", () => {
-    const added = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !["sirkit.component-authority.inspect", "sirkit.manufacturing.readiness-inspect", "sirkit.pcb.board-inspect", "sirkit.pcb.propose-bounded-edit", "sirkit.pcb.revision-inspect", "sirkit.project.canonical-revision-inspect", "sirkit.schematic.inspect", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit", "sirkit.selection.inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"].includes(id));
+    // (B18-C granted executions are pinned by b18-c-exposure-lift; the B18-E E11 bounded mechanical read is excluded
+    //  by name below — it is a later reviewed addition, not a B17-F one.)
+    const added = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !GRANTED_EXECUTION_TOOL_IDS.includes(id) && !["sirkit.component-authority.inspect", "sirkit.manufacturing.readiness-inspect", "sirkit.pcb.board-inspect", "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect", "sirkit.pcb.propose-bounded-edit", "sirkit.pcb.revision-inspect", "sirkit.project.canonical-revision-inspect", "sirkit.schematic.inspect", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit", "sirkit.selection.inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"].includes(id));
     expect(added).toEqual(["sirkit.placement.propose", "sirkit.project.history-inspect", "sirkit.routing.propose", "sirkit.selection.control", "sirkit.view.canvas-navigation", "sirkit.view.layers", "sirkit.view.measure", "sirkit.view.pcb3d", "sirkit.view.read-state", "sirkit.view.reveal-finding"]);
   });
 });
@@ -107,7 +122,7 @@ describe("B17-F §2 — view-session tools are bound bus-command tools", () => {
     expect(errorsOf({ sideEffects: "engineering-state" })).toEqual(expect.arrayContaining([expect.stringMatching(/session-state/)]));
     const read = registry.get("sirkit.pcb.board-inspect", "1.0.0")!;
     expect(validateToolDescriptor({ ...read, viewCommands: ["pcb.fit-board"] } as ToolDescriptor, KNOWN)).toEqual(expect.arrayContaining([expect.stringMatching(/only view-session tools/)]));
-    const mutation = registry.get("sirkit.pcb.move-footprint", "1.0.0")!;
+    const mutation = registry.get("sirkit.pcb.edit-track")!; // [B18-C I3] a mutation that is never granted (Tier 2)
     expect(validateToolDescriptor({ ...mutation, agentExposed: true } as ToolDescriptor, KNOWN)).toEqual(expect.arrayContaining([expect.stringMatching(/forbidden/)]));
     // The real catalog validates cleanly (the registry constructor would throw otherwise).
     expect(() => new ToolRegistry(SIRKIT_TOOL_CATALOG)).not.toThrow();

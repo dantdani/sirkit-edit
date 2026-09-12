@@ -41,7 +41,7 @@ import { REPLACEMENT_PROPOSAL_SCHEMA, type SealedReplacementProposal } from "../
 import { buildAuthorizationBinding } from "../proposal-authorization";
 import type { ComponentAuthorityRecord } from "../component-authority";
 import type { PublishedSymbolPinFacts } from "../replacement-pin-facts";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 // ─── Fixtures (aligned with b14-replacement-proposal.test.ts) ────────────────
 
@@ -386,7 +386,7 @@ describe("B14 — refusals mutate nothing", () => {
   it("35. no provider-callable apply exists (registry + gateway)", async () => {
     const registry = sirkitToolRegistry();
     for (const descriptor of registry.list()) {
-      if (descriptor.agentExposed) expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+      if (descriptor.agentExposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }
     const assembly = assembleAgentRunContext({ ...SCOPE, schematic: baseState(), board: createEmptyBoard() });
     if (!assembly.ok) throw new Error(assembly.reason);

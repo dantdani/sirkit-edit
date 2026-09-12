@@ -32,11 +32,40 @@ export interface ProjectOperation {
   ref?: { transactionId?: string; entryId?: string };
 }
 
-export type ProjectUndoRefusalCode = "NOTHING_TO_UNDO" | "DIVERGED_SCHEMATIC" | "DIVERGED_PCB" | "NOT_UNDOABLE";
+export type ProjectUndoRefusalCode = "NOTHING_TO_UNDO" | "DIVERGED_SCHEMATIC" | "DIVERGED_PCB" | "NOT_UNDOABLE" | "STORE_BUSY" | "NOT_LATEST";
 
 export type ProjectUndoDecision =
   | { ok: true; operation: ProjectOperation }
   | { ok: false; code: ProjectUndoRefusalCode; message: string; operation?: ProjectOperation };
+
+/** [B18-D review 2] The part of a PCB history the timeline's recording reads (a `PcbHistory` is one). */
+export interface PcbHistoryView {
+  readonly entries: ReadonlyArray<{ readonly id: string; readonly label: string; readonly state: "applied" | "redo"; readonly metadata: { readonly actor?: ProjectOperation["actor"]; readonly transactionId?: string } }>;
+  readonly redoLabel?: string;
+}
+
+/** [B18-D review 2] Where a PCB history stood after its last recorded change: its head entry and its redo entries. */
+export interface PcbHistoryMark { readonly headId: string | undefined; readonly redoIds: readonly string[] }
+export function pcbHistoryMark(history: PcbHistoryView): PcbHistoryMark {
+  const applied = history.entries.filter((entry) => entry.state === "applied");
+  return { headId: applied[applied.length - 1]?.id, redoIds: history.entries.filter((entry) => entry.state === "redo").map((entry) => entry.id) };
+}
+
+/** [B18-D review 2] What one PCB history change records on the project timeline — the PCB editor's subscription, extracted so
+ *  the recording that the chat's Undo reasons read is tested against a real history. The change is classified by ENTRY
+ *  IDENTITY, never by counts: the previous head moved onto the redo stack → an undo; the new head came off the redo stack → a
+ *  redo; any other new head → a commit. (Counting mistook a commit made after an undo — it clears the redo stack — for a redo,
+ *  and missed a commit into a full history, which evicts its oldest entry.) The ref is the LAST APPLIED entry after the change:
+ *  for an undo, the head it returned to. */
+export function pcbHistoryStep(history: PcbHistoryView, previous: PcbHistoryMark): { step: Pick<ProjectOperation, "kind" | "label" | "actor" | "ref"> | null; mark: PcbHistoryMark } {
+  const mark = pcbHistoryMark(history);
+  const kind = previous.headId !== undefined && mark.redoIds.includes(previous.headId) ? "undo"
+    : mark.headId !== undefined && previous.redoIds.includes(mark.headId) ? "redo"
+      : mark.headId !== undefined && mark.headId !== previous.headId ? "commit" : null;
+  if (!kind) return { step: null, mark };
+  const last = history.entries.find((entry) => entry.id === mark.headId);
+  return { step: { kind, label: kind === "undo" ? (history.redoLabel ?? "PCB edit") : (last?.label ?? "PCB edit"), actor: last?.metadata.actor ?? "human", ref: { transactionId: last?.metadata.transactionId, entryId: last?.id } }, mark };
+}
 
 export function sameHead(a: ProjectStoreHead, b: ProjectStoreHead): boolean {
   if (a.store !== b.store) return false;
@@ -49,6 +78,8 @@ export function sameHead(a: ProjectStoreHead, b: ProjectStoreHead): boolean {
 export interface ProjectStoreBinding {
   undo(): void | Promise<void>;
   head(): ProjectStoreHead | null;
+  /** [B18-D I7] why the store refuses a history step right now (an AI change in flight), or null. */
+  busy?(): string | null;
 }
 
 export class ProjectOperationTimeline {
@@ -71,11 +102,19 @@ export class ProjectOperationTimeline {
     return { schematic: sch && sch.store === "schematic" ? sch : null, pcb: pcb && pcb.store === "pcb" ? pcb : null };
   }
   /** Identify the latest eligible operation against the bound stores' CURRENT heads and, when eligible, run THAT store's own undo. */
-  async undoLatest(): Promise<ProjectUndoDecision> {
+  async undoLatest(options?: { expectTransactionId?: string }): Promise<ProjectUndoDecision> {
     const decision = this.latestEligibleUndo(this.currentHeads());
     if (!decision.ok) return decision;
+    // [B18-D I8] the chat's "Undo this change" names ONE transaction: undo only if the newest operation is exactly it
+    // (compared with the timeline's own recorded reference, so a stale or forged id can only cause a refusal).
+    if (options?.expectTransactionId !== undefined && decision.operation.ref?.transactionId !== options.expectTransactionId) {
+      return { ok: false, code: "NOT_LATEST", message: "That change is no longer the latest operation; nothing was undone.", operation: decision.operation };
+    }
     const binding = this.stores.get(decision.operation.store);
     if (!binding) return { ok: false, code: decision.operation.store === "schematic" ? "DIVERGED_SCHEMATIC" : "DIVERGED_PCB", message: `The ${decision.operation.store} editor is not open.`, operation: decision.operation };
+    // [B18-D I7] a busy store is refused with its reason — never "undone" when its own undo would do nothing.
+    const busy = binding.busy?.() ?? null;
+    if (busy) return { ok: false, code: "STORE_BUSY", message: `The ${decision.operation.store} editor is busy: ${busy}. Nothing was undone.`, operation: decision.operation };
     await binding.undo();
     return decision;
   }

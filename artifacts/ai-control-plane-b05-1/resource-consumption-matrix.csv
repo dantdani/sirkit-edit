@@ -6,7 +6,9 @@ sirkit.manufacturing.readiness-inspect,read.readiness,drc-preset,required
 sirkit.manufacturing.readiness-inspect,read.readiness,fab-preset,required
 sirkit.manufacturing.readiness-inspect,read.readiness,netlist,optional
 sirkit.pcb.board-inspect,read.board-snapshot,canonical-state,required
+sirkit.pcb.mechanical-inspect,read.board-mechanical,canonical-state,required
 sirkit.pcb.revision-inspect,read.pcb-revision,canonical-state,required
+sirkit.pcb.via-inspect,read.board-vias,canonical-state,required
 sirkit.project.canonical-revision-inspect,read.canonical-revision,canonical-state,required
 sirkit.project.history-inspect,read.project-timeline,canonical-state,required
 sirkit.project.history-inspect,read.project-timeline,project-timeline-snapshot,required

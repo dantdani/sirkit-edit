@@ -10,8 +10,9 @@
 import { describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { renderActionToolabilityCsv } from "../action-registry";
+import { ACTION_COVERAGE_REGISTRY, renderActionToolabilityCsv } from "../action-registry";
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
+import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
 import { resolveReadBinding } from "../tool-bindings-readonly";
 import {
   discoverTools,
@@ -33,7 +34,7 @@ import {
   validateToolDescriptor,
   type ToolDescriptor,
 } from "../tool-registry";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, agentExposureReport } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, agentExposureReport, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const registry = sirkitToolRegistry();
 
@@ -110,8 +111,15 @@ describe("registry validation (fail closed)", () => {
 
   it("callable without a binding is impossible; agent-exposed mutation is impossible", () => {
     expect(() => new ToolRegistry([sample({ binding: { status: "unbound" }, callability: "callable" })], KNOWN_COMMANDS)).toThrow(/never be callable/);
-    const mutation = SIRKIT_TOOL_CATALOG.find((item) => item.toolId === "sirkit.pcb.move-footprint")!;
-    expect(() => new ToolRegistry([{ ...mutation, agentExposed: true }], new Set(["pcb.move-footprint"]))).toThrow(/agent-exposed mutation capability is forbidden/);
+    // [B18-C I3] the B04 invariant's subject is a mutation that is NOT a reviewed granted execution (edit-track: Tier 2,
+    // never granted); the granted move keeps the invariant the moment it loses its reviewed shape.
+    const catalog = (id: string) => SIRKIT_TOOL_CATALOG.find((item) => item.toolId === id)!;
+    const commands = new Set(["pcb.move-footprint", "pcb.edit-track", "pcb.delete-item"]);
+    expect(() => new ToolRegistry([{ ...catalog("sirkit.pcb.edit-track"), agentExposed: true }], commands)).toThrow(/agent-exposed mutation capability is forbidden/);
+    expect(() => new ToolRegistry([{ ...catalog("sirkit.pcb.edit-track"), agentExposed: true, executionMode: "granted" }], commands)).toThrow(/agent-exposed mutation capability is forbidden/);
+    expect(() => new ToolRegistry([{ ...catalog("sirkit.pcb.move-footprint"), executionMode: undefined }], commands)).toThrow(/agent-exposed mutation capability is forbidden/);
+    expect(() => new ToolRegistry([{ ...catalog("sirkit.pcb.delete-item"), agentExposed: true, executionMode: "granted" }], commands)).toThrow(/legal only on a mutate tool|forbidden/);
+    expect(() => new ToolRegistry([catalog("sirkit.pcb.move-footprint")], commands)).not.toThrow();
   });
 });
 
@@ -150,11 +158,17 @@ describe("discovery engine (deterministic, contextual, fail closed)", () => {
 
   it("9. selection-kind filtering", () => {
     const nothingSelected = discoverTools(registry, editorContext({ selectedKinds: [] }));
-    expect(nothingSelected.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(false);
-    expect(nothingSelected.excluded.some((entry) => entry.toolId === "sirkit.pcb.move-footprint" && entry.reason === "selection_kind_missing")).toBe(true);
+    // [B18-C I3] the subject is edit-track (track-selection gated for good); move-footprint names its targets by stable
+    // id, so a selection no longer gates it.
+    expect(nothingSelected.included.some((item) => item.toolId === "sirkit.pcb.edit-track")).toBe(false);
+    expect(nothingSelected.excluded.some((entry) => entry.toolId === "sirkit.pcb.edit-track" && entry.reason === "selection_kind_missing")).toBe(true);
+    expect(nothingSelected.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
     const trackOnly = discoverTools(registry, editorContext({ selectedKinds: ["track"] }));
     expect(trackOnly.included.some((item) => item.toolId === "sirkit.pcb.edit-track")).toBe(true);
-    expect(trackOnly.included.some((item) => item.toolId === "sirkit.pcb.arrange")).toBe(false);
+    // [B18-C I5] arrange names its targets by stable id (no selection gate); the negative moves to the tools that stay
+    // selection-gated: under a footprint-only selection, delete-item (track/via/zone) and edit-track (track) are excluded.
+    const footprintOnly = discoverTools(registry, editorContext({ selectedKinds: ["footprint"] }));
+    for (const id of ["sirkit.pcb.delete-item", "sirkit.pcb.edit-track"]) expect(footprintOnly.excluded.some((entry) => entry.toolId === id && entry.reason === "selection_kind_missing"), id).toBe(true);
   });
 
   it("10. risk-ceiling filtering", () => {
@@ -247,15 +261,17 @@ describe("truthful classification", () => {
     for (const item of agent.included) {
       const descriptor = registry.get(item.toolId, item.version)!;
       expect(descriptor.agentExposed, item.toolId).toBe(true);
-      expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.schematic.add-component")).toBe(false); // internal-only: invisible to agents
   });
 
-  it("21. migrated PCB mutations remain agent-exposed: false but are runtime-executable metadata for trusted UI", () => {
+  it("21. migrated PCB mutations are runtime-executable metadata for trusted UI; only a reviewed granted execution is agent-exposed", () => {
     for (const toolId of ["sirkit.pcb.move-footprint", "sirkit.pcb.rotate-side-footprint", "sirkit.pcb.edit-track", "sirkit.pcb.delete-item", "sirkit.pcb.arrange"]) {
       const descriptor = registry.get(toolId)!;
-      expect(descriptor.agentExposed, toolId).toBe(false);
+      // [B18-C I3] exposed exactly when the mutation is a reviewed granted execution; executionMode only then.
+      expect(descriptor.agentExposed, toolId).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(toolId));
+      expect(descriptor.executionMode === "granted", toolId).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(toolId));
       expect(descriptor.callability, toolId).toBe("callable");
       expect(descriptor.binding.status, toolId).toBe("bound-mutation-editor-session");
       expect(descriptor.binding.canonicalCommandId, toolId).toBe(descriptor.owningCommandId);
@@ -267,9 +283,15 @@ describe("truthful classification", () => {
     expect(ui.included.some((item) => item.toolId === "sirkit.pcb.move-footprint")).toBe(true);
     for (const channel of ["assistant-agent", "automation"] as const) {
       const included = discoverTools(registry, editorContext({ channel, riskCeiling: "propose" })).included;
-      expect(included.every((item) => (AGENT_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(item.operationClass)), channel).toBe(true);
+      expect(included.every((item) => isAgentExposableDescriptor(registry.get(item.toolId, item.version)!)), channel).toBe(true);
       expect(included.some((item) => item.toolId.startsWith("sirkit.pcb.move") || item.toolId === "sirkit.pcb.delete-item"), channel).toBe(false);
     }
+    // [B18-C I3] the agent channel includes the granted move ONLY with the server-derived grant context; automation never;
+    // the actor's own edit_placement never counts on the agent channel.
+    const grantContext: Partial<DiscoveryContext> = { grantedCapabilities: ["read_project"], grantableCapabilities: ["edit_placement"], grantLineageId: "lin1-pcb", riskCeiling: "mutate", approvalsAvailable: ["reversible"] };
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", ...grantContext })).included.map((item) => item.toolId)).toContain("sirkit.pcb.move-footprint");
+    expect(discoverTools(registry, editorContext({ channel: "automation", ...grantContext })).included.map((item) => item.toolId)).not.toContain("sirkit.pcb.move-footprint");
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", riskCeiling: "mutate", approvalsAvailable: ["reversible"] })).included.map((item) => item.toolId)).not.toContain("sirkit.pcb.move-footprint");
   });
 
   it("22. canonical undo/redo is absent from every discovery channel", () => {
@@ -280,6 +302,14 @@ describe("truthful classification", () => {
     // Non-UI channels do not even learn it exists.
     const agent = discoverTools(registry, editorContext({ channel: "assistant-agent" }));
     expect(agent.excluded.some((entry) => entry.toolId === "sirkit.pcb.undo-redo-canonical")).toBe(false);
+    // [B18-C I8] the GRANTED replay is grant-only: absent from interactive-ui / api / automation, present on the agent channel
+    // only with the server-derived grant context.
+    for (const channel of ["interactive-ui", "automation", "api"] as const) {
+      expect(discoverTools(registry, editorContext({ channel })).included.some((item) => item.toolId === "sirkit.pcb.undo-redo-granted"), channel).toBe(false);
+    }
+    const grantContext: Partial<DiscoveryContext> = { grantedCapabilities: ["read_project"], grantableCapabilities: ["edit_placement"], grantLineageId: "lin1-pcb", riskCeiling: "mutate", approvalsAvailable: ["reversible"] };
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent" })).included.some((item) => item.toolId === "sirkit.pcb.undo-redo-granted")).toBe(false);
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", ...grantContext })).included.map((item) => item.toolId)).toContain("sirkit.pcb.undo-redo-granted");
   });
 
   it("23. manufacturing release is not agent executable and not callable as a tool", () => {
@@ -292,14 +322,19 @@ describe("truthful classification", () => {
     }
   });
 
-  it("24. [B09.1] dimensions are IMPLEMENTED (B08 canonical interactive path) but still have no tool adapter: active, non-callable, never agent-visible", () => {
+  it("24. [B18-C I7] dimensions are a reviewed granted execution (was [B09.1] implemented but unbound): bound to the canonical editor session, re-tiered reversible (OD-13), agent-visible ONLY with the server-derived grant context", () => {
     const dimension = registry.get("sirkit.pcb.dimension")!;
-    expect(dimension.callability).toBe("not-callable");
+    expect(dimension.version).toBe("1.2.0");
+    expect(dimension.callability).toBe("callable");
     expect(dimension.lifecycle).toBe("active");
-    expect(dimension.agentExposed).toBe(false);
-    expect(dimension.binding.status).toBe("unbound");
-    expect(discoverTools(registry, editorContext()).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
+    expect(dimension.approvalTier).toBe("reversible");
+    expect(dimension.agentExposed).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(dimension.toolId));
+    expect(dimension.executionMode).toBe("granted");
+    expect(dimension.binding).toMatchObject({ status: "bound-mutation-editor-session", canonicalCommandId: "pcb.dimension" });
     expect(discoverTools(registry, editorContext({ channel: "assistant-agent", riskCeiling: "propose" })).included.some((item) => item.toolId === "sirkit.pcb.dimension")).toBe(false);
+    const grantContext: Partial<DiscoveryContext> = { grantedCapabilities: ["read_project"], grantableCapabilities: ["edit_placement"], grantLineageId: "lin1-pcb", riskCeiling: "mutate", approvalsAvailable: ["reversible"] };
+    expect(discoverTools(registry, editorContext({ channel: "assistant-agent", ...grantContext })).included.map((item) => item.toolId)).toContain("sirkit.pcb.dimension");
+    expect(discoverTools(registry, editorContext({ channel: "automation", ...grantContext })).included.map((item) => item.toolId)).not.toContain("sirkit.pcb.dimension");
   });
 
   it("[B09] exactly the activated agent set is exposed, and EVERY exposed descriptor is backed by a real activated binding (tripwire)", () => {
@@ -323,14 +358,24 @@ describe("truthful classification", () => {
         expect(descriptor.sideEffects, descriptor.toolId).toBe("session-state");
         expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["none"]);
         expect(descriptor.viewCommands?.length ?? 0, descriptor.toolId).toBeGreaterThan(0);
+      } else if (descriptor.operationClass === "mutate") {
+        // [B18-C I3] an exposed mutation is a reviewed Tier 1 granted execution bound to the canonical editor session.
+        expect(GRANTED_EXECUTION_TOOL_IDS, descriptor.toolId).toContain(descriptor.toolId);
+        expect(descriptor.binding.status, descriptor.toolId).toBe("bound-mutation-editor-session");
+        expect(descriptor.executionMode, descriptor.toolId).toBe("granted");
+        expect(grantedExecutionViolations(descriptor), descriptor.toolId).toEqual([]);
       } else {
         throw new Error(`agent-exposed descriptor with forbidden class: ${descriptor.toolId} (${descriptor.operationClass})`);
       }
     }
-    // No mutation/destructive/release/undo descriptor is exposed; a view-session descriptor is exposed ONLY as a bound bus-command tool.
+    // No destructive/release/undo descriptor is exposed; a mutation is exposed exactly when it is a reviewed granted
+    // execution; a view-session descriptor is exposed ONLY as a bound bus-command tool.
     for (const descriptor of registry.list()) {
-      if (["mutate", "destructive", "release"].includes(descriptor.operationClass)) {
+      if (["destructive", "release"].includes(descriptor.operationClass)) {
         expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
+      }
+      if (descriptor.operationClass === "mutate") {
+        expect(descriptor.agentExposed, descriptor.toolId).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId));
       }
       if (descriptor.operationClass === "view-session" && descriptor.agentExposed) {
         expect(descriptor.binding.status, descriptor.toolId).toBe("bound-view-session");
@@ -417,7 +462,12 @@ describe("generated artifacts + B01 consistency", () => {
     const coverage = registry.coverageReport();
     expect(coverage.descriptorCount).toBe(SIRKIT_TOOL_CATALOG.length);
     expect(coverage.referencedCommandIds).toContain("pcb.move-footprint");
+    // [B18-C I6] pcb.silkscreen-text is referenced by its granted-execution descriptor; every reviewed family is referenced.
+    expect(coverage.unreferencedMutationCapableCommands).not.toContain("pcb.silkscreen-text");
+    for (const tool of GRANTED_EXECUTION_TOOLS) expect(coverage.referencedCommandIds, tool.family).toContain(tool.family);
+    // [review 2] the report still NAMES the unmigrated mutation surface (a positive pin beside the negative above).
     expect(coverage.unreferencedMutationCapableCommands.length).toBeGreaterThan(0);
-    expect(coverage.unreferencedMutationCapableCommands).toContain("pcb.silkscreen-text");
+    const unmigrated = ACTION_COVERAGE_REGISTRY.find((record) => (record.kind === "mutate" || record.kind === "destructive") && !SIRKIT_TOOL_CATALOG.some((descriptor) => descriptor.owningCommandId === record.id || descriptor.binding.canonicalCommandId === record.id))!;
+    expect(coverage.unreferencedMutationCapableCommands).toContain(unmigrated.id);
   });
 });

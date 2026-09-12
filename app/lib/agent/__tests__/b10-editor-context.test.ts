@@ -21,7 +21,7 @@ import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { schematicStateDigest } from "../../engineering/schematic-model";
 import { createEmptyBoard, type PcbBoard } from "../../pcb/types";
 import { pcbRevisionId } from "../../pcb/revision";
-import { AGENT_EXPOSABLE_OPERATION_CLASSES, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, isAgentExposableDescriptor } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
 const SCHEMATIC: SchematicState = { components: [{ id: "r1", type: "resistor", x: 100, y: 100, rotation: 0, value: "10k" }], wires: [] };
 const MARK = { lineageId: "lin1-1234567890abcdef", headSequence: 1, canonicalStateDigest: "eng1-1234567890abcdef" };
@@ -218,7 +218,7 @@ describe("B10 §B — server-side context assembly over the editor context", () 
     ];
     for (const context of tampered) {
       expect(verifyAgentContextIntegrity(context).length).toBeGreaterThan(0);
-      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.pcb.board-inspect", version: "1.0.0", args: {}, context, timeoutMs: 3000 });
+      const outcome = await gateway.invoke({ runId: "r", provider: "openai", toolId: "sirkit.pcb.board-inspect", version: "1.1.0", args: {}, context, timeoutMs: 3000 });
       expect(outcome).toMatchObject({ kind: "refused", status: "context_integrity" });
     }
   });
@@ -347,11 +347,11 @@ describe("B10 §E — runtime tool availability matrix (matches the committed ar
 // ─── §F — exposure discipline + entry gate 0 ─────────────────────────────────
 
 describe("B10 §F — exposure discipline and the entry-gate-0 schema edge", () => {
-  it("static exposure is exactly ELEVEN ids; no mutate/destructive/release/view-session tool is exposed; no MCP surface exists", () => {
+  it("static exposure is exactly the reviewed list; no mutate/destructive/release/view-session tool is exposed; no MCP surface exists", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
     for (const descriptor of exposed) {
-      expect(AGENT_EXPOSABLE_OPERATION_CLASSES).toContain(descriptor.operationClass);
+      expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
     }
     expect(exposed.some((descriptor) => descriptor.toolId === SELECTION_ID)).toBe(true);
   });

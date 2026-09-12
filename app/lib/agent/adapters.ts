@@ -39,6 +39,8 @@ import { toProviderError } from "../llm/errors";
 import { configuredOpenAIModel, configuredOpenAIReasoningEffort, type OpenAIReasoningEffort } from "../llm/openai-config";
 import type { AgentStep, AgentToolResult, ProviderAgentAdapter, ProviderToolDeclaration } from "./contracts";
 import { renderAnthropicAgentTool, renderOpenAiResponsesTool } from "./provider-tools";
+import { fixtureRuntimeEnabled } from "../fixture-runtime/mode"; // [B18-C I10]
+import { FIXTURE_AGENT_ENV, FIXTURE_AGENT_SCRIPTED, FixtureAgentAdapter } from "./fixture-agent-adapter"; // [B18-C I10]
 
 const MAX_OUTPUT_TOKENS = 4096;
 
@@ -232,5 +234,8 @@ export class AnthropicAgentAdapter implements ProviderAgentAdapter {
 }
 
 export function agentAdapterFor(provider: "openai" | "anthropic"): ProviderAgentAdapter {
+  // [B18-C I10] the browser harness's SCRIPTED agent — only under the fixture runtime (non-production, local_dev identity)
+  // AND an explicit opt-in; never a model, never reachable in production.
+  if (fixtureRuntimeEnabled() && process.env[FIXTURE_AGENT_ENV]?.trim() === FIXTURE_AGENT_SCRIPTED) return new FixtureAgentAdapter(provider);
   return provider === "openai" ? new OpenAIAgentAdapter() : new AnthropicAgentAdapter();
 }

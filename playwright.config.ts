@@ -54,6 +54,8 @@ export default defineConfig({
       // PS_STAGE3_DISABLED 503 where the local .env.local had set it): the fixture runtime declares
       // the same state the deterministic pipelines use.
       SIRKIT_PCB_SYNC_STAGE3: "opt_in",
+      // [B18-C I10] the chat route answers with the SCRIPTED agent (never a model): honoured only under the fixture runtime.
+      SIRKIT_FIXTURE_AGENT: "scripted",
       // Never let a developer's .env.local database leak into the proof.
       DATABASE_URL: "",
     },

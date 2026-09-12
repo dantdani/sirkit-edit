@@ -100,7 +100,7 @@ describe("B16.0.17 §I — security & human-truth invariants", () => {
       expect(code(rel), rel).not.toMatch(/releaseManufacturingPackage|manufacturing\.release/);
     }
   });
-  it("no route becomes an agent tool; total exposed tools remain EXACTLY 12; manufacturing release stays internal-only", () => {
+  it("no route becomes an agent tool; the exposed tools equal the intentional list; manufacturing release stays internal-only", () => {
     const registry = sirkitToolRegistry();
     const exposed = registry.list().filter((d) => d.agentExposed);
     expect(exposed.length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

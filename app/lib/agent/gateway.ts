@@ -14,6 +14,11 @@
  *    the exact schematic), and mutates NOTHING. The sealed artifact can
  *    only enter the existing explicit Apply-exact-proposal review boundary
  *    (page.tsx → verifySealedTier1Proposal → trusted schematic session).
+ *  - [B18-C] A reviewed Tier 1 GRANTED EXECUTION travels through
+ *    `dispatchGrantedExecution` (./execution-dispatch): re-discovered, role-
+ *    rechecked, sealed purely against the verified board and MINTED as a
+ *    one-shot grant through the composition root's closure. Nothing executes
+ *    here — the browser's canonical editor session is the only committer.
  *
  * No provider SDK types, no CanonicalEditorSession/SchematicEditorSession
  * imports, no API-route-to-API-route execution, no LLM-backed routes as
@@ -40,7 +45,10 @@ import { handlePcbProposeTool } from "../pcb/proposal/pcb-propose-tool-handler";
 import { buildAgentResourceBundle } from "./context";
 import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
 import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
-import type { AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
+import { dispatchGrantedExecution } from "./execution-dispatch";
+import type { AgentExecutionGrantMinter, AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
+import { TIER1_EXECUTE_ROLES } from "../engineering/permission-tiers"; // [B18-C]
+import { TIER1_GRANTABLE_CAPABILITIES } from "../engineering/execution-grant"; // [B18-C]
 
 export const AGENT_PROPOSAL_TOOL_ID = "sirkit.schematic.propose-tier1-edit";
 /** [B09.2] the V2 scope/head proposal contract ships as descriptor 1.1.0. */
@@ -80,6 +88,17 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
   const actorCaps = [...context.actor.grantedCapabilities].sort().join(",");
   const discoveryCaps = [...discovery.grantedCapabilities].sort().join(",");
   if (actorCaps !== discoveryCaps) issues.push("granted capability sets diverge between actor and discovery context");
+  // [B18-C] the agent actor never holds a grantable mutation capability (it is a grant property); grantability is a
+  // SERVER-derived discovery fact that must agree exactly with the run's minter availability, board, basis and role.
+  if (context.actor.grantedCapabilities.some((capability) => (TIER1_GRANTABLE_CAPABILITIES as readonly string[]).includes(capability))) {
+    issues.push("the agent actor holds a grantable mutation capability (the capability is a grant property, never the actor's)");
+  }
+  const grantable = context.executionGrantsAvailable === true && (TIER1_EXECUTE_ROLES as readonly string[]).includes(context.actor.actorRole) && context.canonicalState !== null && context.pcbProposalBasis !== null;
+  const expectedGrantable = grantable ? [...TIER1_GRANTABLE_CAPABILITIES].sort().join(",") : "";
+  if ([...(discovery.grantableCapabilities ?? [])].sort().join(",") !== expectedGrantable) issues.push("the grantable capabilities diverge from the run's execution-grant availability");
+  if (discovery.riskCeiling !== (grantable ? "mutate" : "propose")) issues.push("the discovery risk ceiling diverges from the run's execution-grant availability");
+  if ([...discovery.approvalsAvailable].join(",") !== (grantable ? "reversible" : "")) issues.push("the available approval tiers diverge from the run's execution-grant availability");
+  if ((discovery.grantLineageId ?? "") !== (grantable ? context.pcbProposalBasis!.lineageId : "")) issues.push("the grant lineage anchor diverges from the PCB proposal basis");
   if (discovery.tenantId !== context.tenantId || discovery.projectId !== context.projectId || discovery.branchId !== context.branchId) {
     issues.push("project/branch scope diverges between run identity and discovery context");
   }
@@ -138,6 +157,11 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
     if (!discovery.availableAuthority.includes("durable-server-board")) issues.push("component-authority is present but durable-server-board authority is not advertised");
   } else if (context.componentAuthorityDigest !== null) {
     issues.push("a component-authority digest is claimed without a component-authority resource");
+  }
+  // [B18-A] the autonomy setting is server-owned and project-scoped: a setting
+  // for another project (or a malformed one) fails every invocation closed.
+  if (!context.autonomy || context.autonomy.schema !== "sirkit.agent-autonomy-setting.v1" || context.autonomy.tenantId !== context.tenantId || context.autonomy.projectId !== context.projectId) {
+    issues.push("the autonomy setting does not belong to this run's project");
   }
   // [B17-F] the view context is recomputed against its assembly-time pin, and
   // the surfaces it proves must be the ONLY `*-surface` project states the
@@ -422,6 +446,14 @@ export interface AgentGatewayOptions {
    *  absent ⇒ the routing proposal refuses truthfully. */
   routingExecutor?: RoutingExecutorFactory;
   layoutProposalService?: LayoutProposalService;
+  /** [B18-B] the server composition root's execution-grant minter (a
+   *  closure over the trusted request context). Absent ⇒ no Tier 1
+   *  execution can be granted in this run: a granted execution refuses
+   *  `execution_unavailable` (the B18-C dispatch). */
+  executionGrants?: AgentExecutionGrantMinter;
+  /** [B18-C] the system prompt version the run answers under — pinned into
+   *  every grant's origin. Absent ⇒ granted executions are unavailable. */
+  promptVersion?: string;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
@@ -538,7 +570,12 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
         if (outcome.status === "blocked") return { kind: "proposal-blocked", ok: false, toolId: input.toolId, version: input.version, blockers: outcome.blockers };
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: outcome.failure, diagnostics: outcome.diagnostics };
       }
-      // Mutation/destructive/release can never execute here.
+      // [B18-C] a mutation is callable ONLY as a reviewed Tier 1 granted execution: sealed and MINTED as a one-shot grant
+      // through the composition root's closure (nothing executes here). Every other mutation refuses not_callable there.
+      if (descriptor.operationClass === "mutate") {
+        return dispatchGrantedExecution({ registry, descriptor, args: input.args, context: input.context, runId: input.runId, callId: input.callId, executionGrants: options?.executionGrants, promptVersion: options?.promptVersion });
+      }
+      // Destructive/release can never execute here.
       return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "not_callable", diagnostics: [`Operation class ${descriptor.operationClass} is not executable through the agent gateway.`] };
     },
   };

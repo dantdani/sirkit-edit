@@ -26,6 +26,8 @@ import { inspectProjectTimeline, inspectViewState, type CapturedViewContext } fr
 import type { SelectionRef } from "../pcb/edit/commands";
 import { getItems } from "../pcb/selection-queries";
 import { buildAIPcbSnapshot } from "../pcb/ai/snapshot";
+import { buildMechanicalSnapshot } from "../pcb/ai/mechanical"; // [B18-E E11] the bounded mechanical read
+import { buildViaSnapshot } from "../pcb/ai/vias"; // [B18-E E13] the bounded via read
 import { runDrc } from "../pcb/drc/run-drc";
 import type { DrcPreset, DrcRules } from "../pcb/drc/types";
 import { computeConnectivity } from "../pcb/connectivity-board";
@@ -162,6 +164,30 @@ export const ACTIVATED_READ_BINDINGS: readonly ActivatedReadBinding[] = Object.f
       // generatedInMs is wall-clock; provenance is the revision, not the timer.
       return { snapshot: withoutTiming(snapshot as unknown as Record<string, unknown>, ["generatedInMs"]) };
     },
+  },
+  {
+    // [B18-E E11] the BOUNDED mechanical read: the board's extents and its mounting holes, and nothing else, so a dimension
+    // can be planned on a board whose full snapshot exceeds the model's result budget.
+    bindingId: "read.board-mechanical", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.pcb.mechanical-inspect",
+    module: "app/lib/pcb/ai/mechanical.ts", symbol: "buildMechanicalSnapshot",
+    requiredResources: ["canonical-state"],
+    invoke: (_args, resources) => ({ mechanical: buildMechanicalSnapshot(resources.canonicalState.pcb, { boardRevisionId: pcbRevisionId(resources.canonicalState.pcb) }) as unknown as Record<string, unknown> }),
+  },
+  {
+    // [B18-E E13] the BOUNDED via read: which nets carry vias, one net's vias with their padstack binding, and the board's
+    // via padstack library — the facts a via proposal needs and the full snapshot never carried (and, on a routed board,
+    // could not deliver within the model's result budget).
+    bindingId: "read.board-vias", bindingVersion: "1.0.0", kind: "read",
+    toolId: "sirkit.pcb.via-inspect",
+    module: "app/lib/pcb/ai/vias.ts", symbol: "buildViaSnapshot",
+    requiredResources: ["canonical-state"],
+    invoke: (args, resources) => ({
+      vias: buildViaSnapshot(resources.canonicalState.pcb, {
+        netName: typeof (args as { netName?: unknown }).netName === "string" ? (args as { netName: string }).netName : null,
+        boardRevisionId: pcbRevisionId(resources.canonicalState.pcb),
+      }) as unknown as Record<string, unknown>,
+    }),
   },
   {
     // [B10] 1.2.0: consumed by the agent over the sealed selection-snapshot

@@ -121,6 +121,7 @@ export type BoundedEditCompileRefusalCode =
   | "invalid-geometry"
   | "structural-invalid"
   | "padstack-conflict"
+  | "padstack-bound"
   | "no-effective-change";
 
 export type BoundedEditCompileResult =
@@ -524,6 +525,9 @@ interface ApplyContext {
   ruleChanges: string[];
 }
 
+/** [B18-E E12] nanometres as the millimetres the review shows the human — the same three decimals the move/track summaries use. */
+const mmText = (nm: number): string => (nm / 1e6).toFixed(3);
+
 function applyOperation(
   operation: BoundedPcbEditOperation,
   index: number,
@@ -659,6 +663,13 @@ function applyOperation(
       const existing = context.viasById.get(operation.viaId);
       if (!existing) return refuse("unknown-object", `${label} references a via that is not on this board (${operation.viaId}).`);
       if (existing.locked) return refuse("locked-object", `${label} targets a locked via (${operation.viaId}).`);
+      // [B18-C I9] a via bound to a padstack takes its size and drill FROM the padstack: explicit geometry without a padstack
+      // would leave the via claiming a padstack it no longer matches. Retarget it onto an existing padstack (padstackId), or
+      // fork a padstack in the editor — a human step (the via inspector's create-padstack, then set-via-padstack).
+      if (existing.padstackId && operation.padstackId === undefined && (operation.sizeNm !== undefined || operation.drillNm !== undefined)) {
+        const bound = getPadstack(context.board, existing.padstackId);
+        return refuse("padstack-bound", `${label} changes the size/drill of via ${operation.viaId}, which is bound to padstack ${bound?.name ?? existing.padstackId} (${existing.padstackId}). Retarget it onto an existing padstack with padstackId, or fork a padstack in the editor (the via inspector's create-padstack, then set-via-padstack).`);
+      }
       // [B15.1 §D] padstack and explicit geometry are MUTUALLY EXCLUSIVE;
       // assigning a padstack updates padstackId, size, and drill ATOMICALLY
       // through the shared `applyPadstackToVia` authority.
@@ -683,7 +694,15 @@ function applyOperation(
       if (viaMinima) return viaMinima;
       context.changedObjectIds.add(operation.viaId);
       context.affectedNetIds.add(existing.netId);
-      context.operationSummaries.push(`Update via ${operation.viaId}`);
+      // [B18-E E12] the Tier 2 review must state what the human is approving. The RESULTANT pad/drill pair is reported
+      // (not the field that was sent), so a partial change still reads as the via they will get; a padstack is named with
+      // the geometry it imposes; a move states its position. A no-op `update_via` is refused at parse, so the tail here
+      // is never empty.
+      const viaParts: string[] = [];
+      if (operation.at) viaParts.push(`position (${mmText(target.at.x)}, ${mmText(target.at.y)}) mm`);
+      if (padstack) viaParts.push(`padstack ${padstack.name} (${mmText(target.size)} mm pad / ${mmText(target.drill)} mm drill)`);
+      else if (operation.sizeNm !== undefined || operation.drillNm !== undefined) viaParts.push(`${mmText(target.size)} mm pad / ${mmText(target.drill)} mm drill`);
+      context.operationSummaries.push(`Update via ${operation.viaId} — ${viaParts.join(", ")}`);
       return null;
     }
     case "set_routing_preference": {

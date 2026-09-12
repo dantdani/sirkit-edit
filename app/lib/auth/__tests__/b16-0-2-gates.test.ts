@@ -207,7 +207,7 @@ describe("B16.0.2 §C — forwarding headers never define the expected origin (g
 // ── Tool exposure + release internality (unchanged invariants) ───────────────
 
 describe("B16.0.2 — tool exposure unchanged; release internal-only", () => {
-  it("agent tool exposure is EXACTLY 12", () => {
+  it("agent tool exposure equals the intentional list (derived, never a count)", () => {
     expect(sirkitToolRegistry().list().filter((d) => d.agentExposed).length).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
   });
 

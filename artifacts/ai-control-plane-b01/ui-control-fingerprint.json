@@ -38,6 +38,7 @@
       "Save project to a local .sirkit.json file",
       "Select",
       "Sheet size — also sets the KiCad export page",
+      "Stop the assistant's run",
       "Toggle AI chat",
       "Undo schematic action",
       "Wire"
@@ -123,6 +124,11 @@
     "app/components/pcb/SyncPlacementDialog.tsx": [
       "Close import placement",
       "Schematic import placement"
+    ],
+    "app/components/pcb/GrantedExecutionDialog.tsx": [],
+    "app/components/chat/ExecutionEntryActions.tsx": [],
+    "app/components/chat/AutonomyModeControl.tsx": [
+      "Agent autonomy"
     ],
     "app/components/editor/BuildLibraryPanel.tsx": [
       "Close"

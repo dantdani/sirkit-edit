@@ -62,6 +62,10 @@ jobs:
           app/components/pcb/__tests__/component-review-panel.test.tsx
           app/components/pcb/__tests__/snapshot-conflict-dialog.test.tsx
           app/components/pcb/__tests__/board-revision-dialog.test.tsx
+          app/components/pcb/__tests__/b18-c-granted-execution-dialog.test.tsx
+          app/components/pcb/__tests__/b18-d-granted-execution-card.test.tsx
+          app/components/chat/__tests__/b18-d-execution-entry-actions.test.tsx
+          app/components/chat/__tests__/b18-d-autonomy-mode-control.test.tsx
           app/lib/pcb/lifecycle/__tests__/b16-c-strict-mode-remount.test.tsx
           app/components/pcb/__tests__/pcb3d-view-session.test.tsx
           app/components/view-session
@@ -75,6 +79,75 @@ jobs:
           app/lib/engineering/__tests__/b17-f-agent-exposure.test.ts
           app/lib/agent/__tests__/b17-f-view-tools.test.ts
           app/lib/agent/__tests__/b17-f-view-session-bridge.test.ts
+          app/lib/engineering/__tests__/b18-a-permission-tiers.test.ts
+          app/lib/agent/__tests__/b18-a-autonomy-settings.test.ts
+          app/lib/agent/__tests__/b18-a-autonomy-store.test.ts
+          app/api/agent/__tests__/b18-a-autonomy-route.test.ts
+          app/lib/engineering/__tests__/b18-b-execution-grant.test.ts
+          app/lib/engineering/__tests__/b18-b-explicit-request.test.ts
+          app/lib/execution-grant/__tests__/b18-b-store.test.ts
+          app/lib/execution-grant/__tests__/b18-b-mint-consume-decisions.test.ts
+          app/api/agent/__tests__/b18-b-execution-grant-route.test.ts
+          app/lib/agent/__tests__/b18-b-loop-execution.test.ts
+          app/api/chat/__tests__/b18-b-chat-authority-keys.test.ts
+          app/lib/engineering/__tests__/b18-b-granted-executions.test.ts
+          app/lib/project/__tests__/b18-b-import-gates.test.ts
+          app/lib/project/__tests__/b18-d-composer-routing.test.ts
+          app/lib/project/__tests__/b18-d-execution-display.test.ts
+          app/lib/project/__tests__/b18-d-chat-run-view.test.ts
+          app/lib/project/__tests__/b18-d-execution-entry-log.test.ts
+          app/lib/project/__tests__/b18-d-timeline-store-busy.test.ts
+          app/lib/project/__tests__/b18-d-chat-undo-timeline.test.ts
+          app/lib/project/__tests__/b18-d-refused-line.test.ts
+          app/lib/project/__tests__/b18-d-ui-gates.test.ts
+          app/lib/project/__tests__/b18-d-review-entry-lifecycle.test.ts
+          app/lib/project/__tests__/b18-d-review-part3.test.ts
+          app/lib/project/__tests__/b18-d-review-part4.test.ts
+          app/lib/project/__tests__/b18-d-review2.test.ts
+          app/lib/project/__tests__/b18-d-review2-timeline.test.ts
+          app/lib/project/__tests__/b18-e-scenario-6-truth.test.ts
+          app/lib/project/__tests__/b18-e-refusal-causes.test.ts
+          app/lib/agent/__tests__/b18-e-board-inspect-budget.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-7.test.ts
+          app/api/pcb/qualify/__tests__/qualify-human-only.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-8.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-3.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-2.test.tsx
+          app/lib/engineering/__tests__/b18-e-via-facts.test.ts
+          app/api/chat/__tests__/b18-e-scenario-4-route.test.ts
+          app/lib/project/__tests__/b18-e-scenario-4-chat.test.ts
+          app/lib/engineering/__tests__/b18-e-scenario-5.test.ts
+          app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
+          app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
+          app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
+          app/api/chat/__tests__/b18-d-chat-stop.test.ts
+          app/lib/agent/__tests__/b18-c-gateway-dispatch.test.ts
+          app/lib/agent/__tests__/b18-c-gateway-execution.test.ts
+          app/lib/agent/__tests__/b18-c-never-execution-sweep.test.ts
+          app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts
+          app/lib/agent/__tests__/b18-d-tool-refused.test.ts
+          app/lib/engineering/__tests__/b18-c-adversarial.test.ts
+          app/lib/engineering/__tests__/b18-c-builders.test.ts
+          app/lib/engineering/__tests__/b18-c-dimension.test.ts
+          app/lib/engineering/__tests__/b18-c-explicit-grammars.test.ts
+          app/lib/engineering/__tests__/b18-c-exposure-lift.test.ts
+          app/lib/engineering/__tests__/b18-c-fixture-agent.test.ts
+          app/lib/engineering/__tests__/b18-c-granted-execution-gates.test.ts
+          app/lib/engineering/__tests__/b18-c-recovery-inflight.test.ts
+          app/lib/engineering/__tests__/b18-d-ritual-outcome-report.test.ts
+          app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts
+          app/lib/engineering/__tests__/b18-d-repair-undo-held.test.ts
+          app/lib/engineering/__tests__/b18-d-repair-undo-bound.test.ts
+          app/lib/engineering/__tests__/b18-c-loop-real-gateway.test.ts
+          app/lib/engineering/__tests__/b18-c-replay-grants.test.ts
+          app/lib/engineering/__tests__/b18-c-result-contract.test.ts
+          app/lib/engineering/__tests__/b18-c-review-2.test.ts
+          app/lib/engineering/__tests__/b18-c-review-3.test.ts
+          app/lib/engineering/__tests__/b18-c-review-fixes.test.ts
+          app/lib/engineering/__tests__/b18-c-rotate-arrange-e2e.test.ts
+          app/lib/engineering/__tests__/b18-c-silk-text.test.ts
+          app/lib/engineering/__tests__/b18-c-tier2-truth.test.ts
+          app/lib/engineering/__tests__/b18-c-undo-redo.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-deterministic-manufacturing.xml
       - name: Upload evidence and diagnostics
         if: always()

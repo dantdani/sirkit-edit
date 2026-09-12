@@ -69,6 +69,7 @@ export function PcbToolbar({
   canUndo,
   canRedo,
   undoLabel,
+  historyPausedReason,
   redoLabel,
   historyEntries,
   readiness,
@@ -124,6 +125,8 @@ export function PcbToolbar({
   canRedo: boolean;
   undoLabel?: string;
   redoLabel?: string;
+  /** [B18-D review] why undo and redo are paused (an AI change is being made), or null — named on the disabled buttons. */
+  historyPausedReason?: string | null;
   historyEntries: readonly PcbHistoryRecord[];
   readiness?: ReadinessViewModel;
   /** Primary schematic-to-PCB action, intentionally first so it stays visible. */
@@ -308,7 +311,7 @@ export function PcbToolbar({
       <div className="w-px h-4 bg-zinc-800 mx-1" />
       <button
         type="button"
-        title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : "Nothing to undo"}
+        title={historyPausedReason ? `Undo and redo are paused: ${historyPausedReason}` : undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : "Nothing to undo"}
         aria-label={undoLabel ? `Undo ${undoLabel}` : "Undo"}
         onClick={onUndo}
         disabled={!canUndo}
@@ -318,7 +321,7 @@ export function PcbToolbar({
       </button>
       <button
         type="button"
-        title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : "Nothing to redo"}
+        title={historyPausedReason ? `Undo and redo are paused: ${historyPausedReason}` : redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : "Nothing to redo"}
         aria-label={redoLabel ? `Redo ${redoLabel}` : "Redo"}
         onClick={onRedo}
         disabled={!canRedo}

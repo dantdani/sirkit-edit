@@ -291,6 +291,6 @@ describe("B17-F §D — the loop emits view_command_ready and layout_candidate_r
   });
 
   it("the closed trace vocabulary names the two new outcome classes", () => {
-    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate"]);
+    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant"]); // B18-B: + execution_grant
   });
 });

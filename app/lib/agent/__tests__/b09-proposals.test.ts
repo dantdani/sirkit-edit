@@ -11,6 +11,7 @@ import type { SchematicState } from "@/lib/schematic-types";
 import { assembleAgentRunContext } from "../context";
 import { createAgentToolGateway, ProposalInvocationService } from "../gateway";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
+import { GRANTED_EXECUTION_TOOL_IDS } from "../../engineering/granted-execution-families"; // [B18-C I3]
 import { schematicStateDigest } from "../../engineering/schematic-model";
 import { TIER1_PROPOSAL_SCHEMA, verifySealedTier1Proposal, type SealedTier1Proposal, type Tier1ProposalHeadMark, type Tier1ProposalScope } from "../../engineering/schematic-proposals";
 import { SchematicEditorSession } from "../../engineering/schematic-session";
@@ -201,12 +202,14 @@ describe("B09 §4 — sealed proposals through the existing apply boundary", () 
     expect(strippedMark).toMatchObject({ status: "refused", failure: "context_integrity" });
   });
 
-  it("34. no mutation/destructive/release/undo/view-session descriptor is provider-exposed, and the gateway refuses their classes outright", async () => {
+  it("34. no destructive/release/undo descriptor is provider-exposed, a mutation only as a reviewed granted execution, and the gateway refuses the destructive class outright", async () => {
     const registry = sirkitToolRegistry();
     for (const descriptor of registry.list()) {
-      if (["mutate", "destructive", "release"].includes(descriptor.operationClass)) {
+      if (["destructive", "release"].includes(descriptor.operationClass)) {
         expect(descriptor.agentExposed, descriptor.toolId).toBe(false);
       }
+      // [B18-C I3] a mutation is exposed exactly when it is a reviewed granted execution (never without a server grant).
+      if (descriptor.operationClass === "mutate") expect(descriptor.agentExposed, descriptor.toolId).toBe(GRANTED_EXECUTION_TOOL_IDS.includes(descriptor.toolId));
       // [B17-F] view-session tools are exposed ONLY as bound bus-command tools (never engineering state).
       if (descriptor.operationClass === "view-session" && descriptor.agentExposed) expect(descriptor.binding.status, descriptor.toolId).toBe("bound-view-session");
     }

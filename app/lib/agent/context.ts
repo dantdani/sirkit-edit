@@ -40,6 +40,8 @@ import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../eng
 import type { AgentActor, AgentRunContext, PcbProposalBasis } from "./contracts";
 import { validateCapturedViewContext, viewContextDigest, viewProjectStates, type CapturedViewContext } from "./view-context";
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "../engineering/agent-exposure";
+import { AGENT_AUTONOMY_SCHEMA, TIER1_EXECUTE_ROLES, defaultAutonomySetting, isAutonomyMode, type AgentAutonomySetting } from "../engineering/permission-tiers";
+import { TIER1_GRANTABLE_CAPABILITIES } from "../engineering/execution-grant"; // [B18-C]
 import type { ToolSelectionKind } from "../engineering/tool-registry";
 
 /** [B13] SERVER-OWNED authority records — the shape the /api/chat loader
@@ -162,6 +164,11 @@ export interface AssembleAgentContextInput {
    *  identity; absent ⇒ the local-only build actor (production always supplies
    *  it because the local-only path is impossible under production). */
   verifiedActor?: VerifiedRunPrincipal;
+  /** [B18-A] the project's autonomy setting as READ by the route from the
+   *  durable store (server-supplied only; never a body field). A setting that
+   *  does not belong to this run's project, or a malformed one, is ignored
+   *  with a warning and the default (`proposal_only`) applies. */
+  autonomy?: AgentAutonomySetting;
   /** [B17-F] the client-captured view context (`sirkit.view-context.v1`):
    *  the open editor surfaces, each view session's id/revision/bounded state,
    *  the project operation timeline. Exact-key validated and bounded here;
@@ -169,6 +176,8 @@ export interface AssembleAgentContextInput {
    *  never authority — it decides which view tools exist and which revision
    *  a view command expects. */
   view?: unknown;
+  /** [B18-C] SERVER fact from the composition root: an execution-grant minter is bound to this run. Never a body field. */
+  executionGrantsAvailable?: boolean;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -460,6 +469,21 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   for (const state of viewProjectStates(view)) projectState.push(state);
   const selectedKinds: ToolSelectionKind[] = [...new Set((selection?.refs ?? []).map((ref) => ref.kind))].sort() as ToolSelectionKind[];
 
+  // [B18-A] the autonomy setting — server-read; a foreign or malformed record never widens.
+  let autonomy = defaultAutonomySetting({ tenantId: input.tenantId, projectId: input.projectId });
+  if (input.autonomy !== undefined && input.autonomy !== null) {
+    const supplied = input.autonomy;
+    if (supplied.schema === AGENT_AUTONOMY_SCHEMA && supplied.tenantId === input.tenantId && supplied.projectId === input.projectId && isAutonomyMode(supplied.mode) && Number.isSafeInteger(supplied.revision) && supplied.revision >= 0) {
+      autonomy = structuredClone(supplied);
+    } else {
+      warnings.push("The project's agent autonomy setting did not belong to this run's project or was malformed; this run is proposal-only.");
+    }
+  }
+
+  // [B18-C] granted executions are discoverable only when the SERVER bound a minter, the actor holds a Tier 1 execute
+  // role, and a verified board with its PCB proposal basis exists — the capability rides the grant (D18-8); the actor's
+  // own set stays read_project. Absent the grant context, the discovery object is byte-identical to before B18-C.
+  const grantable = input.executionGrantsAvailable === true && (TIER1_EXECUTE_ROLES as readonly string[]).includes(actor.actorRole) && board !== null && pcbProposalBasis !== null;
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -493,11 +517,13 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       // hard-coded count): every intentional tool fits, with headroom.
       maxToolCount: Math.max(16, INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length + 4),
     },
-    // B09 ceiling: reads + sealed proposals; never mutate/destructive/release.
-    riskCeiling: "propose",
-    approvalsAvailable: [],
+    // B09 ceiling: reads + sealed proposals; [B18-C] `mutate` + the reversible approval tier ONLY for a grantable run
+    // (never destructive/release).
+    riskCeiling: grantable ? "mutate" : "propose",
+    approvalsAvailable: grantable ? ["reversible"] : [],
     enabledFlags: [],
     requestedCategories: [],
+    ...(grantable ? { grantableCapabilities: [...TIER1_GRANTABLE_CAPABILITIES], grantLineageId: pcbProposalBasis!.lineageId } : {}),
   };
 
   return {
@@ -521,8 +547,10 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       componentAuthority,
       componentAuthorityDigest,
       pcbProposalBasis,
+      executionGrantsAvailable: grantable,
       view,
       viewDigest,
+      autonomy,
     },
     warnings,
   };

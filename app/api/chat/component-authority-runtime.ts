@@ -22,6 +22,8 @@
  */
 
 import { getSqlClient } from "@/app/lib/db/client";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { fixtureComponentAuthoritySource } from "@/app/lib/fixture-runtime/blinker/authority";
 import type {
   AtomicRevisionConfirmer,
   AuthorityBindingSource,
@@ -63,6 +65,12 @@ export function resetAuthoritySqlClientFactory(): void {
  *  the client is obtained on the first read. Returns null (withhold) when no
  *  durable database is configured. */
 function productionSource(scope: ComponentAuthorityRuntimeScope): ComponentAuthoritySourceDeps | null {
+  // [B18-E E16] The fixture runtime is the one non-database source, and it is gated by the SAME switch every other
+  // fixture seam uses (`fixtureRuntimeEnabled`: a non-production runtime with local_dev auth). It reads the stores the
+  // fixture already fills - the in-memory binding repository and the committed catalog - never the request, the browser
+  // or the model. Without it the component authority resource is never sealed in a browser run, so the inspect read and
+  // the B14 replacement proposal are both withheld and scenario 4 is unreachable in the real application.
+  if (fixtureRuntimeEnabled()) return fixtureComponentAuthoritySource();
   // Withhold safely when no durable DB is configured (getSqlClient() would throw).
   if (!process.env.DATABASE_URL) return null;
   let client: CancellableAuthoritySqlClient | null = null;

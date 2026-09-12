@@ -118,6 +118,8 @@ export function buildReplacementAuthorityBundle(input: {
   scope: Tier1ProposalScope;
   records: readonly ComponentAuthorityRecord[];
   candidates: readonly ComponentCatalogCandidate[];
+  /** [B18-E E16] the component being replaced. The sealed envelope carries ITS authority and nothing else — see below. */
+  componentId?: string;
 }): ReadResourceBundle {
   const { tenantId, projectId, branchId } = input.scope;
   const content = replacementCanonicalContent(input.state, input.scope);
@@ -146,7 +148,17 @@ export function buildReplacementAuthorityBundle(input: {
     producer: "component-authority-source",
     producerVersion: "1.0.0",
     freshness: "current",
-    content: { records: structuredClone(input.records), candidates: structuredClone(input.candidates) },
+    // [B18-E E16] ONLY the replaced component's authority is sealed here. This envelope's content digest feeds the grant
+    // id, which is embedded in the canonical operation — so anything in it that is not about this replacement makes the
+    // SAME replacement digest differently. The two production callers load different breadths on purpose (the chat run
+    // loads every component, because the model may inspect any of them; the apply loads the one it is applying), and a
+    // sealed proposal could therefore never byte-match its own recompile on any project with more than one bound
+    // component: measured in the browser, where every apply was refused "the recompiled plan no longer matches".
+    // Narrowing here rather than widening the apply keeps the browser out of deciding what authority is consulted.
+    content: {
+      records: structuredClone(input.componentId ? input.records.filter((record) => record.componentId === input.componentId) : input.records),
+      candidates: structuredClone(input.componentId ? input.candidates.filter((candidate) => candidate.componentId === input.componentId) : input.candidates),
+    },
   });
   return buildReadResourceBundle(canonicalEnvelope, [authorityEnvelope]);
 }
@@ -274,6 +286,7 @@ export function assembleReplacementProposal(input: {
     scope: input.scope,
     records: input.authority.records,
     candidates: input.authority.candidates,
+    componentId,
   });
   const consumed = consumeFreshReplacementAuthority({
     bundle,

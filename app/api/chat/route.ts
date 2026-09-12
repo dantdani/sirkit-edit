@@ -35,6 +35,10 @@ import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
 import { AgentTraceRecorder, createAgentTraceSink } from "@/app/lib/agent/trace-recorder";
 import { resolveFreeroutingRuntime } from "@/app/lib/pcb/autoroute/runtime";
+import { resolveAgentAutonomyRepository } from "@/app/lib/agent/autonomy-store";
+import { createExecutionGrantMinter } from "@/app/lib/execution-grant/mint";
+import type { AgentExecutionGrantMinter } from "@/app/lib/agent/contracts";
+import type { AgentAutonomySetting } from "@/app/lib/engineering/permission-tiers";
 import { createFreeroutingPassExecutor } from "@/app/lib/pcb/autoroute/freerouting-pass-executor";
 
 export const CHAT_PROTOCOL_VERSION = 1;
@@ -60,6 +64,8 @@ const AUTHORITY_CLAIM_KEYS = new Set([
   "actor", "actorId", "actorRole", "role", "capability", "capabilities",
   "authority", "authoritySource", "approvals", "approval", "release",
   "durableBoard", "durable-board", "idempotency", "idempotencyKey",
+  // [B18-B] grant-, attempt-, decision- and explicitness-shaped claims
+  "executionGrant", "grant", "grantId", "nonce", "attemptId", "consumption", "explicit", "explicitUserRequest", "autonomy", "decision", "tier",
 ]);
 
 /** [B10.1] reusable EXACT-KEY validation for nested control objects: every
@@ -243,6 +249,26 @@ export const POST = agentStreamRoute(
     authMethod: context.authMethod,
   };
 
+  // [B18-A] the project's agent autonomy setting is read SERVER-SIDE from the
+  // durable store (never from the body). An unavailable store is a truthful
+  // warning and the run stays proposal-only — unavailability never widens.
+  let autonomy: AgentAutonomySetting | undefined;
+  const autonomyWarnings: string[] = [];
+  try {
+    autonomy = await resolveAgentAutonomyRepository().get({ tenantId: requestScope.tenantId, projectId: requestScope.projectId });
+  } catch {
+    autonomyWarnings.push("The project's agent autonomy setting could not be read; this run is proposal-only.");
+  }
+  // [B18-C] ONE server fact decides whether this run can be granted anything: a
+  // human session principal with a readable autonomy setting. The SAME fact
+  // binds the minter below and tells BOTH context assemblies that grants are
+  // available (grantability additionally needs a Tier 1 execute role, the
+  // verified board and the PCB history basis — derived by the assembler).
+  const minterAuthority = autonomy && context.actor.actorKind === "human" && (context.authMethod === "supabase_cookie" || context.authMethod === "local_dev")
+    ? { autonomy, authClass: context.authMethod }
+    : null;
+  const executionGrantsAvailable = minterAuthority !== null;
+
   const assembly = assembleAgentRunContext({
     ...requestScope,
     schematic: body.schematicState,
@@ -254,6 +280,8 @@ export const POST = agentStreamRoute(
     pcbProposalBasis: editorPcbProposalBasis,
     verifiedActor,
     view: body.viewContext,
+    autonomy,
+    executionGrantsAvailable,
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -309,6 +337,8 @@ export const POST = agentStreamRoute(
           componentAuthority: authority,
           verifiedActor,
           view: body.viewContext,
+          autonomy,
+          executionGrantsAvailable,
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -318,11 +348,39 @@ export const POST = agentStreamRoute(
 
   const runId = `run-${randomUUID()}`;
   const registry = sirkitToolRegistry();
+  // [B18-B] the execution-grant MINTER — the only place a grant is created —
+  // is built HERE from the trusted request context (verified principal, role,
+  // membership revision, session identity, validated scope, the server-read
+  // autonomy setting, the literal user instruction) and handed to the gateway
+  // and the loop as a closure: the agent layer never sees an instruction, a
+  // nonce or a store. Only a human session principal with a readable autonomy
+  // setting can be granted anything; otherwise execution is simply unavailable
+  // for the run (proposals unaffected — unavailability never widens).
+  let executionGrants: AgentExecutionGrantMinter | undefined;
+  if (minterAuthority) {
+    executionGrants = createExecutionGrantMinter({
+      principalId: context.principalId,
+      role: context.actor.role,
+      membershipRevision: context.membershipRevision,
+      authClass: minterAuthority.authClass,
+      sessionIdentity: context.sessionIdentity,
+      correlationId: context.correlationId,
+      scope: requestScope,
+      boardInstanceId: pcbBoardInstanceId(requestScope.projectId),
+      autonomy: minterAuthority.autonomy,
+      userMessage,
+      runId,
+      provider,
+    });
+  }
   // [B14 §B] SERVER-OWNED published pin facts for the replacement proposal
   // path: production cancellable reads (DATABASE_URL-gated), each wrapped in
   // the abort/deadline settlement machine bound to THIS request's signal.
   const replacementFactsSource = resolveReplacementPinFactsSource();
   const gateway = createAgentToolGateway(registry, {
+    ...(executionGrants ? { executionGrants } : {}),
+    // [B18-C] pinned into every grant's origin; the dispatch refuses without it.
+    promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
       : {}),
@@ -425,8 +483,9 @@ export const POST = agentStreamRoute(
             context: runContext,
             system: AGENT_SYSTEM_PROMPT,
             emit,
-            contextWarnings: assembly.warnings,
+            contextWarnings: [...assembly.warnings, ...autonomyWarnings],
             trace: traceRecorder,
+            ...(executionGrants ? { executionGrants } : {}),
           },
         );
         // [B11] finalize + validate the trace. A trace/sink failure is

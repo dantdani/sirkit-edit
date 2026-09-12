@@ -1,0 +1,536 @@
+# B18-D — Chat execution UX: design record
+
+Status: **PROPOSED design, adopted as the B18-D plan** (I0, 2026-09-11). Produced by a design workflow (`wf_1121fdf1-b3d`, eight read-only agents): four discovery maps of the current surfaces (the chat stream and the model-text path; the confirmation card and the ritual UX; composer routing and tier surfaces; the UI gates and test harnesses), three independent designs (minimal-truthful, enforcement-first, user-first) and a judge that verified the decisive anchors in the code, scored the designs 36 / 37 / 34 and synthesized this contract from the enforcement-first design with grafts from the others.
+
+Recorded limits of the process: the judge received design A truncated and scored it on its visible sections; the anchors below were read by the agents — the builder spot-checked the two decisive anchors (`loop.ts:328` emits a step's text before its tool calls are handled; `page.tsx` appends that text to the answer unmarked and labels any `ok` tool_finished "— succeeded") — and every increment re-verifies the anchors it touches before changing code. The owner decisions D1–D8 (§9) run on the recommended defaults (OWNER_DECISIONS OD-17). Labels: C = CONFIRMED, I = INFERRED, P = PROPOSED, U = UNKNOWN.
+
+## Scores
+
+The scale is 1–10. The labels used throughout are **C** = CONFIRMED (I read the code), **I** = INFERRED (reasoned from code I read), **P** = PROPOSED and **U** = UNKNOWN. Paths are relative to `C:\Users\robsa\Desktop\sirkit-edit`. Design A reached me truncated: I saw only its D4–D7 increments and its gates, tests, risks and out-of-scope sections. Its earlier sections are U, and it is scored on what I could see.
+
+| Criterion | A — minimal-truthful | B — enforcement-first | C — user-first |
+|---|---|---|---|
+| 1. Coverage of the B18-D text | **7**. It covers most items through the card, an outcome report and a log-shaped entry. Stop and the autonomy control are deferred, and the loop's silent refusals stay invisible. | **9**. It covers all ten items, plus Stop, the autonomy control, the silent refusals, P1, P2 and an Undo in chat. | **9**. It covers all ten items in one entry per operation, plus Stop, an explicit-grant Cancel and the autonomy control. |
+| 2. The two rules, and whether they are really enforced | **6**. Rule 2 depends on the page holding preview replies. That is display-only and is lost on reload, and no ordering at the protocol level is visible. | **8**. Server ordering, text phases, page quarantine and exclusion from history. **But** text from a step that only reads is classed "interim" and goes into the answer. So "Done, moved R3" written beside the `selection.inspect` call that comes before the move is shown before any grant exists (this follows from its G2-2 rule). | **8**. Holding every text until the run ends closes that gap, and the final text is labelled. But it drops interim text in runs that wait for the human, and it moves the `b09-loop-safety` #24 pin. |
+| 3. Minimality | **9**. Log-shaped entry, Undo through the timeline, no change to the event contract, no new route. | **6**. A new persisted `run` field and validator change, a page→editor Undo intent plus moving a predicate into a new module, collapsed notes, and four new components. | **7**. No new event type, log-shaped persistence and Undo through the timeline. But it adds a new message role and an explicit-grant Cancel that almost always loses the race to the immediate auto-run (`PcbEditor.tsx:1604-1622`, C). |
+| 4. Testability; CI-green increments | **7**. Gates and tests are named for each increment, and the spec and fixture changes are identified. | **8**. A failing test for each rule (T-R1a–f, T-R2a–d), and CI-list entries for each increment. | **6**. Its receiver anchors are wrong: `execution-grant-events.ts` has 71 lines, but C cites lines 101–150. It leaves the replay-capsule impact U, yet e11 (C) hits the refusals that its `warning.code` would record in the trace. |
+| 5. Risk | **7**. A small surface, but the UI-only P2 gate misses the select tool's own Ctrl+Z (`select-move.ts:840-845`, C). | **6**. Heavy churn in `page.tsx`, a persistence change, and a noun guard that includes "footprint" and "board". | **4**. Its P1 rule order sends the blinker bootstrap prompt ("…two-layer PCB…", `catalog.ts:48`, C) to the assistant. That breaks `bootstrapSynchronizedBoard` (`fixture-journey.ts:81-83`, C) and with it every browser spec. |
+| **Total** | **36** | **37** | **34** |
+
+**Winner: Design B is the backbone.** Grafted onto it:
+- the single execution entry per operation and the labelled final text, from C;
+- the log-shaped persistence, the Undo in chat through the project timeline, and the hoisted outcome report, from A and C;
+- a P2 gate at the one point every undo path passes through, which replaces all three designs' per-control gates.
+
+**Findings, verified in the code, that decided the scores:**
+- Model text is emitted before the step's tool calls are handled: `loop.ts:328` versus `343-662` (C). Both adapters are non-streaming (`adapters.ts:108,154`, C), and the page appends the text to the bubble unmarked (`page.tsx:4474-4477`, C).
+- The trace records only `run_started`, `warning` and the terminal events (`loop.ts:245-250`, C). Text is never traced (`loop.ts:325-328`, C). Replay capsules compare the trace digest (`replay-capsule.ts:574`, C). The e11 capsule makes six identical calls, so three reach the silent `repeated_call` refusal (`evaluation-cases.ts:250-260`; `loop.ts:379-381`, C). A new *warning* there would move e11's digest (I); a new untraced event type would not (I).
+- Every PCB undo path uses one wrapped history. The select tool, `editorRuntime` and the timeline all receive `bound.history` (`PcbEditor.tsx:1002-1006, 1025, 1047`, C). The callers are the toolbar (`:2485`), Ctrl+Z (`:2073-2074`), the select tool's own Ctrl+Z (`select-move.ts:844-845`), the timeline (`:1025`) and board repair (`repair/transaction.ts:204`) (C). The wrapped `undo` has no guard against a commit in flight (`editor-adapter.ts:790-795`, C).
+- "Undo latest" shows a success toast whenever the timeline decision is ok (`page.tsx:3466`, C). So a silently ignored undo would be reported as done (I). A gate needs a refusal inside the timeline.
+
+---
+
+# B18-D — Chat execution UX: final contract (synthesized)
+
+## 0. Honest boundary
+
+**What B18-D shows (P).** For every agent run:
+- **What Sirkit understood:** the composer route before sending; for each grant, the family and the digest-bound before/after text.
+- **Resolved targets:** reference designators mapped from the grant's object ids, display only.
+- **The tier of every tool call and every change**, with wording from `PERMISSION_TIER_TITLES` (`permission-tiers.ts:27-32`, C).
+- **The exact operations:** the grant's digest-covered `proposal.operations`.
+- **Whether confirmation is required, and why:** from the decision, the autonomy mode and revision, the explicit-request proof, or the minter's note.
+- **Progress and cancellation:** the entry's state, the card's Cancel, and a Stop control for the chat run.
+- **The committed transaction and revisions, and the server-record state.**
+- **The validations that ran:** browser-attested DRC error count and compile warnings.
+- **Failures and recovery:** a plain-language headline, whether the board may have changed, the next step, and the raw code in small print.
+- **Undo:** a transaction-bound Undo in chat, plus the existing toolbar, Ctrl+Z, timeline and "Undo that.".
+
+**What B18-D never does:**
+- It adds no Confirm or Apply control outside the existing card (C: `control-registry.ts:165`).
+- Nothing it displays is sent back to the server as authority. The chat body keys stay closed (`b18-b-chat-authority-keys.test.ts:31-52`, C).
+- It adds no route, and the ratchet stays at 158 = 155 + 3 + 0 (`b16-1c-invariant-tripwires.test.ts:50`, C).
+- It adds no parallel mutation code. Undo is always the history's own undo (`PcbEditor.tsx:1025`, C).
+- It never says a board "passes", is "safe", or is "ready" or manufacturable.
+- It never touches release, qualification or ordering. The release tool is `agentExposed:false` and `not-callable` (`b16-1c-invariant-tripwires.test.ts:58-59`, C).
+
+**Limits (C/I).**
+- **Model prose.** B18-D does not check what model prose *says*. It orders it, classifies it on the server, keeps interim text out of the answer, and labels any final text written before a durable result.
+- **Explicit executions.** Once the editor has tendered an explicit grant, it cannot be cancelled. The grant auto-runs at once (`PcbEditor.tsx:1604-1622`, C).
+- **Forged grants.** Grant digests have no key (`execution-grant.ts:12-16`, C). A self-consistent forged grant can therefore be *displayed*, but never executed: consume burns it (`consume.ts:113-114`, C).
+
+## 1. The ten items → surface → data source → anchors
+
+In the "CONFIRMED anchors" column, the anchors are C. The surfaces are P.
+
+| # | Item | Surface (P) | Data source | CONFIRMED anchors |
+|---|---|---|---|---|
+| 1 | What Sirkit understood | A composer route chip (I1). The entry rows "You asked (as recorded)", "Sirkit understood: <family> — <after>" and "Exact request proven" (shown only for `execute_explicit`). The same content on the card, in its context block. | The route from `routeComposerMessage`. The grant's `operation.family` and `preview.before/after`, which are digest-bound. `instruction.excerpt`, which is **not** bound. `instruction.explicit`, which is bound only when explicit. The event `note`. | `page.tsx:206-215`; `execution-grant.ts:113-114, 137, 152-160, 381, 397-398`; `execution-grant-events.ts:27`; `mint.ts:155,166,180` |
+| 2 | Resolved objects/nets | "Targets" on the entry and the card. Refs come from the editor-context board captured at send (chat) or the live board (card), falling back to kind plus a short id. Nets are shown as "Nets named: none", never "no nets affected". | `binding.targets.{objectIds,kinds,netIds,resolvedFrom}`. These are internal ids; `netIds` is always `[]`. A replay targets `[transactionId]`. | `execution-grant.ts:122-129, 259-261, 396`; `execution-operations.ts:155`; `mint.ts:144`; `page.tsx:4423-4427` |
+| 3 | Tier 0/1/2/3 | A chip on every tool line, on the entry and on the card. A static Tier 3 line in the chat header and a composer hint (§5). | A server-computed `tier` on `tool_started` and `tool_finished` (I2). A grant's tier is always `1`. Proposals are Tier 2 by class. | `permission-tiers.ts:37-53` (imports are type-only, `:20-22`); `loop.ts:356-357, 400, 443-658`; `execution-grant.ts:115, 375`; `contracts.ts:373-374` |
+| 4 | Exact proposed operations | "Operations (n)" on the entry and the card. A total formatter converts nm to mm and uses refs. An unknown shape is shown as "operation <kind> (not displayable)". A replay shows "<direction> of transaction <id>; the server selects the operations from the durable record". | `binding.proposal.operations`, which is digest-covered, but its inner shape is not validated. `proposal.replay`. | `execution-grant.ts:139-150, 379, 394-395`; `executor.ts:89-96` |
+| 5 | Is confirmation required, and why | An entry row and a card row, e.g. "Required — this project asks before every AI change (proposal_only, rev n)", or "Not required — your whole message was exactly this request (grammar id vX) and the project runs exact requests". The retry-guard note is shown verbatim. | `operation.decision`, `requiresHumanApproval` and `autonomy.{mode,revision}`. The note is null under `proposal_only`, so the reason is derived from the mode. | `execution-grant.ts:113-120, 398-399`; `mint.ts:152-155, 158-167, 176`; `permission-tiers.ts:145` |
+| 6 | Progress and cancellation | Entry states: issued → awaiting_confirmation → executing → outcome. The card's "Cancel — change nothing". A **Stop** control for the chat run (I9). The bounds are shown ("the assistant waits up to 60 s for your editor"). | The events, plus a new `onExecutionGrantProgress` fired when busy is set. For Stop: `reader.cancel()` → the route's `cancel()` → loop abort → issued explicit grants retired. | `PcbEditor.tsx:1557, 1595-1601`; `route.ts:517-519`; `loop.ts:695-697`; `execution-grant.ts:75, 78`; no Stop exists today (grep of `page.tsx`) |
+| 7 | Committed transaction/revision | An entry row, e.g. "Transaction tx:…; revision <before>… → <after>…; history #n; server record: settled / not yet recorded". The toast stays as the short form. | Explicit: `execution_settled.settlement`. Preview: the ritual's `receipt` plus `settled`, passed up through an extended `onExecutionGrantSettled`. | `contracts.ts:304-311`; `loop.ts:537`; `execution-grant-events.ts:38-58`; `granted-executions.ts:69, 504-509, 519-520`; today only 18 characters in a 6 s toast (`PcbEditor.tsx:1580, 695-699`) |
+| 8 | Validations run | "Checks: DRC (<preset>): N errors (browser-attested, errors only)", or "DRC did not run — no DRC claim"; compile warnings. | Explicit: `settlement.validations`. Preview: the ok outcome gains `validations`, computed once (I4). | `granted-executions.ts:137-151, 519`; `loop.ts:556-561`; `execution-grant.ts:137`; the preview DRC is invisible today (`PcbEditor.tsx:1582`) |
+| 9 | Failures and recovery | The terminal state gives a headline, either "nothing changed" or "the board MAY have changed", and a next step, with the raw code in small print. The run log shows loop refusals (optional I10). A recovery sweep result updates its entry, in plain words. | Ritual `code/message/changed/serverCode`. Server `status/outcome/reason`. Sweep `action`. | `granted-executions.ts:62-71, 556, 593`; `execution-grant.ts:57-64, 70`; `page.tsx:4570-4574`; `loop.ts:358-397` (silent today); `PcbEditor.tsx:1637` (raw ids today) |
+| 10 | Undo action | "Undo this change" on the entry. It is shown only when the entry is committed, `undoEligible` is true, its transaction is the timeline's newest operation, and no hold is active (§4). The entry also says "or say “Undo that.”". The toolbar, Ctrl+Z and timeline stay. The copy follows the undo direction. | The timeline's `undoLatest({ expectTransactionId })` → the PCB store's own `history.undo()`. | `operation-timeline.ts:74-81, 102-112`; `PcbEditor.tsx:1025, 1040`; `mint.ts:83-86`; `loop.ts:562-571`; today's toast claims undo unconditionally (`PcbEditor.tsx:1580`) |
+
+**The entry itself (P, grafted from A and C).**
+- **Form.** One `role:"log"` message with id `xlog-<grantId>`, inserted just before this run's assistant bubble. A pure reducer rebuilds it on each transition. It is keyed by `grantId`, so the preview outcome, the explicit settlement and recovery all update the same entry.
+- **Persistence.** It persists through the existing log shape: `toStoredChat` and `fromStoredChat` (`page.tsx:2952-2967`), the `StoredChatMessage` type and its validator (`lib/persistence.ts:38-40, 694-708`), and project import (`app/lib/project/file.ts:204`) (C). **No change to the persistence schema.** On reload, a pending entry reads "(interrupted by reload)" (`page.tsx:2963-2964`, C). A reloaded entry is a static record with no live Undo.
+- **Disagreement between editor and server.** If they disagree (for example, the editor reports committed while the server reports retired), the entry fails safe to "landed, unverified — check the board and the revision history" (P).
+
+## 2. The two rules → enforcement point → the test that fails if violated
+
+**Rule 1 — "No button may apply an altered proposal."** It holds today (C).
+- The receiver drops any grant that fails parsing or coherence, is not issued, or whose decision does not match (`execution-grant-events.ts:21-29`).
+- The card is inert (`GrantedExecutionDialog.tsx:22-33, 72-74`).
+- The ritual recompiles the operations and byte-matches them against the grant (`granted-executions.ts:349-352`, per the maps).
+- Consume burns the grant on `proposal_altered` (`consume.ts:112-114, 119`).
+- The browser drops a grant altered in transit (`e2e/agent-execution.spec.ts:260-290`).
+
+B18-D keeps each of these and adds the following.
+
+| Id | Invariant (P) | Enforcement point | Test that fails if violated (P) |
+|---|---|---|---|
+| R1-1 | There is exactly one Confirm surface: the card's Confirm. Chat gets no Confirm or Apply. | `PcbEditor.tsx:2794` calls `runGrantedExecution("confirm")`, whose only tender is `:1577` (C) | New `app/lib/project/__tests__/b18-d-ui-gates.test.ts`. It source-scans for exactly one `tenderConfirmedExecution(` and one `runGrantedExecution("confirm")`. It asserts that no file under `app/components/chat/**` imports the controller, ritual, transport or journal, and that an injected offender trips the gate (pattern: `b18-b-import-gates.test.ts:101-109`). |
+| R1-2 | Chat actions carry identifiers only, never content or grant objects. | The chat Undo sends `transactionId` to the timeline. The timeline compares it with its **own** recorded `ref.transactionId` (`PcbEditor.tsx:1040`, C), so a forged id can only cause a refusal. Stop carries nothing. | `b17-e-operation-timeline` gains a case: `expectTransactionId` does not equal the newest `ref.transactionId` → `NOT_LATEST`, and the store's `undo` is never called. |
+| R1-3 | "What changes" is shown only from digest-covered fields: operations, targets and preview; family via the operations digest; explicit proof only when `execute_explicit`. The excerpt, scope, base, origin, autonomy and note go in a separate block labelled "As issued by the server". | `GrantedExecutionDialog` has a change block (`data-testid="granted-execution-change"`) and a context block (`granted-execution-context`) | The dialog test (extended `b18-c-granted-execution-dialog.test.tsx`) asserts that context text never appears inside the change block. It also asserts that a hostile operation `{kind:42}` renders "not displayable" without throwing, and that the partial grant cast at `:15-27` still renders. |
+| R1-4 | The card stays inert: no input, textarea, select or contenteditable; Confirm and Cancel take no arguments; its copy stays pinned. | `GrantedExecutionDialog.tsx`; the copy gate at `b18-b-import-gates.test.ts:112-121` (C) | The same dialog test checks that `querySelectorAll("input,textarea,select,[contenteditable]")` is empty and that the Confirm spy gets 0 arguments. It keeps the strings "Nothing has been changed yet", "exactly ONE canonical PCB transaction" and "pcb.move-footprint, 1 operation" (`b18-c-granted-execution-dialog.test.tsx:38`; spec `:166-167`). |
+| R1-5 | The chat Undo reverts exactly one AI transaction, and only while it is still the latest one. | The timeline's `undoLatest({expectTransactionId})` plus the §4 hold | The e2e check (Undo reverses a confirmed move exactly; a second click is refused), plus the `NOT_LATEST` unit test above. |
+| R1-6 | A forged but coherent grant can be displayed but cannot execute. | Recompile, then consume (C) | Existing coverage: `b18-c-review-3` (recompile-mismatch, per the maps) and `b18-b-mint-consume-decisions` (`proposal_altered`). The new coherent-forgery e2e depends on U1; if Playwright cannot import `stable.ts`, a vitest integration test through `b18c-harness` replaces it. |
+
+**Rule 2 — "No model text may claim success before the transactional result exists."**
+
+**Today it is not enforced (C).**
+- A step's text is emitted before its calls are resolved (`loop.ts:328`).
+- After a preview grant, the model is continued at once (`loop.ts:505-520, 664`), and only written guidance holds it back (`loop.ts:517`; `prompts.ts:43-45`).
+- Grant issuance is shown as "— succeeded" (`page.tsx:4485`).
+- Bubble text becomes the next run's history (`page.tsx:4408-4410`).
+- A failure message is written only into an empty bubble (`page.tsx:4618`).
+
+| Id | Enforcement (P) | Where | Test that fails if violated (P) |
+|---|---|---|---|
+| R2-1 | **Protocol ordering.** A step containing a side-effecting call (a resolved descriptor with `operationClass` `mutate` or `propose`, computed the same way as `loop.ts:350-357, 388-389`) emits its text **after** the step's call loop, below `:662` and before `continueWith` at `:664`. Other steps emit in place. If the run boundary fails mid-step, the held text is never emitted. There is no latency cost, because the adapters don't stream. | `app/lib/agent/loop.ts` | New `app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts`. (a) Step 1 = "Done, R3 moved." plus a move grant, explicit and committed → the `text_delta` comes after `execution_settled`. (b) Preview → it comes after `execution_grant_ready`. (c) A proposal → it comes after `proposal_ready`. (d) A read-plus-text step → emitted before `tool_started` (so `b09-loop-safety.test.ts:181-200` #24 stays `["early"]`, C). (e) A boundary failure after a held step → no `text_delta`. (f) A property check over the whole matrix. The existing pins `b18-b-loop-execution.test.ts:126,145` do not move, because their step 1 has no text (C). |
+| R2-2 | **Server classification.** `text_delta` gains a required `phase: "interim" \| "final"`. Text from a step with any tool call is `interim`; the text of the final step (no calls) is `final`. | `contracts.ts:372`; `loop.ts:328, 332` | The same suite asserts a phase on every `text_delta`. `tsc` then flags every event built by hand. |
+| R2-3 | **Interim text never enters the answer.** The page buffers interim text per run and shows it in the run log as "Assistant note (written before the result): …" **when the run ends**. It is never shown in the bubble and never included in history (the log role is filtered out at `page.tsx:4408-4410`, C). A missing or unknown phase is treated as interim (fail closed). | A new pure `app/lib/project/chat-run-view.ts` reducer; `page.tsx` `applyAgentEvent` | New `app/lib/project/__tests__/b18-d-chat-run-view.test.ts`: interim text never appears in the answer; notes are released only after a terminal event; a missing phase is quarantined. The e2e check S5 is in §7. |
+| R2-4 | **Final text is labelled unless a durable committed settlement exists.** The reducer tracks side effects from `tool_finished.status` ∈ {`execution_grant_issued`, `execution_preview_issued`, `proposal_sealed`, `layout_candidate_ready`}, which the server emits (C: `loop.ts:476, 501-503, 602, 625`). It clears them only when an `execution_settled` event (accepted by the safe receiver) reports `settled/committed`. While a side effect is still unresolved, the bubble starts with its own paragraph: "Written before any change was made — the status above is authoritative.", or for proposals "Written before anything was applied — the proposal above awaits your review." | Reducer plus `page.tsx` | Reducer cases: a preview run → labelled; explicit committed → not labelled; not-committed, retired, in flight or unsettled → labelled; a dropped (forged) grant with status `execution_preview_issued` → labelled. |
+| R2-5 | **Tool lines are honest.** Only `status === "succeeded"` reads "done". Grant issued → "grant issued — executing in your editor"; preview issued → "change prepared — awaiting your confirmation"; proposal sealed → "proposal sealed — awaiting your review"; layout candidate → "candidate ready — awaiting your review"; view command → "view request sent"; anything else → "finished (<status>)". Each line carries a tier chip. | Reducer label map; `page.tsx:4483-4486` | Reducer test: no label for a non-read status contains "succeeded", "done" or "made". The server events are unchanged, so `b18-b-loop-execution.test.ts:128` holds (C). |
+| R2-6 | **History carries the label, never the notes.** The label is part of the bubble content, so the next run sees it. Interim notes live in log messages. | `page.tsx:4408-4410` (unchanged filter) | Reducer: `historyText` equals the label (if any) plus the final text. e2e: the next `/api/chat` body never contains "(fixture interim)". |
+| R2-7 | **A failure stays visible.** Because interim text no longer fills the bubble, the empty-bubble condition at `page.tsx:4618` works as intended (I). The entry also shows the failure. | Reducer plus the entry | Reducer: a run that fails after interim text shows the failure text. |
+
+**Test compatibility (I).** `b14-1-production-integration.test.tsx:210,260` and `b15-3-production-integration.test.tsx:121,173` concatenate every `text_delta` on the wire. Text stays on the wire, so they are unaffected. The page-side labels never reach the wire.
+
+## 3. P1 composer routing: fix it in increment I1
+
+**Why (C).**
+- The edit verbs are bare prefixes (`page.tsx:211`), so "Add silkscreen text …" goes to the schematic editor and "Draw a dimension …" goes to generation (`:210`).
+- The `make R1 …` branch can never run, because the generate test at `:210` matches first.
+- The route is only shown, and the user cannot override it (`:5725-5733, 6829-6833`).
+- The spec works around this with "Please" (`e2e/agent-execution.spec.ts:17-19, 230, 276`).
+
+Routing is UX only: `ask` reaches the server loop, and `edit`/`generate` only produce proposals (`page.tsx:5714-5717`).
+
+**The change (P).** A new pure module, `app/lib/project/composer-routing.ts`, exporting `routeComposerMessage(text, hasSchematic) → { route, reason, hints }`. The first matching rule wins:
+
+| # | Condition (on the trimmed, lower-cased text) | Route |
+|---|---|---|
+| 1 | empty | ask |
+| 2 | `!hasSchematic` | generate (unchanged; the blinker prompt "Design … two-layer PCB …" keeps generating, `catalog.ts:48`, `fixture-journey.ts:79-83`, C) |
+| 3 | `^(generate\|design)\b` | generate |
+| 4 | `^(please\s+)?(move\|shift\|nudge\|rotate\|turn\|flip\|put\|undo\|redo)\b` | ask (as today; the grammars are at `explicit-request.ts:35-44`) |
+| 5 | starts with an edit verb or `create\|build\|make\|draw`, **and** contains a PCB noun `\b(silk(screen)?\|vias?\|tracks?\|traces?\|dimensions?\|copper\|zones?\|pours?\|keep-?outs?\|courtyards?\|drills?\|layers?\|pcb\|drc\|board outline)\b` ("footprint" and "board" are excluded, taking C's refinement) | ask |
+| 6 | `^make\s+(r\|c\|u\|d\|led\|j\|sw)\d+\b` (now reachable) | edit |
+| 7 | `^(create\|build\|make\|draw)\b` | generate |
+| 8 | `^(edit\|change\|set\|rename\|delete\|remove\|add\|replace\|swap\|connect\|disconnect\|rewire\|fix\|update)\b` (now word-bounded) | edit |
+| 9 | anything else | ask |
+
+**Additions to the router (P).**
+- **Tier 3 hint.** A display-only hint, `\b(release|publish|order|purchase|buy|qualify|upload|ship)\b`, adds `hints:["tier3-release"]`. It never changes the route.
+
+**UI (P).**
+- A static route chip, "Sirkit will: ask the assistant / edit the schematic / generate a schematic". It has no handler, so it adds no B17 site (the scanned attributes are at `control-surface.ts:23-36`, C).
+- One override button with the named handler `overrideComposerRoute`. It resets after each submit.
+- `handleComposerSubmit` keeps its name, because the b07-4 test slices the page source on that token (`b07-4-project-async-scope.test.ts:387`, C).
+- `control-registry.ts:80` `dispatcher.chat-composer` adds `agent.execution-grant` to its `recordIds`, because agent turns can mint grants.
+- A new rule, `view.composer-route-override`, goes **before** the generic page rules at `:114, 117` (C).
+
+**Must keep working:**
+- "set R1 to 4.7k", "rename U1 to U5" and "delete R3" → edit.
+- An empty project and "Design …" → generate.
+- "Apply suggestions" calls `handleEditSchematic` directly (`page.tsx:5706`, C).
+- Retry through `lastAiRetryRef`.
+- "Please add …" → ask.
+
+## 4. P2 Undo/Redo during a granted execution: decision
+
+**Decision: gate it.** Beyond UX, there is a correctness reason (I, not yet tested).
+
+**Window (c).** This is an Undo that lands while the executor write is pending. It is not covered by the review-3 fix, which covered only the replay's envelope write (`safe-mutation-contract.md:253`, item 4, C). The sequence is (C):
+1. `runCommit` reads `delegate.committedPresent` and then awaits `executor.execute` (`editor-adapter.ts:651, 675`).
+2. The wrapped `undo` pops synchronously and queues its reconcile (`:790-795, 804-805`).
+3. `applyExecutionResult` takes the link base from the board that was just undone (`:716`) and replaces the board contents (`:742-744`).
+4. `execute` clears the redo stack (`history.ts:228`).
+
+The likely outcome is that the user's Undo is overwritten, their Redo is lost, and the AI entry's own undo also reverts the prior change (I). The order of the reconcile relative to the ritual's postcondition is U3.
+
+**Enforcement at the single choke point (P).** Every PCB undo path shares one wrapped history. Per-control gates would miss the select tool's Ctrl+Z (`select-move.ts:840-845`) and board repair (`repair/transaction.ts:204`) (C).
+- **The hold.** `CanonicalEditorSession` gains `holdHistorySteps(reason): () => void`. While a hold is active:
+  - the wrapped `undo`/`redo` (`editor-adapter.ts:774-801`) refuse, doing nothing;
+  - `canUndo` and `canRedo` read false;
+  - subscribers are notified when the hold starts and ends.
+- **Who takes it.** The ritual takes the hold just before its drift check and releases it in its `finally` (`granted-executions.ts:541-543`, C).
+- **Scope.** The hold is limited to granted executions, so human commits keep their current behaviour.
+- **It only refuses.** It adds no mutation path.
+- **Window (b) improves too.** An Undo pressed during consume is now refused, instead of burning the grant as `commit-rejected` (`:440, 454`, C).
+
+**Visible reasons (P).**
+- **Timeline.** `ProjectStoreBinding` gains an optional `busy(): string | null` (`operation-timeline.ts:49-52`), and `ProjectUndoRefusalCode` gains `STORE_BUSY` (`:35`). `undoLatest` checks `busy` before calling `binding.undo()` (`:74-81`). This is required, because otherwise `page.tsx:3466` would toast a false "Undid…".
+- **Toolbar.** `canUndo` becomes `&& !executionGrantBusy`, and the title shows the reason (`PcbEditor.tsx:2485-2488`). The aria-label is unchanged, so the B17 key does not change (I). The conditional title is not captured by the B01 regex (`action-surface.ts:88`, C).
+- **Keyboard.** Ctrl+Z shows a toast while the hold is active (`PcbEditor.tsx:2069-2076`).
+- **Preview card open, not busy.** Ctrl+Z stays allowed. The live-board check already disables Confirm and shows the reason (`PcbEditor.tsx:1538`, C).
+
+**Tests (P).**
+1. **A probe, written first.** `app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts` holds the executor on a gate, calls `history.undo()`, and asserts either a visible refusal or a separate, redoable step. It runs in CI and in `stage10:test`.
+2. **A hold unit test.** Every entry point does nothing while the hold is active, and the hold is released when the ritual throws.
+3. **e2e.** `page.route` holds the consume POST. Ctrl+Z shows the paused notice and the toolbar Undo is disabled. After release: one commit, and the previous entry intact.
+
+Extending the hold to every canonical commit (human commits, Smart Route) is OD-D2.
+
+## 5. How each tier is presented (P)
+
+| Tier | Trigger (C) | Activity line | Answer / entry | Controls | Never |
+|---|---|---|---|---|---|
+| T0 read / inspect / view | `tool_*` with `tier:0`; `view_command_ready` (`page.tsx:4528-4538`) | "T0 · <title> — done"; "View updated …" | A normal bubble; no entry | none | anything implying a design change |
+| T1 preview | `execution_preview_issued` plus a preview grant (`loop.ts:501-520`) | "T1 · change prepared — awaiting your confirmation" | Entry: awaiting_confirmation → executing → committed, not made, cancelled or superseded. Bubble labelled per R2-4. | The card's Confirm and Cancel; entry Undo after commit | Confirm in chat |
+| T1 explicit | `execution_grant_issued`, the grant, then `execution_settled` (`loop.ts:524-537`) | "T1 · grant issued — executing in your editor" | Entry: issued → executing → committed, not made, landed-unverified or outcome-unknown. The "not required" reason is shown. | Entry Undo; Stop (run) | Cancelling after tender |
+| T2 | `proposal_ready`, `pcb_proposal_ready`, `layout_candidate_ready` (`page.tsx:4488-4548`) | "T2 · proposal sealed — awaiting your review" | The existing review dialogs and panels; bubble labelled "awaiting your review" | The existing dialogs | Applying from chat |
+| T3 | No event: the release tool is not callable (`b16-1c:57-59`); the prompt refuses (`prompts.ts:47`) | "T3 · refused" only if a refusal carries tier 3 | A composer hint plus a static header line: "Release, qualification and ordering are never done by the assistant — use the release workflow" | none | Any path to release |
+
+**Wording (C/P).**
+- User-visible tier labels use only B18-A's vocabulary (`permission-tiers.ts:27-32`).
+- B06's internal name "tier-1 proposal" (`page.tsx:2668`) stays internal. A grep for visible "Tier N" text in `page.tsx` found none (C, for the pattern searched).
+
+## 6. Ordered increments
+
+**Program rules (from the owner's records):**
+- Commit and push after each increment; never merge.
+- Run `tsc` on every increment (CI `deterministic-manufacturing.yml:41`, C).
+- Run the B17 gate locally before pushing any UI change (`EXECUTION_LEDGER.md:306`, C).
+- Never run the CI vitest list at the same time as Playwright, and never edit source during a Playwright run (I, from the ledger).
+
+**I0 — Design record (no code).**
+- `artifacts/ai-control-plane-b18/chat-execution-ux.md`, which `README.md:13` lists as pending (C).
+- Amendments A26 onward in `safe-mutation-contract.md`, including recording that the fixture's claim text is new and why the B09 and replay pins do not move.
+
+**I1 — P1 routing (§3).**
+- **Files:**
+  - `app/lib/project/composer-routing.ts` (new);
+  - `page.tsx:206-215` replaced by an import, with the call sites at `:5713, 5722` kept;
+  - the chip and the override near `:6826`;
+  - `control-registry.ts:80` and the new override rule.
+- **Tests:**
+  - `app/lib/project/__tests__/b18-d-composer-routing.test.ts`, including `BLINKER_ACCEPTANCE_PROMPT` → generate on an empty project;
+  - spec `:230, 276` drop "Please", and the header note at `:17-19` is updated;
+  - a new e2e check: "Draw a dimension from U1 to J1." reaches the assistant (the fixture's fallback reply, `fixture-agent-adapter.ts:65`) and no schematic proposal dialog opens.
+- **Gates:**
+  - B17 regenerated (rows `ui-control-inventory.csv:491, 552` change `record_ids`, and a new override row);
+  - B01 regenerated (a literal label in `page.tsx`, which is watched at `action-surface.ts:64`);
+  - the CI list gains the new test.
+
+**I2 — Server protocol for Rule 2 and tiers.**
+- **Files:**
+  - `contracts.ts:372-374`: `phase` (required) and `tier` (`PermissionTier | null`);
+  - `loop.ts:328` (classification and deferring side-effecting text past `:662`);
+  - `loop.ts:400, 443-658` (the tier from `permissionTierOfDescriptor(descriptor)`).
+- **Tests:** `b18-d-loop-text-phase.test.ts` (new). These must stay green unchanged: `b18-b-loop-execution`, `b09-loop-safety` #24, `b09-2-closure` (`:191-197`), `b18-c-loop-real-gateway`, and the replay capsules (text and tool events are not traced, `loop.ts:245-250, 325-328`, C).
+- **Gates:** `tsc`; add to the CI list. The page reads only `.text` (`page.tsx:4475`), so nothing visible regresses.
+
+**I3 — Pure display modules (no UI).**
+- **Files:**
+  - `app/lib/project/execution-display.ts` (new, SAFE; it imports only grant types and the tier titles). It holds the operation formatter, target labels, tier label, confirmation reason, and failure, retirement and recovery sentences. Every function handles any input without throwing.
+  - `app/lib/project/chat-run-view.ts` (new). It holds the entry reducer (§1), the tool-label map, the answer/notes/history projection, and the pinned strings as constants.
+- **Tests:** `b18-d-execution-display.test.ts` and `b18-d-chat-run-view.test.ts`. They cover hostile shapes, the partial dialog grant, forbidden words in non-result labels, and a prohibited-claims scan using the list at `b18-b-import-gates.test.ts:117-120`.
+- **Gates:** add to the CI list.
+
+**I4 — Ritual outcome report and editor callbacks.**
+- **Files:**
+  - `granted-executions.ts:68-69, 519-520`: the ok outcome returns `validations` and `undoEligible`, computed once; `already-applied` returns null validations.
+  - `PcbEditor.tsx:359-361`: `onExecutionGrantSettled(grantId, outcome, detail?)`, plus the new `onExecutionGrantProgress` and `onExecutionRecovery`.
+  - `PcbEditor.tsx:1557, 1579-1589, 1595-1600, 1611-1618, 1634-1638`.
+  - `PcbEditor.tsx:1580`: the undo sentence becomes conditional on `undoEligible`, keeping the prefix "AI change made as ONE canonical transaction" (spec `:176`).
+  - `PcbEditor.tsx:1637`: the recovery wording keeps the prefix "AI execution recovery" (spec `:70, 188, 257`).
+  - `page.tsx:6314` accepts the new arguments and still clears the single slot.
+- **Tests:** extend `b18-b-granted-executions` (the returned fields equal the settle body the transport double received).
+- **Gates:** run B17 (props are not scanned attributes, so no change is expected). The import gates are unchanged.
+
+**I5 — Card (Rule 1 surface; items 1–5 and 9).**
+- **Files:** `GrantedExecutionDialog.tsx`. It gets a `board` display prop, rows for tier, targets, operations and confirmation reason, the change/context split, and keeps all pinned copy.
+- **Tests:** the extended dialog test (R1-3, R1-4) and `b18-d-ui-gates.test.ts` (R1-1).
+- **Gates:** B17 unchanged (no new handlers). B01 unchanged unless OD-D5 is taken. Add to the CI list.
+
+**I6 — Chat execution entry and the page half of Rule 2.**
+- **Files:**
+  - **`page.tsx` event handling.** `applyAgentEvent` goes through the reducer. The pinned lines move from the run log into the entry, once each ("Change ready for your confirmation in the PCB editor — …", spec `:169, 283`; "AI change committed by your editor (one canonical transaction", spec `:154` and the counts at `:213, 217, 242, 251, 253`). The log keeps pointer lines that do not repeat those phrases. Interim notes are released at the end of the run, the bubble label is applied, and a failure stays visible even after text.
+  - **`page.tsx` rendering.** `MessageBubble` renders the entry with `data-testid="chat-execution-entry"`, `data-grant-id`, `data-state` and `data-tier`, and adds no handlers (`page.tsx:8198-8226`).
+  - **`fixture-agent-adapter.ts:103-108`.** Execution-call steps now carry the interim text described in §7.
+- **Tests:**
+  - reducer tests from I3;
+  - e2e: the existing scenarios gain entry assertions; a new scenario S5 is added (§7); every pinned phrase is matched exactly once;
+  - rerun `b18-c-fixture-agent` (I: it pins only steps without calls).
+- **Gates:** keep the `b07-4` T21 tokens (`b07-4-project-async-scope.test.ts:352-357`); B17 and B01 unchanged; add to the CI list.
+
+**I7 — P2 (§4).**
+- **Files:** `editor-adapter.ts:774-801` (the hold); `granted-executions.ts` (acquire the hold, and release it in `finally`); `operation-timeline.ts:35, 49-52, 74-81`; `PcbEditor.tsx:1025, 2069-2076, 2485-2488`.
+- **Tests:** the probe, the hold unit test, `b17-e-operation-timeline` extended, and the P2 e2e check.
+- **Gates:** the CI list (the probe lives under `app/lib/engineering/__tests__` and so also runs in `stage10:test`, I). B01 unchanged (the title is conditional).
+
+**I8 — Undo in chat.**
+- **Files:**
+  - `operation-timeline.ts`: `undoLatest({ expectTransactionId? })` and a `NOT_LATEST` refusal;
+  - a new `app/components/chat/ExecutionEntryActions.tsx`, with one button (`data-testid="execution-undo"`, handler `onUndo`) that shows its reason when disabled;
+  - `page.tsx` `undoAiChange(transactionId)`, which writes the result into the entry.
+- **Tests:** timeline `NOT_LATEST`; the store's undo is called exactly once; a jsdom test at `app/components/chat/__tests__/b18-d-execution-entry-actions.test.tsx`; e2e (§7).
+- **Gates:**
+  - **B17:** a new rule, `agent.execution-entry-undo`. Surface: that file. Handler: `^onUndo$`. Semantic, with records `project.operation-timeline`, `project.undo-redo` and `pcb.undo-redo-canonical` (`action-registry.ts:74-75, 99`, C). Regenerate.
+  - **B01:** add the file to `UI_CONTROL_SURFACES` (`action-surface.ts:63-78`) and regenerate.
+  - **CI list:** add the entries.
+
+**I9 — Stop.**
+- **Files:** `page.tsx`. `send()` records the reader in `activeChatReaderRef`. A Stop button (handler `stopChatRun`) appears while `loading` and calls `reader.cancel()`. The copy is: "Stopped. An AI change your editor had already started still finishes and is reported here." `signal: scope.signal` and `reader.cancel()` stay inside `send()`.
+- **Tests:** a new route test, `app/api/chat/__tests__/b18-d-chat-stop.test.ts`: cancelling the response body → `abort` (`route.ts:517-519`) → loop cancelled → `retireIssued("run_cancelled", true)` (`loop.ts:695-697`). The e2e check is optional (U2).
+- **Gates:** B17 rule `ai.chat-run-stop` (semantic → `ai.chat-qa`, `agent.execution-grant`), placed before `control-registry.ts:114, 117`; B01 regenerate; CI list.
+
+**I10 (optional) — Show silent refusals.**
+- **Files:** a new **untraced** event, `tool_refused { runId, callId, toolId|null, title|null, tier|null, status }`, emitted at `loop.ts:351-397`, plus a page line "refused before running (<code>) — nothing ran".
+- **Why not a `warning`:** a warning is traced (`loop.ts:247`) and would move the e11 digest (§Scores).
+- **Tests:** a loop unit test; run the capsule suite unchanged.
+- **Gates:** none.
+
+**I11 (optional; B18-A's handoff, `permission-tiers.md:39`, C) — Autonomy indicator and admin toggle.**
+- **Files:** a new `app/components/chat/AutonomyModeControl.tsx`, using the existing `GET/POST /api/agent/autonomy` (`app/api/agent/autonomy/route.ts:34-75`, C). The GET returns `viewer.canChange`. The POST sends exactly `{mode, expectedRevision}`; on 409 it re-reads, and a 403 is shown verbatim.
+- **Tests:** a jsdom test; spec scenario 2 switches the mode through the UI, while the editor 403 check through the API stays (spec `:198-199`).
+- **Gates:** B17 semantic rule → `agent.autonomy-setting` (`action-registry.ts:76`); B01; CI list.
+
+**I12 — Closeout.**
+- A full serial Playwright run.
+- An adversarial review workflow.
+- The closing record, amendments and a ledger line.
+- Evidence screenshots in `artifacts/ai-control-plane-b18/evidence`.
+
+## 7. Tests and the scripted agent
+
+**Unit and integration (node) (P):**
+- `b18-d-composer-routing`
+- `b18-d-loop-text-phase`
+- `b18-d-execution-display`
+- `b18-d-chat-run-view`
+- `b18-d-ui-gates`
+- `b18-d-undo-during-commit` (probe) and the hold unit test
+- extensions to `b17-e-operation-timeline` and `b18-b-granted-executions`
+- `b18-d-chat-stop` (route)
+- optionally, the `tool_refused` loop test
+
+**Component (jsdom):** the extended `b18-c-granted-execution-dialog.test.tsx`, and `b18-d-execution-entry-actions.test.tsx`. `page.tsx` cannot be component-tested, so its logic lives in the pure modules (I, per the maps).
+
+**Browser (`e2e/agent-execution.spec.ts`, run serially) (P):**
+- **Scenarios 1–4:** each keeps its assertions and adds entry assertions. Preview: awaiting_confirmation → committed, with transaction, revisions and DRC. Explicit: issued → committed. Silk: committed. Forged: no entry, and the bubble is labelled.
+- **Cancel:** a new check where Cancel on the card leaves the entry "Cancelled — nothing changed".
+- **S5, the order in which things appear:** extend the MutationObserver at spec `:64-84` to record when each element appears. Across the preview, explicit, silk and replay flows, assert that:
+  - the text "(fixture interim)" never appears inside the bubble;
+  - it appears only in that run's log, and only after the entry's `data-state` exists;
+  - no later `chatBodies` entry's `messages` contain it;
+  - a preview bubble begins with the label paragraph.
+- **Undo in chat:** a confirmed move, then `execution-undo`, restores R3 exactly (checked with `board()`). The timeline gains one pcb undo, and a second click is refused.
+- **P2:** hold the consume POST with `page.route`. Ctrl+Z shows the paused notice and the toolbar Undo is disabled. After release there is one commit and the prior entry is intact.
+- **P1:** "Add silkscreen text …" is sent without "Please", and the dimension check from I1.
+- **Kept exactly:**
+  - the reply counter `^\(fixture agent\) ` (spec `:111`);
+  - `toHaveText("(fixture agent) the tool answered executed.")` (`:254`);
+  - `:281` stays visible, because the label is a separate paragraph (I);
+  - the notice regex at `:70`; entry text never starts with "AI execution recovery" unless a real recovery happened.
+
+**Scripted-agent instructions (`app/lib/agent/fixture-agent-adapter.ts`) (P):**
+1. Steps that carry an **execution** call (move, flip, silk, replay) get the text `"(fixture interim) Done — the change is already made."`. That text must never begin with "(fixture agent) ".
+2. Read steps (`selection.inspect`) and closing replies stay unchanged. Closing replies keep the "(fixture agent) " prefix.
+3. No new grammar is needed. The SILK pattern already accepts messages without "please" (`:40`, C). A message outside the script gets the fallback reply (`:65`), which proves that routing reached the assistant.
+4. Pin the changed script in `b18-c-fixture-agent.test.ts`. The adapter's construction tripwire stays (`:63`, C).
+
+## 8. Gates to regenerate and CI list changes
+
+| Gate | Command / test | Increments |
+|---|---|---|
+| B17 control inventory | `npx tsx scripts/generate-b17-control-inventory.ts`; `b17-a-control-inventory.test.ts` gates 1–6 (`:31-94`, C). Use named handlers only; new page rules go before the generic rules at `control-registry.ts:114, 117`. | I1, I8, I9, I11 regenerate; I4–I7 run and expect no change |
+| B01 UI fingerprint | `npx tsx scripts/generate-action-toolability-matrix.ts`; `action-registry.test.ts`. Only literal `title` and `aria-label` values are captured (`action-surface.ts:88`, C). | I1, I9 (page literals); I8, I11 (new watched files, OD-D5) |
+| Import gates | `b18-b-import-gates.test.ts:40-47, 83-109` stay green unchanged; `b18-d-ui-gates` adds the scan over `app/components/chat/**` | all |
+| Card copy gate | `b18-b-import-gates.test.ts:112-121` is kept, and extended to the new chat and display files (a stricter gate) | I3, I5, I6 |
+| Route ratchet | 158 = 155 + 3 + 0, unchanged (`b16-1c:50`, C) | all |
+| Replay capsules | Unchanged: text and tool events are not traced. The only risk would be a traced warning, which this contract avoids. | I2, I10 |
+| Protocol | `CHAT_PROTOCOL_VERSION` stays 1 (`route.ts:44`). Only artifact documents mention the header (grep, C). | I2 |
+| CI list (`deterministic-manufacturing.yml:46-114`, C) | Add: `app/lib/project/__tests__/b18-d-composer-routing.test.ts`, `…/b18-d-execution-display.test.ts`, `…/b18-d-chat-run-view.test.ts`, `…/b18-d-ui-gates.test.ts`, `app/lib/agent/__tests__/b18-d-loop-text-phase.test.ts`, `app/lib/engineering/__tests__/b18-d-undo-during-commit.test.ts` (plus the hold test), `app/components/chat/__tests__/b18-d-execution-entry-actions.test.tsx`, `app/api/chat/__tests__/b18-d-chat-stop.test.ts`, and the optional I10/I11 tests. The extended suites already listed stay (`:65, 70, 88, 90, 101`). | as each lands |
+| Playwright | `yml:177-178` runs every spec | I1, I6–I9, I12 |
+
+## 9. Risks and open owner decisions
+
+**Risks:**
+1. **`page.tsx` source pins.** These must survive: the b07-4 T21 tokens and slice markers (`:351-357, 387`, C); exactly three `applySchematic(` calls (b16-a, per the maps); and the page must-not-contain strings pinned by b10-1 and b06-1 (U6; check them when editing). Mitigation: keep the logic in pure modules.
+2. **Exact copy.** The spec regexes and counts (`:70, 111, 154, 166-169, 176-177, 213, 217, 242, 251, 253, 254, 281, 283`) require each pinned phrase to appear exactly once, inside the entry.
+3. **B17 first-match rules.** Controls with generic handler names would be classed `view` (`control-registry.ts:114, 117`, C). Use named handlers with their own rules.
+4. **Hold latency.** The P2 hold pauses the user's Undo for as long as the ritual runs, up to the 10 s consume deadline (`execution-grant.ts:79`) plus the commit. The pause is announced.
+5. **Interim text moves out of the answer.** For every multi-step turn, interim text now goes into the run log (OD-D8).
+6. **Hidden PCB view.** Executions can run while the PCB view is hidden, because the publisher is enabled regardless of view (`PcbEditor.tsx:786-793`, C). The toast is then invisible (`:2630-2634`; hidden wrapper at `page.tsx:6297`, C). The entry carries the outcome. The card is portalled (`dialog.tsx:51`, C), so it stays visible.
+7. **Forged display fields.** The excerpt, scope and note can be forged coherently in transit. They are labelled "as issued" and cannot execute.
+8. **Noun-guard false positives.** "make R1 on the top layer" → assistant. The override chip mitigates this.
+
+**Owner decisions:**
+
+| Id | Question | Recommendation |
+|---|---|---|
+| OD-D1 | Pre-result final text: visible with a label, collapsed, or end the run at the preview? | Visible with a label. Ending the run at the preview breaks the B18-C model contract (`b18-c-result-contract.test.ts:74-75`, C). |
+| OD-D2 | Extend the history hold to every canonical commit (human commits, Smart Route) if the probe shows window (c) is lost? | Yes, as a follow-up with its own tests. |
+| OD-D3 | Keep the protocol at version 1? | Yes. |
+| OD-D4 | Autonomy control in the chat header, or in project settings, or deferred? | Chat header (I11), optional. |
+| OD-D5 | Add `GrantedExecutionDialog.tsx` and the new chat components to the B01 watched surfaces? | Yes; this strengthens the gate. |
+| OD-D6 | Ship `tool_refused` (I10)? | Yes. |
+| OD-D7 | Tier 3 hint vocabulary. | As written; display only. |
+| OD-D8 | Accept moving interim text into the run log for all multi-step turns? | Yes; it is required by R2-3. |
+
+**Unknowns:**
+- **U1:** whether Playwright can import `execution-grant.ts` and `stable.ts` for the coherent-forgery e2e.
+- **U2:** whether a client disconnect reaches the route's `cancel()` or `signal` under `next dev` (`route.ts:441-449, 517-519`).
+- **U3:** the order of the reconcile relative to the ritual's postcondition in window (c).
+- **U4:** whether a board can exist while the schematic is empty (rule 2 would then route PCB phrasing to generate).
+- **U5:** whether the route tool's Backspace (`route-tool.ts:1297-1298` → `undoLastSegment` `:1099`) ever reaches `history.undo()`. The choke-point hold covers it either way.
+- **U6:** the page must-not-contain strings pinned by b10-1 and b06-1.
+
+## 10. Out of scope
+
+- A Confirm or Apply in chat, for Tier 1 or Tier 2.
+- Cancelling an explicit execution after it is tendered, and a cancel window before one runs.
+- Re-tendering or cancelling a `left-issued` grant after a reload (`granted-executions.ts:593`).
+- Streaming adapters; changes to the prompt or to the B18-C result contract (`loop.ts:505-593`; `prompts.ts:35-49`).
+- New routes, keyed or authenticated grant digests, and transport authenticity.
+- A full Tier 2 entry; the B06, B14 and B15 dialogs keep ownership.
+- Phase-level telemetry for the ritual; several pending grants at once (the page holds one, `page.tsx:2693`).
+- New explicit grammars, schematic execution families (`execution-grant.ts:34`), and board `texts[]`.
+- A "Show in PCB editor" navigation control.
+- The pre-existing log-header flip back to "running" (`page.tsx:4324`, C).
+- Any release, qualification or ordering UI.
+- Live-LLM proof; the scripted agent only.
+
+## 11. Amendments recorded during implementation
+
+- **D-A1 (I1, CONFIRMED)** — composer routing as built. `app/lib/project/composer-routing.ts` `routeComposerMessage(text, hasSchematic) → { route, reason, hints }` implements §3's nine first-match rules and replaces the page's inline `inferComposerAction`; the page keeps `function handleComposerSubmit` (the b07-4 slice token) and its two call sites. Before sending, the composer shows "Sirkit will: ask the assistant / edit the schematic / generate a schematic" (`data-testid="composer-route"`, `data-route`, the reason as its tooltip); when the suggested route is an edit or a generation, one button (`composer-route-override`, handler `overrideComposerRoute`) sends the message to the assistant instead and back — reset on every submit. A release / publish / order / purchase / qualify / upload / ship word shows the display-only line "Release, qualification and ordering are never done by the assistant — use the release workflow." (it never changes the route). Gates: B17 577 controls (+1 `view.composer-route-override`, a view rule; the two composer rows gain `agent.execution-grant`); B01 unchanged (no literal title or aria-label was added); `page.tsx` eslint 14 problems before and after (all pre-existing react-hooks rules). Tests: `b18-d-composer-routing` 4/4 (in the CI list) — the empty project's design prompt still generates, PCB phrasing reaches the assistant, schematic edits stay edits, word boundaries ("additional", "settings"), the hint never changes the route; the browser proof sends "Add silkscreen text …" without its "Please" workaround and gains a routing scenario (the route shown before sending, the override both ways, "Draw a dimension from U1 to J1." reaching the assistant with no schematic proposal).
+- **D-A2 (I2, CONFIRMED)** — Rule 2 at the protocol boundary, and the tier on tool events, as built. `app/lib/agent/loop.ts`: a step that calls a side-effecting tool — resolved descriptor `operationClass` `mutate` (an execution grant) or `propose` (a sealed proposal or a layout candidate: `sirkit.placement.propose`, `sirkit.routing.propose`, the schematic proposals) — emits its model text only after its calls resolved (after the grant's settlement for an explicit execution, after `execution_grant_ready` for a preview, after the proposal's `tool_finished`) and before the provider is continued; a boundary failure after the step emits nothing; every other step emits in place, so a read step's text still precedes its `tool_started` (the B09 #24 page-gate pin is unchanged). `app/lib/agent/contracts.ts`: `text_delta` gains a required `phase` ("interim" — written in a step that also called tools; "final" — the closing answer), and `tool_started` / `tool_finished` gain `tier` from `permissionTierOfDescriptor` (null for an unregistered tool). Display data only; the page still reads `.text` (it uses the phase from I6). Reproduced first: the new `b18-d-loop-text-phase` suite failed all five cases on the pre-fix code ("Done, R3 moved." at event 7 before `execution_settled` at 11; a preview's text before `execution_grant_ready`; a proposal's text before its result; no phase or tier; a cancelled run still emitted the held text). Unchanged pins: `b09-loop-safety` #24, `b09-2-closure`, `b18-b-loop-execution` (its steps with calls carry no text), `b18-c-loop-real-gateway`, the replay capsules (text and tool events are not traced).
+- **D-A3 (I3, CONFIRMED)** — the pure display modules as built (not wired into the page yet — I4 to I6). `app/lib/project/execution-display.ts` (SAFE: type-only imports plus the tier titles; every function accepts any input without throwing): operations as sentences — `move_footprint` with the reference, millimetres, rotation and side; silkscreen text with its text, position, side and height; dimensions; a replay as "<direction> of transaction … — the server selects its operations from the durable record"; any other shape "not displayable"; targets as references (else the kind and a short id) with nets "Nets named: … / none"; the B18-A tier labels; the confirmation reason (the explicit proof's grammar and version; the retry note; otherwise the autonomy mode and setting revision); sentences for every ritual refusal code (a landed-unverified outcome says the board MAY have changed), every retirement reason and every recovery action; the checks line (browser-attested design-rule check, errors only, never a pass claim). `app/lib/project/chat-run-view.ts` (SAFE): tool-line labels (only a finished read is "done"; a grant "executing in your editor", a preview "awaiting your confirmation", a proposal or candidate "awaiting your review"); the run view — interim text (a missing phase included, fail closed) never enters the answer and is released as notes only when the run ends; the final answer is labelled while an execution the run started is unresolved, or while a proposal awaits review; the history is the answer, never the notes; a failure stays visible; and one execution entry per grant (awaiting confirmation / issued → executing → committed, not made, landed unverified, outcome unknown, cancelled or superseded), following the editor's outcome and the server settlement — a server "not made" after the editor's commit falls back to "landed, unverified", and a terminal state is never reopened. Found while writing it: the explicit-proof record carries no free-text reason, so an unproven instruction reads "your message was not provably exactly this change"; the copy gate's prohibited phrases include "safe to", which a header first used ("fails safe to") — reworded, and both source files are now scanned by the new tests. Tests: `b18-d-execution-display` 7/7 and `b18-d-chat-run-view` 9/9 (CI list).
+- **D-A4 (I4, CONFIRMED)** — the ritual's report and the editor's callbacks, as built. The ok variant of `GrantedExecutionOutcome` carries `validations` (the checks the editor ran on the committed board; null for an execution that was already applied) and `undoEligible`, computed ONCE in the ritual and used both for the server settle and for the report — on the fresh commit, on the registry's already-applied answer and on a proven commit adopted on re-entry (the recovery sweep's own settle is unchanged). The controller re-exports the report types, so `PcbEditor` keeps importing only the approved controller. `PcbEditor`: `onExecutionGrantSettled(grantId, outcome, detail?)` passes the ritual's outcome; `onExecutionGrantProgress(grantId)` fires when the editor starts executing; `onExecutionRecovery(results)` carries the hydration sweep's results (its own notice stays); the committed notice keeps its pinned prefix "AI change made as ONE canonical transaction" and says "Undo restores the exact previous board." only while the change is still undoable — otherwise "It is no longer the latest change, so the editor's Undo would not restore it — use the revision history." The page ignores the new arguments until I6. Reproduced first: `b18-d-ritual-outcome-report` failed both cases on the pre-fix code (no checks or undo eligibility in the outcome).
+- **D-A5 (I5, CONFIRMED)** — the confirmation card as built. `GrantedExecutionDialog` now has two blocks that never mix (R1-3). The change block (`granted-execution-change`) shows only digest-covered content: the tier (`granted-execution-tier`, from the grant's own operation tier), the family, the preview (`granted-execution-preview`, unchanged), the targets as references (`granted-execution-targets`, resolved from the live board `PcbEditor` passes for display) and the exact operations (`granted-execution-operations`, one line each; a hostile shape reads "not displayable"). The "As issued by the server" block (`granted-execution-context`) holds the confirmation reason (`granted-execution-reason`), what you asked (the recorded excerpt), the scope, base and policy line (`granted-execution-scope`) and the minter's note — content a forged-but-coherent grant could word differently, which therefore never describes the change itself. The card stays inert (R1-4): no input, textarea, select or contenteditable; Confirm and Cancel are wrapped so they pass no arguments (the B17 inventory still records `onConfirm` / `onCancel` — its rows unchanged); the pinned copy ("Nothing has been changed yet", "exactly ONE canonical PCB transaction", "pcb.move-footprint, 1 operation") stays. The card joins the B01 watched surfaces (OD-17 D5). Reproduced first: `b18-d-granted-execution-card` failed all four cases on the pre-fix card (no change block, no operations list, Confirm received the click event).
+- **D-A6 (I6, CONFIRMED)** — the chat execution entry and the page half of Rule 2, as built. `page.tsx` folds every run event into the run view (I3): the answer bubble shows only the final text — labelled "Written before any change was made — the status above is authoritative." while an execution the run started is unresolved, or "… the proposal above awaits your review." — and the model's interim text is released into the run log as "Assistant note (written before the result): …" only once the run ends, never into the answer or the history the next request carries; tool lines use `toolLineLabel` with the tier. One entry per grant — a log message `xlog-<grantId>` inserted just before the run's answer and persisted through the existing stored-chat shape (the state rides in the first row's id; the stored-message validator accepts it unchanged) — carries the state, the tier, what was asked and understood, the targets, each operation, the confirmation reason, the transaction and revisions, the checks, the failure and next step, recovery and the undo line. It is fed by the grant, the editor's progress, outcome and recovery callbacks (I4) and the durable settlement, and renders as `chat-execution-entry` with `data-grant-id`, `data-state` and `data-tier` — no controls. The pinned phrases ("Change ready for your confirmation in the PCB editor — …", "AI change committed by your editor (one canonical transaction …") now live in the entry exactly once; the run log keeps pointer lines that do not repeat them. The scripted agent writes "(fixture interim) Done — the change is already made." beside each execution call (pinned in `b18-c-fixture-agent`). The browser proof asserts the entry reaches `committed` for the confirmed preview and the explicit move, the interim text appears only as a note and never in the history, and a grant altered in transit creates no entry.
+- **D-A7 (I7, CONFIRMED)** — the history hold (P2), as built. Window (c) of §4 is CONFIRMED, no longer inferred: on the pre-fix code a one-off diagnostic (the same gated scenario, then deleted) measured it: during the granted commit `canUndo` was true and the Undo popped the earlier human move at once (R4 31.000 → 30.000 mm); when the AI commit landed R4 was back at 31.000 mm — the user's Undo silently overwritten; the AI move committed (R3 6 → 8 mm); Redo was no longer available; the session logged `executed` then `reconcile-rebased`. `CanonicalEditorSession.holdHistorySteps(reason)` (an idempotent release) and `historyHoldReason()`: while a hold is active the wrapped history's undo and redo refuse (they do nothing), `canUndo` / `canRedo` read false, and the history's subscribers are told when a hold starts and ends — the editor republishes its history view, so the toolbar's Undo follows it. Every undo path (the toolbar, Ctrl+Z, the select tool, the project timeline, board repair) goes through this wrapped history, so it is the single choke point; the hold only refuses and adds no mutation path. The granted-execution ritual takes it first thing inside its lease `try` ("an AI change is being made") and releases it in that `finally`. Found while designing it: `undoEligibleFor` read `history.canUndo`, so under the hold every settlement would have reported "not undoable" — it now decides from the entries (an active binding and this transaction as the newest applied entry). The project timeline's store binding gains an optional `busy()`; "Undo latest" refuses a busy store as `STORE_BUSY` with the reason and never calls its undo (the page shows the refusal, never "Undid …"). Ctrl+Z says "Undo and redo are paused: an AI change is being made. Try again when it finishes." instead of doing nothing. Pin moved: review 3's Q4 pinned the pre-hold semantics (a Ctrl+Z during the replay's envelope write was a separate step that re-applied the move); under the hold that Ctrl+Z is refused with the reason, the AI undo stands, and an Undo afterwards reverses it — Q4's own claim (an exact replay is never poisoned) is unchanged. The hold covers granted executions only; extending it to every canonical commit (human commits, Smart Route) stays OD-17 D2. Tests: the probe `b18-d-undo-during-commit` (the Undo refused during the commit, the AI change committed once, no rebase, the history intact afterwards; a failing ritual still releases the hold) and `b18-d-timeline-store-busy` failed or could not run on the pre-fix code.
+- **D-A8 (I8)** — Undo in chat, as built. `ProjectOperationTimeline.undoLatest({ expectTransactionId })` refuses `NOT_LATEST` ("That change is no longer the latest operation; nothing was undone.") when the newest eligible operation's own recorded `ref.transactionId` differs; it is checked after the existing eligibility (a moved head or a non-undoable newest operation keeps its own refusal) and before `STORE_BUSY`, and the store's undo is never called on any refusal. A committed AI change's chat entry carries one "Undo this change" button (`app/components/chat/ExecutionEntryActions.tsx`, `data-testid="execution-undo"`); the click carries nothing. Deviation from §8's `undoAiChange(transactionId)`: the page's handler takes the entry's grant id and looks up the transaction id in its own live entries — both are identifiers, and R1-2 holds because the timeline compares with its own record. Reconciling §1 item 10 ("shown only when …") with §7 and the I8 plan ("shows its reason when disabled"; "a second click is refused"): the button appears on live committed entries only and is disabled with its reason unless the change is still undoable, is the timeline's newest commit or redo of exactly this transaction, and no AI change is in flight (an `issued` or `executing` entry — the page's view of the §4 hold window; the timeline's `STORE_BUSY` stays the backstop). A reloaded record has no live control. The result is written into the entry: a success reads "Undone by you — the editor's own Undo reversed this change (one history step)." and ends the entry's Undo ("Already undone — the editor's Redo brings it back."); a refusal writes "Not undone — <the timeline's message>" as an error row and sets the timeline notice. The page mirrors its execution entries in React state (the ref stays for event handlers), so the button renders from state rather than a ref (`react-hooks/refs`). The `NOT_LATEST` unit case lives in `b18-d-chat-undo-timeline`, not `b17-e-operation-timeline` as §8 named it; the assertion is the same. Gates: B17 rule `agent.execution-entry-undo` (surface `app/components/chat/ExecutionEntryActions.tsx`, handler `^onUndo$`, semantic, records `project.operation-timeline`, `project.undo-redo`, `pcb.undo-redo-canonical`); B01 watches the new file.
+- **D-A9 (I9)** — Stop, as built. `send()` registers its run (`{ requestId, reader, stopped }`) in `activeChatRunRef`; `stopChatRun` marks it stopped and cancels the response reader, and a Stop pressed before the response arrived cancels the reader as soon as it exists. Stop carries nothing and never touches `scope.signal` (whose abort still means a project switch or unmount). When the stream ends, a stopped run appends "Stopped. An AI change your editor had already started still finishes and is reported here." to the assistant message (after any answer) and logs "Stopped by you — the assistant's run was cancelled."; the run's interim notes are still released only as notes. The Stop button (`data-testid="chat-stop"`, title "Stop the assistant's run") shows while `loading`, which only `send()` sets. The server chain is proven through the production POST handler (`b18-d-chat-stop`): cancelling the response body aborts the route's run controller, the REAL loop — waiting on a provider that never answers — ends `cancelled` with the provider's signal aborted, and its `finally` calls `retireIssued("run_cancelled", true)`; the only seam is the grant minter (this unit environment mints none), which the test records. The e2e (optional U2 in §8, done): a held `/api/chat` request (a Playwright route), Stop, then release — the page cancels at once, the copy shows, Stop disappears, the prompt is enabled again, and Stop sent no request. Gates: B17 rule `ai.chat-run-stop` (the page, `^stopChatRun$`, semantic → `ai.chat-qa`, `agent.execution-grant`); B01 regenerated (the button's title literal). The I8 evidence frame is re-taken with the entry scrolled into view.
+- **D-A10 (I10)** — calls refused before they run are shown, as built. A new run event `tool_refused { runId, callId, toolId|null, title|null, tier|null, status }` is emitted through the loop's `emitOnce` at each of the seven pre-run refusal sites (`unknown_tool`, `budget_exhausted`, `invalid_input` for the size limit and for invalid JSON, `repeated_call`, `proposal_exists`, `execution_exists`) by one `refuse()` helper that also pushes the unchanged error result, so the model receives exactly what it did before. It is untraced by construction: the trace mirrors only `run_started`, `warning` and the terminal event, so the run trace and the evaluation capsules do not move. The unknown tool keeps its existing traced warning (its trace is unchanged), so the chat shows that warning and the refused line. The post-start refusal (`invalid_outcome`) keeps its `tool_finished` path. The page adds an error row "<T-tag><title, or Unknown tool> — refused before running (<code>) — nothing ran" (`refusedLineLabel`); `reduceRunView` is unchanged (a refused call starts nothing). Tests: `b18-d-tool-refused` (the real loop and gateway: three refusals emitted and never started, the model's error results unchanged, nothing about them in the trace) and `b18-d-refused-line`; both failed on the pre-change code (no event; no label).
+- **D-A11 (I11)** — the agent autonomy in the chat header, as built (B18-A's handoff, `permission-tiers.md` §3). `app/components/chat/AutonomyModeControl.tsx` reads `GET /api/agent/autonomy` with the project selector headers whenever the chat panel opens (the page keys it by project, so a project switch remounts it; it is not live-updated — the server applies the current setting to every run regardless, and each execution entry names the mode and revision its grant was issued under) and shows every member the mode and what it means ("Proposal only — every AI change waits for your confirmation."; "Explicit Tier 1 — an exact request for a reversible Tier 1 edit runs without the card; everything else still asks."). Only when the server says `viewer.canChange` is the mode selectable; the change is a separate "Change" button that sends exactly `{ mode, expectedRevision }`. A 409 is read again and said so ("… nothing was changed"); any other refusal (403 included) is shown verbatim; an unavailable store says the project behaves as proposal only; with no project open it renders nothing. The read happens in an effect whose result is applied through a cancellation flag (the first version set state from a function called in the effect and tripped `react-hooks/set-state-in-effect`). The server still decides everything: the admin-only policy row, same-origin CSRF, the human-actor rule and the compare-and-set are unchanged. Found while verifying: §8 planned to change the mode through the UI in spec scenario 2, assuming the page was the cookie-less administrator there; the fixture bootstrap ends as the EDITOR, so the first browser run timed out on a select that was — correctly — locked for the editor. Scenario 2 keeps its API change; a new scenario (after Stop) checks the editor's locked view with its reason, then reloads as the administrator, changes the mode through the control (the notice names the new revision and the API read agrees) and back, and reloads as the editor with the chat log restored. Gates: B17 `view.autonomy-mode-draft` (the select; a draft) and `agent.autonomy-change` (semantic → `agent.autonomy-setting`); B01 watches the new file (its `aria-label`).
+- **D-A12 (I12, part 1)** — the §7 checks that were still unwritten, completed before the review. `b18-d-ui-gates` (R1-1): a source scan finds exactly one `tenderConfirmedExecution(` call and exactly one `runGrantedExecution("confirm")`, both in `PcbEditor`; nothing under `app/components/chat/**` imports the trusted controller, the ritual, the transport or the journal; an injected chat component importing all four trips every gate. In the browser (`agent-execution`): scenario 1 now also checks the preview answer's label paragraph ("Written before any change was made — the status above is authoritative.") and the committed entry's transaction, revisions and checks; scenario 3 checks that the silkscreen entry is committed; new scenarios — card Cancel (the entry reads "Cancelled — nothing was changed." and the silkscreen is unchanged); P2 in the browser (the editor's tender is held with a Playwright route while the ritual holds the history: the toolbar Undo is disabled, Ctrl+Z says "Undo and redo are paused: an AI change is being made. Try again when it finishes.", then exactly one commit and the earlier entry unchanged); S5 across every flow (an init-script observer records every appearance of the scripted agent's interim text, on every document the page loads, with the execution entries' states at that moment; the last scenario asserts each appearance was a labelled note that appeared while an entry existed, and that no request's history carried the text). S5's ordering is checked as "an execution entry existed when the note appeared", not with per-run timestamps. P2 uses a fresh instruction: the minter asks for confirmation before repeating an instruction identical to one already executed, and the first run — which repeated scenario 2's instruction — waited on the card, so nothing was tendered. Where §7 named other files, the coverage lives in: `b18-d-granted-execution-card` (not an extended `b18-c-granted-execution-dialog`), `b18-d-timeline-store-busy` and `b18-d-chat-undo-timeline` (not `b17-e-operation-timeline`), `b18-d-ritual-outcome-report` (not `b18-b-granted-executions`); the fixture agent's interim text is pinned in `b18-c-fixture-agent` (I6). P1 (a silkscreen request without "Please", the dimension request) was already covered by scenarios 3 and 5.
+- **D-A13 (I12, part 2)** — the adversarial review and its fixes. A review workflow (`wf_ebe145ea-ffc`: six read-only finders over I0–I10 pinned at `6ca4941` — authority, truthful reporting, concurrency, the loop and protocol, tests and gates, UX against the ten items — each dimension's findings put to a skeptic told to refute them, then a completeness critic; it read only the pinned commit, never the working tree). The finders raised 36 findings (about 15 distinct defects, several raised by more than one dimension); the skeptics confirmed 26 and refuted 10. The completeness critic had not reported when this was committed; its gaps are handled in part 3. What changed:
+  - **Entries never cross projects** (confirmed, high). The entry map lived for the page's lifetime and the editor's settled, progress and recovery callbacks were not project-scoped, so a late result for project A's grant wrote A's entry into project B's chat (and B's saved log). The map is now declared with the other pending grant state and cleared by the project reset (`resetTransientProjectState`), so a late callback finds nothing to write. No automated test: the page cannot be component-tested and the browser harness has one project; recorded as a gap.
+  - **A transiently refused Confirm leaves "executing"** (confirmed, medium). A confirmed preview refused for a transient reason (recovery-required, already-in-flight, execution-failed; nothing changed; the card stays for a retry) left its entry "Executing …" and paused every other entry's Undo. PcbEditor now reports the attempt (`onExecutionGrantAttemptRefused`); the entry returns to awaiting confirmation with "Last attempt not made: <message>. Nothing changed — retry or cancel on the card." Test: `b18-d-review-entry-lifecycle`.
+  - **A replaced preview says so** (confirmed, medium). A preview replaced by a newer grant kept inviting a confirmation after its card was gone; its entry is now marked superseded. Test: a new browser scenario.
+  - **Stop, truthfully** (confirmed, low). A run stopped before its terminal event now still releases its interim notes (through a synthetic terminal), and the Stop text — kept in the answer, as D-A9 recorded — reads "Stopped. An AI change already sent to your editor is reported in its entry: made, or not made." ("still finishes" was false for a grant not yet consumed, which the loop retires `run_cancelled`). A Stop pressed after the run had already ended claims nothing: refused as a defect (a window of milliseconds), the guard is kept because it costs nothing. Tests: `b18-d-review-entry-lifecycle` (notes on a stop terminal) and the Stop scenario (the new text).
+  - **The chat Undo's reason after a Redo** (split: two verifiers refuted a re-enabled Undo as contrary to D-A8, one confirmed that the test pinned a false reason). The chat's Undo stays one-shot as D-A8 recorded; after the editor's Redo brings the change back its reason reads "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" instead of "Already undone". The I8 pin moved.
+  - **The undo hint is not a present-tense claim** (confirmed, low). "Undo: while it is the latest change — “Undo this change” here, the editor's Undo (one step), or say “Undo that.”"; the not-undoable line states the fact at settlement. The entry-log pin moved.
+  - **Exact operations** (confirmed, low). The Operations list shows every field an update can change: a silkscreen text's stroke, rotation, mirroring and anchor; a dimension's offset, layer, unit and precision, text height and stroke. Test: `b18-d-review-entry-lifecycle`.
+  - **A dropped grant is said to be dropped** (confirmed, low). When the page's SAFE receiver drops a grant, a line says so ("An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.") and that run's execution tool line reads "dropped by this page — it failed the integrity checks; nothing was changed" instead of "executing in your editor" or "awaiting your confirmation". The forged-grant scenario checks both.
+  - **Dead code** (confirmed, low). `runViewExecutionCommitted`, never called by the page, and the test that described it as page behaviour are removed; a preview confirmed after its run ended keeps its label, which stays true of when it was written.
+  - **The hold's redo case** (confirmed, low). Tested on the real session: while held, `canRedo` reads false and a redo does nothing; after it, the redo works.
+  - **Repair undo — hardening, not a reachable defect** (refuted). `undoRepairTransaction` reported success for an undo the history had refused (reproduced on the real session's hold with a matching transaction id) and now refuses when the history cannot undo and checks that the undo happened. The verifier showed the repair panel cannot reach it on a bound history: the executor replaces the repair's transaction id in the history entry, so the panel's Undo is refused earlier ("Only the most recent repair transaction can be undone directly."). That mismatch is a pre-existing bug outside B18-D, flagged as a separate task.
+
+  Every finding raised, with its verdict and disposition:
+
+| Finding | Dimension | Verdict | Disposition |
+|---|---|---|---|
+| Stop during a tool call or an explicit grant's settlement wait: the route's enqueue throws and the grant is retired run_unsettled, not run_cancelled | loop | REFUTED | Not changed: on this Next/Node stack the run is aborted before the body is cancelled, so the route's enqueue never throws there. |
+| A stopped run's interim notes are silently discarded, although D-A9 says they are still released as notes | loop | CONFIRMED (low) | Fixed: a run stopped before its terminal event is closed with a synthetic terminal, so its notes are released. |
+| AI change entries leak into the next project's chat after a project switch | concurrency | CONFIRMED (high) | Fixed: the entry map is cleared by the project reset; a late editor callback finds nothing to write. |
+| Repair panel says 'PCB repair undone' while the history hold silently refused the undo | concurrency | REFUTED (unreachable) | The panel cannot reach it on a bound history (the executor replaces the repair's transaction id, so its Undo is refused earlier). The function-level false success was real and is hardened; the id mismatch is a pre-existing bug, flagged as a separate task. |
+| A transiently refused Confirm leaves the entry 'Executing ...' forever and disables every chat Undo | concurrency | CONFIRMED (medium) | Fixed: PcbEditor reports the refused attempt; the entry returns to awaiting confirmation and says the attempt changed nothing. |
+| A preview entry whose grant was replaced keeps saying 'Change ready for your confirmation' with no card | concurrency | CONFIRMED (medium) | Fixed: an earlier preview still awaiting confirmation is marked superseded when a newer grant arrives. |
+| After a chat Undo, the entry claims 'Already undone' permanently even when the change is redone and latest again | concurrency | REFUTED (D-A8: the chat Undo is one-shot) | One-shot kept as recorded; the reason after the editor's Redo is now true (see the test-pin finding). |
+| Stop silently drops the run's interim notes (D-A9 says they are still released) | concurrency | CONFIRMED (low) | Fixed (the synthetic stop terminal). |
+| A late result from the PCB editor writes one project's AI-change entry into another project's chat, which is then saved | authority | CONFIRMED (medium) | Fixed (the project reset clears the entry map). |
+| A preview refused for a transient reason stays 'Executing' and pauses every chat Undo with a false reason | authority | CONFIRMED (low) | Fixed (the refused attempt returns the entry to awaiting confirmation). |
+| After the editor's Redo, the chat entry still says 'Already undone' for a change that is back on the board | authority | REFUTED (D-A8) | One-shot kept; the reason after a Redo is now true. |
+| The Operations list omits the fields a dimension update or silk text actually changes | authority | CONFIRMED (low) | Fixed: a silkscreen text's stroke, rotation, mirroring and anchor and a dimension's offset, layer, unit and precision, text height and stroke are shown. |
+| The test that enforces a single Confirm path (R1-1) does not exist at 6ca4941, and no amendment records that | authority | CONFIRMED (low) | Fixed in part 1 (b18-d-ui-gates, a162ef9). |
+| A late editor callback writes an AI change's entry into another project's chat, and the original project keeps a stale 'Executing' record | truth | CONFIRMED (high) | Fixed (the project reset); the original project's saved record reads as interrupted when reopened, per the recorded persistence contract. |
+| A transient refusal of a confirmed preview leaves its entry 'Executing, awaiting the editor's settlement' and pauses every other entry's Undo | truth | CONFIRMED (medium) | Fixed (the refused attempt). |
+| The entry's 'undoable' and 'the editor's Undo (one step)' copy is a snapshot from commit time and is never refreshed | truth | CONFIRMED (low) | The undo hint is conditional ('while it is the latest change'); the committed line drops 'undoable' in part 3. |
+| Stop's promise that 'an AI change your editor had already started still finishes' is false before the grant is consumed | truth | CONFIRMED (low) | Fixed: 'An AI change already sent to your editor is reported in its entry: made, or not made.' |
+| A preview entry replaced by a newer grant stays 'Change ready for your confirmation' after its card is gone | truth | CONFIRMED (low) | Fixed (marked superseded). |
+| entrySettled can turn a 'landed, unverified' entry back into 'Nothing was changed'; consumed-grant retirement reasons are worded as 'Nothing was changed' | truth | REFUTED (no path reaches it) | Not changed here; part 3 makes a later server retirement keep any terminal entry the editor already reported, after the UX verifier found a reachable case (an explicit grant refused by the live pre-check). |
+| Stop pressed after the run already completed still says the run was cancelled, and the Stop text enters the answer and the next run's history | truth | REFUTED (a window of milliseconds; D-A9 keeps the text in the answer) | The text stays in the answer as D-A9 recorded; a guard that costs nothing now skips it when the run had already ended. |
+| A grant the page dropped is still logged as 'executing in your editor', and later 'see its entry' points to an entry that does not exist | truth | CONFIRMED (low) | Fixed: a line names the dropped grant and the run's execution tool line reads 'dropped by this page'. |
+| Test pins a false 'Already undone' reason after the change was redone | tests | CONFIRMED (low) | Fixed: the pin moved to a true reason; the chat Undo stays one-shot (D-A8). |
+| A confirmed preview refused for a transient reason leaves its entry 'executing' and pauses every chat Undo | tests | CONFIRMED (low) | Fixed (the refused attempt). |
+| The R1-1 gate (b18-d-ui-gates) was never written; nothing pins a single Confirm surface | tests | CONFIRMED (low) | Fixed in part 1. |
+| The editor-side history-hold wiring (P2) has no test; the planned P2 browser check and a redo case are missing | tests | CONFIRMED (low) | The P2 browser check landed in part 1; the redo case is tested on the real session here. |
+| A reducer test claims page behaviour that does not exist (runViewExecutionCommitted is dead code) | tests | CONFIRMED (low) | Fixed: the helper and the false claim are removed. |
+| Stop drops the run's interim notes, contrary to D-A9; the Stop e2e covers only a Stop pressed before the response | tests | CONFIRMED (low) | Notes fixed; a Stop in the middle of a stream is not browser-tested (the scripted agent answers at once) — a recorded gap. |
+| Several new e2e assertions are weaker than the browser proof the amendments claim | tests | REFUTED | Not changed. |
+| Recovered after reload: the chat keeps a red 'interrupted' entry for a change that recovery committed | ux | REFUTED (the recorded persistence contract) | Not changed: a reloaded entry is a static record and says nothing false. |
+| An explicit grant refused by the editor's live pre-check shows the wrong reason: first 'Replaced…', then 'the editing session was replaced' | ux | CONFIRMED (medium) | Fixed in part 3. |
+| After the chat Undo and then a Redo, the entry still says 'Already undone'; after a toolbar Undo it still says committed and undoable | ux | CONFIRMED (low) | The reason after a Redo is true (part 2); the committed line drops 'undoable' (part 3). |
+| A transient refusal after Confirm leaves the entry at 'Executing' with no failure shown, and pauses every other entry's Undo | ux | CONFIRMED (medium) | Fixed (the refused attempt). |
+| On an AI undo/redo entry, the Undo copy ignores the undo direction and the 'say “Undo that.”' hint is refused | ux | CONFIRMED (low) | Fixed in part 3: the hint follows the replay's direction. |
+| The route override only works in one direction, and realistic messages are misrouted | ux | REFUTED (the same routing as before B18-D) | Not changed. |
+| Screen readers can't reach disabled-control reasons, the route reason is tooltip-only, and the toolbar Undo gives no hold reason | ux | CONFIRMED (low) | Fixed in part 3. |
+| Stop throws away the run's interim notes, although D-A9 says they are still released as notes | ux | REFUTED (one verifier; three others confirmed) | Fixed as confirmed by the others (the synthetic stop terminal). |
+- **D-A14 (I12, part 3)** — the UX verifier's remaining findings, fixed. (1) An explicit grant refused by the editor's live pre-check names that reason in its entry ("Not made: <reason>. Nothing was changed." — a new `precheck-refused` code carries the editor's message); it used to read "Replaced — …" and then, once the server's retirement arrived, "the editing session was replaced". A later server retirement now keeps any terminal entry the editor already reported, while a committed entry the server calls retired still fails safe to "landed, unverified". (2) The committed line no longer says "undoable" — a snapshot that stopped being true after a toolbar Undo or a later change; the undo hint, conditional since part 2, says when. The pinned phrase changes from `(one canonical transaction[, undoable])` to `(one canonical transaction)`, and the entry-log pin moved. (3) An AI undo's hint says the editor's Undo re-applies the change ("or say “Redo.”"); an AI redo's says it removes the change again ("or say “Undo that.”"); the entry keeps the replay's direction. (4) Assistive technology: the entry's disabled Undo and the card's disabled Confirm are described by their visible reasons (`aria-describedby`); the composer route's reason is in the chip's text for screen readers, not only its tooltip; while the history hold is active the toolbar's disabled Undo and Redo are titled "Undo and redo are paused: an AI change is being made", and the P2 scenario checks that title. The completeness critic: it reported seven gaps; each is fixed in part 4, the next commit (D-A15).
+- **D-A15 (I12, part 4)** — the review's completeness critic (`wf_ebe145ea-ffc`) reported seven gaps that no dimension had checked; each is fixed:
+  1. **A stream that ends without its terminal event** (a dropped connection, not Stop) — confirmed by reading, medium. Its interim notes were thrown away, no failure appeared and the run log turned green, "AI change issued" included. Now it is a failure: the notes are released, the log is marked failed and the message "The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made." is shown. Test: a browser scenario that removes the terminal event from the stream.
+  2. **The answer label's wording** — medium. "Written before any change was made" was false when an explicit change committed but its settlement came too late, and the label rides in the history the next run receives. It now reads "Written before the outcome of this change was confirmed — the entry above is authoritative.", true in every labelled case.
+  3. **Rule 2 on the schematic edit route** — medium; the path predates B18-D. The model's `note` became the assistant's answer ("Changed R1 to 4.7 kΩ. Review the exact operations …") before anything was applied, and stayed in the history. Owner decision OD-18 (a default, reversible by the owner): Rule 2 covers every chat surface. The answer is now the page's own sentence and the note is a labelled note in the run log (`editProposalMessages`).
+  4. **The chat Undo after a later human change was undone** — low. The project timeline only undoes its newest commit or redo, so the chat Undo stays unavailable; its reason now says what works: "Not available here after a later undo — it is on top again: the editor's Undo reverts it." (the I8 pin moved).
+  5. **Recovery results for a live entry** — medium, narrow. `entryRecovery` only added a sentence; a live entry now settles to what the sweep established (adopted or settled → committed; abandoned → not made; refused as poisoned → landed, unverified); a terminal entry keeps its state.
+  6. **The static Tier 3 line** — low. §1 item 3's header line ("Release, qualification and ordering are never done by the assistant — use the release workflow.") now shows for every message, not only when the composer hint's words match.
+  7. **The in-progress lines** — low. "Issued" and "Executing" no longer claim "undoable" before any result exists, and they show how long the assistant waits for the editor (§1 item 6), taken from the settlement budget.
+- **D-A16 (I12, part 5)** — a second adversarial review (`wf_a9af930e-505`: four read-only finders over I11–I12 pinned at `e543cfe` — truth, authority, concurrency, tests and gates — one skeptic per dimension, then a completeness critic) raised 17 findings: 15 confirmed (two medium), one plausible, one refuted; the critic added six gaps. Every confirmed finding, the plausible one and every gap is fixed:
+  1. **A dropped connection** (medium). A real drop errors the response body (the read rejects), which skipped part 4's cut handling: the answer was overwritten with "Error — please try again.", the notes were lost and nothing pointed at the entry. A read that rejects — not an abort, not Stop — now ends the loop and takes the same path as a cut stream. Browser: the body errors mid-stream after losing its terminal line.
+  2. **The wait is named only where it exists**. A confirmed preview's run has already ended, so its "Executing" line now reads "… — awaiting the editor's result"; only an explicit grant's names the assistant's wait.
+  3. **A stored entry never names the chat's button**. The undo hint is persisted with the entry and a reloaded record has no live control, so the hint no longer says "“Undo this change” here" (two pins moved); the browser checks a reloaded entry.
+  4. **A dropped grant's answer** . The label named "the entry above" when the page had dropped the run's only grant. Page decisions — `runViewGrantReceived` / `runViewGrantDropped`, which no stream event can reach — choose the label's wording, and a drop never removes a label: a run whose only grants were dropped reads "Written without knowing that this page dropped the change — nothing was changed; the run log above says why."; "see its entry" is written only when an entry exists. The forged-grant scenario checks the label.
+  5. **The label after a durable outcome**. A settled (any outcome) or retired result reaches the model before it writes its answer, so the label now applies only while the outcome was unknown (an I3 pin moved: not-committed and retired runs are unlabelled; unsettled and in-flight runs stay labelled).
+  6. **The chat Undo's reason follows the change**. "Already undone — the editor's Redo brings it back." stayed after a later commit had cleared the redo stack. The chat Undo now keeps the seq of the operation it undid, and the reason replays the PCB steps recorded since: on the redo stack ("… brings it back", or "… after re-applying N earlier steps"), cleared by a later change, redone and on top, redone under later changes, on top again after a later undo, or the history replaced. It is tested against a real PCB history recorded through the editor's own step (`pcbHistoryStep`, extracted from PcbEditor for that), checked against `canRedo` and the labels. Found while testing: the recording classified a change by counts, so a commit made after an undo (it clears the redo stack) was recorded as a redo, and a commit into a full history (it evicts the oldest entry) was not recorded at all — a B17-E defect, fixed: changes are classified by entry identity.
+  7. **The autonomy control** (the a11y finding confirmed; the claims finding plausible). Every result is announced in a persistent status region, focus returns to the select, and the note (with the lock reason) describes the select. A lost, unreadable or unconfirmed response no longer says "nothing was changed": it says the response did not confirm the change and reads the setting again; only the route's own `AGENT_AUTONOMY_*` refusals are shown as they say. A setting it cannot read is "not known here; every run still applies the server's setting", never "behaves as proposal only".
+  8. **The edit route's note on the review dialog** (medium). The model's note was sealed as the proposal's provenance and shown unlabelled in "AI edit proposal — review before applying". The sealed note is now the page's own sentence (`editRouteProvenanceNote`), as the agent path's is; the model's note stays only a labelled run-log note (OD-18).
+  9. **A refused Confirm on a used-up grant**. Two refusals come after the server consumed the grant and settled it as not committed; the entry still invited a retry that could only be refused. The ritual flags them (`grantConsumed`), the card is kept only for a transient refusal of an unconsumed grant (`refusalKeepsPreviewCard`, the ritual's own rule), and the entry reads "Not made — the grant was used and settled as not committed, so it cannot be retried. Nothing was changed.". The B18-B crash test checks the flag and that a retry is refused `grant-invalid`.
+  10. **The wiring is pinned**. The fixes above and in parts 2–4 were tested as pure reducers, so a lost prop or branch broke no test. `b18-d-ui-gates` now requires 15 wires exactly once (the page's entry callbacks, the edit route's answer, content, labelled note and sealed note, the run view's page decisions, the Undo's timeline and seq, the editor's refusal report, card rule, pre-check reason and recording step), forbids sealing `data.note`, and a tripwire removes each wire in turn. Browser: a Confirm whose tender is aborted keeps its card; the entry returns to awaiting confirmation with "Last attempt not made: …", nothing is paused, and a retry commits.
+  11. **A preview replaced while its Confirm runs** (critic, medium). A transient refusal arriving after a newer grant replaced the card reopened the old entry with no card. PcbEditor now retires it (the entry reads "Replaced …") and cancels it durably; the card says "Applying…" only for its own grant (another grant's ritual shows as the disabled reason "an execution is already in progress.").
+  12. **A replaced preview on the server** (critic). A preview replaced before it was confirmed stayed issued for its lifetime; PcbEditor now cancels it durably with `superseded_by_new_grant`.
+  13. **The retirement reason names what happened** (critic). The editor's live pre-check, the ritual's pre-consume refusals of an explicit grant and its drift check retired grants as `session_superseded` ("the editing session was replaced") — false unless it was. A new retirement reason `refused_before_execution` ("your editor's checks refused it before making it") is used there; `session_superseded` stays for a superseded session. The cancel route accepts these two further labels (a cancel still retires only an ISSUED grant; the auth wrapper, same-origin CSRF, the role rows and the bounded reader are unchanged; the route count is unchanged); three B18-B pins moved and the vocabulary pin reads 24.
+  14. **S5's observer** (critic). It recorded only leaf elements, so an interim text inside mixed markup (an answer with a bold word) could leak unseen. It now checks text nodes; a browser probe proves a formatted appearance is recorded (and is then removed from the log).
+
+  Every finding raised, with its verdict and disposition:
+
+| Finding | Verdict | Disposition |
+|---|---|---|
+| A dropped connection bypasses the stream-cut handling (answer overwritten, notes lost, no pointer) | CONFIRMED (medium) | Fixed (item 1). |
+| The cut handling only catches a clean end of stream | CONFIRMED (low) | Fixed (item 1). |
+| "The assistant waits up to 60 s" on a confirmed preview (raised four times) | CONFIRMED (low) | Fixed (item 2). |
+| A reloaded committed entry tells the user to press "Undo this change" | CONFIRMED (low) | Fixed (item 3). |
+| For a dropped grant the label and the settlement line point to an entry that does not exist | CONFIRMED (low) | Fixed (item 4). |
+| The label points to a missing entry and misstates when the text was written after a not-made outcome | CONFIRMED (low) | Fixed (items 4 and 5). |
+| After a chat Undo, "the editor's Redo brings it back" is false after a later edit (raised twice) | CONFIRMED (low) | Fixed (item 6). |
+| The autonomy control's result is not announced, focus is lost, the lock reason is not described | CONFIRMED (low) | Fixed (item 7). |
+| The autonomy control claims "nothing was changed" / "behaves as proposal only" when it cannot know | PLAUSIBLE (low) | Fixed (item 7). |
+| The edit route's model note is shown unlabelled on the review dialog | CONFIRMED (medium) | Fixed (item 8). |
+| A refused Confirm whose grant was consumed is shown as ready to confirm again | CONFIRMED (low) | Fixed (item 9); the attempt row keeps the ritual's own message, bounded to 300 characters. |
+| The transient-refusal and pre-check fixes are tested only as pure reducers | CONFIRMED (low) | Fixed (item 10). |
+| A recovery-settled live entry reads committed with no transaction and an unfounded undo reason | REFUTED (no lasting path: every tender reports an outcome, and a lifecycle change supersedes a pending entry before the sweep returns) | Not changed. |
+| Critic: a preview replaced while its Confirm runs is reopened with no card | gap (medium) | Fixed (item 11). |
+| Critic: a replaced preview is never cancelled on the server | gap | Fixed (item 12). |
+| Critic: the pre-check path's durable reason is "session superseded" | gap (low) | Fixed (item 13). |
+| Critic: Rule 2 on the edit route is not enforced by any gate | gap | Fixed (item 10, the edit-route wires). |
+| Critic: the "on top again" reason is not tied to the real recording | gap | Fixed (item 6, the real-history test and the recording defect it found). |
+| Critic: S5's observer misses mixed markup | gap | Fixed (item 14). |

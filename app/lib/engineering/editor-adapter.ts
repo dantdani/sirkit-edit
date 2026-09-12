@@ -49,12 +49,13 @@ import type { PcbHistory, PcbHistoryMetadata } from "../pcb/history";
 import { pcbRevisionId } from "../pcb/revision";
 import type { PcbBoard } from "../pcb/types";
 import { ACTION_COVERAGE_REGISTRY } from "./action-registry";
-import { CanonicalExecutor, deriveExecutorLineageId, type ExecutionRejectionCode, type ExecutionResult } from "./executor";
+import { CanonicalExecutor, deriveExecutorLineageId, type ExecutionRejectionCode, type ExecutionResult, REPLAY_COMMAND_ID } from "./executor";
 import { createEditorSessionChannel } from "./interactive-channel.internal";
 import { isBareHistoryAuthorized } from "./pcb-bare-authority.internal";
 import { createPersistenceEnvelope, InMemoryAtomicProjectStore, validatePersistenceEnvelope, type AtomicProjectStore } from "./persistence";
 import { computeProjectRevision } from "./revision";
 import { engineeringDigest } from "./stable";
+import { canonicalLineageDigest } from "./semantic-board-digest"; // [B18-C review]
 import { EngineeringTransactionService } from "./transaction-service";
 import type { CanonicalProjectState, EngineeringActor, EngineeringOperation, ProjectPersistenceEnvelope, ProjectRevision } from "./types";
 
@@ -70,20 +71,10 @@ export interface CanonicalEditorIdentity {
  * Semantic lineage digest: the board with zone-fill DERIVED state normalized
  * away. `applyDerived` zone refills change board content without a history
  * entry; excluding fills keeps refills from being misread as lineage drift.
+ * [B18-C review] The one implementation lives in `./semantic-board-digest`
+ * (pure; shared with the granted-execution builder and ritual) — re-exported.
  */
-export function canonicalLineageDigest(board: PcbBoard): string {
-  const normalized = {
-    ...board,
-    zones: board.zones.map((zone) => ({
-      ...zone,
-      fill: [],
-      dirty: false,
-      fillState: undefined,
-      fillHash: undefined,
-    })),
-  };
-  return engineeringDigest({ schema: "sirkit.b03-lineage.v1", board: normalized });
-}
+export { canonicalLineageDigest };
 
 // ─── Structured results + event log ──────────────────────────────────────────
 
@@ -134,7 +125,10 @@ export interface CanonicalAdapterEvent {
 /** [B15.3] see `CanonicalEditorSession.durableIdempotencyEvidence`. */
 export type PcbDurableIdempotencyEvidence =
   | { kind: "unavailable" }
-  | { kind: "absent" }
+  /** [B18-E validation] `lineageId`: the lineage the durable ledger currently belongs to (null when there is no envelope).
+   *  The ledger answers only for ITS OWN lineage — reopening one replaces the log wholesale — so a caller that would
+   *  conclude "this never committed" from an absence must first check that the lineage has not changed underneath it. */
+  | { kind: "absent"; lineageId: string | null }
   | { kind: "corrupt"; detail: string }
   | {
       kind: "found";
@@ -177,6 +171,18 @@ export interface CanonicalCommitRequest {
    * caller.
    */
   provenanceCandidateId?: string;
+}
+
+/** [B18-C I8] One granted undo / redo of a referenced durable transaction (see `CanonicalEditorSession.replayUnderGrant`). */
+export interface CanonicalReplayRequest {
+  direction: "undo" | "redo";
+  referencedTransactionId: string;
+  /** The grant id — the replay transaction's clientOperationId, so the durable idempotency evidence finds it. */
+  idempotencyKey: string;
+  /** The canonical head sequence the grant was issued against. */
+  expectedBaseHeadSequence: number;
+  label: string;
+  metadata?: Partial<PcbHistoryMetadata>;
 }
 
 // ─── Session ─────────────────────────────────────────────────────────────────
@@ -281,6 +287,10 @@ export class CanonicalEditorSession {
   private readonly eventLog: CanonicalAdapterEvent[] = [];
   private queue: Promise<unknown> = Promise.resolve();
   private disposed = false;
+  /** [B18-D I7] active history holds (a granted execution in flight): the user's undo / redo are refused meanwhile. */
+  private readonly historyHolds = new Map<number, string>();
+  private holdSeq = 0;
+  private readonly holdListeners = new Set<(board: PcbBoard, entry: { label: string }) => void>();
 
   constructor(raw: PcbHistory, identity: CanonicalEditorIdentity, options?: BindCanonicalOptions) {
     this.delegate = raw;
@@ -374,6 +384,79 @@ export class CanonicalEditorSession {
   /** Queue-serialized canonical execution of one migrated UI action. */
   commit(request: CanonicalCommitRequest): Promise<CanonicalCommitResult> {
     return this.enqueue(() => this.runCommit(request));
+  }
+
+  /**
+   * [B18-C I8] Undo or redo ONE referenced durable transaction under a server-minted grant — canonical FIRST: the executor
+   * verifies the reference, the lineage position and a pure dry run BEFORE any mutation, and only an accepted replay is
+   * published into the editor history (a NEW applied entry, never a stack pop). A refusal mutates nothing and never rebases
+   * the lineage (the grant is bound to it). A landed result the durable records cannot confirm throws AFTER the envelope is
+   * persisted, so the ritual's canonical-evidence path reports it as landed and unverified — never "nothing changed".
+   */
+  replayUnderGrant(request: CanonicalReplayRequest): Promise<CanonicalCommitResult> {
+    return this.enqueue(() => this.runReplay(request));
+  }
+
+  /**
+   * [B18-D I7] Refuse the user's undo / redo while a granted execution is in flight (the ritual is the only caller). Every
+   * undo path — the toolbar, Ctrl+Z, the select tool, the project timeline, board repair — goes through this wrapped
+   * history, so this is the single choke point: an Undo pressed while the executor works would otherwise pop at once, be
+   * overwritten by the commit (computed from the pre-undo base), lose its redo and make the reconcile rebase the lineage.
+   * It only REFUSES — no mutation path. Returns an idempotent release; subscribers hear when a hold starts and ends, so the
+   * editor's Undo control follows it.
+   */
+  holdHistorySteps(reason: string): () => void {
+    const id = ++this.holdSeq;
+    this.historyHolds.set(id, reason);
+    this.notifyHoldChange();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.historyHolds.delete(id);
+      this.notifyHoldChange();
+    };
+  }
+
+  /** [B18-D I7] Why undo / redo are refused right now, or null. */
+  historyHoldReason(): string | null {
+    const first = this.historyHolds.values().next();
+    return first.done ? null : first.value;
+  }
+
+  private notifyHoldChange(): void {
+    for (const listener of [...this.holdListeners]) {
+      try { listener(this.delegate.present, { label: "history hold" }); } catch { /* a subscriber's error never breaks the hold */ }
+    }
+  }
+
+  /** [B18-C I8] Whether `transactionId` can be undone (it IS the canonical head) or redone (the head is the replay that undid
+   *  it) right now — read-only, from the durable records (never the in-memory links, which a reload clears). */
+  isReplayEligible(direction: "undo" | "redo", transactionId: string): boolean {
+    if (!this.service || this.disposed) return false;
+    const records = this.service.durableRecords();
+    const referenced = records.find((item) => item.transaction.transactionId === transactionId);
+    if (!referenced || referenced.status !== "accepted" || !referenced.appliedChangeSet?.baseSemanticStateDigest || !referenced.appliedChangeSet.resultSemanticStateDigest) return false;
+    const head = this.service.currentRevision();
+    if (direction === "undo") return head.headTransactionId === transactionId;
+    const top = records.find((item) => item.transaction.transactionId === head.headTransactionId);
+    return top?.transaction.provenance?.candidateId === `undo:${transactionId}`;
+  }
+
+  /** [B18-C I8] A landed replay is exactly what it claims: its durable record links the referenced transaction and direction,
+   *  and its recorded semantic result is the referenced change's other side (two DIFFERENT durable records agree).
+   *  [B18-C review 3] With `expectedResultHeadSequence`, its RECORDED result position is that single advance too — from the
+   *  durable record, so a user step after it (an Undo pressed at once) never changes the answer. */
+  replayResultVerified(direction: "undo" | "redo", referencedTransactionId: string, transactionId: string, expectedResultHeadSequence?: number): boolean {
+    if (!this.service || this.disposed) return false;
+    const records = this.service.durableRecords();
+    const replay = records.find((item) => item.transaction.transactionId === transactionId);
+    const referenced = records.find((item) => item.transaction.transactionId === referencedTransactionId);
+    if (!replay?.appliedChangeSet || !referenced?.appliedChangeSet) return false;
+    if (replay.transaction.provenance?.candidateId !== `${direction}:${referencedTransactionId}`) return false;
+    if (expectedResultHeadSequence !== undefined && replay.resultingRevision?.headSequence !== expectedResultHeadSequence) return false;
+    const expected = direction === "undo" ? referenced.appliedChangeSet.baseSemanticStateDigest : referenced.appliedChangeSet.resultSemanticStateDigest;
+    return typeof expected === "string" && expected.length > 0 && replay.appliedChangeSet.resultSemanticStateDigest === expected;
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────
@@ -500,12 +583,13 @@ export class CanonicalEditorSession {
     } catch {
       return { kind: "unavailable" };
     }
-    if (!envelope) return { kind: "absent" };
+    if (!envelope) return { kind: "absent", lineageId: null };
     try {
       const integrityIssues = validatePersistenceEnvelope(envelope);
       if (integrityIssues.length > 0) return { kind: "corrupt", detail: integrityIssues[0] ?? "ENVELOPE_INVALID" };
+      const envelopeLineage = typeof envelope.lineageId === "string" ? envelope.lineageId : null;
       const record = envelope.transactionLog.find((candidate) => candidate.transaction?.clientOperationId === clientOperationId);
-      if (!record) return { kind: "absent" };
+      if (!record) return { kind: "absent", lineageId: envelopeLineage };
       const transaction = record.transaction;
       if (typeof transaction.transactionId !== "string" || transaction.transactionId.length === 0 || !Array.isArray(transaction.operations)) {
         return { kind: "corrupt", detail: "MALFORMED_TRANSACTION_RECORD" };
@@ -556,6 +640,49 @@ export class CanonicalEditorSession {
     if (boardDigest !== headDigest) {
       await this.openLineage(this.delegate.committedPresent, "rebased", undefined, "Editor board diverged from the canonical head (legacy-path mutation); rebased onto the current board.");
     }
+  }
+
+  private async runReplay(request: CanonicalReplayRequest): Promise<CanonicalCommitResult> {
+    type RejectionCode = Extract<CanonicalCommitResult, { ok: false }>["reasonCode"];
+    const refuse = (reasonCode: RejectionCode, message: string, diagnostics: string[] = []): CanonicalCommitResult => {
+      this.record({ kind: "rejected", detail: `granted ${request.direction} of ${request.referencedTransactionId}: ${reasonCode} — ${message}` });
+      return { ok: false, status: "rejected", reasonCode, message, diagnostics };
+    };
+    // NO lineage repair here: a replay under a grant is bound to the lineage it was issued against — a diverged board refuses.
+    if (!this.service || !this.executor) return refuse("stale_revision", "The canonical session has no open lineage. Nothing was changed.");
+    const service = this.service;
+    if (canonicalLineageDigest(this.delegate.committedPresent) !== canonicalLineageDigest(service.currentProject().pcb)) return refuse("stale_revision", "The editor board diverged from the canonical head. Nothing was changed.");
+    const head = service.currentRevision();
+    if (head.headSequence !== request.expectedBaseHeadSequence) return refuse("stale_revision", "The history advanced since the grant was issued. Nothing was changed.");
+    if (!this.isReplayEligible(request.direction, request.referencedTransactionId)) return refuse("replay_position", `The referenced change is no longer ${request.direction}-eligible at the head. Nothing was changed.`);
+    const changeSet = service.durableRecords().find((item) => item.transaction.transactionId === request.referencedTransactionId)!.appliedChangeSet!;
+    const result = await this.executor.executeUndoRedo({
+      referencedTransactionId: request.referencedTransactionId,
+      direction: request.direction,
+      actor: this.actor,
+      expectedLineage: { ...this.identity, lineageId: this.lineage },
+      expectedHeadRevision: head,
+      expectedSourceStateDigest: (request.direction === "undo" ? changeSet.resultSemanticStateDigest : changeSet.baseSemanticStateDigest)!,
+      expectedResultStateDigest: (request.direction === "undo" ? changeSet.baseSemanticStateDigest : changeSet.resultSemanticStateDigest)!,
+      idempotencyKey: request.idempotencyKey,
+      reason: request.label,
+    });
+    if (this.disposed) {
+      this.record({ kind: "rejected", detail: `granted ${request.direction}: session retired while the replay was in flight — result not published.` });
+      return { ok: false, status: "rejected", reasonCode: "session_retired", message: "The replay was not applied: the board was replaced while it was in flight. Nothing was changed.", diagnostics: ["SESSION_RETIRED_IN_FLIGHT"] };
+    }
+    // Every executor check and the dry run precede its submit: a rejection mutated nothing.
+    if (result.status === "rejected") return refuse(result.reasonCode, `The canonical executor refused the ${request.direction} (${result.reasonCode}). Nothing was changed.`, result.diagnostics);
+    const mapped = this.applyExecutionResult({ commandId: REPLAY_COMMAND_ID, label: request.label, metadata: request.metadata, buildOperations: () => [] }, result);
+    if (mapped.ok && mapped.status === "executed") {
+      // [B18-C review 3] verified SYNCHRONOUSLY, before the envelope write yields: an Undo the user presses during the write is
+      // a later, separate history step (its reconcile queues behind this task) and never makes an exact replay unverified.
+      const verified = canonicalLineageDigest(this.delegate.committedPresent) === canonicalLineageDigest(service.currentProject().pcb)
+        && this.replayResultVerified(request.direction, request.referencedTransactionId, mapped.transactionId ?? "", head.headSequence + 1);
+      await this.persistEnvelope();
+      if (!verified) throw new Error("REPLAY_RESULT_UNVERIFIED");
+    }
+    return mapped;
   }
 
   private async runCommit(request: CanonicalCommitRequest): Promise<CanonicalCommitResult> {
@@ -687,27 +814,34 @@ export class CanonicalEditorSession {
 
   private makeWrappedHistory(): PcbHistory {
     const delegate = this.delegate;
+    const held = (): boolean => this.historyHolds.size > 0; // [B18-D I7]
     return {
       get present() { return delegate.present; },
       get committedPresent() { return delegate.committedPresent; },
-      get canUndo() { return delegate.canUndo; },
-      get canRedo() { return delegate.canRedo; },
+      get canUndo() { return delegate.canUndo && !held(); },
+      get canRedo() { return delegate.canRedo && !held(); },
       get undoLabel() { return delegate.undoLabel; },
       get redoLabel() { return delegate.redoLabel; },
       get entries() { return delegate.entries; },
       get events() { return delegate.events; },
       execute: (label, mutate, metadata) => delegate.execute(label, mutate, metadata),
-      subscribe: (cb) => delegate.subscribe(cb),
+      subscribe: (cb) => {
+        const off = delegate.subscribe(cb);
+        this.holdListeners.add(cb); // [B18-D I7] a hold's start and end republish the history view
+        return () => { off(); this.holdListeners.delete(cb); };
+      },
       transient: (mutate) => delegate.transient(mutate),
       cancelTransient: () => delegate.cancelTransient(),
       applyDerived: (label, mutate) => delegate.applyDerived(label, mutate),
       undo: (): void => {
+        if (held()) return; // [B18-D I7] refused while a granted execution is in flight (the editor and the timeline say why)
         const applied = delegate.entries.filter((entry) => entry.state === "applied");
         const top = applied.at(-1);
         delegate.undo(); // synchronous patch undo — the UI contract
         if (top) void this.scheduleReconcile(top.metadata.transactionId, "undo", top.label);
       },
       redo: (): void => {
+        if (held()) return; // [B18-D I7]
         const redoTop = delegate.entries.filter((entry) => entry.state === "redo").at(-1);
         delegate.redo(); // synchronous patch redo — the UI contract
         if (redoTop) void this.scheduleReconcile(redoTop.metadata.transactionId, "redo", redoTop.label);

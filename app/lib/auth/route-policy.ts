@@ -48,6 +48,8 @@ const WRITE_EDITORS: readonly ProjectRole[] = ["pcb_editor", "project_admin", "a
 const REVIEW_EDITORS: readonly ProjectRole[] = ["pcb_editor", "reviewer", "project_admin"];
 const ADMIN_ONLY: readonly ProjectRole[] = ["project_admin"];
 const QUALIFY_ROLES: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
+/** [B18-B] the roles that may tender, cancel or settle a Tier 1 execution grant (= TIER1_EXECUTE_ROLES; a grant is issued only to them). */
+const TIER1_EXECUTE: readonly ProjectRole[] = ["pcb_editor", "project_admin"];
 
 // ── Policy constructors (defaults per class) ─────────────────────────────────
 function pub(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
@@ -250,6 +252,12 @@ const ALL: RoutePolicy[] = [
   //    freerouting / kicad-cli routes spawn external processes on caller-
   //    supplied data and therefore require active membership + an engineering
   //    role (no bounded public-use case exists for process execution).
+  // ── [B18-A] agent autonomy setting: every member reads; ONLY a project administrator changes it (CSRF, audited CAS) ──
+  ...read("/api/agent/autonomy", ["GET"], "agent autonomy setting + audit trail (trusted project scope; every member)"),
+  ...mutate("/api/agent/autonomy", ["POST"], "agent autonomy setting change (project administrator; compare-and-set on the revision; one audit event per change)", { roles: ADMIN_ONLY }),
+  ...read("/api/agent/execution-grant", ["GET"], "own execution grant read (public projection with lazy expiry; Tier 1 execute roles; a foreign or unknown id is 404 — never an existence oracle)", TIER1_EXECUTE),
+  ...mutate("/api/agent/execution-grant", ["POST"], "execution grant consumption or cancellation (one-shot compare-and-set burn bound to the SAME principal, session and membership revision the grant was minted for; forged handles refused with zero writes)", { roles: TIER1_EXECUTE }),
+  ...mutate("/api/agent/execution-grant/settle", ["POST"], "execution grant settlement (browser-attested outcome bound to the consumed attempt and commitment; the awaiting chat run reads the settled record only)", { roles: TIER1_EXECUTE }),
   ...read("/api/bom/snapshot", ["GET"], "durable BOM snapshot list (trusted project scope)"),
   ...mutate("/api/bom/snapshot", ["POST"], "durable BOM snapshot create (trusted project scope)", { roles: WRITE_EDITORS }),
   ...read("/api/bom/notifications", ["GET"], "durable BOM notifications list (trusted project scope)"),

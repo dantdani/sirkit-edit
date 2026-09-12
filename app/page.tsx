@@ -58,6 +58,12 @@ import { EditorContextBridge } from "@/app/lib/agent/editor-context-bridge"; // 
 import { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
+import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
+import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
+import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
+import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
 import { listProjects, saveProjectFields, renameProject, deleteProject, type SavedProject, type StoredChatMessage } from "@/lib/persistence";
 import { bootstrapCurrentProject, createProjectRecord, loadProjectRecord, markProjectCurrent, type ProjectBootstrap } from "@/app/lib/project/current";
@@ -200,17 +206,6 @@ function isSupportSuggestion(s: { title: string; detail: string; category?: stri
 
 function isGuardedSupportApplyInstruction(text: string): boolean {
   return text.startsWith("Apply ONLY the bounded support-circuit suggestions below.");
-}
-
-function inferComposerAction(text: string, hasSchematic: boolean): "ask" | "edit" | "generate" {
-  const t = text.trim().toLowerCase();
-  if (!t) return "ask";
-  if (!hasSchematic) return "generate";
-  if (/^(generate|create|design|build|make|draw)\b/.test(t)) return "generate";
-  if (/^(edit|change|set|rename|delete|remove|add|replace|swap|connect|disconnect|rewire|fix|update|make\s+(r|c|u|d|led|j|sw)\d+\b)/.test(t)) {
-    return "edit";
-  }
-  return "ask";
 }
 
 // Hit-test radius for net labels (delete / drag).
@@ -2557,6 +2552,8 @@ function KicadMetaRow({ label, value }: { label: string; value: string }) {
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput]       = useState("");
+  // [B18-D I1] the user's choice to send a suggested schematic edit or generation to the assistant instead (reset on submit).
+  const [composerRouteOverride, setComposerRouteOverride] = useState<ComposerRoute | null>(null);
   const [loading, setLoading]   = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [mode, setMode]         = useState<Mode>("build");
@@ -2687,6 +2684,13 @@ export default function Home() {
   // [B17-F] the ONE pending agent layout candidate (placement / routing) narrowed by the SAFE receiver; the PCB
   // editor registers it in its own candidate store after re-verifying it. Display grants nothing.
   const [pendingLayoutCandidate, setPendingLayoutCandidate] = useState<{ candidate: LayoutCandidate; originRunId: string | null } | null>(null);
+  // [B18-B] the ONE pending server-minted execution grant narrowed by the SAFE receiver; the PCB editor runs the
+  // granted-execution ritual (preview grants wait for the human's Confirm; explicit grants execute once). Display grants nothing.
+  const [pendingExecutionGrant, setPendingExecutionGrant] = useState<{ grant: ReceivedExecutionGrant["grant"]; decision: ReceivedExecutionGrant["decision"]; note: string | null; originRunId: string | null } | null>(null);
+  // [B18-D I6/I8] one chat execution entry per grant, kept by grant id (the ref for handlers, the state for rendering).
+  // Declared with the other pending grant state so the project reset below can clear it: entries never cross projects.
+  const executionEntriesRef = useRef<Map<string, ExecutionEntry>>(new Map());
+  const [executionEntries, setExecutionEntries] = useState<ReadonlyMap<string, ExecutionEntry>>(() => new Map());
 
   // B06.2/B07.2: pending schematic-history recovery decision (projection
   // conflict, corrupt durable history, or an identity-invalid projection
@@ -2957,7 +2961,8 @@ export default function Home() {
       ? {
           id: message.id, role: "log" as const, title: message.title,
           status: message.status === "running" ? ("error" as const) : message.status,
-          entries: message.entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
+          // [B18-E E1] a committed AI-change entry's undo hint is replaced by one that stays true after a reload
+          entries: restoredEntryLog(message).entries.map((entry) => entry.status === "running" ? { ...entry, status: "error" as const, text: `${entry.text} (interrupted by reload)` } : entry),
         }
       : message);
   }
@@ -3065,6 +3070,9 @@ export default function Home() {
     setTier1ApplyBusy(false);           // B12: no in-flight apply crosses projects
     setTier1Receipt(null);              // B12: a receipt belongs to its project
     setPendingPcbProposal(null);        // B15.3: no stale PCB proposal crosses projects
+    setPendingExecutionGrant(null);     // B18-C review: a pending execution grant never crosses projects (it idles out server-side)
+    executionEntriesRef.current.clear(); // [B18-D review] no execution entry crosses projects: a late editor callback for the
+    setExecutionEntries(new Map());      // previous project's grant finds nothing to write into the new project's chat
     setSchematicRecovery(null);         // recovery re-evaluated by the new open
     // B07.5 (failure A) — release recovery-decision ownership: the previous
     // project's in-flight decision (if any) is already scope-stale; the new
@@ -3855,13 +3863,15 @@ export default function Home() {
           setReplacementReceipt(outcome.receipt);
           setSelectedId(null);
           setSelectedKicadId(null);
-          const verb = outcome.status === "already-applied" ? "was already applied" : "applied";
-          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: `Replacement ${verb} — ${outcome.receipt.sourcePartId} → ${outcome.receipt.target.partId}, canonical transaction ${outcome.receipt.transactionId.slice(0, 12)}… (verified, undoable).` }]);
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.applied({ alreadyApplied: outcome.status === "already-applied", sourcePartId: outcome.receipt.sourcePartId, targetPartId: outcome.receipt.target.partId, transactionId: outcome.receipt.transactionId }) }]);
           autoRunIncludesTidy.current = false;
           setAutoRunToken((t) => t + 1);
         } else {
           if (outcome.code !== "already-in-flight" && outcome.code !== "editor-busy") { setPendingReplacement(null); setPendingReplacementRunId(null); }
           showToast(outcome.message);
+          // [B18-E E15] a refused apply used to be a toast and nothing else: the run log kept saying a proposal awaited
+          // review and never said the attempt failed. The chat now says it, in the same place the success sentence lands.
+          setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.refused(outcome.message) }]);
         }
       });
     } finally {
@@ -3874,7 +3884,9 @@ export default function Home() {
     if (pendingReplacement) approvedMutationAudit.record({ at: Date.now(), proposalId: pendingReplacement.proposalId, originRunId: pendingReplacementRunId, event: "canceled", code: null });
     setPendingReplacement(null);
     setPendingReplacementRunId(null);
-    showToast("Replacement proposal discarded — nothing was changed.");
+    showToast(replacementChatLines.discarded());
+    // [B18-E E15] and the chat is told the decision, so the run log does not keep saying a proposal awaits review.
+    setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: replacementChatLines.discarded() }]);
   }, [replacementApplyBusy, pendingReplacement, pendingReplacementRunId]);
 
   // ── B06.2: explicit schematic-history recovery choices ─────────────────────
@@ -4370,6 +4382,58 @@ export default function Home() {
     setMessages(build);
   }
 
+  // [B18-D I6] one chat execution entry per grant (display only). Kept by grant id so the preview outcome, the explicit
+  // settlement and recovery update the same entry; persisted through the existing chat log shape (a reloaded entry is a
+  // static record).
+  const upsertExecutionEntry = useCallback((entry: ExecutionEntry, insertBeforeId?: string) => {
+    executionEntriesRef.current.set(entry.grantId, entry);
+    setExecutionEntries((prev) => new Map(prev).set(entry.grantId, entry));
+    const message = entryToLogMessage(entry);
+    setMessages((prev) => {
+      if (prev.some((existing) => existing.id === message.id)) return prev.map((existing) => (existing.id === message.id ? message : existing));
+      const at = insertBeforeId ? prev.findIndex((existing) => existing.id === insertBeforeId) : -1;
+      return at >= 0 ? [...prev.slice(0, at), message, ...prev.slice(at)] : [...prev, message];
+    });
+  }, []);
+
+  // [B18-D I9] Stop (chat-execution-ux.md §8 I9): send() registers its run here; Stop cancels the response reader and
+  // carries nothing — the route aborts the run, and the loop retires its still-issued explicit grants. An AI change the
+  // editor had already started still finishes and is reported in its entry.
+  const activeChatRunRef = useRef<{ requestId: string; reader: ReadableStreamDefaultReader<Uint8Array> | null; stopped: boolean } | null>(null);
+  const stopChatRun = useCallback(() => {
+    const run = activeChatRunRef.current;
+    if (!run || run.stopped) return;
+    run.stopped = true;
+    if (run.reader) void run.reader.cancel().catch(() => undefined);
+  }, []);
+  // [B18-D I8] "Undo this change" on a committed entry (chat-execution-ux.md §1 item 10): available only for a change
+  // still undoable and still the timeline's newest operation, with no AI change in flight. The click carries only the
+  // entry's grant id; the page looks up its transaction, the timeline undoes exactly that transaction (NOT_LATEST
+  // otherwise) with the PCB store's own Undo, and the result — or the refusal, verbatim — is written into the entry.
+  const executionUndoStates = useMemo(() => {
+    const newest = projectTimelineEntries[projectTimelineEntries.length - 1];
+    const inFlight = [...executionEntries.values()].some((entry) => entry.state === "issued" || entry.state === "executing");
+    const states = new Map<string, NonNullable<ReturnType<typeof entryUndoAvailability>>>();
+    for (const entry of executionEntries.values()) {
+      const availability = entryUndoAvailability(entry, newest, inFlight, projectTimelineEntries); // [B18-D review 2] the timeline, for the one-shot reason
+      if (availability) states.set(entry.grantId, availability);
+    }
+    return states;
+  }, [executionEntries, projectTimelineEntries]);
+  async function undoAiChange(grantId: string) {
+    const entry = executionEntriesRef.current.get(grantId);
+    if (!entry?.transaction) return;
+    const decision = await projectTimeline.undoLatest({ expectTransactionId: entry.transaction.id });
+    const current = executionEntriesRef.current.get(grantId) ?? entry;
+    if (decision.ok) {
+      upsertExecutionEntry(entryUndoResult(current, { ok: true, afterSeq: decision.operation.seq }));
+      showToast(`Undid: ${decision.operation.label}`);
+    } else {
+      upsertExecutionEntry(entryUndoResult(current, { ok: false, message: decision.message }));
+      setProjectTimelineNotice(`${decision.code} — ${decision.message}`);
+    }
+  }
+
   async function send(retryText?: string) {
     const text = (retryText ?? input).trim();
     if (!text || loading) return;
@@ -4395,6 +4459,8 @@ export default function Home() {
     setInput("");
     activeChatRef.current = scope.requestId;
     setLoading(true);
+    const chatRun: { requestId: string; reader: ReadableStreamDefaultReader<Uint8Array> | null; stopped: boolean } = { requestId: scope.requestId, reader: null, stopped: false }; // [B18-D I9]
+    activeChatRunRef.current = chatRun;
     setAiProviderFailure(null);
     lastAiRetryRef.current = () => void send(text);
 
@@ -4454,6 +4520,8 @@ export default function Home() {
       if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
       if (!res.body) throw new Error("No response body");
       const reader = res.body.getReader();
+      chatRun.reader = reader; // [B18-D I9] Stop cancels this reader (a Stop pressed before the response arrived cancels it now)
+      if (chatRun.stopped) void reader.cancel().catch(() => undefined);
       const dec    = new TextDecoder();
       appendActivityStep(logId, "Streaming response");
       // B09 — versioned NDJSON agent-event protocol: every event is applied
@@ -4463,21 +4531,31 @@ export default function Home() {
       // the route emits only the typed event protocol.
       let ndjsonBuffer = "";
       let runFailure: { reason: string; message: string } | null = null;
+      // [B18-D I6] the page half of Rule 2: every event folds into the run view; the answer bubble shows ONLY the final text
+      // (labelled while a change the run started is unresolved); interim text is released as notes when the run ends.
+      let runView = initialRunView();
+      const boardForRefs = chatEditorContext?.board ?? null;
+      const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
         if (!scope.isCurrent()) return;
+        runView = reduceRunView(runView, event);
         switch (event.type) {
           case "text_delta": {
-            const text = typeof event.text === "string" ? event.text : "";
-            if (text) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content + text } : m)));
+            const answer = projectRunView(runView).answer;
+            setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: answer } : m)));
             return;
           }
           case "tool_started": {
-            appendActivityStep(logId, `Running Sirkit tool: ${typeof event.title === "string" ? event.title : "tool"}`);
+            const tag = typeof event.tier === "number" ? `T${event.tier} · ` : "";
+            appendActivityStep(logId, `Running Sirkit tool: ${tag}${typeof event.title === "string" ? event.title : "tool"}`);
             return;
           }
           case "tool_finished": {
-            const title = typeof event.title === "string" ? event.title : "tool";
-            appendActivityStep(logId, event.ok === true ? `${title} — succeeded` : `${title} — refused (${typeof event.status === "string" ? event.status : "error"})`, event.ok === true ? "done" : "error");
+            appendActivityStep(logId, toolLineLabel(event), event.ok === true ? "done" : "error");
+            return;
+          }
+          case "tool_refused": {
+            appendActivityStep(logId, refusedLineLabel(event), "error"); // [B18-D I10] refused before running — nothing ran
             return;
           }
           case "proposal_ready": {
@@ -4494,7 +4572,14 @@ export default function Home() {
               setPendingReplacement(replacement.proposal);
               setPendingReplacementRunId(replacement.runId);
               approvedMutationAudit.record({ at: Date.now(), proposalId: replacement.proposal.proposalId, originRunId: replacement.runId, event: "approval-displayed", code: null });
-              appendActivityStep(logId, `Replacement proposal ready — ${replacement.proposal.target.partId} awaiting your explicit review`, "done");
+              // [B18-E E15] the page's own sentence: the target, where it came from (the recorded authority — never the
+              // model's choice), and what happens to the connections. Nothing has been changed at this point.
+              appendActivityStep(logId, replacementChatLines.ready({
+                partId: replacement.proposal.target.partId,
+                manufacturer: replacement.proposal.target.manufacturer,
+                preservedConnections: replacement.proposal.impact.preservedConnections.length,
+                droppedConnections: replacement.proposal.impact.droppedConnections.length,
+              }), "done");
               return;
             }
             if (proposal && proposal.schema === TIER1_PROPOSAL_SCHEMA && Array.isArray(proposal.operations)) {
@@ -4538,7 +4623,55 @@ export default function Home() {
             const received = receiveLayoutCandidateEvent(event);
             if (received) {
               setPendingLayoutCandidate({ candidate: received.candidate, originRunId: received.runId });
-              appendActivityStep(logId, `${received.candidate.kind === "placement" ? "Placement" : "Routing"} candidate ready — review it in the PCB editor's ${received.candidate.kind} panel; the board is unchanged until you apply it`, "done");
+              // [B18-E E17] the page's own sentence names what the candidate measured and, for routing, what could not be
+              // routed — "show me anything that failed" is the last clause of the request, and it is answered here rather
+              // than left to the model's prose or to the panel the person may not open.
+              appendActivityStep(logId, layoutCandidateChatLine(received.candidate), "done");
+            }
+            return;
+          }
+          case "execution_grant_ready": {
+            // [B18-B] a server-minted execution grant — the SAFE receiver re-parses it and checks its coherence; the PCB
+            // editor (the composition root) runs the granted-execution ritual: preview grants wait for the human's Confirm,
+            // explicit grants execute once and settle back to the server. Receiving it changes nothing.
+            const received = receiveExecutionGrantReadyEvent(event);
+            if (!received) {
+              // [B18-D review] the SAFE receiver dropped the grant (altered in transit, incoherent or not issued). The tool line
+              // came first and said it was issued: rewrite it, and say what happened. [B18-D review 2] the run view stops
+              // counting it as a change in progress: there is no entry, so the answer's label says the page dropped it.
+              runView = runViewGrantDropped(runView);
+              setMessages((prev) => prev.map((m) => (m.role === "log" && m.id === logId ? { ...m, entries: markGrantLineDropped(m.entries) } : m)));
+              appendActivityStep(logId, "An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.", "error");
+            }
+            if (received) {
+              runView = runViewGrantReceived(runView); // [B18-D review 2] an entry exists for it
+              setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
+              // [B18-D review] one card at a time: an earlier preview still awaiting confirmation was replaced by this grant (its card
+              // is gone), so its entry says so instead of inviting a confirmation that no longer exists.
+              for (const earlier of [...executionEntriesRef.current.values()]) {
+                if (earlier.grantId !== received.grant.grantId && earlier.state === "awaiting_confirmation") upsertExecutionEntry(entrySuperseded(earlier));
+              }
+              // [B18-D I6] ONE execution entry per grant (just before this run's answer) carries the state, the tier, what was
+              // asked and understood, the targets, the operations and why a confirmation is (not) required; the run log points to it.
+              upsertExecutionEntry(entryFromGrant({ grant: received.grant, decision: received.decision, note: received.note }, refOf), assistantId);
+              if (received.decision === "execute_explicit") appendActivityStep(logId, "AI change issued — your editor executes it now; its entry below follows it", "running");
+              else appendActivityStep(logId, "AI change prepared — confirm or cancel it on the card; its entry below follows it", "done");
+            }
+            return;
+          }
+          case "execution_settled": {
+            // [B18-B] what the run learned from the DURABLE record (display only — never a claim of its own).
+            const settled = receiveExecutionSettledEvent(event);
+            if (settled) {
+              // [B18-D I6] the durable settlement updates the grant's entry (its state row says what happened); the log points to it.
+              const committed = settled.status === "settled" && settled.outcome === "committed";
+              const entry = executionEntriesRef.current.get(settled.grantId);
+              if (entry) upsertExecutionEntry(entrySettled(entry, settled));
+              // [B18-D review 2] "see its entry" only when there is one: a grant this page dropped has none, and was never executed here
+              const line = entry
+                ? (committed ? "AI change settled — see its entry" : "AI change not completed — see its entry")
+                : (committed ? "AI change settled on the server — this page has no entry for it" : "AI change not completed — this page has no entry for it and never executed it; nothing was changed here");
+              appendActivityStep(logId, line, committed ? "done" : "error");
             }
             return;
           }
@@ -4558,7 +4691,17 @@ export default function Home() {
         }
       };
       while (true) {
-        const { done, value } = await reader.read();
+        // [B18-D review 2] a dropped connection errors the body stream (read() rejects) instead of ending it: it is handled
+        // below exactly like a stream cut before its terminal event — the answer stays, the notes are released and the entry
+        // is named. Stop (a cancelled reader ends the stream) and a project switch (an abort) keep their own paths.
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (readError) {
+          if (isAbortError(readError) || chatRun.stopped || !scope.isCurrent()) throw readError;
+          break;
+        }
+        const { done, value } = chunk;
         if (done) break;
         if (!scope.isCurrent()) {
           // Project changed mid-stream: stop consuming; write nothing more
@@ -4577,6 +4720,30 @@ export default function Home() {
             applyAgentEvent(event);
           } catch { /* malformed line: skipped, never rendered raw */ }
         }
+      }
+      // [B18-D review] a run stopped before it ended: close its view so its interim notes are still released as notes.
+      const stoppedEarly = chatRun.stopped && runView.terminal === null;
+      if (stoppedEarly) runView = reduceRunView(runView, { type: "run_failed", reason: "stopped", message: "Stopped by you." });
+      // [B18-D review] a stream that ended without its terminal event (a dropped connection, not Stop) is a failure: its notes
+      // are released and the failure stays visible — never a green log.
+      if (!chatRun.stopped && runView.terminal === null && scope.isCurrent()) {
+        const cut = "The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made.";
+        runView = reduceRunView(runView, { type: "run_failed", reason: "stream_cut", message: cut });
+        runFailure = { reason: "stream_cut", message: cut };
+      }
+      // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
+      if (scope.isCurrent()) {
+        const projected = projectRunView(runView);
+        for (const note of projected.notes) appendActivityStep(logId, note, "done");
+        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
+      }
+      // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).
+      // An AI change already sent to the editor is reported in its entry either way — made, or not made: a grant not yet consumed
+      // is retired run_cancelled, so "it still finishes" would not be true.
+      if (stoppedEarly && scope.isCurrent()) {
+        const stopped = "Stopped. An AI change already sent to your editor is reported in its entry: made, or not made.";
+        appendActivityStep(logId, "Stopped by you — the assistant's run was cancelled.", "done");
+        setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: m.content ? `${m.content}\n\n${stopped}` : stopped } : m)));
       }
       if (runFailure !== null && scope.isCurrent()) {
         const failure = runFailure as { reason: string; message: string };
@@ -4632,6 +4799,7 @@ export default function Home() {
           };
         });
       });
+      if (activeChatRunRef.current === chatRun) activeChatRunRef.current = null; // [B18-D I9]
       // Only THIS request may clear the busy flag it set.
       if (activeChatRef.current === scope.requestId) {
         activeChatRef.current = null;
@@ -5155,7 +5323,9 @@ export default function Home() {
       const sealed = sealTier1Proposal({
         state: snapshot,
         compilation,
-        provenance: { provider: aiBrainRef.current, note: data.note ?? "", instruction: prompt },
+        // [B18-D review 2] the sealed note is the page's own sentence (as the agent path's is): the model's note never reaches the
+        // review dialog — it is only a labelled note in the run log (Rule 2, OD-18)
+        provenance: { provider: aiBrainRef.current, note: editRouteProvenanceNote(data.note), instruction: prompt },
         now: Date.now(),
         scope: { ...sealScope, headMark: sealHeadMark },
         // [B16.0.2 §E] the LIVE server-derived principal + membership revision
@@ -5190,13 +5360,17 @@ export default function Home() {
         return;
       }
       setPendingTier1(sealed.proposal);
+      // [B18-D review] Rule 2 here too (OD-18): the model's note is a labelled note in the run log — never the answer, and never
+      // the history the next run receives; the answer is the page's own sentence.
+      const editMessages = editProposalMessages(data.note);
+      if (editMessages.note) appendActivityStep(logId, editMessages.note, "done");
       finishActivityLog(logId, `Proposal ready — ${sealed.proposal.operations.length} operation(s) awaiting your review`);
       appendChatFor(pin.projectId, (prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: `${data.note || "Edit proposal prepared."} Review the exact operations and choose "Apply exact proposal" — nothing has been changed yet.`,
+          content: editMessages.answer,
         },
       ]);
     } catch (err) {
@@ -5676,7 +5850,9 @@ export default function Home() {
     const text = input.trim();
     if (!text || loading || isGenerating || isEditing) return;
     const hasSchematic = components.length > 0 || kicadComponents.length > 0;
-    const action = inferComposerAction(text, hasSchematic);
+    // [B18-D I1] the shown route, or the user's override — routing only; the server loop or the proposal review decides.
+    const action = composerRouteOverride ?? routeComposerMessage(text, hasSchematic).route;
+    setComposerRouteOverride(null);
     if (action !== "ask") setInput("");
     if (action === "generate") void handleGenerateSchematic(text);
     else if (action === "edit") void handleEditSchematic(text);
@@ -5685,7 +5861,9 @@ export default function Home() {
 
   const composerText = input.trim();
   const hasSchematicForComposer = components.length > 0 || kicadComponents.length > 0;
-  const composerAction = inferComposerAction(composerText, hasSchematicForComposer);
+  const composerRouting = routeComposerMessage(composerText, hasSchematicForComposer);
+  const composerAction = composerRouteOverride ?? composerRouting.route;
+  const overrideComposerRoute = (): void => setComposerRouteOverride((current) => (current ? null : "ask"));
   const composerBusy = loading || isGenerating || isEditing;
   const composerDisabled = !composerText || composerBusy;
   const showComposerButton = composerAction !== "ask" || isGenerating || isEditing;
@@ -6276,6 +6454,20 @@ export default function Home() {
                     viewSessionBridge={viewSessionBridgeRef.current!} // [B17-F]
                     layoutCandidateIntake={pendingLayoutCandidate} // [B17-F] — display only; apply lives inside PcbEditor
                     onLayoutCandidateSettled={() => setPendingLayoutCandidate(null)}
+                    executionGrantIntake={pendingExecutionGrant} // [B18-B] — display only; the granted-execution ritual lives inside PcbEditor
+                    onExecutionGrantSettled={(grantId, outcome, detail) => {
+                      setPendingExecutionGrant((current) => (current && current.grant.grantId === grantId ? null : current));
+                      // [B18-D I6] the editor's outcome updates the grant's entry (display only).
+                      const entry = executionEntriesRef.current.get(grantId);
+                      if (!entry) return;
+                      if (detail) upsertExecutionEntry(entryEditorOutcome(entry, detail));
+                      else if (outcome === "cancelled") upsertExecutionEntry(entryCancelled(entry));
+                      else if (outcome === "retired") upsertExecutionEntry(entrySuperseded(entry));
+                      else if (outcome === "failed") upsertExecutionEntry(entryEditorOutcome(entry, { ok: false, code: "session-superseded", changed: false }));
+                    }}
+                    onExecutionGrantProgress={(grantId) => { const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryExecuting(entry)); }}
+                    onExecutionGrantAttemptRefused={(grantId, refusal) => { /* [B18-D review] the card stays; the entry says the attempt changed nothing */ const entry = executionEntriesRef.current.get(grantId); if (entry) upsertExecutionEntry(entryAttemptRefused(entry, refusal)); }}
+                    onExecutionRecovery={(results) => { for (const result of results) { const entry = executionEntriesRef.current.get(result.grantId); if (entry && result.action !== "left-in-flight") upsertExecutionEntry(entryRecovery(entry, result.action)); } }}
                   />
                 </div>
               )}
@@ -6639,7 +6831,11 @@ export default function Home() {
                   ) : null}
                   <div>Embeddings: <span className="text-zinc-300">OpenAI</span></div>
                 </div>
+                {/* [B18-D I11] the project's agent autonomy: shown to every member; a project administrator may change it */}
+                <AutonomyModeControl key={project?.id ?? "no-project"} scope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
               </div>
+              {/* [B18-D review] §1 item 3: the static Tier 3 line */}
+              <p className="mt-1.5 text-[10px] leading-4 text-zinc-500" data-testid="chat-tier3-line">Release, qualification and ordering are never done by the assistant — use the release workflow.</p>
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto">
@@ -6650,7 +6846,7 @@ export default function Home() {
                   </p>
                 )}
                 {messages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble key={message.id} message={message} undoStates={executionUndoStates} onUndoExecution={undoAiChange} />
                 ))}
                 <div ref={chatEndRef} />
               </div>
@@ -6776,6 +6972,25 @@ export default function Home() {
                   : "Type a question, edit (e.g. 'set R1 to 4.7k'), or describe a circuit to generate"}
                 disabled={loading || isGenerating || isEditing}
               />
+              {/* [B18-D I1] where Enter sends this message, shown before sending; the override sends a suggested schematic
+                  edit or generation to the assistant instead (and back). Routing only: nothing here makes a change. */}
+              {composerText && (
+                <div className="flex flex-wrap items-center gap-2 mt-1.5 text-[11px] text-zinc-500">
+                  <span data-testid="composer-route" data-route={composerAction} title={composerRouting.reason}>
+                    Sirkit will: {COMPOSER_ROUTE_LABELS[composerAction]}{composerRouteOverride ? " (your choice)" : ""}
+                    {/* [B18-D review] the reason is readable without the tooltip */}
+                    <span className="sr-only"> — {composerRouting.reason}</span>
+                  </span>
+                  {composerRouting.route !== "ask" && (
+                    <button type="button" data-testid="composer-route-override" onClick={overrideComposerRoute} className="rounded border border-zinc-700 px-1.5 py-0.5 text-zinc-400 hover:text-zinc-200">
+                      {composerRouteOverride ? `${COMPOSER_ROUTE_LABELS[composerRouting.route].replace(/^./, (c) => c.toUpperCase())} instead` : "Ask the assistant instead"}
+                    </button>
+                  )}
+                  {composerRouting.hints.includes("tier3-release") && (
+                    <span data-testid="composer-tier3-hint" className="text-amber-400/90">Release, qualification and ordering are never done by the assistant — use the release workflow.</span>
+                  )}
+                </div>
+              )}
               <div className="flex items-center justify-between mt-2 gap-2">
                 <div className="text-xs text-zinc-500">
                   {isTidying
@@ -6787,6 +7002,11 @@ export default function Home() {
                         : "Enter to submit - Shift+Enter newline"}
                 </div>
                 <div className="flex items-center flex-wrap justify-end gap-2">
+                  {loading && (
+                    <Button size="sm" variant="outline" data-testid="chat-stop" title="Stop the assistant's run" onClick={stopChatRun}>
+                      Stop
+                    </Button>
+                  )}
                   {showComposerButton && (
                     <Button
                       size="sm"
@@ -8149,7 +8369,7 @@ function ViewTab({ icon: Icon, label, active, onClick }: {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, undoStates, onUndoExecution }: { message: Message; undoStates?: ReadonlyMap<string, { eligible: boolean; reason: string | null }>; onUndoExecution?: (grantId: string) => Promise<void> }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -8161,13 +8381,17 @@ function MessageBubble({ message }: { message: Message }) {
   }
   if (message.role === "log") {
     const StatusIcon = message.status === "running" ? Loader2 : message.status === "error" ? X : Check;
+    const entryState = entryStateOfLogMessage(message); // [B18-D I6] a chat execution entry (display only; its one control is I8's Undo)
+    const entryGrantId = entryState ? message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length) : null;
+    const undoState = entryGrantId && entryState === "committed" ? (undoStates?.get(entryGrantId) ?? null) : null; // [B18-D I8] live entries only
     return (
-      <div className="flex justify-start w-full">
+      <div className="flex justify-start w-full" {...(entryState ? { "data-testid": "chat-execution-entry", "data-grant-id": message.id.slice(EXECUTION_ENTRY_ID_PREFIX.length), "data-state": entryState, "data-tier": "1" } : {})}>
         <div className="w-full rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-xs">
           <div className="flex items-center gap-2 text-zinc-300">
             <StatusIcon className={`size-3.5 shrink-0 ${message.status === "running" ? "animate-spin text-teal-300" : message.status === "error" ? "text-red-400" : "text-teal-400"}`} />
             <span className="font-medium">{message.title}</span>
           </div>
+          {undoState && entryGrantId && onUndoExecution ? <ExecutionEntryActions eligible={undoState.eligible} reason={undoState.reason} onUndo={() => void onUndoExecution?.(entryGrantId)} /> : null}
           <div className="mt-2 space-y-1.5">
             {message.entries.map((entry) => (
               <div key={entry.id} className="flex items-start gap-2 text-[11px] leading-relaxed">

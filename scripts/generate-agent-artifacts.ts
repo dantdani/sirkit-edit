@@ -41,6 +41,8 @@ const EXCLUSION_REASONS: Record<string, string> = {
 type Descriptor = NonNullable<ReturnType<typeof registry.get>>;
 
 function requiredRuntimeResources(item: Descriptor): string {
+  // [B18-C] a granted execution needs the board, the PCB history basis and the run's execution-grant minter.
+  if (item.operationClass === "mutate" && item.agentExposed) return "canonical-state;pcb-proposal-basis;execution-grant-minter";
   if (item.operationClass === "read") {
     const binding = ACTIVATED_READ_BINDINGS.find((entry) => entry.toolId === item.toolId);
     return binding ? [...binding.requiredResources].join(";") : "";
@@ -68,6 +70,12 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
       reason: "requires the editorContext's published, validated current-generation PCB working copy (canonical-state); withheld per run when the browser publishes no valid board" + (item.toolId === "sirkit.manufacturing.readiness-inspect" ? "; the optional netlist resource is consumed only when provably captured with this run's schematic — otherwise schematic parity reports not-evaluated" : ""),
     };
   }
+  if (item.operationClass === "mutate") {
+    return {
+      availability: "conditional",
+      reason: "GRANTED EXECUTION (B18-C): requires the editorContext's validated board AND its PCB history basis (head, lineage, active DRC preset) AND an execution-grant minter bound by /api/chat (a human session principal with a readable autonomy setting) AND a Tier 1 execute role; a call mints a one-shot server grant — the user's editor previews it for confirmation or, under execute_explicit_tier1 for the exact requested operation, commits it through the canonical editor session; withheld per run otherwise",
+    };
+  }
   return {
     availability: "conditional",
     reason: "available only when the run request carries a validated schematic snapshot AND a validated canonical head mark (lineage-sealed proposal contract); otherwise withheld and the run proceeds tool-less",
@@ -77,10 +85,12 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
 function reasonFor(item: Descriptor): string {
   if (item.agentExposed) {
     if (item.operationClass === "read") return "STATICALLY EXPOSED: activated B05/B05.1 read binding; per-run availability requires every declared runtime resource (see browser_runtime_availability)";
+    if (item.operationClass === "mutate") return "STATICALLY EXPOSED: reviewed Tier 1 granted execution (B18-C) — a call mints a server-bound one-shot grant; the user's canonical editor session is the only committer";
     return "STATICALLY EXPOSED: sealed tier-1 proposal binding (proposal-artifact only; apply stays the human-only destructive command); per-run availability requires validated schematic + canonical head mark";
   }
   if (EXCLUSION_REASONS[item.toolId]) return `EXCLUDED: ${EXCLUSION_REASONS[item.toolId]}`;
-  if (["mutate", "destructive", "release", "view-session"].includes(item.operationClass)) return "EXCLUDED: mutation-capable operation class is forbidden for agents in B09";
+  if (item.operationClass === "mutate") return "EXCLUDED: a canonical mutation is exposed only as a reviewed Tier 1 granted execution (B18-C); this one is not in the reviewed list";
+  if (["destructive", "release", "view-session"].includes(item.operationClass)) return "EXCLUDED: mutation-capable operation class is forbidden for agents in B09";
   if (item.callability !== "callable") return "EXCLUDED: no proven callable implementation binding";
   return "EXCLUDED: not activated in B09 (default-deny)";
 }
@@ -101,7 +111,7 @@ const rows = registry.list().map((item) => {
     bindingSymbol: item.binding.symbol ?? "",
     discovery: item.discovery,
     staticallyExposed: item.agentExposed,
-    bindingResolved: item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.binding.status === "bound-proposal",
+    bindingResolved: item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
     requiredRuntimeResources: requiredRuntimeResources(item),
     browserRuntimeAvailability: runtime.availability,
     requiredProjectState: [...item.requiredProjectState].join(";"),

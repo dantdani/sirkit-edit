@@ -38,6 +38,11 @@ interface ResourceAnnotation {
 const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // ── durable project data ───────────────────────────────────────────────────
   "/api/bom/snapshot": { durable: "read-write", sensitivity: "project-durable" },
+  "/api/agent/autonomy": { durable: "read-write", sensitivity: "project-durable" }, // [B18-A] durable-workflow aggregate agent.autonomy-settings.v1
+  // [B18-B] the execution-grant aggregates (agent.execution-grant.v1 + the per-principal index): consumption burns the grant
+  // bound to the caller's session identity; settlement records the browser-attested outcome on the same aggregate.
+  "/api/agent/execution-grant": { durable: "read-write", sensitivity: "session-identity" },
+  "/api/agent/execution-grant/settle": { durable: "read-write", sensitivity: "project-durable" },
   "/api/bom/notifications": { durable: "read-write", sensitivity: "project-durable" },
   "/api/bom/diff": { durable: "read", sensitivity: "project-durable" },
   "/api/pcb-sync": { durable: "read-write", sensitivity: "project-durable" },
@@ -61,8 +66,13 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/export/kicad": { sensitivity: "caller-supplied-only" },
   // [B16.0.3 §C] chat READS durable, project-scoped component authority + pin
   // facts for the agent's replacement-facts path (same durable sources as
-  // /api/replacement-authority), so its durable access is truthfully "read".
-  "/api/chat": { durable: "read", sensitivity: "session-identity" },
+  // /api/replacement-authority). [B18-B] it also MINTS execution grants
+  // (durable-workflow aggregates bound to the session identity) through the
+  // composition-root minter, so its durable access is truthfully read-write.
+  // The grant is not an engineering write: the commit stays in the browser's
+  // canonical editor session, so the policy row stays authenticated-propose
+  // (authoritativeWrite: false) — recorded as an owner decision in B18-B.
+  "/api/chat": { durable: "read-write", sensitivity: "session-identity" },
   // [B16.0.3 §C] the replacement REAUTHORIZATION exchange READS durable,
   // project-scoped component authority + published pin facts
   // (resolveComponentAuthoritySource / loadRunComponentAuthority /
@@ -84,6 +94,9 @@ export const KNOWN_DURABLE_SOURCE_SYMBOLS: readonly string[] = [
   "loadRunComponentAuthority",
   "loadRunReplacementPinFacts",
   "resolveReplacementPinFactsSource",
+  // [B18-B] the execution-grant store (durable-workflow aggregates; consumed by the grant routes and the /api/chat minter)
+  "resolveExecutionGrantStore",
+  "createExecutionGrantMinter",
 ];
 
 export interface RouteResourceRow {

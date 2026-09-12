@@ -10,6 +10,7 @@
 
 import type { LLMProviderId } from "../llm/types";
 import type { DiscoveryContext } from "../engineering/tool-discovery";
+import type { PermissionTier } from "../engineering/permission-tiers";
 import type { SealedTier1Proposal, Tier1ProposalHeadMark } from "../engineering/schematic-proposals";
 import type { SealedReplacementProposal } from "../engineering/replacement-proposals";
 import type { SealedPcbEditProposal } from "../pcb/proposal/sealed-pcb-edit-proposal";
@@ -30,7 +31,11 @@ import type { SelectionRef } from "../pcb/edit/commands";
 import type { AgentNetlistLogical } from "./netlist-validation";
 import type { ComponentAuthorityRecord, ComponentCatalogCandidate } from "../engineering/component-authority";
 import type { CapturedViewContext, ViewCommandRequest } from "./view-context";
+import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import type { LayoutCandidate } from "../pcb/candidates/layout-candidate";
+import type { PcbBoard } from "../pcb/types";
+import type { EngineeringOperation } from "../engineering/types";
+import { EXECUTION_SETTLEMENT_TIMEOUT_MS, type ExecutionDecisionMode, type ExecutionFamily, type ExecutionGrantBase, type ExecutionGrantPreview, type ExecutionGrantSession, type ExecutionGrantTargets, type GrantableCapability, type PublicExecutionGrant, type RetirementReason, type SettlementOutcome } from "../engineering/execution-grant";
 
 // ─── Run identity + context ──────────────────────────────────────────────────
 
@@ -128,6 +133,17 @@ export interface AgentRunContext {
   view: CapturedViewContext | null;
   /** [B17-F] integrity pin for `view`. */
   viewDigest: string | null;
+  /** [B18-A] the project's agent autonomy setting, read SERVER-SIDE by the
+   *  route from the durable store (never from the request body or the
+   *  model). The default (`proposal_only`, revision 0) when the project never
+   *  wrote one or the store is unavailable — unavailability never widens. It
+   *  decides, with the operation's permission tier and the actor's role,
+   *  whether a Tier 1 operation previews or executes (B18-C). */
+  autonomy: AgentAutonomySetting;
+  /** [B18-C] whether the composition root bound an execution-grant minter to this run (a human session principal with a
+   *  readable autonomy setting). SERVER-derived; with the verified board, the PCB proposal basis and a Tier 1 execute role it
+   *  makes granted executions discoverable — the actor still holds only read_project. */
+  executionGrantsAvailable: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
@@ -150,6 +166,10 @@ export interface AgentRunBudget {
   runDeadlineMs: number;
   /** Identical (toolId@version + canonical args digest) call limit. */
   maxIdenticalCalls: number;
+  /** [B18-B] how long the run waits for the browser to settle an
+   *  execute_explicit grant before answering the model truthfully that the
+   *  execution is unsettled (bounded by the remaining run deadline). */
+  executionSettlementTimeoutMs: number;
 }
 
 export const DEFAULT_AGENT_BUDGET: AgentRunBudget = Object.freeze({
@@ -158,6 +178,7 @@ export const DEFAULT_AGENT_BUDGET: AgentRunBudget = Object.freeze({
   perToolTimeoutMs: 15_000,
   runDeadlineMs: 120_000,
   maxIdenticalCalls: 2,
+  executionSettlementTimeoutMs: EXECUTION_SETTLEMENT_TIMEOUT_MS,
 });
 
 export interface AgentRunRequest {
@@ -239,6 +260,68 @@ export interface ProviderAgentAdapter {
   }): Promise<AgentStep>;
 }
 
+// ─── [B18-B] Execution grants (server-minted; the agent sees a closure) ──────
+
+/** The DATA the pure seal (app/lib/agent/execution-intents.ts) hands the
+ *  minter: family, tool identity, the grant's capability, the operations
+ *  compiled through the shared builder, their digest, the targets and the
+ *  human-readable preview. No decision, no ids, no explicitness — those are
+ *  minted only inside the server closure. */
+export interface AgentExecutionPlan {
+  family: ExecutionFamily;
+  toolId: string;
+  toolVersion: string;
+  capability: GrantableCapability;
+  operations: EngineeringOperation[];
+  operationsDigest: string;
+  operationCount: number;
+  targets: ExecutionGrantTargets;
+  preview: ExecutionGrantPreview;
+  previewDigest: string;
+  expectedPcbRevisionAfter: string;
+  /** [B18-C I8] a replay plan's direction (the minter resolves the reference from the principal's settled grants). */
+  replayDirection?: "undo" | "redo";
+}
+
+export interface AgentExecutionGrantRequest {
+  plan: AgentExecutionPlan;
+  /** The VERIFIED canonical board the plan was built against (the proof re-derives on it). */
+  board: PcbBoard;
+  base: ExecutionGrantBase;
+  session: ExecutionGrantSession;
+  origin: { callId: string; registryDigest: string; promptVersion: string };
+}
+
+export type AgentExecutionGrantOutcome =
+  | { ok: true; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
+  | { ok: false; reason: "execution_not_permitted" | "grant_unavailable" | "nothing_to_replay"; diagnostics: string[] };
+
+export interface AgentExecutionSettlement {
+  status: "settled" | "retired" | "in_flight" | "unsettled";
+  grant: PublicExecutionGrant | null;
+}
+
+/** [B18-C I4] what the DURABLE settlement says about an execution — display data for the page (never a claim of its own). */
+export interface AgentExecutionSettledSummary {
+  transactionId: string | null;
+  revisionBefore: string | null;
+  revisionAfter: string | null;
+  headSequenceAfter: number | null;
+  validations: { drc: { ran: boolean; violations: number } } | null;
+  undoEligible: boolean;
+}
+
+/** The ONLY authority the agent layer ever holds over execution: a closure
+ *  the `/api/chat` composition root builds from the trusted request context
+ *  (app/lib/execution-grant/mint.ts). It never receives an instruction, a
+ *  nonce or a store; it mints from a sealed plan, reports settlement from the
+ *  durable record only, and retires this run's still-issued grants. */
+export interface AgentExecutionGrantMinter {
+  mint(request: AgentExecutionGrantRequest): Promise<AgentExecutionGrantOutcome>;
+  awaitSettlement(grantId: string, options: { timeoutMs: number; signal?: AbortSignal; pollMs?: number }): Promise<AgentExecutionSettlement>;
+  retireIssued(reason: Extract<RetirementReason, "run_cancelled" | "run_unsettled">, onlyExplicit: boolean): Promise<string[]>;
+}
+
 // ─── Invocation gateway boundary ─────────────────────────────────────────────
 
 export type GatewayInvocationOutcome =
@@ -256,6 +339,13 @@ export type GatewayInvocationOutcome =
    *  routing) — an artifact the human previews and applies in the editor's
    *  own panel; producing it changes nothing. */
   | { kind: "layout-candidate"; ok: true; toolId: string; version: string; candidate: LayoutCandidate }
+  /** [B18-B] a SERVER-MINTED one-shot execution grant for a Tier 1 family:
+   *  the browser tenders it (one compare-and-set burn) and commits the
+   *  operations through its canonical editor session; the loop awaits the
+   *  browser-attested settlement for execute_explicit and reports a preview
+   *  awaiting confirmation for preview_then_confirm. Producing it changes
+   *  nothing. */
+  | { kind: "execution-grant"; ok: true; toolId: string; version: string; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
   | { kind: "refused"; ok: false; toolId: string; version?: string; status: string; diagnostics: string[] };
 
 export interface AgentToolInvocationGateway {
@@ -270,6 +360,9 @@ export interface AgentToolInvocationGateway {
     context: AgentRunContext;
     timeoutMs: number;
     signal?: AbortSignal;
+    /** [B18-C] the provider call id. REQUIRED by the granted-execution dispatch (a grant is minted once per run + call —
+     *  the mint idempotency key); every other operation class ignores it. */
+    callId?: string;
   }): Promise<GatewayInvocationOutcome>;
 }
 
@@ -277,9 +370,18 @@ export interface AgentToolInvocationGateway {
 
 export type AgentRunEvent =
   | { type: "run_started"; runId: string; provider: LLMProviderId }
-  | { type: "text_delta"; runId: string; text: string }
-  | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string }
-  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string }
+  /** [B18-D I2] `phase`: "interim" — written in a step that also called tools (a side-effecting step's text is emitted only
+   *  after its calls resolved); "final" — the closing answer. `tier` on tool events: the tool's permission tier (display only). */
+  | { type: "text_delta"; runId: string; text: string; phase: "interim" | "final" }
+  | { type: "tool_started"; runId: string; callId: string; toolId: string; title: string; tier: PermissionTier | null }
+  /** [B18-E E12] `reason`: on a REFUSAL only, the server's own sentence for it (today: a blocked proposal's first
+   *  blocker), shown to the user so learning why never depends on the model relaying it. Display only — untraced, never
+   *  authority, and never set on a successful outcome. */
+  | { type: "tool_finished"; runId: string; callId: string; toolId: string; title: string; ok: boolean; status: string; tier: PermissionTier | null; reason?: string }
+  /** [B18-D I10] a call refused BEFORE it ran (an unknown tool, the budget, invalid arguments, a repeated call, a second
+   *  side-effecting artifact) — shown to the user; the model already receives the error result. UNTRACED: the run trace
+   *  and the evaluation capsules are unchanged. `toolId`, `title` and `tier` are null for an unknown tool. */
+  | { type: "tool_refused"; runId: string; callId: string; toolId: string | null; title: string | null; tier: PermissionTier | null; status: string }
   | { type: "proposal_ready"; runId: string; toolId: string; proposal: SealedAgentProposal }
   /** [B15.3] DISTINCT event for the sealed bounded PCB-edit proposal — never
    *  overloaded onto the schematic `proposal_ready`. Receiving or displaying
@@ -294,6 +396,17 @@ export type AgentRunEvent =
    *  in the placement / routing panel; apply stays the human's explicit
    *  action through the B17-E apply path. */
   | { type: "layout_candidate_ready"; runId: string; toolId: string; candidate: LayoutCandidate }
+  /** [B18-B] a server-minted execution grant for the browser's granted-
+   *  execution ritual: preview_then_confirm shows the exact preview and
+   *  waits for the human; execute_explicit tenders and commits through the
+   *  canonical editor session, then settles back to the server. Receiving
+   *  it grants nothing beyond the grant itself (server-bound, one-shot). */
+  | { type: "execution_grant_ready"; runId: string; toolId: string; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
+  /** [B18-B] what the run learned about an execute_explicit grant from the
+   *  DURABLE record before answering the model (never from the browser
+   *  directly): settled with an outcome, retired with a reason, still in
+   *  flight (consumed, unsettled) or unsettled (never tendered in time). */
+  | { type: "execution_settled"; runId: string; toolId: string; grantId: string; status: AgentExecutionSettlement["status"]; outcome: SettlementOutcome | null; reason: RetirementReason | null; settlement: AgentExecutionSettledSummary | null }
   | { type: "warning"; runId: string; message: string }
   | { type: "run_failed"; runId: string; reason: string; message: string }
   | {
