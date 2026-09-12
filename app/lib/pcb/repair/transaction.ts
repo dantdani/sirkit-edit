@@ -196,6 +196,20 @@ export async function applyRepairTransaction(
     },
   });
   if (!result.ok) return { ok: false, error: result.message };
+  // [B18-D review] An ok commit is not proof that this repair was applied — the BOARD is. A repair's own Undo puts the
+  // board back at `preview.baseRevisionId`, so every pin above passes again and the apply is re-submitted under the SAME
+  // durable key; the executor replays the first transaction (`idempotent_replay`) and the session returns ok having
+  // mutated nothing and added no history entry. The preview id is content-derived, so re-planning the undone board
+  // rebuilds the same key with a fresh preview — only evidence catches that, never an "already committed" flag. A
+  // genuine duplicate submit of an apply that DID land leaves the board OFF the base and is still reported as applied.
+  if (pcbRevisionId(history.committedPresent) === preview.baseRevisionId) {
+    return {
+      ok: false,
+      error: result.status === "idempotent_replay"
+        ? "This repair is already recorded on this board and was undone: the duplicate submission replayed that transaction and nothing was applied. Use Redo to restore it."
+        : "The canonical executor reported no effective change; nothing was applied.",
+    };
+  }
   preview.status = "committed";
   return { ok: true };
 }
