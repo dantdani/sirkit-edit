@@ -4,10 +4,13 @@
  * [B18-D I11] The project's agent autonomy in the chat header (B18-A's handoff, permission-tiers.md §3): every member
  * sees the current mode and what it means; a project administrator may change it. It reads `GET /api/agent/autonomy`
  * and changes it with exactly `{ mode, expectedRevision }` (the server's compare-and-set). A stale revision (409) is
- * re-read and said so; a refusal (403 and the rest) is shown verbatim; an unavailable store means the project behaves as
- * proposal only. The server decides who may change it and what the agent may do — this control only asks and shows.
+ * re-read and said so; the route's own refusals are shown verbatim. The server decides who may change it and what the
+ * agent may do — this control only asks and shows.
+ * [B18-D review 2] It claims only what it knows: a lost, unreadable or unconfirmed response leaves the outcome unknown,
+ * so the setting is read again and shown; a setting it cannot read is "not known here", never a mode. Every result is
+ * announced (a status region), focus returns to the select, and the note (with the lock reason) describes the select.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 
@@ -23,24 +26,30 @@ export const AUTONOMY_MODE_NOTES: Readonly<Record<AutonomyMode, string>> = Objec
   proposal_only: "Every AI change waits for your confirmation.",
   execute_explicit_tier1: "An exact request for a reversible Tier 1 edit runs without the card; everything else still asks.",
 });
-const UNAVAILABLE = "The autonomy setting is unavailable; the project behaves as proposal only.";
+export const AUTONOMY_UNREADABLE = "The autonomy setting could not be read, so the mode is not known here; every run still applies the server's setting.";
 
+type Body = { ok?: unknown; code?: unknown; error?: unknown; setting?: { mode?: unknown; revision?: unknown }; viewer?: { canChange?: unknown } };
 type Loaded =
   | { kind: "loading" }
   | { kind: "ready"; mode: AutonomyMode; revision: number; canChange: boolean }
   | { kind: "unavailable"; message: string };
 
-/** Read the setting; never throws — ready (the mode, its revision, whether this viewer may change it) or unavailable. */
+/** The route's own named refusal (`AGENT_AUTONOMY_*`, answered before or instead of a change): what it says is shown. */
+const isRouteRefusal = (body: Body | null): body is Body & { code: string } => body !== null && body.ok === false && typeof body.code === "string" && body.code.startsWith("AGENT_AUTONOMY_");
+const errorText = (body: Body | null): string | null => (body && typeof body.error === "string" && body.error.length > 0 ? body.error.slice(0, 300) : null);
+
+/** Read the setting; never throws — ready (the mode, its revision, whether this viewer may change it) or unavailable
+ *  (the server's own words, or "not known here" when nothing readable came back). */
 async function readAutonomy(headers: Record<string, string>): Promise<Loaded> {
   try {
     const response = await fetch("/api/agent/autonomy", { headers, cache: "no-store" });
-    const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: unknown; setting?: { mode?: unknown; revision?: unknown }; viewer?: { canChange?: unknown } };
-    if (response.ok && body.ok === true && isMode(body.setting?.mode) && Number.isSafeInteger(body.setting?.revision)) {
+    const body = (await response.json().catch(() => null)) as Body | null;
+    if (response.ok && body?.ok === true && isMode(body.setting?.mode) && Number.isSafeInteger(body.setting?.revision)) {
       return { kind: "ready", mode: body.setting.mode, revision: body.setting.revision as number, canChange: body.viewer?.canChange === true };
     }
-    return { kind: "unavailable", message: typeof body.error === "string" && body.error.length > 0 ? body.error.slice(0, 300) : UNAVAILABLE };
+    return { kind: "unavailable", message: errorText(body) ?? AUTONOMY_UNREADABLE };
   } catch {
-    return { kind: "unavailable", message: UNAVAILABLE };
+    return { kind: "unavailable", message: AUTONOMY_UNREADABLE };
   }
 }
 
@@ -52,6 +61,9 @@ export function AutonomyModeControl({ scope }: { scope: ProjectSelectorScope | n
   const [target, setTarget] = useState<AutonomyMode | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const noteId = useId();
+  const selectRef = useRef<HTMLSelectElement>(null);
+  const refocusRef = useRef(false);
 
   const headers = useCallback((): Record<string, string> => (tenantId && projectId && branchId ? projectSelectorHeaders({ tenantId, projectId, branchId }) : {}), [tenantId, projectId, branchId]);
 
@@ -62,30 +74,49 @@ export function AutonomyModeControl({ scope }: { scope: ProjectSelectorScope | n
     return () => { current = false; };
   }, [projectId, headers]);
 
+  // [B18-D review 2] the Change button unmounts (or the controls were disabled) while focused: focus returns to the select
+  useEffect(() => {
+    if (busy || !refocusRef.current) return;
+    refocusRef.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body) selectRef.current?.focus();
+  }, [busy]);
+
   const change = async (): Promise<void> => {
     if (loaded.kind !== "ready" || !target || target === loaded.mode) return;
     setBusy(true);
     setNotice(null);
+    refocusRef.current = true;
+    let response: Response | null = null;
+    let body: Body | null = null;
     try {
-      const response = await fetch("/api/agent/autonomy", {
+      response = await fetch("/api/agent/autonomy", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...headers() },
         body: JSON.stringify({ mode: target, expectedRevision: loaded.revision }),
       });
-      const body = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: unknown; setting?: { mode?: unknown; revision?: unknown } };
-      if (response.ok && body.ok === true && isMode(body.setting?.mode) && Number.isSafeInteger(body.setting?.revision)) {
+      body = (await response.json().catch(() => null)) as Body | null;
+    } catch {
+      response = null; // the request may or may not have reached the server
+    }
+    try {
+      if (response?.ok && body?.ok === true && isMode(body.setting?.mode) && Number.isSafeInteger(body.setting?.revision)) {
         setLoaded({ ...loaded, mode: body.setting.mode, revision: body.setting.revision as number });
         setTarget(null);
         setNotice(`Changed to ${AUTONOMY_MODE_LABELS[body.setting.mode]} (revision ${body.setting.revision as number}).`);
-      } else if (response.status === 409) {
+      } else if (response?.status === 409 && isRouteRefusal(body)) {
         setTarget(null);
         setLoaded(await readAutonomy(headers()));
         setNotice("The setting changed since you read it. It has been read again; nothing was changed.");
+      } else if (response && !response.ok && isRouteRefusal(body)) {
+        setNotice(errorText(body) ?? `Refused (${body.code}).`);
       } else {
-        setNotice(typeof body.error === "string" && body.error.length > 0 ? body.error.slice(0, 300) : `Refused (${response.status}); nothing was changed.`);
+        // [B18-D review 2] a lost, unreadable or unconfirmed response: the change may or may not have been made — read it again
+        const detail = response ? `HTTP ${response.status}${errorText(body) ? ` — ${errorText(body)}` : ""}` : "no response";
+        setTarget(null);
+        setLoaded(await readAutonomy(headers()));
+        setNotice(`The response did not confirm the change (${detail}); the setting was read again and is shown here.`);
       }
-    } catch {
-      setNotice("The change could not be sent; nothing was changed.");
     } finally {
       setBusy(false);
     }
@@ -101,7 +132,9 @@ export function AutonomyModeControl({ scope }: { scope: ProjectSelectorScope | n
         <>
           <div className="flex items-center gap-1.5">
             <select
+              ref={selectRef}
               aria-label="Agent autonomy"
+              aria-describedby={noteId}
               data-testid="autonomy-mode"
               value={target ?? loaded.mode}
               disabled={!loaded.canChange || busy}
@@ -116,12 +149,13 @@ export function AutonomyModeControl({ scope }: { scope: ProjectSelectorScope | n
               </Button>
             ) : null}
           </div>
-          <span className="text-[10px] leading-4 text-zinc-500" data-testid="autonomy-note">
+          <span id={noteId} className="text-[10px] leading-4 text-zinc-500" data-testid="autonomy-note">
             {AUTONOMY_MODE_NOTES[loaded.mode]}{loaded.canChange ? "" : " Only a project administrator can change this."}
           </span>
         </>
       ) : null}
-      {notice ? <span className="text-[10px] leading-4 text-zinc-400" data-testid="autonomy-notice">{notice}</span> : null}
+      {/* [B18-D review 2] always present, so every result is announced; visually empty when there is nothing to say */}
+      <span role="status" aria-live="polite" className="text-[10px] leading-4 text-zinc-400 empty:sr-only" data-testid="autonomy-notice">{notice ?? ""}</span>
     </div>
   );
 }

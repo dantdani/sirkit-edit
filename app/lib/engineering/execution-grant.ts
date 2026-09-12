@@ -61,6 +61,7 @@ export const RETIREMENT_REASONS = Object.freeze([
   "proposal_altered", "confirmation_missing", "tier_exceeded", "kind_not_allowed",
   "superseded_by_new_grant", "session_superseded",
   "commit_rejected", "recovery_required", "consumed_unsettled",
+  "refused_before_execution", // [B18-D review 2] the editor's own checks refused an issued grant before making it
 ] as const);
 export type RetirementReason = (typeof RETIREMENT_REASONS)[number];
 export const isRetirementReason = (value: unknown): value is RetirementReason => typeof value === "string" && (RETIREMENT_REASONS as readonly string[]).includes(value);

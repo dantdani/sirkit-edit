@@ -60,7 +60,7 @@ import { useViewSessionBridge } from "@/app/components/view-session/useViewSessi
 import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-events"; // [B17-F]
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, reduceRunView, refusedLineLabel, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -4409,7 +4409,7 @@ export default function Home() {
     const inFlight = [...executionEntries.values()].some((entry) => entry.state === "issued" || entry.state === "executing");
     const states = new Map<string, NonNullable<ReturnType<typeof entryUndoAvailability>>>();
     for (const entry of executionEntries.values()) {
-      const availability = entryUndoAvailability(entry, newest, inFlight);
+      const availability = entryUndoAvailability(entry, newest, inFlight, projectTimelineEntries); // [B18-D review 2] the timeline, for the one-shot reason
       if (availability) states.set(entry.grantId, availability);
     }
     return states;
@@ -4420,7 +4420,7 @@ export default function Home() {
     const decision = await projectTimeline.undoLatest({ expectTransactionId: entry.transaction.id });
     const current = executionEntriesRef.current.get(grantId) ?? entry;
     if (decision.ok) {
-      upsertExecutionEntry(entryUndoResult(current, { ok: true }));
+      upsertExecutionEntry(entryUndoResult(current, { ok: true, afterSeq: decision.operation.seq }));
       showToast(`Undid: ${decision.operation.label}`);
     } else {
       upsertExecutionEntry(entryUndoResult(current, { ok: false, message: decision.message }));
@@ -4621,11 +4621,14 @@ export default function Home() {
             const received = receiveExecutionGrantReadyEvent(event);
             if (!received) {
               // [B18-D review] the SAFE receiver dropped the grant (altered in transit, incoherent or not issued). The tool line
-              // came first and said it was issued: rewrite it, and say what happened.
+              // came first and said it was issued: rewrite it, and say what happened. [B18-D review 2] the run view stops
+              // counting it as a change in progress: there is no entry, so the answer's label says the page dropped it.
+              runView = runViewGrantDropped(runView);
               setMessages((prev) => prev.map((m) => (m.role === "log" && m.id === logId ? { ...m, entries: markGrantLineDropped(m.entries) } : m)));
               appendActivityStep(logId, "An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.", "error");
             }
             if (received) {
+              runView = runViewGrantReceived(runView); // [B18-D review 2] an entry exists for it
               setPendingExecutionGrant({ grant: received.grant, decision: received.decision, note: received.note, originRunId: received.runId });
               // [B18-D review] one card at a time: an earlier preview still awaiting confirmation was replaced by this grant (its card
               // is gone), so its entry says so instead of inviting a confirmation that no longer exists.
@@ -4648,7 +4651,11 @@ export default function Home() {
               const committed = settled.status === "settled" && settled.outcome === "committed";
               const entry = executionEntriesRef.current.get(settled.grantId);
               if (entry) upsertExecutionEntry(entrySettled(entry, settled));
-              appendActivityStep(logId, committed ? "AI change settled — see its entry" : "AI change not completed — see its entry", committed ? "done" : "error");
+              // [B18-D review 2] "see its entry" only when there is one: a grant this page dropped has none, and was never executed here
+              const line = entry
+                ? (committed ? "AI change settled — see its entry" : "AI change not completed — see its entry")
+                : (committed ? "AI change settled on the server — this page has no entry for it" : "AI change not completed — this page has no entry for it and never executed it; nothing was changed here");
+              appendActivityStep(logId, line, committed ? "done" : "error");
             }
             return;
           }
@@ -4668,7 +4675,17 @@ export default function Home() {
         }
       };
       while (true) {
-        const { done, value } = await reader.read();
+        // [B18-D review 2] a dropped connection errors the body stream (read() rejects) instead of ending it: it is handled
+        // below exactly like a stream cut before its terminal event — the answer stays, the notes are released and the entry
+        // is named. Stop (a cancelled reader ends the stream) and a project switch (an abort) keep their own paths.
+        let chunk: ReadableStreamReadResult<Uint8Array>;
+        try {
+          chunk = await reader.read();
+        } catch (readError) {
+          if (isAbortError(readError) || chatRun.stopped || !scope.isCurrent()) throw readError;
+          break;
+        }
+        const { done, value } = chunk;
         if (done) break;
         if (!scope.isCurrent()) {
           // Project changed mid-stream: stop consuming; write nothing more
@@ -5290,7 +5307,9 @@ export default function Home() {
       const sealed = sealTier1Proposal({
         state: snapshot,
         compilation,
-        provenance: { provider: aiBrainRef.current, note: data.note ?? "", instruction: prompt },
+        // [B18-D review 2] the sealed note is the page's own sentence (as the agent path's is): the model's note never reaches the
+        // review dialog — it is only a labelled note in the run log (Rule 2, OD-18)
+        provenance: { provider: aiBrainRef.current, note: editRouteProvenanceNote(data.note), instruction: prompt },
         now: Date.now(),
         scope: { ...sealScope, headMark: sealHeadMark },
         // [B16.0.2 §E] the LIVE server-derived principal + membership revision

@@ -90,16 +90,19 @@ test.beforeAll(async ({ browser, baseURL }) => {
   await context.addInitScript(() => {
     const host = window as unknown as { __sirkitInterim?: (record: { text: string; entries: string[] }) => void };
     const seen = new WeakSet<Element>();
+    // [B18-D review 2] every TEXT node is checked (not only leaf elements), so an appearance inside mixed markup — an answer
+    // paragraph with a bold word, say — is recorded too; each block is recorded once, with its whole text
     const check = (node: Node): void => {
       const root = node.nodeType === 1 ? (node as Element) : node.parentElement;
       if (!root) return;
-      for (const element of [root, ...Array.from(root.querySelectorAll("*"))]) {
-        if (element.childElementCount !== 0 || seen.has(element)) continue;
-        const text = element.textContent ?? "";
-        if (!text.includes("(fixture interim)")) continue;
-        seen.add(element);
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!(text.textContent ?? "").includes("(fixture interim)")) continue;
+        const block = text.parentElement?.closest("p, li, div, span, pre, td") ?? text.parentElement;
+        if (!block || seen.has(block)) continue;
+        seen.add(block);
         const entries = Array.from(document.querySelectorAll('[data-testid="chat-execution-entry"]')).map((entry) => entry.getAttribute("data-state") ?? "");
-        void host.__sirkitInterim?.({ text: text.slice(0, 300), entries });
+        void host.__sirkitInterim?.({ text: (block.textContent ?? "").slice(0, 300), entries });
       }
     };
     const observe = (): void => {
@@ -292,6 +295,9 @@ test("B18-C silkscreen add with the card; 'Undo that.' undoes it; after a RELOAD
   await reloadAs(page, context, "editor", origin, true);
   await openChat();
   await expect(committedLines()).toHaveCount(committedBeforeReload); // the chat log is restored after the page loads
+  // [B18-D review 2] a reloaded entry is a static record: no live Undo, and its stored text never names the chat's button
+  await expect(page.getByTestId("execution-undo")).toHaveCount(0);
+  await expect(page.getByText(/“Undo this change”/)).toHaveCount(0);
   await chat("Redo.");
   await expect(committedLines()).toHaveCount(committedBeforeReload + 1);
   await expect(page.getByText(/^\(fixture agent\) the tool answered /).last()).toHaveText("(fixture agent) the tool answered executed.");
@@ -329,6 +335,8 @@ test("B18-C a grant altered in transit is dropped by the page's SAFE receiver: n
   // [B18-D review] the dropped grant is said to be dropped, and its tool line never says it is awaiting confirmation
   await expect(page.getByText("An AI change the assistant issued was dropped by this page: it failed the integrity checks. Nothing was changed and there is no card.").last()).toBeVisible();
   await expect(page.getByText(/dropped by this page — it failed the integrity checks; nothing was changed$/).last()).toBeVisible();
+  // [B18-D review 2] the answer's label never points at an entry that does not exist
+  await expect(page.getByText("Written without knowing that this page dropped the change — nothing was changed; the run log above says why.").last()).toBeVisible();
   await page.screenshot({ path: `${EVIDENCE}/forged-grant-dropped.png`, fullPage: false });
 
   const after = await board();
@@ -537,6 +545,41 @@ test("B18-D review: a preview replaced by a newer one says so, and only the newe
   expect(silkTexts(await board())).toEqual(silkTexts(start));
 });
 
+test("B18-D review 2: a Confirm refused for a transient reason (its tender never reached the server) keeps the card; the entry says the attempt changed nothing and nothing is paused; a retry commits", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  await chat(`Add silkscreen text RETRY at ${at.x}, ${at.y}.`);
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card).toBeVisible();
+  const grantId = await page.getByTestId("chat-execution-entry").last().getAttribute("data-grant-id");
+  expect(grantId).toBeTruthy();
+  const entry = page.locator(`[data-testid="chat-execution-entry"][data-grant-id="${grantId}"]`);
+  await expect(entry).toHaveAttribute("data-state", "awaiting_confirmation");
+  const isTender = (url: URL): boolean => url.pathname === "/api/agent/execution-grant";
+  let aborted = 0;
+  await page.route(isTender, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    aborted += 1;
+    await route.abort("connectionrefused");
+  });
+  try {
+    await page.getByTestId("granted-execution-confirm").click();
+    await expect(entry).toContainText("Last attempt not made:");
+    await expect(entry).toHaveAttribute("data-state", "awaiting_confirmation");
+    await expect(card).toBeVisible();
+    await expect(page.getByText("Paused — an AI change is being made.")).toHaveCount(0);
+    expect(aborted).toBeGreaterThan(0);
+  } finally {
+    await page.unroute(isTender);
+  }
+  await entry.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${EVIDENCE}/confirm-refused-transient.png`, fullPage: false });
+  await page.getByTestId("granted-execution-confirm").click();
+  await expect(card).toBeHidden();
+  await expect(entry).toHaveAttribute("data-state", "committed");
+  expect(silkTexts(await board())).toContain("RETRY");
+});
+
 test("B18-D review: a chat stream cut before its terminal event is shown as a failure, never as a finished run", async () => {
   await openChat();
   const prompt = page.getByTestId("prompt-input");
@@ -550,6 +593,77 @@ test("B18-D review: a chat stream cut before its terminal event is shown as a fa
   await prompt.press("Enter");
   await expect(page.getByText("The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made.").last()).toBeVisible();
   await expect(prompt).toBeEnabled({ timeout: 90_000 });
+});
+
+test("B18-D review 2: a chat stream that ERRORS mid-body (a dropped connection) is handled like a cut — the answer stays, the notes are released, the entry is named", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  await openChat();
+  const prompt = page.getByTestId("prompt-input");
+  await expect(prompt).toBeEnabled({ timeout: 90_000 });
+  // The next /api/chat body loses its terminal line and then errors — read() rejects, as it does when a connection drops.
+  await page.evaluate(() => {
+    const original = window.fetch.bind(window);
+    let armed = true;
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await original(input, init);
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (!armed || !url.endsWith("/api/chat") || !response.body) return response;
+      armed = false;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+      const keep = (line: string): boolean => !line.includes("\"run_completed\"") && !line.includes("\"run_failed\"");
+      let buffer = "";
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (buffer && keep(buffer)) controller.enqueue(encoder.encode(buffer));
+            controller.error(new TypeError("network error"));
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          const kept = lines.filter(keep);
+          if (kept.length > 0) controller.enqueue(encoder.encode(`${kept.join("\n")}\n`));
+        },
+      });
+      return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+    };
+  });
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  await prompt.fill(`Add silkscreen text DROPPED at ${at.x}, ${at.y}.`);
+  await prompt.press("Enter");
+  await expect(page.getByText("The connection ended before the assistant finished. An AI change already sent to your editor is reported in its entry: made, or not made.").last()).toBeVisible();
+  await expect(entries).toHaveCount(entriesBefore + 1);
+  await expect(page.getByText("Error — please try again.")).toHaveCount(0);
+  // the answer written before the connection dropped stays, and the run's interim text is released as a labelled note
+  await expect(page.getByText(/the tool answered execution_preview_issued/).last()).toBeVisible();
+  await expect(page.getByText(/^Assistant note \(written before the result\): \(fixture interim\)/).last()).toBeVisible();
+  await expect(prompt).toBeEnabled({ timeout: 90_000 });
+  await page.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  expect(silkTexts(await board())).toEqual(silkTexts(start));
+});
+
+test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
+  const probeText = "(fixture interim) Done — R3 moved";
+  const before = interimLog.length;
+  await page.evaluate(() => {
+    const probe = document.createElement("p");
+    probe.id = "s5-probe";
+    const strong = document.createElement("strong");
+    strong.textContent = "R3";
+    probe.append("(fixture interim) Done — ", strong, " moved");
+    document.body.append(probe);
+  });
+  await expect.poll(() => interimLog.slice(before).some((record) => record.text === probeText), { timeout: 10_000 }).toBe(true);
+  await page.evaluate(() => document.getElementById("s5-probe")?.remove());
+  // the probe is not an appearance of the scripted agent's text: it is removed so S5 judges only the real flows
+  for (let index = interimLog.length - 1; index >= before; index -= 1) if (interimLog[index]!.text === probeText) interimLog.splice(index, 1);
 });
 
 test("B18-D S5 Rule 2 across every flow: the scripted agent's interim text only ever appeared as a labelled note, while an execution entry existed, and never in a request's history", async () => {

@@ -62,7 +62,7 @@ import { approveAndApplyPcbEdit } from "@/app/lib/project/pcb-edit-approval-cont
 import { createPcbApplyReauthorizer } from "@/app/lib/project/pcb-apply-reauthorization";
 import { IndexedDbAgentExecutionJournalStore } from "@/app/lib/engineering/agent-execution-journal-idb"; // [B18-B]
 import { AgentExecutionJournal } from "@/app/lib/engineering/agent-execution-journal"; // [B18-B]
-import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, tenderConfirmedExecution, tenderExplicitExecution, type GrantedExecutionOutcome, type GrantedExecutionRecoveryResult } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]; [B18-D I4] report types
+import { cancelGrantedExecution, recoverGrantedExecutionsForEditor, refusalKeepsPreviewCard, tenderConfirmedExecution, tenderExplicitExecution, type GrantedExecutionOutcome, type GrantedExecutionRecoveryResult } from "@/app/lib/project/granted-execution-controller.internal"; // [B18-B]; [B18-D I4] report types
 import { verifyPublicGrantCoherence, type ExecutionDecisionMode, type PublicExecutionGrant } from "@/app/lib/engineering/execution-grant"; // [B18-B]
 import { GrantedExecutionDialog } from "./GrantedExecutionDialog"; // [B18-B]
 import { isPcbEditProposalExpired, verifySealedPcbEditProposalIntegrity, type SealedPcbEditProposal } from "@/app/lib/pcb/proposal/sealed-pcb-edit-proposal";
@@ -144,7 +144,7 @@ import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
 import { clearNets, LayoutCandidateStore, netsOfSelection, verifyLayoutCandidate, type LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-E]
 import type { ViewSessionBridge } from "@/app/lib/agent/view-session-bridge"; // [B17-F]
 import { useViewSessionBridge } from "@/app/components/view-session/useViewSessionBridge"; // [B17-F]
-import type { ProjectOperationTimeline, ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]
+import { pcbHistoryMark, pcbHistoryStep, type ProjectOperationTimeline, type ProjectStoreHead } from "@/app/lib/project/operation-timeline"; // [B17-E]; [B18-D review 2] the recording step
 import { SnapshotConflictDialog } from "./SnapshotConflictDialog"; // [B16-C.3]
 import { BoardRevisionDialog } from "./BoardRevisionDialog"; // [B16-C.1]
 import { preflightBlockedByProtectedCopper, type BoardRevisionCarry } from "@/app/lib/pcb-sync/board-revision"; // [B16-C.1]
@@ -1026,15 +1026,13 @@ export default function PcbEditor({
     // recorded with the canonical head fingerprint; the store lends its own undo + head while it is bound.
     const timeline = operationTimelineRef.current;
     const appliedCount = (): number => history.entries.filter((entry) => entry.state === "applied").length;
-    const redoCount = (): number => history.entries.filter((entry) => entry.state === "redo").length;
     const historyId = `pcb-history-${++historyBindSeqRef.current}`;
     const pcbHead = (board: PcbBoard): Extract<ProjectStoreHead, { store: "pcb" }> => {
       const head = canonicalSessionFor(history)?.headMetadataFor(board) ?? null;
       const applied = appliedCount();
       return { store: "pcb", historyId: head?.lineageId ?? historyId, headSequence: head?.headSequence ?? applied, entryCount: applied };
     };
-    let previousApplied = appliedCount();
-    let previousRedo = redoCount();
+    let previousMark = pcbHistoryMark(history); // [B18-D review 2] by entry identity, never by counts
     timeline?.record({ store: "pcb", kind: "hydrate", label: "Board loaded", actor: "system", head: pcbHead(history.present) });
     const unbindTimeline = timeline?.bindStore("pcb", { undo: () => history.undo(), head: () => pcbHead(history.present), busy: () => canonicalSessionFor(history)?.historyHoldReason() ?? null }); // [B18-D I7] busy
     const unsubscribe = history.subscribe((board) => {
@@ -1045,14 +1043,10 @@ export default function PcbEditor({
       const live = liveRefs(board, refs);
       if (live.length !== refs.length) selectionStore.replace(live);
       if (timeline) {
-        const applied = appliedCount(), redo = redoCount();
-        const kind = applied > previousApplied ? (redo < previousRedo ? "redo" : "commit") : applied < previousApplied ? "undo" : null;
-        previousApplied = applied; previousRedo = redo;
-        if (kind) {
-          const appliedEntries = history.entries.filter((entry) => entry.state === "applied");
-          const last = appliedEntries[appliedEntries.length - 1];
-          timeline.record({ store: "pcb", kind, label: kind === "undo" ? (history.redoLabel ?? "PCB edit") : (last?.label ?? "PCB edit"), actor: last?.metadata.actor ?? "human", head: pcbHead(board), ref: { transactionId: last?.metadata.transactionId, entryId: last?.id } });
-        }
+        // [B18-D review 2] the shared, tested recording step: the chat's Undo reasons read what it records
+        const next = pcbHistoryStep(history, previousMark);
+        previousMark = next.mark;
+        if (next.step) timeline.record({ store: "pcb", ...next.step, head: pcbHead(board) });
       }
     });
     tool.refreshAirwires();
@@ -1511,6 +1505,22 @@ export default function PcbEditor({
   // editor.
   const pendingExecutionGrant = executionGrantIntake?.grant ?? null;
   const [executionGrantBusy, setExecutionGrantBusy] = useState(false);
+  // [B18-D review 2] which grant's ritual is running (the card says "Applying…" only for its own grant), and the grant the card
+  // shows now (a preview replaced while its ritual ran is never reopened for a retry that has no card)
+  const [executionGrantBusyId, setExecutionGrantBusyId] = useState<string | null>(null);
+  const executionGrantBusyIdRef = useRef<string | null>(null);
+  const intakeGrantIdRef = useRef<string | null>(null);
+  const previousIntakeRef = useRef<typeof pendingExecutionGrant>(null);
+  useEffect(() => {
+    intakeGrantIdRef.current = pendingExecutionGrant?.grantId ?? null;
+    const previous = previousIntakeRef.current;
+    previousIntakeRef.current = pendingExecutionGrant;
+    // [B18-D review 2] a preview replaced by a newer grant before it was confirmed is cancelled durably (never left issued); one
+    // whose Confirm is running is settled by its own ritual
+    if (!previous || !pendingExecutionGrant || previous.grantId === pendingExecutionGrant.grantId) return;
+    if (previous.binding.operation.decision !== "preview_then_confirm" || executionGrantBusyIdRef.current === previous.grantId) return;
+    void cancelGrantedExecution({ grant: previous, scope: { tenantId: previous.binding.scope.tenantId, projectId: previous.binding.scope.projectId, branchId: previous.binding.scope.branchId }, reason: "superseded_by_new_grant" }).catch(() => undefined);
+  }, [pendingExecutionGrant]);
   // Expiry is time-based: the clock sample is state (never read impurely during render) and ticks while a grant is open.
   const [executionGrantNow, setExecutionGrantNow] = useState(() => Date.now());
   const executionJournalStoreRef = useRef<IndexedDbAgentExecutionJournalStore | null>(null);
@@ -1569,6 +1579,7 @@ export default function PcbEditor({
     }
     const lifecycleScope = pcbLifecycle.capture();
     setExecutionGrantBusy(true);
+    setExecutionGrantBusyId(grant.grantId); executionGrantBusyIdRef.current = grant.grantId; // [B18-D review 2]
     onExecutionGrantProgress?.(grant.grantId); // [B18-D I4] display only
     try {
       // The journal is scoped by the lineage ROOT board id — the identity the grant was minted and checked against (a derived board revision keeps the same journal).
@@ -1600,12 +1611,18 @@ export default function PcbEditor({
         setToast(`${outcome.changed ? "AI change LANDED but could not be verified" : "AI change not made"}: ${outcome.message}`);
         // [B18-C review U3] a PREVIEW grant refused for a transient reason (nothing changed; the grant stays issued) keeps its
         // dialog so the user can retry what the message tells them to retry; every other outcome clears it.
-        const transient = !outcome.changed && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
+        // [B18-D review 2] never for a grant already consumed and settled as not committed: a retry could only be refused
+        const transient = refusalKeepsPreviewCard(outcome);
         if (!(mode === "confirm" && grant.binding.operation.decision === "preview_then_confirm" && transient)) onExecutionGrantSettled?.(grant.grantId, outcome.changed ? "failed" : "retired", outcome);
-        else onExecutionGrantAttemptRefused?.(grant.grantId, { code: outcome.code, message: outcome.message }); // [B18-D review] the card stays for a retry
+        else if (intakeGrantIdRef.current !== grant.grantId) {
+          // [B18-D review 2] replaced by a newer grant while its ritual ran: there is no card to retry on — retired, durably
+          void cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "superseded_by_new_grant" }).catch(() => undefined);
+          onExecutionGrantSettled?.(grant.grantId, "retired");
+        } else onExecutionGrantAttemptRefused?.(grant.grantId, { code: outcome.code, message: outcome.message }); // [B18-D review] the card stays for a retry
       }
     } finally {
       setExecutionGrantBusy(false);
+      setExecutionGrantBusyId(null); executionGrantBusyIdRef.current = null; // [B18-D review 2]
     }
   }, [pendingExecutionGrant, editorRuntime, currentInterlock, syncIdentity, pcbLifecycle, drc, executionGrantIntake, onExecutionGrantSettled, onExecutionGrantProgress, onExecutionGrantAttemptRefused]);
   const cancelExecutionGrant = useCallback(async () => {
@@ -1628,7 +1645,8 @@ export default function PcbEditor({
       // Reported asynchronously (never a synchronous setState inside the effect), and cancelled DURABLY so the awaiting run is
       // answered at once instead of at its settlement timeout.
       void Promise.resolve().then(async () => {
-        if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "session_superseded" }).catch(() => undefined);
+        // [B18-D review 2] the durable retirement names what happened: the editor's own live check refused it
+        if (syncIdentity) await cancelGrantedExecution({ grant, scope: { tenantId: grant.binding.scope.tenantId, projectId: grant.binding.scope.projectId, branchId: grant.binding.scope.branchId }, reason: "refused_before_execution" }).catch(() => undefined);
         setToast(`AI change not made: ${reason} Nothing was changed.`);
         // [B18-D review] the entry names the live check's reason (never a generic "replaced")
         onExecutionGrantSettled?.(grant.grantId, "retired", { ok: false, status: "refused", code: "precheck-refused", message: reason, changed: false, serverCode: null });
@@ -2813,7 +2831,7 @@ export default function PcbEditor({
         grant={pendingExecutionGrant && pendingExecutionGrant.binding.operation.decision === "preview_then_confirm" ? pendingExecutionGrant : null}
         note={executionGrantIntake?.note ?? null}
         board={state.board} // [B18-D I5] display only: references for the card's targets and operations
-        busy={executionGrantBusy}
+        busy={executionGrantBusy && executionGrantBusyId === pendingExecutionGrant?.grantId} // [B18-D review 2] "Applying…" only for its own grant
         disableReason={executionGrantDisableReason}
         onConfirm={() => void runGrantedExecution("confirm")}
         onCancel={() => void cancelExecutionGrant()}

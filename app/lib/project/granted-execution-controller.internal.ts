@@ -17,6 +17,7 @@
 import { executeGrantedOperation, recoverGrantedExecutions, GRANTED_EXECUTION_CONFIRM_ACTION, type GrantedExecutionInput, type GrantedExecutionOutcome, type GrantedExecutionRecoveryInput, type GrantedExecutionRecoveryResult } from "../engineering/granted-executions";
 import type { PublicExecutionGrant } from "../engineering/execution-grant";
 import { createExecutionGrantTransport, type ExecutionGrantTransport } from "./execution-grant-client";
+export { refusalKeepsPreviewCard } from "../engineering/granted-executions"; // [B18-D review 2] the editor's card rule, from the ritual
 import type { ProjectSelectorScope } from "./project-selector";
 
 /** [B18-D I4] the ritual's report and the sweep's results, for the composition root's callbacks (types only). */
@@ -38,7 +39,7 @@ export function tenderExplicitExecution(deps: GrantedExecutionDeps): Promise<Gra
   return executeGrantedOperation({ ...deps, transport: deps.transport ?? createExecutionGrantTransport(), confirmation: null });
 }
 
-export async function cancelGrantedExecution(input: { grant: PublicExecutionGrant; scope: ProjectSelectorScope; reason: "cancelled_by_user" | "session_superseded"; transport?: ExecutionGrantTransport; signal?: AbortSignal }): Promise<{ ok: boolean; message: string }> {
+export async function cancelGrantedExecution(input: { grant: PublicExecutionGrant; scope: ProjectSelectorScope; reason: "cancelled_by_user" | "session_superseded" | "superseded_by_new_grant" | "refused_before_execution"; transport?: ExecutionGrantTransport; signal?: AbortSignal }): Promise<{ ok: boolean; message: string }> {
   const transport = input.transport ?? createExecutionGrantTransport();
   const result = await transport.cancel(input.scope, { grantId: input.grant.grantId, grantDigest: input.grant.grantDigest, reason: input.reason }, input.signal);
   if (result.ok) return { ok: true, message: "The grant was cancelled; nothing was changed." };

@@ -33,7 +33,7 @@ export interface ConsumeTender {
 
 export type ConsumeRequest =
   | { kind: "tender"; grantId: string; grantDigest: string; attemptId: string; tender: ConsumeTender }
-  | { kind: "cancel"; grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" };
+  | { kind: "cancel"; grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" | "superseded_by_new_grant" | "refused_before_execution" }; // [B18-D review 2] the last two
 
 export type ConsumeOutcome =
   | { ok: true; grant: PublicExecutionGrant; consumption: ExecutionGrantConsumption; live: ConsumeTender extends never ? never : { principalId: string; role: ProjectRole; membershipRevision: string }; idempotent: boolean }

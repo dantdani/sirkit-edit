@@ -25,7 +25,7 @@ export interface TenderBody {
   attemptId: string;
   tender: { operationsDigest: string; commitment: string; confirmation: { actionId: string; previewDigest: string } | null; live: { pcbRevisionId?: string | null; headSequence?: number | null; lineageId?: string | null; selectionDigest?: string | null } | null };
 }
-export interface CancelBody { grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" }
+export interface CancelBody { grantId: string; grantDigest: string; reason: "cancelled_by_user" | "session_superseded" | "superseded_by_new_grant" | "refused_before_execution" } // [B18-D review 2] the last two
 export interface SettleBody {
   grantId: string;
   grantDigest: string;

@@ -207,6 +207,7 @@ const RETIREMENTS: Readonly<Record<string, string>> = Object.freeze({
   commit_rejected: "the editor refused it",
   recovery_required: "its outcome had to be recovered",
   consumed_unsettled: "it was started but never reported",
+  refused_before_execution: "your editor's checks refused it before making it", // [B18-D review 2]
 });
 
 /** A server retirement reason as a sentence. */

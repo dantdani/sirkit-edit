@@ -38,6 +38,35 @@ export type ProjectUndoDecision =
   | { ok: true; operation: ProjectOperation }
   | { ok: false; code: ProjectUndoRefusalCode; message: string; operation?: ProjectOperation };
 
+/** [B18-D review 2] The part of a PCB history the timeline's recording reads (a `PcbHistory` is one). */
+export interface PcbHistoryView {
+  readonly entries: ReadonlyArray<{ readonly id: string; readonly label: string; readonly state: "applied" | "redo"; readonly metadata: { readonly actor?: ProjectOperation["actor"]; readonly transactionId?: string } }>;
+  readonly redoLabel?: string;
+}
+
+/** [B18-D review 2] Where a PCB history stood after its last recorded change: its head entry and its redo entries. */
+export interface PcbHistoryMark { readonly headId: string | undefined; readonly redoIds: readonly string[] }
+export function pcbHistoryMark(history: PcbHistoryView): PcbHistoryMark {
+  const applied = history.entries.filter((entry) => entry.state === "applied");
+  return { headId: applied[applied.length - 1]?.id, redoIds: history.entries.filter((entry) => entry.state === "redo").map((entry) => entry.id) };
+}
+
+/** [B18-D review 2] What one PCB history change records on the project timeline — the PCB editor's subscription, extracted so
+ *  the recording that the chat's Undo reasons read is tested against a real history. The change is classified by ENTRY
+ *  IDENTITY, never by counts: the previous head moved onto the redo stack → an undo; the new head came off the redo stack → a
+ *  redo; any other new head → a commit. (Counting mistook a commit made after an undo — it clears the redo stack — for a redo,
+ *  and missed a commit into a full history, which evicts its oldest entry.) The ref is the LAST APPLIED entry after the change:
+ *  for an undo, the head it returned to. */
+export function pcbHistoryStep(history: PcbHistoryView, previous: PcbHistoryMark): { step: Pick<ProjectOperation, "kind" | "label" | "actor" | "ref"> | null; mark: PcbHistoryMark } {
+  const mark = pcbHistoryMark(history);
+  const kind = previous.headId !== undefined && mark.redoIds.includes(previous.headId) ? "undo"
+    : mark.headId !== undefined && previous.redoIds.includes(mark.headId) ? "redo"
+      : mark.headId !== undefined && mark.headId !== previous.headId ? "commit" : null;
+  if (!kind) return { step: null, mark };
+  const last = history.entries.find((entry) => entry.id === mark.headId);
+  return { step: { kind, label: kind === "undo" ? (history.redoLabel ?? "PCB edit") : (last?.label ?? "PCB edit"), actor: last?.metadata.actor ?? "human", ref: { transactionId: last?.metadata.transactionId, entryId: last?.id } }, mark };
+}
+
 export function sameHead(a: ProjectStoreHead, b: ProjectStoreHead): boolean {
   if (a.store !== b.store) return false;
   if (a.store === "schematic" && b.store === "schematic") return a.entryCount === b.entryCount && a.digest === b.digest;

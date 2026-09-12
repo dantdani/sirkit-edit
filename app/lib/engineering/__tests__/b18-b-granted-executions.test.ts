@@ -38,7 +38,7 @@ import { InMemoryAtomicProjectStore } from "../persistence";
 import { ProjectCommitInterlock } from "../project-commit-interlock";
 import { engineeringDigest } from "../stable";
 import { AgentExecutionJournal, InMemoryAgentExecutionJournalStore, type AgentExecutionJournalStore } from "../agent-execution-journal";
-import { GrantedExecutionRegistry } from "../granted-executions";
+import { GrantedExecutionRegistry, refusalKeepsPreviewCard } from "../granted-executions";
 
 const PROJECT = "p18x";
 const BRANCH = "main";
@@ -229,7 +229,7 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     const head = headOf(c).headSequence;
     const drifted = await tenderExplicitExecution(deps(c, grant, transport));
     expect(drifted).toMatchObject({ ok: false, code: "stale-revision", changed: false });
-    expect(await serverState(c, grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "session_superseded" } });
+    expect(await serverState(c, grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "refused_before_execution" } }); // [B18-D review 2] pin moved: the reason names what happened
     expect(transport.calls).toEqual(["cancel"]);
     expect(headOf(c).headSequence).toBe(head);
     expect(await c.journal.pending()).toEqual({ ok: true, entries: [] });
@@ -246,7 +246,8 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     // An EXPLICIT grant refused before the consume by a live-authority check is cancelled durably (foreign scope, superseded lifecycle,
     // missing session — three cancels); a forged artifact or an expired grant sends nothing (the server cannot or need not act).
     expect(quiet.calls).toEqual(["cancel", "cancel", "cancel"]);
-    expect(await serverState(c, fresh.grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "session_superseded" } });
+    // [B18-D review 2] pin moved: the first cancel (the foreign scope) retires it, and names what happened
+    expect(await serverState(c, fresh.grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "refused_before_execution" } });
     expect(headOf(c).headSequence).toBe(head);
     // The human's own cancel of a preview grant.
     c.state.autonomy = setting("proposal_only");
@@ -283,10 +284,14 @@ describe("B18-B §4.3 — the granted-execution ritual over the real canonical s
     const a = await mint(c, { runId: "run-a" });
     c.journalStore.failAt = 2;
     const transportA = transportOver(c);
-    expect(await tenderExplicitExecution(deps(c, a.grant, transportA))).toMatchObject({ ok: false, code: "recovery-required", changed: false });
+    const crashedA = await tenderExplicitExecution(deps(c, a.grant, transportA));
+    // [B18-D review 2] the grant was burned and settled as not committed: flagged, so no card invites a retry
+    expect(crashedA).toMatchObject({ ok: false, code: "recovery-required", changed: false, grantConsumed: true });
+    expect(!crashedA.ok && refusalKeepsPreviewCard(crashedA)).toBe(false);
     c.journalStore.failAt = null;
     expect((await serverState(c, a.grant.grantId)).status).toBe("settled"); // the ritual settled it not-committed before giving up
     expect(await c.journal.lookupByGrant(a.grant.grantId)).toMatchObject({ kind: "entry", entry: { state: "abandoned" } });
+    expect(await tenderExplicitExecution(deps(c, a.grant, transportOver(c)))).toMatchObject({ ok: false, code: "grant-invalid", changed: false }); // [B18-D review 2] a retry can only be refused
     // Crash B: the commit lands but markCommitted is lost — the journal stays grant-consumed while the canonical ledger proves the transaction.
     const b = await mint(c, { runId: "run-b" });
     const before = headOf(c).headSequence;
@@ -383,7 +388,7 @@ describe("B18-B §4.4/4.6 — review-hardened recovery paths", () => {
     const quiet = transportOver(c);
     expect(await tenderExplicitExecution(deps(c, foreign.grant, quiet, { currentBranchId: "release" }))).toMatchObject({ ok: false, code: "foreign-scope", changed: false });
     expect(quiet.calls).toEqual(["cancel"]);
-    expect(await serverState(c, foreign.grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "session_superseded" } });
+    expect(await serverState(c, foreign.grant.grantId)).toMatchObject({ status: "retired", retirement: { reason: "refused_before_execution" } }); // [B18-D review 2] pin moved
     // A PREVIEW grant refused the same way is left for the human (no cancel).
     c.state.autonomy = setting("proposal_only");
     const preview = await mint(c, { runId: "run-preview-foreign", dxMm: 5, message: "Move R3 5 mm to the right." });

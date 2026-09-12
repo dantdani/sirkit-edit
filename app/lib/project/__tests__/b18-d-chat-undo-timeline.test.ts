@@ -78,11 +78,15 @@ describe("B18-D I8 — what the entry's Undo shows", () => {
   });
 
   it("a success is written into the entry once (one history step; no longer undoable); a refusal carries the timeline's message verbatim", () => {
-    const undone = entryUndoResult(committed, { ok: true });
-    expect(undone).toMatchObject({ state: "committed", undoEligible: false, undoResult: { ok: true } });
-    expect(entryUndoAvailability(undone, { kind: "undo", ref: { transactionId: "tx-before" } }, false)).toEqual({ eligible: false, reason: "Already undone — the editor's Redo brings it back." });
+    const undone = entryUndoResult(committed, { ok: true, afterSeq: 5 });
+    expect(undone).toMatchObject({ state: "committed", undoEligible: false, undoResult: { ok: true, afterSeq: 5 } });
+    // [B18-D review 2] the reason is judged from the PCB steps recorded after the undone commit (seq 5), never the newest alone
+    const commit = { seq: 5, store: "pcb" as const, kind: "commit" as const, ref: { transactionId: tx } };
+    const chatUndo = { seq: 6, store: "pcb" as const, kind: "undo" as const, ref: { transactionId: "tx-before" } };
+    expect(entryUndoAvailability(undone, chatUndo, false, [commit, chatUndo])).toEqual({ eligible: false, reason: "Already undone — the editor's Redo brings it back." });
     // [B18-D review] pin moved: after the editor's Redo the reason no longer says "Already undone"; the chat's Undo stays one-shot (D-A8)
-    expect(entryUndoAvailability(undone, { kind: "redo", ref: { transactionId: tx } }, false)).toEqual({ eligible: false, reason: "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" });
+    const redo = { seq: 7, store: "pcb" as const, kind: "redo" as const, ref: { transactionId: tx } };
+    expect(entryUndoAvailability(undone, redo, false, [commit, chatUndo, redo])).toEqual({ eligible: false, reason: "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" });
     const message = entryToLogMessage(undone);
     const rows = message.entries.map((row) => row.text);
     expect(rows.filter((text) => text === "Undone by you — the editor's own Undo reversed this change (one history step).")).toHaveLength(1);

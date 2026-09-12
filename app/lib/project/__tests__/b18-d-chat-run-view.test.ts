@@ -51,13 +51,18 @@ describe("B18-D I3 — the answer, the notes and the history (Rule 2 on the page
     expect(ended.historyText).toBe("");
   });
 
-  it("a preview run's answer is labelled; an explicit committed run's is not; not-committed, retired and unsettled runs are labelled", () => {
+  it("a preview run's answer is labelled; an explicit run whose durable outcome came before its answer is not; unsettled runs are labelled", () => {
     const preview = run([finished("execution_preview_issued"), text("R3 is moved.", "final"), { type: "run_completed" }]);
     expect(preview.answer).toBe(`${LABEL_BEFORE_CHANGE}\n\nR3 is moved.`);
     expect(preview.historyText).toBe(preview.answer);
     const committed = run([finished("execution_grant_issued"), { type: "execution_settled", status: "settled", outcome: "committed" }, text("R3 moved 2 mm.", "final"), { type: "run_completed" }]);
     expect(committed).toMatchObject({ answer: "R3 moved 2 mm.", label: null });
-    for (const settled of [{ status: "settled", outcome: "not-committed" }, { status: "retired", outcome: null }, { status: "unsettled", outcome: null }, { status: "in_flight", outcome: null }]) {
+    // [B18-D review 2] pin moved: a not-committed or retired outcome reached the model before it wrote its answer, so "written
+    // before the outcome was confirmed" would be false; only an answer written while the outcome was unknown is labelled
+    for (const settled of [{ status: "settled", outcome: "not-committed" }, { status: "retired", outcome: null }]) {
+      expect(run([finished("execution_grant_issued"), { type: "execution_settled", ...settled }, text("Not made.", "final"), { type: "run_completed" }]).label, JSON.stringify(settled)).toBeNull();
+    }
+    for (const settled of [{ status: "unsettled", outcome: null }, { status: "in_flight", outcome: null }]) {
       expect(run([finished("execution_grant_issued"), { type: "execution_settled", ...settled }, text("Done.", "final"), { type: "run_completed" }]).label, JSON.stringify(settled)).toBe(LABEL_BEFORE_CHANGE);
     }
     // [B18-D review] a preview the human confirms after its run ended keeps its label: the answer was written before any change.

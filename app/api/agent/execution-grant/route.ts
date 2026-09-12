@@ -31,7 +31,10 @@ const TENDER_KEYS: ReadonlySet<string> = new Set(["kind", "grantId", "grantDiges
 const CANCEL_KEYS: ReadonlySet<string> = new Set(["kind", "grantId", "grantDigest", "reason"]);
 const TENDER_BLOCK_KEYS: ReadonlySet<string> = new Set(["operationsDigest", "commitment", "confirmation", "live"]);
 const LIVE_KEYS: ReadonlySet<string> = new Set(["pcbRevisionId", "headSequence", "lineageId", "selectionDigest"]);
-const CANCEL_REASONS = new Set(["cancelled_by_user", "session_superseded"]);
+// [B18-D review 2] also a preview replaced by a newer grant, and a grant the editor's checks refused before making it: the
+// retirement names what happened. Every value is in the closed RETIREMENT_REASONS vocabulary, and a cancel retires only an
+// ISSUED grant (a consumed one retires only with the consumed reasons — the store refuses the rest).
+const CANCEL_REASONS = new Set(["cancelled_by_user", "session_superseded", "superseded_by_new_grant", "refused_before_execution"]);
 const MAX_ID = 200;
 
 function refusal(status: number, code: string, error: string, extra: Record<string, unknown> = {}): Response {
@@ -56,8 +59,8 @@ export function parseExecutionGrantRequest(body: Record<string, unknown>): { ok:
   if (unknown.length > 0) return { ok: false, response: refusal(400, "EXECUTION_GRANT_UNKNOWN_FIELD", "The request carries an undeclared key.", { fields: unknown }) };
   if (!isGrantId(body.grantId) || typeof body.grantDigest !== "string" || !DIGEST.test(body.grantDigest)) return { ok: false, response: refusal(400, "EXECUTION_GRANT_BODY_INVALID", "grantId and grantDigest must be the handle the grant was issued with.") };
   if (body.kind === "cancel") {
-    if (typeof body.reason !== "string" || !CANCEL_REASONS.has(body.reason)) return { ok: false, response: refusal(400, "EXECUTION_GRANT_BODY_INVALID", "reason must be cancelled_by_user or session_superseded.") };
-    return { ok: true, request: { kind: "cancel", grantId: body.grantId, grantDigest: body.grantDigest, reason: body.reason as "cancelled_by_user" | "session_superseded" } };
+    if (typeof body.reason !== "string" || !CANCEL_REASONS.has(body.reason)) return { ok: false, response: refusal(400, "EXECUTION_GRANT_BODY_INVALID", `reason must be one of ${[...CANCEL_REASONS].join(", ")}.`) };
+    return { ok: true, request: { kind: "cancel", grantId: body.grantId, grantDigest: body.grantDigest, reason: body.reason as Extract<ConsumeRequest, { kind: "cancel" }>["reason"] } };
   }
   if (!isAttemptId(body.attemptId)) return { ok: false, response: refusal(400, "EXECUTION_GRANT_BODY_INVALID", "attemptId must be the prepared attempt id.") };
   const tender = body.tender;

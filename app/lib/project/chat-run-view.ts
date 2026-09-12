@@ -19,6 +19,8 @@ import type { ProjectOperation } from "./operation-timeline"; // [B18-D I8]
 
 export const LABEL_BEFORE_CHANGE = "Written before the outcome of this change was confirmed — the entry above is authoritative."; // [B18-D review] true also when the change was made but not yet confirmed
 export const LABEL_BEFORE_REVIEW = "Written before anything was applied — the proposal above awaits your review.";
+/** [B18-D review 2] The run's only execution grants were dropped by this page: there is no entry to point at. */
+export const LABEL_DROPPED = "Written without knowing that this page dropped the change — nothing was changed; the run log above says why.";
 export const NOTE_PREFIX = "Assistant note (written before the result): ";
 
 // ── tool lines ────────────────────────────────────────────────────────────────
@@ -77,12 +79,17 @@ export interface RunViewState {
   answer: string;
   interim: string[];
   pendingExecutions: number;
-  committedExecutions: number;
+  /** [B18-D review 2] grants the DURABLE record resolved during the run (settled with any outcome, or retired): the model was
+   *  told each outcome before it wrote its answer. */
+  resolvedExecutions: number;
   pendingReviews: number;
   terminal: "completed" | "failed" | null;
   failure: string | null;
+  /** [B18-D review 2] what this page decided about the grants the stream carried (received: an entry exists; dropped: none). */
+  receivedExecutions: number;
+  droppedExecutions: number;
 }
-export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, committedExecutions: 0, pendingReviews: 0, terminal: null, failure: null });
+export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0 });
 
 /** Fold one raw run event (as the page receives it) into the run view. Unknown events change nothing. */
 export function reduceRunView(state: RunViewState, event: Record<string, unknown>): RunViewState {
@@ -99,7 +106,9 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
       return state;
     }
     case "execution_settled":
-      return event.status === "settled" && event.outcome === "committed" ? { ...state, committedExecutions: state.committedExecutions + 1 } : state;
+      // [B18-D review 2] any durable outcome resolves it (committed, not committed, poisoned, retired); an unsettled or in-flight
+      // answer does not — the model could not know the outcome
+      return event.status === "settled" || event.status === "retired" ? { ...state, resolvedExecutions: state.resolvedExecutions + 1 } : state;
     case "run_completed":
       return { ...state, terminal: state.terminal ?? "completed" };
     case "run_failed":
@@ -110,12 +119,19 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
 }
 
 
+/** [B18-D review 2] What this page decided about a grant the stream carried — page decisions, never events: nothing in the
+ *  run's stream can reach them. They change only the label's wording (a dropped grant never removes a label). */
+export const runViewGrantReceived = (state: RunViewState): RunViewState => ({ ...state, receivedExecutions: state.receivedExecutions + 1 });
+export const runViewGrantDropped = (state: RunViewState): RunViewState => ({ ...state, droppedExecutions: state.droppedExecutions + 1 });
+
 export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null }
 
 /** What the page shows and what the next run's history carries. */
 export function projectRunView(state: RunViewState): RunViewProjection {
-  const unresolvedExecution = state.pendingExecutions > state.committedExecutions;
-  const label = state.answer.length === 0 ? null : unresolvedExecution ? LABEL_BEFORE_CHANGE : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : null;
+  const unresolvedExecution = state.pendingExecutions > state.resolvedExecutions;
+  // [B18-D review 2] "the entry above" only when an entry exists: a run whose only grants this page dropped has none
+  const noEntry = state.droppedExecutions > 0 && state.receivedExecutions === 0;
+  const label = state.answer.length === 0 ? null : unresolvedExecution ? (noEntry ? LABEL_DROPPED : LABEL_BEFORE_CHANGE) : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : null;
   const answer = label ? `${label}\n\n${state.answer}` : state.answer;
   return {
     answer,
@@ -150,7 +166,7 @@ export interface ExecutionEntry {
   recovery: string | null;
   undoEligible: boolean;
   /** [B18-D I8] the chat Undo's result for this entry: a success, or the timeline's refusal verbatim. */
-  undoResult?: { ok: boolean; text: string } | null;
+  undoResult?: { ok: boolean; text: string; /** [B18-D review 2] the timeline seq of the operation it undid */ afterSeq?: number } | null;
   /** [B18-D review] the last confirmed attempt was refused for a transient reason (nothing changed; the card stays). */
   attempt?: string | null;
   /** [B18-D review] an AI undo or redo (a replay): its undo hint follows the direction. */
@@ -191,7 +207,7 @@ export const entryExecuting = (entry: ExecutionEntry): ExecutionEntry => (entry.
 /** The editor's ritual outcome (structural: the page passes what the ritual returned). */
 export type EditorOutcome =
   | { ok: true; status: "committed" | "already-applied"; receipt: { transactionId: string; pcbRevisionBefore: string; pcbRevisionAfter: string; headSequenceAfter: number }; settled: "settled" | "settle-failed"; validations?: { drc?: unknown } | null; undoEligible?: boolean; presetId?: string | null }
-  | { ok: false; code: string; changed: boolean; message?: string };
+  | { ok: false; code: string; changed: boolean; message?: string; grantConsumed?: true };
 
 export function entryEditorOutcome(entry: ExecutionEntry, outcome: EditorOutcome): ExecutionEntry {
   if (outcome.ok) {
@@ -206,7 +222,10 @@ export function entryEditorOutcome(entry: ExecutionEntry, outcome: EditorOutcome
   // [B18-D review] the editor's live pre-check names its own reason (never a generic "replaced")
   const sentence = outcome.code === "precheck-refused" && typeof outcome.message === "string" && outcome.message.trim() !== ""
     ? { headline: `Not made: ${outcome.message.trim().replace(/[.\s]+$/, "").slice(0, 300)}. Nothing was changed.`, next: "Ask again once that is resolved." }
-    : refusalSentence(outcome.code, outcome.changed);
+    // [B18-D review 2] a grant already consumed and settled as not committed: nothing is left to recover or retry
+    : outcome.grantConsumed === true && !outcome.changed
+      ? { headline: "Not made — the grant was used and settled as not committed, so it cannot be retried. Nothing was changed.", next: "Ask again." }
+      : refusalSentence(outcome.code, outcome.changed);
   return { ...entry, state: outcome.changed ? "landed_unverified" : outcome.code === "already-in-flight" ? entry.state : "not_made", failure: { ...sentence, code: outcome.code }, undoEligible: false };
 }
 
@@ -258,6 +277,14 @@ export function editProposalMessages(note: unknown): { answer: string; note: str
   };
 }
 
+/** [B18-D review 2] The note sealed into a schematic edit proposal is the page's own sentence (as the agent path's is): the
+ *  model's note never reaches the review dialog — it is only a labelled note in the run log (Rule 2, OD-18). */
+export function editRouteProvenanceNote(note: unknown): string {
+  return typeof note === "string" && note.trim() !== ""
+    ? "Prepared by the schematic edit route from your instruction. The assistant's own note is in the run log, labelled as written before the result."
+    : "Prepared by the schematic edit route from your instruction.";
+}
+
 export const isTerminalEntry = (entry: ExecutionEntry): boolean => TERMINAL.has(entry.state);
 /** [B18-D review] A confirmed preview refused for a transient reason changed nothing and keeps its card for a retry: the entry
  *  returns to awaiting confirmation and says the attempt was not made — never "executing" with no ritual running. */
@@ -272,11 +299,13 @@ export const entryAttemptRefused = (entry: ExecutionEntry, refusal: { code: stri
  *  is not among the page's live entries at all. The timeline re-checks everything when it is used (NOT_LATEST,
  *  STORE_BUSY, a moved head), so this only decides what the button shows. */
 export interface EntryUndoAvailability { eligible: boolean; reason: string | null }
-export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<ProjectOperation, "kind" | "ref"> | undefined, aiChangeInFlight: boolean): EntryUndoAvailability | null {
+export type TimelineStep = Pick<ProjectOperation, "seq" | "kind" | "store" | "ref">;
+export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<ProjectOperation, "kind" | "ref"> | undefined, aiChangeInFlight: boolean, operations?: readonly TimelineStep[]): EntryUndoAvailability | null {
   if (entry.state !== "committed" || !entry.transaction) return null;
   const latest = newest !== undefined && (newest.kind === "commit" || newest.kind === "redo") && newest.ref?.transactionId === entry.transaction.id;
-  // The chat's Undo is one-shot (D-A8). [B18-D review] its reason stays true after the editor's Redo brings the change back.
-  if (entry.undoResult?.ok) return { eligible: false, reason: latest ? "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”" : "Already undone — the editor's Redo brings it back." };
+  // The chat's Undo is one-shot (D-A8). [B18-D review 2] its reason follows where the change is now, judged from every PCB
+  // operation recorded since the change it undid — never from the newest operation alone.
+  if (entry.undoResult?.ok) return { eligible: false, reason: afterChatUndoReason(entry.undoResult.afterSeq, operations) };
   if (!entry.undoEligible) return { eligible: false, reason: "No longer undoable from here — use the revision history." };
   if (aiChangeInFlight) return { eligible: false, reason: "Paused — an AI change is being made." };
   if (latest) return { eligible: true, reason: null };
@@ -286,11 +315,43 @@ export function entryUndoAvailability(entry: ExecutionEntry, newest: Pick<Projec
   return { eligible: false, reason: "No longer the latest operation — use the revision history." };
 }
 
+/** [B18-D review 2] Where a change undone from the chat stands now. The PCB history is replayed from the steps the timeline
+ *  recorded after the operation that Undo reversed (the chat's own undo first): an undo or a redo moves one step, a commit
+ *  clears the editor's Redo, a restore or a hydrate replaces the history. Without that record it claims nothing. */
+function afterChatUndoReason(afterSeq: number | undefined, operations: readonly TimelineStep[] | undefined): string {
+  if (afterSeq === undefined || operations === undefined) return "Undone once from here — the revision history shows where it stands.";
+  const since = operations.filter((op) => op.store === "pcb" && op.seq > afterSeq);
+  type Place = { at: "applied"; above: number } | { at: "redo"; depth: number } | { at: "gone" } | { at: "unknown" };
+  // until the chat's own undo is recorded, the change is already on top of the editor's redo stack
+  let place: Place = since.length === 0 ? { at: "redo", depth: 0 } : { at: "applied", above: 0 };
+  for (const op of since) {
+    if (place.at === "gone" || place.at === "unknown") break;
+    if (op.kind === "undo") place = place.at === "applied" ? (place.above > 0 ? { at: "applied", above: place.above - 1 } : { at: "redo", depth: 0 }) : { at: "redo", depth: place.depth + 1 };
+    else if (op.kind === "redo") place = place.at === "redo" ? (place.depth > 0 ? { at: "redo", depth: place.depth - 1 } : { at: "applied", above: 0 }) : { at: "applied", above: place.above + 1 };
+    else if (op.kind === "commit") place = place.at === "applied" ? { at: "applied", above: place.above + 1 } : { at: "gone" };
+    else place = { at: "unknown" };
+  }
+  switch (place.at) {
+    case "applied":
+      if (place.above > 0) return "Undone once from here and redone since; later changes are above it — use the revision history.";
+      return since[since.length - 1]?.kind === "redo"
+        ? "Undone once from here, and the editor's Redo brought it back — use the editor's Undo, or say “Undo that.”"
+        : "Undone once from here and redone since — it is on top again: the editor's Undo reverts it.";
+    case "redo":
+      return place.depth === 0 ? "Already undone — the editor's Redo brings it back." : `Already undone — the editor's Redo brings it back after re-applying ${place.depth} earlier step${place.depth === 1 ? "" : "s"}.`;
+    case "gone":
+      return "Already undone — a later change cleared the editor's Redo; ask again, or use the revision history.";
+    default:
+      return "Undone once from here — the history was replaced since; the revision history shows where it stands.";
+  }
+}
+
 /** [B18-D I8] The chat Undo's result, written into the entry: a success names the one history step and ends the entry's
- *  Undo; a refusal carries the timeline's message verbatim and changes nothing else. */
-export const entryUndoResult = (entry: ExecutionEntry, result: { ok: true } | { ok: false; message: string }): ExecutionEntry =>
+ *  Undo; a refusal carries the timeline's message verbatim and changes nothing else. [B18-D review 2] a success keeps the
+ *  seq of the operation it undid, so the reason can follow the change afterwards. */
+export const entryUndoResult = (entry: ExecutionEntry, result: { ok: true; afterSeq?: number } | { ok: false; message: string }): ExecutionEntry =>
   result.ok
-    ? { ...entry, undoEligible: false, undoResult: { ok: true, text: "Undone by you — the editor's own Undo reversed this change (one history step)." } }
+    ? { ...entry, undoEligible: false, undoResult: { ok: true, text: "Undone by you — the editor's own Undo reversed this change (one history step).", afterSeq: result.afterSeq } }
     : { ...entry, undoResult: { ok: false, text: `Not undone — ${result.message}` } };
 
 // The execution entry as a chat log message. It persists through the EXISTING stored-chat log shape (no schema
@@ -317,7 +378,10 @@ function stateSentence(entry: ExecutionEntry): string {
   switch (entry.state) {
     case "awaiting_confirmation": return `Change ready for your confirmation in the PCB editor — ${after}; nothing has changed yet`;
     case "issued": return `Issued — your editor executes it now (one canonical transaction; the assistant waits up to ${SETTLE_WAIT_S} s for the result)`;
-    case "executing": return `Executing in the PCB editor — ${after} (one canonical transaction) — awaiting the editor's settlement (the assistant waits up to ${SETTLE_WAIT_S} s)`;
+    // [B18-D review 2] only an explicit grant's run waits for the editor; a confirmed preview's run has already ended
+    case "executing": return entry.decision === "execute_explicit"
+      ? `Executing in the PCB editor — ${after} (one canonical transaction) — awaiting the editor's settlement (the assistant waits up to ${SETTLE_WAIT_S} s)`
+      : `Executing in the PCB editor — ${after} (one canonical transaction) — awaiting the editor's result`;
     case "committed": return `AI change committed by your editor (one canonical transaction)${entry.checks ? ` — ${entry.checks.replace(/^Checks: /, "")}` : ""}`;
     case "landed_unverified": return entry.failure?.headline ?? "The change LANDED but could not be verified — the board MAY have changed.";
     case "outcome_unknown": return entry.failure?.headline ?? "Outcome not yet known — the editor did not report in time.";
@@ -325,12 +389,14 @@ function stateSentence(entry: ExecutionEntry): string {
   }
 }
 
-/** [B18-D review] The undo hint: conditional (never a present-tense claim), and following an AI undo/redo's direction. */
+/** [B18-D review] The undo hint: conditional (never a present-tense claim), and following an AI undo/redo's direction.
+ *  [B18-D review 2] It is stored with the entry, so it never names the chat's own button: a reloaded record has none (the
+ *  live button, shown beside a live entry, speaks for itself). */
 function undoHint(entry: ExecutionEntry): string {
   if (!entry.undoEligible) return "Undo: it was no longer the latest change when it settled — use the revision history.";
-  if (entry.replay === "undo") return "Undo: while it is the latest change — “Undo this change” here or the editor's Undo (one step) re-applies the change; or say “Redo.”";
-  if (entry.replay === "redo") return "Undo: while it is the latest change — “Undo this change” here or the editor's Undo (one step) removes the change again; or say “Undo that.”";
-  return "Undo: while it is the latest change — “Undo this change” here, the editor's Undo (one step), or say “Undo that.”";
+  if (entry.replay === "undo") return "Undo: while it is the latest change — the editor's Undo (one step) re-applies the change; or say “Redo.”";
+  if (entry.replay === "redo") return "Undo: while it is the latest change — the editor's Undo (one step) removes the change again; or say “Undo that.”";
+  return "Undo: while it is the latest change — the editor's Undo (one step), or say “Undo that.”";
 }
 
 /** The entry as a persistable chat log message (rebuilt on every transition). */

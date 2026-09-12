@@ -71,7 +71,12 @@ export type GrantedExecutionOutcome =
    *  committed board (null for an execution that was already applied) and whether it is still the latest, undoable change. */
   | { ok: true; status: "committed" | "already-applied"; receipt: ExecutionReceipt; autosaveSettled: boolean; settled: "settled" | "settle-failed"; validations: { drc: { ran: boolean; violations: number } } | null; undoEligible: boolean }
   /** `changed`: whether the board changed (true only after a landed commit that could not be verified). */
-  | { ok: false; status: "refused"; code: GrantedExecutionRefusalCode; message: string; changed: boolean; serverCode: string | null };
+  | { ok: false; status: "refused"; code: GrantedExecutionRefusalCode; message: string; changed: boolean; serverCode: string | null; /** [B18-D review 2] the grant was consumed on the server and settled as not committed: a retry can only be refused */ grantConsumed?: true };
+
+/** [B18-C review U3, B18-D review 2] Whether a refused Confirm of a preview grant keeps its card for a retry: only when nothing
+ *  changed, the grant was not consumed, and the reason is transient. A consumed grant can only be refused again. */
+export const refusalKeepsPreviewCard = (outcome: Extract<GrantedExecutionOutcome, { ok: false }>): boolean =>
+  !outcome.changed && outcome.grantConsumed !== true && (outcome.code === "recovery-required" || outcome.code === "already-in-flight" || outcome.code === "execution-failed");
 
 export interface GrantedExecutionInput {
   /** The received public grant (bounded, re-parsed here; never trusted by reference). */
@@ -98,8 +103,8 @@ export interface GrantedExecutionInput {
   signal?: AbortSignal;
 }
 
-const refuse = (code: GrantedExecutionRefusalCode, message: string, extra: { changed?: boolean; serverCode?: string | null } = {}): GrantedExecutionOutcome =>
-  ({ ok: false, status: "refused", code, message, changed: extra.changed ?? false, serverCode: extra.serverCode ?? null });
+const refuse = (code: GrantedExecutionRefusalCode, message: string, extra: { changed?: boolean; serverCode?: string | null; grantConsumed?: true } = {}): GrantedExecutionOutcome =>
+  ({ ok: false, status: "refused", code, message, changed: extra.changed ?? false, serverCode: extra.serverCode ?? null, ...(extra.grantConsumed ? { grantConsumed: true as const } : {}) });
 
 function randomNonce(): string {
   const bytes = new Uint8Array(16);
@@ -233,7 +238,9 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
   const base = b.base.pcb;
   /** An execute_explicit grant refused BEFORE the consume is cancelled durably (best-effort) so the awaiting run is answered at once instead of at the settlement timeout; preview grants stay for the human. */
   const refuseExplicit = async (code: GrantedExecutionRefusalCode, message: string): Promise<GrantedExecutionOutcome> => {
-    if (b.operation.decision === "execute_explicit") { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: "session_superseded" }, input.signal); } catch { /* the grant expires lazily */ } }
+    // [B18-D review 2] the durable retirement names what happened: a replaced session, or the editor's own checks refusing it
+    const reason = code === "session-superseded" ? "session_superseded" : "refused_before_execution";
+    if (b.operation.decision === "execute_explicit") { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason }, input.signal); } catch { /* the grant expires lazily */ } }
     return refuse(code, message);
   };
 
@@ -342,7 +349,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
     if (drifted) {
       registry.release(identityKey);
       // Drift retires the grant durably so it cannot be spent later (best-effort; the server's own checks would burn it anyway).
-      if (!entry) { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: "session_superseded" }, input.signal); } catch { /* the grant expires lazily */ } }
+      if (!entry) { try { await input.transport.cancel(scope, { grantId: grant.grantId, grantDigest: grant.grantDigest, reason: "refused_before_execution" }, input.signal); } catch { /* the grant expires lazily */ } } // [B18-D review 2] the editor's drift check refused it
       return refuse(drifted.code, drifted.message);
     }
 
@@ -407,7 +414,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       registry.release(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry, settlement: NOT_COMMITTED("journal"), signal: input.signal });
       await input.journal.abandon(identityKey, "journal could not record the consume");
-      return refuse("recovery-required", "The grant was consumed but the durable journal could not record it; the commit was not attempted and the grant was settled as not committed. Nothing was changed.");
+      return refuse("recovery-required", "The grant was consumed but the durable journal could not record it; the commit was not attempted and the grant was settled as not committed. Nothing was changed.", { grantConsumed: true });
     }
 
     // 12. Commit lease around the durable-commit critical section only.
@@ -542,7 +549,7 @@ export async function executeGrantedOperation(input: GrantedExecutionInput): Pro
       registry.release(identityKey);
       await settleOnServer({ transport: input.transport, scope, entry: entryForSettle, settlement: NOT_COMMITTED("threw"), signal: input.signal });
       try { await input.journal.abandon(identityKey, `failed before the commit: ${detail.slice(0, 80)}`); } catch { /* the sweep reconciles from the server state */ }
-      return refuse("execution-failed", `The execution failed before the commit (${detail}); the consumed grant was settled as not committed. Nothing was changed.`);
+      return refuse("execution-failed", `The execution failed before the commit (${detail}); the consumed grant was settled as not committed. Nothing was changed.`, { grantConsumed: true });
     }
     if (commitAttempted) {
       return refuse("recovery-required", `The execution failed around the commit (${detail}); recovery will settle it from the canonical ledger. The board may have changed — check it.`, { changed: true });

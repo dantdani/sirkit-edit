@@ -4,10 +4,13 @@
  * (the server's `viewer.canChange`) can change it; the change sends exactly `{ mode, expectedRevision }` with the
  * project selector headers; a 409 is re-read and said so; a refusal is shown verbatim; an unavailable store says the
  * project behaves as proposal only; with no project open it renders nothing.
+ * [B18-D review 2] Results are announced in a status region, focus returns to the select, and the note (with the lock
+ * reason) describes the select; a lost, unreadable or unconfirmed response never claims "nothing was changed" — the
+ * setting is read again and shown; a setting it cannot read is "not known here", never a mode.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AutonomyModeControl } from "../AutonomyModeControl";
+import { AUTONOMY_UNREADABLE, AutonomyModeControl } from "../AutonomyModeControl";
 
 const SCOPE = { tenantId: "local", projectId: "p1", branchId: "main" };
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -78,5 +81,60 @@ describe("B18-D I11 — the agent autonomy control", () => {
     const { container } = render(<AutonomyModeControl scope={null} />);
     expect(container.innerHTML).toBe("");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("[B18-D review 2] a result is announced in a status region, focus returns to the select, and the note describes it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => (init?.method === "POST" ? json(200, { ok: true, setting: { mode: "execute_explicit_tier1", revision: 4 }, unchanged: false }) : setting("proposal_only", 3, true))));
+    render(<AutonomyModeControl scope={SCOPE} />);
+    const select = (await screen.findByTestId("autonomy-mode")) as HTMLSelectElement;
+    expect(select.getAttribute("aria-describedby")).toBe(screen.getByTestId("autonomy-note").id);
+    expect(screen.getByRole("status").textContent).toBe(""); // present before any result, so the result is announced
+    fireEvent.change(select, { target: { value: "execute_explicit_tier1" } });
+    fireEvent.click(screen.getByTestId("autonomy-change"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Changed to Explicit Tier 1 (revision 4)."));
+    await waitFor(() => expect(document.activeElement).toBe(select));
+  });
+
+  it("[B18-D review 2] a member who may not change it hears why: the lock reason describes the select", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => setting("execute_explicit_tier1", 2, false)));
+    render(<AutonomyModeControl scope={SCOPE} />);
+    const select = await screen.findByTestId("autonomy-mode");
+    expect(document.getElementById(select.getAttribute("aria-describedby")!)?.textContent).toContain("Only a project administrator can change this.");
+  });
+
+  it("[B18-D review 2] a lost, unreadable or unconfirmed response never claims 'nothing was changed': the setting is read again and shown", async () => {
+    const posts: Array<() => Promise<Response>> = [
+      async () => new Response("<html>gateway timeout</html>", { status: 504 }),
+      async () => { throw new TypeError("network error"); },
+      async () => new Response("not json", { status: 200 }),
+      async () => json(504, { ok: false, code: "ROUTE_DEADLINE_EXCEEDED", error: "The request exceeded its deadline." }),
+    ];
+    for (const post of posts) {
+      let reads = 0;
+      vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+        if (init?.method === "POST") return post();
+        reads += 1;
+        return reads === 1 ? setting("proposal_only", 3, true) : setting("execute_explicit_tier1", 4, true);
+      }));
+      const view = render(<AutonomyModeControl scope={SCOPE} />);
+      fireEvent.change(await screen.findByTestId("autonomy-mode"), { target: { value: "execute_explicit_tier1" } });
+      fireEvent.click(screen.getByTestId("autonomy-change"));
+      await waitFor(() => expect(screen.getByTestId("autonomy-notice").textContent).toMatch(/^The response did not confirm the change \(.+\); the setting was read again and is shown here\.$/));
+      expect(screen.getByTestId("autonomy-notice").textContent).not.toMatch(/nothing was changed/);
+      expect(reads).toBe(2);
+      expect(screen.getByTestId("autonomy-control").getAttribute("data-mode")).toBe("execute_explicit_tier1"); // what the server now says
+      view.unmount();
+    }
+  });
+
+  it("[B18-D review 2] a setting it cannot read is 'not known here', never a mode", async () => {
+    expect(AUTONOMY_UNREADABLE).not.toMatch(/proposal only|proposal_only/);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("network error"); }));
+    const first = render(<AutonomyModeControl scope={SCOPE} />);
+    expect((await screen.findByTestId("autonomy-unavailable")).textContent).toBe(AUTONOMY_UNREADABLE);
+    first.unmount();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>bad gateway</html>", { status: 502 })));
+    render(<AutonomyModeControl scope={SCOPE} />);
+    expect((await screen.findByTestId("autonomy-unavailable")).textContent).toBe(AUTONOMY_UNREADABLE);
   });
 });
