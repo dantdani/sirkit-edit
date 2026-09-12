@@ -636,6 +636,15 @@ export async function recoverGrantedExecutions(input: GrantedExecutionRecoveryIn
         await settleOnServer({ transport: input.transport, scope: input.scope, entry, settlement: POISONED, signal: input.signal });
         push("refused-poisoned", "the journal claims a commit the canonical history cannot prove"); continue;
       }
+      // [B18-E validation] The canonical ledger answers only for the lineage it belongs to: reopening one (a legacy-path
+      // divergence rebases it) replaces the transaction log wholesale, so a transaction that really landed becomes
+      // unprovable. Settling `not-committed` on that absence would assert that nothing happened for a change that is on
+      // the board — and, for a relative family, reopen the auto-execute path for the same instruction. When the ledger's
+      // lineage is no longer the one this grant was prepared under, the honest answer is that it cannot tell.
+      if (evidence.kind === "absent" && evidence.lineageId !== null && evidence.lineageId !== entry.lineageId) {
+        push("unavailable", "the editor's canonical lineage was reopened after this grant, so the ledger can neither prove nor disprove its commit; left pending");
+        continue;
+      }
       const remote = await input.transport.get(input.scope, entry.grantId, input.signal);
       const deadline = remote.ok && remote.body.grant.state.consumption ? Date.parse(remote.body.grant.state.consumption.commitDeadline) : (entry.consumedAt ?? entry.preparedAt) + 60_000;
       if (now() > deadline + GRANT_SETTLE_GRACE_MS || (remote.ok && remote.body.grant.state.status !== "consumed")) {

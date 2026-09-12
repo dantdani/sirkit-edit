@@ -39,6 +39,21 @@ describe("[B18-E E9] a run that claimed a change and prepared none", () => {
     expect(run([{ type: "tool_finished", title: "Propose", tier: 2, ok: true, status: "proposal_sealed" }, answer("A proposal is ready."), { type: "run_completed" }]).label).toBe(LABEL_BEFORE_REVIEW);
   });
 
+  // [B18-E validation] The adversarial pass at B18's closeout broke the first version of this rule: it keyed on the model
+  // having written prose BESIDE the tool call, so the ordinary case — a model that says nothing there and simply answers
+  // "Done." — went unlabelled, into the answer bubble and into the next run's history. What makes an answer worth
+  // contradicting is that the run TRIED something and prepared nothing, wherever the model chose to write.
+  it("catches the claim wherever it is written: a refused or failed call plus an answer is labelled even with no interim text", () => {
+    const finalOnly = run([{ type: "tool_finished", title: "Move footprint", tier: 1, ok: false, status: "invalid_input" }, answer("Done — R3 is moved 2 mm to the left."), { type: "run_completed" }]);
+    expect(finalOnly.label, "the claim was in the ANSWER, not beside the call").toBe(LABEL_NOTHING_CHANGED);
+    expect(finalOnly.answer.startsWith(LABEL_NOTHING_CHANGED)).toBe(true);
+    expect(finalOnly.historyText, "and the next run is told what the page told the human").toBe(finalOnly.answer);
+    expect(finalOnly.notes, "there was no interim text to release").toEqual([]);
+
+    const refusedBeforeRunning = run([refused("unknown_tool"), answer("Done — the board is released."), { type: "run_completed" }]);
+    expect(refusedBeforeRunning.label, "a call refused before it ran is an attempt that changed nothing").toBe(LABEL_NOTHING_CHANGED);
+  });
+
   it("says nothing about runs that made no claim, that are still running, or whose change really happened", () => {
     expect(run([answer("R3 is at (52.000, 47.480) mm."), { type: "run_completed" }]).label, "a plain answer is not labelled").toBeNull();
     expect(run([claim, refused("unknown_tool"), answer("the tool answered unknown_tool.")]).label, "not before the run ends").toBeNull();

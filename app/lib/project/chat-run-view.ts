@@ -21,9 +21,12 @@ export const LABEL_BEFORE_CHANGE = "Written before the outcome of this change wa
 export const LABEL_BEFORE_REVIEW = "Written before anything was applied — the proposal above awaits your review.";
 /** [B18-D review 2] The run's only execution grants were dropped by this page: there is no entry to point at. */
 export const LABEL_DROPPED = "Written without knowing that this page dropped the change — nothing was changed; the run log above says why.";
-/** [B18-E E9] The run claimed something before it had a result and then prepared no change at all (a refused tool, an
- *  invalid call): there is no entry to point at, so the PAGE contradicts the claim in its own words. */
-export const LABEL_NOTHING_CHANGED = "Nothing was changed: this run never prepared a change. Anything said about it being done was written before the assistant had any result — the run log above says what really happened.";
+/** [B18-E E9] The run prepared no change at all (a refused tool, an invalid call) and yet its answer may say otherwise:
+ *  there is no entry to point at, so the PAGE contradicts it in its own words.
+ *  [B18-E validation] It applies whether the claim was written BESIDE the call or in the final answer — the first version
+ *  keyed on interim text, and a model that simply answers "Done." after a refused tool got through unlabelled, into the
+ *  answer bubble and into the next run's history. */
+export const LABEL_NOTHING_CHANGED = "Nothing was changed: this run never prepared a change. Anything above that says otherwise is the assistant's own text, not the editor's — the run log says what really happened.";
 export const NOTE_PREFIX = "Assistant note (written before the result): ";
 
 // ── tool lines ────────────────────────────────────────────────────────────────
@@ -105,8 +108,11 @@ export interface RunViewState {
   /** [B18-D review 2] what this page decided about the grants the stream carried (received: an entry exists; dropped: none). */
   receivedExecutions: number;
   droppedExecutions: number;
+  /** [B18-E validation] tool calls that ended without doing anything — refused before running, or finished not-ok. A run
+   *  that tried and failed is a run whose answer may claim otherwise, whether or not the model wrote prose beside the call. */
+  failedAttempts: number;
 }
-export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0 });
+export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0, failedAttempts: 0 });
 
 /** Fold one raw run event (as the page receives it) into the run view. Unknown events change nothing. */
 export function reduceRunView(state: RunViewState, event: Record<string, unknown>): RunViewState {
@@ -116,8 +122,12 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
       if (!text) return state;
       return event.phase === "final" ? { ...state, answer: state.answer + text } : { ...state, interim: [...state.interim, text] };
     }
+    case "tool_refused":
+      // [B18-E validation] a call that never ran: the run attempted something and nothing came of it.
+      return { ...state, failedAttempts: state.failedAttempts + 1 };
     case "tool_finished": {
-      if (event.ok !== true || typeof event.status !== "string") return state;
+      if (event.ok !== true) return { ...state, failedAttempts: state.failedAttempts + 1 };
+      if (typeof event.status !== "string") return state;
       if (EXECUTION_STATUSES.has(event.status)) return { ...state, pendingExecutions: state.pendingExecutions + 1 };
       if (REVIEW_STATUSES.has(event.status)) return { ...state, pendingReviews: state.pendingReviews + 1 };
       return state;
@@ -148,9 +158,14 @@ export function projectRunView(state: RunViewState): RunViewProjection {
   const unresolvedExecution = state.pendingExecutions > state.resolvedExecutions;
   // [B18-D review 2] "the entry above" only when an entry exists: a run whose only grants this page dropped has none
   const noEntry = state.droppedExecutions > 0 && state.receivedExecutions === 0;
-  // [B18-E E9] the run ENDED having claimed something and having prepared nothing at all: no execution, no review, nothing
-  // dropped. Counters only the page owns, so a stream cannot talk the page out of saying it.
-  const claimedNothing = state.terminal !== null && state.interim.length > 0 && state.pendingExecutions === 0 && state.receivedExecutions === 0 && state.droppedExecutions === 0 && state.pendingReviews === 0;
+  // [B18-E E9] the run ENDED having prepared nothing at all: no execution, no review, nothing dropped — and it either
+  // claimed something beside a call, or TRIED something that did not work. Counters only the page owns, so a stream
+  // cannot talk the page out of saying it.
+  // [B18-E validation] `interim` alone was not enough: the ordinary case is a model that puts its claim in the FINAL
+  // text and writes nothing beside the call, and that answer reached the user unlabelled AND became the next run's
+  // history. A refused or not-ok tool call is what makes the answer worth contradicting, whatever the model wrote where.
+  const preparedNothing = state.pendingExecutions === 0 && state.receivedExecutions === 0 && state.droppedExecutions === 0 && state.pendingReviews === 0;
+  const claimedNothing = state.terminal !== null && preparedNothing && (state.interim.length > 0 || state.failedAttempts > 0);
   const label = state.answer.length === 0 ? null : unresolvedExecution ? (noEntry ? LABEL_DROPPED : LABEL_BEFORE_CHANGE) : state.pendingReviews > 0 ? LABEL_BEFORE_REVIEW : claimedNothing ? LABEL_NOTHING_CHANGED : null;
   const answer = label ? `${label}\n\n${state.answer}` : state.answer;
   return {

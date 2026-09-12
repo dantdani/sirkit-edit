@@ -584,14 +584,25 @@ reconstructing it from nineteen entries.
 
 | # | unit | integration / real loop | browser | carried by |
 |---|---|---|---|---|
-| 1 move | yes | yes (loop, gateway, minter, ritual, settle) | yes — preview path and explicit path, both from the runbook's sentence | E3, E8 |
+| 1 move | yes | yes (loop, gateway, minter, ritual, settle) | yes — the runbook's exact sentence on the preview path; the explicit path with a VARIANT sentence, because the retry guard turns a repeat of the same sentence into a card (§1, E8) | E3, E8 |
 | 2 vias | yes | yes — an `update_via` payload through the real loop; the bounded via read; the padstack-bound refusal | yes — the read runs and the answer is truthful; the board has no vias to resize (LB-8) | E12–E14 |
 | 3 dimensions | yes | yes — the plan built from the bounded mechanical read | yes — a card even under explicit autonomy, one transaction on Confirm | E10, E11 |
 | 4 replacement | yes | yes — the runbook sentence through the REAL `/api/chat` handler | yes — seal, review, Cancel, Apply: ONE canonical transaction | E15, E16 |
 | 5 place / route / report | yes | yes — the candidate reports, the turn-taking, the routing producer, the SAFE receiver | yes — a placement candidate for review and the clauses it cannot honour said out loud | E17, E18 |
 | 6 undo / refresh / redo | yes | yes — including the refresh | yes — on a move, across a reload | E1, E4, E8 |
-| 7a–7h | yes | yes — every condition | yes for 7a, 7b, 7c, 7d, 7e, 7g, 7h | E2, E5, E7–E9b |
+| 7a–7h | yes | yes — every condition | yes for 7b, 7c, 7d, 7e, 7g, 7h. NOT 7a: the browser case proves the open card is modal, which makes a selection change impossible to attempt — that targets are bound by id and never by the selection is proven in unit and integration, where the burn is reachable (E8, OD-26) | E2, E5, E7–E9b |
 | 8 Tier 3 | yes | yes — through the loop and the gateway | yes — a forged name and a nested delegation, both refused with nothing changed | E6, E7, E9 |
+
+**This table was checked by an adversarial pass, not only written.** Six verifiers (workflow `wf_d1783a33-a63`) were each
+given one load-bearing claim and told to REFUTE it from the source. Three could not (Tier 3 inaccessible, Tier 2 human-only,
+the exposure set exact — each dead-ends on independently enforced mechanisms, not on comments). Three did, and their
+findings are acted on rather than argued with: two rows of this table were overstated and are corrected above; the chat's
+"nothing was changed" label keyed on the model having written prose beside the call, so an ordinary "Done." in the final
+answer went unlabelled — fixed, with a regression that fails on the pre-fix rule; and a settlement/recovery finding was
+reproduced and fixed: a landed granted execution whose journal write was lost could be settled NOT COMMITTED after the
+editor's lineage was reopened, because reopening replaces the canonical transaction log wholesale and absence of evidence
+was read as evidence of absence. The ledger now says which lineage it can answer for, and the recovery sweep says it
+cannot tell rather than asserting a change did not happen — with a regression that fails on the pre-fix code.
 
 **The three product defects these scenarios found, each fixed with a regression that fails on the pre-fix code.**
 

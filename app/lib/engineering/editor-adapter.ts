@@ -125,7 +125,10 @@ export interface CanonicalAdapterEvent {
 /** [B15.3] see `CanonicalEditorSession.durableIdempotencyEvidence`. */
 export type PcbDurableIdempotencyEvidence =
   | { kind: "unavailable" }
-  | { kind: "absent" }
+  /** [B18-E validation] `lineageId`: the lineage the durable ledger currently belongs to (null when there is no envelope).
+   *  The ledger answers only for ITS OWN lineage — reopening one replaces the log wholesale — so a caller that would
+   *  conclude "this never committed" from an absence must first check that the lineage has not changed underneath it. */
+  | { kind: "absent"; lineageId: string | null }
   | { kind: "corrupt"; detail: string }
   | {
       kind: "found";
@@ -580,12 +583,13 @@ export class CanonicalEditorSession {
     } catch {
       return { kind: "unavailable" };
     }
-    if (!envelope) return { kind: "absent" };
+    if (!envelope) return { kind: "absent", lineageId: null };
     try {
       const integrityIssues = validatePersistenceEnvelope(envelope);
       if (integrityIssues.length > 0) return { kind: "corrupt", detail: integrityIssues[0] ?? "ENVELOPE_INVALID" };
+      const envelopeLineage = typeof envelope.lineageId === "string" ? envelope.lineageId : null;
       const record = envelope.transactionLog.find((candidate) => candidate.transaction?.clientOperationId === clientOperationId);
-      if (!record) return { kind: "absent" };
+      if (!record) return { kind: "absent", lineageId: envelopeLineage };
       const transaction = record.transaction;
       if (typeof transaction.transactionId !== "string" || transaction.transactionId.length === 0 || !Array.isArray(transaction.operations)) {
         return { kind: "corrupt", detail: "MALFORMED_TRANSACTION_RECORD" };
