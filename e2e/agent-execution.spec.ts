@@ -652,6 +652,80 @@ test("B18-D review 2: a chat stream that ERRORS mid-body (a dropped connection) 
   expect(silkTexts(await board())).toEqual(silkTexts(start));
 });
 
+test("[B18-E E8] scenario 6 on a MOVE: an explicit move, 'Undo that.', a RELOAD, then 'Redo.' — each replay is its own history entry and the board ends where the move left it", async () => {
+  const start = await board();
+  const x0 = r3(start).at.x;
+  const before = await committedLines().count();
+  await select("R3");
+  // A sentence no earlier test used: the retry guard is per principal for five minutes and the fixture clock is frozen.
+  await chat("Move R3 4 mm to the right.");
+  await expect(committedLines()).toHaveCount(before + 1);
+  await expect(page.getByTestId("granted-execution-card"), "explicit autonomy: the move runs without a card").toBeHidden();
+  expect(r3(await board()).at.x).toBe(x0 + 4 * NM_PER_MM);
+
+  await chat("Undo that.");
+  await expect(committedLines()).toHaveCount(before + 2);
+  await expect(page.getByTitle(/^Undo: AI: undo — /), "the undo is a NEW history entry, not a step back in a stack").toBeVisible();
+  expect(r3(await board()).at.x).toBe(x0);
+
+  // RELOAD: the page's memory is gone, so "Redo." must resolve its reference from the durable grant records and the head.
+  const committedBeforeReload = await committedLines().count();
+  await reloadAs(page, context, "editor", origin, true);
+  await openChat();
+  await expect(committedLines()).toHaveCount(committedBeforeReload);
+  await chat("Redo.");
+  await expect(committedLines()).toHaveCount(committedBeforeReload + 1);
+  await expect(page.getByTitle(/^Undo: AI: redo — /)).toBeVisible();
+  expect(r3(await board()).at.x, "the move is back after a refresh it never depended on").toBe(x0 + 4 * NM_PER_MM);
+  await page.screenshot({ path: `${EVIDENCE}/scenario-6-move-redo-after-reload.png`, fullPage: false });
+});
+
+test("[B18-E E8] the retry guard and the card's modality: the SAME move sentence again is a CARD with the guard's note even under explicit autonomy; the open card is modal, so the selection cannot drift under it, and Confirm commits the bound move", async () => {
+  const start = await board();
+  const x0 = r3(start).at.x;
+  const other = start.footprints.find((footprint) => footprint.ref !== "R3")!;
+  const before = await committedLines().count();
+  await select("R3");
+  await chat("Move R3 4 mm to the right."); // identical to the previous test's instruction, and it already executed
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card, "an identical instruction is never executed twice unasked").toBeVisible();
+  await expect(page.getByTestId("granted-execution-note")).toHaveText(/^An identical instruction already executed at .+ \(grant xg-[a-z0-9-]+\); confirm to run it again\.$/);
+  await expect(page.getByTestId("chat-execution-entry").last()).toHaveAttribute("data-state", "awaiting_confirmation");
+  await page.screenshot({ path: `${EVIDENCE}/retry-guard-card.png`, fullPage: false });
+
+  // [B18-E E8] 7a in the browser, measured: the card is a MODAL dialog, so while a preview waits the human cannot reach the
+  // editor at all — the selection cannot drift under an open card. (That targets are bound by id and never by the selection
+  // is proven in the unit and integration suites, where the burn is reachable to test; here the UI makes it moot.)
+  const reachable = await page.getByTestId("pcb-goto").click({ trial: true, timeout: 3_000 }).then(() => true).catch(() => false);
+  expect(reachable, "the editor is unreachable while a confirmation card is open").toBe(false);
+  await page.getByTestId("granted-execution-confirm").click();
+  await expect(card).toBeHidden();
+  await expect(committedLines()).toHaveCount(before + 1);
+  await expect(page.getByTitle(/^Undo: AI: .*R3/), "the committed change names the bound footprint").toBeVisible();
+  const after = await board();
+  expect(r3(after).at.x).toBe(x0 + 4 * NM_PER_MM);
+  expect(after.footprints.find((footprint) => footprint.ref === other.ref)!.at, `${other.ref} was never part of this change`).toEqual(other.at);
+});
+
+test("[B18-E E8] the double call: two identical execution calls in one step produce ONE card and one entry; the duplicate is refused and Confirm commits exactly one transaction", async () => {
+  const start = await board();
+  const at = centroidMm(start);
+  expect(silkTexts(start)).not.toContain("REV C");
+  const entries = page.getByTestId("chat-execution-entry");
+  const entriesBefore = await entries.count();
+  const before = await committedLines().count();
+  await chat(`Add silkscreen text REV C at ${at.x}, ${at.y} twice.`);
+  await expect(entries, "one side-effecting artifact per run, however many calls the model makes").toHaveCount(entriesBefore + 1);
+  await expect(page.getByText(/refused before running \(execution_exists\) — nothing ran/).last(), "the run log says the duplicate was refused").toBeVisible();
+  const card = page.getByTestId("granted-execution-card");
+  await expect(card).toBeVisible();
+  await expect(page.getByTestId("granted-execution-preview")).toContainText("REV C");
+  await page.getByTestId("granted-execution-confirm").click();
+  await expect(card).toBeHidden();
+  await expect(committedLines()).toHaveCount(before + 1);
+  expect(silkTexts(await board()).filter((text) => text === "REV C"), "added once, not twice").toHaveLength(1);
+});
+
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
   const probeText = "(fixture interim) Done — R3 moved";
   const before = interimLog.length;

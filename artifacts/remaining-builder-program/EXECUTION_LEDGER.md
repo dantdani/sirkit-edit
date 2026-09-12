@@ -799,3 +799,23 @@ _(discovery, reproduction and results appended below as they are observed)_
   edit in the same sentence is lost too. Strict tool arguments are the outer wall; E6's gateway refusal is the inner one.
 - Tests: b18-c-fixture-agent 10/10 (4 new); broad run: 258 files, 3361 passed, 10 expected skips; tsc 0; eslint clean. No browser run: this is fixture-only harness code plus tests, and the
   browser scenarios that use it are E8-E9.
+
+### B18-E E8 — the browser, part 1: scenario 6 on a move, the retry guard, the binding, the double call (2026-09-11 local, solo; this commit)
+
+- Three cases added to `e2e/agent-execution.spec.ts` against the REAL application (fixture runtime, scripted agent; every
+  authority check runs for real). No production code changed in this increment.
+- Scenario 6 on a MOVE, which the browser had only proven on a silkscreen add: an explicit move with no card, "Undo that." as
+  a replay grant that is its own history entry, a RELOAD, then "Redo." resolved from the durable records — the board ends at
+  the moved position.
+- The retry guard in the browser (7e): the same sentence again is a CARD with the minter's note even under explicit autonomy.
+- Measured while writing it, and it corrected the case: the confirmation card is a MODAL dialog. With one open the editor is
+  unreachable — the first version of this test tried to change the selection under the card and spent its full 300 s timeout
+  with the dialog intercepting every click on the editor's own control. So a selection cannot drift under a pending preview in
+  this session at all; the browser case now pins the modality (a trial click on the editor is refused) and that Confirm commits
+  the bound move. 7a's real claim — targets are bound by id, never by the selection — stays proven in the unit and integration
+  suites, where that burn is reachable. It also constrains E9: revision drift under an open card can only be driven from
+  another session, not from this page.
+- The double call in the browser (7c): E7's two-calls-in-one-step script yields ONE card, ONE entry, a run log line saying the
+  duplicate was refused before running (`execution_exists`), and exactly one committed transaction.
+- Browser run: agent-execution 19/19 (3 new), 6.8 min, port 3100. Broad vitest: not re-run for this increment: no source file changed (only the browser spec and records); E7's broad run at 9cdf842 was green and CI runs the full set on this commit; tsc 0; eslint clean. Evidence: two new PNGs; re-taken PNGs from unchanged cases
+  were restored so the committed evidence changes only where the proof changed.

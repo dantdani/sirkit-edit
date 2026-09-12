@@ -74,6 +74,9 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 
 - Question: no production code supplies the live selection digest, so the `selection_stale` burn and the ritual's stale-selection refusal can never fire. Keep them as a pinned defensive floor, or delete them with their display sentence?
 - Default applied: keep them, pinned by a synthetic case (E5).
+- Measured in E8 (browser): the confirmation card is a MODAL dialog, so while a preview waits the human cannot reach the
+  editor at all and the selection cannot change under it — a second, independent reason the burn cannot fire through the
+  product. The floor stays a floor; the decision is unchanged.
 - The owner may choose otherwise.
 
 ## OD-27 — Scenario 7f in the browser (B18-E, 2026-09-11)

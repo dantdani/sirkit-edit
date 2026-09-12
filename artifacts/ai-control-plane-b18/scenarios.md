@@ -52,7 +52,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E5 | Scenario 7 integration closures | 7a, 7c–7g | CONFIRMED — see §6 |
 | E6 | Scenario 8 through the loop; a human-only qualify route | 8 | CONFIRMED — see §6 |
 | E7 | The scripted agent: Tier 3 attempts and a double call (fixture only) | 7c, 7e, 8 | CONFIRMED — see §6 |
-| E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | planned |
+| E8 | Browser, part 1: scenario 1 explicit, scenario 6 on the move, selection and retry | 1, 6, 7a, 7c, 7e | CONFIRMED — see §6 |
 | E9 | Browser, part 2: stale revision, Stop, forged handle, altered operations, Tier 3 | 7b–7d, 7g, 7h, 8 | planned |
 | E10 | Scenario 3, part 1: mounting holes, a bounded mechanical read if needed, integration | 3 | planned |
 | E11 | Scenario 3, part 2: the scripted plan, a truncation marker, browser | 3 | planned |
@@ -201,3 +201,27 @@ green: nothing in production constructs this adapter).
   simultaneous duplicate). The grant is `preview_then_confirm` — the product grammar cannot prove a silkscreen add explicit — so
   nothing is auto-run and the head does not move until a human confirms.
 - Tests: b18-c-fixture-agent 10/10 (4 new)
+- CI green at `9cdf842` (deterministic-manufacturing 34662852356 and benchmark-quality 34662852426, both success).
+
+### E8 — the browser, part 1: the move scenarios end to end in the real app (CONFIRMED)
+
+Three cases added to `e2e/agent-execution.spec.ts` (the real app, the real loop, gateway, minter, ritual and server settle,
+driven by the scripted agent). They close what scenario 1's browser proof left to unit and integration tests.
+
+- **Scenario 6 on a MOVE** (the runbook's own sentence: "Undo that," then refresh, then redo). Until now the browser proved
+  it on a silkscreen add. Under `execute_explicit_tier1`: the move runs with no card; "Undo that." is a REPLAY grant that
+  commits its own history entry (not a step back in a stack) and returns R3; after a RELOAD — the page's memory gone —
+  "Redo." resolves its reference from the durable records and the board ends where the move left it.
+- **The retry guard, and what the browser can really show about 7a.** The SAME sentence again, still under explicit autonomy,
+  comes back as a CARD carrying the minter's note ("An identical instruction already executed at … (grant xg-…); confirm to
+  run it again."), so no repetition is ever executed unasked. The case was WRITTEN to then change the selection under the open
+  card and confirm — and that turned out to be impossible: **the confirmation card is a MODAL dialog**, and with one open the
+  editor cannot be reached at all (a trial click on the editor's own control is refused by the dialog's hit-target for as long
+  as the card is up; the first version of this test spent its whole 300 s timeout retrying that click). So the selection
+  cannot drift under a pending preview in this session, and the browser case pins THAT: the card is modal, the editor is
+  unreachable, and Confirm commits the bound move. That targets are bound by id and never by the selection stays proven where
+  the burn is reachable to test — the unit and integration suites (E5).
+- **The double call (7c).** E7's script emits the same execution call twice in one step: the browser shows ONE card and ONE
+  entry, the run log says the duplicate was refused before running (`execution_exists`), and Confirm commits exactly one
+  transaction — the text is added once, not twice.
+- Browser run: agent-execution 19/19 (3 new), 6.8 min, port 3100
