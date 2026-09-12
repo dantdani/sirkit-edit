@@ -657,3 +657,9 @@ _(discovery, reproduction and results appended below as they are observed)_
 - `assignment-queue-panel.test.tsx` failed again in a loaded broad run after `82b99a9` had given it more time. The failure's DOM shows the cause: the reason was typed, but the candidate radio was unchecked and "Select exact candidate" was still disabled, so no preview could ever appear. The panel auto-selects the first item after loading and resets its per-item state (candidate, preview, confirmation) in an effect keyed on the selection; under load that reset ran after the test's first click and wiped it. The diagnosis recorded with `82b99a9` ("timing") was wrong; the longer waits never addressed it.
 - The fix: the test flushes pending effects before interacting and checks each interaction as it happens (the radio is checked; the button is enabled before it is clicked); the reviewer-assignment test gets the same flush. Alone 5/5; broad run: 251 files / 3307 tests passed, 10 skipped (the expected skips).
 - The product pattern — per-item state reset in an effect rather than with a key — predates B18 and is flagged as a separate task.
+
+### Correction — commit identity (2026-09-11 local)
+
+- Found while preparing the B18 merge: runbook §2.4 names the approved identity `Dandi Desta <dandidesta82@gmail.com>` (this ledger's header and the repository's git config agree), but 54 commits on `chapter/b18-agent-execution` (`2eafb49`…`e543cfe`) were authored as `Dandi Desta <danditilahun82@gmail.com>` — the owner's other address, the one the session environment reports — because the commit command overrode the configured identity.
+- Every one of them is the owner's own work under the owner's own address, with real timestamps and no AI co-author trailers. They are not rewritten: the runbook forbids history rewriting and force-pushes.
+- From the next commit on, commits use the approved identity. The owner may choose either address (OD-19).

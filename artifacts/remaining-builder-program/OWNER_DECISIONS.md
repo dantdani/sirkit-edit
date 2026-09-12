@@ -27,3 +27,9 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Question: the runbook's B18-D rule "No model text may claim success before the transactional result exists" was built into the agent loop and the chat entry. Does it also cover the schematic edit route (`/api/schematic/edit`), whose model `note` the page showed as the assistant's answer before the user applied anything?
 - Default applied: yes. Rule 2 covers every chat surface: the edit route's note is shown only as a labelled note in the run log ("Assistant note (written before the result): …"), never as the answer and never in the history the next run receives; the answer is the page's own sentence.
 - The owner may reverse this; the change is confined to the page's edit flow and `editProposalMessages`.
+
+## OD-19 — Commit identity (2026-09-11)
+
+- Question: runbook §2.4 approves `Dandi Desta <dandidesta82@gmail.com>`; 54 B18 commits used the owner's other address `danditilahun82@gmail.com` (see the ledger's correction). Which address should the remaining chapters use?
+- Default applied: the runbook's approved `dandidesta82@gmail.com` (the repository's configured identity) from the next commit on; the earlier commits stay as they are (no history rewriting).
+- The owner may choose `danditilahun82@gmail.com` instead, for example if that address is the one linked to the GitHub account.
