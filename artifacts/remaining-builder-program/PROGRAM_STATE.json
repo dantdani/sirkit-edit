@@ -2,17 +2,17 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B18",
-  "currentCheckpoint": "B18-C",
+  "currentCheckpoint": "B18-E",
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "e770bf1",
+  "lastGreenSha": "6ae2c73",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18-D I12 part 5: a short adversarial review of I11-I12 (6ca4941..HEAD), the full Playwright suite, the closing record; then B18-E (the scenario matrix) and B18 validation.",
-  "updatedAt": "2026-09-11T19:55:03-04:00"
+  "nextAction": "B18-E: turn the discovery workflow's scenario matrix into increments that prove the eight mandatory scenarios in unit, integration and browser tests; then B18 validation, mark PR #8 ready and merge after green CI.",
+  "updatedAt": "2026-09-11T21:12:03-04:00"
 }
