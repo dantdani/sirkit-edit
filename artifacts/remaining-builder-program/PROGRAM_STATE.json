@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B18",
-  "currentCheckpoint": "B18 validation",
+  "currentCheckpoint": "B18 validation complete",
   "status": "in_progress",
   "baseSha": "804a08d",
   "branch": "chapter/b18-agent-execution",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B18 validation: the four validation artifacts (test-and-validation-report, changed-files, unknowns-and-owner-decisions, final-verdict), then mark PR #8 ready and merge normally after green CI; then B19.",
-  "updatedAt": "2026-09-12T06:10:00-04:00"
+  "nextAction": "Mark PR #8 ready and merge normally once CI is green on the final commit; then B19 (external component and evidence acquisition).",
+  "updatedAt": "2026-09-12T10:30:00-04:00"
 }

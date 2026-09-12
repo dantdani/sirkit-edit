@@ -1092,3 +1092,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   ratchet is untouched, no Tier 2 path became a grant, and no agent control was widened (OD-24).
 - Chapter totals against the base `804a08d`: 82 commits, 240 files, +22,240/-397 lines, 76 new test files.
 - Next: B18 validation artifacts, then PR #8 ready and a normal merge after green CI.
+
+### B18 validation — the adversarial pass, and the verdict (2026-09-12 local, solo; this commit)
+
+- Before writing a verdict, six verifiers were each given ONE load-bearing B18 claim and told to REFUTE it from the
+  source (workflow `wf_d1783a33-a63`). Three could not: Tier 3 inaccessible (nine attack routes, each dead-ending on an
+  independently enforced mechanism), Tier 2 human-only, and the exposure set exactly the reviewed list.
+- Three did. All three were acted on: the chat's "nothing was changed" label keyed on the model having written prose
+  beside the call, so an ordinary "Done." in the final answer went unlabelled AND became the next run's history — while
+  the same rule fired on innocent read-only runs; a landed granted execution could be settled NOT COMMITTED after a
+  lineage rebase, because reopening a lineage replaces the canonical transaction log wholesale and absence of evidence
+  was read as evidence of absence; and two rows of the closeout table overstated what the browser carries. Each is fixed
+  or corrected, with regressions that fail on the pre-fix code.
+- CI then caught one more that a local run had not: the browser spec kept its own COPY of the label sentence. The spec
+  imports the constant now. That commit (`bd4aaf5`) is the one red commit on this branch and the next commit fixes it.
+- Five further observations with no live path are RECORDED as F18-1 to F18-5 with file:line, not closed by assertion.
+  The one tier boundary B18 moved (`pcb.dimension`, OD-13/OD-11) is stated plainly rather than left inside "no ratchet
+  was loosened".
+- Validation artifacts: `test-and-validation-report.md`, `changed-files.md`, `unknowns-and-owner-decisions.md`,
+  `final-verdict.md`. Verdict: **B18 PASSES its deterministic gate.**
+- Measured on the final tree: broad 268 files / 3439 passed / 10 expected skips; browser 29/29 in 11.1 min; tsc 0;
+  eslint clean; seven generators idempotent with zero drift; 158-route ratchet and the exposure ratchet intact.
