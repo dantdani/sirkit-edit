@@ -932,6 +932,43 @@ test("[B18-E E14] scenario 2 in the browser: the assistant reads the vias before
   expect(after.dimensions.length, "and nothing was added").toBe(start.dimensions.length);
 });
 
+test("[B18-E E16] scenario 4 in the browser: the sentence seals a Tier 2 replacement the SERVER chose, the chat says what it is, and Cancel changes nothing", async () => {
+  const replies = page.getByText(/^\(fixture agent\) /);
+  const start = await board();
+  await chat("Delete U1 and replace it with the approved lower-power part while preserving compatible nets.");
+
+  // The run read the schematic, then asked the server to prepare the replacement. It never named a part.
+  expect((await replies.last().textContent()) ?? "").toContain("proposal_sealed");
+  const dialog = page.getByRole("dialog").filter({ hasText: "Exact component replacement — review before applying" });
+  await expect(dialog, "a Tier 2 replacement opens a review, never a grant card").toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("granted-execution-card")).toBeHidden();
+  await expect(dialog).toContainText("Nothing has been changed yet.");
+  await expect(dialog).toContainText("0 dropped (a replacement never drops a connected pin)");
+  await expect(dialog, "the human is told this is destructive before they click").toContainText("This is a destructive-tier change");
+
+  // [E15] the chat's own sentence: the part, and that the project's authority is what records it.
+  await expect(page.getByText(/Replacement proposal ready — .*the part this project's component authority records for this component/)).toBeVisible();
+  await page.screenshot({ path: `${EVIDENCE}/scenario-4-replacement-review.png`, fullPage: false });
+
+  // Cancel is a decision, and now it is one the chat is told about.
+  await dialog.getByRole("button", { name: "Cancel — change nothing" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Replacement proposal discarded — nothing was changed.").last()).toBeVisible();
+  const after = await board();
+  expect(after.footprints, "a cancelled replacement moves nothing").toEqual(start.footprints);
+});
+
+test("[B18-E E16] and the human's Apply lands it: ONE canonical replacement transaction, reported in the chat as verified and undoable", async () => {
+  await chat("Delete U1 and replace it with the approved lower-power part while preserving compatible nets.");
+  const dialog = page.getByRole("dialog").filter({ hasText: "Exact component replacement — review before applying" });
+  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await dialog.getByRole("button", { name: "Apply exact replacement" }).click();
+  await expect(dialog).toBeHidden({ timeout: 60_000 });
+  // [E15] the chat's own sentence for the outcome — and it is the APPLIED one, not the refusal.
+  await expect(page.getByText(/^Replacement applied — .*canonical transaction .*\(verified, undoable\)\.$/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Replacement NOT applied/), "the apply was not refused").toHaveCount(0);
+});
+
 test("B18-D review 2: the S5 observer records interim text inside mixed markup, so a leak into a formatted answer could not hide", async () => {
   const probeText = "(fixture interim) Done — R3 moved";
   const before = interimLog.length;

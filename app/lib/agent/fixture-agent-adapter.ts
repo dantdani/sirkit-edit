@@ -47,12 +47,20 @@ type Planned =
   /** [B18-E E10] scenario 3: read the board first, then dimension what the snapshot actually showed. */
   | { kind: "board-then"; build: (board: BoardFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } }
   /** [B18-E E14] scenario 2: read the net's vias first, then say what is actually possible — or propose it. */
-  | { kind: "via-then"; netName: string; build: (facts: NetViaFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
+  | { kind: "via-then"; netName: string; build: (facts: NetViaFacts) => { toolId: string; args: Record<string, unknown> } | { reply: string } }
+  /** [B18-E E16] scenario 4: read the schematic to resolve the reference designator, then propose the replacement. */
+  | { kind: "schematic-then"; reference: string; build: (facts: SchematicComponentFacts[]) => { toolId: string; args: Record<string, unknown> } | { reply: string } };
 
 /** [B18-E E10/E11] what the scripted agent reads out of the mechanical read (the same fields a model would use). */
 export interface BoardFacts {
   outline: { originMm: { x: number; y: number }; widthMm: number; heightMm: number } | null;
   mountingHoles: Array<{ id: string; reference: string; positionMm: { x: number; y: number } }>;
+}
+
+/** [B18-E E16] what the scripted agent reads out of the schematic inspect report. */
+export interface SchematicComponentFacts {
+  id: string;
+  displayRef: string;
 }
 
 /** [B18-E E14] what the scripted agent reads out of the bounded VIA read. */
@@ -84,6 +92,9 @@ const VIA_PADSTACK = /^(?:please\s+)?use\s+the\s+(.{1,64}?)\s+padstack\s+for\s+(
  *  rather than silently proposing part of a net. Duplicated as a literal on purpose: the fixture agent is a stand-in for a
  *  model, and a model has no import of the server's limits either. */
 const PROPOSABLE_VIAS = 16;
+// [B18-E E16] scenario 4, as the runbook words it. The sentence names a reference designator; the schematic read resolves
+// it to an instance id. The agent never names the replacement part - it cannot: the tool takes only {componentId}.
+const REPLACE_COMPONENT = /^(?:please\s+)?delete\s+([a-z]+\d+)\s+and\s+replace\s+it\s+with\s+the\s+(?:approved|verified)\b[^.]*\bpart\b/i;
 const mmText = (value: number): string => value.toFixed(3);
 const VECTORS: Readonly<Record<string, readonly [number, number]>> = Object.freeze({ right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] });
 /** [B18-D I6] A model may write text beside an execution call that claims the change is made; the scripted agent does, so
@@ -198,9 +209,23 @@ export function planFixtureInstruction(message: string): Planned {
       },
     };
   }
+  // [B18-E E16] scenario 4: resolve the reference designator by READING, then ask the server to prepare the replacement.
+  // The target part is never named here - the server reads it from the project's own component authority.
+  const replace = REPLACE_COMPONENT.exec(text);
+  if (replace) {
+    const reference = replace[1]!.toUpperCase();
+    return {
+      kind: "schematic-then", reference,
+      build: (components) => {
+        const found = components.find((component) => component.displayRef.toUpperCase() === reference);
+        if (!found) return { reply: `(fixture agent) this schematic has no ${reference}. It has: ${components.map((component) => component.displayRef).join(", ") || "no components"}. Nothing was changed.` };
+        return { toolId: "sirkit.schematic.propose-component-replacement", args: { componentId: found.id } };
+      },
+    };
+  }
   const replay = REPLAY.exec(text);
   if (replay) return { kind: "call", toolId: "sirkit.pcb.undo-redo-granted", args: { direction: replay[1]!.toLowerCase() } };
-  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
+  return { kind: "reply", text: "(fixture agent) I follow only the harness's scripted instructions: move or flip a selected part, add silkscreen text, dimension the board (and its mounting holes), resize or retarget the vias on a net, replace a component with the part its authority records, undo, redo, and the refusal scripts (release, qualify, order, a delegation, a double call)." };
 }
 
 /** [B18-E E14] The name the person used is not a net on this board: say so, and say what the board does have. */
@@ -247,6 +272,17 @@ export function netViaFacts(outputText: string | undefined): NetViaFacts {
     };
   } catch {
     return empty;
+  }
+}
+
+/** [B18-E E16] Read the components out of the schematic inspect report - id and reference designator only. */
+export function schematicComponentFacts(outputText: string | undefined): SchematicComponentFacts[] {
+  try {
+    const parsed = JSON.parse(outputText ?? "") as { output?: { report?: { components?: unknown } } };
+    const components = Array.isArray(parsed.output?.report?.components) ? (parsed.output.report.components as Array<Record<string, unknown>>) : [];
+    return components.flatMap((component) => (typeof component.id === "string" && typeof component.displayRef === "string" ? [{ id: component.id, displayRef: component.displayRef }] : []));
+  } catch {
+    return [];
   }
 }
 
@@ -302,6 +338,7 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
   private awaitingSelection = false;
   private awaitingBoard = false;
   private awaitingVias = false;
+  private awaitingSchematic = false;
   private seq = 0;
 
   constructor(readonly provider: LLMProviderId) {}
@@ -332,6 +369,10 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
       this.awaitingVias = true;
       return this.call(input.tools, "sirkit.pcb.via-inspect", { netName: this.planned.netName });
     }
+    if (this.planned.kind === "schematic-then") {
+      this.awaitingSchematic = true;
+      return this.call(input.tools, "sirkit.schematic.inspect", {});
+    }
     // [B18-E E7] a forged name skips the declaration lookup on purpose: the run must refuse a tool it never advertised, and the
     // interim claim must still only ever appear as a labelled note.
     if (this.planned.kind === "forged") {
@@ -354,6 +395,11 @@ export class FixtureAgentAdapter implements ProviderAgentAdapter {
     if (this.awaitingBoard && planned.kind === "board-then") {
       this.awaitingBoard = false;
       const next = planned.build(boardFacts(outputText));
+      return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
+    }
+    if (this.awaitingSchematic && planned.kind === "schematic-then") {
+      this.awaitingSchematic = false;
+      const next = planned.build(schematicComponentFacts(outputText));
       return "reply" in next ? this.step({ text: next.reply }) : this.call(input.tools, next.toolId, next.args);
     }
     if (this.awaitingVias && planned.kind === "via-then") {

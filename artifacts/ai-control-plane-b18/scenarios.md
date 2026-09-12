@@ -11,7 +11,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | 1 | "Move R3 2 mm to the right." | Tier 1 grant (`sirkit.pcb.move-footprint`): a preview card under `proposal_only`; under `execute_explicit_tier1` the minter proves the whole message and it runs without the card. Either way ONE canonical transaction, reported from the settled record. | unit and integration yes (loop, gateway, minter, ritual); browser: the exact sentence on the preview path only — the explicit path uses a variant sentence | E3, E8 |
 | 2 | "Change every via on the 5 V net to 0.7 mm diameter and 0.35 mm drill." | Tier 2 sealed PCB proposal (`propose-bounded-edit`, `update_via` ×N, at most 16) that the human applies; via edits are never granted (OD-13). | unit, integration and the real loop; the browser proves the read and the truthful answer — its board cannot be routed here (LB-8) | E12, E13, E14 (OD-20) |
 | 3 | "Add horizontal and vertical dimensions for the board and mounting holes." | Tier 1 grant, confirmation-only (`sirkit.pcb.dimension`, OD-11): a card even under explicit autonomy. A Tier 2 route (`add_dimension`) also exists. | the builder in unit; one horizontal dimension through the loop; no browser; Sirkit has no mounting-hole object | E10, E11 (OD-21, OD-22) |
-| 4 | "Delete U1 and replace it with the approved lower-power part while preserving compatible nets." | Tier 2 sealed replacement proposal (B14) the human applies; never a grant. The composer routes the sentence to the legacy schematic edit today. | the sealed artifact and the human apply (B14, dense); E15 adds the runbook sentence through the real route and the chat's own sentences; no browser — the fixture runtime has no component authority source (E16) | E15, E16 (OD-23) |
+| 4 | "Delete U1 and replace it with the approved lower-power part while preserving compatible nets." | Tier 2 sealed replacement proposal (B14) the human applies; never a grant. The composer routes the sentence to the legacy schematic edit today. | unit, integration, the real route from the runbook sentence, and the BROWSER end to end (seal, review, cancel, apply — one canonical transaction) | E15, E16 (OD-23) |
 | 5 | "Place the board compactly, keep decoupling close to U1, route it, and show me anything that failed." | Tier 2 layout candidates the human applies; one side-effecting artifact per run (placement and routing take turns); the routing engine is local-only. | partial integration; no browser | E17, E18 (OD-24, OD-29) |
 | 6 | "Undo that," then refresh, then redo. | Two Tier 1 replay grants (`sirkit.pcb.undo-redo-granted`) through `replayUnderGrant`; the minter resolves the reference from the settled grants at the head. | integration without a refresh; browser on a silkscreen add, not a move | E1, E4, E8 (OD-25) |
 | 7a | Stale selection | Targets are bound by id, never by the selection, so a selection change cannot redirect a grant; the `selection_stale` burn is unreachable (a defensive floor). | unit | E5, E8 (OD-26) |
@@ -71,7 +71,7 @@ Labels as in the program: CONFIRMED (run or read), INFERRED (from code, not run)
 | E13 | Scenario 2, part 2: via facts for the model, harness vias, integration | 2 | CONFIRMED — see §6 |
 | E14 | Scenario 2, part 3: the scripted via plan and browser | 2 | CONFIRMED — see §6 |
 | E15 | Scenario 4, part 1: routing, a sealed-proposal consumer, a truthful apply line | 4 | CONFIRMED — see §6 |
-| E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | planned |
+| E16 | Scenario 4, part 2: fixture authority sources, integration, browser | 4 | CONFIRMED — see §6 |
 | E17 | Scenario 5, part 1: truthful layout reporting | 5 | planned |
 | E18 | Scenario 5, part 2: integration, scripted layout plans, browser | 5 | planned |
 | E19 | Closeout | all | planned |
@@ -464,3 +464,45 @@ proven densely and were not rebuilt. Three things were missing, and they are wha
 - **Corrected in this page, not quietly:** §3's scenario-4 line said "the model never chooses the target". The model DOES
   name the component to replace; what it can never choose is the replacement PART. The sentence now says that.
 - Tests: b18-e-scenario-4-route 6/6 and b18-e-scenario-4-chat 8/8 (both new, in the CI list); broad run: 264 files, 3407 passed, 10 expected skips
+
+### E16 — scenario 4, part 2: the fixture's missing authority, and the defect that surfaced behind it (CONFIRMED)
+
+- **The structural blocker.** Every durable seam has had a fixture branch since B16-C — except the two `/api/chat`
+  component-authority sources, which are gated on `DATABASE_URL` that the fixture launchers blank on purpose. So in every
+  browser run the component-authority resource was never sealed and BOTH `sirkit.component-authority.inspect` and
+  `sirkit.schematic.propose-component-replacement` were withheld from the model. Scenario 4 was unreachable in the real
+  application. Two fixture sources now supply the SAME server-owned reads out of the stores the fixture already fills — the
+  in-memory binding repository the component-review flow commits into, and the committed catalog's published snapshots —
+  behind the same `fixtureRuntimeEnabled` gate every other seam uses. Nothing is invented: an unbound component still
+  resolves to no authority, and an unapproved mapping still yields no facts.
+- **The scripted agent's plan.** "Delete U1 and replace it with the approved lower-power part while preserving compatible
+  nets." now reads the schematic to resolve the reference designator and then names only the component. It never names a
+  part — the tool takes `{componentId}` and the server reads the target from the project's own authority. A reference the
+  schematic does not have is answered in words, with the ones it does have.
+- **In the real app** (`agent-execution`, two new cases): the sentence seals a Tier 2 replacement — the review dialog shows
+  Component U1, the current part, the proposed exact part the AUTHORITY records, 8 connections preserved, 0 dropped and its
+  own destructive-tier warning; no grant card. Cancel changes nothing and the chat now says so. Apply commits ONE canonical
+  transaction and the chat reports it as verified and undoable. Evidence:
+  `evidence/scenario-4-replacement-review.png`.
+- **The defect the browser found, and it was a real one.** The first apply in the real application was REFUSED: "Fresh
+  server authority or the recompiled plan no longer matches the reviewed proposal." The apply recompiles the proposal from
+  fresh authority and requires a byte match of the operation digest. The two production callers load different BREADTHS of
+  authority on purpose — the chat run loads every component (the model may inspect any of them), the apply loads the one
+  it is applying — and the whole record set was sealed verbatim into the authority envelope, whose content digest feeds
+  the grant id embedded in the canonical operation. So the same replacement digested differently depending on how many
+  OTHER components the caller happened to load: on any project with more than one bound component (the journey has nine)
+  EVERY apply was refused. Single-record fixtures on both sides had hidden it. The envelope now carries only the replaced
+  component's authority — narrowing the assembler rather than widening the apply, so the browser never decides what
+  authority is consulted. Reproduced independently at the assembler before the fix, and all 77 replacement tests pass after
+  it.
+- **A sentence that read as a stutter**, also found by running it: the editor's own refusals already end with "Nothing was
+  changed.", and E15's line appended its own. It is said once now, whoever says it.
+- **OD-23's fixture part was not needed.** The default pre-authorized a fixture-only CMOS 555 so the browser would have
+  something to replace. With the authority source in place the journey already produces a real replacement — U1's loose
+  part reference against the exact part its authority records — so no fictional part was added to the catalog. The first
+  half of OD-23 (the target is the single server-owned exact authority, never a choice among alternates) is what the code
+  does.
+- **Corrected from E15's record:** it reported `b18-e-scenario-4-chat 8/8`; the file has 7 tests. The count was wrong, not
+  the result.
+- Tests: b18-e-fixture-authority 6/6, b18-e-replacement-apply-breadth 3/3 (both new), b18-c-fixture-agent 19/19 (4 new);
+  browser: agent-execution 28/28 (2 new), 4.8 min; broad run: 266 files, 3420 passed, 10 expected skips

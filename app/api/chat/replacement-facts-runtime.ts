@@ -16,6 +16,8 @@
  */
 
 import { getSqlClient } from "@/app/lib/db/client";
+import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { fixtureReplacementPinFactsSource } from "@/app/lib/fixture-runtime/blinker/authority";
 import type { PublishedSymbolPinFacts } from "@/app/lib/engineering/replacement-pin-facts";
 import {
   loadPublishedSymbolPinFactsCancellable,
@@ -27,6 +29,9 @@ export interface ReplacementPinFactsSource {
 }
 
 function productionSource(): ReplacementPinFactsSource | null {
+  // [B18-E E16] the fixture runtime's published pin facts - the same bounded projection, read out of the committed
+  // catalog instead of the database. Gated by the same non-production, local_dev-only switch as every other seam.
+  if (fixtureRuntimeEnabled()) return fixtureReplacementPinFactsSource();
   if (!process.env.DATABASE_URL) return null;
   let client: CancellableAuthoritySqlClient | null = null;
   const sql = (): CancellableAuthoritySqlClient => (client ??= getSqlClient() as unknown as CancellableAuthoritySqlClient);

@@ -56,6 +56,10 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 
 - Question: is "the approved lower-power part" the single server-owned exact authority recorded for U1 (B14), with no power claim unless a tool fact states one? And may the fixture runtime gain a CMOS 555 atomic part with an approved mapping, for the browser proof?
 - Default applied: yes to the first reading (choosing among several approved alternates would be a new selection authority and is not proposed); yes to a fixture-only part, gated to the fixture runtime with a tripwire.
+- [B18-E E16, 2026-09-12] The first half is what the code does. The second half was NOT needed and was not taken: once the
+  fixture runtime was given the component-authority sources it was missing, the browser journey already produces a real
+  replacement (U1's loose part reference against the exact part its authority records), so no fictional part was added to
+  the catalog. Scenario 4 is proven end to end in the browser without one.
 - The owner may choose otherwise.
 
 ## OD-24 — Scenario 5's controls (B18-E, 2026-09-11)

@@ -50,6 +50,10 @@ describe("[B18-E E15] the chat's sentences for a component replacement", () => {
     expect(refused).toBe("Replacement NOT applied: The proposal has expired; request a fresh one. Nothing was changed.");
     expect(replacementChatLines.refused(undefined), "a missing reason still says the outcome").toBe("Replacement NOT applied: the editor refused it. Nothing was changed.");
     expect(replacementChatLines.refused("x".repeat(5_000)).length, "the line stays a line").toBeLessThan(400);
+    // [E16] measured in the browser: the editor's own refusals already end with this sentence. Saying it twice reads as a
+    // stutter — "Nothing was changed. Nothing was changed." — so it is said once, whoever says it.
+    expect(replacementChatLines.refused("Fresh server authority no longer matches the reviewed proposal; regenerate it. Nothing was changed."))
+      .toBe("Replacement NOT applied: Fresh server authority no longer matches the reviewed proposal; regenerate it. Nothing was changed.");
     expect(replacementChatLines.discarded()).toBe("Replacement proposal discarded — nothing was changed.");
   });
 

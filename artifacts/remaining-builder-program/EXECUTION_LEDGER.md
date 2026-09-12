@@ -1007,3 +1007,26 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b18-e-scenario-4-route 6/6, b18-e-scenario-4-chat 8/8 (both new, added to the CI list); broad run: 264 files, 3407 passed, 10 expected skips;
   tsc 0; eslint clean on the changed files (page.tsx's pre-existing react-hooks findings unchanged in count).
 - E14's CI: green at `40b22dd` (deterministic-manufacturing 34677824967 and benchmark-quality 34677824886, both success).
+
+### B18-E E16 — scenario 4, part 2: the fixture's missing authority, and a real defect behind it (2026-09-12 local, solo; this commit)
+
+- The fixture runtime had no component-authority source: both `/api/chat` sources are gated on `DATABASE_URL`, which the
+  fixture launchers blank. So the replacement tool was withheld from every browser run and scenario 4 was unreachable in
+  the real application. Two fixture sources now supply the same server-owned reads from the stores the fixture already
+  fills, behind the same gate as every other seam. Nothing is invented — an unbound component resolves to no authority.
+- The scripted agent reads the schematic to resolve "U1" and then names only the component; it can never name the part.
+- Browser, end to end: the sentence seals a Tier 2 replacement, the dialog shows the part the AUTHORITY records with its
+  connection outcome and its destructive-tier warning, Cancel changes nothing (and now says so), and Apply commits ONE
+  canonical transaction reported as verified and undoable.
+- A REAL production defect, found by running it and fixed: the apply recompiles the proposal and requires a byte match,
+  but the seal and the apply load different BREADTHS of component authority (every component vs the one being replaced),
+  and the whole record set was sealed into the authority envelope whose digest feeds the grant id inside the operation.
+  Any project with more than one bound component refused every apply. The envelope now carries only the replaced
+  component's authority. Reproduced independently at the assembler first; 77 replacement tests pass after the fix.
+- A duplicated sentence in the chat ("Nothing was changed. Nothing was changed.") was found the same way and fixed.
+- OD-23's pre-authorized fixture-only CMOS part was NOT needed and was not added: the journey's own authority already
+  yields a real replacement. Recorded as an annotation on OD-23 rather than a silent deviation.
+- Corrected from E15's own record: it said `b18-e-scenario-4-chat 8/8`; the file has 7 tests. The count was wrong.
+- Tests: b18-e-fixture-authority 6/6, b18-e-replacement-apply-breadth 3/3 (new), b18-c-fixture-agent 19/19 (4 new);
+  browser agent-execution 28/28 (2 new), 4.8 min; broad run: 266 files, 3420 passed, 10 expected skips; tsc 0; eslint clean.
+- E15's CI: green at `beee5c9` (deterministic-manufacturing 34678943429 and benchmark-quality 34678943506, both success).

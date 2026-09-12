@@ -16,7 +16,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentAdapterFor } from "../../agent/adapters";
-import { FixtureAgentAdapter, planFixtureInstruction, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
+import { FixtureAgentAdapter, planFixtureInstruction, schematicComponentFacts, FIXTURE_INTERIM_TEXT } from "../../agent/fixture-agent-adapter";
 import type { ProviderToolDeclaration } from "../../agent/contracts";
 import { mmToNm } from "../../pcb/units";
 import { composition, headOf, POWER_NET_NAME, r3Of, runWithAdapter } from "./b18c-harness";
@@ -266,4 +266,38 @@ describe("[B18-E E14] the scripted agent's via plan (scenario 2)", () => {
     expect(answerOf(missing), "and it lists the ones it has").toContain("Power via 0.8/0.4");
     expect(missing.events.some((event) => event.type === "pcb_proposal_ready")).toBe(false);
   }, 40_000);
+});
+
+// ─── [B18-E E16] scenario 4: the scripted agent resolves the reference designator by reading the schematic ──────────
+
+describe("[B18-E E16] the scripted agent's replacement plan (scenario 4)", () => {
+  const SENTENCE = "Delete U1 and replace it with the approved lower-power part while preserving compatible nets.";
+
+  it("the plan is a schematic READ first — the sentence names a reference designator, and an id is never invented for it", () => {
+    const planned = planFixtureInstruction(SENTENCE);
+    expect(planned.kind).toBe("schematic-then");
+    expect((planned as { reference: string }).reference).toBe("U1");
+  });
+
+  it("what it proposes is the component the READ resolved, and nothing else — the part is the server's to choose", () => {
+    const planned = planFixtureInstruction(SENTENCE) as { kind: string; build: (facts: Array<{ id: string; displayRef: string }>) => { toolId?: string; args?: Record<string, unknown>; reply?: string } };
+    const next = planned.build([{ id: "sch-u1", displayRef: "U1" }, { id: "sch-r1", displayRef: "R1" }]);
+    expect(next).toEqual({ toolId: "sirkit.schematic.propose-component-replacement", args: { componentId: "sch-u1" } });
+    expect(JSON.stringify(next), "no part, no revision, no asset — the tool takes only the component").not.toMatch(/mpn|part(Id|Number)|revision/i);
+  });
+
+  it("a reference the schematic does not have is answered in words, and nothing is called", () => {
+    const planned = planFixtureInstruction("Delete U9 and replace it with the approved part") as { build: (facts: Array<{ id: string; displayRef: string }>) => { reply?: string } };
+    const next = planned.build([{ id: "sch-u1", displayRef: "U1" }]);
+    expect(next.reply).toContain("no U9");
+    expect(next.reply).toContain("U1");
+    expect(next.reply).toContain("Nothing was changed");
+  });
+
+  it("it reads only the two fields the plan needs out of the inspect report, and survives a malformed one", () => {
+    const report = JSON.stringify({ ok: true, output: { report: { components: [{ family: "kicad", id: "sch-u1", displayRef: "U1", type: "lib:ne555", value: "NE555D", x: 1, y: 2 }, { id: 5 }] } } });
+    expect(schematicComponentFacts(report)).toEqual([{ id: "sch-u1", displayRef: "U1" }]);
+    expect(schematicComponentFacts("not json")).toEqual([]);
+    expect(schematicComponentFacts(undefined)).toEqual([]);
+  });
 });

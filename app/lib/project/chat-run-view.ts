@@ -40,8 +40,9 @@ const TOOL_STATUS_LABELS: Readonly<Record<string, string>> = Object.freeze({
 /** [B18-E E1] A refusal the model is told in plain words gets a plain line too, never a bare code. */
 const REFUSED_TOOL_LABELS: Readonly<Record<string, string>> = Object.freeze({
   nothing_to_replay: "nothing to undo or redo — the assistant acts only on its own latest change; nothing was changed",
-  // [B18-E E12] a Tier 2 proposal the compiler refused: nothing was sealed, so there is no review and nothing to apply.
-  proposal_blocked: "refused — this change could not be prepared on this board; nothing was changed",
+  // [B18-E E12] a Tier 2 proposal the server refused: nothing was sealed, so there is no review and nothing to apply.
+  // [B18-E E16] worded for every Tier 2 path, not just the PCB one — a component replacement is blocked the same way.
+  proposal_blocked: "refused — the change could not be prepared; nothing was changed",
 });
 
 /** [B18-E E12] how much of a refusal's own reason a line carries — enough for the compiler's sentence, never a payload. */
@@ -323,7 +324,10 @@ export const replacementChatLines = Object.freeze({
   },
   refused(message: unknown): string {
     const text = typeof message === "string" && message.trim() !== "" ? message.trim().slice(0, 300) : "the editor refused it.";
-    return `Replacement NOT applied: ${text} Nothing was changed.`;
+    // [B18-E E16] several refusals already end with "Nothing was changed." — saying it twice reads as a stutter, and a
+    // sentence a person distrusts is worse than one they do not read. Say it once, wherever it comes from.
+    const alreadySaid = /nothing was changed\.?\s*$/i.test(text);
+    return `Replacement NOT applied: ${text}${alreadySaid ? "" : " Nothing was changed."}`;
   },
   discarded(): string {
     return "Replacement proposal discarded — nothing was changed.";
