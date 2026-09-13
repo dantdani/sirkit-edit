@@ -1500,3 +1500,21 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: the new and extended files above, plus the B16.0.24 simulate parity and confinement gates and the autoroute route
   suite; full unit suite under a loaded machine (a per-file eslint loop ran alongside; 65 min): 5870 passed, 68 failed in 47 files - 67 timeouts or perf thresholds and 1 real failure (the write-dsn escaped-quote pin, moved above); all 47 files re-run afterwards with two workers and nothing else running: 47 files, 544 tests passed; tsc 0; eslint: no new findings; control inventory regenerated with no drift.
 
+### B19-E E1-A/B — pricing provenance, per-source status, packet labels (2026-09-13 local, solo; this commit)
+
+- Plan: the B19-E discovery workflow (six increments E1–E6); owner decisions OD-36..OD-40 recorded with their safe defaults.
+- E1-A reproduced first (6 of 8 cases failed): a connector's memo answer was indistinguishable from a live one and was
+  persisted as `now` (served past DigiKey's hour from when it answered); a cache-only build listed every source as queried; a
+  memo answer counted as live. Now every offer carries `provenance {servedFrom: live | process-memo | offer-cache,
+  retrievedAt}`, the memo and the offer cache expire from the vendor's answer, a future time is never stamped, and the counts
+  say what happened. Fixture correction: the I3 retention fixture's `fetchedAt: 0` became a real fetch time.
+- E1-B reproduced first (8 of 10 failed; formula safety and cart bytes held): `source-labels.ts` (browser-safe) labels a
+  source and an offer from the registry; the BOM result carries `pricingMode`, `registryVersion` and `sources[]` (available,
+  paused with retryAt, blocked, disabled with owner decision, operator-disabled, credentials missing — no values); the
+  procurement packet has Status, Pricing basis and License lines, optional warnings, and two appended columns (observation
+  time, basis) with columns 19/20 and the cart files' bytes unchanged; the risk summary no longer says "production-ready".
+- Tests: provenance cache (PGlite) 5/5, counts 3/3, source labels 7/7, BOM sources 5/5, packet 5/5; distributor, acquisition,
+  BOM routes and B16.0.11 parity suites green; tsc 0.
+- Next: E1-C — the BOM workbench (source chips and labels, offline state, no window.open, sourcing-worksheet wording), the
+  no-purchase tripwire and the control inventory.
+

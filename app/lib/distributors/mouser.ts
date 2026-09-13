@@ -75,7 +75,7 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
       const answer = await enqueue(() => search(mpn));
       const pricing = mapPart(mpn, answer.value);
       // [B19-C I4] pin the result to the exact bytes Mouser sent (the bytes themselves are never kept)
-      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
+      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt }, provenance: { servedFrom: "live" as const, retrievedAt: answer.retrievedAt } } : null;
     } catch (err) {
       // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error or the request URL.
       console.error(`[mouser] lookup failed: ${describeFailure(err)}`);

@@ -109,7 +109,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
       const pricing = mapProduct(mpn, answer.value);
       if (!pricing) rememberNoExactMatch("digikey", mpn); // [B19-D I5b review] a successful answer with no exact product
       // [B19-C I4] pin the result to the exact bytes DigiKey sent
-      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
+      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt }, provenance: { servedFrom: "live" as const, retrievedAt: answer.retrievedAt } } : null;
     } catch (err) {
       // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error, which can carry the
       // request, the transport's own text, or a credential.

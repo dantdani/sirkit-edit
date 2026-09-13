@@ -16,6 +16,7 @@ import { cheapestUnitPrice, PRICING_CURRENCY } from "./distributors/types"; // [
 const CRLF = "\r\n";
 import { spreadsheetText } from "./spreadsheet-cell"; // [B19-D I5c row 09]
 import { safeHref, VENDOR_PAGE_HOSTS } from "./net/href-policy";
+import { sourceForDistributorName } from "./acquisition/source-registry"; // [B19-E E1] browser-safe registry
 
 // ─── RFC 4180 helpers ───────────────────────────────────────────────────────--
 
@@ -166,7 +167,38 @@ const PACKET_COLUMNS = [
   "Extended Cost",
   "Risk Score",
   "Risk Notes",
+  // [B19-E E1] appended, so every earlier column keeps its index
+  "Best Source Observed At (UTC)",
+  "Best Source Basis",
 ];
+
+const SERVED_FROM_CELL: Record<NonNullable<PartPricing["provenance"]>["servedFrom"], string> = {
+  live: "live (vendor answer)",
+  "process-memo": "cached (recent answer)",
+  "offer-cache": "cached (offer cache)",
+};
+
+/** [B19-E E1] When the best offer's vendor answered, and whether it was live or cached. */
+function observationCells(best: PartPricing | null): [string, string] {
+  if (!best) return ["", ""];
+  const servedFrom = best.provenance?.servedFrom ?? (best.evidence ? "live" : "offer-cache");
+  const at = best.provenance?.retrievedAt ?? best.evidence?.retrievedAt ?? best.fetchedAt;
+  return [Number.isFinite(at) && at > 0 ? new Date(at).toISOString() : "", SERVED_FROM_CELL[servedFrom]];
+}
+
+/** [B19-E E1] The attribution each source's terms require, for the sources whose offers appear in the packet. */
+function licenseLine(rows: BomRow[]): string {
+  const attributions: string[] = [];
+  for (const row of rows) {
+    for (const offer of row.pricing?.offers ?? []) {
+      const entry = sourceForDistributorName(offer.distributor);
+      if (entry && !attributions.includes(`${entry.displayName}: ${entry.license.attribution}`)) attributions.push(`${entry.displayName}: ${entry.license.attribution}`);
+    }
+  }
+  return attributions.length === 0
+    ? "License: no distributor data in this packet."
+    : `License: ${attributions.join("; ")}. Distributor values are for this project's sourcing review only and not for redistribution (OD-39).`;
+}
 
 const SOURCE_LABEL: Record<PartPricing["distributor"], string> = {
   digikey: "DigiKey",
@@ -182,7 +214,7 @@ function bestCurrency(): string {
 
 export function toProcurementPacketCsv(
   rows: BomRow[],
-  meta: { title: string; buildQuantity: number; date: Date; notes?: string },
+  meta: { title: string; buildQuantity: number; date: Date; notes?: string; pricingMode?: "none" | "cache-only" | "live"; warnings?: readonly string[] },
 ): string {
   const buildQty = Math.max(1, Math.floor(meta.buildQuantity) || 1);
   const lines: string[] = [];
@@ -192,6 +224,13 @@ export function toProcurementPacketCsv(
   lines.push(csvRow([`Build Quantity: ${buildQty}`]));
   lines.push(csvRow([`Date: ${meta.date.toISOString().slice(0, 10)}`]));
   lines.push(csvRow([`Notes: ${meta.notes ?? ""}`]));
+  // [B19-E E1] what this file is, how its prices were obtained, and the sources' terms
+  lines.push(csvRow(["Status: sourcing worksheet of observed distributor offers; not verified procurement. No order was placed. Prices and stock and lifecycle may have changed since each observation."]));
+  lines.push(csvRow([meta.pricingMode === "live"
+    ? "Pricing basis: live vendor answers where a source answered and cached offers otherwise; each line's observation time and basis are in the last two columns."
+    : "Pricing basis: cached offers only (no vendor was asked for this file); each line's observation time and basis are in the last two columns."]));
+  lines.push(csvRow([licenseLine(rows)]));
+  for (const warning of meta.warnings ?? []) lines.push(csvRow([`Warning: ${warning}`]));
   lines.push("");
   lines.push(csvRow(PACKET_COLUMNS));
 
@@ -245,6 +284,7 @@ export function toProcurementPacketCsv(
         extended ?? "",
         row.riskScore.total,
         row.riskScore.notes.join("; "),
+        ...observationCells(best),
       ]),
     );
   });

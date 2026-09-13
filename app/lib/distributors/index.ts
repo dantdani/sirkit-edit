@@ -19,7 +19,7 @@ import { consolidateLifecycle } from "./lifecycle";
 import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
 import { getDb } from "../db/client";
 import { parts } from "../db/schema";
-import { admitSource, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
+import { admitSource, SOURCE_IDS, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
 import { currentPause, type AdmissionPause } from "../acquisition/admission-control";
 import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
@@ -120,6 +120,43 @@ export function pausedSources(choice: DistributorChoice, now: number = Date.now(
   return out;
 }
 
+export type PricingSourceStatus = {
+  sourceId: AcquisitionSourceId;
+  displayName: string;
+  status: "available" | "paused" | AdmissionRefusal;
+  ownerDecision: string | null;
+  /** When a paused source may be tried again (unix ms); null otherwise. */
+  retryAt: number | null;
+  freshnessLabel: string;
+  attribution: string;
+};
+
+/**
+ * [B19-E E1] Every registry source a pricing choice names, with its state as data: available, paused (with when it may be
+ * tried again), or the admission refusal (blocked, disabled under an owner decision, switched off, credentials missing).
+ * "all" names LCSC too, which is blocked. Credentials are checked by presence only; no value is read into the result.
+ */
+export function pricingSourceStatuses(choice: DistributorChoice, now: number = Date.now()): PricingSourceStatus[] {
+  if (choice === "none") return [];
+  const out: PricingSourceStatus[] = [];
+  for (const id of SOURCE_IDS) {
+    if (!(choice === "all" || choice === id)) continue;
+    const entry = SOURCE_REGISTRY[id];
+    const admission = admitSource(id, process.env);
+    const pause = admission.admitted ? currentPause(id, now) : null;
+    out.push({
+      sourceId: id,
+      displayName: entry.displayName,
+      status: !admission.admitted ? admission.refusal : pause ? "paused" : "available",
+      ownerDecision: entry.state.ownerDecision,
+      retryAt: pause ? pause.retryAtMs : null,
+      freshnessLabel: entry.freshness.label,
+      attribution: entry.license.attribution,
+    });
+  }
+  return out;
+}
+
 /** Intended sources that are unavailable, by name only. Prefer `unavailableSources`, which says why. */
 export function missingCredentials(choice: DistributorChoice): DistributorName[] {
   return unavailableSources(choice).map((source) => source.name);
@@ -175,7 +212,6 @@ export async function getPricingFor(
   // The safe value is the default, so a new caller that forgets to decide cannot spend quota by accident.
   const livePricing = opts.live === true;
   const forceRefresh = livePricing && opts.forceRefresh === true;
-  const sourceNames = sources.map((s) => s.name);
 
   // Seed an aggregation accumulator per part.
   for (const it of items) {
@@ -185,7 +221,7 @@ export async function getPricingFor(
       offers: [],
       bestOverall: null,
       lifecycleStatus: "unknown",
-      sourcesQueried: sourceNames,
+      sourcesQueried: [], // [B19-E E1] filled with the sources actually asked for this part
       sourcesFromCache: 0,
       sourcesFromLive: 0,
     });
@@ -230,6 +266,7 @@ export async function getPricingFor(
     if (forceRefresh) {
       for (const m of misses) evictCached(name, m.mpn);
     }
+    for (const m of misses) result.get(m.key)?.sourcesQueried.push(name); // [B19-E E1] asked, whatever the answer
 
     let live: Map<string, PartPricing>;
     try {
@@ -247,7 +284,9 @@ export async function getPricingFor(
       const agg = result.get(it.key);
       if (agg) {
         agg.offers.push(offer);
-        agg.sourcesFromLive += 1;
+        // [B19-E E1] only an answer a vendor sent for this lookup is live; a connector's memo answer is a cached one
+        if (offer.provenance?.servedFrom === "live" || (!offer.provenance && offer.evidence)) agg.sourcesFromLive += 1;
+        else agg.sourcesFromCache += 1;
         liveOffersByKey.set(it.key, [...(liveOffersByKey.get(it.key) ?? []), offer]);
       }
       try {

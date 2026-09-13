@@ -27,7 +27,8 @@ const HOUR = 3_600_000;
 let partId = "";
 
 function offer(distributor: PartPricing["distributor"]): PartPricing {
-  return { distributor, mpn: "NE555DR", manufacturer: "TI", description: null, datasheet: null, inStock: 10, minOrderQty: 1, priceBreaks: [{ qty: 1, price: 0.5, currency: "USD" }], bestUnitPrice: 0.5, productUrl: null, package: null, lifecycleStatus: "active", lifecycleRaw: "Active", fetchedAt: 0 };
+  return { distributor, mpn: "NE555DR", manufacturer: "TI", description: null, datasheet: null, inStock: 10, minOrderQty: 1, priceBreaks: [{ qty: 1, price: 0.5, currency: "USD" }], bestUnitPrice: 0.5, productUrl: null, package: null, lifecycleStatus: "active", lifecycleRaw: "Active", fetchedAt: Date.now() };
+  // [B19-E E1; fixture correction] a stored offer is stamped with when it was fetched, so the fixture carries a real fetch time
 }
 
 async function rowsFor(id: string): Promise<Array<{ distributor: string; age: number }>> {

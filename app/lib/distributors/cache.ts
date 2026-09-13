@@ -68,7 +68,13 @@ export function isKnownNoExactMatch(distributor: DistributorName, mpn: string): 
   return true;
 }
 
-/** Fresh cached value for this distributor+mpn, or null on miss/expiry. */
+/** [B19-E E1] When the vendor answered: the recorded retrieval, else the fetch time; never later than now. */
+export function offerRetrievedAt(offer: PartPricing, now: number = Date.now()): number {
+  const at = offer.provenance?.retrievedAt ?? offer.evidence?.retrievedAt ?? offer.fetchedAt;
+  return Number.isFinite(at) ? Math.min(at, now) : now;
+}
+
+/** Fresh cached value for this distributor+mpn, or null on miss/expiry. [B19-E E1] Labelled as a memo answer. */
 export function getCached(distributor: DistributorName, mpn: string): PartPricing | null {
   const key = keyOf(distributor, mpn);
   if (!key) return null;
@@ -78,17 +84,17 @@ export function getCached(distributor: DistributorName, mpn: string): PartPricin
     store.delete(key);
     return null;
   }
-  return hit.value;
+  return { ...hit.value, provenance: { servedFrom: "process-memo", retrievedAt: offerRetrievedAt(hit.value) } };
 }
 
 export function setCached(distributor: DistributorName, mpn: string, value: PartPricing): void {
   if (ttlFor(distributor) <= 0) return; // [B19-A I3] a source whose terms prohibit storage is never memoized
   const key = keyOf(distributor, mpn);
   if (!key) return;
-  store.set(key, {
-    value,
-    expiresAt: Date.now() + ttlFor(distributor),
-  });
+  // [B19-E E1] the memo expires a freshness window after the vendor answered, not after it was memoized
+  const expiresAt = offerRetrievedAt(value) + ttlFor(distributor);
+  if (expiresAt <= Date.now()) return;
+  store.set(key, { value, expiresAt });
 }
 
 /** Drop a single in-memory entry — used by forceRefresh to compel a live fetch. */
@@ -193,6 +199,8 @@ function offerRowToPricing(row: PartOffer): PartPricing {
     lifecycleStatus: row.lifecycleStatus ?? "unknown",
     lifecycleRaw: row.lifecycleRaw ?? null,
     fetchedAt: row.lastRefreshedAt ? new Date(row.lastRefreshedAt).getTime() : Date.now(),
+    // [B19-E E1] a stored row was served from the offer cache; its stamp is when the vendor answered
+    provenance: { servedFrom: "offer-cache", retrievedAt: row.lastRefreshedAt ? new Date(row.lastRefreshedAt).getTime() : 0 },
   };
 }
 
@@ -282,7 +290,8 @@ export async function putCachedOffer(
   // [B19-A I3] only a source the registry allows to store is ever persisted (Mouser's terms prohibit storing its content)
   if (ttlFor(distributor) <= 0) return;
   const db = getDb();
-  const now = new Date();
+  // [B19-E E1] stamped with when the vendor answered (a memo answer is not "now"), so freshness is measured from the answer
+  const now = new Date(offerRetrievedAt(offer));
   const values = {
     partId,
     distributor,

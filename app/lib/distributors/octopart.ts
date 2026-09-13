@@ -103,7 +103,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
         const part = asRecord(asRecord(firstResult).part);
         const mapped = mapPart(a.mpn, part);
         // [B19-C I4] every part in one batch answer is pinned to that answer's bytes
-        const pricing = mapped ? { ...mapped, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
+        const pricing = mapped ? { ...mapped, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt }, provenance: { servedFrom: "live" as const, retrievedAt: answer.retrievedAt } } : null;
         if (pricing) {
           setCached("octopart-aggregated", a.mpn, pricing);
           found.set(a.mpn, pricing);

@@ -16,11 +16,14 @@ import {
   getPricingFor,
   pausedSources,
   pricingKey,
+  pricingSourceStatuses,
   unavailableSources,
   type AggregatedPricing,
   type DistributorChoice,
   type LifecycleStatus,
+  type PricingSourceStatus,
 } from "@/app/lib/distributors";
+import { SOURCE_REGISTRY_VERSION } from "@/app/lib/acquisition/source-registry";
 import {
   computeLineRisk,
   computeDesignRisk,
@@ -88,6 +91,12 @@ export type BomResult = {
   lifecycleSummary: BomLifecycleSummary;
   riskSummary: DesignRiskSummary;
   warnings: string[];
+  /** [B19-E E1] "live" when a project member's request could ask vendors; "cache-only" otherwise; "none" without pricing. */
+  pricingMode: "none" | "cache-only" | "live";
+  /** [B19-E E1] the source registry revision every label and status below comes from */
+  registryVersion: string;
+  /** [B19-E E1] each source the choice names, with its state as data (the sentences stay in `warnings`) */
+  sources: PricingSourceStatus[];
 };
 
 // Natural refDes order: alpha prefix, then numeric suffix (R2 < R10).
@@ -267,6 +276,9 @@ export async function buildBom(
     lifecycleSummary: summarizeLifecycle(rows),
     riskSummary: computeDesignRisk(rows),
     warnings,
+    pricingMode: pricingChoice === "none" ? "none" : pricing.live === true ? "live" : "cache-only",
+    registryVersion: SOURCE_REGISTRY_VERSION,
+    sources: pricingSourceStatuses(pricingChoice),
   };
 }
 

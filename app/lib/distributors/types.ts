@@ -45,7 +45,16 @@ export type PartPricing = {
    * Absent when served from a cache (a stored offer keeps no raw-content reference).
    */
   evidence?: { rawContentHash: string; retrievedAt: number };
+  /**
+   * [B19-E E1] Where this offer was served from and when the vendor answered it: `live` (a vendor request made for this
+   * lookup), `process-memo` (a connector's in-process memo of an earlier answer) or `offer-cache` (a stored `part_offers` row).
+   * Freshness is measured from `retrievedAt`, never from when the offer was re-served or re-stored.
+   */
+  provenance?: OfferProvenance;
 };
+
+export type OfferServedFrom = "live" | "process-memo" | "offer-cache";
+export type OfferProvenance = { servedFrom: OfferServedFrom; retrievedAt: number };
 
 export type DistributorName = PartPricing["distributor"];
 

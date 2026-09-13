@@ -2,8 +2,11 @@
  * POST /api/bom/procurement-packet
  *
  * Body: { state; pricingChoice; title?; buildQuantity?; notes? }
- * Returns a comprehensive procurement CSV (metadata header, per-line detail,
- * total project cost) for sending to contract manufacturers / procurement.
+ * Returns a sourcing worksheet CSV (metadata header with status, pricing basis
+ * and license lines, per-line detail with each best offer's observation time
+ * and basis, total estimated cost) to review with a contract manufacturer or a
+ * buyer. [B19-E E1] It is not verified procurement and never places an order;
+ * it prices from cached offers only.
  */
 
 import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
@@ -35,8 +38,8 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
   const notes = typeof body.notes === "string" ? body.notes : "";
 
   try {
-    const { rows } = await buildBomRows(stateCheck.state, normalizeChoice(body.pricingChoice));
-    const csv = toProcurementPacketCsv(rows, { title, buildQuantity, date: new Date(), notes });
+    const { rows, pricingMode, warnings } = await buildBomRows(stateCheck.state, normalizeChoice(body.pricingChoice));
+    const csv = toProcurementPacketCsv(rows, { title, buildQuantity, date: new Date(), notes, pricingMode, warnings });
     return new Response(csv, {
       status: 200,
       headers: {

@@ -166,3 +166,47 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - The owner may choose otherwise: e.g. derive `project_owner_confirmed` only for the project owner's principal, or require a
   reviewer role for the organisational and contractual classes.
 
+## OD-36 — May distributor observations be sent to the LLM provider? (B19-E, 2026-09-13)
+
+- Question: DigiKey's API terms forbid providing its data to third parties, and Nexar's forbid distributing it
+  (`source-registry.ts`). Sending a vendor's price, stock, description or links to the model provider may be such a disclosure.
+- Default applied: every source's `license.agentDisclosure` is `unknown`. The agent's external-search and evidence tools (E6)
+  return labels only — source, status, served-from, observed and expiry times, exact-match flag, conflict property names and
+  the missing-evidence list — and never trigger a live vendor call. A blocked or disabled source can never be `permitted`.
+- The owner may choose otherwise: set `permitted` for a source in a reviewed registry revision after confirming its terms, so
+  values reach the model bounded under an untrusted key.
+
+## OD-37 — Who holds global catalog authority? (B19-E, 2026-09-13)
+
+- Question: the atomic catalog tables have no tenant column, and the catalog role was supplied by the caller. Who may approve,
+  publish and withdraw an atomic revision that every project can bind?
+- Default applied: approval, publication and withdrawal happen only in the one governance project named by
+  `SIRKIT_ATOMIC_CATALOG_PROJECT_ID` (on its default branch); when unset, every such operation is refused. A reviewer approves
+  and a project admin publishes or withdraws; the approver is never the publisher (an admin is not exempt); the actor is always
+  a human. AAL2 step-up is not enforced (authentication strength is never checked) and is recorded as open.
+- The owner may choose otherwise: e.g. per-tenant catalogs, a separate catalog-publisher role, or enforced step-up.
+
+## OD-38 — What deprecated and superseded mean for a project (B19-E, 2026-09-13)
+
+- Default applied: an existing pin to a deprecated or superseded revision keeps materializing, syncing and exporting, with a
+  visible gap naming the successor; such revisions are excluded from new selection, new binding and link reads. A revoked
+  revision fails closed everywhere.
+- The owner may choose otherwise: e.g. block export of superseded revisions, or allow new binding to a deprecated one.
+
+## OD-39 — May distributor values leave Sirkit? (B19-E, 2026-09-13)
+
+- Question: the registry marks distributor values `private_review_only`, but the BOM exports are public and cache-only and
+  BOM snapshots keep values indefinitely.
+- Default applied: exports are unchanged apart from status, pricing-basis and license lines, per-line observation time and
+  basis, and "not for redistribution" wording. No new export, snapshot or review record carries vendor values. Recorded as
+  undecided, following OD-33's precedent; the B19 closeout's "no terms bypass" claim cites this decision.
+- The owner may choose otherwise: require authentication for exports, blank `private_review_only` cells, or purge snapshot
+  vendor fields at the source's retention.
+
+## OD-40 — External search scope and quota sharing (B19-E, 2026-09-13)
+
+- Default applied: project members may run keyword or exact-MPN searches in the product (at most 5 candidates per source),
+  consistent with OD-31. The agent gets exact MPNs only (1–5 per call, at most 5 live MPNs per run, at most 25% of each
+  source's quota window). Meters are per process, not cluster-wide.
+- The owner may choose otherwise: agent keyword search, other limits, or a shared quota meter.
+
