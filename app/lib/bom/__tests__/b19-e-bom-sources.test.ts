@@ -62,6 +62,14 @@ describe("[B19-E E1] every registry source the choice names has a structured sta
     expect(JSON.stringify(result)).not.toContain("token-SENTINEL");
   });
 
+  it("[B19-E E1-C review] the result carries the server's clock, so a client judges expiry in server time", async () => {
+    const before = Date.now();
+    const result = await buildBom(STATE, "all");
+    expect(typeof result.generatedAt).toBe("number");
+    expect(result.generatedAt).toBeGreaterThanOrEqual(before);
+    expect(result.generatedAt).toBeLessThanOrEqual(Date.now());
+  });
+
   it("no pricing choice has no sources and says so (baseline)", async () => {
     const result = await buildBom(STATE, "none");
     expect(result.pricingMode).toBe("none");

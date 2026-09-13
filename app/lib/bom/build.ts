@@ -97,6 +97,8 @@ export type BomResult = {
   registryVersion: string;
   /** [B19-E E1] each source the choice names, with its state as data (the sentences stay in `warnings`) */
   sources: PricingSourceStatus[];
+  /** [B19-E E1-C review] the server clock (ms) when the result was built: a client judges offer expiry in server time */
+  generatedAt: number;
 };
 
 // Natural refDes order: alpha prefix, then numeric suffix (R2 < R10).
@@ -279,6 +281,7 @@ export async function buildBom(
     pricingMode: pricingChoice === "none" ? "none" : pricing.live === true ? "live" : "cache-only",
     registryVersion: SOURCE_REGISTRY_VERSION,
     sources: pricingSourceStatuses(pricingChoice),
+    generatedAt: Date.now(),
   };
 }
 

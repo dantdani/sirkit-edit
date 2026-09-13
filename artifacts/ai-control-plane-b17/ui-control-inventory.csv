@@ -25,6 +25,7 @@ app/components/bom/BomView.tsx|click|button|Dismiss|setExportNotice,app/componen
 app/components/bom/BomView.tsx|click|button|Exporting…|Export CSV|exportCsv,app/components/bom/BomView.tsx,click,button,Exporting…|Export CSV,exportCsv,semantic,bom.workbench,bom.workbench,,
 app/components/bom/BomView.tsx|click|button|Exporting…|Export for distributor ▾|setExportMenuOpen,app/components/bom/BomView.tsx,click,button,Exporting…|Export for distributor ▾,setExportMenuOpen,view,,view.bom-chrome,,"filters, drafts, sort, expand, dialogs and popovers"
 "app/components/bom/BomView.tsx|click|button|Generating…|Generate worksheet|onGenerate,title.trim",app/components/bom/BomView.tsx,click,button,Generating…|Generate worksheet,"onGenerate,title.trim",semantic,bom.workbench,bom.workbench,,
+app/components/bom/BomView.tsx|click|button|Get current offers|setRefreshNonce,app/components/bom/BomView.tsx,click,button,Get current offers,setRefreshNonce,semantic,bom.workbench,bom.workbench,,
 app/components/bom/BomView.tsx|click|button|History ( )|setHistoryOpen,app/components/bom/BomView.tsx,click,button,History ( ),setHistoryOpen,view,,view.bom-chrome,,"filters, drafts, sort, expand, dialogs and popovers"
 app/components/bom/BomView.tsx|click|button|Jump to part|onJump,app/components/bom/BomView.tsx,click,button,Jump to part,onJump,semantic,bom.workbench,bom.workbench,,
 app/components/bom/BomView.tsx|click|button|Loading…|Refresh|setRefreshNonce,app/components/bom/BomView.tsx,click,button,Loading…|Refresh,setRefreshNonce,semantic,bom.workbench,bom.workbench,,

@@ -160,6 +160,22 @@ function offerServable(offer: PartPricing, now: number): boolean {
   return offerFreshness(offer, now)?.servable ?? false;
 }
 
+/** [B19-E E1-C review] Past the expiry of a source whose observations may be served for a while, online or offline. */
+function offerExpired(offer: PartPricing, now: number): boolean {
+  return (sourceLabel(offer.distributor)?.servedForMs ?? 0) > 0 && !offerServable(offer, now);
+}
+
+/** [B19-E E1-C review] Not shown: an offer past its expiry, online or offline; offline, also one that is never kept (no-storage or unregistered). */
+function offerWithheld(offer: PartPricing, now: number, offline: boolean): boolean {
+  return offerExpired(offer, now) || (offline && !offerServable(offer, now));
+}
+
+/** [B19-E E1-C review] What a shown result was for, when it arrived (client clock) and how far the server clock was ahead then. */
+type ResultFor = { pricingChoice: DistributorChoice; signature: string; receivedAt: number; serverOffsetMs: number };
+
+/** [B19-E E1-C review] Why supply signals are not shown: their observations expired, or the result was for another request. */
+type SupplyWithheld = "expired" | "stale" | null;
+
 /** Unit price at a target quantity: the highest break with qty ≤ target. */
 function priceAtQty(breaks: { qty: number; price: number; currency: string }[], target: number): number | null {
   let chosen: { qty: number; price: number } | null = null;
@@ -265,7 +281,10 @@ function stockOf(row: BomRow): number | null {
 function currencyOf(row: BomRow): string | null {
   return lineCurrency(row);
 }
-function compareRows(a: BomRow, b: BomRow, key: SortKey): number {
+function compareRows(a: BomRow, b: BomRow, key: SortKey, bestWithheld: (row: BomRow) => boolean): number {
+  // [B19-E E1-C review] a withheld best offer sorts as no price and no stock, so the order does not reveal them
+  const stock = (row: BomRow): number | null => (bestWithheld(row) ? null : stockOf(row));
+  const unit = (row: BomRow): number | null => (bestWithheld(row) ? null : bestUnit(row));
   switch (key) {
     case "refDes":
       return refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name);
@@ -288,12 +307,12 @@ function compareRows(a: BomRow, b: BomRow, key: SortKey): number {
       // Lowest score (highest risk) first at the default direction.
       return a.riskScore.total - b.riskScore.total;
     case "stock":
-      return nullLast(stockOf(a)) - nullLast(stockOf(b));
+      return nullLast(stock(a)) - nullLast(stock(b));
     case "unit":
-      return nullLast(bestUnit(a)) - nullLast(bestUnit(b));
+      return nullLast(unit(a)) - nullLast(unit(b));
     case "ext": {
-      const ea = bestUnit(a);
-      const eb = bestUnit(b);
+      const ea = unit(a);
+      const eb = unit(b);
       return nullLast(ea === null ? null : ea * a.qty) - nullLast(eb === null ? null : eb * b.qty);
     }
   }
@@ -400,8 +419,10 @@ export function BomView(props: Props) {
   const [worksheetOpen, setWorksheetOpen] = useState(false);
   // [B19-E E1] a refetch that got no answer: the last result stays, offers past their expiry are not shown
   const [offline, setOffline] = useState(false);
-  const [resultAt, setResultAt] = useState<number | null>(null);
-  // [B19-E E1] the time offers are judged against: set when a result arrives, when a refetch fails, and while offline
+  // [B19-E E1-C review] the pricing choice and design the shown result was for, its arrival and the server clock offset
+  const [resultFor, setResultFor] = useState<ResultFor | null>(null);
+  // [B19-E E1] the client time offers are judged against (plus the server offset): set when a result arrives, when a
+  // refetch fails, and every 30 s while a result is shown
   const [clock, setClock] = useState(0);
   // Snapshots / notifications (Stage 7).
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
@@ -429,12 +450,14 @@ export function BomView(props: Props) {
     return () => clearTimeout(t);
   }, [banner]);
 
-  // [B19-E E1] while offline, the clock advances every 30 s so an offer that expires meanwhile is blanked, not kept on screen
+  // [B19-E E1-C review] whenever a result is shown, online or offline, the clock advances every 30 s, so an offer that expires
+  // meanwhile reads expired and is blanked instead of kept on screen
+  const showingResult = result !== null;
   useEffect(() => {
-    if (!offline) return;
+    if (!showingResult) return;
     const t = setInterval(() => setClock(Date.now()), 30_000);
     return () => clearInterval(t);
-  }, [offline]);
+  }, [showingResult]);
 
   // Hydrate the persisted choice on mount (client-only).
   useEffect(() => {
@@ -473,6 +496,7 @@ export function BomView(props: Props) {
   const fetchBom = useCallback(async () => {
     if (isEmpty) {
       setResult(null);
+      setResultFor(null);
       setOffline(false);
       return;
     }
@@ -481,6 +505,7 @@ export function BomView(props: Props) {
     // the view says why instead of showing an empty table.
     if (!projectKey) {
       setResult(null);
+      setResultFor(null);
       setOffline(false);
       setError(BOM_NEEDS_PROJECT);
       return;
@@ -489,26 +514,46 @@ export function BomView(props: Props) {
     setError(null);
     try {
       const forceRefresh = forceRef.current;
-      const res = await fetch("/api/bom", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...selectorHeaders },
-        body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
-      });
-      const data = (await res.json()) as BomResult | { ok: false; error: string };
-      setOffline(false);
-      if (!data.ok) {
-        setError("error" in data ? data.error : "Failed to build BOM");
-        setResult(null);
-      } else {
-        const receivedAt = Date.now();
-        setResult(data);
-        setResultAt(receivedAt);
-        setClock(receivedAt);
+      let res: Response;
+      try {
+        res = await fetch("/api/bom", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...selectorHeaders },
+          body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
+        });
+      } catch {
+        // [B19-E E1-C review] only a request that got no answer is offline: the last result stays and says so; Retry refetches
+        setOffline(true);
+        setClock(Date.now());
+        return;
       }
-    } catch {
-      // [B19-E E1] no answer (offline, or an unreadable response): keep the last result and say so; Retry refetches.
-      setOffline(true);
-      setClock(Date.now());
+      // [B19-E E1-C review] an answer that is not a BOM (an error status, or a body that is not JSON) is an error with its
+      // HTTP status, and the last result is not kept as if it were current
+      let data: BomResult | { ok: false; error?: unknown } | null;
+      try {
+        data = (await res.json()) as BomResult | { ok: false; error?: unknown } | null;
+      } catch (bodyError) {
+        if (!(bodyError instanceof SyntaxError)) {
+          // [B19-E E1-C review follow-up] the connection dropped while the answer downloaded: no answer arrived, so offline
+          setOffline(true);
+          setClock(Date.now());
+          return;
+        }
+        data = null;
+      }
+      setOffline(false);
+      if (res.ok && data !== null && data.ok === true) {
+        const receivedAt = Date.now();
+        const serverOffsetMs = Number.isFinite(data.generatedAt) ? data.generatedAt - receivedAt : 0;
+        setResult(data);
+        setResultFor({ pricingChoice, signature, receivedAt, serverOffsetMs });
+        setClock(receivedAt);
+      } else {
+        const message = data !== null && data.ok === false && typeof data.error === "string" ? data.error : "The BOM could not be built";
+        setError(`${message} (HTTP ${res.status})`);
+        setResult(null);
+        setResultFor(null);
+      }
     } finally {
       forceRef.current = false; // one-shot — clear after the request settles
       setLoading(false);
@@ -695,14 +740,25 @@ export function BomView(props: Props) {
     }
   };
 
+  // [B19-E E1] an offer past its expiry is blanked instead of served — in the rows, the offers, the sort and the total.
+  // [B19-E E1-C review] Judged in server time (the client clock plus the offset at receipt), online or offline; offline, a
+  // kept result that was for another pricing choice or design shows no cost, sources or offer prices at all.
+  const now = clock + (resultFor?.serverOffsetMs ?? 0);
+  const staleRequest = offline && result !== null && (resultFor === null || resultFor.pricingChoice !== pricingChoice || resultFor.signature !== signature);
+  const isWithheld = useCallback((offer: PartPricing): boolean => staleRequest || offerWithheld(offer, now, offline), [staleRequest, now, offline]);
+
   const rows = useMemo(() => {
     if (!result) return [];
     // "At-risk" is now driven by the synthesized risk grade (Stage 5).
     const base = onlyAtRisk
       ? result.rows.filter((r) => r.riskScore.grade === "caution" || r.riskScore.grade === "high_risk")
       : result.rows;
-    return [...base].sort((a, b) => compareRows(a, b, sort.key) * sort.dir);
-  }, [result, sort, onlyAtRisk]);
+    const bestWithheld = (row: BomRow): boolean => {
+      const best = row.pricing?.bestOverall ?? null;
+      return best !== null && isWithheld(best);
+    };
+    return [...base].sort((a, b) => compareRows(a, b, sort.key, bestWithheld) * sort.dir);
+  }, [result, sort, onlyAtRisk, isWithheld]);
 
   const toggleSort = (key: SortKey) => {
     setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 1 ? -1 : 1 } : { key, dir: 1 }));
@@ -733,15 +789,20 @@ export function BomView(props: Props) {
 
   const cost = result?.estimatedProjectCost ?? null;
   const warnings = result?.warnings ?? [];
-  const sources = result?.sources ?? [];
-  // [B19-E E1] offline, an offer past its expiry is blanked instead of served — in the rows, the offers and the total
-  const now = clock;
-  const hideExpired = offline;
+  // [B19-E E1-C review] a kept result for another request shows no source chips
+  const sources = staleRequest ? [] : result?.sources ?? [];
   const expiredBest = (row: BomRow): boolean => {
     const best = row.pricing?.bestOverall ?? null;
-    return hideExpired && best !== null && !offerServable(best, now);
+    return best !== null && isWithheld(best);
   };
-  const costHasExpired = hideExpired && (result?.rows ?? []).some(expiredBest);
+  const costHasExpired = (result?.rows ?? []).some(expiredBest);
+  // [B19-E E1-C review] online, an offer that expired while shown prompts a refresh; any expiry qualifies the supply signals
+  const anyOfferExpired = !staleRequest && (result?.rows ?? []).some((row) => (row.pricing?.offers ?? []).some((o) => offerExpired(o, now)));
+  const supplyWithheld: SupplyWithheld = staleRequest ? "stale" : costHasExpired || anyOfferExpired ? "expired" : null;
+  // [B19-E E1-C review] the cached and live counts describe the last result while offline or once an offer has expired
+  const countsPrefix = offline || anyOfferExpired ? "last result · " : "";
+  const receivedAtServer = resultFor ? resultFor.receivedAt + resultFor.serverOffsetMs : null;
+  const withheldWord = staleRequest ? "not current" : "expired";
   const exportLabel = exportNotice ? EXPORT_LABELS[exportNotice.dist] : null;
   const uploadHref = exportNotice ? safeHref(DISTRIBUTOR_UPLOAD_URLS[exportNotice.dist], "page", VENDOR_PAGE_HOSTS) : null;
 
@@ -769,7 +830,7 @@ export function BomView(props: Props) {
         {/* Cache freshness badge */}
         {result && pricingChoice !== "none" && (
           <span className="text-[11px] text-zinc-500">
-            {result.cached} cached · {result.fetched} live
+            {countsPrefix}{result.cached} cached · {result.fetched} live
           </span>
         )}
 
@@ -907,7 +968,12 @@ export function BomView(props: Props) {
           </button>
 
           <div className="text-xs text-zinc-400">
-            {costHasExpired ? (
+            {/* [B19-E E1-C review] pricing None never shows a cost; nor does a kept result for another request */}
+            {pricingChoice === "none" ? (
+              <span className="text-zinc-600">Pricing off</span>
+            ) : staleRequest ? (
+              <span className="text-zinc-600">Project cost hidden: the last result was for a different request</span>
+            ) : costHasExpired ? (
               <span className="text-zinc-600">Project cost hidden: offers expired</span>
             ) : cost && cost.value !== null ? (
               <span>
@@ -917,8 +983,6 @@ export function BomView(props: Props) {
                 </span>{" "}
                 <span className="text-zinc-600">(qty 1)</span>
               </span>
-            ) : pricingChoice === "none" ? (
-              <span className="text-zinc-600">Pricing off</span>
             ) : (
               <span className="text-zinc-600">No pricing</span>
             )}
@@ -949,9 +1013,11 @@ export function BomView(props: Props) {
       {offline && (
         <div data-testid="bom-offline" role="status" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-amber-200 bg-amber-950/30 border-b border-amber-900/40 shrink-0">
           <span className="flex-1">
-            {result && resultAt !== null
-              ? `Offline — the BOM could not be refreshed. Showing the last result, received ${utcMinute(resultAt)}; offers past their expiry are hidden.`
+            {result && receivedAtServer !== null
+              ? `Offline — the BOM could not be refreshed. Showing the last result, received ${utcMinute(receivedAtServer)}; offers past their expiry are hidden.`
               : "Offline — the BOM could not be loaded."}
+            {/* [B19-E E1-C review] a kept result for another pricing choice or design says so */}
+            {staleRequest && " That result was for a different pricing choice or design, so its cost, sources and offer prices are not shown."}
           </span>
           <button
             onClick={() => setRefreshNonce((n) => n + 1)}
@@ -959,6 +1025,20 @@ export function BomView(props: Props) {
             className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
           >
             Retry
+          </button>
+        </div>
+      )}
+
+      {/* ── [B19-E E1-C review] online, an offer expired while shown: it is hidden, and a refresh brings current offers ── */}
+      {!offline && anyOfferExpired && (
+        <div data-testid="bom-expired" role="status" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-amber-200 bg-amber-950/30 border-b border-amber-900/40 shrink-0">
+          <span className="flex-1">Some offers have expired since this result was received; their price, stock and link are hidden.</span>
+          <button
+            onClick={() => setRefreshNonce((n) => n + 1)}
+            disabled={loading}
+            className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
+          >
+            Get current offers
           </button>
         </div>
       )}
@@ -1024,6 +1104,7 @@ export function BomView(props: Props) {
         <RiskSummaryCard
           summary={result.riskSummary}
           rows={result.rows}
+          supplyWithheld={supplyWithheld}
           onlyAtRisk={onlyAtRisk}
           onToggleAtRisk={() => setOnlyAtRisk((v) => !v)}
         />
@@ -1068,7 +1149,8 @@ export function BomView(props: Props) {
           </thead>
           <tbody className="text-zinc-300">
             {rows.map((row, i) => {
-              const expired = expiredBest(row); // [B19-E E1] offline and past its expiry: price, stock and link are not shown
+              // [B19-E E1] past its expiry (online or offline), or offline for another request: price, stock and link are not shown
+              const expired = expiredBest(row);
               const unit = expired ? null : bestUnit(row);
               const currency = currencyOf(row);
               const stock = expired ? null : stockOf(row);
@@ -1076,9 +1158,10 @@ export function BomView(props: Props) {
               const hasPricing = pricingChoice !== "none" && row.pricing !== null;
               const offers = row.pricing?.offers ?? [];
               const best = row.pricing?.bestOverall ?? null;
-              const rowKey = `${row.partId ?? row.name}|${row.value ?? ""}|${i}`;
-              const isExpandable = offers.length > 0;
-              const isOpen = expanded.has(rowKey);
+              // [B19-E E1-C review follow-up] keyed by the row's references, not its position: a clock tick that re-sorts keeps expansion
+              const rowKey = `${row.partId ?? row.name}|${row.value ?? ""}|${row.refDesList.join(",")}`;
+              const isExpandable = hasPricing && offers.length > 0; // [B19-E E1-C review] pricing None opens no offers
+              const isOpen = isExpandable && expanded.has(rowKey);
               return (
                 <Fragment key={rowKey}>
                   <tr
@@ -1117,7 +1200,7 @@ export function BomView(props: Props) {
                       <LifecycleBadge status={row.lifecycleStatus} />
                     </Td>
                     <Td>
-                      <RiskBadge row={row} now={now} hideExpired={hideExpired} />
+                      <RiskBadge row={row} isWithheld={isWithheld} withheldWord={withheldWord} />
                     </Td>
                     <Td>
                       {row.alternatesCount > 0 ? (
@@ -1139,7 +1222,7 @@ export function BomView(props: Props) {
                       {hasPricing && best && expired ? (
                         <span>
                           <span className="text-zinc-300">{distributorLabel(best.distributor)}</span>
-                          <span className="text-zinc-600"> · expired</span>
+                          <span className="text-zinc-600"> · {withheldWord}</span>
                         </span>
                       ) : hasPricing && best ? (
                         <span>
@@ -1160,7 +1243,7 @@ export function BomView(props: Props) {
                         unit !== null ? (
                           fmtPrice(unit, currency)
                         ) : (
-                          <Muted>{expired ? "expired" : "no pricing"}</Muted>
+                          <Muted>{expired ? withheldWord : "no pricing"}</Muted>
                         )
                       ) : (
                         <Muted>—</Muted>
@@ -1189,7 +1272,7 @@ export function BomView(props: Props) {
                   {isOpen && (
                     <tr className="bg-zinc-900/40">
                       <td className="px-3 py-2 border-b border-zinc-800/70" colSpan={16}>
-                        <OfferDetail offers={offers} bestDistributor={best?.distributor ?? null} now={now} hideExpired={hideExpired} />
+                        <OfferDetail offers={offers} bestDistributor={best?.distributor ?? null} now={now} isWithheld={isWithheld} offline={offline} staleRequest={staleRequest} />
                       </td>
                     </tr>
                   )}
@@ -1208,7 +1291,7 @@ export function BomView(props: Props) {
 
       <div className="px-3 py-1.5 text-[11px] text-zinc-600 border-t border-zinc-800 shrink-0">
         {result
-          ? `${result.rows.length} line item${result.rows.length === 1 ? "" : "s"} · ${result.cached} cached · ${result.fetched} live`
+          ? `${countsPrefix}${result.rows.length} line item${result.rows.length === 1 ? "" : "s"} · ${result.cached} cached · ${result.fetched} live`
           : "—"}
       </div>
 
@@ -1802,18 +1885,20 @@ function LifecycleSummaryCard({ summary }: { summary: BomLifecycleSummary }) {
 
 // ─── Risk badge + breakdown popover ─────────────────────────────────────────--
 
-function RiskBadge({ row, now, hideExpired }: { row: BomRow; now: number; hideExpired: boolean }) {
+function RiskBadge({ row, isWithheld, withheldWord }: { row: BomRow; isWithheld: (offer: PartPricing) => boolean; withheldWord: string }) {
   const risk = row.riskScore;
   const g = RISK_GRADE[risk.grade];
 
-  // [B19-E E1] offline, an expired offer's stock is not counted into what the breakdown shows
+  // [B19-E E1] an offer that is not shown (expired, or offline for another request) is not counted into the breakdown
   const allOffers = row.pricing?.offers ?? [];
-  const offers = allOffers.filter((o) => !hideExpired || offerServable(o, now));
+  const offers = allOffers.filter((o) => !isWithheld(o));
   const hasData = row.pricing !== null;
   const allExpired = offers.length === 0 && allOffers.length > 0;
   const totalStock = offers.reduce((s, o) => s + (o.inStock ?? 0), 0);
   const suppliers = new Set(offers.filter((o) => (o.inStock ?? 0) > 0).map((o) => o.distributor)).size;
-  const hasPrice = (row.pricing?.bestOverall?.bestUnitPrice ?? null) !== null;
+  // [B19-E E1-C review] priced only by an offer still shown; a price that is only in withheld offers says why
+  const hasPrice = offers.some((o) => o.bestUnitPrice !== null);
+  const priceWithheld = !hasPrice && allOffers.some((o) => o.bestUnitPrice !== null);
 
   return (
     <span className="relative inline-block group">
@@ -1833,19 +1918,19 @@ function RiskBadge({ row, now, hideExpired }: { row: BomRow; now: number; hideEx
             label="Availability"
             pts={risk.components.availability}
             max={30}
-            note={allExpired ? "expired" : hasData ? `${totalStock.toLocaleString()} units` : "no data"}
+            note={allExpired ? withheldWord : hasData ? `${totalStock.toLocaleString()} units` : "no data"}
           />
           <BreakdownLine
             label="Supplier mix"
             pts={risk.components.diversity}
             max={20}
-            note={hasData ? `${suppliers} supplier${suppliers === 1 ? "" : "s"}` : "no data"}
+            note={allExpired ? withheldWord : hasData ? `${suppliers} supplier${suppliers === 1 ? "" : "s"}` : "no data"}
           />
           <BreakdownLine
             label="Pricing"
             pts={risk.components.pricing}
             max={15}
-            note={hasPrice ? "priced" : hasData ? "no price" : "no data"}
+            note={hasPrice ? "priced" : priceWithheld ? withheldWord : hasData ? "no price" : "no data"}
           />
         </div>
         {risk.notes.length > 0 && (
@@ -1877,17 +1962,27 @@ function BreakdownLine({ label, pts, max, note }: { label: string; pts: number; 
 
 // ─── Design risk summary card ───────────────────────────────────────────────--
 
+/** [B19-E E1-C review] What replaces the supply signals when the observations behind them are not shown. */
+const SUPPLY_WITHHELD: Record<Exclude<SupplyWithheld, null>, { badge: string; note: string }> = {
+  expired: { badge: "Observations expired", note: "Supply signals are not shown: observations behind them have expired. Refresh prices for current offers." },
+  stale: { badge: "Observations not current", note: "Supply signals are not shown: the last result was for a different pricing choice or design." },
+};
+
 function RiskSummaryCard({
   summary,
   rows,
+  supplyWithheld,
   onlyAtRisk,
   onToggleAtRisk,
 }: {
   summary: DesignRiskSummary;
   rows: BomRow[];
+  /** [B19-E E1-C review] expired or other-request observations: no "Supply signals OK" badge or recommendation */
+  supplyWithheld: SupplyWithheld;
   onlyAtRisk: boolean;
   onToggleAtRisk: () => void;
 }) {
+  const withheld = supplyWithheld ? SUPPLY_WITHHELD[supplyWithheld] : null;
   const g = RISK_GRADE[summary.overallGrade];
   const showConcerns = summary.overallGrade === "caution" || summary.overallGrade === "high_risk";
   const concerns = showConcerns
@@ -1918,10 +2013,14 @@ function RiskSummaryCard({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-zinc-400">{summary.recommendation}</div>
+          <div className="text-[11px] text-zinc-400">{withheld ? withheld.note : summary.recommendation}</div>
         </div>
         <div className="ml-auto flex items-center gap-2 shrink-0">
-          {summary.productionReady && (
+          {withheld ? (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800/60 text-zinc-400 border border-zinc-700 font-medium">
+              {withheld.badge}
+            </span>
+          ) : summary.productionReady && (
             <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/15 text-green-300 border border-green-500/50 font-medium">
               Supply signals OK (observed)
             </span>
@@ -1974,14 +2073,26 @@ function OfferDetail({
   offers,
   bestDistributor,
   now,
-  hideExpired,
+  isWithheld,
+  offline,
+  staleRequest,
 }: {
   offers: PartPricing[];
   bestDistributor: string | null;
+  /** [B19-E E1-C review] server time */
   now: number;
-  /** [B19-E E1] offline: an offer past its expiry is blanked, not served */
-  hideExpired: boolean;
+  /** [B19-E E1] an offer past its expiry (online or offline), or offline one never kept, is blanked, not served */
+  isWithheld: (offer: PartPricing) => boolean;
+  offline: boolean;
+  /** [B19-E E1-C review] offline, the kept result was for a different pricing choice or design */
+  staleRequest: boolean;
 }) {
+  const withheldText = (offer: PartPricing): string =>
+    staleRequest
+      ? "not shown — this result was for a different pricing choice or design"
+      : offerExpired(offer, now)
+        ? `expired — its price, stock and link are not shown${offline ? " while offline" : "; refresh prices for a current offer"}`
+        : "not kept — its price, stock and link are not shown while offline";
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-[11px] border-collapse">
@@ -2005,7 +2116,7 @@ function OfferDetail({
             const cur = o.priceBreaks[0]?.currency ?? "USD";
             const isBest = o.distributor === bestDistributor;
             const freshness = offerFreshness(o, now);
-            const expired = hideExpired && !offerServable(o, now);
+            const expired = isWithheld(o);
             return (
               <tr key={`${o.distributor}:${idx}`} data-testid="bom-offer" data-distributor={o.distributor} className={isBest ? "text-zinc-100" : ""}>
                 <td className="px-2 py-1">
@@ -2028,7 +2139,7 @@ function OfferDetail({
                 </td>
                 {expired ? (
                   <td className="px-2 py-1 text-zinc-500" colSpan={7}>
-                    expired — its price, stock and link are not shown while offline
+                    {withheldText(o)}
                   </td>
                 ) : (
                   <>

@@ -1537,3 +1537,29 @@ _(discovery, reproduction and results appended below as they are observed)_
   shown as offline, expired offers still steering sort, risk and the summary badge, a kept result under a changed choice,
   client clock skew, and seven test-strength gaps. They are fixed test-first in the next commit (E1-C review).
 
+### B19-E E1-C review — fixes for the confirmed workbench findings (2026-09-13 local; fix workflow + lead; this commit)
+
+- Fix workflow, test-first: 12 new cases failed on the unchanged code; the tests that only strengthen existing ones were proven
+  by 18 deliberate breakages of the source (each caught). Two independent checkers confirmed all 13 distinct findings fixed and
+  every new test failing on revert.
+  - The clock ticks every 30 s whenever a result is shown; an expired offer is blanked online too, with a "Get current offers"
+    notice; only a rejected fetch is offline, and an error answer shows its HTTP status and clears the result.
+  - Expired offers steer no sort order, no priced note and no supply-OK badge ("Observations expired"); counts say
+    "last result"; a kept result for a different pricing choice or design shows no cost, chips or prices; pricing None never
+    shows a cost.
+  - `BomResult.generatedAt` lets the client judge expiry and observation times in server time (a two-hour-slow client clock
+    tested).
+  - Test strength: fixture separates expiry from basis, rank and distributor; the risk breakdown and every vendor's notice are
+    asserted; programmatic anchor clicks, bare `open()`, `.click()` on href-assigned elements and location navigations are
+    caught; the wording scan covers every production .tsx; export routes may not pass pricing options from anywhere but an
+    object literal.
+- Lead follow-ups on the checkers' three new low issues (3 cases failed first): a connection dropping while the body downloads is
+  offline (not "HTTP 200"); rows are keyed by their references so a clock-driven re-sort keeps an expanded row; the notice's
+  refetch is named "Get current offers", distinct from the header's cache-bypassing "Refresh prices".
+- Control inventory 583 → 584 (the notice button, semantic under bom.workbench). Tests: 14 files, 173 passed (workbench 19,
+  tripwire 12+, source labels, BOM library and routes, B17 gates, action and tool registries, href/CSV); tsc 0; eslint: the 4
+  pre-existing `set-state-in-effect` errors only.
+- Recorded, not fixed: the tripwire has no bare "cart" pattern outside BomView (the component test covers BomView); a navigation
+  through a helper in a file that never names an upload URL is not caught lexically; out-of-order /api/bom answers (pre-existing
+  race; a result is labelled with the request it answered); no-storage sources are hidden only offline (both disabled or blocked).
+
