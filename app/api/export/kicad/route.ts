@@ -9,7 +9,7 @@
  * Body: { state: SchematicState; title?: string; description?: string; company?: string }
  */
 
-import { exportToKicadSch, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { exportToKicadSch, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
 import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -106,6 +106,19 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       componentSelections: body.componentSelections,
     });
   } catch (error) {
+    // [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol
+    if (error instanceof SchematicExportLicenseError) {
+      return Response.json(
+        {
+          ok: false,
+          code: "EXPORT_LICENSE_PROHIBITED",
+          error: "Some pinned parts' symbol licenses do not permit export, so nothing was exported. Replace or re-license these parts.",
+          components: [...new Set(error.violations.map((item) => item.refDes))].sort(),
+          violations: error.violations.slice(0, 50),
+        },
+        { status: 422, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     // Defense in depth: the serializer's own typed validation (should be
     // unreachable after the pre-check above) still maps to a structured 422.
     if (error instanceof SchematicExportValidationError) {

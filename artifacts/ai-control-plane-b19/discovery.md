@@ -72,7 +72,7 @@ Source and freshness labelling on what the user sees is thin, and no agent tool 
 | D19-10 | **Regression introduced by I2**: the operator `refresh-bom-pricing` job passed only `forceRefresh`, so it silently refreshed nothing once live pricing became a grant. **Found in I3**; closed | `scripts/refresh-bom-pricing.ts:43` (before) |
 | D19-11 | Mouser's terms require the application's primary purpose to be driving Mouser sales and prohibit storage; the source was used whenever its key was set. **Disabled in I3** pending OD-32 | `source-registry.md` |
 | D19-12 | Nexar issues 24 h tokens by OAuth2 client credentials; the connector sends a pre-issued token that expires. RECORDED, not changed | `app/lib/distributors/octopart.ts` |
-| D19-7 | License is enforced at publication but **not at export** | `app/lib/atomic/validation.ts:109` vs `app/api/export/kicad/route.ts` (no `license` occurrence) |
+| D19-7 | License is enforced at publication but **not at export**. **Closed in I5a**: a pinned symbol exports only when its own license is `redistributable` | `app/lib/atomic/validation.ts:109` vs `app/api/export/kicad/route.ts` (no `license` occurrence) |
 
 The `providerCredit: boolean` flag already exists on ~20 route-policy rows and **nothing reads it** — the taxonomy for
 quotas is written down and inert (`app/lib/auth/route-policy.ts:37`).
@@ -88,7 +88,8 @@ quotas is written down and inert (`app/lib/auth/route-policy.ts:37`).
 | I3b | Request quotas, circuit breakers and cache coalescing, enforced from the registry's recorded policy | B19-B | CONFIRMED — `acquisition-boundary.md` |
 | I4 | The quarantine pipeline's front half: observation → normalized candidate → verified evidence bundle, with a real `SourceAdapter`, and the rule that distributor data can never alone prove pin mapping or CAD correctness | B19-C | CONFIRMED — `quarantine-pipeline.md` (observations pinned to raw-content hashes; candidates classified; bundles with conflicts and missing evidence). **No distributor `SourceAdapter` was built**: an adapter pages a vendor catalog, which is bulk acquisition, and every registered source's terms prohibit it or leave it unclear, so the registry refuses it (I3); observations are made per interactive lookup instead |
 | I4b | Stage 4's evidence rules: `evaluateApproval` refuses engineering facts and mapping certificates backed only by sourcing or unverified-CAD evidence, and trusted facts backed only by unreviewed model/OCR extraction | B19-C | CONFIRMED — `quarantine-pipeline.md` |
-| I5 | Import security and licensing: malicious PDFs, SVGs, archives, KiCad files, traversal, nested archives, active content, Unicode-confusable MPNs, unit ambiguity, stale source revisions; license enforced at export | B19-D | planned |
+| I5a | License enforced at export (D19-7) | B19-D | CONFIRMED — `import-security.md` |
+| I5b | Import security matrix against the surfaces that exist: KiCad assets, library paths, vendor text and links, confusable MPNs, unit ambiguity, stale revisions, conflicting pin data, prompt injection; PDFs, SVGs and archives recorded as absent import surfaces | B19-D | planned |
 | I6 | Product and agent experience: source/freshness labels, candidate review, bounded external-search and evidence-read tools, and no purchase path | B19-E | planned |
 | I7 | Validation and closeout | all | planned |
 

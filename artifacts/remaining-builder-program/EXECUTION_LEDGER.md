@@ -1298,3 +1298,18 @@ _(discovery, reproduction and results appended below as they are observed)_
   `path.win32`), and fixed in the test: the assertions use the platform's own separator and an absolute native root, add a
   permitted-path case, and add the other platform's separator as a traversal that must also be refused.
 - Tests: governance-security 25/25 locally; CI confirms on Linux.
+
+### B19 I5a — license enforced at export (2026-09-13 local, solo; this commit)
+
+- CI record first: I4 (`583691e`) green; I4b (`d1d5ed0`) red on prompt-to-gerber only — the Windows-only governance path
+  case, fixed in `ad3f066`, which is green on every job.
+- Reproduced (6 of 7 failing on the unchanged export): a pinned symbol whose license export disposition was `prohibited`,
+  `private_review_only`, `metadata_only` or `unknown`, or whose license record was absent, was copied into the downloaded
+  `.kicad_sch`; `POST /api/export/kicad` answered 200 with the file. One baseline (redistributable) passes before and after.
+- `exportToKicadSch` checks every pinned symbol's own license before serializing and throws `SchematicExportLicenseError`;
+  the route answers 422 `EXPORT_LICENSE_PROHIBITED` naming the components and sends nothing of any symbol.
+- Recorded: the app's export button sends no pinned selections today, so this protects the public export API and pinned
+  exports; PCB/fabrication geometry licensing is UNKNOWN from this chapter and carried to the validation increment.
+- Tests: b19-export-license 7/7 (new, in the CI list); atomic, API and PCB suites green (three PCB performance cases timed
+  out once under a full parallel run and pass in isolation, 41/41 — machine load, recorded, not a code change); broad run:
+  293 files, 3723 passed, 10 expected skips; tsc 0 in the changed files; eslint clean.

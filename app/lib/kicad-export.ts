@@ -46,6 +46,20 @@ export class SchematicExportValidationError extends Error {
   }
 }
 
+/**
+ * [B19-D I5a] An export that would redistribute a pinned symbol its license does not allow to be exported. The export copies
+ * each pinned part's symbol definition into the file, so the symbol's own license must say `redistributable`; `metadata_only`,
+ * `private_review_only`, `prohibited`, `unknown` and a missing license record all refuse. Nothing is serialized.
+ */
+export class SchematicExportLicenseError extends Error {
+  readonly violations: ReadonlyArray<{ refDes: string; licenseId: string; disposition: string }>;
+  constructor(violations: ReadonlyArray<{ refDes: string; licenseId: string; disposition: string }>) {
+    super(`Export blocked by license: ${violations.map((item) => `${item.refDes} (${item.disposition})`).join(", ")}`);
+    this.name = "SchematicExportLicenseError";
+    this.violations = violations;
+  }
+}
+
 export type KicadExportInput = {
   state: SchematicState;
   parts: Map<string, CachedPart>; // partId -> CachedPart for every kicadComponent in state
@@ -183,16 +197,26 @@ export function exportToKicadSch(input: KicadExportInput): string {
   const wires = state.wires ?? [];
   const netLabels = state.netLabels ?? [];
   const effectivePartByInstance = new Map<string, CachedPart>();
+  const licenseViolations: Array<{ refDes: string; licenseId: string; disposition: string }> = [];
   for (const instance of kicadComponents) {
     const selection = input.componentSelections?.[instance.id];
-    const exact = selection
+    const pinned = Boolean(selection
       && selection.atomicRevisionId === instance.atomicPartRevisionId
-      && selection.symbolVersionId === instance.symbolAssetVersionId
-      ? atomicSnapshotToCachedPart(selection.embeddedSnapshot)
-      : null;
+      && selection.symbolVersionId === instance.symbolAssetVersionId);
+    if (pinned && selection) {
+      // [B19-D I5a] the symbol definition is copied into the file: its own license must permit export
+      const snapshot = selection.embeddedSnapshot;
+      const licenseId = snapshot.symbol.origin.licenseId;
+      const license = snapshot.licenses.find((item) => item.id === licenseId);
+      if (!license || license.exportDisposition !== "redistributable") {
+        licenseViolations.push({ refDes: instance.refDes, licenseId, disposition: license?.exportDisposition ?? "missing" });
+      }
+    }
+    const exact = pinned && selection ? atomicSnapshotToCachedPart(selection.embeddedSnapshot) : null;
     const part = exact ?? parts.get(instance.partId);
     if (part) effectivePartByInstance.set(instance.id, part);
   }
+  if (licenseViolations.length > 0) throw new SchematicExportLicenseError(licenseViolations);
 
   const schematicUuid = uuidFor("schematic", "root");
   // For a single-sheet design the symbol instance path is the root schematic
