@@ -41,7 +41,7 @@ import {
   isWire,
   loadProject,
   loadProjectSalvaged,
-  saveProject,
+  trySaveProject,
   type PcbStageEvidence,
   type PcbWorkingCopy,
   type SavedProject,
@@ -54,6 +54,68 @@ import { checkpointStore, isCheckpointLike, type ProjectCheckpoint } from "./che
 export const PROJECT_FILE_FORMAT = "sirkit-project";
 export const PROJECT_FILE_VERSION = 1;
 export const PROJECT_FILE_EXTENSION = ".sirkit.json";
+
+/**
+ * [B19-D I5e rows 12, 13] What a project file may be. A file is refused before it is read when it is larger than
+ * `MAX_PROJECT_FILE_BYTES`; its JSON nesting is bounded before any recursive walk (the canonical hash recursed, and 10 000
+ * levels threw a RangeError); and every table has a count bound far above a real project (a routed 200-part board with a
+ * long history is a few thousand rows). Catalog parts are looked up a few at a time, each distinct part once.
+ */
+export const MAX_PROJECT_FILE_BYTES = 50 * 1024 * 1024;
+export const PROJECT_IMPORT_LIMITS = Object.freeze({
+  jsonDepth: 128,
+  components: 20_000,
+  kicadComponents: 20_000,
+  wires: 50_000,
+  netLabels: 20_000,
+  chatMessages: 10_000,
+  checkpoints: 1_000,
+  distinctParts: 1_000,
+  partLookupConcurrency: 8,
+});
+
+/** [B19-D I5e row 12] Read a picked file only when it is within the size bound. */
+export async function readProjectFile(file: Blob): Promise<{ ok: true; content: string } | { ok: false; reason: string }> {
+  if (file.size > MAX_PROJECT_FILE_BYTES) {
+    return { ok: false, reason: `The file is too large to open (${Math.ceil(file.size / (1024 * 1024))} MB; the limit is ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB). Nothing was imported.` };
+  }
+  try {
+    return { ok: true, content: await file.text() };
+  } catch {
+    return { ok: false, reason: "The file could not be read. Nothing was imported." };
+  }
+}
+
+/** True when the JSON text never nests arrays/objects deeper than `limit` (a linear scan; strings are skipped). */
+function jsonNestingWithin(text: string, limit: number): boolean {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+    } else if (char === '"') inString = true;
+    else if (char === "[" || char === "{") {
+      depth++;
+      if (depth > limit) return false;
+    } else if (char === "]" || char === "}") depth--;
+  }
+  return true;
+}
+
+type SchematicCounts = Pick<SchematicState, "components" | "wires" | "kicadComponents" | "netLabels">;
+
+function tableOverLimit(state: SchematicCounts): string | null {
+  const limits = PROJECT_IMPORT_LIMITS;
+  if (state.components.length > limits.components) return `too many schematic components (${state.components.length}; the limit is ${limits.components})`;
+  if ((state.kicadComponents ?? []).length > limits.kicadComponents) return `too many placed parts (${(state.kicadComponents ?? []).length}; the limit is ${limits.kicadComponents})`;
+  if (state.wires.length > limits.wires) return `too many wires (${state.wires.length}; the limit is ${limits.wires})`;
+  if ((state.netLabels ?? []).length > limits.netLabels) return `too many net labels (${(state.netLabels ?? []).length}; the limit is ${limits.netLabels})`;
+  return null;
+}
 
 export interface ProjectFilePayload {
   project: SavedProject;
@@ -157,22 +219,41 @@ function validateWorkingCopy(value: unknown): PcbWorkingCopy | { error: string }
   return copy as unknown as PcbWorkingCopy;
 }
 
-/** Check that instance part references still resolve in the live catalog. */
-async function findMissingParts(state: SchematicState): Promise<string[]> {
-  const partIds = [...new Set((state.kicadComponents ?? []).map((instance) => instance.partId))];
-  const missing: string[] = [];
-  for (const partId of partIds) {
-    try {
-      const res = await fetch(`/api/parts/${encodeURIComponent(partId)}`);
-      if (!res.ok) missing.push(partId);
-    } catch {
-      missing.push(partId);
-    }
+/**
+ * Check that instance part references still resolve in the live catalog.
+ *
+ * [B19-D I5e rows 13, 14] Distinct parts only, a few lookups at a time. The route answers a part it does not have with
+ * `200 { ok: true, part: null }`, so a part is resolved only when the answer carries the part — a 200 alone is not.
+ */
+async function findMissingParts(partIds: readonly string[]): Promise<string[]> {
+  const missing = new Set<string>();
+  for (let index = 0; index < partIds.length; index += PROJECT_IMPORT_LIMITS.partLookupConcurrency) {
+    const batch = partIds.slice(index, index + PROJECT_IMPORT_LIMITS.partLookupConcurrency);
+    await Promise.all(batch.map(async (partId) => {
+      try {
+        const res = await fetch(`/api/parts/${encodeURIComponent(partId)}`);
+        const body = (await res.json().catch(() => null)) as { ok?: unknown; part?: unknown } | null;
+        if (!res.ok || !body || body.ok !== true || !body.part || typeof body.part !== "object") missing.add(partId);
+      } catch {
+        missing.add(partId);
+      }
+    }));
   }
-  return missing;
+  return partIds.filter((partId) => missing.has(partId));
 }
 
 export async function importProjectFile(content: string): Promise<ProjectImportResult | { ok: false; reason: string }> {
+  // [B19-D I5e row 12] never a rejected promise: every failure below is a refusal that imports nothing
+  try {
+    return await importProjectFileChecked(content);
+  } catch {
+    return { ok: false, reason: "The file could not be imported. Nothing was imported." };
+  }
+}
+
+async function importProjectFileChecked(content: string): Promise<ProjectImportResult | { ok: false; reason: string }> {
+  if (content.length > MAX_PROJECT_FILE_BYTES) return { ok: false, reason: `The file is too large to open (the limit is ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB). Nothing was imported.` };
+  if (!jsonNestingWithin(content, PROJECT_IMPORT_LIMITS.jsonDepth)) return { ok: false, reason: `The file nests data more than ${PROJECT_IMPORT_LIMITS.jsonDepth} levels deep; it is not a Sirkit project. Nothing was imported.` };
   let parsed: unknown;
   try { parsed = JSON.parse(content); } catch { return { ok: false, reason: "The file is not valid JSON." }; }
   if (typeof parsed !== "object" || parsed === null) return { ok: false, reason: "The file is not a Sirkit project." };
@@ -197,24 +278,41 @@ export async function importProjectFile(content: string): Promise<ProjectImportR
   if (typeof project["id"] !== "string" || typeof project["name"] !== "string") return { ok: false, reason: "The project record is missing id or name." };
   const stateResult = validateSchematicState(project["state"]);
   if (!stateResult.ok) return { ok: false, reason: stateResult.reason };
+  const overLimit = tableOverLimit(stateResult.state);
+  if (overLimit) return { ok: false, reason: `The project has ${overLimit}. Nothing was imported.` };
   if (project["pcb"] !== undefined && !isPcbBoardLike(project["pcb"])) return { ok: false, reason: "Invalid PCB board in file." };
   const working = validateWorkingCopy(project["pcbWorking"]);
   if (working && "error" in working) return { ok: false, reason: working.error };
   const chat = project["chat"];
   if (chat !== undefined && (!Array.isArray(chat) || !chat.every(isStoredChatMessage))) return { ok: false, reason: "Invalid chat history in file." };
+  if (Array.isArray(chat) && chat.length > PROJECT_IMPORT_LIMITS.chatMessages) return { ok: false, reason: `The chat history has too many messages (the limit is ${PROJECT_IMPORT_LIMITS.chatMessages}). Nothing was imported.` };
 
   const rawCheckpoints = (payload as Record<string, unknown>)["checkpoints"];
   const checkpoints: ProjectCheckpoint[] = [];
   if (rawCheckpoints !== undefined) {
     if (!Array.isArray(rawCheckpoints)) return { ok: false, reason: "Invalid checkpoints in file." };
+    if (rawCheckpoints.length > PROJECT_IMPORT_LIMITS.checkpoints) return { ok: false, reason: `The file has too many checkpoints (${rawCheckpoints.length}; the limit is ${PROJECT_IMPORT_LIMITS.checkpoints}). Nothing was imported.` };
     for (const checkpoint of rawCheckpoints) {
       if (!isCheckpointLike(checkpoint)) return { ok: false, reason: "A checkpoint in the file is invalid. Nothing was imported." };
-      checkpoints.push(checkpoint);
+      // [B19-D I5e row 11] a checkpoint is restored into the page like a project: its schematic, chat and board get the
+      // same validation (the header check alone let a checkpoint crash the restore or carry any chat markup)
+      const checkpointState = validateSchematicState(checkpoint.schematic);
+      if (!checkpointState.ok || tableOverLimit(checkpointState.state)) return { ok: false, reason: "A checkpoint's schematic in the file is invalid. Nothing was imported." };
+      const checkpointChat: unknown = checkpoint.chat;
+      if (checkpointChat !== undefined && (!Array.isArray(checkpointChat) || checkpointChat.length > PROJECT_IMPORT_LIMITS.chatMessages || !checkpointChat.every(isStoredChatMessage))) {
+        return { ok: false, reason: "A checkpoint's chat history in the file is invalid. Nothing was imported." };
+      }
+      if (checkpoint.board !== undefined && !isPcbBoardLike(checkpoint.board)) return { ok: false, reason: "A checkpoint's PCB board in the file is invalid. Nothing was imported." };
+      checkpoints.push({ ...checkpoint, schematic: checkpointState.state });
     }
   }
 
   const warnings: string[] = [];
-  const missingParts = await findMissingParts(stateResult.state);
+  const distinctParts = [...new Set((stateResult.state.kicadComponents ?? []).map((instance) => instance.partId))];
+  if (distinctParts.length > PROJECT_IMPORT_LIMITS.distinctParts) {
+    return { ok: false, reason: `The project references too many distinct catalog parts (${distinctParts.length}; the limit is ${PROJECT_IMPORT_LIMITS.distinctParts}). Nothing was imported.` };
+  }
+  const missingParts = await findMissingParts(distinctParts);
   if (missingParts.length) warnings.push(`${missingParts.length} referenced catalog part(s) no longer resolve: ${missingParts.join(", ")}. Their instances load, but synchronization will fail closed until the parts are restored.`);
 
   // Identity: never overwrite an existing project.
@@ -243,7 +341,9 @@ export async function importProjectFile(content: string): Promise<ProjectImportR
     ...(project["componentSelections"] && typeof project["componentSelections"] === "object" ? { componentSelections: project["componentSelections"] as SavedProject["componentSelections"] } : {}),
     ...(project["ai"] && typeof project["ai"] === "object" ? { ai: project["ai"] as SavedProject["ai"] } : {}),
   };
-  const saved = saveProject(imported);
+  // [B19-D I5e row 13] a project browser storage refused is not an imported project
+  const saved = trySaveProject(imported);
+  if (!saved) return { ok: false, reason: "Browser storage refused the project (it may be full). Nothing was imported; free space and try again." };
 
   // Checkpoints follow the target identity (re-keyed on conflict copies).
   const rekeyed = checkpoints.map((checkpoint) => ({ ...checkpoint, projectId: targetId, id: `${targetId}:${checkpoint.seq}` }));

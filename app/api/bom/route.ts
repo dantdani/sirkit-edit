@@ -9,7 +9,7 @@
  */
 
 import type { BomRow, BomLifecycleSummary } from "@/app/lib/bom/build";
-import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { BOM_FORBIDDEN_BODY_KEYS } from "./_scope";
 import { bomFailure } from "./_failure";
@@ -39,18 +39,14 @@ export const POST = authenticatedJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30
   }
 
   const state = body.state;
-  if (!isSchematicState(state)) {
-    return Response.json(
-      { ok: false, error: "Body must include a `state` with components/kicadComponents." },
-      { status: 400 },
-    );
-  }
+  const stateCheck = checkBomState(state); // [B19-D I5e row 19] shape and table bounds before any lookup
+  if (!stateCheck.ok) return bomStateRefusal(stateCheck);
 
   const pricingChoice = normalizeChoice(body.pricingChoice);
   const forceRefresh = body.forceRefresh === true;
 
   try {
-    const result = await buildBomRows(state, pricingChoice, { live: true, forceRefresh });
+    const result = await buildBomRows(stateCheck.state, pricingChoice, { live: true, forceRefresh });
     return Response.json(result);
   } catch (err) {
     return bomFailure("api/bom", err);

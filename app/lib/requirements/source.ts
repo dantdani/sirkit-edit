@@ -12,6 +12,34 @@ import { REQUIREMENTS_SOURCE_SCHEMA_VERSION } from "./types";
 import { requirementsDigest, requirementsId } from "./stable";
 
 export const MAX_REQUIREMENTS_SOURCE_BYTES = 1_500_000;
+
+/**
+ * [B19-D I5e row 28] The declared unions, checked at runtime. The ingestion route's body is typed only by TypeScript: a source
+ * could declare `application/pdf` (accepted as text), or any source kind, authority class, access policy, privacy class or
+ * benchmark use, and those values were pinned into the immutable artifact unchecked.
+ */
+export const REQUIREMENT_SOURCE_MEDIA_TYPES = ["text/plain", "text/markdown", "application/json"] as const satisfies readonly RequirementSourceArtifact["mediaType"][];
+export const REQUIREMENT_SOURCE_KINDS = ["direct_user_statement", "structured_project_brief", "uploaded_specification", "existing_project_metadata", "organization_policy_default", "manufacturing_profile", "customer_requirement_document", "benchmark_task_definition", "imported_legacy_constraint", "observed_design_context", "external_regulation_reference", "conversation_message"] as const satisfies readonly RequirementSourceKind[];
+export const REQUIREMENT_AUTHORITY_CLASSES = ["project_owner_confirmed", "authorized_stakeholder_confirmed", "organizational_policy", "contractual_customer_source", "manufacturer_component_source", "imported_legacy_data", "ai_proposal", "inferred_observation", "untrusted_reference"] as const satisfies readonly RequirementAuthorityClass[];
+export const REQUIREMENT_ACCESS_POLICIES = ["project_private", "organization_private", "restricted", "public"] as const satisfies readonly AccessPolicy[];
+export const REQUIREMENT_PRIVACY_CLASSIFICATIONS = ["public", "internal", "confidential", "restricted"] as const satisfies readonly PrivacyClassification[];
+export const REQUIREMENT_BENCHMARK_USES = ["forbidden", "explicit_opt_in", "public_allowed"] as const satisfies readonly RequirementSourceArtifact["benchmarkUse"][];
+
+// compile-time: every member of each union is listed (a new member must be added to the runtime list too)
+type Exhaustive<List extends readonly string[], Union extends string> = Exclude<Union, List[number]> extends never ? true : never;
+const unionsAreExhaustive: [
+  Exhaustive<typeof REQUIREMENT_SOURCE_KINDS, RequirementSourceKind>,
+  Exhaustive<typeof REQUIREMENT_AUTHORITY_CLASSES, RequirementAuthorityClass>,
+  Exhaustive<typeof REQUIREMENT_ACCESS_POLICIES, AccessPolicy>,
+  Exhaustive<typeof REQUIREMENT_PRIVACY_CLASSIFICATIONS, PrivacyClassification>,
+  Exhaustive<typeof REQUIREMENT_SOURCE_MEDIA_TYPES, RequirementSourceArtifact["mediaType"]>,
+  Exhaustive<typeof REQUIREMENT_BENCHMARK_USES, RequirementSourceArtifact["benchmarkUse"]>,
+] = [true, true, true, true, true, true];
+void unionsAreExhaustive;
+
+export function isOneOf<T extends string>(list: readonly T[], value: unknown): value is T {
+  return typeof value === "string" && (list as readonly string[]).includes(value);
+}
 const MAX_EXCERPT_CHARS = 360;
 const INJECTION_PATTERNS = [
   /ignore\s+(?:all\s+)?(?:previous|prior|system)\s+instructions?/i,
@@ -56,6 +84,8 @@ function validateJsonDepth(value: unknown, depth = 0): void {
 }
 
 export function normalizeSourceText(content: string, mediaType: RequirementSourceArtifact["mediaType"]): string {
+  if (!isOneOf(REQUIREMENT_SOURCE_MEDIA_TYPES, mediaType)) throw new Error("Requirements source media type is not supported (text/plain, text/markdown or application/json).");
+  if (typeof content !== "string") throw new Error("Requirements source content must be text.");
   if (new TextEncoder().encode(content).byteLength > MAX_REQUIREMENTS_SOURCE_BYTES) throw new Error("Requirements source exceeds 1,500,000 bytes.");
   if (content.includes("\0")) throw new Error("Requirements source contains a NUL byte.");
   const normalized = content.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").normalize("NFC");
@@ -70,6 +100,12 @@ export function normalizeSourceText(content: string, mediaType: RequirementSourc
 export function ingestRequirementSource(input: IngestRequirementSourceInput): RequirementSourceArtifact {
   if (!input.tenantId.trim() || !input.projectId.trim() || !input.sourceId.trim() || !input.sourceVersion.trim()) throw new Error("Tenant, project, source, and source-version identities are required.");
   if (!input.title.trim()) throw new Error("Source title is required.");
+  if (!isOneOf(REQUIREMENT_SOURCE_MEDIA_TYPES, input.mediaType)) throw new Error("Requirements source media type is not supported (text/plain, text/markdown or application/json).");
+  if (!isOneOf(REQUIREMENT_SOURCE_KINDS, input.sourceKind)) throw new Error("Requirements source kind is not a known source kind.");
+  if (!isOneOf(REQUIREMENT_AUTHORITY_CLASSES, input.authorityClass)) throw new Error("Requirements source authority class is not a known authority class.");
+  if (!isOneOf(REQUIREMENT_ACCESS_POLICIES, input.accessPolicy)) throw new Error("Requirements source access policy is not a known policy.");
+  if (!isOneOf(REQUIREMENT_PRIVACY_CLASSIFICATIONS, input.privacyClassification)) throw new Error("Requirements source privacy classification is not a known classification.");
+  if (input.benchmarkUse !== undefined && !isOneOf(REQUIREMENT_BENCHMARK_USES, input.benchmarkUse)) throw new Error("Requirements source benchmark use is not a known value.");
   assertIsoDate(input.capturedAt, "capturedAt");
   if (input.extractionConfidence !== undefined && (input.extractionConfidence < 0 || input.extractionConfidence > 1)) throw new Error("extractionConfidence must be between 0 and 1.");
   const normalizedContent = normalizeSourceText(input.content, input.mediaType);

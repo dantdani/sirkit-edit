@@ -402,15 +402,28 @@ export function saveProjectFields(
 }
 
 export function saveProject(project: SavedProject): SavedProject {
+  return trySaveProject(project) ?? { ...project, updatedAt: Date.now() };
+}
+
+/**
+ * [B19-D I5e row 13] `saveProject` that REPORTS failure: `null` when browser storage refused the record or the project index
+ * (quota exceeded, storage unavailable). A record written without its index entry is removed again, so a failed save leaves
+ * nothing half-listed. Callers that tell a person "saved" or "imported" must use this one.
+ */
+export function trySaveProject(project: SavedProject): SavedProject | null {
   const updated: SavedProject = { ...project, updatedAt: Date.now() };
+  const key = STORAGE_PREFIX + updated.id;
   try {
-    localStorage.setItem(STORAGE_PREFIX + updated.id, JSON.stringify(updated));
-    const index = getIndex();
-    if (!index.includes(updated.id)) {
-      setIndex([...index, updated.id]);
-    }
+    localStorage.setItem(key, JSON.stringify(updated));
   } catch {
-    // quota exceeded or unavailable
+    return null;
+  }
+  try {
+    const index = getIndex();
+    if (!index.includes(updated.id)) localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify([...index, updated.id]));
+  } catch {
+    try { localStorage.removeItem(key); } catch { /* storage unavailable: nothing more to undo */ }
+    return null;
   }
   return updated;
 }

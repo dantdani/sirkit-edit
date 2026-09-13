@@ -113,7 +113,7 @@ import { evaluateSchematicConsumerGate } from "@/app/lib/engineering/schematic-c
 import { LatestRequestGate, OwnedRecoveryDecisionAdapter, OwnedSimulationRunner, ProjectAsyncScopeRegistry, evaluateSuggestionBatch, type ProjectAsyncScope, type ScopedSuggestionBatch } from "@/app/lib/engineering/project-async-scope";
 import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
-import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION } from "@/app/lib/project/file";
+import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION, readProjectFile } from "@/app/lib/project/file";
 import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
 import { Undo2, Redo2, History, Save, FolderInput } from "lucide-react";
 
@@ -4139,8 +4139,10 @@ export default function Home() {
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const handleImportProjectFile = useCallback(async (file: File) => {
-    const content = await file.text();
-    const result = await importProjectFile(content);
+    // [B19-D I5e row 12] the size bound comes before the file is read; the import itself never rejects
+    const read = await readProjectFile(file);
+    if (!read.ok) { showToast(`Open project failed: ${read.reason}`); return; }
+    const result = await importProjectFile(read.content);
     if (!result.ok) { showToast(`Open project failed: ${result.reason}`); return; }
     // B12.4 §E — the imported record/checkpoints are persisted; activation
     // (the pointer) belongs to the winning install.

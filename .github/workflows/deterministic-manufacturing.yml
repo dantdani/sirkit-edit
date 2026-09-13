@@ -149,6 +149,10 @@ jobs:
           app/lib/atomic/__tests__/b19-d-atomic-integrity.test.ts
           app/lib/atomic/__tests__/kicad-compatibility.test.ts
           app/lib/kicad/__tests__/b19-d-sexp-hostile.test.ts
+          app/lib/project/__tests__/b19-d-project-import-bounds.test.tsx
+          app/api/bom/__tests__/b19-d-bom-table-bounds.test.ts
+          app/lib/requirements/__tests__/b19-d-source-unions.test.ts
+          app/lib/pcb/__tests__/b19-d-dsn-tokens.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts

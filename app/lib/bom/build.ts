@@ -303,10 +303,23 @@ type PartMeta = {
   mainCategory: string;
 };
 
+/** [B19-D I5e row 19] catalog lookups in bounded IN lists */
+const IN_LIST_CHUNK = 500;
+function chunks<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < items.length; index += IN_LIST_CHUNK) out.push(items.slice(index, index + IN_LIST_CHUNK));
+  return out;
+}
+
 async function loadPartMeta(partIds: string[]): Promise<Map<string, PartMeta>> {
   const map = new Map<string, PartMeta>();
   if (partIds.length === 0) return map;
+  for (const chunk of chunks(partIds)) for (const [id, meta] of await loadPartMetaChunk(chunk)) map.set(id, meta);
+  return map;
+}
 
+async function loadPartMetaChunk(partIds: string[]): Promise<Map<string, PartMeta>> {
+  const map = new Map<string, PartMeta>();
   const db = getDb();
   const rows = await db
     .select({
@@ -330,6 +343,12 @@ async function loadPartMeta(partIds: string[]): Promise<Map<string, PartMeta>> {
 async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   if (partIds.length === 0) return map;
+  for (const chunk of chunks(partIds)) for (const [id, count] of await loadAlternatesCountsChunk(chunk)) map.set(id, count);
+  return map;
+}
+
+async function loadAlternatesCountsChunk(partIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
 
   const db = getDb();
   const rows = await db

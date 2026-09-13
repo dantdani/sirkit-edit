@@ -62,7 +62,7 @@ The rows land in four test-first batches:
 | I5b | 01, 03, 20, 26, 27a, 36, 39, 40, 41, 42, 43, 51 | the acquisition path: exact-MPN binding, derived lifecycle retention, price semantics, lifecycle mapping, confusable identity in bundles, quarantine hygiene, ingestion bounds |
 | I5c | 02, 04, 09, 10, 15, 16, 17, 18, 21, 33, 34, 35 | output injection: chat markdown images, KiCad emitters, CSV formulas and CR, vendor hrefs, report escaping, export selection shape |
 | I5d | 06, 07, 08, 22, 23, 27b (missing from the first table), 27c, 37, 38, 44–50 | KiCad parsing and atomic data integrity: symbols, inheritance, s-expression bounds, paths, value keys, claims, mapping conflicts, quantities |
-| I5e | 05, 11–14, 19, 24, 25, 28–32, 52 (DSN writer tokens, from the I5c review) | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
+| I5e | 05, 11–14, 19, 24, 25, 28–32, 52 (DSN writer tokens, from the I5c review) — landing in two commits: I5e-1 bounds and shapes (11–14, 19, 28, 52), I5e-2 model context (05, 24, 25, 29–32) | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
 
 ### I5b landed — the acquisition path (CONFIRMED)
 
@@ -237,4 +237,25 @@ Decisions recorded with the batch:
   spellings.
 - A supplier claim whose evidence carries no expiry is stale, and a view or context without source records cannot call a
   supplier claim fresh.
+
+### I5e-1 landed — project import, BOM table and source shapes, DSN tokens (CONFIRMED)
+
+Every row was reproduced by a failing test first: **37 of 43** new cases failed on the unchanged code; the other 6 are
+baselines. Five of the failures were only on a missing export (the new size and table bounds are named constants the tests
+read) — the behaviour they guard was shown by the neighbouring cases (a 10 000-level file rejected its promise with a
+RangeError; thousands of distinct parts were looked up one at a time).
+
+| row | reproduced before the fix | now |
+|---|---|---|
+| 11 | an imported checkpoint was checked on its header only: a chat message whose content was a number, a chat that was a string, a schematic whose components were a string and a board that was not a board all imported | a checkpoint's schematic, chat and board get the project's own validation (and the table bounds); any failure imports nothing |
+| 12 | 10 000 levels of nesting threw a RangeError out of the canonical hash (a rejected promise, not a refusal); no size bound | files over 50 MB are refused before they are read (`readProjectFile`, used by the page); JSON nesting is bounded (128) by a linear scan before any recursive walk; `importProjectFile` never rejects |
+| 13 | no table bound; one sequential lookup per distinct part; a project browser storage refused was reported imported | components, placed parts, wires, labels, chat and checkpoints are bounded; more than 1 000 distinct parts is refused before any lookup; lookups run eight at a time; a refused save (`trySaveProject`, which also removes a record whose index entry failed) is a failed import |
+| 14 | a part the catalog answered `200 { ok: true, part: null }` for counted as resolved | a part resolves only when the answer carries it; the project-state test's parts mock now uses the route's real shape (reviewed pin move — the old `{}`/404 mock is what hid this) |
+| 19 | every BOM route checked only `state.components`; 60 000 placed parts (7 MB, under the 8 MB body bound) reached the database, and a non-list `kicadComponents` was a 500 | one `checkBomState` for all eight BOM routes: placed parts are objects with bounded part id, reference and value; more than 10 000 instances or 2 000 distinct parts is `413 BOM_TABLE_TOO_LARGE` before any lookup; malformed tables are `400 BOM_STATE_INVALID`; catalog lookups use IN lists of at most 500 |
+| 28 | `application/pdf`, `image/svg+xml`, `application/zip` and `text/html` sources were ingested as text, and unknown source kinds, authority classes, access policies, privacy classes and benchmark uses were pinned into the artifact; `validateSourceArtifact` accepted a forged artifact whose digest matched | runtime unions at ingestion and in artifact validation (each list is compile-time exhaustive against its type) |
+| 52 | the FreeRouting DSN writer wrote a stackup's layer name, preferred direction and routing costs as bare text (injected nodes, `NaN` costs) and wrote net names with line breaks or NUL inside quotes | `DsnEmitError` refusals before anything is written: layer names from the four copper layers, directions from `horizontal`/`vertical`/`any`, finite non-negative costs, bare-token design name and resolution, finite coordinates, no control characters in quoted names |
+
+Owner decision recorded: **OD-35** — who may assert a confirming authority class for a requirements source (applied default:
+the authenticated editor or reviewer who posts the source still declares it; the class must now be a real one, and a
+confirmed requirement still needs the separate approval the compiler requires).
 

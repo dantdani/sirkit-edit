@@ -1433,3 +1433,21 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Reviewed pin move: the library-table test uses the platform's absolute paths (a relative library path is now refused);
   assertions unchanged.
 
+### B19 I5e-1 — project import, BOM table and source shapes, DSN tokens (2026-09-13 local, solo; this commit)
+
+- Seven matrix rows (11, 12, 13, 14, 19, 28, 52), reproduced first: 37 of 43 new cases failed on the unchanged code (5 of
+  them only on missing named exports); 6 baselines.
+- Project files: size bound before reading, linear nesting bound before hashing, no rejected promise; checkpoint schematic,
+  chat and board validated; table and distinct-part bounds; eight lookups at a time; a part is resolved only when the catalog
+  returns it; a refused save is a failed import (`trySaveProject`).
+- BOM routes: one `checkBomState` for all eight routes (shape, 10 000 instances, 2 000 distinct parts, bounded text) before any
+  lookup; chunked IN lists.
+- Requirements sources: runtime unions at ingestion and validation, compile-time exhaustive. OD-35 recorded (authority
+  class remains caller-declared; must be a defined class).
+- FreeRouting DSN: `DsnEmitError` refusals for layer names, directions, costs, design token, coordinates and control
+  characters in quoted names.
+- Reviewed pin move: the project-state parts mock uses the route's real `{ ok, part }` shape.
+- Tests: project import bounds 13/13, BOM table bounds 9/9, source unions 11/11, DSN tokens 10/10 (all new, in the CI list);
+  affected suites 52 files / 430 passed; full unit suite 577 files (572 passed, 5 env-gated skips), 5833 passed, 33 expected skips — the first full run found 5 failures in the B16.0.11 parity pins, which require each BOM route's exact historical 400 wording for a missing state; the implementation now passes each route's own wording (the pins were not changed); tsc 0; eslint: no new findings.
+- The I5d adversarial review is still running over commit cf3993e; its findings land in their own commit.
+

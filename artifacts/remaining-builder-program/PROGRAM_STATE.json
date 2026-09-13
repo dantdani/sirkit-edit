@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5d complete (review pending)",
+  "currentCheckpoint": "B19-D I5e-1 complete (I5d review running)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I5d review (adversarial diff review, fix verified findings); then I5e (model context, project import bounds, prompt delimiters, tool results, injection ratchet, SchGen labels, requirement unions, knowledge excerpts, DSN writer tokens).",
-  "updatedAt": "2026-09-13T03:50:30-04:00"
+  "nextAction": "Fix the I5d review's verified findings; then I5e-2 (model context: catalog text in prompts, prompt delimiters, tool-result hygiene, knowledge excerpts, raw error text, end-to-end injection ratchet, SchGen labels and replayed assistant turns); then the I5e review, B19-E and B19 closeout.",
+  "updatedAt": "2026-09-13T04:14:02-04:00"
 }

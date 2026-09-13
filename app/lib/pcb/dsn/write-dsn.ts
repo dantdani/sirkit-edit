@@ -551,11 +551,40 @@ export function boardToDsn(board: PcbBoard, options: BoardToDsnOptions = {}): Ds
 
 // ── writeDsn ────────────────────────────────────────────────────────────────
 
+/**
+ * [B19-D I5e row 52] A refusal to write a DSN token outside its vocabulary. The file is handed to the FreeRouting subprocess;
+ * the board (and its stackup) arrives in a request or a shared project, so every token written by hand is checked here and
+ * nothing is written at all when one fails.
+ */
+export class DsnEmitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DsnEmitError";
+  }
+}
+
+const DSN_LAYER_NAMES: ReadonlySet<string> = new Set(["F.Cu", "In1.Cu", "In2.Cu", "B.Cu"]);
+const DSN_DIRECTIONS: ReadonlySet<string> = new Set(["horizontal", "vertical", "any"]);
+const DSN_BARE_TOKEN = /^[A-Za-z0-9_.:+-]+$/;
+
+function layerToken(name: unknown): string {
+  if (typeof name !== "string" || !DSN_LAYER_NAMES.has(name)) throw new DsnEmitError("A DSN layer is not one of the supported copper layers.");
+  return name;
+}
+
+function costToken(value: unknown, field: string): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new DsnEmitError(`The routing ${field} is not a finite, non-negative number.`);
+  return String(value);
+}
+
 function q(s: string): string {
+  // a line break or other control character inside a quoted DSN string is refused, never written
+  if (typeof s !== "string" || /[\u0000-\u001f\u007f]/.test(s)) throw new DsnEmitError("A DSN name contains a control character.");
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function n(v: number): string {
+  if (typeof v !== "number" || !Number.isFinite(v)) throw new DsnEmitError("A DSN coordinate is not a finite number.");
   // PcbBoard stores integer nanometers; DSN uses Freerouting's supported
   // micrometer unit. Preserve all nanometer precision with up to 3 decimals.
   const micrometers = Math.round(v) / 1000;
@@ -567,20 +596,30 @@ function n(v: number): string {
 function shapeSexpr(shape: DsnPadShape, layer: DsnLayerName): string {
   switch (shape.kind) {
     case "circle":
-      return `(shape (circle ${layer} ${n(shape.diameterNm)}))`;
+      return `(shape (circle ${layerToken(layer)} ${n(shape.diameterNm)}))`;
     case "rect": {
       const hw = shape.wNm / 2;
       const hh = shape.hNm / 2;
-      return `(shape (rect ${layer} ${n(-hw)} ${n(-hh)} ${n(hw)} ${n(hh)}))`;
+      return `(shape (rect ${layerToken(layer)} ${n(-hw)} ${n(-hh)} ${n(hw)} ${n(hh)}))`;
     }
     case "polygon": {
       const coords = shape.pointsNm.map((p) => `${n(p.x)} ${n(p.y)}`).join(" ");
-      return `(shape (polygon ${layer} 0 ${coords}))`;
+      return `(shape (polygon ${layerToken(layer)} 0 ${coords}))`;
     }
   }
 }
 
 export function writeDsn(dsn: DsnBoard): string {
+  if (typeof dsn.name !== "string" || !DSN_BARE_TOKEN.test(dsn.name)) throw new DsnEmitError("The DSN design name is not a bare token.");
+  if (!DSN_BARE_TOKEN.test(String(dsn.resolution))) throw new DsnEmitError("The DSN resolution is not a bare token.");
+  for (const layer of dsn.layers) {
+    layerToken(layer.name);
+    if (layer.type !== "signal" && layer.type !== "power") throw new DsnEmitError("A DSN layer type is not signal or power.");
+    if (!DSN_DIRECTIONS.has(layer.preferredDirection)) throw new DsnEmitError("A DSN layer's preferred direction is not horizontal, vertical or any.");
+  }
+  const viaCost = costToken(dsn.routingSettings.viaCost, "via cost");
+  const planeViaCost = costToken(dsn.routingSettings.planeViaCost, "plane via cost");
+  const startRipupCost = costToken(dsn.routingSettings.startRipupCost, "start ripup cost");
   const L: string[] = [];
   L.push(`(pcb ${dsn.name}`);
   L.push(`  (parser`);
@@ -619,9 +658,9 @@ export function writeDsn(dsn: DsnBoard): string {
   L.push(`      (autoroute on)`);
   L.push(`      (postroute ${dsn.routingSettings.postroute ? "on" : "off"})`);
   L.push(`      (vias ${dsn.routingSettings.viasAllowed ? "on" : "off"})`);
-  L.push(`      (via_costs ${dsn.routingSettings.viaCost})`);
-  L.push(`      (plane_via_costs ${dsn.routingSettings.planeViaCost})`);
-  L.push(`      (start_ripup_costs ${dsn.routingSettings.startRipupCost})`);
+  L.push(`      (via_costs ${viaCost})`);
+  L.push(`      (plane_via_costs ${planeViaCost})`);
+  L.push(`      (start_ripup_costs ${startRipupCost})`);
   L.push(`      (start_pass_no 1)`);
   for (const layer of dsn.layers) {
     L.push(`      (layer_rule ${layer.name}`);
@@ -662,7 +701,7 @@ export function writeDsn(dsn: DsnBoard): string {
   }
   for (const via of dsn.vias) {
     L.push(`    (padstack ${q(via.name)}`);
-    for (const layer of via.onLayers) L.push(`      (shape (circle ${layer} ${n(via.diameterNm)}))`);
+    for (const layer of via.onLayers) L.push(`      (shape (circle ${layerToken(layer)} ${n(via.diameterNm)}))`);
     L.push(`      (attach off)`);
     L.push(`    )`);
   }
@@ -701,7 +740,7 @@ export function writeDsn(dsn: DsnBoard): string {
   for (const item of dsn.wiring) {
     if (item.kind === "wire") {
       L.push(
-        `    (wire (path ${item.layer} ${n(item.widthNm)} ${n(item.startNm.x)} ${n(item.startNm.y)} ${n(item.endNm.x)} ${n(item.endNm.y)})(net ${q(item.netName)})(type protect))`,
+        `    (wire (path ${layerToken(item.layer)} ${n(item.widthNm)} ${n(item.startNm.x)} ${n(item.startNm.y)} ${n(item.endNm.x)} ${n(item.endNm.y)})(net ${q(item.netName)})(type protect))`,
       );
     } else {
       L.push(

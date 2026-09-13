@@ -152,3 +152,17 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   identity.
 - Also applied: prices are compared and totalled in USD only; an offer without a USD break has no unit price.
 - The owner may choose otherwise (e.g. suffix-insensitive matching for specific manufacturers, or currency conversion).
+
+## OD-35 — Who may declare a requirements source's authority class (B19-D I5e, 2026-09-13)
+
+- Question: `POST /api/requirements/sources` takes the source's `authorityClass` from the authenticated caller's body. Classes
+  such as `project_owner_confirmed`, `authorized_stakeholder_confirmed`, `organizational_policy` and
+  `contractual_customer_source` describe WHO stands behind the source. Should the server derive the class from the caller's
+  role instead of accepting it?
+- Default applied: the caller (an authenticated editor or reviewer of that project, same-origin, scope-checked) still declares
+  the class, and it must now be one of the defined classes. A confirmed requirement still needs the compiler's separate
+  approval (`CONFIRMING_AUTHORITIES` plus an approval), and AI extraction can never confirm. Nothing is weakened; no class is
+  inferred.
+- The owner may choose otherwise: e.g. derive `project_owner_confirmed` only for the project owner's principal, or require a
+  reviewer role for the organisational and contractual classes.
+

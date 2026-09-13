@@ -1,6 +1,6 @@
 import { validateQuantity } from "../constraints/quantity";
 import type { ConstraintQuantity, TypedRequirement } from "../constraints/types";
-import { sourceRefForLocation } from "./source";
+import { isOneOf, REQUIREMENT_ACCESS_POLICIES, REQUIREMENT_AUTHORITY_CLASSES, REQUIREMENT_BENCHMARK_USES, REQUIREMENT_PRIVACY_CLASSIFICATIONS, REQUIREMENT_SOURCE_KINDS, REQUIREMENT_SOURCE_MEDIA_TYPES, sourceRefForLocation } from "./source";
 import { requirementsDigest, withoutRequirementDigest } from "./stable";
 import type {
   DesignRequirementsPackage,
@@ -109,6 +109,13 @@ export function validateSourceArtifact(artifact: RequirementSourceArtifact): str
   });
   if (expected !== artifact.immutableArtifactDigest) errors.push("REQUIREMENTS_SOURCE_DIGEST_MISMATCH");
   if (artifact.trustBoundary !== "untrusted_evidence") errors.push("REQUIREMENTS_SOURCE_TRUST_BOUNDARY_INVALID");
+  // [B19-D I5e row 28] a matching digest proves only that the declared values were hashed — not that they are allowed
+  if (!isOneOf(REQUIREMENT_SOURCE_MEDIA_TYPES, artifact.mediaType)) errors.push("REQUIREMENTS_SOURCE_MEDIA_TYPE_INVALID");
+  if (!isOneOf(REQUIREMENT_SOURCE_KINDS, artifact.sourceKind)) errors.push("REQUIREMENTS_SOURCE_KIND_INVALID");
+  if (!isOneOf(REQUIREMENT_AUTHORITY_CLASSES, artifact.authorityClass)) errors.push("REQUIREMENTS_SOURCE_AUTHORITY_INVALID");
+  if (!isOneOf(REQUIREMENT_ACCESS_POLICIES, artifact.accessPolicy)) errors.push("REQUIREMENTS_SOURCE_ACCESS_POLICY_INVALID");
+  if (!isOneOf(REQUIREMENT_PRIVACY_CLASSIFICATIONS, artifact.privacyClassification)) errors.push("REQUIREMENTS_SOURCE_PRIVACY_INVALID");
+  if (!isOneOf(REQUIREMENT_BENCHMARK_USES, artifact.benchmarkUse)) errors.push("REQUIREMENTS_SOURCE_BENCHMARK_USE_INVALID");
   if (artifact.privacyClassification !== "public" && artifact.benchmarkUse === "public_allowed") errors.push("PRIVATE_SOURCE_BENCHMARK_POLICY_INVALID");
   return errors;
 }
