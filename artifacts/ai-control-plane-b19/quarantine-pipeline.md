@@ -9,7 +9,7 @@ The runbook's five stages, and where each lives:
 | 1. external observation | what a source said: availability, price, lifecycle claim, links — pinned to the source, the registry revision, the SHA-256 of the exact response bytes, and the normalizer | `app/lib/acquisition/quarantine.ts` (`observationFromPricing`) | **I4 CONFIRMED** |
 | 2. normalized candidate | the observation's (or a document's) facts, each classified by what its source and method may establish | `candidateFromObservation`, `candidateFromExtraction` | **I4 CONFIRMED** |
 | 3. verified evidence bundle | facts for one part across sources, conflicts, stale observations, parser versions, and the engineering evidence still missing | `buildEvidenceBundle` | **I4 CONFIRMED** |
-| 4. reviewed atomic revision | exact identity, symbol, footprint, package geometry and pin-to-pad mapping approved under human review policy | `app/lib/atomic` (catalog transitions, `evaluateApproval`, mapping certificates) | existed before B19; its evidence rules are I4b |
+| 4. reviewed atomic revision | exact identity, symbol, footprint, package geometry and pin-to-pad mapping approved under human review policy | `app/lib/atomic` (catalog transitions, `evaluateApproval`, mapping certificates) | existed before B19; **I4b CONFIRMED**: engineering evidence must come from an engineering-authoritative source, and unreviewed AI extraction never stands |
 | 5. published project binding | revision-bound use in a design | `app/lib/atomic` project pins, component selection, physical bindings | existed before B19 |
 
 ## I4 — the front half (CONFIRMED)
@@ -61,3 +61,55 @@ The runbook's five stages, and where each lives:
   vendor-library evidence and requires reviewed evidence. I4b reproduces the approval gap and closes it.
 - Unicode-confusable MPNs, unit ambiguity, malicious documents and archives: B19-D (I5).
 - Showing candidates, conflicts and missing evidence to a person, and agent tools that read bundles: B19-E (I6).
+
+## I4b — what evidence a reviewed atomic revision may rest on (CONFIRMED)
+
+`evaluateApproval` decides approval at catalog review, PCB assignability at the publication transaction
+(`validatePortableSnapshotForPublication`), qualification in catalog search, and component selection's CAD gate. The
+downstream mapping verifier already accepted only manufacturer, official-library, organization and human-reviewed evidence
+and required review; the approval validator did not.
+
+### Reproduced first
+
+`app/lib/atomic/__tests__/b19-approval-evidence-authority.test.ts` against the unchanged validator: **12 of 17 failed**.
+
+| case | before |
+|---|---|
+| an approved mapping certificate whose only evidence is a distributor catalog, downloaded third-party CAD, CAD geometry inference, or an LLM suggestion | PCB-assignable (4 cases) |
+| a published portable snapshot whose mapping rests only on a distributor, through the publication transaction | **accepted** |
+| a validation context that carries no provenance at all | PCB-assignable |
+| a trusted terminal, package or identity claim resting only on a distributor | no blocker (3 cases) |
+| a verified claim resting only on unreviewed LLM or OCR extraction from a manufacturer datasheet | no blocker (2 cases) |
+| an approved mapping certificate resting only on an unreviewed LLM extraction | PCB-assignable |
+
+Five cases are baselines, passing before and after: the unchanged fixture part stays assignable; distributor evidence
+beside manufacturer evidence is fine; a sourcing claim from a distributor is fine; an INFERRED engineering claim from a
+distributor is not trusted, so nothing refuses it — it simply proves nothing; a reviewed LLM extraction is accepted.
+
+### What changed
+
+| rule | where |
+|---|---|
+| A PCB profile's approved mapping certificate must rest on at least one evidence record from an engineering-authoritative source class (manufacturer datasheet, CAD or application note; official KiCad library; organization-authored; human-reviewed) that is not an unreviewed model/OCR extraction; the certificate's and every entry's evidence count | `app/lib/atomic/validation.ts` |
+| A trusted claim (source-backed or verified) whose evidence is all unreviewed model/OCR extraction is refused ("quarantined until review"), whatever its facet | same |
+| A trusted identity, terminal, package or mechanical claim (or one scoped to a terminal or package) must rest on engineering-authoritative evidence | same |
+| Provenance that cannot be judged is refused, precisely: no provenance in the context, a missing evidence record, a missing evidence source record, or a missing source identity | same |
+| Every caller supplies provenance: the in-memory catalog, the publication transaction, component selection's CAD gate, and the server search view (which now loads the source records and sources behind the evidence it already loaded) | `catalog.ts`, `server-repository.ts`, `component-selection/gates.ts`, `server-search.ts` |
+
+### Proven
+
+- The 17 cases above, 17/17.
+- The existing governance suite unchanged and green — including the half-publication case, which still fails with
+  "source record is missing" because the new message names a missing evidence source record precisely instead of a
+  generic "cannot be resolved". That suite was not in any CI list; it is now, beside the new one.
+- Every suite that builds on atomic approval: atomic, component selection and the fixture runtime (123 cases); workflow
+  (including prompt-to-Gerber), mapping verification, physical binding, assignment queue, KiCad and circuit knowledge
+  (151 passed, 6 skipped as before); broad run 292 files, 3716 passed. The manufacturing fixture's parts rest on
+  organization-authored and official-KiCad-library evidence, so they remain eligible.
+
+### Stated limits
+
+- The server search view's new provenance loading is exercised by type-checking and by the in-memory equivalents, not by a
+  database-backed test (INFERRED for that one path).
+- The rule judges the CLASS of a source, as recorded on the source identity. Whether a source was classified truthfully when
+  it was registered stays a review-policy question, as it was before.

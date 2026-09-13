@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-C I4 complete",
+  "currentCheckpoint": "B19-C I4b complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I4b: reproduce and close the approval validator's evidence gap — engineering facts and mapping certificates backed only by sourcing or unverified-CAD evidence, and trusted facts backed only by unreviewed model/OCR extraction.",
-  "updatedAt": "2026-09-13T04:06:00-04:00"
+  "nextAction": "B19 I5 (B19-D): import security and licensing — malicious PDFs, SVGs, archives, KiCad files, huge tables, nested archives, traversal, active content, prompt injection, conflicting pin data, Unicode-confusable MPNs, unit ambiguity, stale source revisions; license enforced at export (D19-7).",
+  "updatedAt": "2026-09-13T04:16:00-04:00"
 }

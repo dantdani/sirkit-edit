@@ -155,7 +155,7 @@ export class AtomicCatalog {
   }
 
   validationContext(): ValidationContext {
-    return { symbols: this.symbols, footprints: this.footprints, models: this.models, mappings: this.mappings, claims: this.claims, licenses: this.licenses, offerSnapshots: this.offerSnapshots, evidence: this.evidence, guidance: this.guidance };
+    return { symbols: this.symbols, footprints: this.footprints, models: this.models, mappings: this.mappings, claims: this.claims, licenses: this.licenses, offerSnapshots: this.offerSnapshots, evidence: this.evidence, guidance: this.guidance, sourceRecords: this.sourceRecords, sources: this.sources };
   }
 
   /**

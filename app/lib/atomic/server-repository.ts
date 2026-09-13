@@ -45,6 +45,9 @@ export function validatePortableSnapshotForPublication(snapshot: PortableAtomicS
     offerSnapshots: new Map(snapshot.offerSnapshots.map((offer) => [offer.id, offer])),
     evidence: new Map(snapshot.evidence.map((item) => [item.id, item])),
     guidance: new Map(snapshot.guidance.map((item) => [item.id, item])),
+    // [B19-C I4b] where each evidence record came from, so engineering evidence can be judged
+    sourceRecords: new Map(snapshot.sourceRecords.map((item) => [item.id, item])),
+    sources: new Map(snapshot.sources.map((item) => [item.id, item])),
   };
   const approval = evaluateApproval(revision, profile, context);
   if (!approval.eligible) throw new Error(`Atomic publication rejected: ${approval.blockers.join("; ")}`);

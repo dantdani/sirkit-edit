@@ -1268,3 +1268,21 @@ _(discovery, reproduction and results appended below as they are observed)_
   model extracted it; the downstream mapping verifier does.
 - Tests: b19-quarantine-pipeline 20/20 (new, under app/lib/acquisition in the CI list); acquisition, distributor and BOM
   suites 117/117; broad run: 291 files, 3699 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I4b — what evidence a reviewed atomic revision may rest on (2026-09-13 local, solo; this commit)
+
+- Reproduced first, 12 of 17 cases failing on the unchanged validator: a mapping certificate resting only on a distributor,
+  third-party CAD, geometry inference or an LLM suggestion was PCB-assignable, and a published snapshot like that passed the
+  publication transaction; a context with no provenance was trusted; trusted terminal/package/identity claims resting only
+  on a distributor, and verified claims resting only on unreviewed LLM/OCR extraction, raised no blocker. Five baselines.
+- `evaluateApproval` now requires engineering-authoritative evidence (manufacturer, official library, organization,
+  human-reviewed; not an unreviewed model/OCR extraction) for approved mapping certificates and for trusted
+  identity/terminal/package/mechanical claims; refuses any trusted claim resting only on unreviewed model/OCR extraction;
+  and refuses provenance it cannot judge, naming exactly what is missing.
+- All four callers supply provenance, including the server search view, which now loads the source records and sources
+  behind its evidence (not DB-tested: INFERRED for that path).
+- The governance suite's half-publication pin holds unchanged (the new message names a missing evidence source record);
+  that suite was in no CI list and now is.
+- Tests: b19-approval-evidence-authority 17/17 (new, in the CI list with governance-security); atomic, component-selection,
+  fixture-runtime 123/123; workflow, mapping-verification, physical-binding, assignment-queue, kicad, circuit-knowledge 151
+  passed / 6 skipped; broad run: 292 files, 3716 passed, 10 expected skips; tsc 0; eslint clean on the changed files.

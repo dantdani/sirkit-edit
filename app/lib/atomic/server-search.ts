@@ -11,6 +11,8 @@ import {
   atomicMappingCertificates,
   atomicOfferSnapshots,
   atomicPartRevisions,
+  atomicSourceRecords,
+  atomicSources,
 } from "@/app/lib/db/schema";
 import type {
   ApplicationGuidance,
@@ -23,6 +25,8 @@ import type {
   LicenseRecord,
   MappingCertificate,
   ModelAssetVersion,
+  SourceIdentity,
+  SourceRecord,
   SupplierOfferSnapshot,
   SymbolAssetVersion,
 } from "./types";
@@ -60,6 +64,16 @@ export async function loadAtomicSearchView(): Promise<SearchCatalogView> {
   const evidenceRows = evidenceIds.length
     ? await db.select({ evidence: atomicEvidence.record }).from(atomicEvidence).where(inArray(atomicEvidence.id, evidenceIds))
     : [];
+  // [B19-C I4b] where each evidence record came from: approval judges engineering evidence by its source class
+  const evidenceRecords = (evidenceRows as Array<{ evidence: EvidenceRef }>).map((row) => row.evidence);
+  const sourceRecordIds = [...new Set(evidenceRecords.map((item) => item.sourceRecordId))];
+  const sourceRecordRows = sourceRecordIds.length
+    ? await db.select({ record: atomicSourceRecords.record }).from(atomicSourceRecords).where(inArray(atomicSourceRecords.id, sourceRecordIds))
+    : [];
+  const sourceRecords = (sourceRecordRows as Array<{ record: SourceRecord }>).map((row) => row.record);
+  const sourceIds = [...new Set(sourceRecords.map((record) => record.sourceId))];
+  const sourceRows = sourceIds.length ? await db.select().from(atomicSources).where(inArray(atomicSources.id, sourceIds)) : [];
+  const sources = sourceRows.map((row): SourceIdentity => ({ id: row.id, sourceClass: row.sourceClass as SourceIdentity["sourceClass"], name: row.name, officialDomains: row.officialDomains, licenseId: row.licenseId }));
   const symbols = new Map<string, SymbolAssetVersion>();
   const footprints = new Map<string, FootprintAssetVersion>();
   const models = new Map<string, ModelAssetVersion>();
@@ -99,7 +113,9 @@ export async function loadAtomicSearchView(): Promise<SearchCatalogView> {
     licenses: new Map((licenseRows as Array<{ license: LicenseRecord }>).map((row) => [row.license.id, row.license])),
     offerSnapshots: new Map((offerRows as Array<{ offer: SupplierOfferSnapshot }>).map((row) => [row.offer.id, row.offer])),
     guidance: new Map(guidance.map((item) => [item.id, item])),
-    evidence: new Map((evidenceRows as Array<{ evidence: EvidenceRef }>).map((row) => [row.evidence.id, row.evidence])),
+    evidence: new Map(evidenceRecords.map((item) => [item.id, item])),
+    sourceRecords: new Map(sourceRecords.map((item) => [item.id, item])),
+    sources: new Map(sources.map((item) => [item.id, item])),
     categoryByRevisionId,
   };
 }
