@@ -36,7 +36,7 @@ import {
 } from "./schematic-types";
 import { planPageFit, type Bounds } from "./page-sizes";
 import type { CachedPart } from "@/app/lib/parts-cache";
-import { normalizeValueKey } from "@/app/lib/atomic/value-key";
+import { valueKeyLink } from "@/app/lib/atomic/value-key";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
 import {
@@ -987,9 +987,7 @@ export function autoLayoutBuild(
     // this part at this value ('' link = value-agnostic default). Instances
     // without a matching link simply carry no authority and fail closed at
     // durable PCB publication — never guessed here.
-    const assignment =
-      part?.atomicAssignments?.[normalizeValueKey(c.value)] ??
-      part?.atomicAssignments?.[""];
+    const assignment = valueKeyLink(part?.atomicAssignments, c.value); // [B19-D I5d row 06] own links only
     byRefDes.set(c.refDes, {
       comp: c,
       part,

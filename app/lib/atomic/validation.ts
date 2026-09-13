@@ -18,6 +18,8 @@ import type {
   SourceRecord,
 } from "./types";
 
+import { isClaimFresh } from "./claims";
+
 export const ATOMIC_VALIDATOR_VERSION = "sirkit.atomic-validator/1";
 
 export interface ValidationContext {
@@ -184,6 +186,13 @@ export function evaluateApproval(revision: AtomicPartRevision, profile: Approval
   }
 
 
+  // [B19-D I5d row 07] a revision never binds a claim together with the claim that supersedes it
+  for (const claimId of revision.claimIds) {
+    const claim = context.claims.get(claimId);
+    const target = claim?.supersedesClaimId;
+    if (claim && target && target !== claim.id && revision.claimIds.includes(target)) blockers.push(`claim ${target} is superseded by ${claim.id}, and the revision binds both`);
+  }
+
   for (const guidanceId of revision.guidanceIds) {
     const guidance = context.guidance?.get(guidanceId);
     if (!guidance) {
@@ -203,6 +212,10 @@ export function evaluateApproval(revision: AtomicPartRevision, profile: Approval
     if (revision.offerSnapshotIds.length === 0) blockers.push("sourcing profile requires an offer snapshot");
     const volatileClaims = revision.claimIds.map((id) => context.claims.get(id)).filter((claim) => claim?.scope.kind === "supplier_offer");
     if (volatileClaims.some((claim) => claim?.state === "stale")) blockers.push("supplier data is stale");
+    // [B19-D I5d row 22] every supplier claim must be provably fresh from its evidence records
+    else if (volatileClaims.some((claim) => claim && (!context.evidence || !context.sourceRecords || isClaimFresh(claim, context.sourceRecords, context.evidence, now) === false))) {
+      blockers.push("supplier data is expired, or its freshness cannot be established from its evidence");
+    }
     if (volatileClaims.length === 0) warnings.push("no supplier-scoped claim is attached");
     const snapshots = revision.offerSnapshotIds.map((id) => context.offerSnapshots?.get(id));
     if (snapshots.some((snapshot) => !snapshot || Date.parse(snapshot.expiresAt) <= now.getTime())) blockers.push("supplier offer snapshot is missing or expired");

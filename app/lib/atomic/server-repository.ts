@@ -19,8 +19,10 @@ import {
   atomicSupplierParts,
 } from "@/app/lib/db/schema";
 import type { ApprovalProfile, AuditEvent, PortableAtomicSnapshot } from "./types";
-import { semanticHash } from "./stable";
+import { semanticHash, sha256 } from "./stable";
 import { evaluateApproval } from "./validation";
+import { canonicalExactMpn, MpnIdentityError, normalizeMpnSearchKey } from "./identity";
+import { mappingCertificateIntegrityErrors } from "./mapping";
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
@@ -52,6 +54,23 @@ export function validatePortableSnapshotForPublication(snapshot: PortableAtomicS
   const approval = evaluateApproval(revision, profile, context);
   if (!approval.eligible) throw new Error(`Atomic publication rejected: ${approval.blockers.join("; ")}`);
   if (snapshot.exactPart && snapshot.exactPart.manufacturerId !== snapshot.manufacturer?.id) throw new Error("Exact part manufacturer is missing or mismatched");
+  if (snapshot.exactPart) {
+    // [B19-D I5d row 27c] identity is recomputed, never taken from the snapshot: the exact MPN must be a canonical spelling
+    // (no invisible or confusable characters) and its search key must be the one that MPN produces
+    try {
+      canonicalExactMpn(snapshot.exactPart.exactMpn);
+    } catch (error) {
+      throw new Error(`Exact part MPN is refused: ${error instanceof MpnIdentityError ? error.message : "not a valid exact MPN"}`);
+    }
+    if (snapshot.exactPart.normalizedSearchKey !== normalizeMpnSearchKey(snapshot.exactPart.exactMpn)) {
+      throw new Error("Exact part normalizedSearchKey is not the key its exact MPN produces");
+    }
+  }
+  if (snapshot.mapping && snapshot.footprint) {
+    // [B19-D I5d row 38] the certificate is re-verified from its own content and the exact assets, not trusted by `state`
+    const mappingErrors = mappingCertificateIntegrityErrors(snapshot.mapping, snapshot.symbol, snapshot.footprint);
+    if (mappingErrors.length > 0) throw new Error(`Atomic mapping certificate failed re-verification: ${mappingErrors.slice(0, 10).join("; ")}`);
+  }
   if (snapshot.exactPart?.familyId && snapshot.exactPart.familyId !== snapshot.family?.id) throw new Error("Exact part family is missing or mismatched");
   if (snapshot.family && snapshot.family.manufacturerId !== snapshot.manufacturer?.id) throw new Error("Part family manufacturer is mismatched");
   for (const record of snapshot.sourceRecords) {
@@ -64,6 +83,9 @@ export function validatePortableSnapshotForPublication(snapshot: PortableAtomicS
     if (!licenseIds.has(asset.origin.licenseId)) throw new Error(`Asset ${asset.versionId} license is missing`);
     const blob = snapshot.assetBlobs.find((item) => item.id === asset.rawContentObjectId);
     if (!blob || blob.contentHash !== asset.contentHash) throw new Error(`Asset ${asset.versionId} raw content is missing or hash-mismatched`);
+    // [B19-D I5d row 47] the bytes are hashed here: a declared hash that matches the asset proves nothing about the content
+    const bytes = blob.encoding === "base64" ? Buffer.from(blob.content, "base64") : Buffer.from(blob.content, "utf8");
+    if (sha256(bytes) !== blob.contentHash || bytes.byteLength !== blob.bytes) throw new Error(`Asset ${asset.versionId} raw content does not match its declared hash or size`);
     if (blob.confidential) throw new Error(`Confidential asset ${asset.versionId} cannot be published`);
   }
   for (const part of snapshot.supplierParts) {

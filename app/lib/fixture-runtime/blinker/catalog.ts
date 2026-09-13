@@ -37,7 +37,7 @@ import { AtomicCatalog, createAtomicRevision } from "@/app/lib/atomic/catalog";
 import { parseFootprintAsset, parseSymbolAssets, rawContentObject } from "@/app/lib/atomic/kicad-assets";
 import { buildMappingCertificate, provePackage } from "@/app/lib/atomic/mapping";
 import { sha256 } from "@/app/lib/atomic/stable";
-import { normalizeValueKey } from "@/app/lib/atomic/value-key";
+import { normalizeValueKey, valueKeyLink } from "@/app/lib/atomic/value-key";
 import type { EvidenceRef, ExactManufacturerPart, FootprintAssetVersion, LicenseRecord, Manufacturer, ManufacturerTerminal, MappingCertificate, PortableAtomicSnapshot, SymbolAssetVersion } from "@/app/lib/atomic/types";
 import { extractLibrary, type ExtractedSymbol } from "@/app/lib/kicad/extract";
 import type { CachedPart } from "@/app/lib/parts-cache";
@@ -264,7 +264,7 @@ export function blinkerCatalog(): BlinkerCatalog {
     revisionFor(partId, value) {
       const part = parts.get(partId);
       if (!part) return null;
-      return (part.revisions[normalizeValueKey(value)] ?? part.revisions[""])?.revisionId ?? null;
+      return valueKeyLink(part.revisions, value)?.revisionId ?? null; // [B19-D I5d row 06] own links only
     },
   };
   return memo;

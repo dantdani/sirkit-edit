@@ -1411,3 +1411,25 @@ _(discovery, reproduction and results appended below as they are observed)_
   identical on HEAD).
 - The I5d work in progress is parked in a git stash (not committed) while this lands.
 
+### B19 I5d — KiCad parsing and atomic data integrity (2026-09-13 local, solo; this commit)
+
+- Seventeen matrix rows (06, 07, 08, 22, 23, 27b, 27c, 37, 38, 44–50), reproduced first: 48 of 67 cases failed on the
+  unchanged code; 19 baselines and verified controls; 5 cases added with the fix; 6 mutants of the new controls all killed.
+- Parsing: one bounded iterative s-expression reader that reads exactly one document; DRU files read as forms; raw symbol
+  blocks from the lossless parser's spans; iterative bounded `extends` with cycle/missing/duplicate issues; pin, pad and
+  expanded-pin budgets; embedded payloads, missing or impossible versions and model paths outside the model variables are
+  unsupported; path policy with own variables, absolute paths and segment-based escapes.
+- Data integrity: mega/milli value keys (no re-key) and own-key links; superseded claims; strict supplier freshness in approval
+  and search; unqualified criteria never read absolute maximums; explicit units, ambiguity refusal and percentage tolerances;
+  canonical identity in resolution (confusables are conflicts) and at publication (search key recomputed); certificate
+  conflicts, reclassification and unknown terminals; publication re-verifies certificates and hashes blob bytes;
+  PCB materialization hashes and bounds the footprint bytes.
+- Corpus check over the local upstream KiCad library: extractor output identical; 12 231 per-file derived symbols that were
+  "valid" with zero pins are now unsupported (`extends_missing_parent`); one footprint's doubled model-path separator was
+  first refused, then accepted by a corrected policy (pinned).
+- Tests: claims-values 27/27, KiCad hostile 21/21, s-expression hostile 8/8, atomic integrity 16/16 (all new, in the CI
+  list); full unit suite 573 files (568 passed, 5 env-gated skips), 5790 passed, 33 expected skips; tsc 0; eslint clean on
+  every changed file.
+- Reviewed pin move: the library-table test uses the platform's absolute paths (a relative library path is now refused);
+  assertions unchanged.
+

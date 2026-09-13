@@ -9,6 +9,7 @@ import type {
   SelectionCriterion,
 } from "./types";
 import { compareQuantities, rangeContains } from "./quantity";
+import { isClaimFresh, supersededClaimIds } from "./claims";
 import { evaluateApproval, type ValidationContext } from "./validation";
 
 export interface SearchCatalogView extends ValidationContext {
@@ -65,7 +66,8 @@ function comparePrimitive(actual: unknown, criterion: SelectionCriterion): boole
 
 function evaluateCriterion(criterion: SelectionCriterion, claims: EngineeringClaim[], weight: number): CriterionResult {
   const matching = claims
-    .filter((claim) => claim.property === criterion.property && (!criterion.limit || claim.limit === criterion.limit))
+    // [B19-D I5d row 23] a criterion that names no limit semantics never reads an absolute-maximum rating as an operating value
+    .filter((claim) => claim.property === criterion.property && (criterion.limit ? claim.limit === criterion.limit : claim.limit !== "absolute_maximum"))
     .sort((a, b) => claimRank(b) - claimRank(a) || a.id.localeCompare(b.id));
   if (matching.some((claim) => claim.state === "conflicting" || claim.conflictsWith.length > 0)) {
     return { criterion, outcome: "conflict", claimIds: matching.map((claim) => claim.id), explanation: `${criterion.property} has unresolved source conflict`, score: 0 };
@@ -109,7 +111,9 @@ export function searchAtomicCatalog(view: SearchCatalogView, query: ComponentQue
 
   const results = revisions.map((revision): ComponentSearchResult => {
     const approval = evaluateApproval(revision, query.requiredProfile as ApprovalProfile, view, now);
-    const claims = revision.claimIds.map((id) => view.claims.get(id)).filter((claim): claim is EngineeringClaim => Boolean(claim));
+    const bound = revision.claimIds.map((id) => view.claims.get(id)).filter((claim): claim is EngineeringClaim => Boolean(claim));
+    const superseded = supersededClaimIds(bound); // [B19-D I5d row 07] a superseded claim never satisfies a criterion
+    const claims = bound.filter((claim) => !superseded.has(claim.id));
     const hardResults = query.hard.map((criterion) => evaluateCriterion(criterion, claims, 0));
     const softResults = query.soft.map((criterion) => evaluateCriterion(criterion, claims, criterion.weight));
     const unknownBlocks = query.unknownPolicy === "block" && hardResults.some((result) => result.outcome === "unknown" || result.outcome === "stale");
@@ -119,7 +123,8 @@ export function searchAtomicCatalog(view: SearchCatalogView, query: ComponentQue
     const expiredOffer = offers.some((offer) => !offer || Date.parse(offer.expiresAt) <= now.getTime());
     const freshness = volatile.length === 0 && offers.length === 0
       ? "not_applicable" as const
-      : volatile.some((claim) => claim.state === "stale") || expiredOffer ? "stale" as const : "fresh" as const;
+      // [B19-D I5d row 22] fresh only when every supplier claim is provably fresh from its evidence records
+      : volatile.some((claim) => claim.state === "stale" || !view.evidence || !view.sourceRecords || isClaimFresh(claim, view.sourceRecords, view.evidence, now) === false) || expiredOffer ? "stale" as const : "fresh" as const;
     return {
       revisionId: revision.id,
       qualified,

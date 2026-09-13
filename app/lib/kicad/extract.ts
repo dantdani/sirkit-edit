@@ -27,6 +27,22 @@ import {
   normalizePinOrientation,
 } from "./types";
 import { safeHref } from "../net/href-policy";
+import { emitVerbatim, parseSexpr } from "../pcb/sexpr";
+
+/**
+ * [B19-D I5d rows 45, 08] A problem found while resolving one symbol. The symbol is still returned (a library ingest must not
+ * sink on one bad symbol), but a consumer that needs a trustworthy definition must treat it as not valid.
+ */
+export type ExtractionIssue = {
+  code: "duplicate_symbol_name" | "extends_cycle" | "extends_missing_parent" | "extends_depth" | "empty_symbol_block";
+  message: string;
+};
+
+/**
+ * [B19-D I5d row 45] How many `extends` links are followed. KiCad derives a symbol from a root symbol (one level); a chain
+ * this long is not a real library, and resolution is iterative so a hostile chain is a checked number, not the call stack.
+ */
+export const EXTENDS_MAX_DEPTH = 16;
 
 /** One fully-extracted KiCad symbol, ready to embed and upsert. */
 export type ExtractedSymbol = {
@@ -42,6 +58,8 @@ export type ExtractedSymbol = {
   pins: KicadPin[];
   /** Original S-expression text for this `(symbol ...)` block. */
   symbolRaw: string;
+  /** [B19-D I5d] problems resolving this symbol; empty when its definition is trustworthy */
+  issues: ExtractionIssue[];
 };
 
 /**
@@ -51,7 +69,12 @@ export type ExtractedSymbol = {
 export function extractSymbols(parsedFile: SExpr, rawText: string): ExtractedSymbol[] {
   if (!isList(parsedFile)) return [];
 
-  const sourceByName = mapTopLevelSymbolSource(rawText);
+  let sourceByName: Map<string, string>;
+  try {
+    sourceByName = topLevelSymbolBlocks(rawText);
+  } catch {
+    sourceByName = new Map(); // text that does not parse has no trustworthy blocks; each symbol reports an empty block
+  }
   const out: ExtractedSymbol[] = [];
 
   for (const symbolNode of findChildren(parsedFile, "symbol")) {
@@ -91,19 +114,24 @@ type RawSymbol = {
 export function extractLibrary(rawFiles: string[]): ExtractedSymbol[] {
   // Pass 1: gather all top-level symbols across every file, keyed by name.
   const raws = new Map<string, RawSymbol>();
+  const duplicated = new Set<string>();
   for (const raw of rawFiles) {
     let tree: SExpr;
+    let sourceByName: Map<string, string>;
     try {
+      // one bounded document: trailing content or hostile nesting makes the file malformed
       tree = parseSExp(raw);
+      sourceByName = topLevelSymbolBlocks(raw);
     } catch {
       continue; // a single malformed file shouldn't sink the library
     }
     if (!isList(tree)) continue;
 
-    const sourceByName = mapTopLevelSymbolSource(raw);
     for (const node of findChildren(tree, "symbol")) {
       const name = getString(node[1]);
       if (!name) continue;
+      // [B19-D I5d row 45] a second definition of a name is a conflict, never a silent last-wins replacement
+      if (raws.has(name)) duplicated.add(name);
       raws.set(name, {
         name,
         parent: getString(findChild(node, "extends")?.[1]),
@@ -117,8 +145,11 @@ export function extractLibrary(rawFiles: string[]): ExtractedSymbol[] {
   // Pass 2: resolve inheritance into final parts (one per unique name).
   const out: ExtractedSymbol[] = [];
   for (const sym of raws.values()) {
-    const resolved = resolveSymbol(sym, raws, new Set());
-    out.push(buildExtractedSymbol(sym.name, resolved.properties, resolved.pins, resolved.symbolRaw));
+    const resolved = resolveSymbol(sym, raws);
+    const issues = [...resolved.issues];
+    if (duplicated.has(sym.name)) issues.unshift({ code: "duplicate_symbol_name", message: "The library defines this symbol name more than once" });
+    if (!resolved.symbolRaw) issues.push({ code: "empty_symbol_block", message: "No symbol definition block was found for this symbol" });
+    out.push(buildExtractedSymbol(sym.name, resolved.properties, resolved.pins, resolved.symbolRaw, issues));
   }
   return out;
 }
@@ -127,32 +158,51 @@ type ResolvedSymbol = {
   properties: Record<string, string>;
   pins: KicadPin[];
   symbolRaw: string;
+  issues: ExtractionIssue[];
 };
 
 /**
  * Resolve one symbol against its parent chain. A child with no pins of its own
  * (the usual `extends` case) inherits the parent's pins and geometry; its
- * properties override the parent's. `seen` guards against cyclic `extends`.
+ * properties override the parent's.
+ *
+ * [B19-D I5d row 45] Iterative: the chain is collected first (stopping at a cycle, a missing parent or
+ * {@link EXTENDS_MAX_DEPTH}) and folded from the root down. Each stop is reported as an issue instead of resolving silently
+ * to whatever the chain happened to reach.
  */
-function resolveSymbol(
-  sym: RawSymbol,
-  raws: Map<string, RawSymbol>,
-  seen: Set<string>,
-): ResolvedSymbol {
-  if (sym.parent && !seen.has(sym.name)) {
-    const parent = raws.get(sym.parent);
-    if (parent) {
-      seen.add(sym.name);
-      const base = resolveSymbol(parent, raws, seen);
-      const inherit = sym.pins.length === 0;
-      return {
-        properties: { ...base.properties, ...sym.properties },
-        pins: inherit ? base.pins : sym.pins,
-        symbolRaw: inherit ? base.symbolRaw : sym.symbolRaw,
-      };
+function resolveSymbol(sym: RawSymbol, raws: Map<string, RawSymbol>): ResolvedSymbol {
+  const chain: RawSymbol[] = [sym];
+  const seen = new Set<string>([sym.name]);
+  const issues: ExtractionIssue[] = [];
+  for (let current = sym; current.parent !== null;) {
+    if (seen.has(current.parent)) {
+      issues.push({ code: "extends_cycle", message: "The symbol's extends chain is cyclic" });
+      break;
     }
+    const parent = raws.get(current.parent);
+    if (!parent) {
+      issues.push({ code: "extends_missing_parent", message: "The symbol extends a symbol that is not in the library" });
+      break;
+    }
+    if (chain.length > EXTENDS_MAX_DEPTH) {
+      issues.push({ code: "extends_depth", message: `The symbol's extends chain is deeper than ${EXTENDS_MAX_DEPTH} levels` });
+      break;
+    }
+    seen.add(parent.name);
+    chain.push(parent);
+    current = parent;
   }
-  return { properties: sym.properties, pins: sym.pins, symbolRaw: sym.symbolRaw };
+  let resolved = { properties: chain[chain.length - 1].properties, pins: chain[chain.length - 1].pins, symbolRaw: chain[chain.length - 1].symbolRaw };
+  for (let index = chain.length - 2; index >= 0; index--) {
+    const child = chain[index];
+    const inherit = child.pins.length === 0;
+    resolved = {
+      properties: { ...resolved.properties, ...child.properties },
+      pins: inherit ? resolved.pins : child.pins,
+      symbolRaw: inherit ? resolved.symbolRaw : child.symbolRaw,
+    };
+  }
+  return { ...resolved, issues };
 }
 
 // ─── Per-symbol extraction ──────────────────────────────────────────────────
@@ -163,11 +213,13 @@ function extractOneSymbol(
 ): ExtractedSymbol | null {
   const name = getString(symbolNode[1]);
   if (!name) return null;
+  const symbolRaw = sourceByName.get(name) ?? "";
   return buildExtractedSymbol(
     name,
     extractProperties(symbolNode),
     extractPins(symbolNode),
-    sourceByName.get(name) ?? "",
+    symbolRaw,
+    symbolRaw ? [] : [{ code: "empty_symbol_block", message: "No symbol definition block was found for this symbol" }],
   );
 }
 
@@ -177,6 +229,7 @@ function buildExtractedSymbol(
   properties: Record<string, string>,
   pins: KicadPin[],
   symbolRaw: string,
+  issues: ExtractionIssue[],
 ): ExtractedSymbol {
   return {
     name,
@@ -190,6 +243,7 @@ function buildExtractedSymbol(
     properties,
     pins,
     symbolRaw,
+    issues,
   };
 }
 
@@ -268,73 +322,24 @@ function parsePin(pinNode: SExpr[], unit: number, bodyStyle: number): KicadPin |
 /**
  * Build a map from top-level symbol name → its raw S-expression text.
  *
- * We scan the raw file tracking parenthesis depth (ignoring parens inside
- * quoted strings). A top-level `(symbol ...)` opens while depth === 1 (directly
- * inside the root `kicad_symbol_lib` list). This naturally distinguishes real
- * parts from the nested unit sub-symbols, which open at deeper depth.
+ * [B19-D I5d row 08] The file is read once with the lossless parser and each top-level `(symbol …)` block is sliced by its
+ * own source span, keyed by the name exactly as the parser unescaped it — the same reading `parseSExp` gives the pins. A
+ * separate text scan with its own escape handling let two differently escaped names collide, so a symbol could be exported
+ * with another symbol's block. Nested unit sub-symbols are children of a top-level block, never entries here. For a name
+ * defined twice the last block wins, matching the last definition in the parsed tree (the duplicate is reported).
  */
-function mapTopLevelSymbolSource(rawText: string): Map<string, string> {
+function topLevelSymbolBlocks(rawText: string): Map<string, string> {
   const map = new Map<string, string>();
-  let depth = 0;
-  let inString = false;
-  let symbolStart: number | null = null;
-
-  for (let i = 0; i < rawText.length; i++) {
-    const ch = rawText[i];
-
-    if (inString) {
-      if (ch === "\\") { i++; continue; }
-      if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') { inString = true; continue; }
-
-    if (ch === "(") {
-      if (depth === 1 && symbolStart === null && tokenAfterParenIs(rawText, i, "symbol")) {
-        symbolStart = i;
-      }
-      depth++;
-    } else if (ch === ")") {
-      depth--;
-      // Closed the top-level symbol block (back down to depth 1).
-      if (symbolStart !== null && depth === 1) {
-        const block = rawText.slice(symbolStart, i + 1);
-        const name = readSymbolName(block);
-        if (name !== null) map.set(name, block);
-        symbolStart = null;
-      }
-    }
+  const root = parseSexpr(rawText);
+  for (const node of root.items) {
+    if (node.kind !== "list") continue;
+    const headNode = node.items[0];
+    const nameNode = node.items[1];
+    if (headNode?.kind !== "symbol" || headNode.value !== "symbol") continue;
+    if (nameNode?.kind !== "string" && nameNode?.kind !== "symbol") continue;
+    map.set(nameNode.value, emitVerbatim(node, rawText));
   }
   return map;
-}
-
-/** Does the token immediately following the `(` at `parenIdx` equal `expected`? */
-function tokenAfterParenIs(rawText: string, parenIdx: number, expected: string): boolean {
-  let i = parenIdx + 1;
-  while (i < rawText.length) {
-    const ch = rawText[i];
-    if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") { i++; continue; }
-    break;
-  }
-  return rawText.startsWith(expected, i) && isTokenBoundary(rawText[i + expected.length]);
-}
-
-function isTokenBoundary(ch: string | undefined): boolean {
-  return ch === undefined ||
-    ch === " " || ch === "\t" || ch === "\n" || ch === "\r" ||
-    ch === "(" || ch === ")" || ch === '"';
-}
-
-/** Read the quoted name out of a `(symbol "NAME" ...)` block, unescaping it. */
-function readSymbolName(block: string): string | null {
-  const match = /^\(\s*symbol\s+"((?:[^"\\]|\\.)*)"/.exec(block);
-  if (!match) return null;
-  return match[1]
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, "\\")
-    .replace(/\\n/g, "\n")
-    .replace(/\\t/g, "\t")
-    .replace(/\\r/g, "\r");
 }
 
 // ─── Misc ───────────────────────────────────────────────────────────────────

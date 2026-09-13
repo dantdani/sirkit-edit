@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5c review complete",
+  "currentCheckpoint": "B19-D I5d complete (review pending)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "5eec196",
+  "lastGreenSha": "19be27f",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I5d (KiCad parsing and atomic data integrity, including row 27b): un-park the stash, finish the fixes, review; then I5e (including row 52).",
-  "updatedAt": "2026-09-13T03:35:21-04:00"
+  "nextAction": "B19 I5d review (adversarial diff review, fix verified findings); then I5e (model context, project import bounds, prompt delimiters, tool results, injection ratchet, SchGen labels, requirement unions, knowledge excerpts, DSN writer tokens).",
+  "updatedAt": "2026-09-13T03:50:30-04:00"
 }

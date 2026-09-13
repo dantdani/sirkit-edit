@@ -24,6 +24,37 @@ function unique(values: string[]): string[] {
 }
 
 /**
+ * [B19-D I5d row 38] Cross-entry conflicts: one pad number or one symbol pin claimed by more than one terminal. Sharing is
+ * legitimate only for terminals the manufacturer declares internally common (the same `internallyCommonGroup`) or, for pads,
+ * when every claim is the exposed thermal pad. Anything else is a short the certificate must not approve.
+ */
+function crossEntryConflicts(entries: readonly TerminalMappingEntry[]): string[] {
+  const conflicts: string[] = [];
+  const shareable = (claims: readonly TerminalMappingEntry[], allowThermal: boolean): boolean => {
+    const group = claims[0]?.internallyCommonGroup;
+    if (group && claims.every((entry) => entry.internallyCommonGroup === group)) return true;
+    return allowThermal && claims.every((entry) => entry.classification === "exposed_thermal");
+  };
+  const padClaims = new Map<string, TerminalMappingEntry[]>();
+  const pinClaims = new Map<string, TerminalMappingEntry[]>();
+  for (const entry of entries) {
+    for (const number of new Set(entry.logicalPadNumbers)) padClaims.set(number, [...(padClaims.get(number) ?? []), entry]);
+    for (const pinId of new Set(entry.symbolPinIds)) pinClaims.set(pinId, [...(pinClaims.get(pinId) ?? []), entry]);
+  }
+  for (const [number, claims] of padClaims) {
+    if (claims.length > 1 && !shareable(claims, true)) {
+      conflicts.push(`pad ${number} is claimed by terminals ${unique(claims.map((entry) => entry.manufacturerTerminalId)).join(", ")}`);
+    }
+  }
+  for (const [pinId, claims] of pinClaims) {
+    if (claims.length > 1 && !shareable(claims, false)) {
+      conflicts.push(`symbol pin ${pinId} is claimed by terminals ${unique(claims.map((entry) => entry.manufacturerTerminalId)).join(", ")}`);
+    }
+  }
+  return conflicts;
+}
+
+/**
  * Produce exact revision-bound proof. Matching counts are never evidence: every
  * electrical symbol pin number and every electrical pad number must be covered
  * by an explicit terminal map (unless classified NC/DNC/NU).
@@ -94,7 +125,13 @@ export function buildMappingCertificate(input: {
       else physicalPadIds.push(...matched);
       mappedPadNumbers.add(number);
     }
+    // [B19-D I5d row 38] an entry may supply a classification only where the terminal's own is unknown; silently turning an
+    // electrical terminal into a no-connect would drop it from coverage
+    if (requested.classification && terminal.classification !== "unknown" && requested.classification !== terminal.classification) {
+      ambiguous.push(`mapping entry for terminal ${terminal.id} reclassifies it from ${terminal.classification} to ${requested.classification}`);
+    }
     const classification = requested.classification ?? terminal.classification;
+    if (classification === "unknown") ambiguous.push(`terminal ${terminal.id} is mapped but its classification is unknown`);
     if (classification === "exposed_thermal") physicalPadIds.forEach((id) => exposedPadIds.add(id));
     entries.push({
       manufacturerTerminalId: terminal.id,
@@ -107,6 +144,11 @@ export function buildMappingCertificate(input: {
     });
   }
 
+  ambiguous.push(...crossEntryConflicts(entries));
+  // [B19-D I5d row 38] a terminal whose classification is unknown might be electrical: unmapped, it is unresolved, not ignorable
+  for (const terminal of input.terminals) {
+    if (terminal.classification === "unknown" && !mappedTerminalIds.has(terminal.id)) ambiguous.push(`terminal ${terminal.id} has an unknown classification and is not mapped`);
+  }
   const requiredTerminals = input.terminals.filter((terminal) =>
     terminal.classification !== "mechanical" && terminal.classification !== "unknown",
   );
@@ -175,6 +217,44 @@ export function buildMappingCertificate(input: {
   };
   const hash = semanticHash(body);
   return { id: `map_${hash}`, semanticHash: hash, ...body };
+}
+
+/**
+ * [B19-D I5d row 38] Re-verify a certificate as it arrives in a snapshot, from its own content and the exact assets it names.
+ * Publication used to trust `state`; a certificate whose entries were edited afterwards still said "approved". This checks
+ * that the content still hashes to the certificate's id, that every entry names real pins and pads, that no pad or pin is
+ * claimed by conflicting terminals, and — for an approved certificate — that coverage is complete and nothing is unresolved.
+ */
+export function mappingCertificateIntegrityErrors(certificate: MappingCertificate, symbol: SymbolAssetVersion, footprint: FootprintAssetVersion): string[] {
+  const errors: string[] = [];
+  const { id, semanticHash: declaredHash, ...body } = certificate;
+  const hash = semanticHash(body);
+  if (hash !== declaredHash || id !== `map_${hash}`) errors.push("its content does not match its hash");
+  if (certificate.symbolVersionId !== symbol.versionId || certificate.footprintVersionId !== footprint.versionId) errors.push("it is bound to other asset versions");
+  const pinById = new Map(symbol.pins.map((pin) => [pin.id, pin]));
+  const padById = new Map(footprint.pads.map((pad) => [pad.id, pad]));
+  const electricalPadNumbers = new Set(footprint.pads.filter((pad) => !(pad.mechanical || pad.number === "" || pad.padType === "np_thru_hole")).map((pad) => pad.number));
+  for (const entry of certificate.entries) {
+    for (const pinId of entry.symbolPinIds) if (!pinById.has(pinId)) errors.push(`terminal ${entry.manufacturerTerminalId} names an absent symbol pin`);
+    for (const padId of entry.physicalPadIds) {
+      const pad = padById.get(padId);
+      if (!pad) errors.push(`terminal ${entry.manufacturerTerminalId} names an absent pad`);
+      else if (!entry.logicalPadNumbers.includes(pad.number)) errors.push(`terminal ${entry.manufacturerTerminalId} names pad ${pad.number} outside its logical pad numbers`);
+    }
+    for (const number of entry.logicalPadNumbers) if (!electricalPadNumbers.has(number)) errors.push(`terminal ${entry.manufacturerTerminalId} names absent electrical pad ${number}`);
+  }
+  errors.push(...crossEntryConflicts(certificate.entries));
+  if (certificate.state === "approved") {
+    const mappedPads = new Set(certificate.entries.flatMap((entry) => entry.logicalPadNumbers));
+    for (const number of electricalPadNumbers) if (!mappedPads.has(number)) errors.push(`electrical pad ${number} is not mapped`);
+    const mappedPinNumbers = new Set(certificate.entries.flatMap((entry) => entry.symbolPinIds.map((pinId) => pinById.get(pinId)?.number)));
+    for (const pin of symbol.pins) if (pin.number && !mappedPinNumbers.has(pin.number)) errors.push(`symbol pin ${pin.number} is not mapped`);
+    if (certificate.entries.some((entry) => entry.classification === "unknown")) errors.push("an entry's classification is unknown");
+    if (certificate.ambiguous.length || certificate.missingTerminalIds.length || certificate.missingSymbolPinIds.length || certificate.missingPadNumbers.length || certificate.extraElectricalPadNumbers.length) {
+      errors.push("it is approved while listing unresolved items");
+    }
+  }
+  return [...new Set(errors)].sort();
 }
 
 export function mappingIsCurrent(certificate: MappingCertificate, symbolVersionId: string, footprintVersionId: string): boolean {

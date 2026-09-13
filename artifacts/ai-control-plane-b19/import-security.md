@@ -190,3 +190,51 @@ are on octopart.com); a `KicadEmitError` answering 500 on the PCB export (fails 
 on that route); the FreeRouting DSN writer's own unquoted stackup tokens (not in the I5c diff or rows). The DSN finding is real
 in its own right — an authenticated caller's stackup names, directions and costs are written unquoted into the file handed to
 the FreeRouting subprocess, and its `q()` does not escape newlines — so it is **added to I5e** as row 52 rather than dropped.
+
+### I5d landed — KiCad parsing and atomic data integrity (CONFIRMED)
+
+Every row was reproduced by a failing test on the unchanged code first: **48 of 67** cases failed; the other 19 are baselines
+(behaviour that must not change) and the two verified controls from the matrix's §3. Five cases were added with the fix: the
+seeded value keys pinned unchanged, the legacy `MF`/`MFD` spellings, own-key value links, the PCB-materialization blob check
+and the model path policy table. Six controls were then proven by reverting each one and watching its test fail (the
+materialization hash, the publication byte hash, the certificate re-verification, the search-key recomputation, the pad
+conflict rule and the own-key link lookup: all six mutants killed).
+
+| row | reproduced before the fix | now |
+|---|---|---|
+| 06 | `normalizeValueKey` lower-cased first: `1M` (megohm) and `1m` (milliohm), `4M7` and `4m7`, `1MF` and `1mF` were one key | the SI prefix is read before case folds; mega is keyed `meg`; `MF`/`MFD` get no key; every seeded key is unchanged (no re-key); links are read by own key with the '' default (`valueKeyLink`, used by the auto-layout and the fixture catalog) |
+| 07 | a claim superseded by a newer source revision still won `effectiveClaim` (ties broke by id), passed approval beside its superseder and satisfied a search criterion | superseded claims (chains and cycles) never win, never satisfy a criterion, and a revision that binds a claim with its superseder is refused (the catalog will not publish it) |
+| 08 | the raw symbol block was found by a separate text scan with its own unescaping: two names differing only by escaping swapped blocks (exported definition ≠ validated pins), one got an empty block and still validated; content after the library root was ignored | blocks are sliced from the lossless parser's own spans, keyed by the parser's unescaped name; trailing content is refused; a missing block is an issue (`empty_symbol_block`) |
+| 22 | supplier-offer freshness skipped evidence with no expiry or a missing record, so one fresh record made the claim fresh; search never used it | fresh only when every piece of evidence resolves to a record with a real future expiry; approval (`sourcing_current`) and search both use it; without provenance a supplier claim is stale |
+| 23 | a criterion that named no limit semantics matched an absolute-maximum rating as an operating value | an unqualified criterion never reads `absolute_maximum` |
+| 27b (missing from the first batch table) | identity resolution folded NFKC: `BAT54ſ` resolved exactly as `BAT54S`; `BAT54С` (Cyrillic) was "incomplete" | the canonical exact MPN (ASCII case folds, nothing else); a spelling outside printable ASCII is `conflict` |
+| 27c | publication trusted `normalizedSearchKey` and accepted an exact MPN with a zero-width space | both recomputed at publication |
+| 37 | `Math.max(...pins)` threw RangeError on 150 000 pins (symbol) and 200 000 (legacy row); a 190 000-pad footprint was valid | folds, not spreads; `too_many_pins` (10 000 per symbol) and `too_many_pads` (10 000) refusals before per-pin work |
+| 38 | a certificate approved one pad claimed by two terminals, an entry silently reclassifying an electrical terminal as no-connect, and an unmapped terminal of unknown classification; publication trusted `state` | cross-entry pad and pin claims conflict unless internally common (or all exposed-thermal); reclassification only where the terminal is unknown; unknown terminals block; publication re-verifies the certificate (hash, pins, pads, conflicts, coverage) |
+| 44 | a 2 000-pin parent with 200 `extends` children expanded to 402 000 hashed pins | `expanded_pin_budget` (200 000 per library) before hashing; the source is hashed once |
+| 45 | a 12 000-link chain overflowed the stack; a cycle and a missing parent resolved silently to empty symbols; a duplicate name kept the last definition | iterative resolution, `extends_depth` (16) refusal; `extends_cycle`, `extends_missing_parent` and `duplicate_symbol_name` make the asset unsupported |
+| 46 | `parseSExp` recursed without a bound (200 000 levels overflowed) and returned the first node; `importKicadDru` wrapped the file in a synthetic root, so a stray `)` dropped every later rule with `ok: true` and no loss | one iterative reader with a depth bound (160) that reads exactly one document; `.kicad_dru` is read as a sequence of forms (depth 40), so a stray `)` is quarantined |
+| 47 | publication compared a blob's declared hash with the asset, never the bytes; PCB materialization parsed the stored footprint without a hash or bound | publication hashes the bytes and checks the size; materialization hashes and bounds them before parsing |
+| 48 | a footprint with `embedded_files`, a versionless `footprint` root, `(version 20261399)`, a `${EVIL}/../../../../Windows/win.ini` model and a symbol library with `embedded_files` or `embedded_fonts yes` were all valid | each is unsupported; a format version is a real calendar date; a model reference is one KiCad model variable, forward-slash segments without `.`/`..`, a model file type (`model_path_rejected`, reference `blocked`) |
+| 49 | `resolvePermittedPath` read `${constructor}` from the prototype, resolved a relative path against the working directory and refused a legitimate `..foo` directory | own variables only; `relative_path` refusal; an escape is the `..` segment |
+| 50 | an empty unit was dimensionless; `10 MFD` as mF and `10K` as kelvin were accepted; there was no percentage tolerance | a unit is required (`1` for dimensionless); unit/source-text ambiguity is refused; `tolerancePercent` |
+
+**Corpus check (the local upstream KiCad library, 22 756 symbols and 15 433 footprints, compared before and after):** the
+ingest extractor's output is identical (22 756 symbols, 805 614 pins, 19 916 datasheets). Exactly **12 231 symbols** changed,
+all from `valid` to `unsupported` with `extends_missing_parent` — and every one of them was "valid" with **zero pins**: KiCad
+9/10 symbol directories put a derived symbol in its own file, so a single file ingested alone has no parent. The honest
+answer for such a file is "not valid", and a derived symbol must be ingested with its parent. **One footprint** changed
+(Degson DG246-3.81-03P) because its model path doubles a separator; a doubled separator is harmless, so the policy was
+corrected to accept it and the footprint is valid again (pinned).
+
+Decisions recorded with the batch:
+- Mapping validator version stays `sirkit.atomic-mapping/1`: the rules only refuse certificates the old rules approved in
+  error, and publication re-verifies every certificate, so bumping the version (and every certificate id) would change stored
+  and fixture identities without adding protection.
+- No duplicate-pad diagnostic: repeated physical pads sharing a logical number are intended (matrix §5, pinned by the mapping
+  tests); the pad cap is the resource control.
+- Units are not NFKC-folded: the Ohm sign and the degree-Celsius sign stay refused, so a unit is exactly one of the listed
+  spellings.
+- A supplier claim whose evidence carries no expiry is stale, and a view or context without source records cannot call a
+  supplier claim fresh.
+

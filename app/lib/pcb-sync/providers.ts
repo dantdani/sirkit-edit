@@ -1,4 +1,6 @@
 import { parseKicadMod } from "../pcb/kicad-mod";
+import { assertBoundedSExpression } from "../atomic/security";
+import { sha256 } from "../atomic/stable";
 import { loadPublishedPortableSnapshot } from "../atomic/server-catalog";
 import type { MappingCertificate, PortableAtomicSnapshot } from "../atomic/types";
 import type { PcbSyncAuthoritativeSnapshot, PcbSyncFootprintMaterialization, PcbSyncResourceProvider, PcbSyncSchematicComponent, PcbSyncSnapshotProvider, VerifiedPinPadMappingArtifact } from "./types";
@@ -59,6 +61,13 @@ export class AtomicPcbSyncResourceProvider implements PcbSyncResourceProvider {
     if (snapshot.footprint.versionId !== resolved.footprintAsset.assetVersionId || snapshot.footprint.contentHash !== resolved.footprintAsset.contentDigest || snapshot.mapping.id !== resolved.pinPadMapping.mappingCertificateId) return null;
     const raw = snapshot.assetBlobs.find((item) => item.id === snapshot.footprint?.rawContentObjectId);
     if (!raw || raw.encoding !== "utf8" || raw.contentHash !== resolved.footprintAsset.contentDigest) return null;
+    // [B19-D I5d row 47] the geometry comes from these bytes: hash them, and bound them before the recursive parser sees them
+    if (sha256(raw.content) !== raw.contentHash) return null;
+    try {
+      assertBoundedSExpression(raw.content);
+    } catch {
+      return null;
+    }
     const mapping = mappingArtifact(snapshot, snapshot.mapping, component, raw.contentHash);
     if (!mapping) return null;
     const footprintDef = parseKicadMod(raw.content, snapshot.footprint.origin.libraryNickname ?? "Atomic");

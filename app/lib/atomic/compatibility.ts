@@ -70,7 +70,7 @@ export function legacyPartToAtomicDraft(part: LegacyPartRow, now = new Date(0)):
     formatVersion: "legacy-unverified",
     symbolName: part.name,
     aliases: [],
-    unitCount: Math.max(1, ...pins.map((pin) => pin.unit)),
+    unitCount: pins.reduce((most, pin) => Math.max(most, pin.unit), 1), // [B19-D I5d row 37] no argument spread
     bodyStyles: [...new Set(pins.map((pin) => pin.bodyStyle))].sort(),
     pins,
     properties: part.properties ?? {},

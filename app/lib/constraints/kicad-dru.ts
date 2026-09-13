@@ -1,4 +1,4 @@
-import { findChild, getNumber, getString, head, isList, parseSExp, type SExpr } from "@/app/lib/kicad/sexp";
+import { findChild, getNumber, getString, head, isList, parseSExpForms, type SExpr } from "@/app/lib/kicad/sexp";
 import type {
   ConstraintDefinition,
   ConstraintDocument,
@@ -129,7 +129,9 @@ export function importKicadDru(input: {
   if (new TextEncoder().encode(input.text).byteLength > 500_000) return { ok: false, quarantined: true, losses: [], diagnostics: ["KiCad rule file exceeds 500000 bytes."] };
   let root: SExpr;
   try {
-    root = parseSExp(`(sirkit_dru_root ${stripComments(input.text)})`);
+    // [B19-D I5d row 46] the file is a sequence of forms. Wrapping it in a synthetic root let a stray ')' close that root
+    // early and silently drop every rule after it; a bounded depth refuses hostile nesting before the tree is walked.
+    root = ["sirkit_dru_root", ...parseSExpForms(stripComments(input.text), { maxDepth: 40 })];
   } catch (error) {
     return { ok: false, quarantined: true, losses: [], diagnostics: [error instanceof Error ? error.message : "Invalid KiCad S-expression."] };
   }
