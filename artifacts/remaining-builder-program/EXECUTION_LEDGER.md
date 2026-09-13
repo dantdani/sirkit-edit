@@ -1286,3 +1286,15 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-approval-evidence-authority 17/17 (new, in the CI list with governance-security); atomic, component-selection,
   fixture-runtime 123/123; workflow, mapping-verification, physical-binding, assignment-queue, kicad, circuit-knowledge 151
   passed / 6 skipped; broad run: 292 files, 3716 passed, 10 expected skips; tsc 0; eslint clean on the changed files.
+
+### B19 I4b CI fix — a governance case that had never run on Linux (2026-09-13 local, solo; this commit)
+
+- I4b added `app/lib/atomic/__tests__/governance-security.test.ts` to CI; it had only ever run on the Windows development
+  machine. On Linux one case failed: "rejects path traversal and unsupported 3D formats" used Windows paths
+  (`C:\safe\models`, backslash-separated references). A backslash is not a separator on POSIX, so the file-type reference
+  resolved outside the root first and threw the path error instead; and the traversal assertion passed on Linux only for
+  that same reason. The code under test (`resolvePermittedPath`) was right on both platforms — fail-closed.
+- Not called a flake: reproduced from the CI log, reasoned under both path semantics (simulated with `path.posix` and
+  `path.win32`), and fixed in the test: the assertions use the platform's own separator and an absolute native root, add a
+  permitted-path case, and add the other platform's separator as a traversal that must also be refused.
+- Tests: governance-security 25/25 locally; CI confirms on Linux.

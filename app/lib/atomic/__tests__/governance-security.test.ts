@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createAtomicRevision } from "../catalog";
 import { SourceAdapterError, advanceIngestion, collectAdapterPages, extractedClaim, makeEvidence, makeSourceRecord, quarantineText } from "../ingestion";
@@ -206,9 +207,18 @@ describe("Stage 5 untrusted input security", () => {
   });
 
   it("rejects path traversal and unsupported 3D formats", () => {
-    const policy = { roots: ["C:\\safe\\models"], variables: { KICAD9_3DMODEL_DIR: "C:\\safe\\models" }, extensions: [".step", ".wrl"] };
-    expect(() => resolvePermittedPath("${KICAD9_3DMODEL_DIR}\\..\\secret.step", policy)).toThrow(/outside/);
-    expect(() => resolvePermittedPath("${KICAD9_3DMODEL_DIR}\\payload.exe", policy)).toThrow(/Unsupported file type/);
+    // [B19 I4b CI] this suite first ran in CI (Linux) in B19. Its Windows-only paths ("C:\\safe\\models") made the file-type
+    // case fail there — a backslash is not a separator on POSIX, so the reference resolved outside the root first — and the
+    // traversal case passed there only for that reason. The same assertions now use the platform's own paths, plus the
+    // OTHER platform's separator, which must never escape either.
+    const root = path.resolve("safe", "models");
+    const policy = { roots: [root], variables: { KICAD9_3DMODEL_DIR: root }, extensions: [".step", ".wrl"] };
+    const foreign = path.sep === "/" ? "\\" : "/";
+    const dir = "${KICAD9_3DMODEL_DIR}";
+    expect(() => resolvePermittedPath(`${dir}${path.sep}..${path.sep}secret.step`, policy)).toThrow(/outside/);
+    expect(() => resolvePermittedPath(`${dir}${path.sep}payload.exe`, policy)).toThrow(/Unsupported file type/);
+    expect(resolvePermittedPath(`${dir}${path.sep}part.step`, policy)).toBe(path.join(root, "part.step"));
+    expect(() => resolvePermittedPath(`${dir}${foreign}..${foreign}..${foreign}secret.step`, policy)).toThrow(/outside/);
   });
 
   it("blocks private-network/HTTP URLs and non-allowlisted hosts", () => {
