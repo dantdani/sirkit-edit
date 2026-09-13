@@ -197,6 +197,7 @@ export async function getPricingFor(
     : await getCachedOffersForParts(items.map((i) => i.partId));
 
   const bulkRefresh = opts.purpose === "bulk-refresh";
+  const liveOffersByKey = new Map<string, PartPricing[]>();
   const refusedForTerms: string[] = [];
 
   for (const { id, name, client } of sources) {
@@ -247,6 +248,7 @@ export async function getPricingFor(
       if (agg) {
         agg.offers.push(offer);
         agg.sourcesFromLive += 1;
+        liveOffersByKey.set(it.key, [...(liveOffersByKey.get(it.key) ?? []), offer]);
       }
       try {
         await putCachedOffer(it.partId, name, offer);
@@ -261,7 +263,7 @@ export async function getPricingFor(
   }
 
   // Finalize: compute bestOverall + consolidated lifecycle; drop empty parts.
-  const lifecycleWrites: Array<{ partId: string; status: LifecycleStatus }> = [];
+  const lifecycleWrites: Array<{ partId: string; status: LifecycleStatus; answeredAt: number }> = [];
   for (const [key, agg] of result) {
     if (agg.offers.length === 0) {
       result.delete(key);
@@ -270,9 +272,13 @@ export async function getPricingFor(
     agg.bestOverall = pickBestOverall(agg.offers);
     agg.lifecycleStatus = consolidateLifecycle(agg.offers.map((o) => o.lifecycleStatus));
     // Only persist a real verdict — never overwrite stored data with "unknown".
-    // [B19-D I5b row 03] and only from a LIVE answer: re-stamping from cached offers extended a derived fact indefinitely
-    if (agg.lifecycleStatus !== "unknown" && agg.sourcesFromLive > 0) {
-      lifecycleWrites.push({ partId: agg.partId, status: agg.lifecycleStatus });
+    // [B19-D I5b row 03 + review] and only from LIVE answers, consolidated from those answers alone (a cached offer's verdict is
+    // never re-stamped because another source answered), stamped with when the vendor answered (a memo answer is not "now")
+    const liveOffers = liveOffersByKey.get(key) ?? [];
+    const liveVerdict = consolidateLifecycle(liveOffers.map((o) => o.lifecycleStatus));
+    if (liveVerdict !== "unknown") {
+      const answeredAt = Math.min(...liveOffers.map((o) => o.evidence?.retrievedAt ?? o.fetchedAt));
+      lifecycleWrites.push({ partId: agg.partId, status: liveVerdict, answeredAt });
     }
   }
 
@@ -283,16 +289,15 @@ export async function getPricingFor(
 
 /** Write consolidated lifecycle (and a refresh stamp) back to the parts table. */
 async function persistLifecycle(
-  writes: Array<{ partId: string; status: LifecycleStatus }>,
+  writes: Array<{ partId: string; status: LifecycleStatus; answeredAt: number }>,
 ): Promise<void> {
   if (writes.length === 0) return;
   const db = getDb();
-  const now = new Date();
   await Promise.all(
-    writes.map(({ partId, status }) =>
+    writes.map(({ partId, status, answeredAt }) =>
       db
         .update(parts)
-        .set({ lifecycleStatus: status, lastRefreshedAt: now })
+        .set({ lifecycleStatus: status, lastRefreshedAt: new Date(answeredAt) })
         .where(eq(parts.id, partId))
         .catch((err: unknown) => {
           console.error(`[distributors] failed to persist lifecycle for ${partId} (details withheld): ${err instanceof Error ? err.name : "non-error"}`);

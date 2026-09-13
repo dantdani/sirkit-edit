@@ -15,6 +15,7 @@ import { getDb } from "../db/client";
 import { partOffers, parts, type PartOffer } from "../db/schema";
 import { cheapestUnitPrice, type DistributorName, type PartPricing, type PriceBreak } from "./types";
 import { SOURCE_IDS, SOURCE_REGISTRY, sourceForDistributorName } from "../acquisition/source-registry";
+import { canonicalExactMpn } from "../atomic/identity";
 
 export const STOCK_TTL_MS = 60 * 60 * 1000; // 1 hour
 export const PRICING_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -34,16 +35,47 @@ type Entry = { value: PartPricing; expiresAt: number };
 
 const store = new Map<string, Entry>();
 
-function keyOf(distributor: DistributorName, mpn: string): string {
-  return `${distributor}:${mpn.toLowerCase()}`;
+/**
+ * [B19-D I5b review] A memo key is the canonical exact MPN; a confusable spelling has no key and is never memoized, so it can
+ * never be answered from the plain MPN's entry (Unicode case-folding turned a Kelvin sign K into k).
+ */
+function keyOf(distributor: DistributorName | string, mpn: string): string | null {
+  try {
+    return `${distributor}:${canonicalExactMpn(mpn)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** [B19-D I5b review] "The vendor has no exact product for this MPN", remembered for the source's freshness. */
+const noExactMatch = new Map<string, number>();
+
+export function rememberNoExactMatch(distributor: DistributorName, mpn: string): void {
+  const key = keyOf(distributor, mpn);
+  const ttl = ttlFor(distributor);
+  if (key && ttl > 0) noExactMatch.set(key, Date.now() + ttl);
+}
+
+export function isKnownNoExactMatch(distributor: DistributorName, mpn: string): boolean {
+  const key = keyOf(distributor, mpn);
+  if (!key) return false;
+  const until = noExactMatch.get(key);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    noExactMatch.delete(key);
+    return false;
+  }
+  return true;
 }
 
 /** Fresh cached value for this distributor+mpn, or null on miss/expiry. */
 export function getCached(distributor: DistributorName, mpn: string): PartPricing | null {
-  const hit = store.get(keyOf(distributor, mpn));
+  const key = keyOf(distributor, mpn);
+  if (!key) return null;
+  const hit = store.get(key);
   if (!hit) return null;
   if (Date.now() >= hit.expiresAt) {
-    store.delete(keyOf(distributor, mpn));
+    store.delete(key);
     return null;
   }
   return hit.value;
@@ -51,7 +83,9 @@ export function getCached(distributor: DistributorName, mpn: string): PartPricin
 
 export function setCached(distributor: DistributorName, mpn: string, value: PartPricing): void {
   if (ttlFor(distributor) <= 0) return; // [B19-A I3] a source whose terms prohibit storage is never memoized
-  store.set(keyOf(distributor, mpn), {
+  const key = keyOf(distributor, mpn);
+  if (!key) return;
+  store.set(key, {
     value,
     expiresAt: Date.now() + ttlFor(distributor),
   });
@@ -59,7 +93,10 @@ export function setCached(distributor: DistributorName, mpn: string, value: Part
 
 /** Drop a single in-memory entry — used by forceRefresh to compel a live fetch. */
 export function evictCached(distributor: DistributorName, mpn: string): void {
-  store.delete(keyOf(distributor, mpn));
+  const key = keyOf(distributor, mpn);
+  if (!key) return;
+  store.delete(key);
+  noExactMatch.delete(key); // a forced refresh asks the vendor again
 }
 
 /**
@@ -80,6 +117,7 @@ export function makeCachedLookup(
     async lookup(mpn: string): Promise<PartPricing | null> {
       const cached = getCached(distributor, mpn);
       if (cached) return cached;
+      if (isKnownNoExactMatch(distributor, mpn)) return null; // [B19-D I5b review] remembered: no exact product
       const fresh = await fetcher(mpn);
       if (fresh) setCached(distributor, mpn, fresh);
       return fresh;
@@ -92,6 +130,7 @@ export function makeCachedLookup(
 
 /** Test/maintenance hook — clears the whole cache. */
 export function clearPricingCache(): void {
+  noExactMatch.clear();
   store.clear();
 }
 

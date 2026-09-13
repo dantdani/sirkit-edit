@@ -40,6 +40,7 @@ import type { CachedPart } from "@/app/lib/parts-cache";
 
 import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 /** Compact pin descriptor handed to the AI — no positions (keeps tokens small). */
 export type AiPartPin = {
   number: string;
@@ -102,7 +103,7 @@ export async function getPartsByIds(ids: string[]): Promise<AiPartResult[]> {
       description: parts.description,
       mainCategory: libraries.mainCategory,
       pins: parts.pins,
-      lifecycleStatus: parts.lifecycleStatus,
+      lifecycleStatus: partLifecycleStatus,
     })
     .from(parts)
     .innerJoin(libraries, eq(parts.libraryId, libraries.id))
@@ -317,7 +318,7 @@ export async function searchPartsForAI(
     description: parts.description,
     mainCategory: libraries.mainCategory,
     pins: parts.pins,
-    lifecycleStatus: parts.lifecycleStatus,
+    lifecycleStatus: partLifecycleStatus,
     similarity,
   };
 
@@ -577,7 +578,7 @@ export async function fetchAlternatesForAI(
       name: parts.name,
       mpn: parts.mpn,
       manufacturer: parts.manufacturer,
-      lifecycleStatus: parts.lifecycleStatus,
+      lifecycleStatus: partLifecycleStatus,
       score: alternates.score,
       kind: alternates.kind,
       matchReasons: alternates.matchReasons,

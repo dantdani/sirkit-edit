@@ -13,7 +13,7 @@ import { blockedHostnameReason } from "./ip-policy";
 
 export type ExternalLinkKind = "page" | "document";
 
-const UNSAFE_CHARACTERS = /[\u0000-\u0020\u007f-\u009f\u00a0\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/;
+const UNSAFE_CHARACTERS = /[\s\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
 
 export function safeExternalHref(raw: unknown, kind: ExternalLinkKind, allowedHosts?: readonly string[]): string | null {
   if (typeof raw !== "string") return null;
@@ -29,7 +29,11 @@ export function safeExternalHref(raw: unknown, kind: ExternalLinkKind, allowedHo
   if (url.protocol !== "https:" && !(kind === "document" && url.protocol === "http:")) return null;
   if (url.username || url.password || !url.hostname) return null;
   if (blockedHostnameReason(url.hostname) !== null) return null;
-  if (allowedHosts && !allowedHosts.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) return null;
+  if (allowedHosts) {
+    const hostname = url.hostname.replace(/\.$/, "");
+    const allowed = allowedHosts.map((host) => host.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean);
+    if (!allowed.some((host) => hostname === host || hostname.endsWith(`.${host}`))) return null;
+  }
   return url.toString();
 }
 
@@ -39,7 +43,10 @@ export function safeExternalHref(raw: unknown, kind: ExternalLinkKind, allowedHo
  */
 export function inertExternalText(raw: unknown, maxLength = 500): string | null {
   if (typeof raw !== "string") return null;
-    const text = raw.normalize("NFC").replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g, " ").replace(/\s+/g, " ").trim();
+    // [B19-D I5b review] every control, format (bidi, zero-width, word joiner, invisible operators, tags, soft hyphen), line/paragraph
+  // separator and lone surrogate becomes a space; truncation counts code points, so a character is never split
+  const text = raw.normalize("NFC").replace(/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu, " ").replace(/\s+/g, " ").trim();
   if (text === "") return null;
-  return text.length > maxLength ? text.slice(0, maxLength) : text;
+  const codePoints = Array.from(text);
+  return codePoints.length > maxLength ? codePoints.slice(0, maxLength).join("").trimEnd() : text;
 }

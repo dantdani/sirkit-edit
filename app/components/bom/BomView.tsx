@@ -14,6 +14,7 @@
  * without a parent change; the later integration pass can switch to `{ state }`.
  */
 
+import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
@@ -217,15 +218,13 @@ const RISK_GRADE: Record<RiskGrade, { label: string; chip: string; text: string 
 };
 
 function bestUnit(row: BomRow): number | null {
-  return row.pricing?.bestOverall?.bestUnitPrice ?? null;
+  return lineUnitPrice(row); // [B19-D I5b review] the price the line's quantity reaches — the one the project cost adds up
 }
 function stockOf(row: BomRow): number | null {
   return row.pricing?.bestOverall?.inStock ?? null;
 }
 function currencyOf(row: BomRow): string | null {
-  const best = row.pricing?.bestOverall;
-  if (!best || best.bestUnitPrice === null) return null;
-  return best.priceBreaks.find((b) => b.price === best.bestUnitPrice)?.currency ?? "USD";
+  return lineCurrency(row);
 }
 function productUrlOf(row: BomRow): string | null {
   return row.pricing?.bestOverall?.productUrl ?? null;

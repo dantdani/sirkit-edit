@@ -16,7 +16,7 @@
 
 import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
 import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
-import { diffSnapshots, rowToSnapshotRow, type BomSnapshot, type BomSnapshotMeta } from "@/app/lib/snapshots";
+import { diffSnapshots, rowToSnapshotRow, SNAPSHOT_PRICE_BASIS, type BomSnapshot, type BomSnapshotMeta } from "@/app/lib/snapshots";
 import { resolveBomRepository, type BomSnapshotFull } from "@/app/lib/bom/snapshot-repository";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { BOM_FORBIDDEN_BODY_KEYS, bomNotFound, bomOwnershipScope } from "../_scope";
@@ -61,6 +61,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
       const rows = result.rows.filter((r) => r.partId).map(rowToSnapshotRow);
       const costValue = result.estimatedProjectCost.value;
       const meta: BomSnapshotMeta = {
+        priceBasis: SNAPSHOT_PRICE_BASIS, // [B19-D I5b review]
         totalRows: rows.length,
         totalCostCents: costValue === null ? null : Math.round(costValue * 100),
         currency: result.estimatedProjectCost.currency,

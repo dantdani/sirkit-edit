@@ -15,6 +15,7 @@ import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -107,7 +108,7 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
         symbolRaw: parts.symbolRaw,
         properties: parts.properties,
         internalPartNumber: parts.internalPartNumber,
-        lifecycleStatus: parts.lifecycleStatus,
+        lifecycleStatus: partLifecycleStatus,
         rohsStatus: parts.rohsStatus,
         packageNormalized: parts.packageNormalized,
         keySpecs: parts.keySpecs,

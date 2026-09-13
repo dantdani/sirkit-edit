@@ -16,6 +16,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { getDb } from "./db/client";
 import { parts, type KeySpecs, type PartOffer } from "./db/schema";
 import type { PartRow } from "./parts-normalization";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "./distributors/types"; // [B19-D I5b review]
 
 export type AlternateKind = "exact" | "drop_in" | "fff" | "substitute";
 
@@ -245,15 +246,15 @@ const REPUTABLE_MANUFACTURERS = [
   "samsung electro-mechanics", "kemet",
 ];
 
-/** Cheapest unit price across a set of offers, with its currency. */
+/**
+ * Cheapest unit price across a set of offers, with its currency.
+ * [B19-D I5b review] per offer, the price at quantity 1 in the pricing currency — never a volume break or another currency.
+ */
 export function bestOfferPrice(offers: PartOfferRow[]): { value: number; currency: string } | null {
   let best: { value: number; currency: string } | null = null;
   for (const o of offers) {
-    for (const b of o.priceBreaks ?? []) {
-      if (b.price > 0 && (best === null || b.price < best.value)) {
-        best = { value: b.price, currency: b.currency };
-      }
-    }
+    const unit = cheapestUnitPrice(o.priceBreaks ?? []);
+    if (unit !== null && (best === null || unit < best.value)) best = { value: unit, currency: PRICING_CURRENCY };
   }
   return best;
 }

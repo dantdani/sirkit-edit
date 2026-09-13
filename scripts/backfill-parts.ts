@@ -115,6 +115,7 @@ async function main(): Promise<void> {
           normalizedMpn: normalized,
           internalPartNumber: ipn,
           lifecycleStatus: lifecycle,
+          lastRefreshedAt: null, // [B19-D I5b review] a KiCad-derived status carries no vendor stamp
           rohsStatus: rohs,
           packageNormalized: pkg,
           keySpecs: specs,

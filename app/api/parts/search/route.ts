@@ -19,6 +19,7 @@ import { parts, libraries } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 
 export const runtime = "nodejs";
 
@@ -174,7 +175,7 @@ function browse(
       pins: parts.pins,
       score: sql<number>`0`,
       internalPartNumber: parts.internalPartNumber,
-      lifecycleStatus: parts.lifecycleStatus,
+      lifecycleStatus: partLifecycleStatus,
       rohsStatus: parts.rohsStatus,
       packageNormalized: parts.packageNormalized,
     })
@@ -217,7 +218,7 @@ function lexical(
       pins: parts.pins,
       score,
       internalPartNumber: parts.internalPartNumber,
-      lifecycleStatus: parts.lifecycleStatus,
+      lifecycleStatus: partLifecycleStatus,
       rohsStatus: parts.rohsStatus,
       packageNormalized: parts.packageNormalized,
     })
@@ -266,7 +267,7 @@ async function semantic(
       pins: parts.pins,
       score: sql<number>`1 - (${distance})`,
       internalPartNumber: parts.internalPartNumber,
-      lifecycleStatus: parts.lifecycleStatus,
+      lifecycleStatus: partLifecycleStatus,
       rohsStatus: parts.rohsStatus,
       packageNormalized: parts.packageNormalized,
     })

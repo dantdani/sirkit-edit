@@ -81,7 +81,7 @@ export function asString(value: unknown): string | null {
 export function asNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
-    const match = /^\s*[$\u00a3\u20ac\u00a5]?\s*(-?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?\s*$/.exec(value);
+    const match = /^\s*[$\u00a3\u20ac\u00a5]?\s*(-?)([1-9]\d{0,2}(?:,\d{3})+|\d+)(\.\d+)?\s*$/.exec(value);
     if (!match) return null;
     const n = Number(`${match[1]}${match[2]!.replace(/,/g, "")}${match[3] ?? ""}`);
     return Number.isFinite(n) ? n : null;

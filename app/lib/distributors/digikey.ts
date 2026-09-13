@@ -20,12 +20,12 @@ import {
   type PriceBreak,
 } from "./types";
 import { mapLifecycleString } from "./lifecycle";
-import { makeCachedLookup } from "./cache";
+import { makeCachedLookup, rememberNoExactMatch } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 import { makeCoalescer } from "../acquisition/admission-control";
-import { sameExactMpn } from "../atomic/identity";
+import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
 const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
@@ -107,6 +107,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     try {
       const answer = await enqueue(() => searchKeyword(mpn));
       const pricing = mapProduct(mpn, answer.value);
+      if (!pricing) rememberNoExactMatch("digikey", mpn); // [B19-D I5b review] a successful answer with no exact product
       // [B19-C I4] pin the result to the exact bytes DigiKey sent
       return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
     } catch (err) {
@@ -120,7 +121,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
   const cached = makeCachedLookup("digikey", lookupByMpn);
   // [B19-B I3b] a second identical lookup already in flight joins the first instead of paying for its own search
   const coalesce = makeCoalescer<PartPricing | null>();
-  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(mpn.trim().toLowerCase(), () => cached.lookup(mpn));
+  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(inFlightKey(mpn), () => cached.lookup(mpn));
 
   async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
@@ -134,6 +135,15 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
   }
 
   return { name: "digikey", lookupByMpn: lookup, lookupBatch };
+}
+
+/** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */
+function inFlightKey(mpn: string): string {
+  try {
+    return canonicalExactMpn(mpn);
+  } catch {
+    return `\u0000raw:${mpn}`;
+  }
 }
 
 // ─── Response mapping ──────────────────────────────────────────────────────────

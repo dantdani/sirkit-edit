@@ -22,11 +22,11 @@ import {
   type PriceBreak,
 } from "./types";
 import { mapLifecycleString } from "./lifecycle";
-import { getCached, setCached } from "./cache";
+import { getCached, isKnownNoExactMatch, rememberNoExactMatch, setCached } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
 import { makeCoalescer } from "../acquisition/admission-control";
-import { sameExactMpn } from "../atomic/identity";
+import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
 const GRAPHQL_URL = "https://api.nexar.com/graphql";
 
@@ -107,6 +107,8 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
         if (pricing) {
           setCached("octopart-aggregated", a.mpn, pricing);
           found.set(a.mpn, pricing);
+        } else {
+          rememberNoExactMatch("octopart-aggregated", a.mpn); // [B19-D I5b review] answered, but not with this exact part
         }
       }
     } catch (err) {
@@ -126,7 +128,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     for (const mpn of unique) {
       const hit = getCached("octopart-aggregated", mpn);
       if (hit) out.set(mpn, hit);
-      else misses.push(mpn);
+      else if (!isKnownNoExactMatch("octopart-aggregated", mpn)) misses.push(mpn);
     }
     if (misses.length === 0) return out;
 
@@ -135,7 +137,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     const fresh: string[] = [];
     let freshQuery: Promise<Map<string, PartPricing>> | null = null;
     for (const mpn of misses) {
-      const key = mpn.trim().toLowerCase();
+      const key = inFlightKey(mpn);
       pending.set(mpn, coalesce(key, () => {
         fresh.push(mpn);
         freshQuery ??= Promise.resolve().then(() => queryMisses(fresh));
@@ -150,6 +152,15 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
   }
 
   return { name: "octopart-aggregated", lookupByMpn, lookupBatch };
+}
+
+/** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */
+function inFlightKey(mpn: string): string {
+  try {
+    return canonicalExactMpn(mpn);
+  } catch {
+    return `\u0000raw:${mpn}`;
+  }
 }
 
 // ─── Response mapping ──────────────────────────────────────────────────────────

@@ -136,6 +136,10 @@ jobs:
           app/lib/distributors/__tests__/b19-d-vendor-values.test.ts
           app/lib/distributors/__tests__/b19-d-lifecycle-retention.test.ts
           app/lib/bom/__tests__/b19-d-pricing-mpn-binding.test.ts
+          app/lib/distributors/__tests__/b19-d-review-connectors.test.ts
+          app/lib/distributors/__tests__/b19-d-review-values.test.ts
+          app/lib/distributors/__tests__/b19-d-review-lifecycle.test.ts
+          app/lib/bom/__tests__/b19-d-review-price-consistency.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

@@ -265,6 +265,13 @@ const CONFLICT_PROPERTIES = [...new Set(["mpn", "manufacturer", "lifecycle", ...
 
 function conflictKey(property: string, value: CandidateFact["value"]): string {
   const text = typeof value === "string" ? value : canonicalJson(value);
+  if (property === "mpn") {
+    try {
+      return canonicalExactMpn(text); // [B19-D I5b review] case alone is never an MPN conflict
+    } catch {
+      return text.trim();
+    }
+  }
   return property === "manufacturer" ? text.normalize("NFKC").trim().toUpperCase().replace(/\s+/g, " ") : text.trim();
 }
 

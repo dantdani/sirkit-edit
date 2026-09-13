@@ -28,7 +28,10 @@ import {
   type DesignRiskSummary,
 } from "@/app/lib/risk-scoring";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
-import { cheapestUnitPrice, PRICING_CURRENCY } from "@/app/lib/distributors/types"; // [B19-D I5b row 20]
+import { PRICING_CURRENCY } from "@/app/lib/distributors/types"; // [B19-D I5b row 20]
+import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
+
+export { lineUnitPrice };
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
@@ -244,9 +247,8 @@ export async function buildBom(
   let costValue: number | null = null;
   let costCurrency: string | null = null;
   for (const row of rows) {
-    // [B19-D I5b row 20] the unit price that applies at the line's quantity, in the pricing currency
-    const best = row.pricing?.bestOverall ?? null;
-    const unit = best ? cheapestUnitPrice(best.priceBreaks, { quantity: row.qty }) ?? best.bestUnitPrice : null;
+    // [B19-D I5b row 20 + review] the unit price that applies at the line's quantity — the same one the table and CSV show
+    const unit = lineUnitPrice(row);
     if (unit === null) continue;
     costValue = (costValue ?? 0) + unit * row.qty;
     costCurrency = costCurrency ?? currencyOfBest(row.pricing);
@@ -373,8 +375,8 @@ export function bomToCsv(result: BomResult): string {
 
   const rows = result.rows.map((row) => {
     const best = row.pricing?.bestOverall ?? null;
-    const unit = best?.bestUnitPrice ?? null;
-    const currency = currencyOfBest(row.pricing);
+    const unit = lineUnitPrice(row); // [B19-D I5b review] the price the line's quantity reaches, as the estimate uses
+    const currency = unit === null ? null : currencyOfBest(row.pricing);
     const ext = unit === null ? null : Number((unit * row.qty).toFixed(4));
     return [
       row.refDes,

@@ -87,4 +87,35 @@ baselines that pass before and after (the behaviour that must not change).
 Recorded, not changed: pricing currency is USD (every registered source's default); an offer priced only in another
 currency has no unit price rather than a converted one. Two exact MPNs under one catalog part share one
 `(part_id, distributor)` cache row and may displace each other's cached offer — never mislabel it. An independent
-adversarial review of this diff runs before the next commit; its verified findings are fixed there.
+adversarial review of this diff followed (below).
+
+### I5b adversarial review — every verified finding fixed (CONFIRMED)
+
+A review workflow read the exact I5b diff through four lenses (functional correctness, security bypasses, data and migration
+safety, test adequacy), and a skeptic per lens tried to refute each finding by reading the code. 39 findings: **22 verified
+real** (1 medium, 21 low; several reported by more than one lens), 17 refuted with file:line reasons (e.g. the one-cache-row-
+per-part collision needs `componentSelections` on a route, and no route passes them today).
+
+Every verified finding got a failing test first — **42 of 67** new cases failed on the I5b code; 22 are baselines; three are
+pins that already passed (the adapter deadline against a hanging page and a hanging retry wait, and the packet total at the
+ordered quantity), kept because the reviewer showed the earlier test would pass with either mechanism removed.
+
+| finding | fix |
+|---|---|
+| medium: "no exact match" answers were never remembered, so every live BOM re-queried the vendor for generic MPNs | a successful answer with no exact product is remembered per source and canonical MPN for the source's freshness (not for no-storage sources; a failed request is not remembered; a forced refresh clears it) |
+| memo and in-flight keys folded Unicode case (a Kelvin-sign request read the plain MPN's memo) | memo and in-flight keys are the canonical exact MPN; a confusable spelling is never memoized |
+| a three-digit decimal comma ("0,340") read as a thousands group | a thousands group never starts with 0 |
+| negated phrases beyond "(in|not|non) active" mapped to active ("No Longer Active", "Not In Production", "Non-Preferred") | every negated active / in production / preferred phrase maps to unknown |
+| inert text left ALM, word joiner, invisible operators, tag characters and soft hyphens, and could split a surrogate pair | Unicode property classes (Cc, Cf, Cs, Zl, Zp) and code-point truncation; the same classes for links |
+| a mixed-case host allowlist refused every link; http-page refusal untested | allowlist entries are normalised; both pinned |
+| the archive budget skipped a missing or inherited count | the three named counts are checked explicitly |
+| a case-only MPN difference raised an MPN conflict | MPN conflicts compare canonical MPNs |
+| a cached offer's lifecycle was re-stamped when another source answered live; a memo answer was stamped "now" | the persisted verdict is consolidated from live answers only and stamped with when the vendor answered |
+| the project estimate used the price at the line's quantity while the table, BOM CSV and view showed the quantity-1 price | one browser-safe `lineUnitPrice` rule for the estimate, the BOM CSV and the BOM view |
+| snapshots labelled a USD price with a same-numbered break's currency; the notify job and alternates still used the lowest break in any currency; pre-B19 snapshots were compared with current ones | snapshots record `priceBasis: usd-at-quantity-1` and are labelled USD; price and best-supplier changes are compared only between snapshots of the same basis; the notify job and alternates price at quantity 1 in USD |
+| the alternates route and both operator scripts read offers stored for another exact MPN or before 0029 | one `offersForExactMpn` rule (fresh + stored for that exact MPN) in all three |
+| vendor lifecycle expired only when the BOM purge ran; public readers of `parts.lifecycle_status` never enforced it; the notify job then read "unknown" as a change; `backfill-parts` left a vendor stamp on a KiCad-derived status | a shared `partLifecycleStatus` SQL expression expires a stamped status older than the strictest retention at READ time in parts search, part detail, alternates and the notify job (verified on migrated PGlite); an expired current status is "no information" in notifications; backfill clears the stamp |
+| the opt-in real-PostgreSQL qualification test's migration pin was not moved for 0029 | moved |
+
+Accepted as recorded decisions rather than changed: exact-MPN matching ignores the manufacturer (OD-34), and alternate
+ranking still scores a never-checked part's seeded status (pre-existing Stage 1 data, recorded).

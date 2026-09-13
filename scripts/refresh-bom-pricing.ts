@@ -32,11 +32,14 @@ import {
   type NewBomNotification,
 } from "../app/lib/db/schema";
 import { getPricingFor } from "../app/lib/distributors";
-import { isOfferServable } from "../app/lib/distributors/cache";
+import { offersForExactMpn } from "../app/lib/distributors/offer-selection";
+import { partLifecycleStatus } from "../app/lib/distributors/lifecycle-sql";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "../app/lib/distributors/types";
 import {
   diffSnapshots,
   type BomSnapshot,
   type SnapshotRow,
+  SNAPSHOT_PRICE_BASIS,
 } from "../app/lib/snapshots";
 import { changeToNotification } from "../app/lib/notifications";
 
@@ -168,7 +171,7 @@ async function generateNotifications(): Promise<void> {
       label: null,
       takenAt: new Date(),
       rows: nowRows,
-      meta: prevSnap.meta,
+      meta: { ...prevSnap.meta, priceBasis: SNAPSHOT_PRICE_BASIS }, // [B19-D I5b review] the synthetic prices use the current meaning
     };
 
     const changes = diffSnapshots(prevSnap, nowSnap);
@@ -227,7 +230,7 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
 
   // Current lifecycle per part.
   const partRows = await db
-    .select({ id: parts.id, lifecycleStatus: parts.lifecycleStatus })
+    .select({ id: parts.id, lifecycleStatus: partLifecycleStatus }) // [B19-D I5b review] vendor lifecycle expires at read time
     .from(parts)
     .where(inArray(parts.id, partIds));
   const lifecycleById = new Map(partRows.map((p) => [p.id, p.lifecycleStatus ?? "unknown"]));
@@ -236,7 +239,6 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
   const offerRows = await db.select().from(partOffers).where(inArray(partOffers.partId, partIds));
   const offersByPart = new Map<string, typeof offerRows>();
   for (const o of offerRows) {
-    if (!isOfferServable(o.distributor, o.lastRefreshedAt)) continue; // [B19-A I3] the registry's serving rule
     const list = offersByPart.get(o.partId) ?? [];
     list.push(o);
     offersByPart.set(o.partId, list);
@@ -255,25 +257,26 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
   }
 
   return prevRows.map((prev) => {
-    const offers = offersByPart.get(prev.partId) ?? [];
+    // [B19-A I3 + B19-D I5b review] fresh offers stored for this row's exact MPN, priced like the snapshot it is compared with
+    const offers = offersForExactMpn(offersByPart.get(prev.partId) ?? [], prev.mpn);
     const totalStock = offers.reduce((s, o) => s + (o.stock ?? 0), 0);
 
     let bestCents: number | null = null;
     let bestCurrency: string | null = null;
     let bestSource: string | null = null;
     for (const o of offers) {
-      for (const b of o.priceBreaks ?? []) {
-        if (b.price > 0 && (bestCents === null || b.price * 100 < bestCents)) {
-          bestCents = Math.round(b.price * 100);
-          bestCurrency = b.currency;
-          bestSource = o.distributor;
-        }
+      const unit = cheapestUnitPrice(o.priceBreaks ?? []);
+      if (unit !== null && (bestCents === null || Math.round(unit * 100) < bestCents)) {
+        bestCents = Math.round(unit * 100);
+        bestCurrency = PRICING_CURRENCY;
+        bestSource = o.distributor;
       }
     }
 
     return {
       ...prev,
-      lifecycleStatus: lifecycleById.get(prev.partId) ?? prev.lifecycleStatus,
+      // an expired (unknown) current status is no information, not a change
+      lifecycleStatus: lifecycleById.get(prev.partId) && lifecycleById.get(prev.partId) !== "unknown" ? lifecycleById.get(prev.partId)! : prev.lifecycleStatus,
       totalStock,
       bestPriceCents: bestCents,
       bestPriceCurrency: bestCurrency,

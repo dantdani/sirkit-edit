@@ -73,7 +73,7 @@ describe.runIf(qualification.enabled)("B16-B §qualified PostgreSQL — clean, r
       await requireEmpty(upgrader, "SIRKIT_DB_QUALIFICATION_URL_2");
       await migrateDatabase(upgrader, { manifest: truncateManifest(manifest, 27) });
       const upgrade = await migrateDatabase(upgrader, { manifest });
-      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]); // [B19-D I5b review] pin move missed in I5b
       expect(schemaFingerprint(await captureSchemaSnapshot(upgrader))).toBe(cleanPrint);
     } finally {
       await upgrader.close();

@@ -132,3 +132,22 @@ describe("[B19-D I5b row 03] a vendor-derived lifecycle on a part expires with i
     expect(await read(kicad)).toMatchObject({ status: "active", refreshed: null });
   });
 });
+
+describe("[B19-D I5b review] a vendor-stamped lifecycle expires at READ time too", () => {
+  it("partLifecycleStatus reads a stamped status older than the strictest retention as unknown, before any purge runs", async () => {
+    const { partLifecycleStatus } = await import("../lifecycle-sql");
+    const { eq } = await import("drizzle-orm");
+    const library = await pg.db.query<{ id: string }>(`SELECT library_id AS id FROM parts WHERE id = $1`, [partId]);
+    const make = async (name: string, status: string, refreshedAgoMs: number | null) => (await pg.db.query<{ id: string }>(
+      `INSERT INTO parts (library_id, name, properties, pins, symbol_raw, lifecycle_status, last_refreshed_at) VALUES ($1, $2, '{}'::jsonb, '[]'::jsonb, '', $3, $4) RETURNING id`,
+      [library.rows[0]!.id, name, status, refreshedAgoMs === null ? null : new Date(Date.now() - refreshedAgoMs).toISOString()],
+    )).rows[0]!.id;
+    const stale = await make("read-stale", "obsolete", 2 * HOUR);
+    const fresh = await make("read-fresh", "nrnd", 10 * 60_000);
+    const kicad = await make("read-kicad", "active", null);
+    const read = async (id: string) => (await orm.select({ status: partLifecycleStatus }).from(schema.parts).where(eq(schema.parts.id, id)))[0]!.status;
+    expect(await read(stale)).toBe("unknown");
+    expect(await read(fresh)).toBe("nrnd");
+    expect(await read(kicad)).toBe("active");
+  });
+});

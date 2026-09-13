@@ -27,7 +27,7 @@ import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 import { makeCoalescer } from "../acquisition/admission-control";
-import { sameExactMpn } from "../atomic/identity";
+import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
 // [B19-A I3] the registry derives this from Mouser's documented 30 requests a minute (60 000 ms / 30).
@@ -85,7 +85,7 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
 
   // [B19-B I3b] a second identical lookup already in flight joins the first instead of paying for its own search
   const coalesce = makeCoalescer<PartPricing | null>();
-  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(mpn.trim().toLowerCase(), () => lookupByMpn(mpn));
+  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(inFlightKey(mpn), () => lookupByMpn(mpn));
 
   async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
@@ -99,6 +99,15 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
   }
 
   return { name: "mouser", lookupByMpn: lookup, lookupBatch };
+}
+
+/** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */
+function inFlightKey(mpn: string): string {
+  try {
+    return canonicalExactMpn(mpn);
+  } catch {
+    return `\u0000raw:${mpn}`;
+  }
 }
 
 // ─── Response mapping ──────────────────────────────────────────────────────────

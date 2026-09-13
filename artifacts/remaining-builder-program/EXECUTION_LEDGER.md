@@ -1351,3 +1351,22 @@ _(discovery, reproduction and results appended below as they are observed)_
   PGlite 7/7 (2 new cases, database-delivery job); database suites 55 passed / 3 skipped; broad run (now including app/lib/db
   and app/lib/component-selection): 306 files, 3867 passed, 13 expected skips; tsc 0; eslint clean on the changed files.
 - An adversarial review workflow over this exact diff is running; its verified findings are fixed in the next commit.
+
+### B19 I5b review — the adversarial review's verified findings, fixed (2026-09-13 local, solo; this commit)
+
+- CI on I5b (`2feaeee`): green on every job, database-delivery with migration 0029 included.
+- Review workflow (4 lenses + 4 skeptics, read-only, over the saved diff): 39 findings, 22 verified real (1 medium, 21 low),
+  17 refuted with reasons.
+- Reproduced first: 42 of 67 new cases failed on the I5b code; 22 baselines; 3 pins that already passed, kept because the
+  reviewer showed the earlier deadline test could not tell the mechanisms apart.
+- Medium: remembered "no exact match" answers (per source and canonical MPN, for the source's freshness; failures and
+  no-storage sources excluded). Low: canonical memo keys; decimal-comma groups; all negated lifecycle phrases; Unicode-property
+  inert text and code-point truncation; normalised host allowlists; explicit archive counts; canonical MPN conflicts;
+  live-only lifecycle verdicts stamped at answer time; one line-price rule for estimate, CSV and view; snapshot price basis;
+  quantity-1 USD pricing in notify and alternates; `offersForExactMpn` for every other offer reader; read-time lifecycle
+  expiry (`partLifecycleStatus`) in every lifecycle reader, verified on migrated PGlite; backfill clears vendor stamps; the
+  qualification pin missed in I5b.
+- Tests: review-connectors 5/5, review-values 36/36, review-lifecycle 2/2, review-price-consistency 16/16 (all new, in the CI
+  list), offer retention on PGlite 8/8; affected suites 412 passed / 3 skipped; broad run: 310 files, 3927 passed, 13
+  expected skips; tsc 0; eslint: no new findings (BomView's four pre-existing effect warnings unchanged).
+- Three I5c reproduction files written in parallel are left uncommitted on purpose; they land with I5c.
