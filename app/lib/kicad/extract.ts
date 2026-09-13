@@ -44,6 +44,39 @@ export type ExtractionIssue = {
  */
 export const EXTENDS_MAX_DEPTH = 16;
 
+/**
+ * [B19-D I5d review] Inheritance multiplies what later work handles: every derived symbol carries its parent's properties
+ * and raw block. A caller that hashes or stores each symbol (atomic ingestion) passes bounds, checked before any property map
+ * is built; exceeding one throws this error with a stable code.
+ */
+export interface ExtractionBudget {
+  /** total property entries across all resolved symbols */
+  maxResolvedProperties?: number;
+  /** total characters of resolved raw symbol blocks */
+  maxResolvedRawChars?: number;
+}
+
+export class ExtractionBudgetError extends Error {
+  constructor(readonly code: "expanded_property_budget" | "expanded_raw_budget", message: string) {
+    super(message);
+    this.name = "ExtractionBudgetError";
+  }
+}
+
+/**
+ * [B19-D I5d review] What an operator ingest may upsert: symbols with no extraction issue. A duplicated name, a cyclic, dangling
+ * or cut `extends` chain, or a missing definition block is skipped and reported, never ingested silently.
+ */
+export function symbolsSafeToIngest(symbols: readonly ExtractedSymbol[]): { accepted: ExtractedSymbol[]; skipped: Array<{ name: string; codes: string[] }> } {
+  const accepted: ExtractedSymbol[] = [];
+  const skipped: Array<{ name: string; codes: string[] }> = [];
+  for (const symbol of symbols) {
+    if (symbol.issues.length === 0) accepted.push(symbol);
+    else skipped.push({ name: symbol.name, codes: [...new Set(symbol.issues.map((issue) => issue.code))].sort() });
+  }
+  return { accepted, skipped };
+}
+
 /** One fully-extracted KiCad symbol, ready to embed and upsert. */
 export type ExtractedSymbol = {
   name: string;
@@ -111,7 +144,7 @@ type RawSymbol = {
  * inherit the parent's pins and symbol geometry and apply the child's property
  * overrides. Inheritance is resolved transitively across the whole library.
  */
-export function extractLibrary(rawFiles: string[]): ExtractedSymbol[] {
+export function extractLibrary(rawFiles: string[], budget: ExtractionBudget = {}): ExtractedSymbol[] {
   // Pass 1: gather all top-level symbols across every file, keyed by name.
   const raws = new Map<string, RawSymbol>();
   const duplicated = new Set<string>();
@@ -144,10 +177,25 @@ export function extractLibrary(rawFiles: string[]): ExtractedSymbol[] {
 
   // Pass 2: resolve inheritance into final parts (one per unique name).
   const out: ExtractedSymbol[] = [];
+  let resolvedProperties = 0;
+  let resolvedRawChars = 0;
   for (const sym of raws.values()) {
-    const resolved = resolveSymbol(sym, raws);
-    const issues = [...resolved.issues];
+    const chain = symbolChain(sym, raws);
+    // [B19-D I5d review] the cost of resolving this symbol is known from its chain before any map is built
+    const properties = chain.members.reduce((total, member) => total + Object.keys(member.properties).length, 0);
+    resolvedProperties += properties;
+    if (budget.maxResolvedProperties !== undefined && resolvedProperties > budget.maxResolvedProperties) {
+      throw new ExtractionBudgetError("expanded_property_budget", `The library expands to more than ${budget.maxResolvedProperties} symbol properties after inheritance`);
+    }
+    const resolved = foldChain(chain);
+    resolvedRawChars += resolved.symbolRaw.length;
+    if (budget.maxResolvedRawChars !== undefined && resolvedRawChars > budget.maxResolvedRawChars) {
+      throw new ExtractionBudgetError("expanded_raw_budget", `The library expands to more than ${budget.maxResolvedRawChars} characters of symbol definitions after inheritance`);
+    }
+    const issues = [...chain.issues];
     if (duplicated.has(sym.name)) issues.unshift({ code: "duplicate_symbol_name", message: "The library defines this symbol name more than once" });
+    // [B19-D I5d review] deriving from a duplicated name inherits whichever definition came last — as ambiguous as the duplicate
+    else if (chain.members.slice(1).some((member) => duplicated.has(member.name))) issues.unshift({ code: "duplicate_symbol_name", message: "The symbol inherits from a symbol name the library defines more than once" });
     if (!resolved.symbolRaw) issues.push({ code: "empty_symbol_block", message: "No symbol definition block was found for this symbol" });
     out.push(buildExtractedSymbol(sym.name, resolved.properties, resolved.pins, resolved.symbolRaw, issues));
   }
@@ -158,8 +206,9 @@ type ResolvedSymbol = {
   properties: Record<string, string>;
   pins: KicadPin[];
   symbolRaw: string;
-  issues: ExtractionIssue[];
 };
+
+type SymbolChain = { members: RawSymbol[]; issues: ExtractionIssue[] };
 
 /**
  * Resolve one symbol against its parent chain. A child with no pins of its own
@@ -170,7 +219,7 @@ type ResolvedSymbol = {
  * {@link EXTENDS_MAX_DEPTH}) and folded from the root down. Each stop is reported as an issue instead of resolving silently
  * to whatever the chain happened to reach.
  */
-function resolveSymbol(sym: RawSymbol, raws: Map<string, RawSymbol>): ResolvedSymbol {
+function symbolChain(sym: RawSymbol, raws: Map<string, RawSymbol>): SymbolChain {
   const chain: RawSymbol[] = [sym];
   const seen = new Set<string>([sym.name]);
   const issues: ExtractionIssue[] = [];
@@ -192,17 +241,23 @@ function resolveSymbol(sym: RawSymbol, raws: Map<string, RawSymbol>): ResolvedSy
     chain.push(parent);
     current = parent;
   }
-  let resolved = { properties: chain[chain.length - 1].properties, pins: chain[chain.length - 1].pins, symbolRaw: chain[chain.length - 1].symbolRaw };
-  for (let index = chain.length - 2; index >= 0; index--) {
-    const child = chain[index];
+  return { members: chain, issues };
+}
+
+function foldChain({ members }: SymbolChain): ResolvedSymbol {
+  const root = members[members.length - 1];
+  let resolved: ResolvedSymbol = { properties: root.properties, pins: root.pins, symbolRaw: root.symbolRaw };
+  for (let index = members.length - 2; index >= 0; index--) {
+    const child = members[index];
     const inherit = child.pins.length === 0;
     resolved = {
-      properties: { ...resolved.properties, ...child.properties },
+      // a child with no properties of its own shares its parent's map instead of copying it
+      properties: Object.keys(child.properties).length === 0 ? resolved.properties : { ...resolved.properties, ...child.properties },
       pins: inherit ? resolved.pins : child.pins,
       symbolRaw: inherit ? resolved.symbolRaw : child.symbolRaw,
     };
   }
-  return { ...resolved, issues };
+  return resolved;
 }
 
 // ─── Per-symbol extraction ──────────────────────────────────────────────────

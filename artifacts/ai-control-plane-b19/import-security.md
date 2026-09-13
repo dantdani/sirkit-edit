@@ -259,3 +259,33 @@ Owner decision recorded: **OD-35** — who may assert a confirming authority cla
 the authenticated editor or reviewer who posts the source still declares it; the class must now be a real one, and a
 confirmed requirement still needs the separate approval the compiler requires).
 
+### I5d adversarial review — verified findings fixed (CONFIRMED)
+
+A review workflow read commit cf3993e through four lenses (regressions against the local upstream KiCad corpus, security
+bypasses, missed sites, test adequacy) with a skeptic per lens. **30 findings: 12 verified real** (after de-duplication: two
+medium, the rest low), **18 refuted** with file:line reasons — among them a hypothetical KiCad 6.99 format constant no input
+carries, kelvin written without a space (refusing it is the row 50 contract), non-approved certificates on a publication path
+that does not exist, and several test-adequacy points already covered.
+
+Every real finding got a failing test first: **32 of 37** new cases failed on cf3993e; 5 are baselines.
+
+| finding (severity) | fix |
+|---|---|
+| inheritance still multiplied PROPERTIES: a 244 KB library (8 000-property parent, 2 000 children) passed every pin budget and took 17–31 s and ~1 GB (medium) | the resolution cost is counted from each symbol's chain before any map is built — `expanded_property_budget` (100 000) and `expanded_raw_budget` (32 MB) refuse in milliseconds; a child with no properties of its own shares its parent's map |
+| mega/milli collided again for any value with a suffix (`1M 1%` = `1m 1%`, `2.2M/0.25W`, `4M7 5%`), so a megohm value could bind a milliohm shunt (medium, two lenses) | before the fallback folds case, a mega `M` after a digit is spelled `meg`; every seeded key is still unchanged |
+| a symbol deriving from a duplicated name was valid with the last definition's pins | a chain through a duplicated name is `duplicate_symbol_name` |
+| a missing `)` nested a rule inside another and it vanished; rules wrapped in any other form vanished | every top-level form other than `version`/`rule`, and every rule child other than `condition`/`constraint`/`severity`, is an error loss |
+| publication's invisible-character refusal was bypassed by U+FEFF, NBSP, U+2028 or U+3000 around the MPN (JavaScript `trim()` removed them first) | `canonicalExactMpn` trims only ASCII space and tab; a published MPN has no surrounding whitespace at all |
+| the ambiguity guard missed `mOhm`/`mOHM`, the Ohm sign and a lowercase `k` after a space | both patterns widened |
+| an unqualified criterion still read test-condition, characterization-only, configurable, derating (and typical) ratings | an allowlist: recommended operating, guaranteed and nominal |
+| the ingest script ignored extraction issues | `symbolsSafeToIngest` skips and reports them (across all 230 upstream symbol libraries: 22 756 accepted, 0 skipped) |
+| supersession followed only direct links inside the bound set (A ← B ← C with B unbound: A won), and component-selection gates ignored it | chains are walked through the whole claim map in approval, search and `effectiveClaim`; gates drop superseded claims |
+| (low, two lenses) publication hashed the blob but never re-derived the asset: edited pads, an edited raw symbol, or `valid` declared over bytes that parse unsupported all published | publication re-parses every KiCad symbol and footprint from its verified bytes and requires the declared record to equal the derived one (semantic hash of the whole record) |
+
+Reviewed pin moves (both because the synthetic fixture catalog's blobs are not KiCad text — their content is the version id):
+the Stage 5 governance test's "complete bundle" and two I5d publication cases now use a real published blinker snapshot; the
+missing-source expectation and every identity case are unchanged.
+
+Corpus re-check after the fixes: symbol and footprint outcomes are exactly the I5d outcomes (12 231 per-file derived symbols
+unsupported for their missing parent; footprints identical to before I5d).
+

@@ -24,6 +24,18 @@ import { resolveExactIdentity } from "@/app/lib/component-selection/identity";
 import type { ManufacturerTerminal } from "../types";
 import { footprintAsset, makeFixtureCatalog, packageProof, symbolAsset, TEST_NOW } from "./fixtures";
 
+/**
+ * [B19-D I5d review] reviewed pin move: publication now re-derives every KiCad asset from its bytes, and the synthetic fixture
+ * catalog's blobs are not KiCad text (their content is the version id). Publication cases whose subject is a later check use
+ * a real published blinker snapshot (committed KiCad bytes) instead; the identity cases still use the fixture, because the
+ * identity checks run before the asset checks.
+ */
+async function blinkerTimerSnapshot() {
+  const { blinkerCatalog, BLINKER_PART_IDS } = await import("@/app/lib/fixture-runtime/blinker/catalog");
+  const catalog = blinkerCatalog();
+  return structuredClone(catalog.snapshots.get(catalog.revisionFor(BLINKER_PART_IDS.timer, "NE555")!)!);
+}
+
 function codeOf(run: () => unknown): string | undefined {
   try {
     run();
@@ -133,9 +145,8 @@ describe("[B19-D I5d row 38] a mapping certificate refuses conflicting pin data"
     expect(shared.state).toBe("approved");
   });
 
-  it("publication re-verifies the certificate: an entry moved onto another entry's pad is refused", () => {
-    const fixture = makeFixtureCatalog();
-    const snapshot = structuredClone(fixture.catalog.portableSnapshot(fixture.published.id, TEST_NOW));
+  it("publication re-verifies the certificate: an entry moved onto another entry's pad is refused", async () => {
+    const snapshot = await blinkerTimerSnapshot();
     expect(() => validatePortableSnapshotForPublication(snapshot, "pcb_assignable")).not.toThrow(); // baseline
     snapshot.mapping!.entries[1]!.logicalPadNumbers = [...snapshot.mapping!.entries[0]!.logicalPadNumbers];
     expect(() => validatePortableSnapshotForPublication(snapshot, "pcb_assignable")).toThrow(/mapping/);
@@ -183,9 +194,8 @@ describe("[B19-D I5d row 27b] identity resolution does not fold confusable chara
 });
 
 describe("[B19-D I5d row 47] publication recomputes blob hashes", () => {
-  it("a footprint blob whose bytes changed under the same declared hash is refused", () => {
-    const fixture = makeFixtureCatalog();
-    const snapshot = structuredClone(fixture.catalog.portableSnapshot(fixture.published.id, TEST_NOW));
+  it("a footprint blob whose bytes changed under the same declared hash is refused", async () => {
+    const snapshot = await blinkerTimerSnapshot();
     const blob = snapshot.assetBlobs.find((item) => item.id === snapshot.footprint!.rawContentObjectId)!;
     blob.content = `${blob.content} (pad "1" smd rect (at 5 5) (size 9 9))`;
     expect(() => validatePortableSnapshotForPublication(snapshot, "pcb_assignable")).toThrow(/hash/);

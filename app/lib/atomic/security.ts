@@ -15,6 +15,9 @@ export const INGEST_LIMITS = Object.freeze({
   maxSymbolPins: 10_000,
   maxExpandedSymbolPins: 200_000,
   maxFootprintPads: 10_000,
+  // [B19-D I5d review] inheritance also multiplies properties and raw blocks, which are hashed and stored per symbol
+  maxExpandedSymbolProperties: 100_000,
+  maxExpandedSymbolRawChars: 32 * 1024 * 1024,
 });
 
 export class IngestSecurityError extends Error {

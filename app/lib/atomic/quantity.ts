@@ -81,10 +81,10 @@ function unitDefinition(unit: string): UnitDefinition {
  * extractor must say which it meant — with a unit whose source text agrees — rather than have the quantity guess.
  */
 const AMBIGUOUS_SOURCE_TEXT: ReadonlyArray<{ units: ReadonlySet<string>; pattern: RegExp; reason: string }> = [
-  { units: new Set(["K"]), pattern: /\d[Kk](?![A-Za-z])/, reason: "a digit followed by K reads as kilo, not kelvin" },
+  { units: new Set(["K"]), pattern: /\d[Kk](?![A-Za-z])|\d\s+k(?![A-Za-z])/, reason: "a digit followed by K, or by a lower-case k, reads as kilo, not kelvin" },
   { units: new Set(["mF"]), pattern: /[Mm][Ff][Dd]|(?:^|[\d\s])MF(?![A-Za-z])/, reason: "MF and MFD are the legacy microfarad spellings" },
   { units: new Set(["m"]), pattern: /\dM(?![A-Za-z])/, reason: "M after a digit reads as mega" },
-  { units: new Set(["MΩ", "Mohm"]), pattern: /\d\s*m(?:Ω|ohm)/, reason: "a lower-case m before the ohm is milli" },
+  { units: new Set(["MΩ", "Mohm"]), pattern: /\d\s*m(?:[Ω\u2126]|[Oo][Hh][Mm])/, reason: "a lower-case m before the ohm is milli" },
 ];
 
 function finite(value: number | undefined, field: string): number | undefined {

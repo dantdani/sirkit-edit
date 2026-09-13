@@ -18,7 +18,7 @@ import type {
   SourceRecord,
 } from "./types";
 
-import { isClaimFresh } from "./claims";
+import { isClaimFresh, supersededClaimIds } from "./claims";
 
 export const ATOMIC_VALIDATOR_VERSION = "sirkit.atomic-validator/1";
 
@@ -186,11 +186,12 @@ export function evaluateApproval(revision: AtomicPartRevision, profile: Approval
   }
 
 
-  // [B19-D I5d row 07] a revision never binds a claim together with the claim that supersedes it
-  for (const claimId of revision.claimIds) {
-    const claim = context.claims.get(claimId);
-    const target = claim?.supersedesClaimId;
-    if (claim && target && target !== claim.id && revision.claimIds.includes(target)) blockers.push(`claim ${target} is superseded by ${claim.id}, and the revision binds both`);
+  // [B19-D I5d row 07, review] a revision never binds a claim together with a claim that supersedes it, directly or through a
+  // chain in the claim map
+  {
+    const bound = revision.claimIds.map((id) => context.claims.get(id)).filter((claim): claim is EngineeringClaim => Boolean(claim));
+    const superseded = supersededClaimIds(bound, context.claims);
+    for (const claimId of revision.claimIds) if (superseded.has(claimId)) blockers.push(`claim ${claimId} is superseded by a newer claim the revision also binds`);
   }
 
   for (const guidanceId of revision.guidanceIds) {

@@ -1,4 +1,4 @@
-import { EXTENDS_MAX_DEPTH, extractLibrary, fileTag } from "@/app/lib/kicad/extract";
+import { EXTENDS_MAX_DEPTH, ExtractionBudgetError, extractLibrary, fileTag } from "@/app/lib/kicad/extract";
 import { findChild, getNumber, getString, parseSExp } from "@/app/lib/kicad/sexp";
 import { parseKicadMod } from "@/app/lib/pcb/kicad-mod";
 import { child, children, parseSexpr } from "@/app/lib/pcb/sexpr";
@@ -82,7 +82,13 @@ export function parseSymbolAssets(input: {
     const parent = atomValue(child(node, "extends"), 1);
     if (name && parent) extendsByName.set(name, parent);
   }
-  const symbols = extractLibrary([input.source]);
+  let symbols: ReturnType<typeof extractLibrary>;
+  try {
+    symbols = extractLibrary([input.source], { maxResolvedProperties: INGEST_LIMITS.maxExpandedSymbolProperties, maxResolvedRawChars: INGEST_LIMITS.maxExpandedSymbolRawChars });
+  } catch (error) {
+    if (error instanceof ExtractionBudgetError) throw new IngestSecurityError(error.code, error.message);
+    throw error;
+  }
   // [B19-D I5d rows 37, 44, 45] resource refusals come before any per-pin work: an inheritance chain beyond the bound, a
   // symbol with more pins than any real part, or `extends` children multiplying one large parent's pins
   let expandedPins = 0;

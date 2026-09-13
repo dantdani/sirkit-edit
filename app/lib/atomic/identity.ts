@@ -21,7 +21,9 @@ export class MpnIdentityError extends Error {
  * upper-cases to S, a full-width digit — is refused as confusable rather than folded into a plain spelling (OD-34).
  */
 export function canonicalExactMpn(mpn: string): string {
-  const trimmed = mpn.trim();
+  // [B19-D I5d review] only ASCII space and tab are trimmed: JavaScript's trim() also removes U+FEFF, NBSP, U+2028 and U+3000,
+  // which let an invisible character pass as a clean spelling
+  const trimmed = mpn.replace(/^[ \t]+|[ \t]+$/g, "");
   if (trimmed === "") throw new MpnIdentityError("An exact MPN is required");
   if (!/^[\x20-\x7e]+$/.test(trimmed)) throw new MpnIdentityError(`The MPN contains characters outside printable ASCII (confusable identity): ${JSON.stringify(trimmed).slice(0, 80)}`);
   return trimmed.replace(/[a-z]/g, (letter) => letter.toUpperCase());

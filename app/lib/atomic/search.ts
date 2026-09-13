@@ -20,6 +20,13 @@ export interface SearchCatalogView extends ValidationContext {
   categoryByRevisionId?: ReadonlyMap<string, string>;
 }
 
+/**
+ * [B19-D I5d review] What a criterion that names no limit semantics may read: guaranteed and operating values, and nominal ones
+ * (a part's stated value). Absolute maximums, typicals, test conditions, characterization-only, configurable and derating
+ * figures are not values a design may rely on without asking for them by name.
+ */
+const UNQUALIFIED_CRITERION_LIMITS: ReadonlySet<string> = new Set(["recommended_operating", "guaranteed", "nominal"]);
+
 function claimRank(claim: EngineeringClaim): number {
   switch (claim.state) {
     case "verified": return 6;
@@ -67,7 +74,7 @@ function comparePrimitive(actual: unknown, criterion: SelectionCriterion): boole
 function evaluateCriterion(criterion: SelectionCriterion, claims: EngineeringClaim[], weight: number): CriterionResult {
   const matching = claims
     // [B19-D I5d row 23] a criterion that names no limit semantics never reads an absolute-maximum rating as an operating value
-    .filter((claim) => claim.property === criterion.property && (criterion.limit ? claim.limit === criterion.limit : claim.limit !== "absolute_maximum"))
+    .filter((claim) => claim.property === criterion.property && (criterion.limit ? claim.limit === criterion.limit : UNQUALIFIED_CRITERION_LIMITS.has(claim.limit)))
     .sort((a, b) => claimRank(b) - claimRank(a) || a.id.localeCompare(b.id));
   if (matching.some((claim) => claim.state === "conflicting" || claim.conflictsWith.length > 0)) {
     return { criterion, outcome: "conflict", claimIds: matching.map((claim) => claim.id), explanation: `${criterion.property} has unresolved source conflict`, score: 0 };
@@ -112,7 +119,7 @@ export function searchAtomicCatalog(view: SearchCatalogView, query: ComponentQue
   const results = revisions.map((revision): ComponentSearchResult => {
     const approval = evaluateApproval(revision, query.requiredProfile as ApprovalProfile, view, now);
     const bound = revision.claimIds.map((id) => view.claims.get(id)).filter((claim): claim is EngineeringClaim => Boolean(claim));
-    const superseded = supersededClaimIds(bound); // [B19-D I5d row 07] a superseded claim never satisfies a criterion
+    const superseded = supersededClaimIds(bound, view.claims); // [B19-D I5d row 07, review] chains followed through the whole claim map
     const claims = bound.filter((claim) => !superseded.has(claim.id));
     const hardResults = query.hard.map((criterion) => evaluateCriterion(criterion, claims, 0));
     const softResults = query.soft.map((criterion) => evaluateCriterion(criterion, claims, criterion.weight));

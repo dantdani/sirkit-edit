@@ -25,7 +25,7 @@ import { loadEnvLocal } from "../app/lib/load-env-local";
 import { eq, sql } from "drizzle-orm";
 import { getDb, getSqlClient } from "../app/lib/db/client";
 import { libraries, parts, type NewPart } from "../app/lib/db/schema";
-import { extractLibrary, type ExtractedSymbol } from "../app/lib/kicad/extract";
+import { extractLibrary, symbolsSafeToIngest, type ExtractedSymbol } from "../app/lib/kicad/extract";
 import { categorizeLib } from "../app/lib/kicad/categories";
 import { embedBatch, MAX_EMBED_BATCH_SIZE } from "../app/lib/embeddings";
 
@@ -159,7 +159,11 @@ async function ingestLibraryUnit(unit: LibraryUnit): Promise<void> {
 
   // Extract every part in the library, resolving `extends` inheritance. Returns
   // one symbol per unique name (already the upsert key).
-  const symbols: ExtractedSymbol[] = extractLibrary(contents);
+  // [B19-D I5d review] a symbol with an extraction issue (duplicate name, cyclic/dangling/cut extends chain, missing block)
+  // is skipped and reported, never upserted silently
+  const extraction = symbolsSafeToIngest(extractLibrary(contents));
+  const symbols: ExtractedSymbol[] = extraction.accepted;
+  for (const skipped of extraction.skipped) console.warn(`[ingest] ${name}: skipped symbol ${JSON.stringify(skipped.name).slice(0, 120)} (${skipped.codes.join(", ")})`);
 
   // Upsert the library row and get its id — but DO NOT stamp the new fileHash
   // yet. The hash is the "fully ingested" marker; writing it before the parts

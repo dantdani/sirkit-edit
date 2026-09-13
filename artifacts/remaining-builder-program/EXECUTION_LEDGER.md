@@ -1451,3 +1451,21 @@ _(discovery, reproduction and results appended below as they are observed)_
   affected suites 52 files / 430 passed; full unit suite 577 files (572 passed, 5 env-gated skips), 5833 passed, 33 expected skips — the first full run found 5 failures in the B16.0.11 parity pins, which require each BOM route's exact historical 400 wording for a missing state; the implementation now passes each route's own wording (the pins were not changed); tsc 0; eslint: no new findings.
 - The I5d adversarial review is still running over commit cf3993e; its findings land in their own commit.
 
+### B19 I5d review — adversarial diff review, verified findings fixed (2026-09-13 local, workflow + solo fixes; this commit)
+
+- Review workflow over cf3993e (regressions against the upstream corpus, security, missed sites, tests; a skeptic per lens):
+  30 findings, 12 verified real, 18 refuted with reasons.
+- Reproduced first: 32 of 37 new cases failed on cf3993e; 5 baselines.
+- Medium: inheritance property amplification (resolution cost counted from the chain before any map is built; property and
+  raw budgets; shared maps); suffixed mega/milli value-key collisions.
+- Low: duplicated-ancestor symbols; DRU forms and rule children that were silently dropped; Unicode whitespace around
+  published MPNs; wider unit ambiguity patterns; allowlisted limit semantics for unqualified criteria; ingest script skips
+  symbols with extraction issues; supersession chains through the whole claim map and in component-selection gates;
+  publication re-derives every KiCad asset from its verified bytes.
+- Reviewed pin moves: the governance "complete bundle" and two I5d publication cases use a real blinker snapshot (the synthetic
+  fixture's blobs are not KiCad text).
+- Corpus re-check: outcomes identical to I5d; whole-library ingest over the 230 upstream symbol libraries accepts 22 756, skips 0.
+- Tests: I5d review 32/32, DRU structure 3/3, ingest issues 2/2 (all new, in the CI list); affected suites 29 files / 297
+  passed; full unit suite 580 files (575 passed, 5 env-gated skips), 5870 passed, 33 expected skips; tsc 0; eslint: no new findings (ingest-kicad's unused `sha256` import is pre-existing).
+- The I5e-2 reproduction tests written meanwhile are parked outside the repository until this lands.
+

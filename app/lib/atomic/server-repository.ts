@@ -23,6 +23,27 @@ import { semanticHash, sha256 } from "./stable";
 import { evaluateApproval } from "./validation";
 import { canonicalExactMpn, MpnIdentityError, normalizeMpnSearchKey } from "./identity";
 import { mappingCertificateIntegrityErrors } from "./mapping";
+import { parseFootprintAsset, parseSymbolAssets } from "./kicad-assets";
+import type { FootprintAssetVersion, RawContentObject, SymbolAssetVersion } from "./types";
+
+/**
+ * [B19-D I5d review] The asset a snapshot declares must be exactly what its verified bytes parse to — pins, pads, raw symbol
+ * block, validation state and diagnostics included (compared by semantic hash of the whole record). A matching blob hash
+ * binds only the bytes; without this, edited pads, an edited raw block or a forged `valid` state published over true bytes.
+ */
+function kicadAssetMatchesBytes(asset: SymbolAssetVersion | FootprintAssetVersion, blob: RawContentObject): boolean {
+  if (blob.encoding !== "utf8") return false;
+  const { logicalName: _logicalName, ...origin } = asset.origin;
+  void _logicalName;
+  try {
+    const derived = asset.kind === "symbol"
+      ? parseSymbolAssets({ source: blob.content, origin }).find((candidate) => candidate.symbolName === asset.symbolName)
+      : parseFootprintAsset({ source: blob.content, libraryNickname: origin.libraryNickname, origin });
+    return Boolean(derived) && semanticHash(derived) === semanticHash(asset);
+  } catch {
+    return false;
+  }
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
@@ -57,6 +78,9 @@ export function validatePortableSnapshotForPublication(snapshot: PortableAtomicS
   if (snapshot.exactPart) {
     // [B19-D I5d row 27c] identity is recomputed, never taken from the snapshot: the exact MPN must be a canonical spelling
     // (no invisible or confusable characters) and its search key must be the one that MPN produces
+    if (snapshot.exactPart.exactMpn !== snapshot.exactPart.exactMpn.trim() || /^[ \t]|[ \t]$/.test(snapshot.exactPart.exactMpn)) {
+      throw new Error("Exact part MPN is refused: a published MPN has no surrounding whitespace");
+    }
     try {
       canonicalExactMpn(snapshot.exactPart.exactMpn);
     } catch (error) {
@@ -86,6 +110,7 @@ export function validatePortableSnapshotForPublication(snapshot: PortableAtomicS
     // [B19-D I5d row 47] the bytes are hashed here: a declared hash that matches the asset proves nothing about the content
     const bytes = blob.encoding === "base64" ? Buffer.from(blob.content, "base64") : Buffer.from(blob.content, "utf8");
     if (sha256(bytes) !== blob.contentHash || bytes.byteLength !== blob.bytes) throw new Error(`Asset ${asset.versionId} raw content does not match its declared hash or size`);
+    if (asset.kind !== "model" && !kicadAssetMatchesBytes(asset, blob)) throw new Error(`Asset ${asset.versionId} does not match what its raw content parses to`);
     if (blob.confidential) throw new Error(`Confidential asset ${asset.versionId} cannot be published`);
   }
   for (const part of snapshot.supplierParts) {

@@ -1,4 +1,5 @@
 import { evaluateApproval, type ValidationContext } from "../atomic/validation";
+import { supersededClaimIds } from "../atomic/claims";
 import type { EngineeringClaim, PortableAtomicSnapshot, Quantity } from "../atomic/types";
 import { normalizedDecimalText, normalizeQuantity } from "../constraints/quantity";
 import type { ConstraintQuantity } from "../constraints/types";
@@ -9,7 +10,8 @@ import type { AtomicGateResult, CompiledSelectionPredicate, ComponentRoleRequire
 import { COMPONENT_SELECTION_EVALUATOR_VERSION } from "./types";
 
 function gate(input: Omit<AtomicGateResult, "gateResultId" | "deterministicDigest" | "evaluatorVersion"> & { gateResultId?: string }): AtomicGateResult { const base = structuredClone({ ...input, evaluatorVersion: COMPONENT_SELECTION_EVALUATOR_VERSION, gateResultId: input.gateResultId ?? selectionId("gate-result", input) }); return { ...base, deterministicDigest: selectionDigest(base) }; }
-function trustedClaims(snapshot: PortableAtomicSnapshot, property: string): EngineeringClaim[] { return snapshot.claims.filter((item) => item.property === property && ["source_backed", "verified"].includes(item.state)); }
+// [B19-D I5d review] a claim superseded by another claim in the snapshot is never trusted evidence for a gate
+export function trustedClaims(snapshot: PortableAtomicSnapshot, property: string): EngineeringClaim[] { const superseded = supersededClaimIds(snapshot.claims); return snapshot.claims.filter((item) => item.property === property && ["source_backed", "verified"].includes(item.state) && !superseded.has(item.id)); }
 function claimState(claims: EngineeringClaim[]): EvidenceState { if (claims.some((item) => item.state === "conflicting" || item.conflictsWith.length)) return "conflict"; if (claims.some((item) => item.state === "stale")) return "stale"; return claims.length ? "pass" : "unknown"; }
 function conditionCompatible(claim: EngineeringClaim, conditions: string[]): boolean { return conditions.every((condition) => { const [key, expected] = condition.split("=", 2); if (!expected) return false; return key in claim.conditions && String(claim.conditions[key]) === expected; }); }
 function primitiveMatches(actual: unknown, operator: "eq" | "neq" | "in" | "contains", expected: string | number | boolean | string[]): boolean {

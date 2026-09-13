@@ -32,7 +32,9 @@ export function normalizeValueKey(value: string | undefined | null): string {
     const marker = rkm[2] === "R" || rkm[2] === "r" ? "r" : PREFIX_KEY[rkm[2]!];
     return `${rkm[1]}${marker}${rkm[3]}${rkm[4]!.toLowerCase()}`;
   }
-  return unitless.toLowerCase().replace(/(\d)\.0(?=[a-z]|$)/, "$1");
+  // [B19-D I5d review] a value with any other suffix ("1M 1%", "2.2M/0.25W", "4M7 5%") is folded here: a mega M after a digit
+  // is spelled out first, so it can never fold into a milli m
+  return unitless.replace(/(\d)M(?![Ee][Gg])/g, "$1meg").toLowerCase().replace(/(\d)\.0(?=[a-z]|$)/, "$1");
 }
 
 /**

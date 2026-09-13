@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5e-1 complete (I5d review running)",
+  "currentCheckpoint": "B19-D I5d review complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "19be27f",
+  "lastGreenSha": "8df97ff",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "Fix the I5d review's verified findings; then I5e-2 (model context: catalog text in prompts, prompt delimiters, tool-result hygiene, knowledge excerpts, raw error text, end-to-end injection ratchet, SchGen labels and replayed assistant turns); then the I5e review, B19-E and B19 closeout.",
-  "updatedAt": "2026-09-13T04:14:02-04:00"
+  "nextAction": "B19 I5e-2 (model context: catalog text in prompts, prompt delimiters, tool-result hygiene, knowledge excerpts, raw error text, end-to-end injection ratchet, SchGen labels and replayed advisory turns); then the I5e adversarial review, B19-E and B19 closeout.",
+  "updatedAt": "2026-09-13T04:36:58-04:00"
 }

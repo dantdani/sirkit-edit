@@ -90,9 +90,13 @@ describe("Stage 5 publication and review governance", () => {
     expect(deprecated.publicationState).toBe("deprecated");
   });
 
-  it("rejects a half-publication bundle before opening the database transaction", () => {
-    const { catalog, published } = makeFixtureCatalog();
-    const complete = catalog.portableSnapshot(published.id, TEST_NOW);
+  it("rejects a half-publication bundle before opening the database transaction", async () => {
+    // [B19-D I5d review] reviewed pin move: publication re-derives each KiCad asset from its bytes, and the synthetic fixture's
+    // blobs are not KiCad text, so the complete bundle is a real published blinker snapshot (committed KiCad bytes). The
+    // missing-source case and its expectation are unchanged.
+    const { blinkerCatalog, BLINKER_PART_IDS } = await import("@/app/lib/fixture-runtime/blinker/catalog");
+    const blinker = blinkerCatalog();
+    const complete = structuredClone(blinker.snapshots.get(blinker.revisionFor(BLINKER_PART_IDS.timer, "NE555")!)!);
     expect(() => validatePortableSnapshotForPublication(complete, "pcb_assignable")).not.toThrow();
     const missingSource = structuredClone(complete);
     missingSource.sourceRecords = [];

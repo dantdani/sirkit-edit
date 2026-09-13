@@ -19,15 +19,25 @@ const SOURCE_PRIORITY: Record<string, number> = {
  * claim it names; a chain supersedes every earlier link, and a cycle supersedes both (neither can stand). `supersedesClaimId`
  * used to be recorded and never read, so ties fell to the claim id and an older revision could win.
  */
-export function supersededClaimIds(claims: readonly EngineeringClaim[]): Set<string> {
-  const present = new Set(claims.map((claim) => claim.id));
+export function supersededClaimIds(claims: readonly EngineeringClaim[], allClaims?: ReadonlyMap<string, EngineeringClaim>): Set<string> {
+  // [B19-D I5d review] a chain is followed through the whole claim map when one is given: with the middle claim of A <- B <- C
+  // unbound, C still supersedes A. The walk is bounded and cycle-safe.
+  const byId = new Map<string, EngineeringClaim>(allClaims ?? []);
+  for (const claim of claims) byId.set(claim.id, claim);
   const superseded = new Set<string>();
   for (const claim of claims) {
-    const target = claim.supersedesClaimId;
-    if (target && target !== claim.id && present.has(target)) superseded.add(target);
+    const visited = new Set<string>([claim.id]);
+    let target = claim.supersedesClaimId;
+    for (let step = 0; target && !visited.has(target) && step < SUPERSESSION_MAX_CHAIN; step++) {
+      superseded.add(target);
+      visited.add(target);
+      target = byId.get(target)?.supersedesClaimId;
+    }
   }
   return superseded;
 }
+
+const SUPERSESSION_MAX_CHAIN = 64;
 
 export interface EffectiveClaimResult {
   claim: EngineeringClaim | null;
@@ -46,8 +56,10 @@ export function effectiveClaim(
   evidence: ReadonlyMap<string, EvidenceRef>,
   records: ReadonlyMap<string, SourceRecord>,
   sourceClasses: ReadonlyMap<string, string>,
+  /** [B19-D I5d review] the full claim map, so a supersession chain through an absent claim is still followed */
+  allClaims?: ReadonlyMap<string, EngineeringClaim>,
 ): EffectiveClaimResult {
-  const superseded = supersededClaimIds(candidates);
+  const superseded = supersededClaimIds(candidates, allClaims);
   const usable = candidates.filter((claim) =>
     !superseded.has(claim.id) && claim.state !== "unknown" && claim.state !== "stale" && claim.state !== "not_applicable",
   );
