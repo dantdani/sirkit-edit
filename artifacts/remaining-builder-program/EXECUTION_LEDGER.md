@@ -1388,3 +1388,26 @@ _(discovery, reproduction and results appended below as they are observed)_
   SPICE, project and component suites 1387 passed / 8 skipped; broad run 312 files, 3941 passed, 13 expected skips; control
   inventory gate green; tsc 0; eslint clean on the changed files.
 - Browser proof for the UI changes is CI's page-browser-e2e job.
+
+### B19 I5c review — adversarial diff review, verified findings fixed (2026-09-13 local, workflow + solo fixes; this commit)
+
+- Review workflow over the committed I5c diff (regressions, security, coverage, tests; a skeptic per finding): 20 findings,
+  17 verified real, 3 refuted with reasons.
+- Reproduced first: 18 new or strengthened cases failed on the I5c code; pins that already passed were each proven by
+  reverting their control (5 mutants, 5 killed).
+- Medium: pinned export lost the Datasheet (fixed from the published symbol's property; fixture-runtime route test with the
+  real loader); silk text anchor injected `.kicad_pcb` nodes (closed set through the token layer; all eight PCB writers
+  audited); the row-16 test could not catch its own regression (well-formed forged symbol and license-precedence cases).
+- Low: `lib_symbols` Datasheet policy; scheme-less `www.` datasheets; one load per revision with 503 on catalog failure;
+  closed Side token; BOM CSV link columns; discriminating chat link cases; served-header e2e spec; indent, power-label, native
+  placement and DRU pins; `DatasheetLink` and the distributor link helpers replace regex tripwires; local host names.
+- Decision: pinned parts keep MPN-named library items (unique per pinned part; symbol-named items would collide) — the cost
+  to "Update symbols from library" is recorded in import-security.md.
+- Added to later batches instead of dropped: row 27b (identity resolution confusables) was missing from the batch table and
+  lands in I5d; the refuted-as-out-of-scope FreeRouting DSN token finding becomes I5e row 52.
+- Correction: the I5c entry above said "Browser proof for the UI changes is CI's page-browser-e2e job" — no spec exercised
+  those changes, so that proof did not exist. The corrected proof is the component/helper tests and the new served-header spec.
+- Tests: broad run 473 files (469 passed, 4 env-gated skips), 5025 passed, 25 expected skips (live auth, Postgres qualification, kicad-cli oracle, live assist, SPICE worker, ingest data); e2e security headers 2/2 locally against the running fixture-runtime app (next dev); tsc 0; eslint: no new findings (page.tsx 14 and BomView 4 pre-existing,
+  identical on HEAD).
+- The I5d work in progress is parked in a git stash (not committed) while this lands.
+

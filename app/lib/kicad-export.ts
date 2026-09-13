@@ -29,7 +29,7 @@ import { assignFootprints } from "@/lib/footprint-assign";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 import { atomicSnapshotToCachedPart } from "@/app/lib/atomic/kicad-adapters";
 import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c]
-import { parseSexpr } from "@/app/lib/pcb/sexpr";
+import { parseSexpr, type SNode } from "@/app/lib/pcb/sexpr";
 import { assertBoundedSExpression } from "@/app/lib/atomic/security";
 
 /**
@@ -181,6 +181,38 @@ function rewriteSymbolName(symbolRaw: string, libId: string): string {
   return out;
 }
 
+/**
+ * [B19-D I5c row 35, review] The embedded library symbol carries its own `(property "Datasheet" …)`, which the file copies
+ * verbatim. A value the document-link policy refuses (`file:`, UNC, `javascript:`, …) becomes KiCad's empty marker `~`; a
+ * scheme-less `www.` link is written with its scheme; a web link and every other property stay byte-for-byte. A block that
+ * does not parse is left as it is (KiCad could not read it either).
+ */
+function sanitizeEmbeddedDatasheets(symbolRaw: string): string {
+  let tree: SNode;
+  try {
+    assertBoundedSExpression(symbolRaw);
+    tree = parseSexpr(symbolRaw);
+  } catch {
+    return symbolRaw;
+  }
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  const visit = (node: SNode): void => {
+    if (node.kind !== "list") return;
+    const [head, key, value] = node.items;
+    if (head?.kind === "symbol" && head.value === "property" && key?.kind === "string" && key.value === "Datasheet" && value && value.kind !== "list") {
+      const text = value.kind === "number" ? value.raw : value.value;
+      const safe = safeHref(text, "document");
+      const wanted = safe === null ? (text.trim() === "" ? text : "~") : /^https?:\/\//i.test(text.trim()) ? text : safe;
+      if (wanted !== text) edits.push({ start: value.start, end: value.end, text: q(wanted) });
+    }
+    for (const child of node.items) visit(child);
+  };
+  visit(tree);
+  let out = symbolRaw;
+  for (const edit of edits.sort((a, b) => b.start - a.start)) out = out.slice(0, edit.start) + edit.text + out.slice(edit.end);
+  return out;
+}
+
 const TODAY = new Date().toISOString().slice(0, 10);
 
 // ─── Main export ────────────────────────────────────────────────────────────
@@ -259,7 +291,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
     if (pinnedSelection && pinnedSelection.atomicRevisionId === inst.atomicPartRevisionId && pinnedSelection.symbolVersionId === inst.symbolAssetVersionId) {
       assertSingleSymbolDefinition(part.symbolRaw.trim(), inst.refDes);
     }
-    const raw = rewriteSymbolName(part.symbolRaw.trim(), libId);
+    const raw = rewriteSymbolName(sanitizeEmbeddedDatasheets(part.symbolRaw.trim()), libId);
     if (raw) lines.push(indent(raw, 2));
   }
 

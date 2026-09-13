@@ -15,9 +15,20 @@ import { makeFixtureCatalog, TEST_NOW } from "./fixtures";
 
 vi.mock("@/app/lib/parts-search", () => ({ getFullPartsByIds: vi.fn(async () => []), getPartsByIds: vi.fn(async () => []), searchParts: vi.fn(async () => []) }));
 const published = new Map<string, PortableAtomicSnapshot>();
-vi.mock("@/app/lib/atomic/server-catalog", () => ({ loadPublishedPortableSnapshot: vi.fn(async (id: string) => structuredClone(published.get(id) ?? null)) }));
+const loader = vi.hoisted(() => ({ fail: false, calls: [] as string[] }));
+vi.mock("@/app/lib/atomic/server-catalog", () => ({
+  loadPublishedPortableSnapshot: vi.fn(async (id: string) => {
+    loader.calls.push(id);
+    if (loader.fail) throw new Error("connect ECONNREFUSED (database unavailable)");
+    return structuredClone(published.get(id) ?? null);
+  }),
+}));
 
-afterEach(() => published.clear());
+afterEach(() => {
+  published.clear();
+  loader.fail = false;
+  loader.calls.length = 0;
+});
 
 function setup(mutate?: (snapshot: PortableAtomicSnapshot) => void) {
   const fixture = makeFixtureCatalog();
@@ -83,6 +94,30 @@ describe("[B19-D I5c row 16] a crafted body selection changes nothing", () => {
     expect(text).not.toContain("sirkit_injected");
   });
 
+  it("[review] a WELL-FORMED forged symbol with a forged license is ignored: the server's symbol is exported", async () => {
+    // the malformed forged block above is refused by the single-definition check even if the route trusted the body again;
+    // this one would be exported, so only ignoring the body keeps it out
+    const { state, snapshot } = setup();
+    const forged = structuredClone(snapshot);
+    forged.licenses = forged.licenses.map((license) => ({ ...license, exportDisposition: "redistributable" }));
+    forged.symbol.rawSymbolSExpression = '(symbol "FX-100-QFN" (property "Reference" "sirkit_injected" (at 0 0 0)) (symbol "FX-100-QFN_1_1" (pin passive line (at 0 0 0) (length 2.54) (name "A") (number "1"))))';
+    const selection = { selectionRecordId: "s", atomicRevisionId: snapshot.atomicRevision.id, symbolVersionId: snapshot.symbol.versionId, modelVersionIds: [], embeddedSnapshot: forged };
+    const { status, text } = await post({ state, componentSelections: { U1: selection } });
+    expect(status).toBe(200);
+    expect(text).toContain("Fixture:FX-100-QFN");
+    expect(text).not.toContain("sirkit_injected");
+  });
+
+  it("[review] a server license that prohibits export wins over a body license that allows it", async () => {
+    const { state, snapshot } = setup((s) => { s.licenses = s.licenses.map((license) => ({ ...license, exportDisposition: "prohibited" })); });
+    const forged = structuredClone(snapshot);
+    forged.licenses = forged.licenses.map((license) => ({ ...license, exportDisposition: "redistributable" }));
+    const selection = { selectionRecordId: "s", atomicRevisionId: snapshot.atomicRevision.id, symbolVersionId: snapshot.symbol.versionId, modelVersionIds: [], embeddedSnapshot: forged };
+    const { status, text } = await post({ state, componentSelections: { U1: selection } });
+    expect(status).toBe(422);
+    expect(JSON.parse(text)).toMatchObject({ code: "EXPORT_LICENSE_PROHIBITED", components: ["U1"] });
+  });
+
   it("a malformed selection is not a 500", async () => {
     const { state, snapshot } = setup();
     const { status } = await post({ state, componentSelections: { U1: { atomicRevisionId: snapshot.atomicRevision.id, symbolVersionId: snapshot.symbol.versionId, embeddedSnapshot: {} } } });
@@ -91,7 +126,50 @@ describe("[B19-D I5c row 16] a crafted body selection changes nothing", () => {
 
   it("a published symbol that is not exactly one symbol definition is refused", async () => {
     const { state } = setup((s) => { s.symbol.rawSymbolSExpression = '(symbol "A") (symbol "B")'; });
-    const { status } = await post({ state });
+    const { status, text } = await post({ state });
     expect(status).toBe(422);
+    const body = JSON.parse(text) as { code: string; issues: string[] };
+    expect(body.code).toBe("SCHEMATIC_STATE_INVALID");
+    expect(body.issues.join("\n")).toMatch(/not exactly one symbol definition/);
+  });
+});
+
+describe("[B19-D I5c review] loading pinned parts", () => {
+  it("a catalog that cannot be reached is a 503, not a claim that the part is unpublished", async () => {
+    const { state } = setup();
+    loader.fail = true;
+    const { status, text } = await post({ state });
+    expect(status).toBe(503);
+    expect(JSON.parse(text)).toMatchObject({ ok: false, code: "EXPORT_CATALOG_UNAVAILABLE" });
+    expect(text).not.toContain("ECONNREFUSED");
+  });
+
+  it("each pinned revision is loaded once, however many instances use it", async () => {
+    const { state } = setup();
+    const first = state.kicadComponents[0]!;
+    state.kicadComponents.push({ ...first, id: "U2", refDes: "U2", x: 200 }, { ...first, id: "U3", refDes: "U3", x: 300 });
+    const { status } = await post({ state });
+    expect(status).toBe(200);
+    expect(loader.calls).toEqual([first.atomicPartRevisionId]);
+  });
+});
+
+describe("[B19-D I5c review] a pinned part keeps its datasheet, and only a web datasheet reaches the file", () => {
+  it("the instance Datasheet comes from the published symbol's own property", async () => {
+    const { state } = setup((s) => { s.symbol.properties = { ...s.symbol.properties, Datasheet: "https://www.example.com/fx-100.pdf" }; });
+    const { status, text } = await post({ state });
+    expect(status).toBe(200);
+    expect(text).toMatch(/\(property "Datasheet" "https:\/\/www\.example\.com\/fx-100\.pdf"/);
+  });
+
+  it("a UNC or file: Datasheet inside the published symbol block is not copied into lib_symbols", async () => {
+    const { state } = setup((s) => {
+      s.symbol.properties = { ...s.symbol.properties, Datasheet: "\\\\server\\share\\x.pdf" };
+      s.symbol.rawSymbolSExpression = '(symbol "FixturePart" (property "Datasheet" "\\\\\\\\server\\\\share\\\\x.pdf" (at 0 0 0)) (property "Description" "file:///C:/kept-as-text.txt" (at 0 0 0)))';
+    });
+    const { status, text } = await post({ state });
+    expect(status).toBe(200);
+    expect(text).not.toContain("server");
+    expect(text).toContain("file:///C:/kept-as-text.txt"); // only the Datasheet property is a link; other text is untouched
   });
 });

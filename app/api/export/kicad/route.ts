@@ -16,8 +16,12 @@ import type { SchematicState } from "@/lib/schematic-types";
 import type { PortableAtomicSnapshot, ProjectComponentPin } from "@/app/lib/atomic/types";
 import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { redactSecrets } from "@/app/lib/atomic/security";
 
 export const runtime = "nodejs";
+
+/** [B19-D I5c review] published revisions loaded at once (each load is several catalog queries). */
+const PINNED_LOAD_CONCURRENCY = 4;
 
 type ExportBody = {
   state?: SchematicState;
@@ -77,16 +81,30 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
   // loads for that revision — its symbol and its licenses — and the declared symbol version must match. Selections in the
   // request body are never trusted (a body snapshot could carry its own s-expressions or claim any license). An instance
   // whose pinned revision cannot be loaded is refused, never silently exported from a catalog row.
+  // [B19-D I5c review] each revision is loaded once (a board of sixty passives pins a handful of revisions), a few at a time.
+  // A loader that THROWS means the catalog could not be reached — a 503, logged and redacted — never "not published".
+  const revisionIds = [...new Set(kicadComponents.map((component) => component.atomicPartRevisionId).filter((id): id is string => Boolean(id)))];
+  const snapshotsByRevision = new Map<string, PortableAtomicSnapshot | null>();
+  try {
+    for (let index = 0; index < revisionIds.length; index += PINNED_LOAD_CONCURRENCY) {
+      const batch = revisionIds.slice(index, index + PINNED_LOAD_CONCURRENCY);
+      const loaded = await Promise.all(batch.map((revisionId) => loadPublishedPortableSnapshot(revisionId)));
+      batch.forEach((revisionId, position) => snapshotsByRevision.set(revisionId, loaded[position] ?? null));
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : typeof error === "string" ? error : "non-error rejection";
+    const safe = redactSecrets(detail).replace(/\b(password|passwd|pwd|secret|token|apikey|api_key|key)=\S+/gi, "$1=[REDACTED]");
+    console.error(`[api/export/kicad] loading published component revisions failed: ${safe.slice(0, 300)}`);
+    return Response.json(
+      { ok: false, code: "EXPORT_CATALOG_UNAVAILABLE", error: "The component catalog could not be reached, so nothing was exported. Try again shortly." },
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "30" } },
+    );
+  }
   const pinnedSelections: Record<string, ProjectComponentPin> = {};
   const unavailable: string[] = [];
   for (const component of kicadComponents) {
     if (!component.atomicPartRevisionId) continue;
-    let snapshot: PortableAtomicSnapshot | null = null;
-    try {
-      snapshot = await loadPublishedPortableSnapshot(component.atomicPartRevisionId);
-    } catch {
-      snapshot = null;
-    }
+    const snapshot = snapshotsByRevision.get(component.atomicPartRevisionId) ?? null;
     if (!snapshot || !component.symbolAssetVersionId || snapshot.symbol.versionId !== component.symbolAssetVersionId) {
       unavailable.push(component.refDes);
       continue;

@@ -61,8 +61,8 @@ The rows land in four test-first batches:
 |---|---|---|
 | I5b | 01, 03, 20, 26, 27a, 36, 39, 40, 41, 42, 43, 51 | the acquisition path: exact-MPN binding, derived lifecycle retention, price semantics, lifecycle mapping, confusable identity in bundles, quarantine hygiene, ingestion bounds |
 | I5c | 02, 04, 09, 10, 15, 16, 17, 18, 21, 33, 34, 35 | output injection: chat markdown images, KiCad emitters, CSV formulas and CR, vendor hrefs, report escaping, export selection shape |
-| I5d | 06, 07, 08, 22, 23, 27c, 37, 38, 44–50 | KiCad parsing and atomic data integrity: symbols, inheritance, s-expression bounds, paths, value keys, claims, mapping conflicts, quantities |
-| I5e | 05, 11–14, 19, 24, 25, 28–32 | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
+| I5d | 06, 07, 08, 22, 23, 27b (missing from the first table), 27c, 37, 38, 44–50 | KiCad parsing and atomic data integrity: symbols, inheritance, s-expression bounds, paths, value keys, claims, mapping conflicts, quantities |
+| I5e | 05, 11–14, 19, 24, 25, 28–32, 52 (DSN writer tokens, from the I5c review) | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
 
 ### I5b landed — the acquisition path (CONFIRMED)
 
@@ -146,5 +146,47 @@ still be quoted.
 Reviewed pin move: I5a's route license test now serves its restricted snapshot through the server catalog, because the route
 no longer reads the body's snapshot. The export parity pin (bytes identical to the serializer) holds unchanged.
 
-Not proven locally: the chat, BOM and library links in a real browser, and the image policy header against the running app —
-carried by CI's page-browser-e2e job on this commit.
+~~Not proven locally: the chat, BOM and library links in a real browser, and the image policy header against the running app —
+carried by CI's page-browser-e2e job on this commit.~~ **Corrected by the I5c review:** no Playwright spec exercised any of
+this, so that sentence claimed proof that did not exist. See the review section below for what now proves it.
+
+### I5c adversarial review — verified findings fixed, one decision recorded (CONFIRMED)
+
+A review workflow read the committed I5c diff through four lenses (regressions, security bypasses, coverage of the rows' own
+claims, test adequacy), and a skeptic per finding tried to refute it by reading and running the code. **20 findings: 17
+verified real** (4 medium after de-duplication: one regression, one injection the diff missed, one weak test; the rest low),
+**3 refuted** with reasons.
+
+Every real finding got a test first. On the I5c code **18 new or strengthened cases failed**; the others are pins that already
+passed and were kept because the reviewer showed the earlier tests could not tell the fix from its absence — each pin was
+proven by reverting its control and watching the test fail (chat link policy, both string-aware indents, native placement
+neutralisation, the DRU own-property lookup: all five mutants killed).
+
+| finding (severity) | fix |
+|---|---|
+| the app's own export of a pinned part wrote an EMPTY Datasheet (the snapshot adapter hard-coded `null`) (medium) | the published symbol's own Datasheet property, through the link policy; a fixture-runtime route test drives the REAL loader (no catalog mock) and finds the NE555's datasheet on both the library block and the placed instance |
+| a silk text anchor was written into `.kicad_pcb` by hand: `left))) (gr_text … (layer "F.Cu") …` became sibling nodes, on the public export route and into kicad-cli (medium; row 04's control did not hold for every input) | only `left`/`center`/`right`, through the validated token layer (`KicadEmitError` otherwise). Every other hand-built child in the eight PCB writers was audited: numbers, `q()`-quoted strings or constants only |
+| the row-16 test passed even if the route trusted body selections again (its forged block was malformed, and its server license forced 422 anyway) (medium) | a WELL-FORMED forged symbol with a forged license (must export the server's symbol, 200, no injected text) and a server-prohibits/body-allows case (must be `EXPORT_LICENSE_PROHIBITED`); the single-definition case asserts its code and issue |
+| the embedded `lib_symbols` block still carried a `file:`/UNC Datasheet (row 35 half applied) (low, two lenses) | the Datasheet property inside the embedded block goes through the same policy (refused → `~`; other properties byte-for-byte) for catalog and pinned parts |
+| 80 of ~20 000 upstream KiCad datasheets are written `www.host/…` with no scheme and were dropped at export and ingest (low) | a scheme-less `www.` DOCUMENT link is read as `https://www.…` and must then pass every rule; a vendor page link must still carry its scheme |
+| the export loaded one full snapshot per INSTANCE, sequentially, and reported a database outage as "not published" (low, two lenses) | one load per revision, four at a time; a loader that throws is `503 EXPORT_CATALOG_UNAVAILABLE`, logged redacted, never 422 |
+| the kicad-default pick-and-place Side column wrote the stored text (low) | a closed token, as in the other formats |
+| the BOM CSV link columns skipped the policy the packet and view use (low) | datasheet through the document policy; product URL through the shared distributor-page helper |
+| the chat link assertions passed with the old unfiltered renderer (react-markdown already empties `javascript:`/`file:`) (low) | protocol-relative, IP-literal, credentialed, `xmpp:`, relative-path and local-host links must render as text; the host label, a mail link and a GFM autolink are asserted exactly |
+| the image policy header was tested only as config, and the artifacts claimed CI browser proof that did not exist (low) | `e2e/security-headers.spec.ts`: the page and an API response carry `img-src 'self' data: blob:` in the running app; the false sentence above is struck and corrected |
+| the string-aware indents and the power-label escaping had no test (low) | unit and export cases for both indents and a power label with a newline |
+| native placement neutralisation and the DRU own-property lookup had no test (low) | both pinned |
+| the BOM view and library panel link policy was guarded only by `safeHref(` regexes; the local-name rule was untested (low) | one `DatasheetLink` component (library panel, part inspector) rendered in tests, `vendorProductPageUrl`/`offerLinkUrl` in `distributor-links` (BOM view, BOM CSV) tested directly; tripwires require them and forbid a stored link straight into an `<a href>`; six local host names refused |
+
+**Decision recorded (regression half kept):** a pinned part's library item is still named after its exact MPN
+(`Timer:NE555DR`, not the catalog row's `Timer:NE555D`). Two pinned revisions share one KiCad symbol name whenever they share a
+symbol (every resistor value is `Device:R`), so naming by symbol would put two different definitions under one `lib_id`; the
+exact MPN is unique per pinned part and the file embeds every definition it uses. Stage 5 designed and tested the pinned export
+this way; I5c made the app's own export use it. Cost, stated plainly: KiCad's "Update symbols from library" does not find
+`Timer:NE555DR` in the stock library.
+
+Refuted: regional distributor domains (no live source produces one — Mouser is disabled, DigiKey sends no locale, Octopart links
+are on octopart.com); a `KicadEmitError` answering 500 on the PCB export (fails closed, same convention as `BoardIntegrityError`
+on that route); the FreeRouting DSN writer's own unquoted stackup tokens (not in the I5c diff or rows). The DSN finding is real
+in its own right — an authenticated caller's stackup names, directions and costs are written unquoted into the file handed to
+the FreeRouting subprocess, and its `q()` does not escape newlines — so it is **added to I5e** as row 52 rather than dropped.

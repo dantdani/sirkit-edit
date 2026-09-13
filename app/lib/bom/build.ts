@@ -33,6 +33,8 @@ import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 
 export { lineUnitPrice };
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
+import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c review]
+import { vendorProductPageUrl } from "@/app/lib/distributor-links"; // [B19-D I5c review]
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
   resistor: "Resistor",
@@ -391,8 +393,9 @@ export function bomToCsv(result: BomResult): string {
       currency ?? "",
       ext ?? "",
       best?.inStock ?? "",
-      row.datasheet ?? "",
-      best?.productUrl ?? "",
+      // [B19-D I5c review] the link columns follow the same policy as the view and the procurement packet
+      safeHref(row.datasheet, "document") ?? "",
+      vendorProductPageUrl(best?.productUrl) ?? "",
       row.riskScore.total,
       row.riskScore.grade,
       row.riskScore.notes.join("; "),

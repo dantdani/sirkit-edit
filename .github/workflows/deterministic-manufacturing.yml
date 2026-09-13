@@ -143,6 +143,7 @@ jobs:
           app/components/chat/__tests__/b19-d-chat-markdown.test.tsx
           app/lib/__tests__/b19-d-href-and-csv-output.test.ts
           app/lib/atomic/__tests__/b19-d-kicad-export-selections.test.ts
+          app/lib/atomic/__tests__/b19-d-kicad-export-fixture-runtime.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts

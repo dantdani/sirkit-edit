@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { emitBomCsv } from "../emit-bom";
 import { emitPositionCsv } from "../emit-position";
+import { emitNativePlacement } from "../native/ancillary";
 import { createEmptyBoard } from "../../types";
 import { mmToNm } from "../../units";
 
@@ -32,5 +33,23 @@ describe("[B19-D I5c row 33] pick-and-place neutralises text columns only", () =
     const csv = emitPositionCsv(b, "kicad-default", "both");
     const row = csv.trim().split("\r\n")[1]!;
     expect(row).toBe("R1,\"'@SUM(1,2)\",'=HYPERLINK(1),-10.0000,5.0000,-90.0000,top");
+  });
+
+  it("[review] the Side column is a closed token, never the stored text", () => {
+    const b = createEmptyBoard();
+    const fp = (side: string) => ({ id: `f-${side.length}`, ref: side === "bottom" ? "R2" : "R1", footprintId: "L:R", at: { x: 0, y: 0 }, rotationDeg: 0, side, padNets: {}, def: { libName: "L", name: "R", attributes: { smd: true, throughHole: false, excludeFromPos: false, excludeFromBom: false }, pads: [{ number: "1", type: "smd", shape: { kind: "rect", width: 1, height: 1 }, at: { x: 0, y: 0 }, rotationDeg: 0, layers: ["copperTop"] }], graphics: [], bodyBBox: { minX: 0, minY: 0, maxX: 0, maxY: 0 }, models: [], rawSexpr: "" } });
+    b.footprints = [fp('=HYPERLINK("https://evil.example","x")'), fp("bottom")] as never;
+    const csv = emitPositionCsv(b, "kicad-default", "both");
+    expect(csv).not.toContain("HYPERLINK");
+    const sides = csv.trim().split("\r\n").slice(1).map((line) => line.split(",").at(-1));
+    expect(sides.sort()).toEqual(["bottom", "top"]);
+  });
+});
+
+describe("[B19-D I5c review] native placement neutralises its text columns", () => {
+  it("a formula-shaped footprint name is prefixed while the negative coordinate stays a number", () => {
+    const footprint = { ref: "R1", side: "top", rotationDeg: 270, at: { x: -10_000_000, y: 0 }, def: { name: "=HYPERLINK(1)", attributes: { excludeFromPos: false }, pads: [{ number: "1" }] } };
+    const csv = emitNativePlacement({ board: { footprints: [footprint] }, transform: { originXNm: 0, originYNm: 0 } } as never);
+    expect(csv.trim().split("\r\n")[1]).toBe("R1,-10.000000,0.000000,Top,-90,'=HYPERLINK(1)");
   });
 });

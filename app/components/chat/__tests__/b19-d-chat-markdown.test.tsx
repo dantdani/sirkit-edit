@@ -35,7 +35,27 @@ describe("[B19-D I5c row 02] images in chat markdown are never fetched", () => {
     expect(html).toMatch(/href="https:\/\/www\.digikey\.com\/x"[^>]*rel="noreferrer noopener"/);
     expect(html).not.toContain("javascript:");
     expect(html).not.toContain("file:///");
-    expect(html).toContain("www.digikey.com");
+    expect(html).toContain(">(www.digikey.com)</span>");
+  });
+
+  // [review] react-markdown already empties javascript: and file:, so those assertions alone cannot tell the policy apart
+  // from a plain pass-through. These destinations are ones react-markdown lets through.
+  it.each([
+    ["protocol-relative", "[x](//evil.example/x)"],
+    ["an IP literal", "[x](https://127.0.0.1/x)"],
+    ["credentials", "[x](https://u:p@evil.example/x)"],
+    ["xmpp:", "[x](xmpp:a@evil.example)"],
+    ["a relative app path", "[x](/api/projects)"],
+    ["a local host name", "[x](https://intranet/x)"],
+  ])("a %s link renders as text, not a link", async (_label, markdown) => {
+    const html = await render(markdown);
+    expect(html).not.toMatch(/<a\b/i);
+    expect(html).toContain(">x<");
+  });
+
+  it("a mail link shows that it is email; a GFM autolink shows its host", async () => {
+    expect(await render("[m](mailto:a@b.com)")).toMatch(/<a href="mailto:a@b\.com"[^>]*>m<span[^>]*>\(email\)<\/span><\/a>/);
+    expect(await render("see www.example.com today")).toMatch(/<a href="http:\/\/www\.example\.com\/?"[^>]*>www\.example\.com<span[^>]*>\(www\.example\.com\)<\/span><\/a>/);
   });
 
   it("the page renders assistant markdown only through ChatMarkdown (tripwire on app/page.tsx)", async () => {

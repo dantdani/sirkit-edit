@@ -85,6 +85,7 @@ Nothing below is a claim that a gap exists until an increment REPRODUCES it with
 | 49 | `resolvePermittedPath`: prototype variables, cwd-relative paths, `..foo` false positive | LOW | R4 | CONFIRMED | kicad-11 |
 | 50 | Atomic quantity unit ambiguity ('' vs %, K, absolute tolerance) | LOW | R4 | CONFIRMED | identity-09 |
 | 51 | `asNumber` turns decimal-comma strings into 100x values | LOW | R4 | CONFIRMED | identity missed M22 |
+| 52 | FreeRouting DSN writer: stackup layer names, directions and costs unquoted; its `q()` leaves newlines | LOW | R2 (authenticated autoroute; a shared project can carry the stackup) | CONFIRMED (I5c review probe) | I5c review, coverage lens |
 
 ---
 
@@ -630,6 +631,18 @@ Nothing below is a claim that a gap exists until an increment REPRODUCES it with
 - **Where:** `distributors/types.ts:80` strips every character outside `[0-9.eE+-]`. Used at `mouser.ts:128-129,145,147` and `octopart.ts:170,180-181`.
 - **Test first:** `app/lib/distributors/__tests__/b19-d-number-parsing.test.ts`. `asNumber('0,34')` and `asNumber('€1.234,56')` must be `null` (today 34 and 1.23456). Pins: `asNumber('$1.23') === 1.23`, `asNumber(5) === 5`.
 - **Minimal fix:** Accept only an optional currency sign plus `-?\d+(\.\d+)?`; otherwise return null.
+
+### B19D-52 · FreeRouting DSN writer tokens — LOW · R2 · CONFIRMED (raised by the I5c review; not part of the I5c rows)
+- **Where:** `pcb/dsn/write-dsn.ts` — `q()` (`:554-556`) escapes only backslash and quote; `(layer ${layer.name}` (`:598`),
+  `(plane_via_costs ${…planeViaCost})` (`:623`), `(preferred_direction ${…})` (`:630`) and `shapeSexpr` (`:572-578`) interpolate
+  the board's stackup configuration as-is. `getBoardStackup` (`stackup.ts:136-146`) clones `board.stackupConfig` unvalidated,
+  and the authenticated autoroute route's `isBoardLike` checks only array shapes, so the `.dsn` handed to the FreeRouting
+  subprocess can carry injected sibling nodes (probe: `(layer F.Cu) (sirkit_injected_layer yes`).
+- **Test first:** `app/lib/pcb/dsn/__tests__/b19-d-dsn-tokens.test.ts`: a stackup whose copper layer name, preferred direction
+  or plane via cost carries `) (sirkit_injected yes` must be refused before FreeRouting is spawned; a net name with a newline
+  stays one line inside its string; the simple-2 and 4-layer baselines emit unchanged.
+- **Minimal fix:** layer names from the DSN layer order, directions from `{horizontal, vertical, any}`, costs finite numbers,
+  and a DSN `q()` that escapes or refuses newline, CR and control characters.
 
 ---
 

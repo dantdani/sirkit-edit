@@ -1,5 +1,6 @@
 import type { AtomicPartRevision, PortableAtomicSnapshot } from "./types";
 import type { CachedPart } from "@/app/lib/parts-cache";
+import { safeHref } from "@/app/lib/net/href-policy";
 import type { PinPadMappingContract } from "@/app/lib/pcb/pin-pad-mapping";
 
 export interface KicadAtomicPartView {
@@ -122,7 +123,9 @@ export function atomicSnapshotToCachedPart(snapshot: PortableAtomicSnapshot): Ca
     description: snapshot.genericDevice?.description ?? null,
     mpn: snapshot.exactPart?.exactMpn ?? null,
     manufacturer: snapshot.manufacturer?.canonicalName ?? null,
-    datasheet: null,
+    // [B19-D I5c review] the published symbol's own Datasheet property (a web link only); it was dropped, so the app's
+    // export of a pinned part wrote an empty Datasheet where the catalog row had carried one
+    datasheet: safeHref(snapshot.symbol.properties?.Datasheet, "document"),
     footprintHint: mapping?.state === "approved" ? footprintFullName : null,
     mainCategory: snapshot.genericDevice?.category ?? snapshot.family?.publishedName ?? "Atomic component",
     libraryName: snapshot.symbol.origin.libraryNickname,

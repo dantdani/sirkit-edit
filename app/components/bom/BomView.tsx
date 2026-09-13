@@ -15,7 +15,6 @@
  */
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
-import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy"; // [B19-D I5c row 34]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
@@ -29,11 +28,10 @@ import type { DistributorChoice, PartPricing, LifecycleStatus } from "@/app/lib/
 import type { RiskGrade, DesignRiskSummary } from "@/app/lib/risk-scoring";
 import {
   DISTRIBUTOR_UPLOAD_URLS,
-  digiKeyProductUrl,
-  mouserProductUrl,
-  lcscProductUrl,
+  offerLinkUrl,
+  vendorProductPageUrl,
   type CartDistributor,
-} from "@/app/lib/distributor-links";
+} from "@/app/lib/distributor-links"; // [B19-D I5c row 34, review] the shared, tested link policy
 import type { Change } from "@/app/lib/snapshots";
 import { changeToNotification, type NotificationSeverity } from "@/app/lib/notifications";
 
@@ -227,11 +225,6 @@ function stockOf(row: BomRow): number | null {
 function currencyOf(row: BomRow): string | null {
   return lineCurrency(row);
 }
-function productUrlOf(row: BomRow): string | null {
-  // [B19-D I5c row 34] a stored vendor link is shown only when it is an HTTPS page on a distributor's own domain
-  return safeHref(row.pricing?.bestOverall?.productUrl ?? null, "page", VENDOR_PAGE_HOSTS);
-}
-
 function compareRows(a: BomRow, b: BomRow, key: SortKey): number {
   switch (key) {
     case "refDes":
@@ -329,17 +322,6 @@ function downloadBlob(blob: Blob, filename: string): void {
 }
 
 /** Best-effort search URL for a distributor offer (productUrl, else MPN search). */
-function searchUrlFor(offer: PartPricing): string | null {
-  const vendorPage = safeHref(offer.productUrl, "page", VENDOR_PAGE_HOSTS); // [B19-D I5c row 34]
-  if (vendorPage) return vendorPage;
-  const id = offer.sku ?? offer.mpn;
-  if (!id) return null;
-  if (offer.distributor === "digikey") return digiKeyProductUrl(id);
-  if (offer.distributor === "mouser") return mouserProductUrl(id);
-  if (offer.distributor === "lcsc") return lcscProductUrl(id);
-  return null;
-}
-
 /** [B19-B I2] shown when there is no project scope to authorize a live-priced BOM request with. */
 const BOM_NEEDS_PROJECT = "Open or save a project to build its BOM. Live distributor pricing is a project read.";
 
@@ -954,7 +936,7 @@ export function BomView(props: Props) {
               const unit = bestUnit(row);
               const currency = currencyOf(row);
               const stock = stockOf(row);
-              const url = productUrlOf(row);
+              const url = vendorProductPageUrl(row.pricing?.bestOverall?.productUrl);
               const hasPricing = pricingChoice !== "none" && row.pricing !== null;
               const offers = row.pricing?.offers ?? [];
               const best = row.pricing?.bestOverall ?? null;
@@ -1882,7 +1864,7 @@ function OfferDetail({
                 <td className="px-2 py-1 text-zinc-500">—</td>
                 <td className="px-2 py-1">
                   {(() => {
-                    const url = searchUrlFor(o);
+                    const url = offerLinkUrl(o);
                     return url ? (
                       <a
                         href={url}

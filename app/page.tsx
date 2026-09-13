@@ -1,7 +1,7 @@
 "use client";
 
 import { ChatMarkdown } from "@/app/components/chat/ChatMarkdown";
-import { safeHref } from "@/app/lib/net/href-policy";
+import { DatasheetLink } from "@/app/components/parts/DatasheetLink"; // [B19-D I5c row 34, review]
 import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
@@ -2518,10 +2518,7 @@ function KicadPropertiesPanel({
         {part && <KicadMetaRow label="Library" value={part.libraryName} />}
         {part && <KicadMetaRow label="Pins" value={String(part.pins.length)} />}
         {part?.footprintHint && <KicadMetaRow label="Footprint" value={part.footprintHint} />}
-        {safeHref(part?.datasheet, "document") && (
-          <a href={safeHref(part?.datasheet, "document")!} target="_blank" rel="noopener noreferrer"
-            className="inline-block text-teal-400 hover:text-teal-300 transition pt-0.5">Datasheet ↗</a>
-        )}
+        <DatasheetLink href={part?.datasheet} className="inline-block text-teal-400 hover:text-teal-300 transition pt-0.5">Datasheet ↗</DatasheetLink>
       </div>
 
       <div className="flex gap-1">

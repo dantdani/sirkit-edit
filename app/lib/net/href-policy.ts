@@ -6,6 +6,10 @@
  * characters anywhere in it, and a host that is a DNS name — not an IP literal, not localhost, not a local/internal name.
  * Everything else (`javascript:`, `data:`, `vbscript:`, `file:`, UNC `\\server`, protocol-relative `//host`) is dropped,
  * never "fixed". The server's egress helper (`external-href.ts`) adds its resolved-address policy on top.
+ *
+ * [B19-D I5c review] One spelling is read, not dropped: a DOCUMENT link written `www.host/path` with no scheme (80 of the
+ * upstream KiCad library's ~20 000 datasheets; KiCad itself opens them as web addresses) is read as `https://www.host/path`
+ * and then passes every rule above. A stored vendor PAGE link must carry its scheme.
  */
 
 export type HrefKind = "page" | "document";
@@ -28,10 +32,11 @@ export function safeHref(raw: unknown, kind: HrefKind, allowedHosts?: readonly s
   if (typeof raw !== "string") return null;
   const candidate = raw.trim();
   if (candidate === "" || candidate.length > 2048 || UNSAFE_CHARACTERS.test(candidate)) return null;
-  if (!/^https?:\/\/[^/\\]/i.test(candidate)) return null;
+  const spelled = kind === "document" && /^www\.[a-z0-9-]/i.test(candidate) ? `https://${candidate}` : candidate;
+  if (!/^https?:\/\/[^/\\]/i.test(spelled)) return null;
   let url: URL;
   try {
-    url = new URL(candidate);
+    url = new URL(spelled);
   } catch {
     return null;
   }
