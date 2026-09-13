@@ -140,6 +140,11 @@ jobs:
           app/lib/distributors/__tests__/b19-d-review-values.test.ts
           app/lib/distributors/__tests__/b19-d-review-lifecycle.test.ts
           app/lib/bom/__tests__/b19-d-review-price-consistency.test.ts
+          app/components/chat/__tests__/b19-d-chat-markdown.test.tsx
+          app/lib/__tests__/b19-d-href-and-csv-output.test.ts
+          app/lib/atomic/__tests__/b19-d-kicad-export-selections.test.ts
+          app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
+          app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

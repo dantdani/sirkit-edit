@@ -106,7 +106,7 @@ function expandPadLayers(padNode: SList, warnings: string[]): LayerId[] {
     const item = layersNode.items[i];
     if (item.kind !== "string" && item.kind !== "symbol") continue;
     const name = item.value;
-    const wild = LAYER_WILDCARDS[name];
+    const wild = Object.hasOwn(LAYER_WILDCARDS, name) ? LAYER_WILDCARDS[name] : undefined; // [B19-D I5c row 18]
     if (wild) {
       for (const id of wild) if (!out.includes(id)) out.push(id);
       continue;

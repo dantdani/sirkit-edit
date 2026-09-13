@@ -159,7 +159,7 @@ export function importKicadDru(input: {
     const constraintNodes = ruleNode.filter((node): node is SExpr[] => isList(node) && head(node) === "constraint");
     for (const [constraintIndex, constraintNode] of constraintNodes.entries()) {
       const externalKind = getString(constraintNode[1]);
-      const kind = externalKind ? KICAD_KIND[externalKind] : undefined;
+      const kind = externalKind && Object.hasOwn(KICAD_KIND, externalKind) ? KICAD_KIND[externalKind] : undefined; // [B19-D I5c row 18]
       const requirement = kind ? requirementFromConstraint(constraintNode, kind) : null;
       const id = stableConstraintId("kicad-rule", { fileHash, ruleName, constraintIndex, externalKind });
       if (!kind || !requirement) {

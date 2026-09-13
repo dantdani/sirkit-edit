@@ -1370,3 +1370,21 @@ _(discovery, reproduction and results appended below as they are observed)_
   list), offer retention on PGlite 8/8; affected suites 412 passed / 3 skipped; broad run: 310 files, 3927 passed, 13
   expected skips; tsc 0; eslint: no new findings (BomView's four pre-existing effect warnings unchanged).
 - Three I5c reproduction files written in parallel are left uncommitted on purpose; they land with I5c.
+
+### B19 I5c — output injection (2026-09-13 local, solo; this commit)
+
+- Twelve matrix rows, reproduced first: all 42 new cases failed before the fix (5 only on missing helpers). Two proposed tests
+  corrected while reproducing (a formula-shaped reference is already refused by board integrity; a comma in a neutralised
+  cell stays quoted).
+- Medium: chat markdown images (02) — one `ChatMarkdown` renderer that never fetches images and keeps only web/mail links, plus
+  an `img-src 'self' data: blob:` policy; `.kicad_pcb` structure injection (04) — every leaf child validated.
+- Also: KiCad string escaping and string-aware indentation (17); own-property table lookups (18); export pinned parts from the
+  server's published snapshots, body selections ignored, single-symbol validation (15, 16); one browser-safe link policy for
+  vendor pages, datasheets and KiCad extraction (34); datasheet policy at export, recorded as policy because KiCad was not
+  available to reproduce (35); CSV formula neutralisation in carts, the packet and both fab writers, and quoted CR (09, 10, 33);
+  SPICE report escaping (21).
+- Tests: chat markdown 7/7, href and CSV output 11/11, export selections 7/7, fab CSV 2/2, KiCad emit injection 13/13, report
+  escaping 1/1 (all new, in the CI list; the fab file under the already-listed fab directory); PCB, constraints, KiCad,
+  SPICE, project and component suites 1387 passed / 8 skipped; broad run 312 files, 3941 passed, 13 expected skips; control
+  inventory gate green; tsc 0; eslint clean on the changed files.
+- Browser proof for the UI changes is CI's page-browser-e2e job.

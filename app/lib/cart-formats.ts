@@ -14,11 +14,14 @@ import { digiKeyProductUrl, mouserProductUrl } from "./distributor-links";
 import { cheapestUnitPrice, PRICING_CURRENCY } from "./distributors/types"; // [B19-D I5b row 20]
 
 const CRLF = "\r\n";
+import { spreadsheetText } from "./spreadsheet-cell"; // [B19-D I5c row 09]
+import { safeHref, VENDOR_PAGE_HOSTS } from "./net/href-policy";
 
 // ─── RFC 4180 helpers ───────────────────────────────────────────────────────--
 
 function csvCell(value: string | number | null | undefined): string {
-  const s = value === null || value === undefined ? "" : String(value);
+  // [B19-D I5c row 09] text cells never start a formula; numbers stay numbers
+  const s = value === null || value === undefined ? "" : typeof value === "number" ? String(value) : spreadsheetText(value);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -213,8 +216,9 @@ export function toProcurementPacketCsv(
       sawPrice = true;
     }
 
-    const dkUrl = dk?.productUrl ?? (dk?.sku ?? row.mpn ? digiKeyProductUrl(dk?.sku ?? row.mpn ?? "") : "");
-    const moUrl = mo?.productUrl ?? (mo?.sku ?? row.mpn ? mouserProductUrl(mo?.sku ?? row.mpn ?? "") : "");
+    // [B19-D I5c row 09] a stored vendor link is used only when it is an HTTPS page on a distributor's domain
+    const dkUrl = safeHref(dk?.productUrl, "page", VENDOR_PAGE_HOSTS) ?? (dk?.sku ?? row.mpn ? digiKeyProductUrl(dk?.sku ?? row.mpn ?? "") : "");
+    const moUrl = safeHref(mo?.productUrl, "page", VENDOR_PAGE_HOSTS) ?? (mo?.sku ?? row.mpn ? mouserProductUrl(mo?.sku ?? row.mpn ?? "") : "");
 
     lines.push(
       csvRow([

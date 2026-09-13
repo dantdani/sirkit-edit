@@ -13,7 +13,8 @@ import { exportToKicadSch, SchematicExportLicenseError, SchematicExportValidatio
 import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
-import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import type { PortableAtomicSnapshot, ProjectComponentPin } from "@/app/lib/atomic/types";
+import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
@@ -23,7 +24,8 @@ type ExportBody = {
   title?: string;
   description?: string;
   company?: string;
-  componentSelections?: Record<string, ProjectComponentPin>;
+  /** [B19-D I5c row 16] accepted for compatibility and IGNORED: pinned parts come from the server's published snapshots */
+  componentSelections?: unknown;
 };
 
 /** Make a title safe to use as a file name. */
@@ -71,18 +73,46 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
     );
   }
 
-  // Collect unique partIds and load full catalog data from the DB (server-side;
-  // the client parts cache / ensurePartLoaded can't be called from a route).
-  const hasExactSelection = (component: (typeof kicadComponents)[number]): boolean => {
-    const selection = body.componentSelections?.[component.id];
-    return Boolean(
-      selection
-      && selection.atomicRevisionId === component.atomicPartRevisionId
-      && selection.symbolVersionId === component.symbolAssetVersionId
-      && selection.embeddedSnapshot.atomicRevision.id === selection.atomicRevisionId
-      && selection.embeddedSnapshot.symbol.versionId === selection.symbolVersionId,
+  // [B19-D I5c rows 15, 16] Every instance that declares an atomic revision is exported from the PUBLISHED snapshot the server
+  // loads for that revision — its symbol and its licenses — and the declared symbol version must match. Selections in the
+  // request body are never trusted (a body snapshot could carry its own s-expressions or claim any license). An instance
+  // whose pinned revision cannot be loaded is refused, never silently exported from a catalog row.
+  const pinnedSelections: Record<string, ProjectComponentPin> = {};
+  const unavailable: string[] = [];
+  for (const component of kicadComponents) {
+    if (!component.atomicPartRevisionId) continue;
+    let snapshot: PortableAtomicSnapshot | null = null;
+    try {
+      snapshot = await loadPublishedPortableSnapshot(component.atomicPartRevisionId);
+    } catch {
+      snapshot = null;
+    }
+    if (!snapshot || !component.symbolAssetVersionId || snapshot.symbol.versionId !== component.symbolAssetVersionId) {
+      unavailable.push(component.refDes);
+      continue;
+    }
+    pinnedSelections[component.id] = {
+      selectionRecordId: component.selectionRecordId ?? `published:${snapshot.atomicRevision.id}`,
+      atomicRevisionId: snapshot.atomicRevision.id,
+      symbolVersionId: snapshot.symbol.versionId,
+      ...(snapshot.footprint ? { footprintVersionId: snapshot.footprint.versionId } : {}),
+      ...(snapshot.mapping ? { mappingCertificateId: snapshot.mapping.id } : {}),
+      modelVersionIds: snapshot.models.map((model) => model.versionId),
+      embeddedSnapshot: snapshot,
+    };
+  }
+  if (unavailable.length > 0) {
+    return Response.json(
+      {
+        ok: false,
+        code: "EXPORT_PINNED_PART_UNAVAILABLE",
+        error: "Some parts are pinned to a component revision that is not published (or no longer matches), so nothing was exported.",
+        components: [...new Set(unavailable)].sort(),
+      },
+      { status: 422, headers: { "Cache-Control": "no-store" } },
     );
-  };
+  }
+  const hasExactSelection = (component: (typeof kicadComponents)[number]): boolean => Boolean(pinnedSelections[component.id]);
   const partIds = [...new Set(kicadComponents.filter((component) => !hasExactSelection(component)).map((c) => c.partId))];
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map(loaded.map((p) => [p.id, p] as const));
@@ -103,7 +133,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       title: body.title,
       description: body.description,
       company: body.company,
-      componentSelections: body.componentSelections,
+      componentSelections: pinnedSelections,
     });
   } catch (error) {
     // [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol

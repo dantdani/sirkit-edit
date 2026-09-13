@@ -349,7 +349,7 @@ async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, numb
 
 function csvCell(v: string | number | null): string {
   const s = v === null ? "" : safeSpreadsheetCell(String(v));
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; // [B19-D I5c row 10] a lone CR is quoted too
 }
 
 export function bomToCsv(result: BomResult): string {

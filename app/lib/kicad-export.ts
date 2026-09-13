@@ -28,6 +28,9 @@ import { getPowerSymbol, buildGenericPowerSymbol } from "./kicad-power-symbols";
 import { assignFootprints } from "@/lib/footprint-assign";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
 import { atomicSnapshotToCachedPart } from "@/app/lib/atomic/kicad-adapters";
+import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c]
+import { parseSexpr } from "@/app/lib/pcb/sexpr";
+import { assertBoundedSExpression } from "@/app/lib/atomic/security";
 
 /**
  * B07.2 — typed fail-closed validation error thrown by `exportToKicadSch`
@@ -116,7 +119,9 @@ function num(n: number): string {
  * only accepts those bare inside double-quoted strings.
  */
 function q(s: string): string {
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  // [B19-D I5c row 17] newline, carriage return and tab escaped as KiCad writes them; other controls become spaces
+  const escaped = String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, " ");
+  return `"${escaped}"`;
 }
 
 /** Escape a literal string for safe interpolation into a `RegExp`. */
@@ -250,6 +255,10 @@ export function exportToKicadSch(input: KicadExportInput): string {
     partLibId.set(inst.id, libId);
     if (embedded.has(assetKey)) continue;
     embedded.add(assetKey);
+    const pinnedSelection = input.componentSelections?.[inst.id];
+    if (pinnedSelection && pinnedSelection.atomicRevisionId === inst.atomicPartRevisionId && pinnedSelection.symbolVersionId === inst.symbolAssetVersionId) {
+      assertSingleSymbolDefinition(part.symbolRaw.trim(), inst.refDes);
+    }
     const raw = rewriteSymbolName(part.symbolRaw.trim(), libId);
     if (raw) lines.push(indent(raw, 2));
   }
@@ -308,7 +317,7 @@ export function exportToKicadSch(input: KicadExportInput): string {
         refDes: inst.refDes,
         value: inst.value,
         footprint: footprintByRefDes.get(inst.refDes) ?? "",
-        datasheet: part?.datasheet ?? "",
+        datasheet: safeHref(part?.datasheet, "document") ?? "", // [B19-D I5c row 35] only a web link is written
         uuid: uuidFor("symbol", inst.id),
         sheetPath,
       }),
@@ -523,9 +532,37 @@ function round3(n: number): number {
 
 /** Re-indent a multi-line raw block by `tabs` tab stops, preserving structure. */
 function indent(block: string, tabs: number): string {
+  // [B19-D I5c row 17] string-aware: a line that begins inside a quoted string is never padded
   const pad = "\t".repeat(tabs);
+  let inString = false;
+  let escaped = false;
   return block
     .split("\n")
-    .map((line) => (line.length ? pad + line : line))
+    .map((line) => {
+      const padded = !inString && line.length ? pad + line : line;
+      for (const c of line) {
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (c === "\\") escaped = true;
+          else if (c === '"') inString = false;
+        } else if (c === '"') inString = true;
+      }
+      return padded;
+    })
     .join("\n");
+}
+
+/**
+ * [B19-D I5c row 16] A pinned part's symbol is written only when it is exactly ONE `(symbol …)` definition: bounded, balanced,
+ * with nothing before or after it. Anything else could close `lib_symbols` and add structure of its own.
+ */
+function assertSingleSymbolDefinition(raw: string, refDes: string): void {
+  try {
+    assertBoundedSExpression(raw);
+    const root = parseSexpr(raw);
+    const head = root.items[0];
+    if (!head || head.kind !== "symbol" || head.value !== "symbol") throw new Error("not a symbol definition");
+  } catch {
+    throw new SchematicExportValidationError([`${refDes}: the pinned part's symbol is not exactly one symbol definition`]);
+  }
 }

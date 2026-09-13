@@ -1,14 +1,11 @@
 "use client";
 
+import { ChatMarkdown } from "@/app/components/chat/ChatMarkdown";
+import { safeHref } from "@/app/lib/net/href-policy";
 import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
 const SpiceStudio = dynamic(() => import("@/app/components/spice/SpiceStudio"), { ssr: false });
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
-import rehypeKatex from "rehype-katex";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -2521,8 +2518,8 @@ function KicadPropertiesPanel({
         {part && <KicadMetaRow label="Library" value={part.libraryName} />}
         {part && <KicadMetaRow label="Pins" value={String(part.pins.length)} />}
         {part?.footprintHint && <KicadMetaRow label="Footprint" value={part.footprintHint} />}
-        {part?.datasheet && (
-          <a href={part.datasheet} target="_blank" rel="noopener noreferrer"
+        {safeHref(part?.datasheet, "document") && (
+          <a href={safeHref(part?.datasheet, "document")!} target="_blank" rel="noopener noreferrer"
             className="inline-block text-teal-400 hover:text-teal-300 transition pt-0.5">Datasheet ↗</a>
         )}
       </div>
@@ -8416,36 +8413,7 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
   return (
     <div className="flex justify-start w-full">
       <div className="w-full rounded-lg px-3 py-2.5 text-xs leading-relaxed bg-zinc-900 border border-zinc-800 overflow-hidden">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeHighlight, rehypeKatex]}
-          components={{
-            p:          ({ children }) => <p className="mb-2 last:mb-0 text-zinc-200 leading-relaxed">{children}</p>,
-            h1:         ({ children }) => <h1 className="text-sm font-medium text-zinc-100 mt-3 mb-1.5">{children}</h1>,
-            h2:         ({ children }) => <h2 className="text-sm font-medium text-zinc-100 mt-3 mb-1.5">{children}</h2>,
-            h3:         ({ children }) => <h3 className="text-xs font-medium text-zinc-100 mt-2 mb-1">{children}</h3>,
-            ul:         ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 text-zinc-300">{children}</ul>,
-            ol:         ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-zinc-300">{children}</ol>,
-            li:         ({ children }) => <li className="text-zinc-300">{children}</li>,
-            strong:     ({ children }) => <strong className="font-medium text-zinc-100">{children}</strong>,
-            em:         ({ children }) => <em className="text-zinc-200">{children}</em>,
-            a:          ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="text-teal-400 hover:underline">{children}</a>,
-            code:       ({ className, children, ...props }) => {
-              const isInline = !className?.includes("language-");
-              if (isInline) return <code className="bg-zinc-800 text-teal-300 px-1 py-0.5 rounded font-mono text-[11px]">{children}</code>;
-              return <code className={`${className ?? ""} font-mono text-[11px]`} {...props}>{children}</code>;
-            },
-            pre:        ({ children }) => <pre className="bg-zinc-950 border border-zinc-800 rounded-md p-2.5 my-2 overflow-x-auto text-[11px] leading-relaxed">{children}</pre>,
-            table:      ({ children }) => <div className="my-2 overflow-x-auto"><table className="w-full text-[11px] border border-zinc-800 rounded">{children}</table></div>,
-            thead:      ({ children }) => <thead className="bg-zinc-800/40">{children}</thead>,
-            th:         ({ children }) => <th className="text-left px-2 py-1 border-b border-zinc-800 font-medium text-zinc-200">{children}</th>,
-            td:         ({ children }) => <td className="px-2 py-1 border-t border-zinc-900/60 text-zinc-300">{children}</td>,
-            blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-700 pl-3 my-2 text-zinc-400 italic">{children}</blockquote>,
-            hr:         () => <hr className="my-3 border-zinc-800" />,
-          }}
-        >
-          {message.content}
-        </ReactMarkdown>
+        <ChatMarkdown content={message.content} /> {/* [B19-D I5c row 02] images never fetched; links web/mail only */}
       </div>
     </div>
   );

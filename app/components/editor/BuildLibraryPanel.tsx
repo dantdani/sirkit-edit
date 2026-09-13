@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { KicadSymbol } from "@/app/components/schematic/KicadSymbol";
 import type { KicadPin } from "@/app/lib/kicad/types";
+import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c row 34]
 
 // ─── Shapes returned by the parts APIs ──────────────────────────────────────
 
@@ -411,9 +412,9 @@ function PreviewPanel({
               <MetaRow label="Library" value={detail.libraryName} mono />
               <MetaRow label="Pins" value={String(detail.pins.length)} />
               {detail.footprintHint && <MetaRow label="Footprint" value={detail.footprintHint} mono />}
-              {detail.datasheet && (
+              {safeHref(detail.datasheet, "document") && (
                 <a
-                  href={detail.datasheet}
+                  href={safeHref(detail.datasheet, "document")!}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300 transition pt-1"

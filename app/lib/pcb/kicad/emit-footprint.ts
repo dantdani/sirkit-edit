@@ -17,7 +17,7 @@ import type { Vec2 } from "../geometry";
 import type { LayerId } from "../layers";
 import { COPPER_LAYERS } from "../layers";
 import { oppositeLayer, effectivePadLayers } from "../side";
-import { block, q, sexpr } from "./sexpr-emit";
+import { block, q, sexpr, KicadEmitError } from "./sexpr-emit";
 import { toKicadLayer } from "./layer-map";
 import { nmToMm, formatDeg, mmToNm } from "./units";
 import { newUuid } from "./types";
@@ -56,6 +56,22 @@ function padShapeToken(pad: Pad): string {
     case "oval": return "oval";
     case "polygon": return "custom";
   }
+  // [B19-D I5c row 04] an unknown shape is refused, never written
+  throw new KicadEmitError(`pad "${String(pad.number)}": unknown pad shape`);
+}
+
+const PAD_TYPES = new Set(["smd", "thru_hole", "np_thru_hole", "connect"]);
+
+/** [B19-D I5c row 04] A pad type from the parser's own vocabulary only. */
+function padTypeToken(pad: Pad): string {
+  if (typeof pad.type !== "string" || !PAD_TYPES.has(pad.type)) throw new KicadEmitError(`pad "${String(pad.number)}": unknown pad type`);
+  return pad.type;
+}
+
+/** [B19-D I5c row 04] A net id is a non-negative safe integer. */
+function netIdToken(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) throw new KicadEmitError("a net id is not a non-negative integer");
+  return value;
 }
 
 function padSize(pad: Pad): string {
@@ -118,9 +134,9 @@ function padLayerList(pad: Pad, side: "top" | "bottom"): string {
 
 function emitPad(ctx: EmitCtx, inst: FootprintInstance, pad: Pad): string {
   const layers = padLayerList(pad, inst.side);
-  const netId = inst.padNets[pad.number] ?? 0;
+  const netId = netIdToken(inst.padNets[pad.number] ?? 0);
   const net = netId !== 0 ? sexpr("net", netId, q(netNameOf(ctx.nets, netId))) : null;
-  return block(`pad ${q(pad.number)} ${pad.type} ${padShapeToken(pad)}`, [
+  return block(`pad ${q(String(pad.number))} ${padTypeToken(pad)} ${padShapeToken(pad)}`, [
     at(mx(ctx, pad.at), childDeg(ctx, pad.rotationDeg)),
     padSize(pad),
     padDrill(pad),

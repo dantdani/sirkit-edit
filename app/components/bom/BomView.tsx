@@ -15,6 +15,7 @@
  */
 
 import { lineCurrency, lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
+import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy"; // [B19-D I5c row 34]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
@@ -227,7 +228,8 @@ function currencyOf(row: BomRow): string | null {
   return lineCurrency(row);
 }
 function productUrlOf(row: BomRow): string | null {
-  return row.pricing?.bestOverall?.productUrl ?? null;
+  // [B19-D I5c row 34] a stored vendor link is shown only when it is an HTTPS page on a distributor's own domain
+  return safeHref(row.pricing?.bestOverall?.productUrl ?? null, "page", VENDOR_PAGE_HOSTS);
 }
 
 function compareRows(a: BomRow, b: BomRow, key: SortKey): number {
@@ -328,7 +330,8 @@ function downloadBlob(blob: Blob, filename: string): void {
 
 /** Best-effort search URL for a distributor offer (productUrl, else MPN search). */
 function searchUrlFor(offer: PartPricing): string | null {
-  if (offer.productUrl) return offer.productUrl;
+  const vendorPage = safeHref(offer.productUrl, "page", VENDOR_PAGE_HOSTS); // [B19-D I5c row 34]
+  if (vendorPage) return vendorPage;
   const id = offer.sku ?? offer.mpn;
   if (!id) return null;
   if (offer.distributor === "digikey") return digiKeyProductUrl(id);

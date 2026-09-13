@@ -119,3 +119,32 @@ ordered quantity), kept because the reviewer showed the earlier test would pass 
 
 Accepted as recorded decisions rather than changed: exact-MPN matching ignores the manufacturer (OD-34), and alternate
 ranking still scores a never-checked part's seeded status (pre-existing Stage 1 data, recorded).
+
+### I5c landed — output injection (CONFIRMED)
+
+Every row was reproduced by a failing test first (**all 42 new cases** failed on the code before the fix; five only because
+the new helpers did not exist yet, the other 37 on behaviour). Two corrections were made to the matrix's proposed tests
+while reproducing: a formula-shaped pick-and-place *reference* is already refused by board integrity (measured
+`BoardIntegrityError`), so row 33 targets the value and package columns instead; and a comma inside a neutralised cell must
+still be quoted.
+
+| row | reproduced before the fix | now |
+|---|---|---|
+| 02 (medium) | assistant markdown rendered `![x](https://evil.example/…)` as an `<img>` fetched when the chat opened (inline, reference-style and in a table); links accepted any destination; no image policy | one `ChatMarkdown` renderer: images render as `[image: alt]` and are never fetched; links keep only web or mail destinations, open without a referrer and show their host; `next.config` sends `Content-Security-Policy: img-src 'self' data: blob:` on every route |
+| 04 (medium) | the `.kicad_pcb` writer put `pad.type` unquoted and net ids through `String()` — an injected pad type or net id became sibling nodes in the file (also through `writeKicadPcb`, which feeds kicad-cli) | every leaf child is a finite number, a `q()`-quoted string or a bare token (`KicadEmitError` otherwise); pad types from the parser's vocabulary; net ids non-negative integers; unknown pad shapes refused |
+| 17 | `q()` escaped only `\` and `"`: a newline inside a footprint text or schematic value became a literal line break inside a string; `indent()` could pad inside a string | newline, CR and tab are escaped as KiCad writes them (other controls become spaces) in all three writers; `indent()` is string-aware |
+| 18 | `constructor` / `__proto__` / `toString` as a pad layer or power label crashed the footprint parser and the schematic export | own-property lookups in the layer, wildcard, power-symbol and DRU tables |
+| 15 | the export's license gate ran only for pinned instances with a body selection; the app exports instances that declare an atomic revision without one | the route exports every instance that declares an atomic revision from the PUBLISHED snapshot it loads for that revision (symbol and licenses), requires the declared symbol version to match, and refuses (`EXPORT_PINNED_PART_UNAVAILABLE`) when it cannot load it |
+| 16 | a crafted body selection injected its own s-expressions through `rawSymbolSExpression`, claimed any license, or crashed the route with a 500 | body selections are ignored; a pinned symbol is written only when it is exactly one bounded `(symbol …)` definition |
+| 34 | vendor product links and KiCad Datasheets were rendered as `href` with no policy (`data:`, `vbscript:`, `//host`, credentials, IP literals passed) | `safeHref` (browser-safe): HTTPS pages (vendor pages only on distributor domains), HTTP/HTTPS documents, no credentials, whitespace, control/format characters, IP literals or local names; the BOM view, the library panel, the part inspector and KiCad extraction use it; the server egress helper delegates to it |
+| 35 (reproduce-first) | the KiCad export wrote a part's Datasheet with quote escaping only | only a web datasheet link is written. Whether KiCad launches a `file:`/UNC datasheet could not be tested (no KiCad here): recorded as **policy**, not as a reproduced exploit |
+| 09 | cart CSVs and the procurement packet never neutralised a formula, and the packet's URL columns took a stored link as-is | text cells are neutralised (numbers stay numbers); a non-distributor stored link is replaced by the vendor search link |
+| 10 | the BOM CSV left a lone CR unquoted | quoted |
+| 21 | the SPICE HTML report interpolated `projectRevision` unescaped | escaped |
+| 33 | fab BOM and pick-and-place CSVs (both writers) never neutralised a formula | text columns are neutralised; coordinates, rotation and quantity stay numbers |
+
+Reviewed pin move: I5a's route license test now serves its restricted snapshot through the server catalog, because the route
+no longer reads the body's snapshot. The export parity pin (bytes identical to the serializer) holds unchanged.
+
+Not proven locally: the chat, BOM and library links in a real browser, and the image policy header against the running app —
+carried by CI's page-browser-e2e job on this commit.

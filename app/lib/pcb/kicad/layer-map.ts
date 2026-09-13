@@ -25,6 +25,8 @@ export const LAYER_MAP: Record<LayerId, string> = {
 };
 
 export function toKicadLayer(id: LayerId): string {
+  // [B19-D I5c row 18] an own entry only: a prototype name ("constructor") is an unknown layer, not a function
+  if (typeof id !== "string" || !Object.hasOwn(LAYER_MAP, id)) throw new Error(`unknown board layer: ${JSON.stringify(id).slice(0, 40)}`);
   return LAYER_MAP[id];
 }
 

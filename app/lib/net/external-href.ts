@@ -10,31 +10,16 @@
  * Server-side: the host check reuses the egress address policy (`ip-policy.ts`, which reads IP literals with node:net).
  */
 import { blockedHostnameReason } from "./ip-policy";
+import { safeHref } from "./href-policy";
 
 export type ExternalLinkKind = "page" | "document";
 
-const UNSAFE_CHARACTERS = /[\s\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
 
 export function safeExternalHref(raw: unknown, kind: ExternalLinkKind, allowedHosts?: readonly string[]): string | null {
-  if (typeof raw !== "string") return null;
-  const candidate = raw.trim();
-  if (candidate === "" || candidate.length > 2048 || UNSAFE_CHARACTERS.test(candidate)) return null;
-  if (!/^https?:\/\//i.test(candidate)) return null; // an explicit scheme and authority: no relative, protocol-relative or other scheme
-  let url: URL;
-  try {
-    url = new URL(candidate);
-  } catch {
-    return null;
-  }
-  if (url.protocol !== "https:" && !(kind === "document" && url.protocol === "http:")) return null;
-  if (url.username || url.password || !url.hostname) return null;
-  if (blockedHostnameReason(url.hostname) !== null) return null;
-  if (allowedHosts) {
-    const hostname = url.hostname.replace(/\.$/, "");
-    const allowed = allowedHosts.map((host) => host.trim().toLowerCase().replace(/\.$/, "")).filter(Boolean);
-    if (!allowed.some((host) => hostname === host || hostname.endsWith(`.${host}`))) return null;
-  }
-  return url.toString();
+  // [B19-D I5c] one link policy: the browser-safe rules first, then the egress address policy for the host
+  const href = safeHref(raw, kind, allowedHosts);
+  if (href === null) return null;
+  return blockedHostnameReason(new URL(href).hostname) === null ? href : null;
 }
 
 /**

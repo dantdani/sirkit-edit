@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5b complete (review findings fixed)",
+  "currentCheckpoint": "B19-D I5c complete (review pending)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I5c: output injection rows 02, 04, 09, 10, 15, 16, 17, 18, 21, 33, 34, 35 (reproductions for 04, 17, 18, 21, 33 already written).",
-  "updatedAt": "2026-09-13T02:37:02-04:00"
+  "nextAction": "B19 I5c review (adversarial diff review, fix verified findings); then I5d (KiCad parsing and atomic data integrity rows).",
+  "updatedAt": "2026-09-13T02:52:41-04:00"
 }

@@ -14,6 +14,10 @@ import { exportToKicadSch, SchematicExportLicenseError } from "@/app/lib/kicad-e
 import { makeFixtureCatalog, TEST_NOW } from "./fixtures";
 
 vi.mock("@/app/lib/parts-search", () => ({ getFullPartsByIds: vi.fn(async () => []), getPartsByIds: vi.fn(async () => []), searchParts: vi.fn(async () => []) }));
+// [B19-D I5c] reviewed pin move: the export route now loads pinned parts from the server's published snapshots (the body's
+// selections are ignored), so the route case below serves its license-restricted snapshot through the server catalog.
+const serverSnapshots = new Map<string, unknown>();
+vi.mock("@/app/lib/atomic/server-catalog", () => ({ loadPublishedPortableSnapshot: vi.fn(async (id: string) => structuredClone(serverSnapshots.get(id) ?? null)) }));
 
 function pinnedExport(disposition: LicenseDisposition | "missing") {
   const fixture = makeFixtureCatalog();
@@ -73,6 +77,7 @@ describe("[B19-D I5a] the KiCad schematic export honours the symbol's license", 
 describe("[B19-D I5a] the export route refuses, names the component, and sends nothing of the symbol", () => {
   it("POST /api/export/kicad → 422 EXPORT_LICENSE_PROHIBITED", async () => {
     const { state, pin, snapshot } = pinnedExport("private_review_only");
+    serverSnapshots.set(snapshot.atomicRevision.id, snapshot);
     const { POST } = await import("@/app/api/export/kicad/route");
     const res = await POST(new Request("http://localhost/api/export/kicad", {
       method: "POST",

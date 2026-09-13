@@ -26,6 +26,7 @@ import {
   toKicadPinType,
   normalizePinOrientation,
 } from "./types";
+import { safeHref } from "../net/href-policy";
 
 /** One fully-extracted KiCad symbol, ready to embed and upsert. */
 export type ExtractedSymbol = {
@@ -183,7 +184,8 @@ function buildExtractedSymbol(
     keywords: cleanProp(properties["ki_keywords"]),
     mpn: cleanProp(properties["MPN"] ?? properties["Mpn"]),
     manufacturer: cleanProp(properties["Manufacturer"]),
-    datasheet: cleanProp(properties["Datasheet"]),
+    // [B19-D I5c row 34] a Datasheet that is not a web link is not a datasheet link (the raw property stays in `properties`)
+    datasheet: safeHref(cleanProp(properties["Datasheet"]), "document"),
     footprintHint: cleanProp(properties["Footprint"]),
     properties,
     pins,
