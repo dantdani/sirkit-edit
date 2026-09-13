@@ -80,7 +80,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     return run;
   }
 
-  async function searchKeyword(mpn: string): Promise<unknown> {
+  async function searchKeyword(mpn: string): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
     const doRequest = (accessToken: string) =>
       distributorJson("digikey", {
         url: SEARCH_URL,
@@ -99,13 +99,15 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
       res = await doRequest(await getToken(true));
     }
     if (!res.ok) throw new DistributorRequestError(`DigiKey search failed: ${res.message}`);
-    return res.value;
+    return { value: res.value, contentHash: res.contentHash, retrievedAt: res.retrievedAt };
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
     try {
-      const json = await enqueue(() => searchKeyword(mpn));
-      return mapProduct(mpn, json);
+      const answer = await enqueue(() => searchKeyword(mpn));
+      const pricing = mapProduct(mpn, answer.value);
+      // [B19-C I4] pin the result to the exact bytes DigiKey sent
+      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
     } catch (err) {
       // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error, which can carry the
       // request, the transport's own text, or a credential.

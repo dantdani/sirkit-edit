@@ -9,6 +9,7 @@
 import { outboundFetch, parseOutboundJson, type OutboundPolicy, type OutboundRequest } from "../net/outbound-fetch";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 import { recordOutcome, requestAdmission, type RequestOutcome } from "../acquisition/admission-control";
+import { sha256 } from "../atomic/stable";
 
 export type DistributorSource = "digikey" | "mouser" | "octopart";
 
@@ -46,7 +47,8 @@ export const DISTRIBUTOR_EGRESS_POLICIES: Readonly<Record<DistributorSource, Out
 });
 
 export type DistributorJsonResult =
-  | { ok: true; status: number; value: unknown }
+  /** [B19-C I4] `contentHash`: SHA-256 of the exact response bytes; `retrievedAt`: when they arrived (unix ms). */
+  | { ok: true; status: number; value: unknown; contentHash: string; retrievedAt: number }
   | { ok: false; status?: number; message: string; paused?: "quota_exhausted" | "breaker_open" };
 
 /**
@@ -83,5 +85,7 @@ export async function distributorJson(source: DistributorSource, request: Outbou
   }
   const parsed = parseOutboundJson(exchange, source);
   settle(parsed.ok ? "success" : "failure");
-  return parsed.ok ? { ok: true, status: exchange.status, value: parsed.value } : { ok: false, status: exchange.status, message: parsed.message };
+  return parsed.ok
+    ? { ok: true, status: exchange.status, value: parsed.value, contentHash: sha256(exchange.bytes), retrievedAt: clock() }
+    : { ok: false, status: exchange.status, message: parsed.message };
 }

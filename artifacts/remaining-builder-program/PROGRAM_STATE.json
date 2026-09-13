@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-B I3b complete",
+  "currentCheckpoint": "B19-C I4 complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "c5b972c",
+  "lastGreenSha": "244c7c4",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I4: the quarantine pipeline's front half (B19-C) — external observation, normalized candidate and verified evidence bundle, with a real SourceAdapter, and the rule that distributor data never alone proves pin mapping or CAD.",
-  "updatedAt": "2026-09-13T03:49:00-04:00"
+  "nextAction": "B19 I4b: reproduce and close the approval validator's evidence gap — engineering facts and mapping certificates backed only by sourcing or unverified-CAD evidence, and trusted facts backed only by unreviewed model/OCR extraction.",
+  "updatedAt": "2026-09-13T04:06:00-04:00"
 }

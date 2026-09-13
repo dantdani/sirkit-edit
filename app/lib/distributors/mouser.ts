@@ -54,7 +54,7 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
     return run;
   }
 
-  async function search(mpn: string): Promise<unknown> {
+  async function search(mpn: string): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
     // Mouser's documented Search API authenticates with the `apiKey` query parameter. The boundary treats it as a secret:
     // it is never logged, never in a message, and a request carrying it is never redirected.
     const res = await distributorJson("mouser", {
@@ -66,13 +66,15 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
       }),
     }, egress);
     if (!res.ok) throw new DistributorRequestError(`Mouser search failed: ${res.message}`);
-    return res.value;
+    return { value: res.value, contentHash: res.contentHash, retrievedAt: res.retrievedAt };
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
     try {
-      const json = await enqueue(() => search(mpn));
-      return mapPart(mpn, json);
+      const answer = await enqueue(() => search(mpn));
+      const pricing = mapPart(mpn, answer.value);
+      // [B19-C I4] pin the result to the exact bytes Mouser sent (the bytes themselves are never kept)
+      return pricing ? { ...pricing, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
     } catch (err) {
       // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error or the request URL.
       console.error(`[mouser] lookup failed: ${describeFailure(err)}`);

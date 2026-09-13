@@ -58,7 +58,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     throw new Error("OCTOPART credentials not configured");
   }
 
-  async function runQuery(query: string, variables: Record<string, string>, matchedPartsAtMost: number): Promise<unknown> {
+  async function runQuery(query: string, variables: Record<string, string>, matchedPartsAtMost: number): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
     const res = await distributorJson("octopart", {
       url: GRAPHQL_URL,
       method: "POST",
@@ -69,7 +69,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
       body: JSON.stringify({ query, variables }),
     }, egress, matchedPartsAtMost); // [B19-B I3b] Nexar's quota counts matched parts: each aliased search asks for at most one
     if (!res.ok) throw new DistributorRequestError(`Octopart query failed: ${res.message}`);
-    return res.value;
+    return { value: res.value, contentHash: res.contentHash, retrievedAt: res.retrievedAt };
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -93,14 +93,16 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
       const variables: Record<string, string> = {};
       for (const a of aliases) variables[a.varName] = a.mpn;
 
-      const json = await runQuery(query, variables, aliases.length);
-      const data = asRecord(asRecord(json).data);
+      const answer = await runQuery(query, variables, aliases.length);
+      const data = asRecord(asRecord(answer.value).data);
 
       for (const a of aliases) {
         const search = asRecord(data[a.alias]);
         const firstResult = asArray(search.results)[0];
         const part = asRecord(asRecord(firstResult).part);
-        const pricing = mapPart(a.mpn, part);
+        const mapped = mapPart(a.mpn, part);
+        // [B19-C I4] every part in one batch answer is pinned to that answer's bytes
+        const pricing = mapped ? { ...mapped, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt } } : null;
         if (pricing) {
           setCached("octopart-aggregated", a.mpn, pricing);
           found.set(a.mpn, pricing);

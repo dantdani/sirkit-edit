@@ -40,6 +40,11 @@ export type PartPricing = {
   lifecycleStatus: LifecycleStatus; // normalized lifecycle for this source
   lifecycleRaw: string | null; // the distributor's original term, kept for debugging
   fetchedAt: number; // unix ms
+  /**
+   * [B19-C I4] The live answer this came from: the SHA-256 of the exact response bytes and when they were retrieved.
+   * Absent when served from a cache (a stored offer keeps no raw-content reference).
+   */
+  evidence?: { rawContentHash: string; retrievedAt: number };
 };
 
 export type DistributorName = PartPricing["distributor"];

@@ -1249,3 +1249,22 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-quota-breaker-coalescing 7/7 (new, in the CI list), b19-admission-control 9/9 (new, under app/lib/acquisition),
   the pause sentence added to b19-source-admission (8/8); distributor, registry and BOM suites 97/97; broad run: 290 files,
   3679 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I4 — the quarantine pipeline's front half (2026-09-13 local, solo; this commit)
+
+- Measured first: a live distributor lookup carried no evidence reference at all, and nothing implemented the pipeline's
+  front half (types only, from before B19).
+- Every live distributor answer is now pinned to the SHA-256 of the exact response bytes and when they arrived; the bytes
+  are never kept.
+- `app/lib/acquisition/quarantine.ts`: deterministic, frozen external observations (source, source and authority class,
+  registry and normalizer versions, raw hash, expiry, `rawRetained: false`; blocked or disabled sources refused);
+  normalized candidates whose every fact is classified sourcing / identity hint / engineering candidate / quarantined
+  (model and OCR extractions always quarantined; engineering facts from distributors, third-party CAD or geometry
+  inference quarantined); evidence bundles for one part with conflicts, stale observations, parser versions and missing
+  engineering evidence, and `engineering.proven` always false. No export can approve, publish, create a revision or bind.
+- Not built, and why: a distributor `SourceAdapter` (discovery planned one) would page a vendor catalog, which every
+  registered source's terms prohibit or leave unclear; observations are made per interactive lookup.
+- Recorded for I4b: the approval validator does not check what kind of source backs an engineering fact, or whether a
+  model extracted it; the downstream mapping verifier does.
+- Tests: b19-quarantine-pipeline 20/20 (new, under app/lib/acquisition in the CI list); acquisition, distributor and BOM
+  suites 117/117; broad run: 291 files, 3699 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
