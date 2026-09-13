@@ -157,21 +157,45 @@ function exportableProject(project: SavedProject): SavedProject {
   };
 }
 
-export async function exportProjectFile(projectId: string): Promise<{ ok: true; fileName: string; content: string } | { ok: false; reason: string }> {
+const utf8Bytes = (text: string): number => new TextEncoder().encode(text).length;
+
+/**
+ * [B19-D I5e review] A project file is written so the importer can open it again. The envelope is pretty-printed when that fits
+ * the import bound and compact otherwise; when even the compact file is over the bound, the oldest checkpoints are left out (the
+ * newest are kept) and the result says how many. A project too large without any checkpoint is refused, not written.
+ */
+export async function exportProjectFile(projectId: string): Promise<{ ok: true; fileName: string; content: string; omittedCheckpoints: number } | { ok: false; reason: string }> {
   const salvaged = loadProjectSalvaged(projectId);
   if (!salvaged) return { ok: false, reason: "Project not found in local storage." };
-  const checkpoints = await checkpointStore().list(projectId).catch(() => [] as ProjectCheckpoint[]);
-  const payload: ProjectFilePayload = { project: exportableProject(salvaged.project), checkpoints };
-  const canonical = canonicalJson(payload);
-  const envelope: ProjectFileEnvelope = {
-    format: PROJECT_FILE_FORMAT,
-    formatVersion: PROJECT_FILE_VERSION,
-    exportedAt: new Date().toISOString(),
-    integrity: `sha256:${await sha256Hex(canonical)}`,
-    payload: JSON.parse(canonical) as ProjectFilePayload,
-  };
-  const safeName = salvaged.project.name.replace(/[^A-Za-z0-9._ -]+/g, "_").trim() || "project";
-  return { ok: true, fileName: `${safeName}${PROJECT_FILE_EXTENSION}`, content: JSON.stringify(envelope, null, 2) };
+  const checkpoints = [...await checkpointStore().list(projectId).catch(() => [] as ProjectCheckpoint[])].sort((a, b) => a.seq - b.seq);
+  const project = exportableProject(salvaged.project);
+  const fileName = `${salvaged.project.name.replace(/[^A-Za-z0-9._ -]+/g, "_").trim() || "project"}${PROJECT_FILE_EXTENSION}`;
+  let omitted = 0;
+  for (;;) {
+    const payload: ProjectFilePayload = { project, checkpoints: checkpoints.slice(omitted) };
+    const canonical = canonicalJson(payload);
+    const envelope: ProjectFileEnvelope = {
+      format: PROJECT_FILE_FORMAT,
+      formatVersion: PROJECT_FILE_VERSION,
+      exportedAt: new Date().toISOString(),
+      integrity: `sha256:${await sha256Hex(canonical)}`,
+      payload: JSON.parse(canonical) as ProjectFilePayload,
+    };
+    const pretty = JSON.stringify(envelope, null, 2);
+    if (utf8Bytes(pretty) <= MAX_PROJECT_FILE_BYTES) return { ok: true, fileName, content: pretty, omittedCheckpoints: omitted };
+    const compact = JSON.stringify(envelope);
+    const compactBytes = utf8Bytes(compact);
+    if (compactBytes <= MAX_PROJECT_FILE_BYTES) return { ok: true, fileName, content: compact, omittedCheckpoints: omitted };
+    if (omitted >= checkpoints.length) {
+      return { ok: false, reason: `The project is too large to save as a file Sirkit can open again (${Math.ceil(compactBytes / (1024 * 1024))} MB without checkpoints; the limit is ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB).` };
+    }
+    // leave out the oldest checkpoints whose size covers the excess (at least one), then measure again
+    let excess = compactBytes - MAX_PROJECT_FILE_BYTES;
+    do {
+      excess -= utf8Bytes(JSON.stringify(checkpoints[omitted]));
+      omitted++;
+    } while (excess > 0 && omitted < checkpoints.length);
+  }
 }
 
 export interface ProjectImportResult {
@@ -242,6 +266,14 @@ async function findMissingParts(partIds: readonly string[]): Promise<string[]> {
   return partIds.filter((partId) => missing.has(partId));
 }
 
+/**
+ * [B19-D I5e review] Chat history that arrives in a file was written by whoever made the file. It is shown, and marked advisory
+ * so it is never replayed to the chat model as the person's or the assistant's own earlier words.
+ */
+function advisoryChat(chat: readonly StoredChatMessage[]): StoredChatMessage[] {
+  return chat.map((message) => (message.role === "user" || message.role === "assistant" ? { ...message, advisory: true } : message));
+}
+
 export async function importProjectFile(content: string): Promise<ProjectImportResult | { ok: false; reason: string }> {
   // [B19-D I5e row 12] never a rejected promise: every failure below is a refusal that imports nothing
   try {
@@ -303,7 +335,12 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
         return { ok: false, reason: "A checkpoint's chat history in the file is invalid. Nothing was imported." };
       }
       if (checkpoint.board !== undefined && !isPcbBoardLike(checkpoint.board)) return { ok: false, reason: "A checkpoint's PCB board in the file is invalid. Nothing was imported." };
-      checkpoints.push({ ...checkpoint, schematic: checkpointState.state });
+      // [B19-D I5e review] a checkpoint written without a page size keeps none (restoring it then keeps the live sheet), and its
+      // chat is shown but never replayed to the chat model
+      const { pageSize: _defaultedPageSize, ...withoutPageSize } = checkpointState.state;
+      void _defaultedPageSize;
+      const schematic = (checkpoint.schematic as { pageSize?: unknown }).pageSize === undefined ? (withoutPageSize as SchematicState) : checkpointState.state;
+      checkpoints.push({ ...checkpoint, schematic, ...(Array.isArray(checkpointChat) ? { chat: advisoryChat(checkpointChat as StoredChatMessage[]) } : {}) });
     }
   }
 
@@ -331,7 +368,7 @@ async function importProjectFileChecked(content: string): Promise<ProjectImportR
     createdAt: typeof project["createdAt"] === "number" ? project["createdAt"] : now,
     updatedAt: now,
     schemaVersion: PROJECT_SCHEMA_VERSION,
-    ...(chat ? { chat: chat as StoredChatMessage[] } : {}),
+    ...(chat ? { chat: advisoryChat(chat as StoredChatMessage[]) } : {}),
     ...(typeof project["designPrompt"] === "string" ? { designPrompt: project["designPrompt"] } : {}),
     ...(typeof project["workflowView"] === "string" ? { workflowView: project["workflowView"] } : {}),
     ...(project["pcb"] !== undefined ? { pcb: project["pcb"] as SavedProject["pcb"] } : {}),

@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5e complete (I5e review pending)",
+  "currentCheckpoint": "B19-D complete (I5e review fixed); B19-E next",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "8df97ff",
+  "lastGreenSha": "a75fc1e",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I5e adversarial review over I5e-1 and I5e-2 (fix verified findings); then B19-E (product/agent UX: source and freshness labels, candidate review, bounded external search and evidence tools) and the B19 closeout.",
-  "updatedAt": "2026-09-13T04:47:15-04:00"
+  "nextAction": "B19-E (product/agent UX per the discovery plan E1-E6: truthful pricing provenance and no-purchase wording; bounded external candidate search with source and freshness labels; exact-revision integrity; candidate review and two-person publication; lifecycle and binding; bounded read-only agent search/evidence tools), then the B19 closeout.",
+  "updatedAt": "2026-09-13T08:44:14-04:00"
 }

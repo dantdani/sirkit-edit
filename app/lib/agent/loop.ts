@@ -74,14 +74,21 @@ export interface AgentLoopDeps {
   executionGrants?: AgentExecutionGrantMinter;
 }
 
-/** [B19-D I5e row 25] every string in a tool result is cleaned before the model sees it (bounded walk, cycle-safe) */
-function modelSafe(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+/**
+ * [B19-D I5e row 25] every string in a tool result is cleaned before the model sees it (bounded walk, cycle-safe).
+ * [B19-D I5e review] only the objects on the current path count as a cycle; an object shared by two branches is written in both.
+ */
+function modelSafe(value: unknown, depth = 0, ancestors = new Set<object>()): unknown {
   if (typeof value === "string") return sanitizeModelBoundText(value);
   if (!value || typeof value !== "object") return value;
-  if (depth > 32 || seen.has(value)) return "[omitted]";
-  seen.add(value);
-  if (Array.isArray(value)) return value.map((item) => modelSafe(item, depth + 1, seen));
-  return Object.fromEntries(Object.entries(value).map(([key, item]) => [sanitizeModelBoundText(key), modelSafe(item, depth + 1, seen)]));
+  if (depth > 32 || ancestors.has(value)) return "[omitted]";
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) return value.map((item) => modelSafe(item, depth + 1, ancestors));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [sanitizeModelBoundText(key), modelSafe(item, depth + 1, ancestors)]));
+  } finally {
+    ancestors.delete(value);
+  }
 }
 
 function resultText(payload: Record<string, unknown>): string {

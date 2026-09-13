@@ -56,17 +56,21 @@ function safeEnvironment(): NodeJS.ProcessEnv {
 
 /**
  * PRIMARY injection defense — reject caller-supplied schematic fields that could
- * inject an arbitrary SPICE directive line. A component value / analysis field /
- * net-label name is a single token; a newline, carriage return, or backtick in
- * one is the only way to smuggle a `.include`/`.control`/shell line into the
+ * inject an arbitrary SPICE directive line. Every caller string the serializer
+ * writes into the deck is screened: a component's value, its element name (the
+ * displayed reference, or the id when there is no reference), a net-label name
+ * and the analysis fields. A line break, another control character or a backtick
+ * in one is the way to smuggle a `.include`/`.control`/shell line into the
  * emitted deck (the serializer legitimately emits exactly ONE `.control` block
- * with `run` + `write result.raw`, so scanning the OUTPUT for `.control` would
- * false-positive — the input guard is what closes injection).
+ * with `run` + `write result.raw`; the output screen below refuses a second one).
+ * [B19-D I5e review] the reference and id were not screened, and a newline in a
+ * reference wrote a live `.control` + `shell` block.
  */
 function assertSchematicFieldsSafe(state: SchematicState, analysis?: SpiceAnalysis): void {
-  const unsafe = (value: unknown): boolean => typeof value === "string" && /[\r\n`]/.test(value);
+  const unsafe = (value: unknown): boolean => typeof value === "string" && /[\x00-\x1f\x7f`]/.test(value);
   for (const component of state.components) {
     if (unsafe(component.value)) throw new Error("a component value contains an illegal control character");
+    if (unsafe(component.refDes) || unsafe(component.id)) throw new Error("a component reference contains an illegal control character");
   }
   for (const label of state.netLabels ?? []) {
     if (unsafe(label.name)) throw new Error("a net label name contains an illegal control character");
@@ -81,13 +85,19 @@ function assertSchematicFieldsSafe(state: SchematicState, analysis?: SpiceAnalys
 /**
  * Belt-and-braces OUTPUT screen — refuse a generated netlist that carries an
  * include/library/source/shell directive (which the serializer NEVER emits, so
- * any occurrence is injected). `.control` is deliberately NOT screened here: the
- * serializer emits its own legitimate batch-mode control block.
+ * any occurrence is injected). The serializer emits exactly one batch-mode
+ * `.control` block of its own, so a deck with any other number of `.control` or
+ * `.endc` lines, or a `shell` line anywhere, is injected.
  */
 function assertNetlistSafe(netlist: string): void {
+  // [B19-D I5e review] defence in depth behind the input guard
+  const controlBlocks = netlist.match(/^\s*\.control\b/gim)?.length ?? 0;
+  const controlEnds = netlist.match(/^\s*\.endc\b/gim)?.length ?? 0;
+  if (controlBlocks !== 1 || controlEnds !== 1) throw new Error("generated netlist contains an unexpected control block");
   const forbidden: Array<{ pattern: RegExp; label: string }> = [
     { pattern: /^\s*\.(?:include|inc|lib)\b/im, label: "include/library directives" },
     { pattern: /^\s*\.(?:shell|cd|source|quit|exec|system|destroy|remcirc)\b/im, label: "filesystem or shell commands" },
+    { pattern: /^\s*shell\b/im, label: "control-block shell commands" }, // element names never start with S
     { pattern: /(?:^|\n)\s*![^=]/m, label: "shell escapes" },
     { pattern: /`[^`]+`/, label: "command substitution" },
   ];

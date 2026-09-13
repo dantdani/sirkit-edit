@@ -1485,3 +1485,18 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Browser proof for the chat-history change is CI's page-browser-e2e job running the existing chat and build specs over this
   commit (they send and render messages; none asserts the advisory flag itself — the flag is proven by the unit tests above).
 
+### B19 I5e review — adversarial diff review fixes (2026-09-13 local, solo; this commit)
+
+- Review workflow over 8df97ff and a75fc1e: 35 findings, 19 confirmed (14 distinct), 16 refuted. 28 cases failed on the
+  unchanged code first; baselines that already held are pinned.
+- Fixed: ngspice deck element names (HIGH, new matrix row 53); DSN quote/backslash refusal with autoroute 422 (MEDIUM);
+  find_alternates catalog text (MEDIUM); every review-input string; save rollback that never deletes an existing record;
+  imported checkpoint page size; SchGen KiCad label grammar; exports that always fit the import bound; imported chat marked
+  advisory; layout-critic message advisory with anchored per-site tripwires (3 mutations caught); strict circuit-knowledge
+  locators; URL-credential redaction; path-only cycle detection and token-anchored `sk-` redaction for model-bound text; KiCad
+  ingests pinned to reviewed commits (live check: both checkouts at their pins).
+- Follow-ups recorded (untouched routes): SPICE AI route, layout-critic prompt/manifest, architecture/interfaces/power
+  propose prompts; locally stored pre-I5e-2 assistant messages.
+- Tests: the new and extended files above, plus the B16.0.24 simulate parity and confinement gates and the autoroute route
+  suite; full unit suite under a loaded machine (a per-file eslint loop ran alongside; 65 min): 5870 passed, 68 failed in 47 files - 67 timeouts or perf thresholds and 1 real failure (the write-dsn escaped-quote pin, moved above); all 47 files re-run afterwards with two workers and nothing else running: 47 files, 544 tests passed; tsc 0; eslint: no new findings; control inventory regenerated with no drift.
+

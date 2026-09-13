@@ -127,13 +127,15 @@ export function parseSchGenSource(python: string): SchGenParseResult {
     // Signature: (label_pos, label_text, label_ref, label_type, text_orient)
     const text = unquote(kw.get("label_text") ?? pos[1] ?? "");
     const ref = unquote(kw.get("label_ref") ?? pos[2] ?? "");
-    // [B19-D I5e row 32] a label names a net only when it is a net name (the grammar the build prompt states: upper-case
-    // letters, digits, underscore, '-', '/', a leading '+', at most 32 characters). Any other label still connects its pins,
-    // but it names nothing — a sentence written by the independent model never becomes a net name shown to anyone.
+    // [B19-D I5e row 32] a label names a net only when it is a net name. Any other label still connects its pins, but it names
+    // nothing — a sentence written by the independent model never becomes a net name shown to anyone.
+    // [B19-D I5e review] the grammar is KiCad's net-name characters without whitespace (SchGen is not given Sirkit's build-prompt
+    // grammar): letters, digits, '_', '-', '/', '+', '.', '~', '#', braces and brackets, at most 64 characters — so '+3.3V',
+    // '~{RESET}', 'RESET#' and 'D[0..7]' name their nets again.
     if (ref && text) {
       labelRefs.add(ref);
       const name = text.toUpperCase();
-      if (/^[+A-Z0-9_\-/]{1,32}$/.test(name)) labelText.set(ref, name);
+      if (/^[+A-Z0-9_\-/.~#{}\[\]]{1,64}$/.test(name)) labelText.set(ref, name);
     }
   }
 

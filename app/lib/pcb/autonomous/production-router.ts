@@ -15,7 +15,7 @@ import { runFreerouting } from "../autoroute/runner";
 import { buildAutorouteCandidate } from "../autoroute/verification";
 import { validateDsn } from "../dsn/preflight";
 import { parseSes, SesImportError } from "../dsn/read-ses";
-import { boardToDsn, writeDsn } from "../dsn/write-dsn";
+import { boardToDsn, DsnEmitError, writeDsn } from "../dsn/write-dsn";
 import { pcbRevisionId } from "../revision";
 import { stableHash } from "../smart-routing/hash";
 import type { AutonomousRouteExecution, AutonomousRouteExecutor } from "./qualify-layout";
@@ -48,7 +48,14 @@ async function createRealAutonomousRouteExecutor(options: AutonomousRouterOption
     const executor: AutoroutePassExecutor = async (pass) => {
       const dsn = boardToDsn(pass.board, { includeNetIds: pass.targetNetIds });
       const validation = validateDsn(pass.board, dsn);
-      const dsnText = writeDsn(dsn);
+      let dsnText: string;
+      try {
+        dsnText = writeDsn(dsn);
+      } catch (error) {
+        // [B19-D I5e review] a refused token is a file-phase failure of this pass, never an unhandled rejection
+        if (!(error instanceof DsnEmitError)) throw error;
+        return { ok: false, routeAttemptId: pass.routeAttemptId, authoritativeSourceRevision: pass.requestedSourceRevision, sourceRevision: dsn.integrity?.sourceRevision, phase: "file", error: `DSN input refused: ${error.message}`, elapsedMs: 0, validation, evidence: { router: { engine: "Freerouting" as const, version: runtime.version, runtime: runtime.javaSource, commandProfile: "headless-offline-cli" as const, maxPasses: pass.engineMaxPasses, timeoutMs }, processStatus: "not-started", outputFileStatus: "not-checked", parserStatus: "not-run", semanticStatus: "not-run" } };
+      }
       const baseEvidence = { dsnDigest: `dsn-${stableHash(dsnText)}`, dsnSourceRevision: dsn.integrity?.sourceRevision, router: { engine: "Freerouting" as const, version: runtime.version, runtime: runtime.javaSource, commandProfile: "headless-offline-cli" as const, maxPasses: pass.engineMaxPasses, timeoutMs } };
       if (!validation.ok) return { ok: false, routeAttemptId: pass.routeAttemptId, authoritativeSourceRevision: pass.requestedSourceRevision, sourceRevision: dsn.integrity?.sourceRevision, phase: "file", error: "DSN preflight failed", elapsedMs: 0, validation, dsnText, evidence: { ...baseEvidence, processStatus: "not-started", outputFileStatus: "not-checked", parserStatus: "not-run", semanticStatus: "not-run" } };
       const routed = await runFreerouting({ dsnText, freeroutingJarPath: runtime.jarPath, javaPath: runtime.javaPath, maxPasses: pass.engineMaxPasses, timeoutMs, signal });

@@ -90,9 +90,30 @@ describe("[B19-D I5e row 52] stackup tokens are validated before the file is wri
     }
   });
 
-  it("a net name with spaces and quotes still writes (baseline)", () => {
+  it("a net name with spaces and slashes still writes (baseline)", () => {
     const b = board();
-    b.nets[b.nets.length - 1]!.name = 'SIG "A" B';
-    expect(writeDsn(boardToDsn(b))).toContain('"SIG \\"A\\" B"');
+    b.nets[b.nets.length - 1]!.name = "SIG A/B";
+    expect(writeDsn(boardToDsn(b))).toContain('"SIG A/B"');
+  });
+
+  // [B19-D I5e review] FreeRouting's DSN lexer has no escape inside a quoted string: a backslash is kept as a plain character
+  // and the next quote ends the string. The old `\"` escape therefore closed the name, and the rest was read as DSN nodes.
+  const BACKSLASH = String.fromCharCode(92);
+  it.each([
+    ["a net name with a quote", (b: PcbBoard) => { b.nets[b.nets.length - 1]!.name = `SIG" ${INJECTED}) ("`; }],
+    ["a net name ending in a backslash", (b: PcbBoard) => { b.nets[b.nets.length - 1]!.name = `SIG${BACKSLASH}`; }],
+    ["a pad number with a quote", (b: PcbBoard) => { b.footprints[0]!.def.pads[0]!.number = `1" ${INJECTED}) ("`; }],
+  ])("%s is refused (DsnEmitError), never written", (_label, mutate) => {
+    const b = board();
+    mutate(b);
+    const error = refusal(() => writeDsn(boardToDsn(b)));
+    if (error === undefined) expect(writeDsn(boardToDsn(b)), "written instead of refused").not.toContain("sirkit_injected");
+    expect(error, "must refuse").toBeInstanceOf(DsnEmitError);
+  });
+
+  it("a component reference with a quote was already refused by board integrity (baseline)", () => {
+    const b = board();
+    b.footprints[0]!.ref = `J1" ${INJECTED}) ("`;
+    expect(refusal(() => writeDsn(boardToDsn(b)))).toBeInstanceOf(Error);
   });
 });

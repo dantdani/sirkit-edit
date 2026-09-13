@@ -402,18 +402,33 @@ export function saveProjectFields(
 }
 
 export function saveProject(project: SavedProject): SavedProject {
-  return trySaveProject(project) ?? { ...project, updatedAt: Date.now() };
+  // [B19-D I5e review] the long-standing contract, kept: the record is written, and an index write the browser refuses is not
+  // fatal (an unlisted record still loads through the current-project pointer, and autosave keeps working)
+  const updated: SavedProject = { ...project, updatedAt: Date.now() };
+  try {
+    localStorage.setItem(STORAGE_PREFIX + updated.id, JSON.stringify(updated));
+    const index = getIndex();
+    if (!index.includes(updated.id)) {
+      setIndex([...index, updated.id]);
+    }
+  } catch {
+    // quota exceeded or unavailable
+  }
+  return updated;
 }
 
 /**
  * [B19-D I5e row 13] `saveProject` that REPORTS failure: `null` when browser storage refused the record or the project index
- * (quota exceeded, storage unavailable). A record written without its index entry is removed again, so a failed save leaves
- * nothing half-listed. Callers that tell a person "saved" or "imported" must use this one.
+ * (quota exceeded, storage unavailable). Callers that tell a person "saved" or "imported" must use this one.
+ * [B19-D I5e review] A failed save undoes only its own write: a record this call created is removed again (nothing is left
+ * half-listed), and a record that was already stored is put back exactly as it was, never deleted.
  */
 export function trySaveProject(project: SavedProject): SavedProject | null {
   const updated: SavedProject = { ...project, updatedAt: Date.now() };
   const key = STORAGE_PREFIX + updated.id;
+  let previous: string | null;
   try {
+    previous = localStorage.getItem(key);
     localStorage.setItem(key, JSON.stringify(updated));
   } catch {
     return null;
@@ -422,7 +437,10 @@ export function trySaveProject(project: SavedProject): SavedProject | null {
     const index = getIndex();
     if (!index.includes(updated.id)) localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify([...index, updated.id]));
   } catch {
-    try { localStorage.removeItem(key); } catch { /* storage unavailable: nothing more to undo */ }
+    try {
+      if (previous === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, previous);
+    } catch { /* storage unavailable: nothing more to undo */ }
     return null;
   }
   return updated;

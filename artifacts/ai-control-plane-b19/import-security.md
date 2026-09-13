@@ -305,3 +305,52 @@ suggestion-instruction helper and its page tripwire, and URL-credential redactio
 | 31 (ratchet) | passes today, adopted as the gate | through the production chat route under `execute_explicit_tier1`: an instruction inside a component value makes the scripted model call the move tool, and the result is exactly one preview (explicit proof false) with nothing settled; no server secret, nonce or session identity is in any model input; the chat route, Build loop and LLM router never import vendor fetch/cache/store code (policy and type modules — the source registry, lifecycle SQL expression, shared types — are allowed and still walked). Recorded honestly: the first closure run failed on `app/lib/acquisition/source-registry.ts`, reached through parts search's lifecycle expression; it is a constants module with type-only imports, so it was allowlisted explicitly |
 | 32 | a SchGen label of any length and content became a net name in second-opinion findings; the build explanation, review and second opinion were resent to the chat model as the assistant's own turns | a label names a net only when it matches the label grammar (other labels still connect); finding titles and details are bounded; those three outputs are marked advisory — shown, stored, never replayed (`chatHistoryForModel`) |
 
+### I5e review — adversarial diff review over I5e-1 (8df97ff) and I5e-2 (a75fc1e)
+
+Four lenses (regressions, security, coverage, tests), each finding checked by an independent skeptic: **35 findings, 19
+confirmed (14 distinct issues after merging duplicates), 16 refuted**. Every confirmed issue was reproduced by a failing test
+before its fix — **28 failing cases** on the unchanged code — except where noted. Cases that already held are kept as pinned
+baselines.
+
+| issue (severity) | lens(es) | reproduced before the fix | now |
+|---|---|---|---|
+| legacy `/api/simulate` ngspice deck (HIGH; new matrix row 53) | coverage | a component reference (or its id when there is no reference) carrying a newline wrote a second, live `.control` block with `shell id` into the deck handed to ngspice: 5 of 7 route cases failed (a backtick was already caught by the output screen; baseline) | every caller string written into the deck — value, reference, id, net-label name, analysis fields — refuses any control character or backtick before a file or process exists; the output screen also refuses a deck with other than exactly one `.control`/`.endc` pair, or a `shell` line |
+| FreeRouting DSN quote breakout (MEDIUM) | security | FreeRouting's lexer has no escape inside a quoted string, so `q()`'s `\"` closed the string: a net name or pad number `SIG" ) (sirkit_injected yes) ("` wrote live nodes, and a trailing backslash did not read back (3 of 3 cases; a component reference was already refused by board integrity) | `q()` refuses a quote or backslash (`DsnEmitError`) and writes the name as is; the autoroute route answers `422 DSN input refused: …` and never launches the engine (that route case failed first: the runner was called), and the production router returns a file-phase failure instead of throwing. The I5c baseline that locked in the broken escaping was replaced |
+| find_alternates catalog text (MEDIUM) | security, coverage, tests | the alternates tool result sent name, MPN, manufacturer and match reasons raw and unbounded at the top level | the same split as search_parts: identifiers and engine facts at the top level, catalog text (and match reasons, at most 10) bounded under `untrustedCatalogText` |
+| review input nets (MEDIUM/LOW) | security, coverage, tests | only the placed-part branch was bounded: theory ids and values, net-label names and net pin ids reached the review model unbounded with bidirectional overrides, and floating-pin ids did not match the bounded names (2 cases; 1 baseline) | every string bounded and cleaned; a pin id is built from the same bounded reference and pin name the component lists; a theory id keeps 64 characters (UUIDs stay whole) |
+| `trySaveProject` rollback (LOW) | regressions | a failed index write deleted a record that already existed (an unindexed record left by the old save), and `saveProject` reported success | a failed save puts an existing record back exactly and removes only a record it created; `saveProject` keeps its long-standing contract (record written, index failure not fatal) |
+| imported checkpoint page size (LOW) | regressions | validation stamped A4 on checkpoints written without a page size, so restoring an imported PCB checkpoint changed an A3 sheet | a checkpoint without a page size keeps none; an A3 checkpoint stays A3 |
+| SchGen label grammar (LOW) | regressions | the I5e-2 grammar dropped `+3.3V`, `~{RESET}`, `RESET#` and `D[0..7]`, so the second opinion stopped reporting those named-net gaps | KiCad net-name characters without whitespace, at most 64 (sentences and over-long labels still name nothing) |
+| export larger than the import bound (LOW) | regressions | the exporter wrote a 58 MB file the 50 MB importer refuses | pretty when it fits, compact otherwise, and when even that is over the bound the oldest checkpoints are left out (newest kept) with the count returned and shown in the toast; a project too large without checkpoints is refused |
+| imported chat replayed (LOW) | security | chat messages in a shared file (project and checkpoint chat) reached the chat model as the person's and the assistant's own turns | every imported user and assistant message is marked advisory: shown, never replayed |
+| layout critic message (LOW) | security, tests | the manual Tidy "Layout review" message (the critic model's reasons and summary) was not advisory, and the page tripwire only counted flags (it passed with a site removed) | flagged advisory; the tripwire anchors each of the four sites (build explanation, review, second opinion, layout review) and was proven by removing each flag in turn (3 mutations, each caught; the layout site was fixed before its first run) |
+| circuit-knowledge locators (LOW) | security | the bound measured `String(locator)`: an object-valued section (`[object Object]`) or an extra key carried 20 000 characters to the model (2 cases; a long string page and a long evidence id were already refused) | a page is a finite number, section and figure are strings of at most 200, identifiers and hash are bounded strings, unknown keys are refused (`RECIPE_SOURCE_LOCATION_FIELD_UNKNOWN`, `RECIPE_SOURCE_LOCATOR_INVALID`), and the model receives an explicit projection of the known fields |
+| URL-credential redaction gaps (LOW) | security | an empty user, token-only userinfo, and a password with `/` or `@` passed (or leaked the rest of the password); the Build loop's log used a different, weaker rule (5 cases) | the whole userinfo up to the last `@` of the token is redacted (over-redaction noted: a URL with `@` in its path loses the part before it); the Build loop log uses the trace redactor |
+| tool-result walk and `sk-` redaction (LOW) | tests | an object shared by two branches was written once and `[omitted]` once; `desk-lamp-controller` reached the model as `de[redacted]` | only objects on the current path count as a cycle; in model-bound text an `sk-` key must start a token (diagnostics keep the unanchored patterns); a key-shaped value and a real cycle are still handled |
+| ingest revision unpinned (LOW; row 05's minimal fix) | security | both operator ingests ran `git pull --ff-only` or cloned upstream HEAD (2 tripwire cases) | `app/lib/kicad/pinned-checkout.ts` pins kicad-symbols `90c39c38…` and kicad-footprints `645402ed…` (the corpus-check commits): fetched by id when absent, verified afterwards, refused when the checkout has local modifications or extra files (never discarded). A live check on this machine confirmed both checkouts are exactly at their pins (rev-parse and status only, no network) |
+
+Refuted (16), with the skeptic's reason in brief: consecutive user turns after dropping advisory answers (no wrong output; both
+adapters accept them); "untrusted data" wording in Apply-suggestions (intended); variation selectors surviving the cleaners
+(combining marks, bounded and labelled; not an instruction channel); DSN refusal status 500 (a status nicety for a crafted
+board; now 422 anyway, above); import nesting/text/table/lookup, BOM, requirement-union, checkpoint board, ratchet,
+SchGen-connectivity, save-rollback and wiring test-strength findings (the named bounds are exercised or the claim did not
+reproduce); and three prompt-completeness findings on routes neither commit touched — recorded as follow-ups below.
+
+Follow-ups (outside B19-D's rows, recorded, not fixed here):
+- `app/api/spice/ai/route.ts`: its system prompt has no untrusted-data sentence, and its tool results (imported SPICE model
+  names and warnings, schematic values, ngspice log tails) go to the model unbounded.
+- `app/api/schematic/layout-critic/route.ts`: the layout-critic prompt has no untrusted-data sentence and its manifest carries
+  unbounded values and categories (its chat output is now advisory).
+- The architecture, interfaces and power propose prompts have no untrusted-data sentence for requirement text.
+- Assistant messages stored locally before I5e-2 carry no advisory flag and are still replayed (a person's own history;
+  files imported from now on are marked).
+
+Reviewed pin moves: `app/lib/pcb/__tests__/write-dsn.test.ts` case (d) pinned the escaped-quote output `(net "A\"B"`, which is
+the injection itself; it now pins a refusal (and a name with spaces and punctuation still writing). The I5c DSN baseline in
+`b19-d-dsn-tokens.test.ts` moved the same way.
+
+Behaviour changes to know: DSN names with a quote or backslash are refused (FreeRouting misread them before); an imported
+chat is display-only for the chat model; an export may leave out the oldest checkpoints and says so; `/api/simulate` refuses
+any control character (tab included) in values, references, labels and analysis fields; KiCad ingests move only by a reviewed
+pin change.
+

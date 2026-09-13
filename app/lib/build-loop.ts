@@ -28,6 +28,7 @@ import {
   searchPartsForAI,
   fetchAlternatesForAI,
   getPartsByIds,
+  type AiAlternateResult,
   type AiPartResult,
 } from "@/app/lib/parts-search";
 import {
@@ -39,6 +40,7 @@ import {
 import { runErc, formatErcFeedback, type ErcReport } from "@/lib/erc";
 import { boundUntrustedText, boundUntrustedTextOrNull } from "@/app/lib/untrusted-text";
 import { redactSecrets } from "@/app/lib/atomic/security";
+import { sanitizeTraceText } from "@/app/lib/agent/redaction";
 
 /**
  * [B19-D I5e row 05] What a search_parts result may put in front of the model: identifiers and facts it acts on at the top
@@ -54,10 +56,31 @@ function modelFacingPart(part: AiPartResult): Record<string, unknown> {
   };
 }
 
+/**
+ * [B19-D I5e review] What a find_alternates result may put in front of the model — the same split as `modelFacingPart`: the
+ * identifiers and engine facts at the top level, the catalog's free text (and the match reasons that quote it) bounded under
+ * `untrustedCatalogText`.
+ */
+function modelFacingAlternate(alternate: AiAlternateResult): Record<string, unknown> {
+  return {
+    partId: alternate.partId,
+    lifecycleStatus: boundUntrustedText(alternate.lifecycleStatus, 32),
+    score: alternate.score,
+    kind: boundUntrustedText(alternate.kind, 32),
+    pinCount: alternate.pinCount,
+    untrustedCatalogText: {
+      name: boundUntrustedText(alternate.name, 128),
+      mpn: boundUntrustedTextOrNull(alternate.mpn, 128),
+      manufacturer: boundUntrustedTextOrNull(alternate.manufacturer, 128),
+      matchReasons: alternate.matchReasons.slice(0, 10).map((reason) => boundUntrustedText(String(reason), 128)),
+    },
+  };
+}
+
 /** [B19-D I5e row 30] A tool failure tells the model a closed sentence; the detail goes to the server log, redacted. */
 function toolFailure(tool: string, error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
-  console.error(`[build-loop] ${tool} failed: ${redactSecrets(detail).replace(/\b[a-z][a-z0-9+.-]*:\/\/[^\s/@]+@/gi, "[redacted-url-credentials]@").slice(0, 300)}`);
+  console.error(`[build-loop] ${tool} failed: ${sanitizeTraceText(redactSecrets(detail))}`); // one URL-credential rule with the trace redactor
   return JSON.stringify({ error: `The ${tool === "search_parts" ? "part search" : "alternates lookup"} failed. Try a different query, or continue with the parts already found.` });
 }
 import { kgDesignNotes } from "@/lib/kg";
@@ -231,7 +254,7 @@ export async function runBuildToolLoop(opts: {
             return {
               type: "tool_result" as const,
               toolCallId: block.id,
-              output: JSON.stringify(alternates),
+              output: JSON.stringify(alternates.map(modelFacingAlternate)),
             };
           } catch (err) {
             return {

@@ -32,13 +32,13 @@ import { pcbFootprints, type NewPcbFootprint } from "../app/lib/db/schema";
 import { parseKicadMod } from "../app/lib/pcb/kicad-mod";
 import type { FootprintDef } from "../app/lib/pcb/types";
 import { embedBatch, MAX_EMBED_BATCH_SIZE } from "../app/lib/embeddings";
+import { ensurePinnedCheckout, KICAD_LIBRARY_PINS } from "../app/lib/kicad/pinned-checkout";
 
 const execFileAsync = promisify(execFile);
 
 // NOTE: github.com/KiCad/kicad-footprints is a mirror frozen in 2020 (~12k
 // footprints) — KiCad moved library development to GitLab. This is the live
 // upstream, same host the symbol ingestion (scripts/ingest-kicad.ts) uses.
-const KICAD_FOOTPRINTS_REPO = "https://gitlab.com/kicad/libraries/kicad-footprints.git";
 const DATA_DIR = join(process.cwd(), "data", "kicad-footprints");
 const REPORT_PATH = join(process.cwd(), "scripts", "output", "ingest-footprints-report.json");
 const SOURCE = "kicad-footprints";
@@ -91,20 +91,18 @@ const report = {
 
 // ─── Step 1: source checkout ────────────────────────────────────────────────
 
+// [B19-D I5e review] the checkout is the reviewed, pinned commit — never upstream HEAD (a failure stops the ingest)
 async function ensureFootprintsCloned(): Promise<string> {
-  if (existsSync(join(DATA_DIR, ".git"))) {
-    console.log("[ingest] kicad-footprints already cloned — pulling latest…");
-    try {
-      await execFileAsync("git", ["-C", DATA_DIR, "pull", "--ff-only"]);
-    } catch (err) {
-      console.warn("[ingest] git pull failed (continuing with local copy):", messageOf(err));
-    }
-  } else {
-    console.log(`[ingest] cloning ${KICAD_FOOTPRINTS_REPO} → ${DATA_DIR} …`);
-    await execFileAsync("git", ["clone", "--depth", "1", KICAD_FOOTPRINTS_REPO, DATA_DIR]);
-  }
-  const { stdout } = await execFileAsync("git", ["-C", DATA_DIR, "rev-parse", "HEAD"]);
-  return stdout.trim();
+  const pin = KICAD_LIBRARY_PINS.footprints;
+  console.log(`[ingest] kicad-footprints: ensuring pinned commit ${pin.commit} (${pin.committedAt})…`);
+  const result = await ensurePinnedCheckout({
+    directory: DATA_DIR,
+    repository: pin.repository,
+    commit: pin.commit,
+    git: async (args) => (await execFileAsync("git", [...args], { maxBuffer: 64 * 1024 * 1024 })).stdout,
+    exists: existsSync,
+  });
+  return result.commit;
 }
 
 // ─── Step 2: discovery + parse ──────────────────────────────────────────────

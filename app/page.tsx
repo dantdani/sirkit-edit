@@ -113,7 +113,7 @@ import { evaluateSchematicConsumerGate } from "@/app/lib/engineering/schematic-c
 import { LatestRequestGate, OwnedRecoveryDecisionAdapter, OwnedSimulationRunner, ProjectAsyncScopeRegistry, evaluateSuggestionBatch, type ProjectAsyncScope, type ScopedSuggestionBatch } from "@/app/lib/engineering/project-async-scope";
 import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
-import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION, readProjectFile } from "@/app/lib/project/file";
+import { exportProjectFile, importProjectFile, MAX_PROJECT_FILE_BYTES, PROJECT_FILE_EXTENSION, readProjectFile } from "@/app/lib/project/file";
 import { chatHistoryForModel } from "@/app/lib/project/chat-history"; // [B19-D I5e row 32]
 import { buildSuggestionInstruction } from "@/app/lib/project/suggestion-instruction"; // [B19-D I5e row 05]
 import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
@@ -4137,7 +4137,9 @@ export default function Home() {
     anchor.download = result.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-    showToast(`Project saved to ${result.fileName}`);
+    showToast(result.omittedCheckpoints > 0
+      ? `Project saved to ${result.fileName}. The ${result.omittedCheckpoints} oldest checkpoint(s) were left out so the file stays within the ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB limit for opening it again.`
+      : `Project saved to ${result.fileName}`);
   }, []);
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -5650,6 +5652,7 @@ export default function Home() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: `**Layout review** — ${reason}\n\n${groupLines}${summary ? `\n\n_${summary}_` : ""}`,
+            advisory: true, // [B19-D I5e review] the layout critic's own words (reasons and summary): shown, never replayed
           },
         ]);
       }

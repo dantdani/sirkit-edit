@@ -54,6 +54,35 @@ describe("[B19-D I5e row 25] tool results are cleaned before the model sees them
     expect(text).toContain("NE555"); // the fact itself still arrives
   });
 
+  // [B19-D I5e review] the walk treated any object seen twice as a cycle, and the unanchored `sk-` pattern redacted design text
+  it("a shared sub-object arrives in full in both places, and design text containing 'sk-' is not redacted", async () => {
+    const registry = sirkitToolRegistry();
+    const board = makeBoard(40, 30, [makeInstance("r3", makeResistorDef(), { x: 5, y: 5 }, { "1": 1, "2": 2 })], 2);
+    const assembly = assembleAgentRunContext({
+      tenantId: "local", projectId: "p19", branchId: "main", board,
+      pcbProposalBasis: { historyHeadSequence: 1, historyHeadLabel: null, lineageId: "lin1-0000000000000001", activeDrcPresetId: DEFAULT_PRESET_ID },
+      verifiedActor: { principalId: "u-1", actorRole: "pcb_editor", membershipRevision: "mbr1-a", authMethod: "local_dev" },
+    });
+    if (!assembly.ok) throw new Error(assembly.reason);
+    const context = assembly.context;
+    const toolset = buildRunToolset(registry, context, () => undefined);
+    const read = toolset.declarations.find((d) => d.toolId === "sirkit.pcb.board-inspect")!;
+    const shared = { x: 12, y: 34 };
+    const cyclic: Record<string, unknown> = { name: "loop" };
+    cyclic.self = cyclic;
+    const gateway: AgentToolInvocationGateway = {
+      invoke: async (input) => ({ kind: "read", ok: true, toolId: input.toolId, version: input.version, output: { a: { at: shared }, b: { at: shared }, labels: ["desk-lamp-controller", "task-scheduler_irq"], secret: `key ${SENTINEL}`, cyclic }, sourceRevisionDigest: context.canonicalRevisionDigest!, verification: "fabricated-for-test" }),
+    };
+    const adapter = new FakeAdapter([() => ({ toolCalls: [{ callId: "c1", providerName: read.providerName, argumentsText: "{}" }] }), () => ({ text: "done" })]);
+    await runAgentLoop({ runId: "run-2", provider: "openai", history: [], userMessage: "Summarize the parts.", budget: DEFAULT_AGENT_BUDGET }, { adapter, gateway, registry, context, system: "sys", emit: () => undefined });
+    const text = adapter.continueInputs[0]![0]!.outputText;
+    expect(text.split('{"x":12,"y":34}').length - 1, "the shared object in both places").toBe(2);
+    expect(text).toContain("desk-lamp-controller");
+    expect(text).toContain("task-scheduler_irq");
+    expect(text).not.toContain(SENTINEL); // a key-shaped value is still redacted
+    expect(text).toContain("[omitted]"); // a real cycle is still cut
+  });
+
   it("the schematic inspection bounds identity strings", () => {
     const long = "V".repeat(5_000);
     const inspection = inspectSchematicState({ components: [], wires: [], kicadComponents: [{ id: "k1", partId: "p".repeat(5_000), refDes: "U1", value: long, x: 0, y: 0, rotation: 0 }], netLabels: [{ id: "l1", name: long, position: { x: 0, y: 0 }, orientation: 0 }] });

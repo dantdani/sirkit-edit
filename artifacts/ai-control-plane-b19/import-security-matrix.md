@@ -86,6 +86,7 @@ Nothing below is a claim that a gap exists until an increment REPRODUCES it with
 | 50 | Atomic quantity unit ambiguity ('' vs %, K, absolute tolerance) | LOW | R4 | CONFIRMED | identity-09 |
 | 51 | `asNumber` turns decimal-comma strings into 100x values | LOW | R4 | CONFIRMED | identity missed M22 |
 | 52 | FreeRouting DSN writer: stackup layer names, directions and costs unquoted; its `q()` leaves newlines | LOW | R2 (authenticated autoroute; a shared project can carry the stackup) | CONFIRMED (I5c review probe) | I5c review, coverage lens |
+| 53 | Legacy `/api/simulate` ngspice deck: a component reference or id is written as the element name and was never screened | HIGH | R2 (authenticated editor; an imported project's reference) | CONFIRMED (I5e review probe; reproduced by a route test) | I5e review, coverage lens |
 
 ---
 
@@ -643,6 +644,17 @@ Nothing below is a claim that a gap exists until an increment REPRODUCES it with
   stays one line inside its string; the simple-2 and 4-layer baselines emit unchanged.
 - **Minimal fix:** layer names from the DSN layer order, directions from `{horizontal, vertical, any}`, costs finite numbers,
   and a DSN `q()` that escapes or refuses newline, CR and control characters.
+
+### B19D-53 · Legacy ngspice deck element names — HIGH · R2 · CONFIRMED (raised by the I5e review; not part of the I5e rows)
+- **Where:** `app/api/simulate/route.ts` — `assertSchematicFieldsSafe` screened a component's value, a net-label name and the
+  analysis fields, but `schematicToSpice` writes the element name from `schDisplayRef(comp)` (`refDes ?? id`) verbatim, and the
+  output screen deliberately did not count `.control` (the serializer writes one). A reference `R1 N001 0 1k` + newline +
+  `.control` + newline + `shell id` + newline + `.endc` wrote a live control block into the deck ngspice runs in batch mode.
+- **Test first:** `app/api/simulate/__tests__/b19-d-deck-injection.test.ts` (fake child process and files): a newline, carriage
+  return or NUL in a reference or id gives 400 with no deck written and no process spawned; a deck with a second control block
+  is refused by the output screen; a normal circuit writes exactly one control block and runs once.
+- **Fix (landed in the I5e review commit):** every caller string written into the deck refuses control characters and
+  backticks; the output screen requires exactly one `.control`/`.endc` pair and refuses a `shell` line.
 
 ---
 

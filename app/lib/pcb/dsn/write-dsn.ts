@@ -580,7 +580,10 @@ function costToken(value: unknown, field: string): string {
 function q(s: string): string {
   // a line break or other control character inside a quoted DSN string is refused, never written
   if (typeof s !== "string" || /[\u0000-\u001f\u007f]/.test(s)) throw new DsnEmitError("A DSN name contains a control character.");
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  // [B19-D I5e review] FreeRouting's lexer has no escape inside a quoted string (a backslash is a plain character and the next
+  // quote ends the string), so a quote cannot be written safely and a backslash would not read back as the same name
+  if (/["\\]/.test(s)) throw new DsnEmitError("A DSN name contains a quote or backslash, which FreeRouting cannot read back exactly.");
+  return `"${s}"`;
 }
 
 function n(v: number): string {

@@ -151,7 +151,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: AUTOROUTE_MAX_BODY_BYTES,
       stderr: completion.lastAttempt?.stderr?.slice(-4000) || undefined,
       job: { id: jobId, status: "failed" },
       completion: { passes: completion.passes, failures: completion.failures },
-    }, { status: completion.engineError === "DSN preflight failed" ? 422 : 500 });
+    }, { status: completion.engineError === "DSN preflight failed" || completion.engineError.startsWith("DSN input refused: ") ? 422 : 500 });
   }
 
   let debugArtifactId: string | undefined;

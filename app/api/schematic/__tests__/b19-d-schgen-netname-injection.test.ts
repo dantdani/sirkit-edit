@@ -11,7 +11,8 @@ import { readFileSync } from "node:fs";
 import { parseSchGenSource } from "@/lib/schgen-netlist";
 import { crossCheckNetlists } from "@/lib/netlist-crosscheck";
 
-const NET_NAME = /^[+A-Z0-9_\-/]{1,32}$/;
+// [B19-D I5e review] KiCad net-name characters without whitespace, at most 64 (the first grammar dropped '+3.3V', '~{RESET}' and bus names)
+const NET_NAME = /^[+A-Z0-9_\-/.~#{}\[\]]{1,64}$/;
 
 describe("[B19-D I5e row 32] SchGen label names follow the label grammar", () => {
   it("a sentence or an over-long label is not a net name, and every finding detail is bounded", () => {
@@ -34,6 +35,19 @@ describe("[B19-D I5e row 32] SchGen label names follow the label grammar", () =>
       expect(finding.detail.length).toBeLessThanOrEqual(400);
       expect(finding.detail).not.toMatch(/Ignore previous instructions/i);
     }
+  });
+
+  it("KiCad-style rail, active-low and bus labels still name their nets", () => {
+    const labels = ["+3.3V", "~{RESET}", "RESET#", "D[0..7]"];
+    const source = [
+      ...labels.map((_, index) => `add_schematic_symbol("Device", "R", ${index * 10}, 0, "R${index + 1}", "10k", 0, False)`),
+      ...labels.map((text, index) => `add_label((0, 0), label_text="${text}", label_ref="L${index + 1}")`),
+      ...labels.map((_, index) => `connect_pins(sym_a="L${index + 1}", pin_a="1", sym_b="R${index + 1}", pin_b="1")`),
+    ].join("\n");
+    const parsed = parseSchGenSource(source);
+    expect(parsed.netlist.nets.map((net) => net.name).filter(Boolean).sort()).toEqual([...labels].sort());
+    const primary = { components: [{ refDes: "R9", klass: "resistor" as const, value: "1k" }], nets: [] };
+    expect(crossCheckNetlists(primary, parsed.netlist).findings.some((finding) => finding.detail.includes("+3.3V"))).toBe(true); // the named-net gap is reported again
   });
 });
 
@@ -59,6 +73,13 @@ describe("[B19-D I5e row 32] advisory model output is not replayed as the assist
   it("the page builds the chat request through that helper and marks the build explanation, the review and the second opinion advisory (tripwire)", () => {
     const page = readFileSync("app/page.tsx", "utf8");
     expect(page).toMatch(/chatHistoryForModel\(/);
-    expect((page.match(/advisory: true/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    // [B19-D I5e review] one anchored check per site: a count passed with a site removed, and the layout review was missed
+    expect(page).toMatch(/content: explanation, advisory: true \}/); // the build explanation
+    expect(page).toMatch(/content: md, advisory: true \}/); // the review
+    expect(page).toMatch(/not current suggestions\._`, advisory: true \}/); // the second opinion
+    expect(page).toMatch(/\*\*Layout review\*\*[^\n]*\n \s*advisory: true,/); // the layout critic
+    const assistantAppends = page.match(/role: "assistant"(?: as const)?,\s*content: [^\n]*/g) ?? [];
+    const unflagged = assistantAppends.filter((line) => /md|explanation|summary|groupLines/.test(line) && !/advisory: true/.test(line) && !/Layout review/.test(line));
+    expect(unflagged, "another model's output appended without the advisory flag").toEqual([]);
   });
 });

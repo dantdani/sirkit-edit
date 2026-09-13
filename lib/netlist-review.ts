@@ -55,29 +55,32 @@ export function buildReviewInput(state: SchematicState, parts: Map<string, Cache
   const pins: Pin[] = []; // real-component pins only (ground symbols excluded)
   const kicadPinPoints: Point[] = [];
 
+  // [B19-D I5e row 05 + review] every project and catalog string reaches the review model bounded and cleaned, and a pin id is
+  // built from the same bounded reference and pin name the component lists (the route matches floating-pin claims against it)
   for (const c of state.components) {
     if (c.type === "ground") continue;
     const names = PIN_NAMES[c.type] ?? [];
-    components.push({ refDes: c.id, description: THEORY_DESC[c.type], value: c.value, mpn: null, pins: names });
-    for (const n of names) pins.push({ pinId: `${c.id}.${n}`, point: pinWorldPos(c, n) });
+    const ref = boundUntrustedText(c.id, 64); // a theory id is a UUID (36 characters) and must stay whole
+    components.push({ refDes: ref, description: THEORY_DESC[c.type], value: boundUntrustedText(c.value, 128), mpn: null, pins: names });
+    for (const n of names) pins.push({ pinId: `${ref}.${n}`, point: pinWorldPos(c, n) });
   }
   for (const k of state.kicadComponents ?? []) {
     const part = parts.get(k.partId);
     const names = part ? part.pins.map((p) => boundUntrustedText(p.name || p.number, 64)) : [];
-    // [B19-D I5e row 05] catalog and project text reaches the review model bounded and cleaned
+    const ref = boundUntrustedText(k.refDes, 32);
     components.push({
-      refDes: boundUntrustedText(k.refDes, 32),
+      refDes: ref,
       description: boundUntrustedText(part?.name ?? "part", 128),
       value: boundUntrustedText(k.value, 128),
       mpn: boundUntrustedTextOrNull(part?.mpn ?? null, 128),
       pins: names,
     });
     if (part) {
-      for (const p of part.pins) {
+      part.pins.forEach((p, index) => {
         const pt = kicadPinWorldPos(k, p);
-        pins.push({ pinId: `${k.refDes}.${p.name || p.number}`, point: pt });
+        pins.push({ pinId: `${ref}.${names[index]}`, point: pt });
         kicadPinPoints.push(pt);
-      }
+      });
     }
   }
 
@@ -88,7 +91,7 @@ export function buildReviewInput(state: SchematicState, parts: Map<string, Cache
   const labelByRoot = new Map<string, { name: string; kind: string }>();
   for (const l of state.netLabels ?? []) {
     const k = pointKey(l.position);
-    if (uf.has(k) && !labelByRoot.has(uf.find(k))) labelByRoot.set(uf.find(k), { name: l.name, kind: l.kind });
+    if (uf.has(k) && !labelByRoot.has(uf.find(k))) labelByRoot.set(uf.find(k), { name: boundUntrustedText(l.name, 128), kind: boundUntrustedText(l.kind, 16) });
   }
   const groundRoots = new Set<string>();
   for (const c of state.components) {
