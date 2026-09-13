@@ -246,7 +246,7 @@ describe("B16.1B §G — exact invariants", () => {
     }
     return out;
   }
-  it("exactly 159 route methods: 156 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search); exactly the intentional agent-exposed tools", () => {
+  it("exactly 161 route methods: 158 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
     for (const file of routeFiles(join(ROOT, "app", "api"))) {
       const src = readFileSync(file, "utf8");
@@ -258,7 +258,7 @@ describe("B16.1B §G — exact invariants", () => {
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 159, canonical: 156, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search (canonical wrappers; 0 raw stays 0)
+    expect({ total, canonical, factories, raw }).toEqual({ total: 161, canonical: 158, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication (reviewed ratchet move: two new canonical wrappers; 0 raw stays 0)
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

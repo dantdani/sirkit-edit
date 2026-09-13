@@ -26,6 +26,13 @@ import { SOURCE_REGISTRY, SOURCE_REGISTRY_VERSION, sourceForDistributorName, typ
 
 export const QUARANTINE_SCHEMA_VERSION = 1;
 export const DISTRIBUTOR_NORMALIZER_VERSION = "sirkit.distributor-normalizer/1";
+/** [B19-E E4] Bounds on what a document or CAD extraction may put into a fact. */
+export const EXTRACTION_VALUE_MAX_LENGTH = 2_000;
+/** [B19-E E4 review] A terminal (pin-to-pad) table is kept whole up to the publication request body's own bound (64 KiB): a
+ *  reviewer must never see a partial table beside a draft assembled from the whole one. */
+export const EXTRACTION_PIN_MAP_MAX_LENGTH = 64 * 1024;
+export const EXTRACTION_LOCATOR_MAX_LENGTH = 500;
+export const EXTRACTION_MAX_FACTS = 256;
 
 /** Source classes whose deterministic parse may yield an engineering CANDIDATE (review still required). */
 export const ENGINEERING_CANDIDATE_SOURCE_CLASSES: readonly SourceClass[] = Object.freeze([
@@ -225,19 +232,40 @@ export function candidateFromExtraction(input: {
 }): Readonly<NormalizedCandidate> {
   if (!/^[0-9a-f]{64}$/.test(input.documentHash)) throw new Error("documentHash must be a lowercase SHA-256");
   if (!input.parserVersion.trim()) throw new Error("an extraction must name its parser version");
+  if (input.facts.length > EXTRACTION_MAX_FACTS) throw new Error(`an extraction carries at most ${EXTRACTION_MAX_FACTS} facts`);
   const documentId = contentId("document", input.documentHash);
   const facts = input.facts.map((fact): CandidateFact => {
-    if (!fact.locator.trim()) throw new Error(`fact ${fact.property} needs a source locator`);
-    return { ...fact, observationId: documentId, sourceId: input.sourceId, sourceClass: input.sourceClass, method: input.method, parserVersion: input.parserVersion, ...classify(fact.property, input.sourceClass, input.method) };
+    // [B19-E E4] a document's text is as untrusted as a vendor's: made inert and bounded before it becomes a fact; a value or
+    // locator that is nothing but invisible characters is refused, never kept blank
+    const locator = inertExternalText(fact.locator, EXTRACTION_LOCATOR_MAX_LENGTH);
+    if (locator === null) throw new Error(`fact ${fact.property} needs a source locator`);
+    const value = typeof fact.value === "string" ? inertExternalText(fact.value, fact.property === "pin_mapping" ? EXTRACTION_PIN_MAP_MAX_LENGTH : EXTRACTION_VALUE_MAX_LENGTH) : fact.value;
+    if (value === null) throw new Error(`fact ${fact.property} has no value`);
+    return { ...fact, value, locator, observationId: documentId, sourceId: input.sourceId, sourceClass: input.sourceClass, method: input.method, parserVersion: input.parserVersion, ...classify(fact.property, input.sourceClass, input.method) };
   });
   return candidate(input.exactMpn, facts, [documentId], null, { superseded: typeof input.supersededBy === "string" && input.supersededBy.trim() !== "" });
 }
 
 // ── 3. Verified evidence bundle ──────────────────────────────────────────────
 
+/** [B19-E E4] One disagreeing value, per what its facts may establish and their source class. */
+export interface EvidenceConflictValue {
+  value: string;
+  establishes: FactEstablishes;
+  sourceClass: SourceClass;
+  sourceIds: string[];
+  observationIds: string[];
+}
+
 export interface EvidenceConflict {
   property: string;
-  values: Array<{ value: string; sourceIds: string[]; observationIds: string[] }>;
+  values: EvidenceConflictValue[];
+}
+
+/** [B19-E E4] A quarantined fact that disagrees with another fact: information for the reviewer, never a conflict. */
+export interface QuarantinedDisagreement {
+  property: string;
+  values: EvidenceConflictValue[];
 }
 
 export interface EvidenceBundle {
@@ -247,9 +275,14 @@ export interface EvidenceBundle {
   exactMpns: string[];
   sourcing: CandidateFact[];
   identityHints: CandidateFact[];
+  /** [B19-E E4] an MPN or manufacturer from an engineering-authority source (e.g. a person-entered datasheet citation) */
+  identityCandidates: CandidateFact[];
   quarantined: CandidateFact[];
   conflicts: EvidenceConflict[];
+  quarantinedDisagreements: QuarantinedDisagreement[];
   staleObservationIds: string[];
+  /** [B19-E E4] the documents a newer revision replaced (also stale) */
+  supersededObservationIds: string[];
   parserVersions: string[];
   engineering: {
     proven: false;
@@ -263,7 +296,8 @@ export interface EvidenceBundle {
 // [B19-D I5b rows 39, 40] every engineering property, plus identity and lifecycle, and a requested-versus-answered MPN
 const CONFLICT_PROPERTIES = [...new Set(["mpn", "manufacturer", "lifecycle", ...ENGINEERING_PROPERTIES])] as const;
 
-function conflictKey(property: string, value: CandidateFact["value"]): string {
+/** [B19-E E4] exported: the review projection groups a conflict's facts by the same key */
+export function conflictKey(property: string, value: CandidateFact["value"]): string {
   const text = typeof value === "string" ? value : canonicalJson(value);
   if (property === "mpn") {
     try {
@@ -275,6 +309,27 @@ function conflictKey(property: string, value: CandidateFact["value"]): string {
   return property === "manufacturer" ? text.normalize("NFKC").trim().toUpperCase().replace(/\s+/g, " ") : text.trim();
 }
 
+/** [B19-E E4] Facts grouped by conflict key, then by what they establish and their class: each group is one value. */
+function valuesFor(property: string, facts: readonly CandidateFact[]): Map<string, EvidenceConflictValue[]> {
+  type Slot = { value: string; establishes: FactEstablishes; sourceClass: SourceClass; sourceIds: Set<string>; observationIds: Set<string> };
+  const byKey = new Map<string, Map<string, Slot>>();
+  for (const fact of facts) {
+    const key = conflictKey(property, fact.value);
+    const groups = byKey.get(key) ?? new Map<string, Slot>();
+    const groupKey = `${fact.establishes}|${fact.sourceClass}`;
+    const slot = groups.get(groupKey) ?? { value: typeof fact.value === "string" ? fact.value : canonicalJson(fact.value), establishes: fact.establishes, sourceClass: fact.sourceClass, sourceIds: new Set<string>(), observationIds: new Set<string>() };
+    slot.sourceIds.add(fact.sourceId);
+    slot.observationIds.add(fact.observationId);
+    groups.set(groupKey, slot);
+    byKey.set(key, groups);
+  }
+  return new Map([...byKey].map(([key, groups]) => [key, [...groups.values()].map((slot) => ({ value: slot.value, establishes: slot.establishes, sourceClass: slot.sourceClass, sourceIds: [...slot.sourceIds].sort(), observationIds: [...slot.observationIds].sort() }))]));
+}
+
+function sortValues(values: EvidenceConflictValue[]): EvidenceConflictValue[] {
+  return values.sort((a, b) => a.value.localeCompare(b.value) || a.sourceClass.localeCompare(b.sourceClass) || a.establishes.localeCompare(b.establishes));
+}
+
 export function buildEvidenceBundle(candidates: readonly NormalizedCandidate[], now: Date): Readonly<EvidenceBundle> {
   if (candidates.length === 0) throw new Error("An evidence bundle needs at least one candidate");
   const identityKey = candidates[0]!.identityKey;
@@ -282,33 +337,28 @@ export function buildEvidenceBundle(candidates: readonly NormalizedCandidate[], 
   const facts = sortFacts(candidates.flatMap((item) => item.facts));
 
   const conflicts: EvidenceConflict[] = [];
+  const quarantinedDisagreements: QuarantinedDisagreement[] = [];
   for (const property of CONFLICT_PROPERTIES) {
+    const ofProperty = facts.filter((fact) => fact.property === property);
     // conflicts are judged among the facts that could be put to a reviewer, not among quarantined ones
-    const considered = facts.filter((fact) => fact.property === property && fact.establishes !== "quarantined");
-    const byValue = new Map<string, { value: string; sourceIds: Set<string>; observationIds: Set<string> }>();
-    for (const fact of considered) {
-      const key = conflictKey(property, fact.value);
-      const slot = byValue.get(key) ?? { value: typeof fact.value === "string" ? fact.value : canonicalJson(fact.value), sourceIds: new Set<string>(), observationIds: new Set<string>() };
-      slot.sourceIds.add(fact.sourceId);
-      slot.observationIds.add(fact.observationId);
-      byValue.set(key, slot);
-    }
-    if (byValue.size > 1) {
-      conflicts.push({
-        property,
-        values: [...byValue.values()].map((slot) => ({ value: slot.value, sourceIds: [...slot.sourceIds].sort(), observationIds: [...slot.observationIds].sort() })).sort((a, b) => a.value.localeCompare(b.value)),
-      });
-    }
+    const considered = valuesFor(property, ofProperty.filter((fact) => fact.establishes !== "quarantined"));
+    if (considered.size > 1) conflicts.push({ property, values: sortValues([...considered.values()].flat()) });
+    // [B19-E E4] a quarantined fact that disagrees with any other fact is reported for the reviewer, never counted as a conflict
+    const all = valuesFor(property, ofProperty);
+    if (all.size > 1 && ofProperty.some((fact) => fact.establishes === "quarantined")) quarantinedDisagreements.push({ property, values: sortValues([...all.values()].flat()) });
   }
 
+  // [B19-E E4] what is missing is judged from current evidence only: a document a newer revision replaced clears nothing
+  const currentFacts = candidates.filter((item) => !item.superseded).flatMap((item) => item.facts);
   const candidatesForReview = facts.filter((fact) => fact.establishes === "engineering_candidate" && (ENGINEERING_PROPERTIES as readonly string[]).includes(fact.property));
-  const has = (property: string) => candidatesForReview.some((fact) => fact.property === property);
+  const has = (property: string) => currentFacts.some((fact) => fact.property === property && fact.establishes === "engineering_candidate");
   const missing: string[] = [];
-  if (!facts.some((fact) => fact.establishes === "engineering_candidate")) missing.push("manufacturer datasheet or CAD evidence");
+  if (!currentFacts.some((fact) => fact.establishes === "engineering_candidate")) missing.push("manufacturer datasheet or CAD evidence");
   if (!has("symbol")) missing.push("symbol");
   if (!has("footprint")) missing.push("footprint");
   if (!has("pin_mapping")) missing.push("pin-to-pad mapping");
 
+  const superseded = candidates.filter((item) => item.superseded).flatMap((item) => item.observationIds);
   const stale = candidates.filter((item) => item.superseded || (item.expiresAt !== null && Date.parse(item.expiresAt) <= now.getTime())).flatMap((item) => item.observationIds);
   const body: Omit<EvidenceBundle, "id"> = {
     schemaVersion: QUARANTINE_SCHEMA_VERSION,
@@ -316,9 +366,12 @@ export function buildEvidenceBundle(candidates: readonly NormalizedCandidate[], 
     exactMpns: [...new Set(candidates.map((item) => item.exactMpn))].sort(),
     sourcing: facts.filter((fact) => fact.establishes === "sourcing"),
     identityHints: facts.filter((fact) => fact.establishes === "identity_hint"),
+    identityCandidates: facts.filter((fact) => fact.establishes === "engineering_candidate" && IDENTITY_PROPERTIES.has(fact.property)),
     quarantined: facts.filter((fact) => fact.establishes === "quarantined"),
     conflicts,
+    quarantinedDisagreements,
     staleObservationIds: [...new Set(stale)].sort(),
+    supersededObservationIds: [...new Set(superseded)].sort(),
     parserVersions: [...new Set(facts.map((fact) => fact.parserVersion))].sort(),
     engineering: {
       proven: false,

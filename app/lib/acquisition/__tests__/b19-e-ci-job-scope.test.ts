@@ -124,6 +124,9 @@ describe("[B19-E E2 review] CI job scope", () => {
     const databaseDelivery = selected(jobFilters("database-delivery"));
     const b19 = ALL_TESTS.filter((file) => /\/b19-/.test(file));
     expect(b19).toEqual(expect.arrayContaining(["app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts"]));
+    // [B19-E E4] the publication review suites: two start PGlite, the rest (a shared fixture harness included) do not
+    expect(["app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts", "app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts"].every(startsPostgres)).toBe(true);
+    expect(["app/lib/atomic/__tests__/b19-e-publication-review.test.ts", "app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts", "app/api/components/__tests__/b19-e-atomic-publication-route.test.ts", "app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx"].some(startsPostgres)).toBe(false);
     expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
   }, 60_000);
 

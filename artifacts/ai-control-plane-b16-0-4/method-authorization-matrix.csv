@@ -57,6 +57,8 @@ POST,/api/component-selection/propose,auth+csrf,authenticated,authenticatedJsonR
 POST,/api/component-selection/solve,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/component-selection/sourcing,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/component-selection/transaction,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
+GET,/api/components/atomic/publication,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
+POST,/api/components/atomic/publication,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/components/atomic,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/components/atomic/search,public,public,publicJsonRoute(…),n/a(public),-,-
 POST,/api/constraints/explain,public,public,publicJsonRoute(…),n/a(public),-,-

@@ -52,6 +52,7 @@ path,methods,auth_class,identity_source,migrated
 /api/component-selection/sourcing,POST,authenticated-propose,trusted-context,yes
 /api/component-selection/transaction,POST,authenticated-mutation,trusted-context,yes
 /api/components/atomic,GET,public,none,no
+/api/components/atomic/publication,GET;POST,authenticated-mutation,trusted-context,yes
 /api/components/atomic/search,POST,public,none,no
 /api/constraints/explain,POST,public,none,no
 /api/constraints/preview,POST,public,none,no

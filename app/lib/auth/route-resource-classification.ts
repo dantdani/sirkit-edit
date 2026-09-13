@@ -47,6 +47,9 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/bom/diff": { durable: "read", sensitivity: "project-durable" },
   "/api/pcb-sync": { durable: "read-write", sensitivity: "project-durable" },
   "/api/physical-bindings": { durable: "read-write", sensitivity: "project-durable" },
+  // [B19-E E4] the durable-workflow aggregate atomic.publication-request.v1, and the atomic catalog tables a publication writes
+  // ([B19-E E4 review] gates-1: those tables are shared by every tenant; only the configured governance tenant AND project reach them)
+  "/api/components/atomic/publication": { durable: "read-write", sensitivity: "project-durable" },
   "/api/assignment-queue": { durable: "read-write", sensitivity: "project-durable" },
   "/api/pcb/release": { durable: "read-write", sensitivity: "project-durable", expensive: true, externalProcess: "kicad-cli (server-authoritative)" },
   "/api/pcb/qualify": { durable: "read-write", sensitivity: "project-durable", expensive: true },

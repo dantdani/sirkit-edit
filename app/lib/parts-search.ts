@@ -176,8 +176,9 @@ export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
   for (const link of links) {
     // [B19-E E3] a link to a withdrawn or missing revision carries no authority into a new instance; approved is derived
     if (link.selectable !== true) {
-      // [B19-E E3 review] ...and its value never falls back to the '' default
-      if (link.valueKey !== "") withdrawnByPart.set(link.partId, [...(withdrawnByPart.get(link.partId) ?? []), link.valueKey]);
+      // [B19-E E3 review] ...and its value never falls back to the '' default. [B19-E E4 review follow-up] the '' default is reported
+      // too, as /api/parts/[id] does (valueKeyLink reads only a value's own key there, so no value's link changes)
+      withdrawnByPart.set(link.partId, [...(withdrawnByPart.get(link.partId) ?? []), link.valueKey]);
       continue;
     }
     const entry = byPart.get(link.partId) ?? {};

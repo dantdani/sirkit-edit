@@ -225,6 +225,10 @@ const ALL: RoutePolicy[] = [
   ...pub("/api/bom/cart/lcsc", ["POST"], "stateless cart payload (no funds)"),
   ...pub("/api/bom/cart/mouser", ["POST"], "stateless cart payload (no funds)"),
   ...pub("/api/components/atomic", ["GET"], "catalog read"),
+  // [B19-E E4] two-person human publication of exact atomic revisions, in the catalog governance project only (OD-37): the
+  // physical-bindings review handoff shape; per-operation roles, the governance project and a human actor are checked in-route.
+  ...read("/api/components/atomic/publication", ["GET"], "app/api/components/atomic/publication (publication requests; governance project only)"),
+  ...mutate("/api/components/atomic/publication", ["POST"], "app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)", { roles: REVIEW_EDITORS }),
   ...pub("/api/components/atomic/search", ["POST"], "catalog read"),
   ...pub("/api/parts/search", ["POST"], "catalog read"),
   ...pub("/api/parts/categories", ["GET"], "catalog read"),

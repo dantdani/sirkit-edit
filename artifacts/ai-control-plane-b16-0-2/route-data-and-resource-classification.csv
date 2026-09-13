@@ -58,6 +58,8 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/component-selection/sourcing,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/component-selection/transaction,POST,false,write,project-durable,false,,false,true,false,false
 /api/components/atomic,GET,true,none,none,false,,false,false,false,true
+/api/components/atomic/publication,GET,false,read-write,project-durable,false,,false,false,false,false
+/api/components/atomic/publication,POST,false,read-write,project-durable,false,,false,true,false,false
 /api/components/atomic/search,POST,true,none,none,false,,false,false,false,true
 /api/constraints/explain,POST,true,none,none,false,,false,false,false,true
 /api/constraints/preview,POST,true,none,none,false,,false,false,false,true

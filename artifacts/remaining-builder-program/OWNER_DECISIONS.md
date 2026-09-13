@@ -152,6 +152,11 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   identity.
 - Also applied: prices are compared and totalled in USD only; an offer without a USD break has no unit price.
 - The owner may choose otherwise (e.g. suffix-insensitive matching for specific manufacturers, or currency conversion).
+- Amendment (B19-E E4, 2026-09-13): a publication links a catalog part to an exact revision only when the part's `mpn` is
+  empty or IS the exact MPN (and, in review, its symbol is the draft's). A family-level link — a symbol part whose backfilled
+  `mpn` is its symbol name, such as `Timer:NE555D` (mpn NE555D) to the exact part NE555DR — is refused with
+  LINK_MPN_MISMATCH. This fails closed under the exact-MPN rule above; the operator seed still writes such links directly.
+  The owner may choose otherwise (e.g. an explicit reviewed family-link kind).
 
 ## OD-35 — Who may declare a requirements source's authority class (B19-D I5e, 2026-09-13)
 
@@ -185,6 +190,10 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   and a project admin publishes or withdraws; the approver is never the publisher (an admin is not exempt); the actor is always
   a human. AAL2 step-up is not enforced (authentication strength is never checked) and is recorded as open.
 - The owner may choose otherwise: e.g. per-tenant catalogs, a separate catalog-publisher role, or enforced step-up.
+- Amendment (B19-E E4, 2026-09-13): the governance scope is a tenant AND a project, because the atomic catalog is shared by
+  every tenant — a project id alone could be matched by another tenant's project. Both `SIRKIT_ATOMIC_CATALOG_TENANT_ID` and
+  `SIRKIT_ATOMIC_CATALOG_PROJECT_ID` must be set (on the default branch); with either unset every publication operation,
+  including the list, is refused with 403. A deployment must set the tenant variable before E4 publication can be used.
 
 ## OD-38 — What deprecated and superseded mean for a project (B19-E, 2026-09-13)
 

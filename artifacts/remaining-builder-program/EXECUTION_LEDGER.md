@@ -1652,3 +1652,48 @@ _(discovery, reproduction and results appended below as they are observed)_
   re-publish is not exercised by a concurrent test (PGlite has one connection); whether Next.js keeps a Request alive for the
   life of a handler (abort propagation on client disconnect) is unverified and is a separate hardening item.
 
+### B19-E E4 — import candidate review and two-person human publication (2026-09-13 local; workflow + follow-up workflow + lead; this commit)
+
+- Implemented test-first by a single-writer workflow (quarantine suite: 11 of 13 cases failed first; every other new suite
+  failed on missing modules):
+  - quarantine: `missing` counts only non-superseded engineering candidates; conflict values carry `establishes` and
+    `sourceClass`; `quarantinedDisagreements` are information only; extraction text is inert and bounded;
+  - `acquisition/import-review.ts`: labelled review evidence (source, freshness, cached/live, registry version, stale) and a
+    `reviewEvidenceDigest` over identity, engineering candidates, quarantined facts, conflicts and supersession — not sourcing
+    facts, distributor TTL or a distributor's MPN spelling; distributor facts are persisted as SHA-256 hashes only;
+  - `atomic/authoring.ts`: drafts assembled server-side from the bundled KiCad library, source classes set by rule
+    (person-entered data is organization_authored, never manufacturer_datasheet), revision = latest + 1;
+  - `atomic/publication-review.ts`: durable `atomic.publication-request.v1` (CAS, namespaced idempotency, human actors,
+    retirement when the requester or approver loses membership or role); approve refuses digest drift, unresolved conflicts,
+    quarantined/superseded/distributor resolutions, an unresolved manufacturer, missing evidence and undispositioned facts;
+    publish by a different person re-assembles the draft and calls the E3 boundary with reviewed links in one transaction;
+  - `POST/GET /api/components/atomic/publication`: governance tenant + project + default branch, human only, per-op roles,
+    64 KiB body, forbidden and undeclared keys refused, closed refusal codes, cache only (0 vendor calls end to end);
+  - `AtomicPublicationReviewPanel` from the Build Library preview and exact E2 hits; never-exposed tool patterns and
+    `publica` in the Tier-3 family pattern; route ratchet 159/156 → 161/158; B01 record `parts.atomic-publication-review`;
+    control inventory 590 → 619.
+- Review in the workflow: 24 findings, 16 confirmed and fixed test-first (13 failing tests first, 3 test-strength findings by
+  deliberate breakages), confirmed by a checker — among them unreviewed requester-chosen links (now checked for exact MPN,
+  symbol and existing links at submit, approve and publish, named in evidence and the digest, and refused inside the
+  transaction), idempotency-key poisoning, an in-flight publish racing a withdrawal or a second publisher (marker lease),
+  authority not re-checked at publish, a truncated pin map, and the governance gate ignoring the tenant (new required
+  `SIRKIT_ATOMIC_CATALOG_TENANT_ID`, recorded as an OD-37 amendment).
+- Follow-up workflow (four checker items, each failing first; checker confirmed): a late publication is never recorded onto a
+  replacing request (409 REQUEST_REPLACED); an ambiguous publish outcome keeps the marker (409 PUBLISH_OUTCOME_UNKNOWN; the
+  E3 boundary flags failures after its callback as commit-outcome-unknown); a withdrawn '' default link is reported in
+  `withdrawnValueKeys`, so the panel no longer offers a link the server refuses; the concurrent-publish test now reproduces
+  the shared-marker-key interleaving (proven against the old key format).
+- Lead follow-ups on the second checker (2 cases failed first): every refusal code has a client message, enforced at compile
+  time (a deleted message fails tsc — checked) and by a test; the outcome read accepts any ReadonlyMap-shaped answer; the
+  unknown-outcome message no longer promises a retry succeeds while the status cannot be read.
+- Decisions recorded: OD-37 amendment (tenant + project governance scope); OD-34 amendment (a link needs an empty or exact
+  `mpn`; family-level links are refused, fail closed).
+- Gates (lead re-run, bounded batches): atomic + acquisition 35 files / 579; component, parts, editor and review panels,
+  physical binding, durable workflow 15 / 124 (+8 skips); prompt-to-gerber, B14 AST gates, chat injection ratchet, fixture
+  runtime 9 / 77; all auth gates and B16.1C tripwires 38 / 444 (+9 skips); engineering registries, B17, B18 exposure and
+  never-execution sweeps, no-purchase 9 / 87; tsc 0 (4 GB heap); eslint clean on 38 files; B17 inventory and route-policy
+  artifacts regenerate with no drift.
+- Recorded, not fixed: a status-read outage holds a request (fail closed) beyond the lease; a definite rollback at COMMIT is
+  reported as an unknown outcome; AAL2 step-up not enforced (OD-37); no browser check of the panel (memory); the bundled
+  KiCad reader was exercised with fixture libraries, not the uncommitted data/ checkout.
+

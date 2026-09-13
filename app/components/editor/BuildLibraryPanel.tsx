@@ -10,6 +10,9 @@
  * [B19-E E2] "Search distributors": a member's bounded search of the enabled distributors by exact MPN or keyword. Every
  * hit is a labelled sourcing observation (source, served from, observed, expires, exact match) and never engineering
  * authority, so an external hit has no Place control; it is a lead for review, not a part on the canvas.
+ *
+ * [B19-E E4] "Request evidence review" (a part preview with an MPN, or an exact external hit) opens the atomic publication
+ * review for that exact MPN: a bundle proves nothing, and only a published atomic revision controls schematic/PCB.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -31,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { KicadSymbol } from "@/app/components/schematic/KicadSymbol";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { DatasheetLink } from "@/app/components/parts/DatasheetLink"; // [B19-D I5c row 34, review]
+import { AtomicPublicationReviewSection, type AtomicPublicationPrefill } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [B19-E E4]
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy";
 import { SERVED_FROM_WORDS, utcMinute } from "@/app/lib/acquisition/source-labels"; // [B19-E E2]
@@ -80,7 +84,19 @@ type PartDetail = {
     revision: { publicationState: string };
     unresolved: string[];
   };
+  /** [B19-E E4 review] the part's selectable atomic links by value key ('' is the default link) */
+  atomicAssignments?: Record<string, unknown>;
+  /** [B19-E E4 review follow-up] value keys whose link points at a withdrawn or missing revision ('' when the default link does) */
+  withdrawnValueKeys?: string[];
 };
+
+/**
+ * [B19-E E4 review follow-up] Whether the part already has a default ('') link: a selectable one, or one whose revision was
+ * withdrawn or is missing. Either way a publication never repoints it, so no default link is offered.
+ */
+function hasDefaultLink(detail: PartDetail): boolean {
+  return (detail.atomicAssignments !== undefined && Object.hasOwn(detail.atomicAssignments, "")) || (Array.isArray(detail.withdrawnValueKeys) && detail.withdrawnValueKeys.includes(""));
+}
 
 const PAGE_SIZE = 30;
 const EXTERNAL_SEARCH_FAILED = "The distributor search could not be completed.";
@@ -148,6 +164,8 @@ export function BuildLibraryPanel({
   const [externalResult, setExternalResult] = useState<ExternalSearchAnswer | null>(null);
   const [externalError, setExternalError] = useState<string | null>(null);
   const [externalLoading, setExternalLoading] = useState(false);
+  // [B19-E E4] the exact part whose evidence review is open
+  const [evidenceReview, setEvidenceReview] = useState<AtomicPublicationPrefill | null>(null);
 
   // ── Categories ────────────────────────────────────────────────────────────
 
@@ -298,8 +316,25 @@ export function BuildLibraryPanel({
     }
   }
 
+  // [B19-E E4] a person asks for the exact part's evidence to be reviewed; nothing is requested until they submit the panel
+  function requestEvidenceReview(prefill: AtomicPublicationPrefill) {
+    if (!projectScope) return;
+    setEvidenceReview(prefill);
+  }
+
   return (
     <div className="relative flex-1 min-h-0 flex flex-col">
+      {evidenceReview !== null && projectScope && (
+        // [B19-E E4 review] bounded and scrollable: the review never squeezes the part list away or runs past the sidebar
+        <div className="p-2 border-b border-zinc-800 space-y-1 shrink-0 max-h-[60%] overflow-y-auto" data-testid="build-library-evidence-review">
+          <div className="flex justify-end">
+            <button onClick={() => setEvidenceReview(null)} title="Close evidence review" className="text-zinc-500 hover:text-zinc-200 transition">
+              <X className="size-3.5" />
+            </button>
+          </div>
+          <AtomicPublicationReviewSection key={`${evidenceReview.exactMpn ?? ""}:${evidenceReview.partId ?? ""}`} projectScope={projectScope} prefill={evidenceReview} />
+        </div>
+      )}
       {selectedCategory === null
         ? renderCategoryList()
         : renderPartsList()}
@@ -311,6 +346,7 @@ export function BuildLibraryPanel({
           error={detailError}
           onClose={closePart}
           onPlace={onSelectForPlacement}
+          requestEvidenceReview={projectScope ? requestEvidenceReview : undefined}
         />
       )}
     </div>
@@ -416,7 +452,7 @@ export function BuildLibraryPanel({
             {externalResult.hits.length === 0 ? (
               <div className="text-[10px] text-zinc-600">No candidates found.</div>
             ) : (
-              externalResult.hits.map((hit) => <ExternalHit key={`${hit.sourceId}:${hit.observationId}:${hit.mpn}`} hit={hit} query={externalResult.query} />)
+              externalResult.hits.map((hit) => <ExternalHit key={`${hit.sourceId}:${hit.observationId}:${hit.mpn}`} hit={hit} query={externalResult.query} requestEvidenceReview={projectScope ? requestEvidenceReview : undefined} />)
             )}
           </>
         )}
@@ -505,7 +541,7 @@ export function BuildLibraryPanel({
 
 // ─── [B19-E E2] One external hit: labelled, and never placeable ─────────────
 
-function ExternalHit({ hit, query }: { hit: ExternalCandidateHit; query: string }) {
+function ExternalHit({ hit, query, requestEvidenceReview }: { hit: ExternalCandidateHit; query: string; requestEvidenceReview?: (prefill: AtomicPublicationPrefill) => void }) {
   const pageHref = safeHref(hit.productUrl, "page", VENDOR_PAGE_HOSTS);
   // [B19-E E2 review] the link the source's terms require beside its data (Nexar: octopart.com), whether or not a page link exists
   const attributionHref = safeHref(hit.attributionLink, "page", VENDOR_PAGE_HOSTS);
@@ -548,6 +584,12 @@ function ExternalHit({ hit, query }: { hit: ExternalCandidateHit; query: string 
           {hit.sourceDisplayName} page <ExternalLink className="size-3" />
         </a>
       )}
+      {/* [B19-E E4] only the exact part may be put to review; a near match is a different part */}
+      {requestEvidenceReview && hit.exactMatch && (
+        <Button size="sm" variant="secondary" className="h-6 text-[10px]" onClick={() => requestEvidenceReview({ exactMpn: hit.mpn })}>
+          Request evidence review
+        </Button>
+      )}
     </div>
   );
 }
@@ -560,13 +602,18 @@ function PreviewPanel({
   error,
   onClose,
   onPlace,
+  requestEvidenceReview,
 }: {
   detail: PartDetail | null;
   isLoading: boolean;
   error: boolean;
   onClose: () => void;
   onPlace?: (partId: string) => void;
+  /** [B19-E E4] open the evidence review for this part's exact MPN */
+  requestEvidenceReview?: (prefill: AtomicPublicationPrefill) => void;
 }) {
+  // [B19-E E4 review follow-up] a default link counts whether its revision is selectable or was withdrawn (the server refuses both)
+  const alreadyLinked = detail !== null && hasDefaultLink(detail);
   return (
     <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
       <div className="h-10 px-3 flex items-center gap-2 border-b border-zinc-800 shrink-0">
@@ -614,6 +661,13 @@ function PreviewPanel({
               <DatasheetLink href={detail.datasheet} className="inline-flex items-center gap-1 text-teal-400 hover:text-teal-300 transition pt-1">
                 Datasheet <ExternalLink className="size-3" />
               </DatasheetLink>
+              {requestEvidenceReview && detail.mpn && (
+                <div className="pt-1">
+                  <Button size="sm" variant="secondary" className="h-6 text-[10px]" onClick={() => requestEvidenceReview({ exactMpn: detail.mpn ?? "", symbol: { library: detail.libraryName, name: detail.name }, footprint: footprintReference(detail.footprintHint), manufacturer: detail.manufacturer, partId: detail.id, alreadyLinked })}>
+                    Request evidence review
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Description */}
@@ -642,6 +696,12 @@ function PreviewPanel({
       )}
     </aside>
   );
+}
+
+/** [B19-E E4] "Library:Footprint" as a bundled-library reference, when the hint has that shape. */
+function footprintReference(hint: string | null): { library: string; name: string } | null {
+  const match = hint ? /^([^:\s]+):([^:\s]+)$/.exec(hint.trim()) : null;
+  return match ? { library: match[1]!, name: match[2]! } : null;
 }
 
 function MetaRow({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {

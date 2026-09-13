@@ -52,6 +52,7 @@ path,methods,record_id,class
 /api/component-selection/sourcing,POST,cd.component-selection.workbench,propose
 /api/component-selection/transaction,POST,cd.component-selection.workbench,mutate
 /api/components/atomic,GET,parts.catalog-read,read
+/api/components/atomic/publication,GET;POST,parts.atomic-publication-review,mutate
 /api/components/atomic/search,POST,parts.catalog-read,read
 /api/constraints/explain,POST,validation.constraints-inspect,read
 /api/constraints/preview,POST,validation.constraints-inspect,read

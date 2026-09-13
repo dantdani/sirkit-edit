@@ -178,6 +178,10 @@ jobs:
           app/api/parts/__tests__/b19-e-external-search-route.test.ts
           app/components/editor/__tests__/b19-e-build-library-external-search.test.tsx
           app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-review.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts
+          app/api/components/__tests__/b19-e-atomic-publication-route.test.ts
+          app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
@@ -249,6 +253,8 @@ jobs:
           app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts
           app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts
           app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

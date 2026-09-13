@@ -58,6 +58,8 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/component-selection/sourcing,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/component-selection/transaction,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/components/atomic,GET,public,none,false,,,false,false,false,false,catalog read
+/api/components/atomic/publication,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/components/atomic/publication (publication requests; governance project only)
+/api/components/atomic/publication,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,"app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)"
 /api/components/atomic/search,POST,public,none,false,,,false,false,false,false,catalog read
 /api/constraints/explain,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/constraints/preview,POST,public,none,false,,,false,false,false,false,stateless compute

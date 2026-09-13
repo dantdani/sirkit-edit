@@ -34,7 +34,10 @@ export type CachedPart = {
   atomicAssignment?: NetlistComponent["atomicAssignment"];
   /** Published atomic authority per normalized value ('' = default). */
   atomicAssignments?: Record<string, NonNullable<NetlistComponent["atomicAssignment"]>>;
-  /** [B19-E E3 review] value keys whose own link points at a withdrawn or missing revision: no '' default fallback for them */
+  /**
+   * [B19-E E3 review] value keys whose own link points at a withdrawn or missing revision: no '' default fallback for them.
+   * [B19-E E4 review follow-up] '' is included when the default link itself points at one (valueKeyLink is unaffected).
+   */
   withdrawnValueKeys?: string[];
 };
 

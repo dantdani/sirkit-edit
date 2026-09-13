@@ -113,7 +113,11 @@ describe("[B19-E E2] g — Search distributors", () => {
     expect(nexar.textContent).toContain(EXTERNAL_OBSERVATION_AUTHORITY);
 
     for (const element of hits) {
-      expect(within(element).queryAllByRole("button"), "no control of any kind on an external hit").toEqual([]);
+      // [B19-E E4] reviewed pin move: this asserted no control of any kind; the plan's E4 mounts the atomic publication review
+      // from an external hit, so the ONE control allowed is "Request evidence review" on the exact-match hit (it opens the review
+      // panel and places, binds or buys nothing); a near match still has no control at all
+      const exact = element === digikey;
+      expect(within(element).queryAllByRole("button").map((button) => button.textContent), "no control on an external hit but the exact part's evidence review").toEqual(exact ? ["Request evidence review"] : []);
       expect(element.textContent ?? "").not.toMatch(/\bplace\b|add to|\bbuy\b|order|cart/i);
     }
     const results = screen.getByTestId("external-search-results");

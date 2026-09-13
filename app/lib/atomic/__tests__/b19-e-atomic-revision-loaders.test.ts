@@ -221,6 +221,37 @@ describe("[B19-E E3 f] atomicAssignments are omitted for withdrawn or missing re
     const authority = Object.fromEntries((state.kicadComponents ?? []).map((component) => [component.refDes, component.atomicPartRevisionId ?? null]));
     expect(authority).toEqual({ R1: ids.P, R2: null, R3: null, R4: null, R5: null });
   });
+
+  // [B19-E E4 review follow-up] correctness-already-linked-withdrawn-default: a '' default link whose revision was withdrawn (or is
+  // missing) is reported too, so a person is never offered a default link the publication would refuse (LINK_ALREADY_LINKED).
+  // The parts above keep their expectations: none has a '' link to a withdrawn or missing revision (defaultedPartId's '' is S2).
+  it("a withdrawn or missing '' default link is reported in withdrawnValueKeys; a value still finds no link through it", async () => {
+    const library = await pg.db.query<{ id: string }>(`SELECT id FROM libraries WHERE name = 'Device' LIMIT 1`);
+    const part = async (name: string) => (await pg.db.query<{ id: string }>(`INSERT INTO parts (library_id, name, properties, pins, symbol_raw) VALUES ($1, $2, '{}'::jsonb, '[]'::jsonb, '') RETURNING id`, [library.rows[0]!.id, name])).rows[0]!.id;
+    const withdrawnDefault = await part("b19ezdefaultdeprecated");
+    const missingDefault = await part("b19ezdefaultmissing");
+    const insertLink = (partIdValue: string, valueKey: string, revisionId: string) => pg.db.query(
+      `INSERT INTO parts_atomic_links (part_id, value_key, atomic_part_revision_id, symbol_asset_version_id, footprint_asset_version_id, mapping_certificate_id, footprint_full_name) VALUES ($1, $2, $3, 'sym', 'fp', 'map', 'Resistor_SMD:R_0805_2012Metric')`,
+      [partIdValue, valueKey, revisionId],
+    );
+    await insertLink(withdrawnDefault, "", ids.D);
+    await insertLink(withdrawnDefault, normalizeValueKey("1k"), ids.P);
+    await insertLink(missingDefault, "", ids.M);
+
+    const loaded = new Map((await getFullPartsByIds([withdrawnDefault, missingDefault])).map((item) => [item.id, item]));
+    expect([Object.keys(loaded.get(withdrawnDefault)!.atomicAssignments ?? {}), loaded.get(withdrawnDefault)!.withdrawnValueKeys]).toEqual([[normalizeValueKey("1k")], [""]]);
+    expect([loaded.get(missingDefault)!.atomicAssignments, loaded.get(missingDefault)!.withdrawnValueKeys]).toEqual([undefined, [""]]);
+    for (const [id, assignments] of [[withdrawnDefault, [normalizeValueKey("1k")]], [missingDefault, []]] as const) {
+      const response = await partDetailGet(new Request(`http://localhost/api/parts/${id}`), { params: Promise.resolve({ id }) });
+      const body = await response.json() as { part: { atomicAssignments?: Record<string, unknown>; withdrawnValueKeys?: string[] } };
+      expect([Object.keys(body.part.atomicAssignments ?? {}), body.part.withdrawnValueKeys], id).toEqual([assignments, [""]]);
+    }
+    // valueKeyLink is unchanged: its fallback check reads a value's own key, so a value without its own link still finds none
+    const parts = new Map([...loaded.values()].map((item) => [item.id, { ...item, pins: [] }]));
+    const netlist = { components: [[withdrawnDefault, "1k"], [withdrawnDefault, "7k"], [missingDefault, "7k"], [missingDefault, ""]].map(([id, value], index) => ({ refDes: `R${index + 1}`, partId: id!, value: value!, role: "passive" as const })), connections: [], explanation: "b19-e" };
+    const authority = Object.fromEntries((autoLayoutBuild(netlist, parts).kicadComponents ?? []).map((component) => [component.refDes, component.atomicPartRevisionId ?? null]));
+    expect(authority).toEqual({ R1: ids.P, R2: null, R3: null, R4: null });
+  });
 });
 
 describe("[B19-E E3 g] binding reads the revision's status; the schema carries the status table", () => {

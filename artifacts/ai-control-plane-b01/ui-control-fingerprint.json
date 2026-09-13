@@ -132,6 +132,7 @@
     ],
     "app/components/editor/BuildLibraryPanel.tsx": [
       "Close",
+      "Close evidence review",
       "Distributor search query"
     ],
     "app/components/bom/BomView.tsx": [

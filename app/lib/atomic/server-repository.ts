@@ -19,6 +19,7 @@ import {
   atomicRawObjects,
   atomicSources,
   atomicSupplierParts,
+  parts,
   partsAtomicLinks,
 } from "@/app/lib/db/schema";
 import type { ApprovalProfile, AtomicPartRevision, AuditEvent, PortableAtomicSnapshot } from "./types";
@@ -184,6 +185,16 @@ export interface AtomicPartLinkInput {
 
 type AtomicPartLinkRow = Required<Omit<typeof partsAtomicLinks.$inferInsert, "createdAt">>;
 
+/** [B19-E E4 review] Whether a catalog part's MPN is the published exact part's (case-folded identity; an invalid MPN never is). */
+function linkNamesExactPart(partMpn: string, exactMpn: string | null): boolean {
+  if (exactMpn === null) return false;
+  try {
+    return canonicalExactMpn(partMpn) === canonicalExactMpn(exactMpn);
+  } catch {
+    return false;
+  }
+}
+
 function linkRowsFor(snapshot: PortableAtomicSnapshot, links: readonly AtomicPartLinkInput[]): AtomicPartLinkRow[] {
   if (links.length === 0) return [];
   if (links.length > MAX_LINKS) throw new Error(`Atomic part links are limited to ${MAX_LINKS} per publication`);
@@ -249,7 +260,11 @@ export async function publishPortableAtomicSnapshot(input: {
     },
   };
 
-  return getDb().transaction(async (tx) => {
+  // [B19-E E4 review follow-up] set once the transaction's work is done and its COMMIT is requested: a failure after that point may
+  // belong to a COMMIT the server applied (or applies later) although the answer was lost, so it is marked `commitOutcomeUnknown`
+  // and the caller never takes it for a rollback; a failure before it is thrown inside the transaction, which rolls back
+  let commitRequested = false;
+  const committed = getDb().transaction(async (tx) => {
     if (snapshot.licenses.length) await tx.insert(atomicLicenses).values(snapshot.licenses.map((license) => ({
       id: license.id,
       spdxId: license.spdxId,
@@ -390,6 +405,11 @@ export async function publishPortableAtomicSnapshot(input: {
     const replay = inserted.length === 0;
 
     for (const link of links) {
+      // [B19-E E4 review] a catalog part that names an MPN is linked only to that exact part (OD-34), whatever the caller checked
+      const [part] = await tx.select({ mpn: parts.mpn }).from(parts).where(eq(parts.id, link.partId)).limit(1);
+      if (part?.mpn && part.mpn.trim() !== "" && !linkNamesExactPart(part.mpn, snapshot.exactPart?.exactMpn ?? null)) {
+        throw new Error(`Atomic part link for part ${link.partId} names MPN ${JSON.stringify(part.mpn.slice(0, 64))}, not the published exact part; a link must name the exact part`);
+      }
       const [existing] = await tx.select({ partId: partsAtomicLinks.partId }).from(partsAtomicLinks).where(and(eq(partsAtomicLinks.partId, link.partId), eq(partsAtomicLinks.valueKey, link.valueKey))).limit(1);
       // [B19-E E3 review] a replay writes no audit row, so it may not write a link either
       if (!existing && replay) throw new Error(`An identical re-publish cannot add the link for value ${JSON.stringify(link.valueKey)}; links are written only by the publication that publishes the revision`);
@@ -405,7 +425,10 @@ export async function publishPortableAtomicSnapshot(input: {
       const [original] = await tx.select({ id: atomicAuditEvents.id }).from(atomicAuditEvents)
         .where(and(eq(atomicAuditEvents.objectType, "atomic_part_revision"), eq(atomicAuditEvents.objectId, revision.id), eq(atomicAuditEvents.action, "publish")))
         .orderBy(asc(atomicAuditEvents.at), asc(atomicAuditEvents.id)).limit(1);
-      if (original) return { revisionId: revision.id, auditId: original.id };
+      if (original) {
+        commitRequested = true;
+        return { revisionId: revision.id, auditId: original.id };
+      }
     }
     await tx.insert(atomicAuditEvents).values({
       id: audit.id,
@@ -416,7 +439,12 @@ export async function publishPortableAtomicSnapshot(input: {
       at,
       event: audit,
     });
+    commitRequested = true;
     return { revisionId: revision.id, auditId: audit.id };
+  });
+  return committed.catch((error: unknown) => {
+    if (!commitRequested) throw error;
+    throw Object.assign(new Error(error instanceof Error ? error.message : "The publication transaction's COMMIT failed"), { name: "AtomicPublicationCommitOutcomeUnknown", commitOutcomeUnknown: true as const, cause: error });
   });
 }
 

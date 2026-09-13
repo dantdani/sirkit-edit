@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import {
   atomicCadAssets,
@@ -18,7 +18,11 @@ import {
   atomicRawObjects,
   atomicSources,
   atomicSupplierParts,
+  libraries,
+  parts,
+  partsAtomicLinks,
 } from "@/app/lib/db/schema";
+import { canonicalExactMpn } from "./identity";
 import { readModeSql } from "./revision-status-sql";
 import { revisionStatusFromEvents, type AtomicRevisionReadMode, type AtomicRevisionStatus } from "./revision-status";
 import type {
@@ -49,6 +53,69 @@ function oneOfKind<T extends { kind: string }>(rows: Array<{ kind: string; paylo
 }
 
 const STATUS_BATCH = 500;
+
+/** [B19-E E4 review] A catalog part a publication link names: its MPN, its KiCad symbol and the value keys already linked. */
+export interface AtomicLinkTargetRow {
+  partId: string;
+  mpn: string | null;
+  library: string;
+  name: string;
+  linkedValueKeys: string[];
+}
+
+const PART_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const LINK_TARGET_BATCH = 64;
+
+/**
+ * [B19-E E4 review] The catalog parts publication links name, read for the review (a link must name the exact part and its KiCad
+ * symbol, and never repoint a value that already has a link — whatever revision it points at). Ids that name no part are absent.
+ */
+export async function loadAtomicLinkTargets(partIds: readonly string[]): Promise<Map<string, AtomicLinkTargetRow>> {
+  const ids = [...new Set(partIds.filter((id) => typeof id === "string" && PART_ID.test(id)).map((id) => id.toLowerCase()))].slice(0, LINK_TARGET_BATCH);
+  const out = new Map<string, AtomicLinkTargetRow>();
+  if (ids.length === 0) return out;
+  const db = getDb();
+  const rows = await db.select({ partId: parts.id, mpn: parts.mpn, name: parts.name, library: libraries.name }).from(parts).innerJoin(libraries, eq(parts.libraryId, libraries.id)).where(inArray(parts.id, ids));
+  const links = await db.select({ partId: partsAtomicLinks.partId, valueKey: partsAtomicLinks.valueKey }).from(partsAtomicLinks).where(inArray(partsAtomicLinks.partId, ids));
+  for (const row of rows) out.set(row.partId, { partId: row.partId, mpn: row.mpn, library: row.library, name: row.name, linkedValueKeys: links.filter((link) => link.partId === row.partId).map((link) => link.valueKey).sort() });
+  return out;
+}
+
+/** [B19-E E4] The catalog identities a new revision of an exact part must reuse, and the revision number to start after. */
+export interface AtomicAuthoringIdentityRow {
+  manufacturerId: string | null;
+  exactPartId: string | null;
+  logicalPartId: string | null;
+  latestRevision: number;
+}
+
+/**
+ * [B19-E E4] The manufacturer (by normalized name), the exact part (by manufacturer and exact MPN, case-folded as OD-34 does) and
+ * the logical part with its latest revision number, so a publication reuses the identities the unique indexes already hold —
+ * a new id beside an existing row would be dropped by the publication's conflict-ignore inserts and fail its foreign keys.
+ */
+export async function loadAtomicAuthoringIdentity(input: { exactMpn: string; manufacturerName: string | null }): Promise<AtomicAuthoringIdentityRow> {
+  const none: AtomicAuthoringIdentityRow = { manufacturerId: null, exactPartId: null, logicalPartId: null, latestRevision: 0 };
+  const normalizedName = input.manufacturerName?.normalize("NFKC").trim().toUpperCase();
+  if (!normalizedName) return none;
+  const db = getDb();
+  const [manufacturer] = await db.select({ id: atomicManufacturers.id }).from(atomicManufacturers).where(eq(atomicManufacturers.normalizedName, normalizedName)).limit(1);
+  if (!manufacturer) return none;
+  let exactMpn: string;
+  try {
+    exactMpn = canonicalExactMpn(input.exactMpn);
+  } catch {
+    return { ...none, manufacturerId: manufacturer.id };
+  }
+  const [exactPart] = await db.select({ id: atomicExactParts.id }).from(atomicExactParts)
+    .where(and(eq(atomicExactParts.manufacturerId, manufacturer.id), sql`upper(${atomicExactParts.exactMpn}) = ${exactMpn}`)).limit(1);
+  if (!exactPart) return { ...none, manufacturerId: manufacturer.id };
+  const [latest] = await db.select({ logicalPartId: atomicPartRevisions.logicalPartId, revision: atomicPartRevisions.revision }).from(atomicPartRevisions)
+    .where(eq(atomicPartRevisions.exactPartId, exactPart.id)).orderBy(desc(atomicPartRevisions.revision)).limit(1);
+  if (!latest) return { manufacturerId: manufacturer.id, exactPartId: exactPart.id, logicalPartId: null, latestRevision: 0 };
+  const [top] = await db.select({ revision: sql<number>`max(${atomicPartRevisions.revision})` }).from(atomicPartRevisions).where(eq(atomicPartRevisions.logicalPartId, latest.logicalPartId));
+  return { manufacturerId: manufacturer.id, exactPartId: exactPart.id, logicalPartId: latest.logicalPartId, latestRevision: Number(top?.revision ?? latest.revision) };
+}
 
 /**
  * [B19-E E3] The catalog status of each published revision named (published, deprecated, superseded or revoked, with its

@@ -55,7 +55,10 @@ type PartDetail = {
    * identity for footprint-ready schematic instances.
    */
   atomicAssignments?: Record<string, AtomicAssignment>;
-  /** [B19-E E3 review] value keys whose own link points at a withdrawn or missing revision: no '' default fallback for them */
+  /**
+   * [B19-E E3 review] value keys whose own link points at a withdrawn or missing revision: no '' default fallback for them.
+   * [B19-E E4 review follow-up] '' is included when the default link itself points at one.
+   */
   withdrawnValueKeys?: string[];
 };
 
@@ -142,7 +145,10 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
     for (const link of linkRows) {
       // [B19-E E3] a link to a withdrawn or missing revision is no assignment for a new selection; approved is derived
       if (link.selectable !== true) {
-        if (link.valueKey !== "") withdrawnValueKeys.push(link.valueKey); // [B19-E E3 review] ...and no '' default fallback
+        // [B19-E E3 review] ...and no '' default fallback. [B19-E E4 review follow-up] the '' default is reported too: the part still
+        // HAS that link (a publication never repoints it); valueKeyLink's fallback check reads only a value's own key, so no
+        // value's link changes
+        withdrawnValueKeys.push(link.valueKey);
         continue;
       }
       atomicAssignments[link.valueKey] = {

@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-E E3 complete (atomic revision integrity, reviewed)",
+  "currentCheckpoint": "B19-E E4 complete (two-person publication, reviewed)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "5b2c3ca",
+  "lastGreenSha": "875da8f",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19-E E4 (import candidate review and two-person human publication in the governance project), then E5-E6, then the B19 closeout.",
-  "updatedAt": "2026-09-13T14:58:05-04:00"
+  "nextAction": "B19-E E5 (lifecycle and project binding: revision-status route and BOM badge, withdraw op, successor rebind, adopting an exact revision), then E6 (bounded agent tools), then the B19 closeout.",
+  "updatedAt": "2026-09-13T17:52:26-04:00"
 }
