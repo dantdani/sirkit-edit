@@ -20,6 +20,7 @@ import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
 import { getDb } from "../db/client";
 import { parts } from "../db/schema";
 import { admitSource, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
+import { currentPause, type AdmissionPause } from "../acquisition/admission-control";
 
 // Re-export the browser-safe surface (types, lifecycle helpers, DistributorChoice,
 // AggregatedPricing) so server callers can keep importing from this barrel. Client
@@ -98,6 +99,22 @@ export function unavailableSources(choice: DistributorChoice): UnavailableSource
     if (!intends(choice, id)) continue;
     const admission = admitSource(id, process.env);
     if (!admission.admitted) out.push({ name: SOURCE_REGISTRY[id].distributorName as DistributorName, refusal: admission.refusal, message: admission.message });
+  }
+  return out;
+}
+
+export type PausedSource = { name: DistributorName; reason: AdmissionPause["reason"]; message: string; retryAtMs: number };
+
+/**
+ * [B19-B I3b] Admitted sources that are paused right now — a registered quota used up, or the circuit breaker open after
+ * repeated failures — each with its sentence and when it may be tried again.
+ */
+export function pausedSources(choice: DistributorChoice, now: number = Date.now()): PausedSource[] {
+  const out: PausedSource[] = [];
+  for (const id of CHOICE_SOURCES) {
+    if (!intends(choice, id) || !admitSource(id, process.env).admitted) continue;
+    const pause = currentPause(id, now);
+    if (pause) out.push({ name: SOURCE_REGISTRY[id].distributorName as DistributorName, reason: pause.reason, message: pause.message, retryAtMs: pause.retryAtMs });
   }
   return out;
 }

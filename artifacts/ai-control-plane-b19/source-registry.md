@@ -77,12 +77,13 @@ likewise approval-gated and not registered.
 | bulk refresh only where terms permit | `getPricingFor(…, { purpose: "bulk-refresh" })` | `b19-source-admission` |
 | no secret value, no wildcard host, no plain HTTP, no redirect allowance, no cached no-storage source, no serving past retention | `validateSourceRegistry`, run by the generator and the gate | eleven crafted violations, each refused |
 | the committed artifact is the registry | byte-for-byte render gate | `b19-source-registry` |
+| quotas (every registered window) and the circuit breaker | `requestAdmission` / `recordOutcome` in `distributorJson` (I3b) | `b19-admission-control`, `b19-quota-breaker-coalescing` |
 
 ## 5. Recorded, not enforced here
 
-- **Quotas, circuit breakers, retries and cache coalescing** are recorded per source but not yet enforced: the runbook's
-  "request quotas and cache coalescing" is B19-B work carried by the next increment (I3b). The registry's breaker and
-  retry fields describe today's behaviour (no automatic retry; a failure degrades to a missing price).
+- **Quotas, circuit breakers and coalescing** are enforced since I3b (`acquisition-boundary.md`). Retries stay as the
+  registry records them: no automatic retry; a failure degrades to a missing price. The meters are per process (stated
+  limit in I3b).
 - The admission decision is taken once per process, as credentials were before: switching a source off takes effect
   on restart.
 - The consolidated lifecycle status written to `parts` is a derived fact; whether the vendors' "no database" clauses

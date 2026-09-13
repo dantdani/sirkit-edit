@@ -14,6 +14,7 @@ import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import { schDisplayRef } from "@/lib/schematic-types";
 import {
   getPricingFor,
+  pausedSources,
   unavailableSources,
   type AggregatedPricing,
   type DistributorChoice,
@@ -182,6 +183,9 @@ export async function buildBom(
     pricingMap = await getPricingFor(partsForPricing, pricingChoice, { live: pricing.live === true, forceRefresh: pricing.forceRefresh === true });
     if (pricing.live !== true) {
       warnings.push("Prices shown are cached offers only. Live distributor pricing is fetched in the BOM workbench by a project member.");
+    } else {
+      // [B19-B I3b] a source whose quota is used up or whose breaker is open says so, and when it may be tried again
+      for (const paused of pausedSources(pricingChoice)) warnings.push(paused.message);
     }
     // Counts are per (part, source): sum the aggregator's per-source tallies.
     for (const agg of pricingMap.values()) {

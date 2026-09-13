@@ -126,6 +126,7 @@ jobs:
           app/lib/acquisition
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
+          app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

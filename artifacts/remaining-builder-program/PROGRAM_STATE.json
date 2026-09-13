@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-A I3 complete",
+  "currentCheckpoint": "B19-B I3b complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I3b: enforce the registry's request quotas, circuit breakers and cache coalescing (B19-B); then I4, the quarantine pipeline's front half (B19-C).",
-  "updatedAt": "2026-09-13T03:37:00-04:00"
+  "nextAction": "B19 I4: the quarantine pipeline's front half (B19-C) — external observation, normalized candidate and verified evidence bundle, with a real SourceAdapter, and the rule that distributor data never alone proves pin mapping or CAD.",
+  "updatedAt": "2026-09-13T03:49:00-04:00"
 }

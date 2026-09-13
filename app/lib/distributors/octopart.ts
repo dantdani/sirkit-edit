@@ -25,6 +25,7 @@ import { mapLifecycleString } from "./lifecycle";
 import { getCached, setCached } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
+import { makeCoalescer } from "../acquisition/admission-control";
 
 const GRAPHQL_URL = "https://api.nexar.com/graphql";
 
@@ -57,7 +58,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     throw new Error("OCTOPART credentials not configured");
   }
 
-  async function runQuery(query: string, variables: Record<string, string>): Promise<unknown> {
+  async function runQuery(query: string, variables: Record<string, string>, matchedPartsAtMost: number): Promise<unknown> {
     const res = await distributorJson("octopart", {
       url: GRAPHQL_URL,
       method: "POST",
@@ -66,7 +67,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ query, variables }),
-    }, egress);
+    }, egress, matchedPartsAtMost); // [B19-B I3b] Nexar's quota counts matched parts: each aliased search asks for at most one
     if (!res.ok) throw new DistributorRequestError(`Octopart query failed: ${res.message}`);
     return res.value;
   }
@@ -74,6 +75,43 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
     const result = await lookupBatch([mpn]);
     return result.get(mpn) ?? null;
+  }
+
+  // [B19-B I3b] an MPN already being queried by a concurrent batch is joined, never queried twice
+  const coalesce = makeCoalescer<PartPricing | null>();
+
+  /** One aliased GraphQL query for MPNs nobody is querying yet. Never rejects: a failure is an empty result. */
+  async function queryMisses(misses: string[]): Promise<Map<string, PartPricing>> {
+    const found = new Map<string, PartPricing>();
+    try {
+      const aliases = misses.map((mpn, i) => ({ mpn, alias: `s${i}`, varName: `q${i}` }));
+      const varDecls = aliases.map((a) => `$${a.varName}: String!`).join(", ");
+      const body = aliases
+        .map((a) => `${a.alias}: supSearchMpn(q: $${a.varName}, limit: 1) { ${PART_FRAGMENT} }`)
+        .join("\n");
+      const query = `query BatchMpn(${varDecls}) {\n${body}\n}`;
+      const variables: Record<string, string> = {};
+      for (const a of aliases) variables[a.varName] = a.mpn;
+
+      const json = await runQuery(query, variables, aliases.length);
+      const data = asRecord(asRecord(json).data);
+
+      for (const a of aliases) {
+        const search = asRecord(data[a.alias]);
+        const firstResult = asArray(search.results)[0];
+        const part = asRecord(asRecord(firstResult).part);
+        const pricing = mapPart(a.mpn, part);
+        if (pricing) {
+          setCached("octopart-aggregated", a.mpn, pricing);
+          found.set(a.mpn, pricing);
+        }
+      }
+    } catch (err) {
+      // A network/auth error (or a quota or breaker pause) sinks this query's live portion; cached entries still return.
+      // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error.
+      console.error(`[octopart] batch lookup failed for ${misses.length} part(s): ${describeFailure(err)}`);
+    }
+    return found;
   }
 
   async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
@@ -89,36 +127,22 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     }
     if (misses.length === 0) return out;
 
-    try {
-      const aliases = misses.map((mpn, i) => ({ mpn, alias: `s${i}`, varName: `q${i}` }));
-      const varDecls = aliases.map((a) => `$${a.varName}: String!`).join(", ");
-      const body = aliases
-        .map((a) => `${a.alias}: supSearchMpn(q: $${a.varName}, limit: 1) { ${PART_FRAGMENT} }`)
-        .join("\n");
-      const query = `query BatchMpn(${varDecls}) {\n${body}\n}`;
-      const variables: Record<string, string> = {};
-      for (const a of aliases) variables[a.varName] = a.mpn;
-
-      const json = await runQuery(query, variables);
-      const data = asRecord(asRecord(json).data);
-
-      for (const a of aliases) {
-        const search = asRecord(data[a.alias]);
-        const firstResult = asArray(search.results)[0];
-        const part = asRecord(asRecord(firstResult).part);
-        const pricing = mapPart(a.mpn, part);
-        if (pricing) {
-          setCached("octopart-aggregated", a.mpn, pricing);
-          out.set(a.mpn, pricing);
-        }
-      }
-    } catch (err) {
-      // A network/auth error sinks the whole batch's *live* portion; cached
-      // entries already collected above still return.
-      // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error.
-      console.error(`[octopart] batch lookup failed for ${misses.length} part(s): ${describeFailure(err)}`);
+    // Join lookups already in flight; one query for the rest, registered so later batches join it in turn.
+    const pending = new Map<string, Promise<PartPricing | null>>();
+    const fresh: string[] = [];
+    let freshQuery: Promise<Map<string, PartPricing>> | null = null;
+    for (const mpn of misses) {
+      const key = mpn.trim().toLowerCase();
+      pending.set(mpn, coalesce(key, () => {
+        fresh.push(mpn);
+        freshQuery ??= Promise.resolve().then(() => queryMisses(fresh));
+        return freshQuery.then((found) => found.get(mpn) ?? null);
+      }));
     }
-
+    for (const [mpn, result] of pending) {
+      const pricing = await result;
+      if (pricing) out.set(mpn, pricing);
+    }
     return out;
   }
 

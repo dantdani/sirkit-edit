@@ -26,6 +26,7 @@ import { mapLifecycleString } from "./lifecycle";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
+import { makeCoalescer } from "../acquisition/admission-control";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
 // [B19-A I3] the registry derives this from Mouser's documented 30 requests a minute (60 000 ms / 30).
@@ -79,18 +80,22 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
     }
   }
 
+  // [B19-B I3b] a second identical lookup already in flight joins the first instead of paying for its own search
+  const coalesce = makeCoalescer<PartPricing | null>();
+  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(mpn.trim().toLowerCase(), () => lookupByMpn(mpn));
+
   async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
     const entries = await Promise.all(
       unique.map(async (mpn): Promise<[string, PartPricing] | null> => {
-        const pricing = await lookupByMpn(mpn);
+        const pricing = await lookup(mpn);
         return pricing ? [mpn, pricing] : null;
       }),
     );
     return new Map(entries.filter((e): e is [string, PartPricing] => e !== null));
   }
 
-  return { name: "mouser", lookupByMpn, lookupBatch };
+  return { name: "mouser", lookupByMpn: lookup, lookupBatch };
 }
 
 // ─── Response mapping ──────────────────────────────────────────────────────────

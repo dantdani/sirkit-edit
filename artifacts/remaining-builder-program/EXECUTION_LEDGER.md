@@ -1233,3 +1233,19 @@ _(discovery, reproduction and results appended below as they are observed)_
   migrated PGlite (all new; the first three in the prompt-to-gerber CI list, the last in database-delivery); distributor and
   BOM suites 56/56; database suites green; broad run: 288 files, 3662 passed, 10 expected skips; tsc 0 in the changed areas;
   eslint: no new findings (the pre-existing `lcsc.ts` unused-parameter warning remains).
+
+### B19 I3b — request quotas, circuit breakers and in-flight coalescing (2026-09-13 local, solo; this commit)
+
+- Reproduced first: against the connectors as I3 left them, 6 of 7 cases failed — the 121st DigiKey request of a minute
+  was sent, a Nexar batch past 2,000 matched parts was sent, requests kept going after five 503s and after a 429, and
+  concurrent identical lookups each paid for a vendor call. The 404 case is a baseline, passing before and after.
+- `app/lib/acquisition/admission-control.ts`: every registered quota window is reserved before a request is sent (cost:
+  1 request, a Nexar batch's matched parts, or 0 for DigiKey's token request); the breaker opens after 5 consecutive
+  failures or at once on a 429, allows one trial after 10 minutes, and ignores neutral answers; per-client coalescing
+  joins lookups already in flight. Enforced in `distributorJson`, the one path every vendor request takes.
+- A BOM priced live names a paused source and when it may be tried again.
+- Stated limits: per-process meters (a durable shared meter is a follow-up); a Nexar batch larger than the remaining
+  quota is refused whole.
+- Tests: b19-quota-breaker-coalescing 7/7 (new, in the CI list), b19-admission-control 9/9 (new, under app/lib/acquisition),
+  the pause sentence added to b19-source-admission (8/8); distributor, registry and BOM suites 97/97; broad run: 290 files,
+  3679 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.

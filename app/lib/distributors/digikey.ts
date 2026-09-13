@@ -24,6 +24,7 @@ import { makeCachedLookup } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
+import { makeCoalescer } from "../acquisition/admission-control";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
 const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
@@ -46,7 +47,8 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
       client_secret: clientSecret,
       grant_type: "client_credentials",
     });
-    const res = await distributorJson("digikey", { url: TOKEN_URL, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, egress);
+    // [B19-B I3b] cost 0: DigiKey's documented quota counts product requests; the token request still respects the breaker
+    const res = await distributorJson("digikey", { url: TOKEN_URL, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, egress, 0);
     if (!res.ok) throw new DistributorRequestError(`DigiKey token request failed: ${res.message}`);
     const json = asRecord(res.value);
     const accessToken = asString(json.access_token);
@@ -113,19 +115,22 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
   }
 
   const cached = makeCachedLookup("digikey", lookupByMpn);
+  // [B19-B I3b] a second identical lookup already in flight joins the first instead of paying for its own search
+  const coalesce = makeCoalescer<PartPricing | null>();
+  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(mpn.trim().toLowerCase(), () => cached.lookup(mpn));
 
   async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
     const entries = await Promise.all(
       unique.map(async (mpn): Promise<[string, PartPricing] | null> => {
-        const pricing = await cached.lookup(mpn);
+        const pricing = await lookup(mpn);
         return pricing ? [mpn, pricing] : null;
       }),
     );
     return new Map(entries.filter((e): e is [string, PartPricing] => e !== null));
   }
 
-  return { name: "digikey", lookupByMpn: cached.lookup, lookupBatch };
+  return { name: "digikey", lookupByMpn: lookup, lookupBatch };
 }
 
 // ─── Response mapping ──────────────────────────────────────────────────────────

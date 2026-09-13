@@ -14,6 +14,7 @@ import { makeDigiKeyClient } from "../digikey";
 import { makeMouserClient } from "../mouser";
 import { makeOctopartClient } from "../octopart";
 import { clearPricingCache } from "../cache";
+import { resetAdmissionControl } from "../../acquisition/admission-control";
 
 const PUBLIC = async (): Promise<string[]> => ["93.184.216.34"];
 const MOUSER_KEY = "MOUSER-KEY-DO-NOT-LEAK-0123456789";
@@ -33,6 +34,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   clearPricingCache();
+  resetAdmissionControl(); // [B19-B I3b] each case starts with empty quota meters and closed breakers
 });
 
 /** A transport that records every request and answers from a script. */

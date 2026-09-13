@@ -103,6 +103,19 @@ describe("[B19-A I3] a bulk refresh touches only sources whose terms permit it",
   });
 });
 
+describe("[B19-B I3b] a BOM says why an admitted source is paused", () => {
+  it("a used-up quota names the quota and when it resets; an unpaused source says nothing", async () => {
+    const { pausedSources } = await freshPricing();
+    const control = await import("../../acquisition/admission-control"); // the same instance the orchestrator uses
+    const now = Date.UTC(2026, 8, 13, 10, 0, 30);
+    expect(control.requestAdmission("digikey", 120, now)).toEqual({ allowed: true });
+    const paused = pausedSources("all", now);
+    expect(paused.map((source) => [source.name, source.reason])).toEqual([["digikey", "quota_exhausted"]]);
+    expect(paused[0]!.message).toBe("DigiKey pricing is paused: its quota of 120 requests per minute is used up until 2026-09-13T10:01:00.000Z.");
+    expect(pausedSources("all", Date.UTC(2026, 8, 13, 10, 1, 0)), "the next minute window is open again").toEqual([]);
+  });
+});
+
 describe("[B19-A I3] a BOM says why a source is unavailable", () => {
   it("disabled, switched off, and missing credentials each carry their own sentence, naming variables and never values", async () => {
     vi.stubEnv("SIRKIT_ACQUISITION_DISABLED_SOURCES", "octopart");

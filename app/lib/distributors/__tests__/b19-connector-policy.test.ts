@@ -13,6 +13,7 @@ import { makeDigiKeyClient } from "../digikey";
 import { makeMouserClient } from "../mouser";
 import { makeLcscClient } from "../lcsc";
 import { clearPricingCache } from "../cache";
+import { resetAdmissionControl } from "../../acquisition/admission-control";
 import { DISTRIBUTOR_EGRESS_POLICIES } from "../egress";
 import { SOURCE_REGISTRY } from "../../acquisition/source-registry";
 
@@ -26,6 +27,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   clearPricingCache();
+  resetAdmissionControl(); // [B19-B I3b] each case starts with empty quota meters and closed breakers
 });
 
 describe("[B19-A I3] request spacing honours the documented per-minute limit", () => {

@@ -210,3 +210,48 @@ that case passes on the old code, as it should.
 
 As in I1: the transport resolves the name again at connect, so a sub-connect rebinding window is not excluded here; the
 exact configured host is the only name allowed.
+
+## I3b — request quotas, circuit breakers and in-flight coalescing (CONFIRMED)
+
+The registry (I3) records each source's documented quota and a breaker policy. Nothing enforced them.
+
+### Reproduced first
+
+`b19-quota-breaker-coalescing.test.ts` against the connectors as I3 left them: **6 of 7 failed**.
+
+| case | before |
+|---|---|
+| the 121st DigiKey request within a minute | sent (121 requests reached the transport) |
+| a Nexar batch that would take the month past 2,000 matched parts | sent |
+| a sixth request after five consecutive 503s | sent |
+| a request right after a 429 | sent |
+| two concurrent DigiKey lookups of the same MPN | two searches |
+| two concurrent Nexar batches sharing an MPN | the shared MPN queried twice |
+| eight 404s (not failures) | all sent — a **baseline**, passing before and after; it guards against the breaker counting a normal miss |
+
+### What changed
+
+| rule | where |
+|---|---|
+| Before a request leaves, its cost is reserved in every window the registry names (per minute, UTC day, UTC month); a request that would exceed any window is refused without being sent. Cost is 1 request, the matched parts a Nexar batch can return (one per aliased MPN), or 0 for DigiKey's OAuth token request (its documented quota counts product requests). Reservations are not refunded: the vendor counts the attempt | `app/lib/acquisition/admission-control.ts` (`requestAdmission`), called by `distributorJson` |
+| Consecutive failures (no answer, 5xx, an unusable answer) open the source's breaker at the registry's threshold (5); a 429 opens it at once; while open nothing is sent; after the open period (10 min) one trial goes — its success closes the breaker, its failure re-opens it. A 4xx that is not a 429, or a caller's abort, is neutral | `recordOutcome`, called by `distributorJson` for every sent request |
+| A lookup already in flight is joined, not repeated: per client, keyed by normalized MPN; a Nexar batch joins MPNs another batch is querying and queries only the rest | `makeCoalescer`; `digikey.ts`, `mouser.ts`, `octopart.ts` |
+| A BOM priced live says when an admitted source is paused and until when | `pausedSources` in the orchestrator; `app/lib/bom/build.ts` |
+
+### Proven
+
+- Connectors (7): the six reproductions above now hold, plus the 404 baseline.
+- The module (9): minute / UTC day / UTC month boundaries including December; DigiKey's day holding when every minute is
+  fresh (exactly 1,000 of 1,200 attempts); refused requests reserve nothing and cost 0 never consumes; Nexar's month
+  resets on the 1st; the breaker opens at the threshold and a success resets the count; one half-open trial, re-opened by
+  its failure and closed by its success; a 429 opens at once and neutral answers never count; breakers are per source;
+  coalescing shares one run and frees the key after success or rejection.
+- The BOM sentence: "DigiKey pricing is paused: its quota of 120 requests per minute is used up until …", gone in the next
+  window.
+- The I1 egress suite and the I3 connector suite reset the meters between cases, so no case depends on another's spend.
+
+### Stated limits
+
+- The meters live in one process. Several server instances each keep their own, so together they can spend more than
+  one quota; the vendors' own enforcement remains the backstop, and a durable shared meter is a follow-up.
+- A Nexar batch larger than the remaining monthly quota is refused whole rather than split.
