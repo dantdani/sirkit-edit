@@ -114,6 +114,8 @@ import { LatestRequestGate, OwnedRecoveryDecisionAdapter, OwnedSimulationRunner,
 import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
 import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION, readProjectFile } from "@/app/lib/project/file";
+import { chatHistoryForModel } from "@/app/lib/project/chat-history"; // [B19-D I5e row 32]
+import { buildSuggestionInstruction } from "@/app/lib/project/suggestion-instruction"; // [B19-D I5e row 05]
 import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
 import { Undo2, Redo2, History, Save, FolderInput } from "lucide-react";
 
@@ -129,7 +131,8 @@ type SchematicSnapshot = {
   netLabels: NetLabel[];
 };
 type LeftPanel = "projects" | "library" | null;
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+// [B19-D I5e row 32] `advisory`: another model's output (build explanation, review, second opinion) — shown, never resent as the assistant's words
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean };
 type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
 type ActivityLogMessage = {
   id: string;
@@ -2946,7 +2949,7 @@ export default function Home() {
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
       ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
-      : { id: message.id, role: message.role, content: message.content });
+      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}) });
   }
 
   /** Reload during a pending operation must show a truthful interrupted state. */
@@ -4462,9 +4465,7 @@ export default function Home() {
 
     try {
       appendActivityStep(logId, "Calling assistant");
-      const apiMessages = [...messages, userMsg]
-        .filter((message): message is ChatMessage => message.role === "user" || message.role === "assistant")
-        .map(({ role, content }) => ({ role, content }));
+      const apiMessages = chatHistoryForModel([...messages, userMsg]); // [B19-D I5e row 32] advisory output is not replayed
       // B07.3 — chat context is ONE immutable authoritative snapshot (never
       // the visible arrays, which may be showing a gesture preview), and it
       // is validated before it leaves the client: an invalid projection
@@ -4908,7 +4909,7 @@ export default function Home() {
         setTool("select");
         const appendedMessages = opts?.suppressChat ? [] : [
           ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
-          { id: crypto.randomUUID(), role: "assistant" as const, content: explanation },
+          { id: crypto.randomUUID(), role: "assistant" as const, content: explanation, advisory: true },
         ];
         if (appendedMessages.length > 0) setMessages((prev) => [...prev, ...appendedMessages]);
         // B07.4 (failure C) — the generation checkpoint is written
@@ -5468,7 +5469,7 @@ export default function Home() {
         ...prev,
         // Auto-runs post only the result; a fake user turn would read as noise.
         ...(auto ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: "Review the circuit" }]),
-        { id: crypto.randomUUID(), role: "assistant", content: md },
+        { id: crypto.randomUUID(), role: "assistant", content: md, advisory: true },
       ]);
     } catch (err) {
       if (isAbortError(err) || !reviewScope.isCurrent()) return; // cancellation, not a failure
@@ -5779,7 +5780,7 @@ export default function Home() {
       appendChatFor(opinionPin.projectId, (prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "user", content: "Get a second opinion" },
-        { id: crypto.randomUUID(), role: "assistant", content: opinionStillCurrent ? md : `${md}\n\n_The schematic changed while this ran — treat as a snapshot comparison, not current suggestions._` },
+        { id: crypto.randomUUID(), role: "assistant", content: opinionStillCurrent ? md : `${md}\n\n_The schematic changed while this ran — treat as a snapshot comparison, not current suggestions._`, advisory: true },
       ]);
     } catch (err) {
       if (isAbortError(err) || !opinionScope.isCurrent()) return; // cancellation, not a failure
@@ -5818,25 +5819,8 @@ export default function Home() {
         return role === "processor" ? `${k.refDes} (${k.value || part?.name || "processor"})` : null;
       })
       .filter((p): p is string => p !== null);
-    const suggestionLines = batch.items.map((s) => {
-      const refs = s.refs && s.refs.length > 0 ? ` [refs: ${s.refs.join(", ")}]` : "";
-      const category = s.category ? `${s.category}: ` : "";
-      return `- ${category}${s.title}${refs}: ${s.detail}`;
-    });
-    const guardedInstruction =
-      "Apply ONLY the bounded support-circuit suggestions below. Keep the design's existing " +
-      "functional blocks intact; do not redesign the schematic.\n\n" +
-      "Hard constraints:\n" +
-      "- Do NOT add another MCU, microcontroller, processor, controller, module, or other large IC.\n" +
-      "- Do NOT remove, replace, rename, or duplicate any existing MCU/processor/controller.\n" +
-      "- Preserve every existing correct component and connection unless a listed support fix directly requires a local connection change.\n" +
-      "- You may add only support/protection/passive parts such as decoupling or bulk capacitors, pull-up/pull-down/series/current-limit/termination resistors, ferrite beads, crystals/load capacitors, TVS/ESD/protection/flyback diodes, or equivalent local support parts.\n" +
-      "- If a suggestion would require adding a second controller or a broad redesign, ignore that suggestion and explain why.\n" +
-      (existingProcessors.length > 0
-        ? `\nExisting processor/controller parts that must remain unique: ${existingProcessors.join(", ")}.\n`
-        : "\n") +
-      "\nSupport suggestions to apply where genuinely appropriate:\n" +
-      suggestionLines.join("\n");
+    // [B19-D I5e row 05] the findings are quoted as untrusted data inside a delimited, bounded block
+    const guardedInstruction = buildSuggestionInstruction({ existingProcessors, items: batch.items });
     setPendingSuggestions(null);
     setSuggestionsMinimized(false);
     await handleEditSchematic(guardedInstruction, { displayPrompt: "Apply suggestions" });

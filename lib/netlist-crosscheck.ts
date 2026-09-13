@@ -245,5 +245,7 @@ export function crossCheckNetlists(
     ? `Independent second opinion agrees on component set (agreement ${(agreement * 100).toFixed(0)}%).`
     : `Independent second opinion differs on ${findings.length} point(s); component-class agreement ${(agreement * 100).toFixed(0)}%. Advisory — verify before acting.`;
 
-  return { findings, agreement, summary };
+  // [B19-D I5e row 32] finding text is shown in chat and can be resent to a model: bounded
+  const boundText = (text: string, max: number) => (text.length <= max ? text : `${text.slice(0, max - 1)}…`);
+  return { findings: findings.map((finding) => ({ ...finding, title: boundText(finding.title, 160), detail: boundText(finding.detail, 400) })), agreement, summary };
 }

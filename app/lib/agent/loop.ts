@@ -15,6 +15,7 @@
  * can only complete or fail on that provider.
  */
 
+import { sanitizeModelBoundText } from "./redaction"; // [B19-D I5e row 25]
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
@@ -73,8 +74,18 @@ export interface AgentLoopDeps {
   executionGrants?: AgentExecutionGrantMinter;
 }
 
+/** [B19-D I5e row 25] every string in a tool result is cleaned before the model sees it (bounded walk, cycle-safe) */
+function modelSafe(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
+  if (typeof value === "string") return sanitizeModelBoundText(value);
+  if (!value || typeof value !== "object") return value;
+  if (depth > 32 || seen.has(value)) return "[omitted]";
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => modelSafe(item, depth + 1, seen));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [sanitizeModelBoundText(key), modelSafe(item, depth + 1, seen)]));
+}
+
 function resultText(payload: Record<string, unknown>): string {
-  const text = JSON.stringify(payload);
+  const text = JSON.stringify(modelSafe(payload));
   if (text.length <= MAX_RESULT_CHARS) return text;
   return JSON.stringify({ ok: false, status: "output_too_large_for_model", note: "The tool result exceeded the model transfer budget; ask a narrower question." });
 }

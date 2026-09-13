@@ -15,6 +15,7 @@
 
 import type { SchComponentType, SchematicState, Point } from "./schematic-types";
 import { PIN_NAMES } from "./schematic-types";
+import { boundUntrustedText, boundUntrustedTextOrNull } from "@/app/lib/untrusted-text";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import { buildNetUnionFind } from "@/app/lib/connectivity";
 import { pinWorldPos, kicadPinWorldPos, pointKey } from "@/app/lib/geometry";
@@ -62,12 +63,13 @@ export function buildReviewInput(state: SchematicState, parts: Map<string, Cache
   }
   for (const k of state.kicadComponents ?? []) {
     const part = parts.get(k.partId);
-    const names = part ? part.pins.map((p) => p.name || p.number) : [];
+    const names = part ? part.pins.map((p) => boundUntrustedText(p.name || p.number, 64)) : [];
+    // [B19-D I5e row 05] catalog and project text reaches the review model bounded and cleaned
     components.push({
-      refDes: k.refDes,
-      description: part?.name ?? "part",
-      value: k.value,
-      mpn: part?.mpn ?? null,
+      refDes: boundUntrustedText(k.refDes, 32),
+      description: boundUntrustedText(part?.name ?? "part", 128),
+      value: boundUntrustedText(k.value, 128),
+      mpn: boundUntrustedTextOrNull(part?.mpn ?? null, 128),
       pins: names,
     });
     if (part) {

@@ -35,6 +35,7 @@ import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, alternates, partsAtomicLinks } from "@/app/lib/db/schema";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
+import { rerankCandidatePayload } from "@/app/lib/parts-rerank-payload"; // [B19-D I5e row 05]
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { CachedPart } from "@/app/lib/parts-cache";
 
@@ -477,17 +478,7 @@ async function rerankParts(
     return candidates;
   }
 
-  const list = candidates.map((c, i) => ({
-    index: i,
-    name: c.name,
-    mpn: c.mpn ?? "",
-    category: c.mainCategory,
-    pinCount: c.pins.length,
-    description: (c.description ?? "").slice(0, 200),
-    // Surfaced so the reranker does not demote a part that can actually be
-    // manufactured below one that has no footprint authority.
-    ...(c.physicalAuthority === "verified" ? { physicalAuthority: "verified", verifiedFootprint: c.verifiedFootprint } : {}),
-  }));
+  const list = rerankCandidatePayload(candidates);
 
   try {
     const resp = await client.messages.create({

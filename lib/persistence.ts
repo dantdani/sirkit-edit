@@ -36,7 +36,7 @@ import { validateFullFlowProject } from "@/app/lib/full-flow/project";
 
 /** Persisted, user-visible AI interaction — never keys, never hidden reasoning. */
 export type StoredChatMessage =
-  | { id: string; role: "user" | "assistant"; content: string }
+  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean }
   | { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: { id: string; text: string; status: "running" | "done" | "error" }[] };
 
 /**
@@ -708,7 +708,7 @@ export function isStoredChatMessage(v: unknown): v is StoredChatMessage {
   if (typeof v !== "object" || v === null) return false;
   const m = v as Record<string, unknown>;
   if (typeof m["id"] !== "string") return false;
-  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string";
+  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean");
   if (m["role"] !== "log") return false;
   return typeof m["title"] === "string"
     && (m["status"] === "running" || m["status"] === "done" || m["status"] === "error")

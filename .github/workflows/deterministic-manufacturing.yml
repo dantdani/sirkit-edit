@@ -156,6 +156,12 @@ jobs:
           app/lib/atomic/__tests__/b19-d-i5d-review.test.ts
           app/lib/constraints/__tests__/b19-d-dru-structure.test.ts
           app/lib/kicad/__tests__/b19-d-ingest-issues.test.ts
+          app/lib/__tests__/b19-d-build-loop-injection.test.ts
+          app/lib/llm/__tests__/b19-d-compose-instructions-escaping.test.ts
+          app/lib/agent/__tests__/b19-d-tool-result-hygiene.test.ts
+          app/api/circuit-knowledge/__tests__/b19-d-excerpt-injection.test.ts
+          app/api/schematic/__tests__/b19-d-schgen-netname-injection.test.ts
+          app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts

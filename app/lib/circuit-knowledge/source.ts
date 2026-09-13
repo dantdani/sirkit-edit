@@ -69,6 +69,10 @@ export function validateRecipeSourceBundle(
     const item = evidence.get(location.evidenceId);
     if (!item || item.sourceRecordId !== location.sourceRecordId) errors.push("RECIPE_SOURCE_LOCATION_REFERENCE_INVALID");
     if (!location.page && !location.section && !location.figureOrTable) errors.push("RECIPE_SOURCE_LOCATION_NOT_EXACT");
+    // [B19-D I5e row 29] a locator names where the evidence is; it is not a place to carry text to the model
+    for (const locator of [location.page, location.section, location.figureOrTable]) {
+      if (locator !== undefined && locator !== null && String(locator).length > 200) errors.push("RECIPE_SOURCE_LOCATOR_TOO_LONG");
+    }
     if (location.excerpt && location.excerpt.length > EMBEDDED_CIRCUIT_KNOWLEDGE_PROFILE_V1.limits.maximumSourceExcerptCharacters) errors.push("RECIPE_SOURCE_EXCERPT_TOO_LONG");
     if (location.excerpt && location.excerptHash !== circuitDigest(location.excerpt)) errors.push("RECIPE_SOURCE_EXCERPT_HASH_MISMATCH");
     if (!location.excerpt && !location.excerptHash.trim()) errors.push("RECIPE_SOURCE_EXCERPT_HASH_MISSING");

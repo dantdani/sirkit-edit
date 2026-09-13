@@ -22,12 +22,25 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   /Bearer\s+[A-Za-z0-9._~+/-]{8,}=*/g,
   /\b(?:api[_-]?key|authorization|x-api-key|secret|password|credential|access[_-]?token)\b\s*[:=]\s*\S+/gi,
   /\b[A-Z][A-Z0-9_]{3,}=(?:[A-Za-z0-9+/._-]{12,})/g, // ENV_VAR=value dumps
+  // [B19-D I5e row 30] credentials inside a URL (a connection string in a driver error: scheme://user:password@host)
+  /\b[a-z][a-z0-9+.-]*:\/\/[^\s/@:]+:[^\s/@]+@/gi,
   // [B11.1] JSON-QUOTED credential fields: a serialized document renders
   // `{"apiKey":"AKIA…"}`, which the unquoted `key: value` pattern above does
   // not match. Separators/case are folded so apiKey / api_key / API-KEY /
   // Authorization all match.
   /"[^"]{0,40}(?:api[_\-\s]?key|authorization|x[_\-\s]?api[_\-\s]?key|secret|password|credential|access[_\-\s]?token|bearer)[^"]{0,40}"\s*:\s*"[^"]{4,}"/gi,
 ];
+
+/**
+ * [B19-D I5e row 25] Text a tool result carries to a model: secret-shaped substrings redacted (without the diagnostic length
+ * cap — a tool result has its own budget) and control and format characters (bidirectional overrides, zero-width
+ * characters) removed. Line breaks and tabs are kept.
+ */
+export function sanitizeModelBoundText(text: string): string {
+  let sanitized = text;
+  for (const pattern of SECRET_PATTERNS) sanitized = sanitized.replace(pattern, "[redacted]");
+  return sanitized.replace(/[^\S\n\t]*[\p{Cf}\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029]+/gu, " ");
+}
 
 /** Default bound for a redacted diagnostic fragment. */
 export const DEFAULT_REDACTION_CHARS = 300;

@@ -1469,3 +1469,19 @@ _(discovery, reproduction and results appended below as they are observed)_
   passed; full unit suite 580 files (575 passed, 5 env-gated skips), 5870 passed, 33 expected skips; tsc 0; eslint: no new findings (ingest-kicad's unused `sha256` import is pre-existing).
 - The I5e-2 reproduction tests written meanwhile are parked outside the repository until this lands.
 
+### B19 I5e-2 — what reaches a model (2026-09-13 local, solo; this commit)
+
+- Rows 05, 24, 25, 29, 30 (synthetic reproduction), 32 reproduced first: 17 of 18 cases failed; 1 baseline; row 31 adopted as
+  the ratchet (4 cases, passing before and after); 3 cases added with the fix.
+- Catalog text bounded and labelled untrusted in Build tool results, rerank and review inputs; the data rule in five prompts;
+  review findings quoted as data in the Apply-suggestions instruction; escaped and capped context sections; cleaned tool
+  results and bounded inspection strings; circuit-knowledge excerpts labelled and locators bounded; closed failure sentences
+  and URL-credential redaction; SchGen label grammar, bounded findings and advisory messages kept out of the chat history.
+- Ratchet note: the vendor-code import closure first failed on the policy-only source registry (reached through the lifecycle
+  SQL expression); allowlisted explicitly and still walked.
+- Tests: build-loop injection 11/11, compose escaping 3/3, tool-result hygiene 2/2, excerpt injection 2/2, SchGen and advisory
+  history 4/4, external-text injection route 4/4 (all new, in the CI list); full unit suite 586 files (581 passed, 5 env-gated skips), 5895 passed, 33 expected skips; tsc 0; eslint: no new
+  findings; control inventory regenerated with no drift.
+- Browser proof for the chat-history change is CI's page-browser-e2e job running the existing chat and build specs over this
+  commit (they send and render messages; none asserts the advisory flag itself — the flag is proven by the unit tests above).
+
