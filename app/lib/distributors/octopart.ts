@@ -23,6 +23,8 @@ import {
 } from "./types";
 import { mapLifecycleString } from "./lifecycle";
 import { getCached, setCached } from "./cache";
+import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
+import { describeFailure, DistributorRequestError } from "./types";
 
 const GRAPHQL_URL = "https://api.nexar.com/graphql";
 
@@ -48,25 +50,25 @@ const PART_FRAGMENT = `
   }
 `;
 
-export function makeOctopartClient(opts: { apiKey: string }): DistributorClient {
+export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorEgress }): DistributorClient {
   const { apiKey } = opts;
+  const egress = opts.egress ?? {};
   if (!apiKey) {
     throw new Error("OCTOPART credentials not configured");
   }
 
   async function runQuery(query: string, variables: Record<string, string>): Promise<unknown> {
-    const res = await fetch(GRAPHQL_URL, {
+    const res = await distributorJson("octopart", {
+      url: GRAPHQL_URL,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ query, variables }),
-    });
-    if (!res.ok) {
-      throw new Error(`Octopart query failed (${res.status})`);
-    }
-    return res.json();
+    }, egress);
+    if (!res.ok) throw new DistributorRequestError(`Octopart query failed: ${res.message}`);
+    return res.value;
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -113,7 +115,8 @@ export function makeOctopartClient(opts: { apiKey: string }): DistributorClient 
     } catch (err) {
       // A network/auth error sinks the whole batch's *live* portion; cached
       // entries already collected above still return.
-      console.error(`[octopart] batch lookup failed for [${misses.join(", ")}]:`, err);
+      // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error.
+      console.error(`[octopart] batch lookup failed for ${misses.length} part(s): ${describeFailure(err)}`);
     }
 
     return out;

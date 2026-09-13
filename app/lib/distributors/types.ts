@@ -85,3 +85,19 @@ export function cheapestUnitPrice(breaks: PriceBreak[]): number | null {
   const prices = breaks.map((b) => b.price).filter((p) => Number.isFinite(p) && p > 0);
   return prices.length > 0 ? Math.min(...prices) : null;
 }
+
+/**
+ * [B19-B I1] A vendor request that failed at the boundary. Its message is the boundary's own redacted sentence and never
+ * the transport's text, the request URL or a credential.
+ */
+export class DistributorRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DistributorRequestError";
+  }
+}
+
+/** What a client may log about a failure: a boundary sentence, or a fixed string for anything it did not produce. */
+export function describeFailure(error: unknown): string {
+  return error instanceof DistributorRequestError ? error.message : "the lookup failed (details withheld)";
+}

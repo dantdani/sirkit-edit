@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19 discovery",
+  "currentCheckpoint": "B19-B I1 complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -13,6 +13,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I1: the bounded outbound boundary - wire the existing SSRF guard and bounded reader into one server-side egress helper with per-source allowlists, deadlines, redirect revalidation and redacted errors; reproduce D19-1..D19-6 first.",
-  "updatedAt": "2026-09-12T11:00:00-04:00"
+  "nextAction": "B19 I2: reproduce and close the anonymous paid-quota drain on /api/bom (D19-1), its error reflection (D19-2), and cross-verify's credential-carrying redirects and body reflection (D19-6).",
+  "updatedAt": "2026-09-13T00:00:00-04:00"
 }

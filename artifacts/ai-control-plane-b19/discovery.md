@@ -63,7 +63,7 @@ Source and freshness labelling on what the user sees is thin, and no agent tool 
 |---|---|---|
 | D19-1 | `/api/bom` is a **public, CSRF-free** route whose body drives live, paid distributor calls, and it honours a caller-supplied `forceRefresh` that bypasses the cache — an anonymous caller can exhaust a ~1000-query/month quota | `app/lib/auth/route-policy.ts:218` + `:55-56`; `app/api/bom/route.ts:45-47`; `app/lib/bom/build.ts:181` |
 | D19-2 | The same route reflects **raw distributor error text** (remote status, queried MPN) to an unauthenticated caller | `app/api/bom/route.ts:48-51` |
-| D19-3 | The Mouser API key travels **in the URL query string**, so it lands in proxy logs, traces and any `Referer` | `app/lib/distributors/mouser.ts:52` |
+| D19-3 | ~~The Mouser API key travels in the URL query string~~ — **corrected in I1**: checked against Mouser's current documentation, the Search API authenticates with an `apiKey` query parameter *by design*. Not a defect to move; a vendor constraint to CONTAIN (never logged, never in a message, never redirected) | `app/lib/distributors/mouser.ts:52`; `acquisition-boundary.md` |
 | D19-4 | No distributor call has a timeout or an `AbortSignal`; a hung socket holds a handler open | `digikey.ts:44,84`, `mouser.ts:52`, `octopart.ts:58` |
 | D19-5 | Every server-side outbound response is read with an unbounded `res.json()` | the five sites above + `app/api/schematic/cross-verify/route.ts:92` |
 | D19-6 | `/api/schematic/cross-verify` follows redirects by default with its bearer attached, and reflects 200 bytes of the remote body — the SSRF read primitive, if that env URL is ever pointed inward | `app/api/schematic/cross-verify/route.ts:30,68,86-88` |
@@ -76,8 +76,8 @@ quotas is written down and inert (`app/lib/auth/route-policy.ts:37`).
 
 | # | increment | checkpoint | state |
 |---|---|---|---|
-| I1 | The bounded outbound boundary: one shared server-side egress helper that wires the EXISTING SSRF guard, a per-source allowlist, deadlines, bounded reads, redirect revalidation and redacted errors — applied to every raw call site; plus the IP-resolution and IPv6 gaps in the guard | B19-B | planned |
-| I2 | `/api/bom`: close the anonymous paid-quota drain and the error reflection (D19-1, D19-2), and make `forceRefresh` an authorized capability | B19-B | planned |
+| I1 | The bounded outbound boundary: one shared server-side egress helper that wires the EXISTING SSRF guard, a per-source allowlist, deadlines, bounded reads, redirect revalidation and redacted errors — applied to the three distributor clients; plus the IP-resolution and IPv6 gaps in the guard | B19-B | CONFIRMED — `acquisition-boundary.md` |
+| I2 | `/api/bom`: close the anonymous paid-quota drain and the error reflection (D19-1, D19-2), make `forceRefresh` an authorized capability; and `/api/schematic/cross-verify`'s credential-carrying redirects and body reflection (D19-6, moved here from I1) | B19-B | planned |
 | I3 | The versioned source registry, with every field the runbook names, secret REFERENCES only, LCSC recorded as blocked; the connectors read their policy from it instead of hard-coding it | B19-A | planned |
 | I4 | The quarantine pipeline's front half: observation → normalized candidate → verified evidence bundle, with a real `SourceAdapter`, and the rule that distributor data can never alone prove pin mapping or CAD correctness | B19-C | planned |
 | I5 | Import security and licensing: malicious PDFs, SVGs, archives, KiCad files, traversal, nested archives, active content, Unicode-confusable MPNs, unit ambiguity, stale source revisions; license enforced at export | B19-D | planned |

@@ -21,13 +21,16 @@ import {
 } from "./types";
 import { mapLifecycleString } from "./lifecycle";
 import { makeCachedLookup } from "./cache";
+import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
+import { describeFailure, DistributorRequestError } from "./types";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
 const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
 const MIN_REQUEST_SPACING_MS = 200;
 
-export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string }): DistributorClient {
+export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string; egress?: DistributorEgress }): DistributorClient {
   const { clientId, clientSecret } = opts;
+  const egress = opts.egress ?? {};
   if (!clientId || !clientSecret) {
     throw new Error("DIGIKEY credentials not configured");
   }
@@ -41,15 +44,9 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
       client_secret: clientSecret,
       grant_type: "client_credentials",
     });
-    const res = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
-    });
-    if (!res.ok) {
-      throw new Error(`DigiKey token request failed (${res.status})`);
-    }
-    const json = asRecord(await res.json());
+    const res = await distributorJson("digikey", { url: TOKEN_URL, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, egress);
+    if (!res.ok) throw new DistributorRequestError(`DigiKey token request failed: ${res.message}`);
+    const json = asRecord(res.value);
     const accessToken = asString(json.access_token);
     if (!accessToken) throw new Error("DigiKey token response missing access_token");
     // `expires_in` is seconds (~600). Refresh 30s early to dodge edge expiry.
@@ -80,8 +77,9 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
   }
 
   async function searchKeyword(mpn: string): Promise<unknown> {
-    const doRequest = async (accessToken: string): Promise<Response> =>
-      fetch(SEARCH_URL, {
+    const doRequest = (accessToken: string) =>
+      distributorJson("digikey", {
+        url: SEARCH_URL,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -89,17 +87,15 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
           "X-DIGIKEY-Client-Id": clientId,
         },
         body: JSON.stringify({ Keywords: mpn, Limit: 5 }),
-      });
+      }, egress);
 
     let res = await doRequest(await getToken());
-    if (res.status === 401) {
+    if (!res.ok && res.status === 401) {
       // Token may have expired early — refresh once and retry.
       res = await doRequest(await getToken(true));
     }
-    if (!res.ok) {
-      throw new Error(`DigiKey search failed for "${mpn}" (${res.status})`);
-    }
-    return res.json();
+    if (!res.ok) throw new DistributorRequestError(`DigiKey search failed: ${res.message}`);
+    return res.value;
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -107,7 +103,9 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
       const json = await enqueue(() => searchKeyword(mpn));
       return mapProduct(mpn, json);
     } catch (err) {
-      console.error(`[digikey] lookup failed for ${mpn}:`, err);
+      // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error, which can carry the
+      // request, the transport's own text, or a credential.
+      console.error(`[digikey] lookup failed: ${describeFailure(err)}`);
       return null;
     }
   }

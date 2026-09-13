@@ -1,5 +1,6 @@
 import { realpath } from "node:fs/promises";
 import path from "node:path";
+import { blockedHostnameReason } from "../net/ip-policy"; // [B19-B I1] the one address policy
 
 export const INGEST_LIMITS = Object.freeze({
   maxTextBytes: 8 * 1024 * 1024,
@@ -122,7 +123,9 @@ export function assertPermittedUrl(raw: string, allowedHosts: string[]): URL {
   const url = new URL(raw);
   if (url.protocol !== "https:") throw new IngestSecurityError("url_scheme", "Only HTTPS source URLs are permitted");
   const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (hostname === "localhost" || hostname === "::1" || hostname.endsWith(".local") || isPrivateIpv4(hostname)) {
+  // [B19-B I1] the address policy is shared with the egress path. The old IPv4-only table let an allowlisted [::1],
+  // [fd00::1], [::ffff:127.0.0.1] or 100.64.0.1 through — the allowlist was doing all the work.
+  if (hostname === "localhost" || hostname.endsWith(".local") || isPrivateIpv4(hostname) || blockedHostnameReason(hostname) !== null) {
     throw new IngestSecurityError("private_network", "Private-network source URLs are prohibited");
   }
   const allowed = allowedHosts.some((host) => hostname === host.toLowerCase() || hostname.endsWith(`.${host.toLowerCase()}`));

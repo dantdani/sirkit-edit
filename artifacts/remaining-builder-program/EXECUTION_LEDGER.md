@@ -1134,3 +1134,32 @@ _(discovery, reproduction and results appended below as they are observed)_
   endpoint following redirects with its bearer attached and reflecting 200 bytes of the remote body; and license enforced
   at publication but not at export.
 - Increments I1–I7 planned in `discovery.md` §4, one per runbook checkpoint plus validation.
+
+### B19 I1 — one bounded, validated egress path for acquisition sources (2026-09-13 local, solo; this commit)
+
+- Built on what already existed rather than beside it: the SSRF guard with no production callers and the bounded stream
+  reader no server-side outbound call used are now wired into one path, `app/lib/net/outbound-fetch.ts`, which never
+  throws and returns a closed code with a redacted sentence.
+- Every request: HTTPS only, no URL credentials, the source's exact allowlisted host, a name and EVERY resolved address
+  outside loopback / link-local (incl. cloud metadata) / private / CGNAT / ULA / multicast, one hard deadline over
+  resolution through body, a bounded read, a media-type check, and no implicit redirect — each hop revalidated, bounded,
+  credentials never crossing an origin, and a request carrying a secret in its URL never redirected at all.
+- Three gaps reproduced before they were fixed. The existing guard's private-range table was IPv4-only, so an allowlisted
+  `[::1]`, `[fd00::1]`, `[::ffff:127.0.0.1]` or `100.64.0.1` passed. Closing that exposed a subtler one: the URL parser
+  REWRITES `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]` before any check sees it, so IPv6 is now read as numbers. And a
+  resolver that never answered ignored the deadline; resolution now races the same abort.
+- A limit stated rather than claimed: addresses are checked at admission and the transport resolves again at connect, so
+  a sub-connect rebinding window is not excluded by this module; the exact-host allowlists close it in practice, and
+  pinning the connection is recorded as a follow-up.
+- DigiKey (token + search), Mouser and Nexar now call only their own host through per-source policies (15/15/20 s, 2/2/4 MB,
+  no redirects, JSON only), and log only the boundary's sentence instead of the raw error object.
+- Corrected a discovery finding instead of "fixing" it: Mouser's current documentation authenticates the Search API with
+  an `apiKey` query parameter by design. It is contained — declared a secret, never logged or messaged, never redirected.
+- Measured while writing the client suite: run against the unwired clients, the seam did not exist and they used the real
+  global fetch with dummy credentials, so some cases passed only because a real call failed fast. Only the failing cases
+  were genuine reproductions. The suite now poisons the global fetch so a bypass can never pass silently.
+- `/api/schematic/cross-verify`'s credential-carrying redirects and body reflection (D19-6) moved to I2 with `/api/bom`'s
+  error reflection, where the two route-level fixes are reproduced together.
+- Tests: b19-outbound-fetch 19/19 and b19-distributor-egress 8/8 (both new, in the CI list); the existing atomic security
+  suites unchanged and green; broad run: 279 files, 3569 passed, 10 expected skips; tsc 0; eslint clean on the changed files (one pre-existing warning in
+  the untouched `lcsc.ts`).

@@ -22,13 +22,16 @@ import {
   type PriceBreak,
 } from "./types";
 import { mapLifecycleString } from "./lifecycle";
+import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
+import { describeFailure, DistributorRequestError } from "./types";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
 // 30 req/min on the free tier → a 2s minimum spacing keeps us comfortably under.
 const MIN_REQUEST_SPACING_MS = 2000;
 
-export function makeMouserClient(opts: { apiKey: string }): DistributorClient {
+export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgress }): DistributorClient {
   const { apiKey } = opts;
+  const egress = opts.egress ?? {};
   if (!apiKey) {
     throw new Error("MOUSER_API_KEY not configured");
   }
@@ -49,17 +52,18 @@ export function makeMouserClient(opts: { apiKey: string }): DistributorClient {
   }
 
   async function search(mpn: string): Promise<unknown> {
-    const res = await fetch(`${SEARCH_URL}?apiKey=${encodeURIComponent(apiKey)}`, {
+    // Mouser's documented Search API authenticates with the `apiKey` query parameter. The boundary treats it as a secret:
+    // it is never logged, never in a message, and a request carrying it is never redirected.
+    const res = await distributorJson("mouser", {
+      url: `${SEARCH_URL}?apiKey=${encodeURIComponent(apiKey)}`,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         SearchByPartRequest: { mouserPartNumber: mpn, partSearchOptions: "string" },
       }),
-    });
-    if (!res.ok) {
-      throw new Error(`Mouser search failed for "${mpn}" (${res.status})`);
-    }
-    return res.json();
+    }, egress);
+    if (!res.ok) throw new DistributorRequestError(`Mouser search failed: ${res.message}`);
+    return res.value;
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -67,7 +71,8 @@ export function makeMouserClient(opts: { apiKey: string }): DistributorClient {
       const json = await enqueue(() => search(mpn));
       return mapPart(mpn, json);
     } catch (err) {
-      console.error(`[mouser] lookup failed for ${mpn}:`, err);
+      // [B19-B I1] only the boundary's own redacted sentence is ever logged — never the raw error or the request URL.
+      console.error(`[mouser] lookup failed: ${describeFailure(err)}`);
       return null;
     }
   }
