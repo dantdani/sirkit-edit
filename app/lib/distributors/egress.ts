@@ -7,6 +7,7 @@
  * cannot reach any other host, and cannot log what the transport said.
  */
 import { outboundFetch, parseOutboundJson, type OutboundPolicy, type OutboundRequest } from "../net/outbound-fetch";
+import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 
 export type DistributorSource = "digikey" | "mouser" | "octopart";
 
@@ -18,37 +19,27 @@ export interface DistributorEgress {
 }
 
 /**
- * Per-source boundary policy. Hosts are the exact API hosts each client already used; nothing is widened. Redirects are
- * refused outright (0): none of these JSON APIs redirects in normal operation, and a redirect is exactly where a credential
- * would leave its host.
+ * Per-source boundary policy, taken from the source registry (`app/lib/acquisition/source-registry.ts`): each source's
+ * exact hosts, deadline, body ceiling and secret query parameters. Redirects are refused outright (0): none of these JSON
+ * APIs redirects in normal operation, and a redirect is exactly where a credential would leave its host.
  */
+function policyFromRegistry(source: DistributorSource): OutboundPolicy {
+  const entry = SOURCE_REGISTRY[source];
+  return Object.freeze({
+    source,
+    allowedHosts: Object.freeze([...entry.endpoints.hosts]),
+    deadlineMs: entry.resilience.deadlineMs,
+    maxResponseBytes: entry.resilience.maxResponseBytes,
+    maxRedirects: entry.resilience.maxRedirects,
+    acceptContentTypes: Object.freeze(["application/json"]),
+    ...(entry.auth.secretQueryParams.length > 0 ? { secretQueryParams: Object.freeze([...entry.auth.secretQueryParams]) } : {}),
+  });
+}
+
 export const DISTRIBUTOR_EGRESS_POLICIES: Readonly<Record<DistributorSource, OutboundPolicy>> = Object.freeze({
-  digikey: Object.freeze({
-    source: "digikey",
-    allowedHosts: Object.freeze(["api.digikey.com"]),
-    deadlineMs: 15_000,
-    maxResponseBytes: 2_000_000,
-    maxRedirects: 0,
-    acceptContentTypes: Object.freeze(["application/json"]),
-  }),
-  mouser: Object.freeze({
-    source: "mouser",
-    allowedHosts: Object.freeze(["api.mouser.com"]),
-    deadlineMs: 15_000,
-    maxResponseBytes: 2_000_000,
-    maxRedirects: 0,
-    acceptContentTypes: Object.freeze(["application/json"]),
-    // Mouser's documented Search API authenticates with this query parameter; the boundary treats it as a secret.
-    secretQueryParams: Object.freeze(["apiKey"]),
-  }),
-  octopart: Object.freeze({
-    source: "octopart",
-    allowedHosts: Object.freeze(["api.nexar.com"]),
-    deadlineMs: 20_000,
-    maxResponseBytes: 4_000_000,
-    maxRedirects: 0,
-    acceptContentTypes: Object.freeze(["application/json"]),
-  }),
+  digikey: policyFromRegistry("digikey"),
+  mouser: policyFromRegistry("mouser"),
+  octopart: policyFromRegistry("octopart"),
 });
 
 export type DistributorJsonResult = { ok: true; status: number; value: unknown } | { ok: false; status?: number; message: string };

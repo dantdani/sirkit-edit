@@ -117,3 +117,26 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Not decided here: a per-project or per-user quota budget. Nothing reads `providerCredit` yet; metering it is recorded
   for the source registry (I3).
 - The owner may choose otherwise.
+
+## OD-32 — Mouser (B19-A I3, 2026-09-13)
+
+- Question: Mouser's current API terms (last modified 2013-03-11) prohibit caching, recording, pre-fetching or storing
+  its content, license display only inside the application, and require the application's primary purpose to be driving
+  sales to Mouser. Sirkit's BOM compares several distributors and cached their offers. May Sirkit use the Mouser API?
+- Default applied: **disabled** in the source registry. Even if enabled later, Mouser offers are never persisted or
+  memoized, never served from a cache, and never bulk-refreshed. Choosing Mouser in the BOM prices nothing and says why.
+- To enable: the owner confirms Sirkit's use complies (or obtains Mouser's agreement), and the registry entry is changed
+  in a reviewed revision (the artifact gate makes that change visible).
+- The owner may choose otherwise.
+
+## OD-33 — DigiKey and Nexar storage, and bulk refresh (B19-A I3, 2026-09-13)
+
+- Question: DigiKey's API agreement prohibits building or updating a database from its data and bulk download, and
+  states no retention period; Nexar's terms allow storage for at most 24 hours and prohibit mass aggregation. How long
+  may Sirkit keep their offers, may the operator job pre-fetch pricing in bulk, and does a consolidated lifecycle status
+  written to `parts` count as a database built from their data?
+- Default applied: DigiKey offers are served and kept for at most **1 hour**; Nexar's at most **24 hours**; older rows are
+  deleted. The `refresh-bom-pricing` bulk job touches no source (DigiKey prohibited, Nexar unclear), and logs that. The
+  derived lifecycle status is left as it was, and recorded here as undecided.
+- The owner may choose otherwise (for example: permit Nexar bulk refresh within its plan, or stop persisting derived
+  lifecycle status).

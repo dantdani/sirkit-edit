@@ -14,10 +14,9 @@ import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import { schDisplayRef } from "@/lib/schematic-types";
 import {
   getPricingFor,
-  missingCredentials,
+  unavailableSources,
   type AggregatedPricing,
   type DistributorChoice,
-  type DistributorName,
   type LifecycleStatus,
 } from "@/app/lib/distributors";
 import {
@@ -176,8 +175,9 @@ export async function buildBom(
   let fetched = 0;
 
   if (pricingChoice !== "none" && partsForPricing.length > 0) {
-    for (const name of missingCredentials(pricingChoice)) {
-      warnings.push(credentialWarning(name));
+    // [B19-A I3] each unavailable source says why: blocked, disabled (with its owner decision), switched off, or missing credentials
+    for (const source of unavailableSources(pricingChoice)) {
+      warnings.push(source.message);
     }
     pricingMap = await getPricingFor(partsForPricing, pricingChoice, { live: pricing.live === true, forceRefresh: pricing.forceRefresh === true });
     if (pricing.live !== true) {
@@ -333,19 +333,6 @@ async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, numb
 
   for (const r of rows) map.set(r.partId, Number(r.count));
   return map;
-}
-
-function credentialWarning(name: DistributorName): string {
-  switch (name) {
-    case "digikey":
-      return "DigiKey API key not configured — add DIGIKEY_CLIENT_ID and DIGIKEY_CLIENT_SECRET to .env.local.";
-    case "mouser":
-      return "Mouser API key not configured — add MOUSER_API_KEY to .env.local.";
-    case "lcsc":
-      return "LCSC integration is not yet available (partner API access required).";
-    case "octopart-aggregated":
-      return "Octopart API key not configured — add OCTOPART_API_KEY (or NEXAR_API_KEY) to .env.local.";
-  }
 }
 
 // ─── CSV serialization (shared with the export route) ──────────────────────────

@@ -20,6 +20,7 @@ loadEnvLocal();
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb, getSqlClient } from "../app/lib/db/client";
 import { parts, partOffers, alternates, type Part, type PartOffer } from "../app/lib/db/schema";
+import { isOfferServable } from "../app/lib/distributors/cache";
 import {
   findCandidateAlternates,
   computeAlternateScore,
@@ -118,6 +119,7 @@ async function processPart(source: Part): Promise<void> {
     .where(inArray(partOffers.partId, [source.id, ...altIds]));
   const offersByPart = new Map<string, PartOffer[]>();
   for (const o of offerRows) {
+    if (!isOfferServable(o.distributor, o.lastRefreshedAt)) continue; // [B19-A I3] the registry's serving rule
     const list = offersByPart.get(o.partId) ?? [];
     list.push(o);
     offersByPart.set(o.partId, list);

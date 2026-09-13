@@ -4,8 +4,8 @@
  *
  * OAuth2 client_credentials → keyword search → `PartPricing`. Tokens are cached
  * in memory and refreshed on expiry or a 401. Requests are serialized through a
- * 200ms-spaced queue to stay under burst limits (the free tier allows
- * 1000 req/day). Per-MPN failures resolve to null rather than throwing, so one
+ * queue spaced by the source registry: 500 ms, DigiKey's documented 120 requests
+ * a minute (and 1000 a day). [B19-A I3: it was 200 ms — up to 300 a minute.] Per-MPN failures resolve to null rather than throwing, so one
  * bad part never sinks a whole batch.
  */
 
@@ -23,10 +23,12 @@ import { mapLifecycleString } from "./lifecycle";
 import { makeCachedLookup } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
+import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
 const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
-const MIN_REQUEST_SPACING_MS = 200;
+// [B19-A I3] the registry derives this from DigiKey's documented per-minute limit (60 000 ms / 120).
+const MIN_REQUEST_SPACING_MS = SOURCE_REGISTRY.digikey.resilience.minRequestSpacingMs;
 
 export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string; egress?: DistributorEgress }): DistributorClient {
   const { clientId, clientSecret } = opts;

@@ -7,8 +7,9 @@
  * Per-MPN failures resolve to null (logged) rather than throwing, so one bad
  * part never sinks a whole batch.
  *
- * Caching is handled one layer up by the aggregator (DB-backed part_offers +
- * a small request-scope LRU), so this client always performs a live fetch.
+ * This client always performs a live fetch and never memoizes. [B19-A I3] Mouser's API
+ * terms prohibit caching or storing its content, so the offer cache one layer up
+ * never persists it either, and the source is DISABLED in the registry (OD-32).
  */
 
 import {
@@ -24,10 +25,11 @@ import {
 import { mapLifecycleString } from "./lifecycle";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
+import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
-// 30 req/min on the free tier → a 2s minimum spacing keeps us comfortably under.
-const MIN_REQUEST_SPACING_MS = 2000;
+// [B19-A I3] the registry derives this from Mouser's documented 30 requests a minute (60 000 ms / 30).
+const MIN_REQUEST_SPACING_MS = SOURCE_REGISTRY.mouser.resilience.minRequestSpacingMs;
 
 export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgress }): DistributorClient {
   const { apiKey } = opts;

@@ -9,7 +9,12 @@
  * lifecycle to parts.lifecycleStatus). Built for ops use (e.g. a nightly cron).
  *
  * Concurrency is capped at 50 parts per chunk; the aggregator's per-distributor
- * request queues (DigiKey 200ms, Mouser 2s) further throttle live calls.
+ * request queues (spaced by the source registry) further throttle live calls.
+ *
+ * [B19-A I3] This job is an operator's BULK refresh. It is granted live pricing (after B19-B I2 made live pricing a grant,
+ * it passed only `forceRefresh` and silently refreshed nothing) and it declares itself a bulk refresh, so it touches only
+ * the sources whose terms permit pre-fetching — none today: DigiKey's agreement prohibits bulk download, Mouser is disabled
+ * and prohibits storage, and Nexar's terms are unclear (OD-33).
  */
 
 import { loadEnvLocal } from "../app/lib/load-env-local";
@@ -27,6 +32,7 @@ import {
   type NewBomNotification,
 } from "../app/lib/db/schema";
 import { getPricingFor } from "../app/lib/distributors";
+import { isOfferServable } from "../app/lib/distributors/cache";
 import {
   diffSnapshots,
   type BomSnapshot,
@@ -99,7 +105,7 @@ async function main(): Promise<void> {
     let withOffers = 0;
     for (let i = 0; i < items.length; i += CHUNK_SIZE) {
       const chunk = items.slice(i, i + CHUNK_SIZE);
-      const pricing = await getPricingFor(chunk, "all", { forceRefresh: true });
+      const pricing = await getPricingFor(chunk, "all", { live: true, forceRefresh: true, purpose: "bulk-refresh" });
       for (const agg of pricing.values()) {
         live += agg.sourcesFromLive;
         if (agg.offers.length > 0) withOffers += 1;
@@ -230,6 +236,7 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
   const offerRows = await db.select().from(partOffers).where(inArray(partOffers.partId, partIds));
   const offersByPart = new Map<string, typeof offerRows>();
   for (const o of offerRows) {
+    if (!isOfferServable(o.distributor, o.lastRefreshedAt)) continue; // [B19-A I3] the registry's serving rule
     const list = offersByPart.get(o.partId) ?? [];
     list.push(o);
     offersByPart.set(o.partId, list);

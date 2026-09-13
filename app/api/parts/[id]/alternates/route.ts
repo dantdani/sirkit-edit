@@ -10,6 +10,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, partOffers, alternates } from "@/app/lib/db/schema";
 import { bestOfferPrice, type AlternateKind } from "@/app/lib/alternates";
+import { isOfferServable } from "@/app/lib/distributors/cache";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
@@ -97,6 +98,8 @@ export const GET = publicRoute({ routeParams: ["id"], query: true }, async ({ pa
         : [];
     const offersByPart = new Map<string, typeof offers>();
     for (const o of offers) {
+      // [B19-A I3] only offers within their source's registered freshness are shown (Mouser's never, a stale row never)
+      if (!isOfferServable(o.distributor, o.lastRefreshedAt)) continue;
       const list = offersByPart.get(o.partId) ?? [];
       list.push(o);
       offersByPart.set(o.partId, list);

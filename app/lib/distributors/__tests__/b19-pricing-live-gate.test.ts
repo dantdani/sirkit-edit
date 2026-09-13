@@ -3,7 +3,8 @@
  *
  * The drain, as discovery found it and I2 measured it: six PUBLIC routes (`/api/bom`, the CSV export, the procurement
  * packet and the three cart routes) price the caller's schematic through `getPricingFor`, and every cache miss is a live,
- * quota-metered vendor call. Nexar's developer tier is about 1000 queries a MONTH. `/api/bom` also honours a caller-sent
+ * quota-metered vendor call (Nexar counts matched parts per month by plan; DigiKey allows 1000 requests a day — see the
+ * source registry). `/api/bom` also honours a caller-sent
  * `forceRefresh`, which bypasses the cache for parts already priced. The priced MPNs resolve server-side from the parts
  * catalog, so the spend is bounded by the catalog — but `forceRefresh` makes it unbounded in repetition, and nothing asked
  * who the caller was.
@@ -47,11 +48,19 @@ import { getPricingFor } from "..";
 const PARTS = [{ partId: "p-555", mpn: "NE555DR" }, { partId: "p-r1", mpn: "RC0805FR-0710KL" }];
 
 beforeEach(() => {
+  // [B19-A I3] a source is constructed only when the source registry admits it, which needs its credentials configured
+  vi.stubEnv("DIGIKEY_CLIENT_ID", "id");
+  vi.stubEnv("DIGIKEY_CLIENT_SECRET", "secret");
+  vi.stubEnv("MOUSER_API_KEY", "mouser-key");
+  vi.stubEnv("OCTOPART_API_KEY", "nexar-token");
   for (const key of Object.keys(lookups)) lookups[key] = 0;
   cacheReads.length = 0;
   evictions.length = 0;
 });
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
 
 const totalLookups = (): number => Object.values(lookups).reduce((sum, value) => sum + value, 0);
 
@@ -71,7 +80,9 @@ describe("[B19-B I2] the pricing layer fails closed", () => {
 
   it("only an explicit `live: true` looks up the misses — once per source, for exactly the uncached parts", async () => {
     await getPricingFor(PARTS, "all", { live: true });
-    expect(lookups).toEqual({ digikey: 2, mouser: 2, octopart: 2 });
+    // [B19-A I3] reviewed pin move: Mouser is DISABLED in the source registry (its terms prohibit storing its content; OD-32),
+    // so it is never asked, key or no key. The two enabled sources are asked exactly as before.
+    expect(lookups).toEqual({ digikey: 2, mouser: 0, octopart: 2 });
   });
 
   it("`live: true` with `forceRefresh` is the one path that bypasses the cache", async () => {

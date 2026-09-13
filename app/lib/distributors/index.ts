@@ -19,6 +19,7 @@ import { consolidateLifecycle } from "./lifecycle";
 import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
 import { getDb } from "../db/client";
 import { parts } from "../db/schema";
+import { admitSource, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
 
 // Re-export the browser-safe surface (types, lifecycle helpers, DistributorChoice,
 // AggregatedPricing) so server callers can keep importing from this barrel. Client
@@ -40,78 +41,70 @@ export {
   getCachedOffersForParts,
 } from "./cache";
 
-// ── Lazy, process-wide client singletons ──────────────────────────────────────
+// ── Lazy, process-wide client singletons, admitted by the source registry ─────
 // Built once so token caches and request queues persist across calls.
-let digikeyClient: DistributorClient | null | undefined;
-let octopartClient: DistributorClient | null | undefined;
-let mouserClient: DistributorClient | null | undefined;
+// [B19-A I3] A client is built only when the registry ADMITS its source: never a blocked one, a disabled one only after a
+// reviewed registry change, and not when the operator has switched it off or its credentials are missing. Credentials are
+// read by reference (the registry names the variables) and handed only to the connector that uses them. The decision is
+// taken once per process, like the credentials were before.
+const CHOICE_SOURCES: readonly AcquisitionSourceId[] = ["digikey", "mouser", "octopart"];
+const clients = new Map<AcquisitionSourceId, DistributorClient | null>();
 
-function getDigiKeyClient(): DistributorClient | null {
-  if (digikeyClient !== undefined) return digikeyClient;
-  const clientId = process.env.DIGIKEY_CLIENT_ID ?? "";
-  const clientSecret = process.env.DIGIKEY_CLIENT_SECRET ?? "";
-  try {
-    digikeyClient = makeDigiKeyClient({ clientId, clientSecret });
-  } catch {
-    digikeyClient = null; // credentials not configured — handled gracefully
+function clientFor(id: AcquisitionSourceId): DistributorClient | null {
+  if (clients.has(id)) return clients.get(id) ?? null;
+  const admission = admitSource(id, process.env);
+  let client: DistributorClient | null = null;
+  if (admission.admitted) {
+    const secret = (name: string): string => admission.secrets[name] ?? "";
+    try {
+      if (id === "digikey") client = makeDigiKeyClient({ clientId: secret("DIGIKEY_CLIENT_ID"), clientSecret: secret("DIGIKEY_CLIENT_SECRET") });
+      else if (id === "mouser") client = makeMouserClient({ apiKey: secret("MOUSER_API_KEY") });
+      else if (id === "octopart") client = makeOctopartClient({ apiKey: secret("OCTOPART_API_KEY") });
+    } catch {
+      client = null;
+    }
   }
-  return digikeyClient;
+  clients.set(id, client);
+  return client;
 }
 
-function getOctopartClient(): DistributorClient | null {
-  if (octopartClient !== undefined) return octopartClient;
-  const apiKey = process.env.OCTOPART_API_KEY ?? process.env.NEXAR_API_KEY ?? "";
-  try {
-    octopartClient = makeOctopartClient({ apiKey });
-  } catch {
-    octopartClient = null;
-  }
-  return octopartClient;
+/** Does `choice` intend to query source `id`? */
+function intends(choice: DistributorChoice, id: AcquisitionSourceId): boolean {
+  return choice === "all" || choice === id;
 }
 
-function getMouserClient(): DistributorClient | null {
-  if (mouserClient !== undefined) return mouserClient;
-  const apiKey = process.env.MOUSER_API_KEY ?? "";
-  try {
-    mouserClient = makeMouserClient({ apiKey });
-  } catch {
-    mouserClient = null;
-  }
-  return mouserClient;
-}
+type ActiveSource = { id: AcquisitionSourceId; name: DistributorName; client: DistributorClient };
 
-/** Does `choice` intend to query distributor `which`? */
-function intends(choice: DistributorChoice, which: "digikey" | "mouser" | "octopart"): boolean {
-  return choice === "all" || choice === which;
-}
-
-type ActiveSource = { name: DistributorName; client: DistributorClient };
-
-/** Configured clients a choice resolves to (after credential checks). */
+/** Admitted clients a choice resolves to. */
 function activeSources(choice: DistributorChoice): ActiveSource[] {
   const out: ActiveSource[] = [];
-  if (intends(choice, "digikey")) {
-    const c = getDigiKeyClient();
-    if (c) out.push({ name: "digikey", client: c });
-  }
-  if (intends(choice, "mouser")) {
-    const c = getMouserClient();
-    if (c) out.push({ name: "mouser", client: c });
-  }
-  if (intends(choice, "octopart")) {
-    const c = getOctopartClient();
-    if (c) out.push({ name: "octopart-aggregated", client: c });
+  for (const id of CHOICE_SOURCES) {
+    if (!intends(choice, id)) continue;
+    const client = clientFor(id);
+    if (client) out.push({ id, name: SOURCE_REGISTRY[id].distributorName as DistributorName, client });
   }
   return out;
 }
 
-/** Intended sources that lack configured credentials (for surfaced warnings). */
+export type UnavailableSource = { name: DistributorName; refusal: AdmissionRefusal; message: string };
+
+/**
+ * [B19-A I3] Intended sources the registry does not admit, each with its reason: blocked, disabled (with the owner
+ * decision), switched off by the operator, or missing credentials. Messages name variables, never values.
+ */
+export function unavailableSources(choice: DistributorChoice): UnavailableSource[] {
+  const out: UnavailableSource[] = [];
+  for (const id of CHOICE_SOURCES) {
+    if (!intends(choice, id)) continue;
+    const admission = admitSource(id, process.env);
+    if (!admission.admitted) out.push({ name: SOURCE_REGISTRY[id].distributorName as DistributorName, refusal: admission.refusal, message: admission.message });
+  }
+  return out;
+}
+
+/** Intended sources that are unavailable, by name only. Prefer `unavailableSources`, which says why. */
 export function missingCredentials(choice: DistributorChoice): DistributorName[] {
-  const missing: DistributorName[] = [];
-  if (intends(choice, "digikey") && !getDigiKeyClient()) missing.push("digikey");
-  if (intends(choice, "mouser") && !getMouserClient()) missing.push("mouser");
-  if (intends(choice, "octopart") && !getOctopartClient()) missing.push("octopart-aggregated");
-  return missing;
+  return unavailableSources(choice).map((source) => source.name);
 }
 
 /**
@@ -124,7 +117,7 @@ export function missingCredentials(choice: DistributorChoice): DistributorName[]
 export async function getPricingFor(
   parts: Array<{ partId: string; mpn: string }>,
   choice: DistributorChoice,
-  opts: { forceRefresh?: boolean; live?: boolean } = {},
+  opts: { forceRefresh?: boolean; live?: boolean; purpose?: "interactive" | "bulk-refresh" } = {},
 ): Promise<Map<string, AggregatedPricing>> {
   const result = new Map<string, AggregatedPricing>();
   if (choice === "none") return result;
@@ -168,7 +161,15 @@ export async function getPricingFor(
     ? new Map<string, Map<string, PartPricing>>()
     : await getCachedOffersForParts(items.map((i) => i.partId));
 
-  for (const { name, client } of sources) {
+  const bulkRefresh = opts.purpose === "bulk-refresh";
+  const refusedForTerms: string[] = [];
+
+  for (const { id, name, client } of sources) {
+    // [B19-A I3] A bulk refresh (an operator job pre-fetching many parts) touches only a source whose terms permit it.
+    if (bulkRefresh && SOURCE_REGISTRY[id].license.bulkRefresh !== "permitted") {
+      refusedForTerms.push(`${SOURCE_REGISTRY[id].displayName} (bulk refresh ${SOURCE_REGISTRY[id].license.bulkRefresh})`);
+      continue;
+    }
     // Split this distributor's work into cache hits and live misses.
     const misses: Array<{ partId: string; mpn: string }> = [];
     for (const it of items) {
@@ -214,9 +215,13 @@ export async function getPricingFor(
       try {
         await putCachedOffer(it.partId, name, offer);
       } catch (err) {
-        console.error(`[distributors] failed to cache ${name} offer for ${it.partId}:`, err);
+        console.error(`[distributors] failed to cache ${name} offer for ${it.partId} (details withheld): ${err instanceof Error ? err.name : "non-error"}`);
       }
     }
+  }
+
+  if (refusedForTerms.length > 0) {
+    console.info(`[distributors] bulk refresh skipped by the source registry: ${refusedForTerms.join(", ")}`);
   }
 
   // Finalize: compute bestOverall + consolidated lifecycle; drop empty parts.

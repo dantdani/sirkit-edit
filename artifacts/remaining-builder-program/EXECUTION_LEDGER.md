@@ -1204,3 +1204,32 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-cross-verify-egress 12/12 and b19-schgen-endpoint-client 14/14 (both new, in the CI list); the B16.0.10
   cross-verify pins unchanged; broad run (now including app/lib/schgen and app/api/schematic): 284 files, 3620 passed,
   10 expected skips; tsc 0 in the changed areas; eslint clean on the changed files.
+
+### B19 I3 — the versioned source registry, enforced (2026-09-13 local, solo; this commit)
+
+- Read the vendors' own current documentation first (DigiKey developer portal and API agreement, Mouser's Search API
+  specifications and terms, Nexar's support articles, plans and legal terms, LCSC's Open API docs); every fact in the
+  registry cites them, and anything they do not state is UNKNOWN.
+- `app/lib/acquisition/source-registry.ts` (1.0.0) records, per source: identity and API version, exact hosts and
+  operations, authentication method and secret REFERENCES, observations, quota, deadline/body/redirect/spacing/retry/
+  breaker, freshness, storage and retention, bulk refresh, redistribution and export disposition, attribution, region,
+  source and authority class, and state. `source-registry.csv` is its generated, byte-gated render.
+- The connectors read it: egress policies, admission (blocked never; disabled only by a reviewed change; operator can
+  only switch off), request spacing, freshness, storage, retention purge, bulk refresh, and the BOM's unavailable-source
+  sentences.
+- Checking the documentation found, and reproduction confirmed before each fix: DigiKey requests 214/203 ms apart
+  against a 120-a-minute limit (now 500 ms); Mouser offers persisted despite a no-storage clause; every stored row served
+  24 h and kept forever (DigiKey now 1 h, Nexar 24 h, purged past retention, one serving rule for every reader);
+  Mouser used whenever its key was set despite its terms (now disabled, OD-32).
+- A regression I2 introduced, found while reading every reader of stored offers: the operator refresh job passed only
+  `forceRefresh`, so it silently refreshed nothing after live pricing became a grant. It is now granted live pricing as
+  a declared bulk refresh, which touches only sources whose terms permit it (none today, OD-33) and says so.
+- A claim corrected before recording: the Mouser client never memoized answers (that case passes on the old client);
+  the storage defect was one layer up.
+- Recorded, not changed: Nexar's connector sends a pre-issued token instead of running client credentials (D19-12).
+  Quotas, breakers and coalescing are recorded but enforced in I3b.
+- Reviewed pin move: b19-pricing-live-gate now configures credentials (admission needs them) and expects Mouser at 0.
+- Tests: b19-source-registry 24/24, b19-connector-policy 6/6, b19-source-admission 7/7 and b19-offer-retention 5/5 against a
+  migrated PGlite (all new; the first three in the prompt-to-gerber CI list, the last in database-delivery); distributor and
+  BOM suites 56/56; database suites green; broad run: 288 files, 3662 passed, 10 expected skips; tsc 0 in the changed areas;
+  eslint: no new findings (the pre-existing `lcsc.ts` unused-parameter warning remains).
