@@ -170,6 +170,8 @@ jobs:
           app/lib/acquisition/__tests__/b19-e-source-labels.test.ts
           app/lib/bom/__tests__/b19-e-bom-sources.test.ts
           app/lib/__tests__/b19-e-packet-provenance.test.ts
+          app/components/bom/__tests__/b19-e-bom-workbench.test.tsx
+          app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts

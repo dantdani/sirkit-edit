@@ -1,14 +1,15 @@
 /**
  * Stable deep-links to distributor tooling (Stage 6).
  *
- * Pure string construction — no API calls. We auto-open the BOM-upload tool
- * after downloading a distributor-formatted CSV, and the procurement packet
- * embeds per-part search URLs.
+ * Pure string construction — no API calls. [B19-E E1] After a distributor
+ * import file downloads, the BOM view offers that distributor's BOM-upload page
+ * as a link the person clicks; nothing is opened automatically, nothing is sent
+ * and no order is placed. The sourcing worksheet embeds per-part search URLs.
  */
 
 import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy";
 
-/** Each distributor's BOM-upload tool, opened in a new tab after CSV download. */
+/** Each distributor's BOM-upload page, offered as a link (never opened automatically) after its import file downloads. */
 export const DISTRIBUTOR_UPLOAD_URLS = {
   digikey: "https://www.digikey.com/en/mylists/list/upload",
   mouser: "https://www.mouser.com/Tools/Project/UploadFile",

@@ -1,0 +1,212 @@
+/**
+ * [B19-E E1] Nothing in Sirkit reads as, or acts as, buying parts.
+ *
+ * The BOM workbench builds distributor import FILES and a sourcing worksheet; it never places an order, never fills a
+ * vendor cart and never opens or navigates to a vendor's upload page on the person's behalf (the person clicks a link).
+ * These tripwires read the source as it is:
+ *  1. no control label, title, aria-label or UI copy uses purchase wording;
+ *  2. no production source opens or navigates to a distributor upload page (window.open, location.assign / replace,
+ *     location.href =);
+ *  3. no API route implements an order, checkout or cart operation;
+ *  4. the distributor import and sourcing worksheet routes price from the cache only: they never pass `live`, never import
+ *     the outbound fetch boundary or a distributor client.
+ * Each checker is also run against a reintroduced violation, so a tripwire that stops biting fails here too.
+ */
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import ts from "typescript";
+import { describe, expect, it } from "vitest";
+import { listControlSurfaceFiles, scanControlSites } from "../control-surface";
+import { DISTRIBUTOR_UPLOAD_URLS } from "@/app/lib/distributor-links";
+
+const cwd = process.cwd();
+const PURCHASE_WORDING = /add to cart|checkout|\bbuy\b|place (an )?order|purchase order|order now|project cart|populate your cart/i;
+/** "Last Time Buy" is a manufacturer lifecycle status (LTB), not an action; it is the one phrase read past. */
+const LIFECYCLE_TERM = /\blast[- ]time[- ]buy\b/gi;
+const hasPurchaseWording = (text: string): boolean => PURCHASE_WORDING.test(text.replace(LIFECYCLE_TERM, ""));
+
+function sourceFile(name: string, text: string): ts.SourceFile {
+  return ts.createSourceFile(name, text, ts.ScriptTarget.ES2022, true, name.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+}
+
+/** Every piece of copy a source can show: string and template literals, JSX text and literal JSX attribute values. */
+export function copyStrings(name: string, text: string): string[] {
+  const out: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return; // module paths are not copy
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) out.push(node.text);
+    else if (ts.isJsxText(node)) {
+      const jsx = node.text.replace(/\s+/g, " ").trim();
+      if (jsx) out.push(jsx);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile(name, text));
+  return out;
+}
+
+function walk(dir: string, out: string[]): void {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "__tests__" || entry.name === "node_modules" || entry.name === ".next") continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
+    else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) && !entry.name.endsWith(".d.ts")) out.push(full);
+  }
+}
+
+/** Production sources: the app, the shared lib and the shared components (tests excluded). */
+function productionSources(): string[] {
+  const files: string[] = [];
+  for (const root of ["app", "lib", "components"]) walk(join(cwd, root), files);
+  return files.map((file) => relative(cwd, file).split(sep).join("/")).sort();
+}
+
+const UPLOAD_URLS = Object.values(DISTRIBUTOR_UPLOAD_URLS);
+
+function calleeName(expression: ts.Expression): string {
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return `${calleeName(expression.expression)}.${expression.name.text}`;
+  if (ts.isElementAccessExpression(expression)) return `${calleeName(expression.expression)}[]`;
+  if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression) || ts.isAsExpression(expression)) return calleeName(expression.expression);
+  return "?";
+}
+
+const OPENS = /^(window|globalThis|self|top|parent)\.open$/;
+const NAVIGATES = /(^|\.)location\.(assign|replace)$/;
+const NAVIGATION_TARGET = /(^|\.)location(\.href)?$/;
+
+/**
+ * Programmatic navigation that reaches a distributor upload page: a navigation whose target names DISTRIBUTOR_UPLOAD_URLS
+ * or an upload URL, or ANY programmatic navigation in a file that refers to them (a value can travel through a variable).
+ */
+export function uploadNavigations(name: string, text: string): string[] {
+  const source = sourceFile(name, text);
+  const refersToUploads = text.includes("DISTRIBUTOR_UPLOAD_URLS") || UPLOAD_URLS.some((url) => text.includes(url));
+  const out: string[] = [];
+  const flag = (node: ts.Node, what: string, target: string): void => {
+    const direct = target.includes("DISTRIBUTOR_UPLOAD_URLS") || UPLOAD_URLS.some((url) => target.includes(url));
+    if (direct || refersToUploads) out.push(`${name}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1} ${what}`);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = calleeName(node.expression);
+      if (OPENS.test(callee) || NAVIGATES.test(callee)) flag(node, callee, node.arguments.map((arg) => arg.getText(source)).join(","));
+    } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && NAVIGATION_TARGET.test(calleeName(node.left))) {
+      flag(node, `${calleeName(node.left)} =`, node.right.getText(source));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return out;
+}
+
+const ORDER_OPERATIONS = /placeOrder|checkout|addToCart|purchaseOrder/;
+
+function apiRoutes(): string[] {
+  const files: string[] = [];
+  walk(join(cwd, "app/api"), files);
+  return files.map((file) => relative(cwd, file).split(sep).join("/")).filter((file) => /\/route\.ts$/.test(file)).sort();
+}
+
+const VENDOR_MODULE = /(^|\/)distributors\/(digikey|octopart|mouser|lcsc|egress)(\.ts)?$|(^|\/)net\/outbound-fetch(\.ts)?$/;
+
+/** A cache-only export route: no `live` pricing flag, no outbound fetch, no distributor client import (static or dynamic). */
+export function liveVendorReach(name: string, text: string): string[] {
+  const source = sourceFile(name, text);
+  const out: string[] = [];
+  const at = (node: ts.Node, what: string): void => { out.push(`${name}:${source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1} ${what}`); };
+  const visit = (node: ts.Node): void => {
+    if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier) && VENDOR_MODULE.test(node.moduleSpecifier.text)) at(node, `imports ${node.moduleSpecifier.text}`);
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && node.arguments[0] && ts.isStringLiteral(node.arguments[0]) && VENDOR_MODULE.test(node.arguments[0].text)) at(node, `imports ${node.arguments[0].text}`);
+    if (ts.isIdentifier(node) && node.text === "outboundFetch") at(node, "names outboundFetch");
+    if (ts.isPropertyAssignment(node) && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) && node.name.text === "live" && node.initializer.kind !== ts.SyntaxKind.FalseKeyword) at(node, `passes live: ${node.initializer.getText(source)}`);
+    if (ts.isShorthandPropertyAssignment(node) && node.name.text === "live") at(node, "passes live");
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return out;
+}
+
+describe("[B19-E E1] no purchase wording on any control or in UI copy", () => {
+  it("no scanned control's label (test id, aria-label, title or text) uses purchase wording", () => {
+    const sites = scanControlSites(cwd);
+    expect(sites.length).toBeGreaterThan(400);
+    expect(sites.filter((site) => hasPurchaseWording(site.label)).map((site) => site.key)).toEqual([]);
+  });
+
+  it("no UI surface's copy (menu labels, banners, titles, aria-labels) uses purchase wording", () => {
+    const hits: string[] = [];
+    for (const file of listControlSurfaceFiles(cwd)) {
+      for (const text of copyStrings(file, readFileSync(join(cwd, file), "utf8"))) if (hasPurchaseWording(text)) hits.push(`${file}: ${text}`);
+    }
+    expect(hits).toEqual([]);
+  });
+
+  it("the checker bites: reintroduced cart and order wording is found; the lifecycle status name is not", () => {
+    const flagged = (text: string): boolean => copyStrings("x.tsx", text).some(hasPurchaseWording);
+    expect(flagged('const L = { mouser: "Mouser Project Cart" };')).toBe(true);
+    expect(flagged("const m = `Upload the file there to populate your cart.`;")).toBe(true);
+    expect(flagged('export const B = () => <button title="Place order">Go</button>;')).toBe(true);
+    expect(flagged("export const B = () => <button>Buy now</button>;")).toBe(true);
+    expect(flagged('export const B = () => <a aria-label="Add to cart" href="#">+</a>;')).toBe(true);
+    expect(flagged('const tip = "LTB — Last Time Buy; the manufacturer has announced the final date it accepts orders";')).toBe(false);
+    expect(flagged('const m = "No order was placed.";')).toBe(false);
+  });
+});
+
+describe("[B19-E E1] nothing opens or navigates to a distributor upload page", () => {
+  it("no production source opens or navigates to a DISTRIBUTOR_UPLOAD_URLS value", () => {
+    const hits = productionSources().flatMap((file) => uploadNavigations(file, readFileSync(join(cwd, file), "utf8")));
+    expect(hits).toEqual([]);
+  });
+
+  it("the checker bites: every navigation form, direct or through a variable, is found", () => {
+    expect(uploadNavigations("a.tsx", 'window.open(DISTRIBUTOR_UPLOAD_URLS[dist], "_blank", "noopener,noreferrer");')).toHaveLength(1);
+    expect(uploadNavigations("b.ts", `location.assign("${DISTRIBUTOR_UPLOAD_URLS.mouser}");`)).toHaveLength(1);
+    expect(uploadNavigations("c.ts", `window.location.replace("${DISTRIBUTOR_UPLOAD_URLS.lcsc}");`)).toHaveLength(1);
+    expect(uploadNavigations("d.ts", "const u = DISTRIBUTOR_UPLOAD_URLS.digikey; window.location.href = u;")).toHaveLength(1);
+    expect(uploadNavigations("e.ts", "import { DISTRIBUTOR_UPLOAD_URLS as U } from 'x'; const t = U.digikey; globalThis.open(t);")).toHaveLength(1);
+    expect(uploadNavigations("f.ts", "const t = DISTRIBUTOR_UPLOAD_URLS.digikey; window.location = t as never;")).toHaveLength(1);
+    // precision: navigation elsewhere, and a plain link the person clicks, are not flagged
+    expect(uploadNavigations("g.tsx", 'window.location.assign("/");')).toEqual([]);
+    expect(uploadNavigations("h.tsx", "const href = safeHref(DISTRIBUTOR_UPLOAD_URLS.digikey, 'page'); export const L = () => <a href={href} target=\"_blank\" rel=\"noopener noreferrer\">Open</a>;")).toEqual([]);
+  });
+});
+
+describe("[B19-E E1] no API route implements an order", () => {
+  it("no app/api/**/route.ts names an order, checkout or cart operation", () => {
+    const routes = apiRoutes();
+    expect(routes.length).toBeGreaterThan(50);
+    expect(routes.filter((file) => ORDER_OPERATIONS.test(readFileSync(join(cwd, file), "utf8")))).toEqual([]);
+  });
+
+  it("the checker bites", () => {
+    for (const text of ["export async function placeOrder() {}", "await vendor.checkout(cart);", "addToCart(sku)", "const purchaseOrder = {};"]) expect(ORDER_OPERATIONS.test(text), text).toBe(true);
+  });
+});
+
+describe("[B19-E E1] the distributor import and sourcing worksheet routes are cache-only", () => {
+  const exportRoutes = (): string[] => {
+    const cartDir = join(cwd, "app/api/bom/cart");
+    const carts = readdirSync(cartDir).filter((entry) => statSync(join(cartDir, entry)).isDirectory()).map((entry) => `app/api/bom/cart/${entry}/route.ts`);
+    return [...carts, "app/api/bom/procurement-packet/route.ts"];
+  };
+
+  it("every cart route and the worksheet route exists and never passes live, fetches out or imports a distributor client", () => {
+    const routes = exportRoutes();
+    expect(routes).toEqual(expect.arrayContaining(["app/api/bom/cart/digikey/route.ts", "app/api/bom/cart/mouser/route.ts", "app/api/bom/cart/lcsc/route.ts", "app/api/bom/procurement-packet/route.ts"]));
+    for (const file of routes) expect(existsSync(join(cwd, file)), file).toBe(true);
+    expect(routes.flatMap((file) => liveVendorReach(file, readFileSync(join(cwd, file), "utf8")))).toEqual([]);
+  });
+
+  it("the checker bites: live pricing, outbound fetch and distributor clients are found", () => {
+    expect(liveVendorReach("r.ts", "await buildBomRows(state, choice, { live: true });")).toHaveLength(1);
+    expect(liveVendorReach("r.ts", "const live = granted; await buildBomRows(state, choice, { live });")).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'import { outboundFetch } from "@/app/lib/net/outbound-fetch";')).toHaveLength(2);
+    expect(liveVendorReach("r.ts", 'import { DigiKeyClient } from "@/app/lib/distributors/digikey";')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'const m = await import("../../../lib/distributors/mouser");')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'import { vendorRequest } from "@/app/lib/distributors/egress";')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'import { toDigiKeyCsv } from "@/app/lib/cart-formats"; await buildBomRows(state, choice, { live: false });')).toEqual([]);
+  });
+});

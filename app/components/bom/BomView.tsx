@@ -1,13 +1,15 @@
 "use client";
 
 /**
- * Bill of Materials with live distributor pricing.
+ * Bill of Materials with distributor pricing observations.
  *
  * Posts the current SchematicState to /api/bom, which groups components into
  * line items and attaches pricing/stock from the user's chosen source (DigiKey,
- * Octopart, both, or none). Renders a sortable/filterable table with totals and
+ * Octopart, all, or none). Renders a sortable/filterable table with totals and
  * CSV export. All distributor API calls happen server-side — this component only
- * ever talks to /api/bom and /api/bom/export-csv.
+ * ever talks to the /api/bom routes. [B19-E E1] Each offer states its source, whether
+ * it is live or cached, when it was observed and when it expires; distributor
+ * exports are files the person uploads themselves — nothing is sent and no order is placed.
  *
  * Accepts either the canonical `{ state }` prop or the legacy
  * `{ components, kicadComponents }` pair, so it drops into the existing BOM tab
@@ -32,6 +34,9 @@ import {
   vendorProductPageUrl,
   type CartDistributor,
 } from "@/app/lib/distributor-links"; // [B19-D I5c row 34, review] the shared, tested link policy
+import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy"; // [B19-E E1]
+import { SOURCE_IDS, SOURCE_REGISTRY } from "@/app/lib/acquisition/source-registry"; // [B19-E E1] browser-safe, static
+import { offerFreshness, sourceLabel, utcMinute } from "@/app/lib/acquisition/source-labels"; // [B19-E E1]
 import type { Change } from "@/app/lib/snapshots";
 import { changeToNotification, type NotificationSeverity } from "@/app/lib/notifications";
 
@@ -94,30 +99,65 @@ const SEVERITY_STYLE: Record<NotificationSeverity, { glyph: string; className: s
 
 const STORAGE_KEY = "sirkit:bom:pricingChoice";
 
-const CHOICE_LABELS: Record<DistributorChoice, string> = {
-  none: "None",
-  digikey: "DigiKey",
-  mouser: "Mouser",
-  octopart: "Octopart",
-  all: "All",
-};
+type ChoiceOption = { value: string; label: string; selectable: boolean };
 
-const CHOICE_ORDER: DistributorChoice[] = ["none", "digikey", "mouser", "octopart", "all"];
+const SOURCE_CHOICES: ReadonlySet<string> = new Set<DistributorChoice>(["digikey", "mouser", "octopart"]);
+
+/**
+ * [B19-E E1] The pricing picker, from the static source registry (never admission or the environment): every registry
+ * source is listed; one that is not enabled, or is not a pricing choice, is shown with its state and owner decision and
+ * cannot be selected.
+ */
+const CHOICE_OPTIONS: readonly ChoiceOption[] = [
+  { value: "none", label: "None", selectable: true },
+  ...SOURCE_IDS.map((id): ChoiceOption => {
+    const { displayName, state } = SOURCE_REGISTRY[id];
+    const selectable = state.status === "enabled" && SOURCE_CHOICES.has(id);
+    const decision = state.ownerDecision ? ` (${state.ownerDecision})` : "";
+    return { value: id, label: selectable ? displayName : `${displayName} — ${state.status}${decision}`, selectable };
+  }),
+  { value: "all", label: "All enabled", selectable: true },
+];
+
+const SELECTABLE_CHOICES: ReadonlySet<string> = new Set(CHOICE_OPTIONS.filter((option) => option.selectable).map((option) => option.value));
 
 /** Human label for a distributor name as it appears on a PartPricing offer. */
 function distributorLabel(name: string): string {
-  switch (name) {
-    case "digikey":
-      return "DigiKey";
-    case "mouser":
-      return "Mouser";
-    case "octopart-aggregated":
-      return "Octopart";
-    case "lcsc":
-      return "LCSC";
-    default:
-      return name;
+  return sourceLabel(name)?.displayName ?? name; // [B19-E E1] the registry's display name
+}
+
+type PricingSource = BomResult["sources"][number];
+
+/** [B19-E E1] A source's state in words; a missing credential is named only as not configured. */
+function sourceStatusText(source: PricingSource): string {
+  switch (source.status) {
+    case "available":
+      return "available";
+    case "paused":
+      return source.retryAt !== null ? `paused · retry after ${utcMinute(source.retryAt)}` : "paused";
+    case "disabled":
+      return source.ownerDecision ? `disabled (${source.ownerDecision})` : "disabled";
+    case "blocked":
+      return "blocked";
+    case "operator_disabled":
+      return "switched off by the operator";
+    case "credentials_missing":
+      return "credentials not configured";
   }
+}
+
+const SOURCE_CHIP_STYLE: Record<PricingSource["status"], string> = {
+  available: "bg-emerald-500/10 text-emerald-300 border-emerald-500/40",
+  paused: "bg-amber-500/10 text-amber-300 border-amber-500/40",
+  disabled: "bg-zinc-800/60 text-zinc-400 border-zinc-700",
+  blocked: "bg-red-500/10 text-red-300 border-red-500/40",
+  operator_disabled: "bg-zinc-800/60 text-zinc-400 border-zinc-700",
+  credentials_missing: "bg-zinc-800/60 text-zinc-400 border-zinc-700",
+};
+
+/** [B19-E E1] May this observation still be shown? Offline, an offer past its expiry (or of a no-storage source) is not. */
+function offerServable(offer: PartPricing, now: number): boolean {
+  return offerFreshness(offer, now)?.servable ?? false;
 }
 
 /** Unit price at a target quantity: the highest break with qty ≤ target. */
@@ -173,7 +213,7 @@ const LIFECYCLE_BADGE: Record<LifecycleStatus, { label: string; className: strin
   last_time_buy: {
     label: "LTB",
     className: "bg-orange-500/15 text-orange-300 border border-orange-500/40",
-    tip: "LTB — Last Time Buy; the manufacturer has announced final purchase orders",
+    tip: "LTB — Last Time Buy; the manufacturer has announced the final date it accepts orders",
   },
   eol: {
     label: "EOL",
@@ -279,20 +319,24 @@ function stockColor(stock: number | null): string {
 
 function loadChoice(): DistributorChoice {
   if (typeof window === "undefined") return "none";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
-  if (stored === "both") return "all"; // migrate the legacy persisted value
-  if ((CHOICE_ORDER as string[]).includes(stored ?? "")) {
-    return stored as DistributorChoice;
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return "none"; // storage unavailable
   }
-  return "none";
+  if (stored === "both") stored = "all"; // migrate the legacy persisted value
+  // [B19-E E1] a stored choice that is no longer selectable (a source since disabled) is not kept
+  return stored !== null && SELECTABLE_CHOICES.has(stored) ? (stored as DistributorChoice) : "none";
 }
 
-// ─── Cart export helpers ────────────────────────────────────────────────────--
+// ─── Distributor import file helpers ─────────────────────────────────────────--
 
-const CART_LABELS: Record<CartDistributor, { full: string; short: string }> = {
-  digikey: { full: "DigiKey BOM Manager", short: "DigiKey" },
-  mouser: { full: "Mouser Project Cart", short: "Mouser" },
-  lcsc: { full: "LCSC BOM Tool", short: "LCSC" },
+/** [B19-E E1] Each distributor's import file: the tool it is uploaded to, and the vendor. */
+const EXPORT_LABELS: Record<CartDistributor, { tool: string; vendor: string }> = {
+  digikey: { tool: "DigiKey BOM Manager", vendor: "DigiKey" },
+  mouser: { tool: "Mouser project upload", vendor: "Mouser" },
+  lcsc: { tool: "LCSC BOM Tool", vendor: "LCSC" },
 };
 
 /** Replace anything outside [A-Za-z0-9-_.] with hyphens for a safe filename. */
@@ -304,7 +348,7 @@ function cartSkuOf(row: BomRow, dist: CartDistributor): string | null {
   return row.pricing?.offers.find((o) => o.distributor === dist)?.sku ?? null;
 }
 
-/** Whether a row will appear in a distributor's cart CSV (mirrors cart-formats). */
+/** Whether a row will appear in a distributor's import CSV (mirrors cart-formats). */
 function includedInCart(row: BomRow, dist: CartDistributor): boolean {
   if (dist === "lcsc") return !!row.mpn;
   return !!cartSkuOf(row, dist) || !!row.mpn;
@@ -347,11 +391,18 @@ export function BomView(props: Props) {
   const [drawerRow, setDrawerRow] = useState<BomRow | null>(null);
   // Set just before a "Refresh prices" click so the next fetch bypasses the cache.
   const forceRef = useRef(false);
-  // Send-to dropdown + procurement modal + post-action banner.
-  const [sendOpen, setSendOpen] = useState(false);
-  const [sending, setSending] = useState(false);
+  // Export-for-distributor menu + sourcing worksheet modal + post-action banners.
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [fileExporting, setFileExporting] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [packetOpen, setPacketOpen] = useState(false);
+  // [B19-E E1] after a distributor import file downloads: stays until dismissed, so the upload link stays reachable
+  const [exportNotice, setExportNotice] = useState<{ dist: CartDistributor; mpnOnly: number } | null>(null);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
+  // [B19-E E1] a refetch that got no answer: the last result stays, offers past their expiry are not shown
+  const [offline, setOffline] = useState(false);
+  const [resultAt, setResultAt] = useState<number | null>(null);
+  // [B19-E E1] the time offers are judged against: set when a result arrives, when a refetch fails, and while offline
+  const [clock, setClock] = useState(0);
   // Snapshots / notifications (Stage 7).
   const [snapshots, setSnapshots] = useState<SnapshotMeta[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -377,6 +428,13 @@ export function BomView(props: Props) {
     const t = setTimeout(() => setBanner(null), 8000);
     return () => clearTimeout(t);
   }, [banner]);
+
+  // [B19-E E1] while offline, the clock advances every 30 s so an offer that expires meanwhile is blanked, not kept on screen
+  useEffect(() => {
+    if (!offline) return;
+    const t = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [offline]);
 
   // Hydrate the persisted choice on mount (client-only).
   useEffect(() => {
@@ -415,6 +473,7 @@ export function BomView(props: Props) {
   const fetchBom = useCallback(async () => {
     if (isEmpty) {
       setResult(null);
+      setOffline(false);
       return;
     }
     // [B19-B I2] live pricing spends a metered vendor quota, so /api/bom is an authenticated project read: it needs the
@@ -422,6 +481,7 @@ export function BomView(props: Props) {
     // the view says why instead of showing an empty table.
     if (!projectKey) {
       setResult(null);
+      setOffline(false);
       setError(BOM_NEEDS_PROJECT);
       return;
     }
@@ -435,15 +495,20 @@ export function BomView(props: Props) {
         body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
       });
       const data = (await res.json()) as BomResult | { ok: false; error: string };
+      setOffline(false);
       if (!data.ok) {
         setError("error" in data ? data.error : "Failed to build BOM");
         setResult(null);
       } else {
+        const receivedAt = Date.now();
         setResult(data);
+        setResultAt(receivedAt);
+        setClock(receivedAt);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
-      setResult(null);
+    } catch {
+      // [B19-E E1] no answer (offline, or an unreadable response): keep the last result and say so; Retry refetches.
+      setOffline(true);
+      setClock(Date.now());
     } finally {
       forceRef.current = false; // one-shot — clear after the request settles
       setLoading(false);
@@ -585,9 +650,12 @@ export function BomView(props: Props) {
     }
   };
 
-  const sendToDistributor = async (dist: CartDistributor) => {
-    setSendOpen(false);
-    setSending(true);
+  // [B19-E E1] Downloads the distributor's import file and nothing else: no page is opened or navigated to, nothing is sent
+  // to the vendor and no order is placed. The notice offers the upload page as a link the person clicks.
+  const exportForDistributor = async (dist: CartDistributor) => {
+    setExportMenuOpen(false);
+    setFileExporting(true);
+    setExportNotice(null);
     setError(null);
     try {
       const res = await fetch(`/api/bom/cart/${dist}`, {
@@ -597,24 +665,17 @@ export function BomView(props: Props) {
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       downloadBlob(await res.blob(), `sirkit-bom-${dist}.csv`);
-      window.open(DISTRIBUTOR_UPLOAD_URLS[dist], "_blank", "noopener,noreferrer");
-
-      const { full, short } = CART_LABELS[dist];
       const mpnOnly = (result?.rows ?? []).filter((r) => includedInCart(r, dist) && !cartSkuOf(r, dist)).length;
-      let msg = `CSV downloaded as sirkit-bom-${dist}.csv. The ${full} just opened — upload the file there to populate your cart.`;
-      if (mpnOnly > 0) {
-        msg += ` ${mpnOnly} row${mpnOnly === 1 ? "" : "s"} had no ${short} SKU and will be matched by MPN. Verify the matches after upload.`;
-      }
-      setBanner(msg);
+      setExportNotice({ dist, mpnOnly });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Send-to failed");
+      setError(err instanceof Error ? err.message : "Export failed");
     } finally {
-      setSending(false);
+      setFileExporting(false);
     }
   };
 
-  const generatePacket = async (form: { title: string; buildQuantity: number; notes: string }) => {
-    setSending(true);
+  const generateWorksheet = async (form: { title: string; buildQuantity: number; notes: string }) => {
+    setFileExporting(true);
     setError(null);
     try {
       const res = await fetch("/api/bom/procurement-packet", {
@@ -624,13 +685,13 @@ export function BomView(props: Props) {
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const date = new Date().toISOString().slice(0, 10);
-      downloadBlob(await res.blob(), `sirkit-procurement-${sanitizeFilename(form.title)}-${date}.csv`);
-      setPacketOpen(false);
-      setBanner(`Procurement packet downloaded for ${form.buildQuantity} board${form.buildQuantity === 1 ? "" : "s"}.`);
+      downloadBlob(await res.blob(), `sirkit-sourcing-worksheet-${sanitizeFilename(form.title)}-${date}.csv`);
+      setWorksheetOpen(false);
+      setBanner(`Sourcing worksheet downloaded for ${form.buildQuantity} board${form.buildQuantity === 1 ? "" : "s"}. It is unverified; no order was placed.`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Packet export failed");
+      setError(err instanceof Error ? err.message : "Worksheet export failed");
     } finally {
-      setSending(false);
+      setFileExporting(false);
     }
   };
 
@@ -672,6 +733,17 @@ export function BomView(props: Props) {
 
   const cost = result?.estimatedProjectCost ?? null;
   const warnings = result?.warnings ?? [];
+  const sources = result?.sources ?? [];
+  // [B19-E E1] offline, an offer past its expiry is blanked instead of served — in the rows, the offers and the total
+  const now = clock;
+  const hideExpired = offline;
+  const expiredBest = (row: BomRow): boolean => {
+    const best = row.pricing?.bestOverall ?? null;
+    return hideExpired && best !== null && !offerServable(best, now);
+  };
+  const costHasExpired = hideExpired && (result?.rows ?? []).some(expiredBest);
+  const exportLabel = exportNotice ? EXPORT_LABELS[exportNotice.dist] : null;
+  const uploadHref = exportNotice ? safeHref(DISTRIBUTOR_UPLOAD_URLS[exportNotice.dist], "page", VENDOR_PAGE_HOSTS) : null;
 
   return (
     <div className="absolute inset-0 flex flex-col bg-zinc-950">
@@ -686,9 +758,9 @@ export function BomView(props: Props) {
             onChange={(e) => onChoiceChange(e.target.value as DistributorChoice)}
             className="bg-zinc-900 border border-zinc-800 rounded px-2 h-7 text-xs text-zinc-200 focus:outline-none focus:border-teal-500"
           >
-            {CHOICE_ORDER.map((c) => (
-              <option key={c} value={c}>
-                {CHOICE_LABELS[c]}
+            {CHOICE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} disabled={!option.selectable}>
+                {option.label}
               </option>
             ))}
           </select>
@@ -697,7 +769,7 @@ export function BomView(props: Props) {
         {/* Cache freshness badge */}
         {result && pricingChoice !== "none" && (
           <span className="text-[11px] text-zinc-500">
-            {result.cached} cached, {result.fetched} fetched live just now
+            {result.cached} cached · {result.fetched} live
           </span>
         )}
 
@@ -736,38 +808,38 @@ export function BomView(props: Props) {
           {exporting ? "Exporting…" : "Export CSV"}
         </button>
 
-        {/* Send-to dropdown */}
+        {/* Export-for-distributor dropdown: files only — nothing is sent and no order is placed */}
         <div className="relative">
           <button
-            onClick={() => setSendOpen((v) => !v)}
-            disabled={!result || sending}
+            onClick={() => setExportMenuOpen((v) => !v)}
+            disabled={!result || fileExporting}
             className="text-xs px-2 h-7 rounded border border-zinc-800 text-zinc-300 hover:bg-zinc-800 transition disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send to ▾"}
+            {fileExporting ? "Exporting…" : "Export for distributor ▾"}
           </button>
-          {sendOpen && (
+          {exportMenuOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setSendOpen(false)} />
-              <div className="absolute z-40 left-0 top-full mt-1 w-52 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl py-1 text-xs">
+              <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
+              <div className="absolute z-40 left-0 top-full mt-1 w-60 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl py-1 text-xs">
                 {(["digikey", "mouser", "lcsc"] as CartDistributor[]).map((d) => (
                   <button
                     key={d}
-                    onClick={() => void sendToDistributor(d)}
+                    onClick={() => void exportForDistributor(d)}
                     className="w-full text-left px-3 py-1.5 text-zinc-300 hover:bg-zinc-800 flex items-center justify-between"
                   >
-                    <span>{CART_LABELS[d].full}</span>
-                    <span className="text-zinc-500">↗</span>
+                    <span>{EXPORT_LABELS[d].tool} (CSV)</span>
+                    <span className="text-zinc-500">⬇</span>
                   </button>
                 ))}
                 <div className="my-1 border-t border-zinc-800" />
                 <button
                   onClick={() => {
-                    setSendOpen(false);
-                    setPacketOpen(true);
+                    setExportMenuOpen(false);
+                    setWorksheetOpen(true);
                   }}
                   className="w-full text-left px-3 py-1.5 text-zinc-300 hover:bg-zinc-800 flex items-center justify-between"
                 >
-                  <span>Procurement Packet (CSV)</span>
+                  <span>Sourcing worksheet (CSV, unverified)</span>
                   <span className="text-zinc-500">⬇</span>
                 </button>
               </div>
@@ -835,7 +907,9 @@ export function BomView(props: Props) {
           </button>
 
           <div className="text-xs text-zinc-400">
-            {cost && cost.value !== null ? (
+            {costHasExpired ? (
+              <span className="text-zinc-600">Project cost hidden: offers expired</span>
+            ) : cost && cost.value !== null ? (
               <span>
                 Project cost:{" "}
                 <span className="font-mono text-teal-300">
@@ -851,6 +925,43 @@ export function BomView(props: Props) {
           </div>
         </div>
       </div>
+
+      {/* ── [B19-E E1] per-source status chips, from the result's structured sources ── */}
+      {sources.length > 0 && (
+        <div data-testid="bom-source-chips" className="flex items-center gap-1.5 flex-wrap px-3 py-1.5 border-b border-zinc-800 bg-zinc-950 shrink-0">
+          <span className="text-[11px] text-zinc-500 font-medium">Sources</span>
+          {sources.map((s) => (
+            <span
+              key={s.sourceId}
+              data-testid="bom-source-chip"
+              data-source={s.sourceId}
+              data-status={s.status}
+              title={[s.freshnessLabel, s.attribution].join(" · ")}
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium ${SOURCE_CHIP_STYLE[s.status]}`}
+            >
+              {s.displayName} · {sourceStatusText(s)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ── [B19-E E1] offline: the last result stays; offers past their expiry are not shown ── */}
+      {offline && (
+        <div data-testid="bom-offline" role="status" className="flex items-center gap-2 px-3 py-1.5 text-[11px] text-amber-200 bg-amber-950/30 border-b border-amber-900/40 shrink-0">
+          <span className="flex-1">
+            {result && resultAt !== null
+              ? `Offline — the BOM could not be refreshed. Showing the last result, received ${utcMinute(resultAt)}; offers past their expiry are hidden.`
+              : "Offline — the BOM could not be loaded."}
+          </span>
+          <button
+            onClick={() => setRefreshNonce((n) => n + 1)}
+            disabled={loading}
+            className="text-[11px] px-2 h-6 rounded border border-amber-700/60 text-amber-200 hover:bg-amber-900/40 transition disabled:opacity-50 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* ── Warnings / errors ── */}
       {warnings.map((w) => (
@@ -871,6 +982,30 @@ export function BomView(props: Props) {
           <span className="flex-1">{banner}</span>
           <button
             onClick={() => setBanner(null)}
+            className="text-teal-400/70 hover:text-teal-200 shrink-0"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {exportNotice && exportLabel && (
+        <div data-testid="bom-export-notice" role="status" className="flex items-start gap-2 px-3 py-1.5 text-[11px] text-teal-200 bg-teal-950/30 border-b border-teal-900/40 shrink-0">
+          <span className="flex-1">
+            {`sirkit-bom-${exportNotice.dist}.csv downloaded for the ${exportLabel.tool}. Nothing was sent to ${exportLabel.vendor} and no order was placed.`}
+            {exportNotice.mpnOnly > 0 &&
+              ` ${exportNotice.mpnOnly} row${exportNotice.mpnOnly === 1 ? "" : "s"} had no ${exportLabel.vendor} SKU and will be matched by MPN; verify the matches after you upload the file.`}
+            {uploadHref && (
+              <>
+                {" "}
+                <a href={uploadHref} target="_blank" rel="noopener noreferrer" className="text-teal-300 underline hover:text-teal-100 whitespace-nowrap">
+                  Open {exportLabel.vendor} upload page ↗
+                </a>
+              </>
+            )}
+          </span>
+          <button
+            onClick={() => setExportNotice(null)}
             className="text-teal-400/70 hover:text-teal-200 shrink-0"
             title="Dismiss"
           >
@@ -933,10 +1068,11 @@ export function BomView(props: Props) {
           </thead>
           <tbody className="text-zinc-300">
             {rows.map((row, i) => {
-              const unit = bestUnit(row);
+              const expired = expiredBest(row); // [B19-E E1] offline and past its expiry: price, stock and link are not shown
+              const unit = expired ? null : bestUnit(row);
               const currency = currencyOf(row);
-              const stock = stockOf(row);
-              const url = vendorProductPageUrl(row.pricing?.bestOverall?.productUrl);
+              const stock = expired ? null : stockOf(row);
+              const url = expired ? null : vendorProductPageUrl(row.pricing?.bestOverall?.productUrl);
               const hasPricing = pricingChoice !== "none" && row.pricing !== null;
               const offers = row.pricing?.offers ?? [];
               const best = row.pricing?.bestOverall ?? null;
@@ -981,7 +1117,7 @@ export function BomView(props: Props) {
                       <LifecycleBadge status={row.lifecycleStatus} />
                     </Td>
                     <Td>
-                      <RiskBadge row={row} />
+                      <RiskBadge row={row} now={now} hideExpired={hideExpired} />
                     </Td>
                     <Td>
                       {row.alternatesCount > 0 ? (
@@ -1000,7 +1136,12 @@ export function BomView(props: Props) {
                       )}
                     </Td>
                     <Td className="whitespace-nowrap">
-                      {hasPricing && best ? (
+                      {hasPricing && best && expired ? (
+                        <span>
+                          <span className="text-zinc-300">{distributorLabel(best.distributor)}</span>
+                          <span className="text-zinc-600"> · expired</span>
+                        </span>
+                      ) : hasPricing && best ? (
                         <span>
                           <span className="text-zinc-300">{distributorLabel(best.distributor)}</span>
                           <span className="text-zinc-600"> · </span>
@@ -1019,7 +1160,7 @@ export function BomView(props: Props) {
                         unit !== null ? (
                           fmtPrice(unit, currency)
                         ) : (
-                          <Muted>no pricing</Muted>
+                          <Muted>{expired ? "expired" : "no pricing"}</Muted>
                         )
                       ) : (
                         <Muted>—</Muted>
@@ -1048,7 +1189,7 @@ export function BomView(props: Props) {
                   {isOpen && (
                     <tr className="bg-zinc-900/40">
                       <td className="px-3 py-2 border-b border-zinc-800/70" colSpan={16}>
-                        <OfferDetail offers={offers} bestDistributor={best?.distributor ?? null} />
+                        <OfferDetail offers={offers} bestDistributor={best?.distributor ?? null} now={now} hideExpired={hideExpired} />
                       </td>
                     </tr>
                   )}
@@ -1067,7 +1208,7 @@ export function BomView(props: Props) {
 
       <div className="px-3 py-1.5 text-[11px] text-zinc-600 border-t border-zinc-800 shrink-0">
         {result
-          ? `${result.rows.length} line item${result.rows.length === 1 ? "" : "s"} · ${result.cached} cached · ${result.fetched} fetched live`
+          ? `${result.rows.length} line item${result.rows.length === 1 ? "" : "s"} · ${result.cached} cached · ${result.fetched} live`
           : "—"}
       </div>
 
@@ -1080,11 +1221,11 @@ export function BomView(props: Props) {
         />
       )}
 
-      {packetOpen && (
-        <ProcurementModal
-          busy={sending}
-          onGenerate={generatePacket}
-          onClose={() => setPacketOpen(false)}
+      {worksheetOpen && (
+        <SourcingWorksheetModal
+          busy={fileExporting}
+          onGenerate={generateWorksheet}
+          onClose={() => setWorksheetOpen(false)}
         />
       )}
 
@@ -1116,9 +1257,10 @@ function alternatesDrawerLabel(row: BomRow): string {
   return parts.join(" — ");
 }
 
-// ─── Procurement packet modal ───────────────────────────────────────────────--
+// ─── Sourcing worksheet modal ───────────────────────────────────────────────--
 
-function ProcurementModal({
+/** [B19-E E1] A sourcing worksheet to review with a buyer or a contract manufacturer — not verified procurement, never an order. */
+function SourcingWorksheetModal({
   busy,
   onGenerate,
   onClose,
@@ -1138,7 +1280,10 @@ function ProcurementModal({
     <div className="absolute inset-0 z-30 flex items-center justify-center" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-[380px] max-w-full rounded-lg border border-zinc-700 bg-zinc-950 shadow-2xl p-4">
-        <div className="text-sm font-medium text-zinc-100 mb-3">Generate procurement packet</div>
+        <div className="text-sm font-medium text-zinc-100 mb-1">Sourcing worksheet (CSV, unverified)</div>
+        <div className="text-[11px] text-zinc-500 mb-3">
+          Priced from cached offers, each with its source and when it was observed. Not verified procurement; no order is placed.
+        </div>
 
         <label className="block text-[11px] text-zinc-400 mb-2">
           Project title
@@ -1182,7 +1327,7 @@ function ProcurementModal({
             disabled={!canGenerate}
             className="text-xs px-3 h-7 rounded border border-teal-500/40 bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {busy ? "Generating…" : "Generate"}
+            {busy ? "Generating…" : "Generate worksheet"}
           </button>
         </div>
       </div>
@@ -1657,12 +1802,15 @@ function LifecycleSummaryCard({ summary }: { summary: BomLifecycleSummary }) {
 
 // ─── Risk badge + breakdown popover ─────────────────────────────────────────--
 
-function RiskBadge({ row }: { row: BomRow }) {
+function RiskBadge({ row, now, hideExpired }: { row: BomRow; now: number; hideExpired: boolean }) {
   const risk = row.riskScore;
   const g = RISK_GRADE[risk.grade];
 
-  const offers = row.pricing?.offers ?? [];
+  // [B19-E E1] offline, an expired offer's stock is not counted into what the breakdown shows
+  const allOffers = row.pricing?.offers ?? [];
+  const offers = allOffers.filter((o) => !hideExpired || offerServable(o, now));
   const hasData = row.pricing !== null;
+  const allExpired = offers.length === 0 && allOffers.length > 0;
   const totalStock = offers.reduce((s, o) => s + (o.inStock ?? 0), 0);
   const suppliers = new Set(offers.filter((o) => (o.inStock ?? 0) > 0).map((o) => o.distributor)).size;
   const hasPrice = (row.pricing?.bestOverall?.bestUnitPrice ?? null) !== null;
@@ -1685,7 +1833,7 @@ function RiskBadge({ row }: { row: BomRow }) {
             label="Availability"
             pts={risk.components.availability}
             max={30}
-            note={hasData ? `${totalStock.toLocaleString()} units` : "no data"}
+            note={allExpired ? "expired" : hasData ? `${totalStock.toLocaleString()} units` : "no data"}
           />
           <BreakdownLine
             label="Supplier mix"
@@ -1775,7 +1923,7 @@ function RiskSummaryCard({
         <div className="ml-auto flex items-center gap-2 shrink-0">
           {summary.productionReady && (
             <span className="text-[10px] px-2 py-0.5 rounded bg-green-500/15 text-green-300 border border-green-500/50 font-medium">
-              Production-ready
+              Supply signals OK (observed)
             </span>
           )}
           <button
@@ -1813,13 +1961,26 @@ function RiskSummaryCard({
   );
 }
 
+/** [B19-E E1] When an observation expires, in words: a no-storage source's offer is never kept. */
+function offerExpiryText(offer: PartPricing, now: number): string {
+  const freshness = offerFreshness(offer, now);
+  if (!freshness) return "—";
+  if ((sourceLabel(offer.distributor)?.servedForMs ?? 0) <= 0) return "not kept (terms prohibit storing it)";
+  return freshness.servable ? utcMinute(freshness.expiresAt) : `expired ${utcMinute(freshness.expiresAt)}`;
+}
+
 /** Per-source breakdown shown when a BOM row is expanded. */
 function OfferDetail({
   offers,
   bestDistributor,
+  now,
+  hideExpired,
 }: {
   offers: PartPricing[];
   bestDistributor: string | null;
+  now: number;
+  /** [B19-E E1] offline: an offer past its expiry is blanked, not served */
+  hideExpired: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -1827,6 +1988,9 @@ function OfferDetail({
         <thead>
           <tr className="text-zinc-500">
             <th className="text-left font-medium px-2 py-1">Distributor</th>
+            <th className="text-left font-medium px-2 py-1">Basis</th>
+            <th className="text-left font-medium px-2 py-1">Observed</th>
+            <th className="text-left font-medium px-2 py-1">Expires</th>
             <th className="text-left font-medium px-2 py-1">SKU</th>
             <th className="text-right font-medium px-2 py-1">Stock</th>
             <th className="text-right font-medium px-2 py-1">Price (qty 1)</th>
@@ -1840,8 +2004,10 @@ function OfferDetail({
           {offers.map((o, idx) => {
             const cur = o.priceBreaks[0]?.currency ?? "USD";
             const isBest = o.distributor === bestDistributor;
+            const freshness = offerFreshness(o, now);
+            const expired = hideExpired && !offerServable(o, now);
             return (
-              <tr key={`${o.distributor}:${idx}`} className={isBest ? "text-zinc-100" : ""}>
+              <tr key={`${o.distributor}:${idx}`} data-testid="bom-offer" data-distributor={o.distributor} className={isBest ? "text-zinc-100" : ""}>
                 <td className="px-2 py-1">
                   {distributorLabel(o.distributor)}
                   {isBest && (
@@ -1851,34 +2017,51 @@ function OfferDetail({
                     </span>
                   )}
                 </td>
-                <td className="px-2 py-1 font-mono">
-                  {o.sku ? o.sku : <span className="text-zinc-600">—</span>}
+                <td className="px-2 py-1" data-testid="offer-basis">
+                  {freshness ? freshness.basis : "—"}
                 </td>
-                <td className="px-2 py-1 text-right tabular-nums">
-                  {o.inStock !== null ? o.inStock.toLocaleString() : "—"}
+                <td className="px-2 py-1 whitespace-nowrap" data-testid="offer-observed">
+                  {freshness ? utcMinute(freshness.retrievedAt) : "—"}
                 </td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 1), cur)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 100), cur)}</td>
-                <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 1000), cur)}</td>
-                {/* Lead time isn't captured in PartPricing yet — placeholder for a later stage. */}
-                <td className="px-2 py-1 text-zinc-500">—</td>
-                <td className="px-2 py-1">
-                  {(() => {
-                    const url = offerLinkUrl(o);
-                    return url ? (
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-teal-400 hover:underline whitespace-nowrap"
-                      >
-                        View on {distributorLabel(o.distributor)} ↗
-                      </a>
-                    ) : (
-                      <span className="text-zinc-700">↗</span>
-                    );
-                  })()}
+                <td className="px-2 py-1 whitespace-nowrap" data-testid="offer-expires">
+                  {offerExpiryText(o, now)}
                 </td>
+                {expired ? (
+                  <td className="px-2 py-1 text-zinc-500" colSpan={7}>
+                    expired — its price, stock and link are not shown while offline
+                  </td>
+                ) : (
+                  <>
+                    <td className="px-2 py-1 font-mono">
+                      {o.sku ? o.sku : <span className="text-zinc-600">—</span>}
+                    </td>
+                    <td className="px-2 py-1 text-right tabular-nums">
+                      {o.inStock !== null ? o.inStock.toLocaleString() : "—"}
+                    </td>
+                    <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 1), cur)}</td>
+                    <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 100), cur)}</td>
+                    <td className="px-2 py-1 text-right font-mono tabular-nums">{fmtPrice(priceAtQty(o.priceBreaks, 1000), cur)}</td>
+                    {/* Lead time isn't captured in PartPricing yet — placeholder for a later stage. */}
+                    <td className="px-2 py-1 text-zinc-500">—</td>
+                    <td className="px-2 py-1">
+                      {(() => {
+                        const url = offerLinkUrl(o);
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-teal-400 hover:underline whitespace-nowrap"
+                          >
+                            View on {distributorLabel(o.distributor)} ↗
+                          </a>
+                        ) : (
+                          <span className="text-zinc-700">↗</span>
+                        );
+                      })()}
+                    </td>
+                  </>
+                )}
               </tr>
             );
           })}

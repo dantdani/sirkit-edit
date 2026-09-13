@@ -1518,3 +1518,22 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Next: E1-C — the BOM workbench (source chips and labels, offline state, no window.open, sourcing-worksheet wording), the
   no-purchase tripwire and the control inventory.
 
+### B19-E E1-C — BOM workbench labels, offline state, no-purchase wording (2026-09-13 local; implementation workflow; this commit)
+
+- Implemented by a workflow agent test-first (9 of 16 new cases failed on the unchanged code: every workbench case, the
+  purchase-wording scan with three hits in BomView, and the navigation check on its `window.open`); reviewed by three lenses
+  with skeptics in the same workflow.
+- BomView: picker from the static registry (Mouser disabled with OD-32, LCSC blocked, a stale stored choice falls back);
+  "Export for distributor" with no `window.open` — a dismissible notice says nothing was sent and no order was placed and
+  links the vendor upload page (safeHref, noopener noreferrer); "N cached · M live"; "Sourcing worksheet (CSV, unverified)";
+  per-source chips (paused with retry time, disabled with owner decision, credentials not configured, switched off);
+  "Supply signals OK (observed)"; offer details show basis, observed and expiry; a failed refetch keeps the last result with
+  an offline banner and Retry, and blanks expired offers. Registry wording updated; control inventory 581 → 583 (Retry
+  semantic under bom.workbench, Dismiss view), B01 toolability matrix re-rendered for the wording change.
+- Tests: workbench 7/7, no-purchase tripwire 9/9 (5 reintroduction checks), B17 gates, action registry, BOM routes and
+  library green (11 files, 98 tests, re-run by the lead); tsc 0; eslint: the 4 `set-state-in-effect` errors in BomView are
+  pre-existing in HEAD, none new.
+- Review (same workflow): 17 findings, 15 confirmed (13 distinct) — a frozen clock while online (medium), non-network errors
+  shown as offline, expired offers still steering sort, risk and the summary badge, a kept result under a changed choice,
+  client clock skew, and seven test-strength gaps. They are fixed test-first in the next commit (E1-C review).
+

@@ -187,7 +187,7 @@ export const CONTROL_RULES: readonly ControlRule[] = Object.freeze([
   rule({ id: "manufacturing.export-engineering", surface: PCB + "FabDialog.tsx", handler: /^fab\.start$/, classification: "semantic", recordIds: ["manufacturing.export-engineering"] }),
 
   // ── BOM ───────────────────────────────────────────────────────────────────
-  rule({ id: "bom.workbench", surface: BOM, handler: /^(refreshPrices|exportCsv|onGenerate,title\.trim|takeSnapshot|sendToDistributor|onSwap|onViewDiff|onMarkAllRead|onChoiceChange|setRefreshNonce|onJump)$/, classification: "semantic", recordIds: ["bom.workbench"] }),
+  rule({ id: "bom.workbench", surface: BOM, handler: /^(refreshPrices|exportCsv|onGenerate,title\.trim|takeSnapshot|exportForDistributor|onSwap|onViewDiff|onMarkAllRead|onChoiceChange|setRefreshNonce|onJump)$/, classification: "semantic", recordIds: ["bom.workbench"] }), // [B19-E E1] exportForDistributor downloads a file only; the offline Retry reuses setRefreshNonce
   rule({ id: "view.bom-chrome", surface: BOM, classification: "view", note: "filters, drafts, sort, expand, dialogs and popovers" }),
 
   // ── build library / schematic dialogs ─────────────────────────────────────
