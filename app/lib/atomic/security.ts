@@ -65,6 +65,10 @@ export function assertBoundedSExpression(source: string, limits = INGEST_LIMITS)
 }
 
 export function assertArchiveBudget(input: { entries: number; compressedBytes: number; decompressedBytes: number }): void {
+  // [B19-D I5b row 43] a count that is not a whole, non-negative, finite number cannot be trusted — refuse it, never compare it
+  for (const [name, value] of Object.entries(input)) {
+    if (!Number.isSafeInteger(value) || value < 0) throw new IngestSecurityError("archive_budget_invalid", `Archive ${name} is not a non-negative integer`);
+  }
   if (input.entries > INGEST_LIMITS.maxArchiveEntries) throw new IngestSecurityError("archive_entries", "Archive entry count exceeds policy");
   if (input.decompressedBytes > INGEST_LIMITS.maxDecompressedBytes) throw new IngestSecurityError("archive_size", "Expanded archive exceeds policy");
   const ratio = input.compressedBytes <= 0 ? Infinity : input.decompressedBytes / input.compressedBytes;

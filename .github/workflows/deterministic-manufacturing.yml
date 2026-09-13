@@ -130,6 +130,12 @@ jobs:
           app/lib/atomic/__tests__/b19-approval-evidence-authority.test.ts
           app/lib/atomic/__tests__/governance-security.test.ts
           app/lib/atomic/__tests__/b19-export-license.test.ts
+          app/lib/atomic/__tests__/b19-d-ingestion-bounds.test.ts
+          app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts
+          app/lib/distributors/__tests__/b19-d-exact-mpn-binding.test.ts
+          app/lib/distributors/__tests__/b19-d-vendor-values.test.ts
+          app/lib/distributors/__tests__/b19-d-lifecycle-retention.test.ts
+          app/lib/bom/__tests__/b19-d-pricing-mpn-binding.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

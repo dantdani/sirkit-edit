@@ -140,3 +140,15 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   derived lifecycle status is left as it was, and recorded here as undecided.
 - The owner may choose otherwise (for example: permit Nexar bulk refresh within its plan, or stop persisting derived
   lifecycle status).
+
+## OD-34 — What counts as the same part number (B19-D I5b, 2026-09-13)
+
+- Question: when a distributor answers a request for an MPN, which spellings are the same part?
+- Default applied: an exact published MPN compares after trimming surrounding whitespace and upper-casing ASCII letters
+  only. Every other character is significant (`MAX3232CSE+` is not `MAX3232CSE`; `LT1086CM#PBF` is not `LT1086CMPBF`). An
+  MPN containing anything outside printable ASCII (zero-width or bidirectional characters, homoglyphs, a long s, full-width
+  digits) never matches and is refused as an evidence identity. The manufacturer is not compared (distributor manufacturer
+  names have aliases Sirkit cannot resolve yet), so two manufacturers publishing the same exact string remain one pricing
+  identity.
+- Also applied: prices are compared and totalled in USD only; an offer without a USD break has no unit price.
+- The owner may choose otherwise (e.g. suffix-insensitive matching for specific manufacturers, or currency conversion).

@@ -21,6 +21,7 @@ import { getDb } from "../db/client";
 import { parts } from "../db/schema";
 import { admitSource, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
 import { currentPause, type AdmissionPause } from "../acquisition/admission-control";
+import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
 // Re-export the browser-safe surface (types, lifecycle helpers, DistributorChoice,
 // AggregatedPricing) so server callers can keep importing from this barrel. Client
@@ -125,11 +126,26 @@ export function missingCredentials(choice: DistributorChoice): DistributorName[]
 }
 
 /**
+ * [B19-D I5b row 36] The key a priced line is found under: its catalog part AND its exact MPN, so two exact parts filed
+ * under one catalog row are priced separately.
+ */
+export function pricingKey(partId: string, mpn: string): string {
+  let exact = mpn.trim();
+  try {
+    exact = canonicalExactMpn(mpn);
+  } catch {
+    // a confusable MPN keeps its raw spelling as a key; no vendor answer will ever match it
+  }
+  return `${partId}\u0000${exact}`;
+}
+
+/**
  * Fetch pricing for a set of parts from the chosen source(s) and aggregate per
  * part. DB cache is consulted first (unless `forceRefresh`); only misses hit a
  * live API, and fresh responses are persisted. Never throws — provider failures
- * degrade to missing offers. Returns a map keyed by partId (only parts that got
- * at least one offer are present).
+ * degrade to missing offers. Returns a map keyed by `pricingKey(partId, mpn)` (only
+ * parts that got at least one offer are present). [B19-D I5b] An offer is attached only
+ * when its own published MPN is the requested one; nothing is relabelled.
  */
 export async function getPricingFor(
   parts: Array<{ partId: string; mpn: string }>,
@@ -139,13 +155,15 @@ export async function getPricingFor(
   const result = new Map<string, AggregatedPricing>();
   if (choice === "none") return result;
 
-  // Dedupe by partId; require a non-empty MPN.
-  const items: Array<{ partId: string; mpn: string }> = [];
+  // Dedupe by (partId, exact MPN); require a non-empty MPN.
+  const items: Array<{ partId: string; mpn: string; key: string }> = [];
   const seen = new Set<string>();
   for (const p of parts) {
-    if (!p.partId || !p.mpn || p.mpn.trim() === "" || seen.has(p.partId)) continue;
-    seen.add(p.partId);
-    items.push({ partId: p.partId, mpn: p.mpn });
+    if (!p.partId || !p.mpn || p.mpn.trim() === "") continue;
+    const key = pricingKey(p.partId, p.mpn);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ partId: p.partId, mpn: p.mpn, key });
   }
   if (items.length === 0) return result;
 
@@ -161,7 +179,7 @@ export async function getPricingFor(
 
   // Seed an aggregation accumulator per part.
   for (const it of items) {
-    result.set(it.partId, {
+    result.set(it.key, {
       partId: it.partId,
       mpn: it.mpn,
       offers: [],
@@ -188,12 +206,13 @@ export async function getPricingFor(
       continue;
     }
     // Split this distributor's work into cache hits and live misses.
-    const misses: Array<{ partId: string; mpn: string }> = [];
+    const misses: Array<{ partId: string; mpn: string; key: string }> = [];
     for (const it of items) {
-      const cached = cacheMap.get(it.partId)?.get(name) ?? null;
+      const stored = cacheMap.get(it.partId)?.get(name) ?? null;
+      // [B19-D I5b rows 01, 36] a stored offer answers only for the exact MPN it was stored for (a row without one never does)
+      const cached = stored && sameExactMpn(stored.mpn, it.mpn) ? stored : null;
       if (cached) {
-        cached.mpn = it.mpn; // row doesn't carry the MPN; fill from input
-        const agg = result.get(it.partId);
+        const agg = result.get(it.key);
         if (agg) {
           agg.offers.push(cached);
           agg.sourcesFromCache += 1;
@@ -222,9 +241,9 @@ export async function getPricingFor(
 
     for (const it of misses) {
       const offer = live.get(it.mpn);
-      if (!offer) continue;
-      offer.mpn = it.mpn;
-      const agg = result.get(it.partId);
+      // [B19-D I5b row 01] an answer for a different part is dropped, never relabelled as the requested one
+      if (!offer || !sameExactMpn(offer.mpn, it.mpn)) continue;
+      const agg = result.get(it.key);
       if (agg) {
         agg.offers.push(offer);
         agg.sourcesFromLive += 1;
@@ -243,16 +262,17 @@ export async function getPricingFor(
 
   // Finalize: compute bestOverall + consolidated lifecycle; drop empty parts.
   const lifecycleWrites: Array<{ partId: string; status: LifecycleStatus }> = [];
-  for (const [partId, agg] of result) {
+  for (const [key, agg] of result) {
     if (agg.offers.length === 0) {
-      result.delete(partId);
+      result.delete(key);
       continue;
     }
     agg.bestOverall = pickBestOverall(agg.offers);
     agg.lifecycleStatus = consolidateLifecycle(agg.offers.map((o) => o.lifecycleStatus));
     // Only persist a real verdict — never overwrite stored data with "unknown".
-    if (agg.lifecycleStatus !== "unknown") {
-      lifecycleWrites.push({ partId, status: agg.lifecycleStatus });
+    // [B19-D I5b row 03] and only from a LIVE answer: re-stamping from cached offers extended a derived fact indefinitely
+    if (agg.lifecycleStatus !== "unknown" && agg.sourcesFromLive > 0) {
+      lifecycleWrites.push({ partId: agg.partId, status: agg.lifecycleStatus });
     }
   }
 
@@ -275,7 +295,7 @@ async function persistLifecycle(
         .set({ lifecycleStatus: status, lastRefreshedAt: now })
         .where(eq(parts.id, partId))
         .catch((err: unknown) => {
-          console.error(`[distributors] failed to persist lifecycle for ${partId}:`, err);
+          console.error(`[distributors] failed to persist lifecycle for ${partId} (details withheld): ${err instanceof Error ? err.name : "non-error"}`);
         }),
     ),
   );

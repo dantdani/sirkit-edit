@@ -11,6 +11,7 @@
 import type { BomRow } from "@/app/lib/bom/build";
 import type { PartPricing } from "@/app/lib/distributors";
 import { digiKeyProductUrl, mouserProductUrl } from "./distributor-links";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "./distributors/types"; // [B19-D I5b row 20]
 
 const CRLF = "\r\n";
 
@@ -53,12 +54,10 @@ function descriptionFor(row: BomRow): string {
   );
 }
 
-/** Unit price at quantity 1: the highest break with qty ≤ 1, else the smallest. */
+/** Unit price at quantity 1, in the pricing currency. [B19-D I5b row 20] never another currency's number. */
 function priceAtQty1(offer: PartPricing | null): number | null {
   if (!offer || offer.priceBreaks.length === 0) return null;
-  const sorted = [...offer.priceBreaks].sort((a, b) => a.qty - b.qty);
-  const atMost1 = sorted.filter((b) => b.qty <= 1).pop();
-  return (atMost1 ?? sorted[0]).price;
+  return cheapestUnitPrice(offer.priceBreaks, { quantity: 1 });
 }
 
 function truncate(s: string, max: number): string {
@@ -173,11 +172,9 @@ const SOURCE_LABEL: Record<PartPricing["distributor"], string> = {
   lcsc: "LCSC",
 };
 
-/** Currency of the best-overall offer's cheapest break, defaulting USD. */
-function bestCurrency(row: BomRow): string {
-  const best = row.pricing?.bestOverall;
-  if (!best) return "USD";
-  return best.priceBreaks.find((b) => b.price === best.bestUnitPrice)?.currency ?? "USD";
+/** [B19-D I5b row 20] Every unit price is in the one pricing currency, so every priced line and the total are too. */
+function bestCurrency(): string {
+  return PRICING_CURRENCY;
 }
 
 export function toProcurementPacketCsv(
@@ -206,8 +203,9 @@ export function toProcurementPacketCsv(
     const dkPrice1 = priceAtQty1(dk);
     const moPrice1 = priceAtQty1(mo);
     const best = row.pricing?.bestOverall ?? null;
-    const bestUnit = best?.bestUnitPrice ?? null;
-    const currency = bestCurrency(row);
+    // [B19-D I5b row 20] the price at the quantity actually ordered, in the pricing currency
+    const bestUnit = best ? cheapestUnitPrice(best.priceBreaks, { quantity: totalRequired }) : null;
+    const currency = bestCurrency();
     const extended = bestUnit === null ? null : Number((bestUnit * totalRequired).toFixed(4));
     if (extended !== null) {
       totalCost += extended;

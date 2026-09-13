@@ -15,6 +15,7 @@ import { schDisplayRef } from "@/lib/schematic-types";
 import {
   getPricingFor,
   pausedSources,
+  pricingKey,
   unavailableSources,
   type AggregatedPricing,
   type DistributorChoice,
@@ -27,6 +28,7 @@ import {
   type DesignRiskSummary,
 } from "@/app/lib/risk-scoring";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "@/app/lib/distributors/types"; // [B19-D I5b row 20]
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
@@ -103,12 +105,11 @@ type Group = {
   atomicRevisionId: string | null;
 };
 
-/** Currency of the price break that produced `bestUnitPrice`, defaulting USD. */
+/** [B19-D I5b row 20] Every unit price is in the one pricing currency (`cheapestUnitPrice`), so that is its currency. */
 function currencyOfBest(pricing: AggregatedPricing | null): string | null {
   const best = pricing?.bestOverall;
   if (!best || best.bestUnitPrice === null) return null;
-  const match = best.priceBreaks.find((b) => b.price === best.bestUnitPrice);
-  return match?.currency ?? "USD";
+  return PRICING_CURRENCY;
 }
 
 export async function buildBom(
@@ -157,21 +158,22 @@ export async function buildBom(
     loadAlternatesCounts(partIds),
   ]);
 
-  // ── Fetch pricing for every distinct part (by partId + its catalog MPN) ───────
+  // ── Fetch pricing for every distinct (part, exact MPN) ───────────────────────
+  // [B19-D I5b row 36] keyed by the exact MPN too: two exact parts filed under one catalog row are priced separately
   const partsForPricing: Array<{ partId: string; mpn: string }> = [];
-  const seenPid = new Set<string>();
+  const seenPricing = new Set<string>();
   for (const g of groups.values()) {
-    if (!g.partId || seenPid.has(g.partId)) continue;
+    if (!g.partId) continue;
     const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
     const mpn = pinned?.exactPart?.exactMpn ?? partMeta.get(g.partId)?.mpn ?? null;
-    if (mpn) {
+    if (mpn && !seenPricing.has(pricingKey(g.partId, mpn))) {
       partsForPricing.push({ partId: g.partId, mpn });
-      seenPid.add(g.partId);
+      seenPricing.add(pricingKey(g.partId, mpn));
     }
   }
 
   const warnings: string[] = [];
-  let pricingMap = new Map<string, AggregatedPricing>(); // keyed by partId
+  let pricingMap = new Map<string, AggregatedPricing>(); // keyed by pricingKey(partId, exact MPN)
   let cached = 0;
   let fetched = 0;
 
@@ -201,7 +203,7 @@ export async function buildBom(
     const meta = g.partId ? partMeta.get(g.partId) : undefined;
     const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
     const mpn = pinned?.exactPart?.exactMpn ?? meta?.mpn ?? null;
-    const pricing = g.partId ? pricingMap.get(g.partId) ?? null : null;
+    const pricing = g.partId && mpn ? pricingMap.get(pricingKey(g.partId, mpn)) ?? null : null;
 
     // Lifecycle is sourced from the aggregator's consolidated verdict, which
     // already folds in cached offers. We deliberately do NOT fall back to the
@@ -236,13 +238,15 @@ export async function buildBom(
   // ── Totals ───────────────────────────────────────────────────────────────────
   const totalUnitsAvailable = partsForPricing.map(({ partId, mpn }) => ({
     mpn,
-    available: pricingMap.get(partId)?.bestOverall?.inStock ?? null,
+    available: pricingMap.get(pricingKey(partId, mpn))?.bestOverall?.inStock ?? null,
   }));
 
   let costValue: number | null = null;
   let costCurrency: string | null = null;
   for (const row of rows) {
-    const unit = row.pricing?.bestOverall?.bestUnitPrice ?? null;
+    // [B19-D I5b row 20] the unit price that applies at the line's quantity, in the pricing currency
+    const best = row.pricing?.bestOverall ?? null;
+    const unit = best ? cheapestUnitPrice(best.priceBreaks, { quantity: row.qty }) ?? best.bestUnitPrice : null;
     if (unit === null) continue;
     costValue = (costValue ?? 0) + unit * row.qty;
     costCurrency = costCurrency ?? currencyOfBest(row.pricing);

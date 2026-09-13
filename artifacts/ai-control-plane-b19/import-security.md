@@ -63,3 +63,28 @@ The rows land in four test-first batches:
 | I5c | 02, 04, 09, 10, 15, 16, 17, 18, 21, 33, 34, 35 | output injection: chat markdown images, KiCad emitters, CSV formulas and CR, vendor hrefs, report escaping, export selection shape |
 | I5d | 06, 07, 08, 22, 23, 27c, 37, 38, 44–50 | KiCad parsing and atomic data integrity: symbols, inheritance, s-expression bounds, paths, value keys, claims, mapping conflicts, quantities |
 | I5e | 05, 11–14, 19, 24, 25, 28–32 | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
+
+### I5b landed — the acquisition path (CONFIRMED)
+
+Every row was reproduced by a failing test on the unchanged code first: **40 of 67** new cases failed; the other 27 are
+baselines that pass before and after (the behaviour that must not change).
+
+| row | reproduced before the fix | now |
+|---|---|---|
+| 01 (high) | DigiKey and Mouser answered a request for `MAX3232CSE` with the first search result (`MAX3232CSE+`); Nexar took `results[0]`; the pricing layer relabelled the answer as the requested MPN, cached it, and wrote its lifecycle into `parts`; cached offers had no MPN and were relabelled too | connectors answer only for the exact published MPN (trim + ASCII case-fold; every suffix character significant; non-printable-ASCII spellings never match — OD-34); nothing is relabelled; a stored offer carries its MPN (`part_offers.mpn`, migration 0029) and answers only for it; rows stored before 0029 are never served |
+| 36 | two exact parts under one catalog row were priced once and shared the first price | pricing is keyed by `pricingKey(partId, exact MPN)` in the pricing layer and the BOM |
+| 03 (medium) | every call — a cache-only export included — re-stamped the part's vendor-derived lifecycle, and nothing cleared it | written only from a live answer; the offer purge clears a vendor-stamped status older than the strictest bounded retention (1 h); KiCad-derived statuses (unstamped) are untouched |
+| 20 | the "best unit price" was the minimum over every break (a 10 000-piece break priced a one-off line; GBP/JPY numbers could win); totals were labelled with one row's currency | `cheapestUnitPrice(breaks, { quantity, currency })`: the cheapest break reachable at the quantity, in USD only, else the order minimum; the BOM estimate and the procurement packet price at the ordered quantity and total in USD |
+| 26 | "Inactive", "Not Active", "Non-Active" mapped to active | negated terms map to unknown |
+| 51 | "0,34" read as 34, "€1.234,56" as 1.23456, "12abc34" as 1234 | only a currency sign, optional US thousands separators and decimals are read; anything else is not a number |
+| 27a | a bundle's identity was the letters-and-digits search key: `MAX3232CSE+`/`MAX3232CSE`, `LT1086CM#PBF`/`LT1086CMPBF`, homoglyph and zero-width spellings merged into one part's evidence | identity is the canonical exact MPN; a confusable spelling is refused |
+| 39 | terminal function, electrical rating and package geometry disagreements were not conflicts | every engineering property, identity and lifecycle are conflict properties |
+| 40 | the observation recorded the vendor's MPN as the one asked for; a superseded document revision never went stale | the requested MPN is kept and a mismatch is a bundle conflict; a superseded extraction is stale |
+| 41 | a `javascript:` product link, a `data:` datasheet link and control/bidi characters became sourcing facts | links pass `safeExternalHref` (HTTPS pages; HTTP/HTTPS documents; no credentials, whitespace, control characters or blocked hosts); vendor text passes `inertExternalText` |
+| 42 | `quarantineText` accepted any media type and size unless it was declared KiCad; adapter paging had no record ceiling and an adapter ignoring its signal ran forever | a text media-type allowlist, the text byte ceiling for every type, s-expression preflight whenever content looks like one; 50 000-record ceiling; every page and retry wait races the deadline |
+| 43 | NaN, negative, infinite and fractional archive counts passed the budget | only non-negative safe integers are accepted |
+
+Recorded, not changed: pricing currency is USD (every registered source's default); an offer priced only in another
+currency has no unit price rather than a converted one. Two exact MPNs under one catalog part share one
+`(part_id, distributor)` cache row and may displace each other's cached offer — never mislabel it. An independent
+adversarial review of this diff runs before the next commit; its verified findings are fixed there.

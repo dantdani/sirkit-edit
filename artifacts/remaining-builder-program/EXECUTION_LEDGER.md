@@ -1331,3 +1331,23 @@ _(discovery, reproduction and results appended below as they are observed)_
 - The skeptics corrected several scout claims and test designs before anything was built (e.g. a proposed CSV fix that
   would have corrupted negative pick-and-place coordinates; tests placed under `lib/__tests__`, which vitest never runs).
 - Recorded as `artifacts/ai-control-plane-b19/import-security-matrix.md`; batches I5b–I5e follow, each test-first.
+
+### B19 I5b — the acquisition path, hardened (2026-09-13 local, solo; this commit)
+
+- Twelve matrix rows, each reproduced first: 40 of 67 new cases failed on the unchanged code; 27 baselines pass before and
+  after. One harness mistake found and fixed before recording: connector cases had been placed in a file whose hoisted
+  module mocks replaced the connectors, so they briefly tested fakes; they moved to their own unmocked file.
+- High (row 01): connectors answered with a different part's offer and the pricing layer relabelled it; now exact-MPN only
+  (OD-34), no relabelling, stored offers carry their MPN (migration `0029_part_offers_mpn`, registered; migration pins moved
+  by one registered entry, every contract unchanged; schema parity holds).
+- Medium (row 03): vendor-derived lifecycle re-stamped on every read and never cleared; now live-only and expired by the
+  purge at the strictest bounded retention.
+- Also: per-exact-MPN pricing keys (36), quantity- and currency-correct unit prices and totals (20), lifecycle negations
+  (26), unambiguous number parsing (51), exact-MPN bundle identity with confusable refusal (27a), complete conflict
+  properties (39), requested-MPN and superseded-revision tracking (40), inert vendor text and safe links (41), ingestion
+  media-type/size/record/deadline bounds (42), archive budget integer checks (43).
+- Tests: exact-MPN connectors 7/7, exact-MPN pricing 5/5, vendor values 26/26, lifecycle retention 2/2, quarantine
+  hardening 16/16, ingestion bounds 16/16, BOM per-MPN pricing 1/1 (all new, in the CI list), offer retention on migrated
+  PGlite 7/7 (2 new cases, database-delivery job); database suites 55 passed / 3 skipped; broad run (now including app/lib/db
+  and app/lib/component-selection): 306 files, 3867 passed, 13 expected skips; tsc 0; eslint clean on the changed files.
+- An adversarial review workflow over this exact diff is running; its verified findings are fixed in the next commit.

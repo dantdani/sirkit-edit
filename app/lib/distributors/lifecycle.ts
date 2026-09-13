@@ -50,7 +50,9 @@ export function mapLifecycleString(raw: string | null | undefined): LifecycleSta
   if (s.includes("not for new design") || /\bnrnd\b/.test(s) || s.includes("not recommended")) {
     return "nrnd";
   }
-  if (s.includes("active") || s.includes("in production") || s.includes("preferred")) {
+  // [B19-D I5b row 26] a negated term ("Inactive", "Not Active", "Non-Active") is never active — and not a known state either
+  if (/\b(?:in|not|non)[\s-]?active\b/.test(s)) return "unknown";
+  if (/\bactive\b/.test(s) || s.includes("in production") || s.includes("preferred")) {
     return "active";
   }
   return "unknown";

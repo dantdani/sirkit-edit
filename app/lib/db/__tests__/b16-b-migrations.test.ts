@@ -2,7 +2,7 @@
  * B16-B — the supported migration mechanism, proven on a disposable in-process
  * PostgreSQL (PGlite, real PostgreSQL 17) in the DEFAULT deterministic suite:
  *
- *  - manifest integrity (journal + registered 0027/0028; nothing unregistered,
+ *  - manifest integrity (journal + registered 0027/0028/0029; nothing unregistered,
  *    nothing missing, strictly ascending, no duplicates);
  *  - clean database → every migration applied, ledger complete, prerequisites reported;
  *  - upgrade from the last journal-covered schema (0000–0026) → the SAME
@@ -31,13 +31,14 @@ async function fresh(options?: { shims?: boolean }): Promise<DisposablePostgres>
 afterEach(async () => { for (const db of open.splice(0)) await db.close(); });
 
 describe("B16-B §manifest — journal + registered migrations, refusing disagreement", () => {
-  it("covers every .sql file exactly once, in strictly ascending order, with 0027/0028 registered after the journal", () => {
+  it("covers every .sql file exactly once, in strictly ascending order, with 0027/0028/0029 registered after the journal", () => {
     const manifest = loadMigrationManifest(MIGRATIONS_DIR);
     expect(manifest.journal).toMatchObject({ version: "7", dialect: "postgresql", entryCount: 27 });
-    expect(manifest.entries).toHaveLength(29);
-    expect(manifest.entries.map((entry) => entry.ordinal)).toEqual([...Array(29).keys()]);
-    expect(manifest.entries.slice(27).map((entry) => [entry.name, entry.source])).toEqual([["0027_project_membership", "registered"], ["0028_bom_project_ownership", "registered"]]);
-    expect(REGISTERED_POST_JOURNAL_MIGRATIONS).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    // [B19-D I5b] reviewed pin move: 0029_part_offers_mpn is a new registered, forward-only migration
+    expect(manifest.entries).toHaveLength(30);
+    expect(manifest.entries.map((entry) => entry.ordinal)).toEqual([...Array(30).keys()]);
+    expect(manifest.entries.slice(27).map((entry) => [entry.name, entry.source])).toEqual([["0027_project_membership", "registered"], ["0028_bom_project_ownership", "registered"], ["0029_part_offers_mpn", "registered"]]);
+    expect(REGISTERED_POST_JOURNAL_MIGRATIONS).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     for (const entry of manifest.entries) {
       expect(entry.checksum).toMatch(/^sha256:[0-9a-f]{64}$/);
       expect(entry.statements.length).toBeGreaterThan(0);
@@ -99,7 +100,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     expect(before.tables.some((table) => table.name === "project_members")).toBe(false);
     expect(before.columns.some((column) => column.table === "bom_snapshots" && column.name === "tenant_id")).toBe(false);
     const upgrade = await migrateDatabase(upgraded, { manifest });
-    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     expect(upgrade.skipped).toHaveLength(27);
     expect(schemaFingerprint(await captureSchemaSnapshot(upgraded))).toBe(cleanPrint);
   }, 60_000);
@@ -114,7 +115,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     expect(second.ledger).toEqual(first.ledger);
     const status = await migrationStatus(db, manifest);
     expect(status).toMatchObject({ pending: [], drift: [], unknown: [], gap: false });
-    expect(status.applied).toHaveLength(29);
+    expect(status.applied).toHaveLength(30); // [B19-D I5b] 0029_part_offers_mpn
   }, 60_000);
 
   it("checksum drift is refused BEFORE anything is applied (an edited 0027 after it was applied)", async () => {
@@ -142,12 +143,12 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     const status = await migrationStatus(db, manifest);
     expect(status.applied).toHaveLength(26);
     expect(status.applied.map((row) => row.name)).not.toContain(target.name);
-    expect(status.pending.map((entry) => entry.name)).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership"]);
+    expect(status.pending.map((entry) => entry.name)).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     const snapshot = await captureSchemaSnapshot(db);
     expect(snapshot.tables.some((table) => table.name === "parts_atomic_links")).toBe(false); // the first chunk was rolled back with the failed transaction
     expect(snapshot.tables.some((table) => table.name === "project_members")).toBe(false);
     const resumed = await migrateDatabase(db, { manifest });
-    expect(resumed.applied).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership"]);
+    expect(resumed.applied).toEqual([target.name, "0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     expect((await migrationStatus(db, manifest)).pending).toEqual([]);
     expect((await captureSchemaSnapshot(db)).tables.some((table) => table.name === "parts_atomic_links")).toBe(true);
   }, 60_000);
@@ -170,7 +171,8 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
         }
       },
     });
-    expect(result.applied).toEqual(["0027_project_membership"]);
+    // [B19-D I5b] 0029 follows the raced 0028 and is applied by "us" as usual
+    expect(result.applied).toEqual(["0027_project_membership", "0029_part_offers_mpn"]);
     expect(result.skipped).toContain("0028_bom_project_ownership");
     expect((await migrationStatus(db, manifest)).pending).toEqual([]);
   }, 60_000);
@@ -184,7 +186,7 @@ describe("B16-B §clean / upgrade / replay / drift / interruption (disposable Po
     await db.query(`DELETE FROM "${MIGRATION_LEDGER_TABLE}" WHERE name = $1`, ["9999_from_a_future_version"]);
     await db.query(`DELETE FROM "${MIGRATION_LEDGER_TABLE}" WHERE name = $1`, [manifest.entries[2]!.name]);
     await expect(migrateDatabase(db, { manifest })).rejects.toMatchObject({ code: "DB_MIGRATION_LEDGER_GAP" });
-    expect(reconcileLedger(manifest, [{ name: manifest.entries[0]!.name, checksum: manifest.entries[0]!.checksum, applied_at: "", statement_count: 1, runner_version: "x" }]).pending).toHaveLength(28);
+    expect(reconcileLedger(manifest, [{ name: manifest.entries[0]!.name, checksum: manifest.entries[0]!.checksum, applied_at: "", statement_count: 1, runner_version: "x" }]).pending).toHaveLength(29); // [B19-D I5b] 0029_part_offers_mpn
   }, 60_000);
 
   it("dry run plans without applying", async () => {
@@ -223,7 +225,7 @@ describe("B16-B §baseline adoption — databases that pre-date the ledger (revi
     await expect(migrateDatabase(db, { manifest })).rejects.toThrow(/already exists/);
     const status = await migrationStatus(db, manifest);
     expect(status.applied).toHaveLength(0);
-    expect(status.pending).toHaveLength(29);
+    expect(status.pending).toHaveLength(30); // [B19-D I5b] 0029_part_offers_mpn
     expect((await captureSchemaSnapshot(db)).tables.length).toBeGreaterThan(100);
   }, 120_000);
 
@@ -238,9 +240,9 @@ describe("B16-B §baseline adoption — databases that pre-date the ledger (revi
     const status = await migrationStatus(db, manifest);
     expect(status.applied.map((row) => row.name)).toEqual(manifest.entries.slice(0, 27).map((entry) => entry.name));
     expect(status.applied.every((row) => row.runner_version === BASELINE_RUNNER_VERSION)).toBe(true);
-    expect(status.pending.map((entry) => entry.name)).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    expect(status.pending.map((entry) => entry.name)).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     const upgrade = await migrateDatabase(db, { manifest });
-    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership"]);
+    expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]);
     const clean = await fresh();
     await migrateDatabase(clean, { manifest });
     expect(schemaFingerprint(await captureSchemaSnapshot(db))).toBe(schemaFingerprint(await captureSchemaSnapshot(clean)));

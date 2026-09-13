@@ -27,6 +27,7 @@ import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 import { makeCoalescer } from "../acquisition/admission-control";
+import { sameExactMpn } from "../atomic/identity";
 
 const SEARCH_URL = "https://api.mouser.com/api/v1/search/partnumber";
 // [B19-A I3] the registry derives this from Mouser's documented 30 requests a minute (60 000 ms / 30).
@@ -108,23 +109,21 @@ function mapPart(requestedMpn: string, json: unknown): PartPricing | null {
   const parts = asArray(searchResults.Parts);
   if (parts.length === 0) return null;
 
-  // Prefer an exact (case-insensitive) MPN match; fall back to the first result.
-  const wanted = requestedMpn.trim().toLowerCase();
-  const exact = parts.find(
-    (p) => asString(asRecord(p).ManufacturerPartNumber)?.toLowerCase() === wanted,
-  );
-  const part = asRecord(exact ?? parts[0]);
+  // [B19-D I5b row 01] only the part whose published MPN IS the requested one — never the first result as a stand-in
+  const exact = parts.find((p) => sameExactMpn(asString(asRecord(p).ManufacturerPartNumber), requestedMpn));
+  if (!exact) return null;
+  const part = asRecord(exact);
 
   const priceBreaks = mapPriceBreaks(asArray(part.PriceBreaks));
   const lifecycleRaw = asString(part.LifecycleStatus);
 
   return {
     distributor: "mouser",
-    mpn: asString(part.ManufacturerPartNumber) ?? requestedMpn,
+    mpn: asString(part.ManufacturerPartNumber)!,
     manufacturer: asString(part.Manufacturer),
     description: asString(part.Description),
     datasheet: asString(part.DataSheetUrl),
-    // AvailabilityInStock is a string like "1234" / "1,234"; asNumber strips it.
+    // AvailabilityInStock is a string like "1234" / "1,234"; asNumber reads only an unambiguous form.
     inStock: asNumber(part.AvailabilityInStock),
     minOrderQty: asNumber(part.MinOrderQty) ?? asNumber(part.Mult),
     priceBreaks,

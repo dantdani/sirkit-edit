@@ -18,7 +18,8 @@
  * bundle's `engineering.proven` is always false.
  */
 import type { EngineeringFacet, ExtractionMethod, SourceClass } from "../atomic/types";
-import { normalizeMpnSearchKey } from "../atomic/identity";
+import { canonicalExactMpn } from "../atomic/identity";
+import { inertExternalText, safeExternalHref } from "../net/external-href";
 import { canonicalJson, contentId, deepFreeze, sha256 } from "../atomic/stable";
 import type { PartPricing } from "../distributors/types";
 import { SOURCE_REGISTRY, SOURCE_REGISTRY_VERSION, sourceForDistributorName, type AcquisitionSourceId } from "./source-registry";
@@ -78,7 +79,7 @@ export interface ExternalObservation {
   };
 }
 
-export function observationFromPricing(pricing: PartPricing, input: { rawContentHash: string | null; retrievedAt: Date }): Readonly<ExternalObservation> {
+export function observationFromPricing(pricing: PartPricing, input: { rawContentHash: string | null; retrievedAt: Date; requestedMpn?: string }): Readonly<ExternalObservation> {
   const entry = sourceForDistributorName(pricing.distributor);
   if (!entry) throw new Error(`${pricing.distributor} is not a registered source`);
   if (entry.state.status !== "enabled") throw new Error(`${entry.displayName} is ${entry.state.status} in the source registry; its data is not acquired`);
@@ -90,25 +91,27 @@ export function observationFromPricing(pricing: PartPricing, input: { rawContent
     registryVersion: SOURCE_REGISTRY_VERSION,
     sourceClass: entry.sourceClass,
     authorityClass: entry.authorityClass,
-    queriedMpn: pricing.mpn,
+    // [B19-D I5b row 40] what was ASKED, kept beside what the vendor answered with
+    queriedMpn: input.requestedMpn?.trim() || pricing.mpn,
     retrievedAt,
     expiresAt: new Date(input.retrievedAt.getTime() + entry.freshness.offerTtlMs).toISOString(),
     rawContentHash: input.rawContentHash,
     rawRetained: false,
     normalizerVersion: DISTRIBUTOR_NORMALIZER_VERSION,
     values: {
-      mpn: pricing.mpn,
-      manufacturer: pricing.manufacturer,
-      description: pricing.description,
-      datasheetUrl: pricing.datasheet,
-      productUrl: pricing.productUrl,
-      distributorSku: pricing.sku ?? null,
-      packaging: pricing.package,
+      // [B19-D I5b row 41] vendor text is made inert and only plain web links survive; a dropped value is null, never "fixed"
+      mpn: pricing.mpn.trim(),
+      manufacturer: inertExternalText(pricing.manufacturer, 200),
+      description: inertExternalText(pricing.description, 500),
+      datasheetUrl: safeExternalHref(pricing.datasheet, "document"),
+      productUrl: safeExternalHref(pricing.productUrl, "page"),
+      distributorSku: inertExternalText(pricing.sku ?? null, 100),
+      packaging: inertExternalText(pricing.package, 100),
       stock: pricing.inStock,
       minimumOrderQuantity: pricing.minOrderQty,
       priceBreaks: pricing.priceBreaks.map((item) => ({ quantity: item.qty, unitPrice: item.price, currency: item.currency })),
       lifecycle: pricing.lifecycleStatus,
-      lifecycleRaw: pricing.lifecycleRaw,
+      lifecycleRaw: inertExternalText(pricing.lifecycleRaw, 100),
     },
   };
   return deepFreeze({ id: contentId("observation", sha256(canonicalJson(body))), ...body });
@@ -140,6 +143,10 @@ export interface NormalizedCandidate {
   facts: CandidateFact[];
   observationIds: string[];
   expiresAt: string | null;
+  /** [B19-D I5b row 40] read from a document revision that a newer revision has replaced */
+  superseded: boolean;
+  /** [B19-D I5b row 40] the MPN that was asked for, when it differs from the one the source answered with */
+  requestedMpn: string | null;
 }
 
 function classify(property: string, sourceClass: SourceClass, method: ExtractionMethod): { establishes: FactEstablishes; reason?: string } {
@@ -160,10 +167,11 @@ function sortFacts(facts: CandidateFact[]): CandidateFact[] {
   return [...facts].sort((a, b) => canonicalJson([a.property, a.sourceId, a.observationId, a.locator, a.value]).localeCompare(canonicalJson([b.property, b.sourceId, b.observationId, b.locator, b.value])));
 }
 
-function candidate(exactMpn: string, facts: CandidateFact[], observationIds: string[], expiresAt: string | null): Readonly<NormalizedCandidate> {
-  const identityKey = normalizeMpnSearchKey(exactMpn);
-  if (!identityKey) throw new Error("A candidate needs an MPN");
-  const body = { schemaVersion: QUARANTINE_SCHEMA_VERSION, identityKey, exactMpn, facts: sortFacts(facts), observationIds: [...observationIds].sort(), expiresAt } as const;
+function candidate(exactMpn: string, facts: CandidateFact[], observationIds: string[], expiresAt: string | null, extra: { superseded?: boolean; requestedMpn?: string | null } = {}): Readonly<NormalizedCandidate> {
+  // [B19-D I5b row 27a] identity is the EXACT published MPN (every suffix character counts; a confusable spelling is refused),
+  // never the letters-and-digits search key that merged MAX3232CSE+ with MAX3232CSE
+  const identityKey = canonicalExactMpn(exactMpn);
+  const body = { schemaVersion: QUARANTINE_SCHEMA_VERSION, identityKey, exactMpn, facts: sortFacts(facts), observationIds: [...observationIds].sort(), expiresAt, superseded: extra.superseded === true, requestedMpn: extra.requestedMpn ?? null } as const;
   return deepFreeze({ id: contentId("candidate", sha256(canonicalJson(body))), ...body });
 }
 
@@ -187,7 +195,15 @@ export function candidateFromObservation(observation: ExternalObservation): Read
   push("minimum_order_quantity", "sourcing", v.minimumOrderQuantity);
   push("price_breaks", "sourcing", v.priceBreaks);
   if (v.lifecycle !== "unknown") push("lifecycle", "lifecycle", v.lifecycle);
-  return candidate(v.mpn, facts, [observation.id], observation.expiresAt);
+  // [B19-D I5b row 40] an answer spelled differently from the request records the request, and the bundle reports the mismatch
+  let requestedMpn: string | null = null;
+  try {
+    requestedMpn = canonicalExactMpn(observation.queriedMpn) === canonicalExactMpn(v.mpn) ? null : observation.queriedMpn;
+  } catch {
+    requestedMpn = observation.queriedMpn;
+  }
+  if (requestedMpn !== null) facts.push({ ...base, sourceId: "request", property: "mpn", facet: "identity", value: requestedMpn, establishes: "identity_hint", locator: "request" });
+  return candidate(v.mpn, facts, [observation.id], observation.expiresAt, { requestedMpn });
 }
 
 /**
@@ -203,6 +219,9 @@ export function candidateFromExtraction(input: {
   parserVersion: string;
   documentHash: string;
   facts: Array<{ property: string; facet: EngineeringFacet; value: string | number | boolean; locator: string }>;
+  /** [B19-D I5b row 40] the document's revision, and the revision that replaced it, if any */
+  sourceRevision?: string;
+  supersededBy?: string | null;
 }): Readonly<NormalizedCandidate> {
   if (!/^[0-9a-f]{64}$/.test(input.documentHash)) throw new Error("documentHash must be a lowercase SHA-256");
   if (!input.parserVersion.trim()) throw new Error("an extraction must name its parser version");
@@ -211,7 +230,7 @@ export function candidateFromExtraction(input: {
     if (!fact.locator.trim()) throw new Error(`fact ${fact.property} needs a source locator`);
     return { ...fact, observationId: documentId, sourceId: input.sourceId, sourceClass: input.sourceClass, method: input.method, parserVersion: input.parserVersion, ...classify(fact.property, input.sourceClass, input.method) };
   });
-  return candidate(input.exactMpn, facts, [documentId], null);
+  return candidate(input.exactMpn, facts, [documentId], null, { superseded: typeof input.supersededBy === "string" && input.supersededBy.trim() !== "" });
 }
 
 // ── 3. Verified evidence bundle ──────────────────────────────────────────────
@@ -241,7 +260,8 @@ export interface EvidenceBundle {
 }
 
 /** Properties whose disagreement across sources is a conflict a reviewer must resolve (prices and stock legitimately differ). */
-const CONFLICT_PROPERTIES = ["manufacturer", "lifecycle", "package", "pin_mapping", "footprint", "symbol"] as const;
+// [B19-D I5b rows 39, 40] every engineering property, plus identity and lifecycle, and a requested-versus-answered MPN
+const CONFLICT_PROPERTIES = [...new Set(["mpn", "manufacturer", "lifecycle", ...ENGINEERING_PROPERTIES])] as const;
 
 function conflictKey(property: string, value: CandidateFact["value"]): string {
   const text = typeof value === "string" ? value : canonicalJson(value);
@@ -282,7 +302,7 @@ export function buildEvidenceBundle(candidates: readonly NormalizedCandidate[], 
   if (!has("footprint")) missing.push("footprint");
   if (!has("pin_mapping")) missing.push("pin-to-pad mapping");
 
-  const stale = candidates.filter((item) => item.expiresAt !== null && Date.parse(item.expiresAt) <= now.getTime()).flatMap((item) => item.observationIds);
+  const stale = candidates.filter((item) => item.superseded || (item.expiresAt !== null && Date.parse(item.expiresAt) <= now.getTime())).flatMap((item) => item.observationIds);
   const body: Omit<EvidenceBundle, "id"> = {
     schemaVersion: QUARANTINE_SCHEMA_VERSION,
     identityKey,

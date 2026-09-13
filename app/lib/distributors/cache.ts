@@ -10,9 +10,9 @@
  * Every reader of stored offers applies `isOfferServable`, and `purgeExpiredOffers` deletes what may no longer be kept.
  */
 
-import { and, eq, gte, inArray, not, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lt, ne, not, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { partOffers, type PartOffer } from "../db/schema";
+import { partOffers, parts, type PartOffer } from "../db/schema";
 import { cheapestUnitPrice, type DistributorName, type PartPricing, type PriceBreak } from "./types";
 import { SOURCE_IDS, SOURCE_REGISTRY, sourceForDistributorName } from "../acquisition/source-registry";
 
@@ -140,7 +140,7 @@ function offerRowToPricing(row: PartOffer): PartPricing {
     // The union is wider than the stored string; the writers only ever persist
     // valid distributor names, so this cast is safe.
     distributor: row.distributor as PartPricing["distributor"],
-    mpn: "", // unknown from the row alone — the aggregator fills it from input
+    mpn: row.mpn ?? "", // [B19-D I5b] the exact MPN stored with the offer; "" (never matches) for rows stored before 0029
     manufacturer: null,
     description: null,
     datasheet: null,
@@ -181,6 +181,15 @@ export async function purgeExpiredOffers(now: Date = new Date()): Promise<number
   const deleted = kept
     ? await db.delete(partOffers).where(not(kept)).returning({ id: partOffers.id })
     : await db.delete(partOffers).returning({ id: partOffers.id });
+  // [B19-D I5b row 03] a lifecycle status the pricing layer derived from vendor offers (it stamps `last_refreshed_at`) expires
+  // with them: its provenance mixes sources, so it is kept no longer than the STRICTEST bounded retention. KiCad-derived
+  // statuses carry no stamp and are untouched.
+  const strictest = Math.min(...SOURCE_IDS.map((id) => SOURCE_REGISTRY[id]).filter((entry) => entry.license.storage === "bounded" && entry.license.retentionMaxMs > 0).map((entry) => entry.license.retentionMaxMs));
+  if (Number.isFinite(strictest)) {
+    await db.update(parts)
+      .set({ lifecycleStatus: "unknown", lastRefreshedAt: null })
+      .where(and(isNotNull(parts.lastRefreshedAt), lt(parts.lastRefreshedAt, new Date(now.getTime() - strictest)), ne(parts.lifecycleStatus, "unknown")));
+  }
   return deleted.length;
 }
 
@@ -238,6 +247,7 @@ export async function putCachedOffer(
   const values = {
     partId,
     distributor,
+    mpn: offer.mpn || null, // [B19-D I5b] the exact MPN the offer answers for
     distributorSku: offer.sku ?? null,
     priceBreaks: offer.priceBreaks,
     stock: offer.inStock ?? null,
@@ -254,6 +264,7 @@ export async function putCachedOffer(
     .onConflictDoUpdate({
       target: [partOffers.partId, partOffers.distributor],
       set: {
+        mpn: values.mpn,
         distributorSku: values.distributorSku,
         priceBreaks: values.priceBreaks,
         stock: values.stock,

@@ -273,6 +273,8 @@ export const partOffers = pgTable(
       .references(() => parts.id, { onDelete: "cascade" }),
     /** "digikey" | "mouser" | "octopart" | "lcsc". */
     distributor: text("distributor").notNull(),
+    /** [B19-D I5b] The exact published MPN this offer answers for. NULL on rows stored before 0029: never served. */
+    mpn: text("mpn"),
     distributorSku: text("distributor_sku"),
     priceBreaks: jsonb("price_breaks")
       .$type<Array<{ qty: number; price: number; currency: string }>>()

@@ -26,6 +26,7 @@ import { getCached, setCached } from "./cache";
 import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1] the bounded, validated egress path
 import { describeFailure, DistributorRequestError } from "./types";
 import { makeCoalescer } from "../acquisition/admission-control";
+import { sameExactMpn } from "../atomic/identity";
 
 const GRAPHQL_URL = "https://api.nexar.com/graphql";
 
@@ -155,7 +156,8 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
 
 function mapPart(requestedMpn: string, part: Record<string, unknown>): PartPricing | null {
   const mpn = asString(part.mpn);
-  if (!mpn) return null;
+  // [B19-D I5b row 01] a search result for a different (or confusably spelled) MPN answers nothing
+  if (!mpn || !sameExactMpn(mpn, requestedMpn)) return null;
 
   const sellers = asArray(part.sellers);
   const priceBreaks: PriceBreak[] = [];

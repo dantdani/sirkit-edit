@@ -25,6 +25,7 @@ import { distributorJson, type DistributorEgress } from "./egress"; // [B19-B I1
 import { describeFailure, DistributorRequestError } from "./types";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
 import { makeCoalescer } from "../acquisition/admission-control";
+import { sameExactMpn } from "../atomic/identity";
 
 const TOKEN_URL = "https://api.digikey.com/v1/oauth2/token";
 const SEARCH_URL = "https://api.digikey.com/products/v4/search/keyword";
@@ -142,12 +143,10 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
   const products = asArray(root.Products);
   if (products.length === 0) return null;
 
-  // Prefer an exact (case-insensitive) MPN match; fall back to the first result.
-  const wanted = requestedMpn.trim().toLowerCase();
-  const exact = products.find(
-    (p) => asString(asRecord(p).ManufacturerProductNumber)?.toLowerCase() === wanted,
-  );
-  const product = asRecord(exact ?? products[0]);
+  // [B19-D I5b row 01] only the product whose published MPN IS the requested one — never the first result as a stand-in
+  const exact = products.find((p) => sameExactMpn(asString(asRecord(p).ManufacturerProductNumber), requestedMpn));
+  if (!exact) return null;
+  const product = asRecord(exact);
 
   const priceBreaks = mapPriceBreaks(asArray(product.StandardPricing));
   const manufacturer = asString(asRecord(product.Manufacturer).Name);
@@ -162,7 +161,7 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
 
   return {
     distributor: "digikey",
-    mpn: asString(product.ManufacturerProductNumber) ?? requestedMpn,
+    mpn: asString(product.ManufacturerProductNumber)!,
     manufacturer,
     description,
     datasheet: asString(product.DatasheetUrl),

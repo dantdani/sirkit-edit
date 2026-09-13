@@ -73,22 +73,41 @@ export function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-/** Coerce numbers, numeric strings, and currency-formatted strings ("$1.23"). */
+/**
+ * Coerce numbers and numeric strings, including a leading currency sign ("$1.23") and US thousands separators ("1,234.56").
+ * [B19-D I5b row 51] Only an unambiguous form is read: a decimal comma ("0,34"), a European group separator ("1.234,56"),
+ * or digits mixed with text ("12abc34") are NOT numbers — they used to be read by deleting every other character.
+ */
 export function asNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
-    const cleaned = value.replace(/[^0-9.eE+-]/g, "");
-    if (cleaned === "") return null;
-    const n = Number(cleaned);
+    const match = /^\s*[$\u00a3\u20ac\u00a5]?\s*(-?)(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?\s*$/.exec(value);
+    if (!match) return null;
+    const n = Number(`${match[1]}${match[2]!.replace(/,/g, "")}${match[3] ?? ""}`);
     return Number.isFinite(n) ? n : null;
   }
   return null;
 }
 
-/** Cheapest unit price across a set of price breaks, or null when none exist. */
-export function cheapestUnitPrice(breaks: PriceBreak[]): number | null {
-  const prices = breaks.map((b) => b.price).filter((p) => Number.isFinite(p) && p > 0);
-  return prices.length > 0 ? Math.min(...prices) : null;
+/** [B19-D I5b row 20] The one currency Sirkit compares and totals prices in (every registered source's default). */
+export const PRICING_CURRENCY = "USD";
+
+/**
+ * The unit price that applies at `quantity` (default 1), in ONE currency (default USD).
+ * [B19-D I5b row 20] It used to be the minimum over EVERY break — a 10 000-piece break priced a one-off line, and a GBP or
+ * JPY number could win. Now: among the breaks in the currency, those whose quantity is reachable (≤ `quantity`) apply and
+ * the cheapest wins (several sellers may quote); when none is reachable, the smallest order's price applies (the order
+ * minimum). No break in the currency is no price.
+ */
+export function cheapestUnitPrice(breaks: PriceBreak[], options: { quantity?: number; currency?: string } = {}): number | null {
+  const quantity = Number.isFinite(options.quantity) && (options.quantity ?? 0) > 0 ? options.quantity! : 1;
+  const currency = (options.currency ?? PRICING_CURRENCY).trim().toUpperCase();
+  const usable = breaks.filter((b) => Number.isFinite(b.price) && b.price > 0 && Number.isFinite(b.qty) && b.qty > 0 && (b.currency ?? PRICING_CURRENCY).trim().toUpperCase() === currency);
+  if (usable.length === 0) return null;
+  const reachable = usable.filter((b) => b.qty <= quantity);
+  if (reachable.length > 0) return Math.min(...reachable.map((b) => b.price));
+  const smallest = Math.min(...usable.map((b) => b.qty));
+  return Math.min(...usable.filter((b) => b.qty === smallest).map((b) => b.price));
 }
 
 /**

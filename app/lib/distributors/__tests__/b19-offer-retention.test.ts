@@ -101,3 +101,34 @@ describe("[B19-A I3] nothing is kept longer than its source's retention", () => 
     expect((await rowsFor(partId)).map((row) => row.distributor)).toEqual(["octopart-aggregated"]);
   });
 });
+
+describe("[B19-D I5b rows 01, 36] a stored offer carries the exact MPN it answers for", () => {
+  it("putCachedOffer stores the offer's MPN and getCachedOffersForParts returns it", async () => {
+    await putCachedOffer(partId, "digikey", offer("digikey"));
+    const served = await getCachedOffersForParts([partId]);
+    expect(served.get(partId)?.get("digikey")?.mpn).toBe("NE555DR");
+    const stored = await pg.db.query<{ mpn: string | null }>(`SELECT mpn FROM part_offers WHERE part_id = $1`, [partId]);
+    expect(stored.rows.map((row) => row.mpn)).toEqual(["NE555DR"]);
+  });
+});
+
+describe("[B19-D I5b row 03] a vendor-derived lifecycle on a part expires with its sources", () => {
+  it("purgeExpiredOffers clears a vendor-stamped lifecycle older than the strictest retention, and leaves KiCad-derived and recent ones", async () => {
+    const library = await pg.db.query<{ id: string }>(`SELECT library_id AS id FROM parts WHERE id = $1`, [partId]);
+    const make = async (name: string, status: string, refreshedAgoMs: number | null) => {
+      const row = await pg.db.query<{ id: string }>(
+        `INSERT INTO parts (library_id, name, properties, pins, symbol_raw, lifecycle_status, last_refreshed_at) VALUES ($1, $2, '{}'::jsonb, '[]'::jsonb, '', $3, $4) RETURNING id`,
+        [library.rows[0]!.id, name, status, refreshedAgoMs === null ? null : new Date(Date.now() - refreshedAgoMs).toISOString()],
+      );
+      return row.rows[0]!.id;
+    };
+    const stale = await make("stale-vendor", "obsolete", 2 * HOUR);
+    const recent = await make("recent-vendor", "nrnd", 10 * 60_000);
+    const kicad = await make("kicad-derived", "active", null);
+    await purgeExpiredOffers();
+    const read = async (id: string) => (await pg.db.query<{ status: string; refreshed: string | null }>(`SELECT lifecycle_status AS status, last_refreshed_at AS refreshed FROM parts WHERE id = $1`, [id])).rows[0]!;
+    expect(await read(stale)).toMatchObject({ status: "unknown", refreshed: null });
+    expect((await read(recent)).status).toBe("nrnd");
+    expect(await read(kicad)).toMatchObject({ status: "active", refreshed: null });
+  });
+});
