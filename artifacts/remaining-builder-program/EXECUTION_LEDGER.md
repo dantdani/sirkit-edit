@@ -1600,3 +1600,15 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Recorded, not fixed: the Nexar pricing path has the same GraphQL-error handling gap (a batch with errors is remembered as
   "no exact match"); it needs its own decision on partial batches. Memo scope is tenant plus project (stricter than tenant).
 
+### B19-E E2 CI — the type-check step ran out of memory (2026-09-13 local; this commit)
+
+- CI on 5c8de9d failed in both workflows at `pnpm exec tsc --noEmit`: V8 aborted with "JavaScript heap out of memory" at about
+  2 GB (prompt-to-gerber and benchmark-core); database-delivery and page-browser-e2e passed. Not a type error, and not dismissed:
+  reproduced locally with a full, non-incremental check capped at 2048 MB (the local incremental cache had hidden it).
+- Measured with `--extendedDiagnostics --incremental false`: 2dee62c 5,434 files, 625,428 types, 2.12 GB; 5c8de9d 5,446 files,
+  629,894 types, 2.19 GB, exit 0 with a 4 GB heap. E2 added 0.7% types and 65 MB — no pathological type; the project had
+  reached Node's default heap on the runner.
+- Fix: the two tsc steps run with `NODE_OPTIONS=--max-old-space-size=4096`. Resources only; no check, test or type changed.
+- The E3 workflow started before the machine restarted did not complete and left no working-tree changes; it is re-run on
+  this commit.
+
