@@ -2,10 +2,11 @@
 
 Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **PROPOSED**, **RECORDED**, **UNKNOWN**.
 
-The registry is code, not a document: `app/lib/acquisition/source-registry.ts` (version `1.0.0`). Its render is
-`source-registry.csv` in this directory, gated byte-for-byte by `app/lib/acquisition/__tests__/b19-source-registry.test.ts`
-(regenerate with `npx tsx scripts/generate-b19-source-registry.ts`). This page records where every fact came from and
-what checking the vendors' current documentation changed.
+The registry is code, not a document: `app/lib/acquisition/source-registry.ts` (version `1.1.0`). Version `1.0.0` was
+B19-A I3; `1.1.0` is B19-E E2 (section 6). Its render is `source-registry.csv` in this directory, gated byte-for-byte by
+`app/lib/acquisition/__tests__/b19-source-registry.test.ts` and `b19-e-source-registry-search.test.ts` (regenerate with
+`npx tsx scripts/generate-b19-source-registry.ts`). This page records where every fact came from and what checking the
+vendors' current documentation changed.
 
 ## 1. Documentation read at execution time (2026-09-13)
 
@@ -68,7 +69,7 @@ likewise approval-gated and not registered.
 | rule | enforced by | proof |
 |---|---|---|
 | hosts, deadline, body ceiling, secret query parameters | `DISTRIBUTOR_EGRESS_POLICIES` derived from the registry | `b19-connector-policy` (policy equality) and the I1 egress suite |
-| a blocked source is never constructed; a disabled one only after a reviewed registry change | `admitSource`, used by the pricing orchestrator for every client | `b19-source-registry` (admission), `b19-source-admission` (Mouser never constructed with its key set) |
+| a blocked source is never constructed; a disabled one only after a reviewed registry change | `admitSource`, used by the shared admitted clients (`app/lib/distributors/clients.ts`) that pricing and the external candidate search both build from, and by the search itself (`app/lib/acquisition/external-search.ts`) before it asks a source | `b19-source-registry` (admission), `b19-source-admission` (Mouser never constructed with its key set), `b19-e-external-search-sources` (Mouser and LCSC never constructed for a search, keys set) |
 | an operator may switch a source off, never on | `SIRKIT_ACQUISITION_DISABLED_SOURCES`; there is no enabling switch | `b19-source-admission` |
 | credentials by reference only; messages name variables, never values | `admitSource` returns values only to the constructor; refusals name variables | `b19-source-registry`, `b19-source-admission` |
 | a BOM says why a source is unavailable | `unavailableSources` replaces the hard-coded credential warnings | `b19-source-admission` |
@@ -78,6 +79,10 @@ likewise approval-gated and not registered.
 | no secret value, no wildcard host, no plain HTTP, no redirect allowance, no cached no-storage source, no serving past retention | `validateSourceRegistry`, run by the generator and the gate | eleven crafted violations, each refused |
 | the committed artifact is the registry | byte-for-byte render gate | `b19-source-registry` |
 | quotas (every registered window) and the circuit breaker | `requestAdmission` / `recordOutcome` in `distributorJson` (I3b) | `b19-admission-control`, `b19-quota-breaker-coalescing` |
+| a candidate search (`candidateSearch`) calls a registered POST operation, serves only `exact`/`keyword`, returns at most 5, declares its cost (`request`, or every `matched-parts-at-limit` for Nexar) and observes only what the source may; a source that is not enabled declares none | `validateSourceRegistry`; the connectors' `searchCandidates`; `searchExternalCandidates` | `b19-e-source-registry-search`, `b19-e-external-search` (fake servers) |
+| `agentDisclosure` is required, `unknown` for every source (OD-36), and never `permitted` for a blocked or disabled source | `validateSourceRegistry` | `b19-e-source-registry-search` |
+| the followable link a source's terms require beside its data (`attributionLink`: Nexar `https://octopart.com/`) is recorded, plain https, and required when the attribution asks for a followable link; every external hit shows it | `validateSourceRegistry`; `searchExternalCandidates`; the Build Library's external hits | `b19-e-source-registry-search`, `b19-e-external-search`, `b19-e-build-library-external-search` |
+| the agent purpose uses at most 25% of every quota window while a person's search still admits (OD-40); meters stay per process | `requestAdmission(…, purpose)` / `previewAdmission` | `b19-e-admission-purpose-share`, `b19-e-external-search` (metered through the connectors) |
 
 ## 5. Recorded, not enforced here
 
@@ -92,3 +97,23 @@ likewise approval-gated and not registered.
   in the product are B19-E (I6).
 - Optional live contract checks against the real APIs are not run here (no credentials in CI); they belong to the
   chapter's validation increment and stay opt-in.
+
+## 6. Version 1.1.0 (B19-E E2): the bounded candidate search
+
+Added in one revision so the version moves once:
+
+- **`candidateSearch`** for DigiKey (the keyword search, `Limit` at most 5, cost one request) and Nexar (one `supSearchMpn`
+  or `supSearch` query, limit at most 5, reserving every matched part it can return); `null` for Mouser (disabled, OD-32)
+  and LCSC (blocked). The CSV column is `candidate_search`.
+- **`license.agentDisclosure`**: `unknown` for every source (OD-36). No agent tool exists until E6; while it is `unknown`
+  an agent may see labels only. The CSV column is `agent_disclosure`.
+- **`license.attributionLink`** ([B19-E E2 review]): Nexar's terms require a followable link to octopart.com or the part
+  page, and a Nexar hit can carry no part-page link (no offer with inventory, or a link dropped by the link policy), so
+  the link is recorded and shown with every hit. The CSV column is `attribution_link`.
+- **The shared clients.** Client construction moved from the pricing orchestrator to `app/lib/distributors/clients.ts`,
+  so pricing and `app/lib/acquisition/external-search.ts` share one token cache and request queue per source.
+
+The search memoizes answers in process memory only, per requesting tenant and project, for the source's `offerTtlMs`, and
+writes nothing to the offer cache or any store (DigiKey: no database may be built from its data). The vendors'
+keyword-search terms were **not re-read** for 1.1.0 (no network in the implementing session), so `documentationCheckedOn`
+keeps the 2026-09-13 check and each source's notes say so (**RECORDED**, not a new check).

@@ -131,7 +131,8 @@
       "Agent autonomy"
     ],
     "app/components/editor/BuildLibraryPanel.tsx": [
-      "Close"
+      "Close",
+      "Distributor search query"
     ],
     "app/components/bom/BomView.tsx": [
       "Bypass the cache and re-fetch live pricing from all selected sources",

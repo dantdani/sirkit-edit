@@ -26,7 +26,7 @@ GET,/api/bom/notifications,auth,canonical-wrapper,authenticatedRoute,(adopted),a
 PATCH,/api/bom/notifications,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 DELETE,/api/bom/notifications,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/bom/procurement-packet,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
-POST,/api/bom,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/bom,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/bom/snapshot,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/bom/snapshot,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
 POST,/api/calculation/corners,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
@@ -92,6 +92,7 @@ POST,/api/model-simulation/readiness,auth+csrf,canonical-wrapper,authenticatedJs
 GET,/api/parts/[id]/alternates,public,canonical-wrapper,publicRoute,(adopted),adopted
 GET,/api/parts/[id],public,canonical-wrapper,publicRoute,(adopted),adopted
 GET,/api/parts/categories,public,canonical-wrapper,publicRoute,(adopted),adopted
+POST,/api/parts/external-search,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/parts/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
 GET,/api/passive-policy,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
 POST,/api/passive-policy,auth+csrf,factory,createPassivePolicyPostHandler (./handler),authenticatedJsonRoute,PENDING_MIGRATION

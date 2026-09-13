@@ -62,7 +62,8 @@ export function utcMinute(ms: number): string {
   return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
-const SERVED_FROM_WORDS: Record<OfferServedFrom, string> = {
+/** [B19-E E2] exported: the Build Library's external search labels its hits with the same words */
+export const SERVED_FROM_WORDS: Readonly<Record<OfferServedFrom, string>> = {
   live: "live",
   "process-memo": "cached (recent answer)",
   "offer-cache": "cached",

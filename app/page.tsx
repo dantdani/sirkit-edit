@@ -6224,7 +6224,7 @@ export default function Home() {
                 </ScrollArea>
               </>
             ) : mode === "build" ? (
-              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} />
+              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
             ) : (
               <>
                 <div className="p-3 border-b border-zinc-800">

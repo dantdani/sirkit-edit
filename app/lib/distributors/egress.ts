@@ -8,7 +8,7 @@
  */
 import { outboundFetch, parseOutboundJson, type OutboundPolicy, type OutboundRequest } from "../net/outbound-fetch";
 import { SOURCE_REGISTRY } from "../acquisition/source-registry";
-import { recordOutcome, requestAdmission, type RequestOutcome } from "../acquisition/admission-control";
+import { recordOutcome, requestAdmission, type AdmissionPurpose, type RequestOutcome } from "../acquisition/admission-control";
 import { sha256 } from "../atomic/stable";
 
 export type DistributorSource = "digikey" | "mouser" | "octopart";
@@ -49,7 +49,7 @@ export const DISTRIBUTOR_EGRESS_POLICIES: Readonly<Record<DistributorSource, Out
 export type DistributorJsonResult =
   /** [B19-C I4] `contentHash`: SHA-256 of the exact response bytes; `retrievedAt`: when they arrived (unix ms). */
   | { ok: true; status: number; value: unknown; contentHash: string; retrievedAt: number }
-  | { ok: false; status?: number; message: string; paused?: "quota_exhausted" | "breaker_open" };
+  | { ok: false; status?: number; message: string; paused?: "quota_exhausted" | "breaker_open"; /** [B19-E E2] when a paused source may be tried again */ retryAtMs?: number };
 
 /**
  * One request to a vendor. Never throws. A non-2xx status is a failure carrying only the status — never the vendor's body.
@@ -57,11 +57,14 @@ export type DistributorJsonResult =
  * [B19-B I3b] Before anything is sent, the request's `cost` (1 request by default; the matched parts a Nexar batch can
  * return; 0 for an OAuth token request) is admitted against the source's registered quota and its circuit breaker, and
  * refused without a request when either says no. Every request that is sent reports its outcome to the breaker.
+ * [B19-E E2] `purpose` meters the request against its purpose's share of the quota (an agent request: at most 25%, OD-40).
+ * [B19-E E2 review] `isErrorAnswer` lets a connector say a 2xx JSON answer is the vendor's error (a GraphQL `errors` answer):
+ * it is then a failure, counted by the breaker, and no value is returned. It can only turn a success into a failure.
  */
-export async function distributorJson(source: DistributorSource, request: OutboundRequest, egress: DistributorEgress = {}, cost = 1): Promise<DistributorJsonResult> {
+export async function distributorJson(source: DistributorSource, request: OutboundRequest, egress: DistributorEgress = {}, cost = 1, purpose: AdmissionPurpose = "interactive", isErrorAnswer?: (value: unknown) => boolean): Promise<DistributorJsonResult> {
   const clock = egress.clock ?? Date.now;
-  const admission = requestAdmission(source, cost, clock());
-  if (!admission.allowed) return { ok: false, message: admission.message, paused: admission.reason };
+  const admission = requestAdmission(source, cost, clock(), purpose);
+  if (!admission.allowed) return { ok: false, message: admission.message, paused: admission.reason, retryAtMs: admission.retryAtMs };
   const base = DISTRIBUTOR_EGRESS_POLICIES[source];
   const policy: OutboundPolicy = egress.deadlineMs === undefined ? base : { ...base, deadlineMs: egress.deadlineMs };
   // A non-2xx body is never read into a message, so accept any content type on the wire and judge JSON only on success.
@@ -84,8 +87,18 @@ export async function distributorJson(source: DistributorSource, request: Outbou
     return { ok: false, status: exchange.status, message: `${source}: expected JSON, received ${exchange.contentType || "no content type"}.` };
   }
   const parsed = parseOutboundJson(exchange, source);
-  settle(parsed.ok ? "success" : "failure");
-  return parsed.ok
-    ? { ok: true, status: exchange.status, value: parsed.value, contentHash: sha256(exchange.bytes), retrievedAt: clock() }
-    : { ok: false, status: exchange.status, message: parsed.message };
+  const errorAnswer = parsed.ok && isErrorAnswer !== undefined && judgedError(isErrorAnswer, parsed.value);
+  settle(parsed.ok && !errorAnswer ? "success" : "failure");
+  if (!parsed.ok) return { ok: false, status: exchange.status, message: parsed.message };
+  if (errorAnswer) return { ok: false, status: exchange.status, message: `${source}: the vendor answered with an error.` };
+  return { ok: true, status: exchange.status, value: parsed.value, contentHash: sha256(exchange.bytes), retrievedAt: clock() };
+}
+
+/** [B19-E E2 review] a judge that throws has not shown the answer is sound */
+function judgedError(isErrorAnswer: (value: unknown) => boolean, value: unknown): boolean {
+  try {
+    return isErrorAnswer(value);
+  } catch {
+    return true;
+  }
 }

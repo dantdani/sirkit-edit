@@ -14,7 +14,10 @@ import {
   asNumber,
   asRecord,
   asString,
+  candidateSearchLimit,
   cheapestUnitPrice,
+  type CandidateSearchAnswer,
+  type CandidateSearchOptions,
   type DistributorClient,
   type PartPricing,
   type PriceBreak,
@@ -50,7 +53,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     });
     // [B19-B I3b] cost 0: DigiKey's documented quota counts product requests; the token request still respects the breaker
     const res = await distributorJson("digikey", { url: TOKEN_URL, method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, egress, 0);
-    if (!res.ok) throw new DistributorRequestError(`DigiKey token request failed: ${res.message}`);
+    if (!res.ok) throw new DistributorRequestError(`DigiKey token request failed: ${res.message}`, { paused: res.paused, retryAtMs: res.retryAtMs });
     const json = asRecord(res.value);
     const accessToken = asString(json.access_token);
     if (!accessToken) throw new Error("DigiKey token response missing access_token");
@@ -81,7 +84,8 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     return run;
   }
 
-  async function searchKeyword(mpn: string): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
+  // [B19-E E2] the candidate search reuses this request: at most 5 results, metered for its purpose
+  async function searchKeyword(keywords: string, limit = 5, purpose: CandidateSearchOptions["purpose"] = "interactive"): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
     const doRequest = (accessToken: string) =>
       distributorJson("digikey", {
         url: SEARCH_URL,
@@ -91,16 +95,36 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
           Authorization: `Bearer ${accessToken}`,
           "X-DIGIKEY-Client-Id": clientId,
         },
-        body: JSON.stringify({ Keywords: mpn, Limit: 5 }),
-      }, egress);
+        body: JSON.stringify({ Keywords: keywords, Limit: candidateSearchLimit(limit) }),
+      }, egress, 1, purpose);
 
     let res = await doRequest(await getToken());
     if (!res.ok && res.status === 401) {
       // Token may have expired early — refresh once and retry.
       res = await doRequest(await getToken(true));
     }
-    if (!res.ok) throw new DistributorRequestError(`DigiKey search failed: ${res.message}`);
+    if (!res.ok) throw new DistributorRequestError(`DigiKey search failed: ${res.message}`, { paused: res.paused, retryAtMs: res.retryAtMs });
     return { value: res.value, contentHash: res.contentHash, retrievedAt: res.retrievedAt };
+  }
+
+  /** [B19-E E2] Up to 5 of DigiKey's own products for a query, each labelled live and flagged exact only when its MPN is the query. */
+  async function searchCandidates(query: string, options: CandidateSearchOptions): Promise<CandidateSearchAnswer> {
+    const limit = candidateSearchLimit(options.limit);
+    try {
+      const answer = await enqueue(() => searchKeyword(query, limit, options.purpose));
+      const hits = asArray(asRecord(answer.value).Products).slice(0, limit).flatMap((product) => {
+        const pricing = mapDigiKeyProduct(asRecord(product));
+        if (!pricing) return [];
+        const labelled: PartPricing = { ...pricing, fetchedAt: answer.retrievedAt, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt }, provenance: { servedFrom: "live", retrievedAt: answer.retrievedAt } };
+        return [{ pricing: labelled, exactMatch: sameExactMpn(pricing.mpn, query) }];
+      });
+      return { ok: true, hits, rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt };
+    } catch (err) {
+      console.error(`[digikey] candidate search failed: ${describeFailure(err)}`);
+      return err instanceof DistributorRequestError && err.paused
+        ? { ok: false, message: "paused", paused: err.paused, ...(err.retryAtMs === undefined ? {} : { retryAtMs: err.retryAtMs }) }
+        : { ok: false, message: "the search failed (details withheld)" };
+    }
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -134,7 +158,7 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     return new Map(entries.filter((e): e is [string, PartPricing] => e !== null));
   }
 
-  return { name: "digikey", lookupByMpn: lookup, lookupBatch };
+  return { name: "digikey", lookupByMpn: lookup, lookupBatch, searchCandidates };
 }
 
 /** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */
@@ -156,8 +180,13 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
   // [B19-D I5b row 01] only the product whose published MPN IS the requested one — never the first result as a stand-in
   const exact = products.find((p) => sameExactMpn(asString(asRecord(p).ManufacturerProductNumber), requestedMpn));
   if (!exact) return null;
-  const product = asRecord(exact);
+  return mapDigiKeyProduct(asRecord(exact));
+}
 
+/** One DigiKey product as a `PartPricing`, under the MPN DigiKey published; null without one. */
+function mapDigiKeyProduct(product: Record<string, unknown>): PartPricing | null {
+  const publishedMpn = asString(product.ManufacturerProductNumber);
+  if (!publishedMpn) return null;
   const priceBreaks = mapPriceBreaks(asArray(product.StandardPricing));
   const manufacturer = asString(asRecord(product.Manufacturer).Name);
   const description = asString(asRecord(product.Description).ProductDescription);
@@ -171,7 +200,7 @@ function mapProduct(requestedMpn: string, json: unknown): PartPricing | null {
 
   return {
     distributor: "digikey",
-    mpn: asString(product.ManufacturerProductNumber)!,
+    mpn: publishedMpn,
     manufacturer,
     description,
     datasheet: asString(product.DatasheetUrl),

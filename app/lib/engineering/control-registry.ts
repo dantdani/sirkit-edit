@@ -193,6 +193,8 @@ export const CONTROL_RULES: readonly ControlRule[] = Object.freeze([
   // ── build library / schematic dialogs ─────────────────────────────────────
   rule({ id: "parts.catalog-read", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^(openCategory|selectPart|backToCategories|loadMore|onRetry)$/, classification: "semantic", recordIds: ["parts.catalog-read"] }),
   rule({ id: "schematic.add-component", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^onPlace$/, classification: "semantic", recordIds: ["schematic.add-component"] }),
+  rule({ id: "parts.external-observation-read", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^(searchExternal|setExternalQuery|setExternalMode)$/, classification: "semantic", recordIds: ["parts.external-observation-read"], note: "[B19-E E2] Search distributors: mode, query and search; every hit is a labelled sourcing observation with no Place control" }),
+  rule({ id: "view.external-search-chrome", surface: "app/components/editor/BuildLibraryPanel.tsx", handler: /^setExternalOpen$/, classification: "view", note: "[B19-E E2] opens or closes the Search distributors section" }),
   rule({ id: "view.build-library", surface: "app/components/editor/BuildLibraryPanel.tsx", classification: "view", note: "search draft, close" }),
   rule({ id: "schematic.replace-component", surface: "app/components/schematic/ReplacementReviewDialog.tsx", handler: /^onApply$/, classification: "semantic", recordIds: ["schematic.replace-component"] }),
   rule({ id: "view.replacement-dialog", surface: "app/components/schematic/ReplacementReviewDialog.tsx", classification: "view", note: "cancel changes nothing" }),

@@ -62,6 +62,23 @@ export interface DistributorClient {
   name: DistributorName;
   lookupByMpn(mpn: string): Promise<PartPricing | null>;
   lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>>;
+  /**
+   * [B19-E E2] A bounded candidate search (exact MPN or keyword), at most 5 hits. Every hit is the vendor's own part, labelled
+   * live with when the vendor answered; `exactMatch` says whether its published MPN is the query (a hit is never relabelled).
+   * Never throws; never memoizes, persists or remembers a miss. Absent: the source is never searched.
+   */
+  searchCandidates?(query: string, options: CandidateSearchOptions): Promise<CandidateSearchAnswer>;
+}
+
+export type CandidateSearchOptions = { mode: "exact" | "keyword"; limit: number; purpose: "interactive" | "agent" };
+export type CandidateSearchHit = { pricing: PartPricing; exactMatch: boolean };
+export type CandidateSearchAnswer =
+  | { ok: true; hits: CandidateSearchHit[]; rawContentHash: string; retrievedAt: number }
+  | { ok: false; message: string; paused?: "quota_exhausted" | "breaker_open"; retryAtMs?: number };
+
+/** [B19-E E2] A search asks for 1 to 5 results, whatever a caller hands a connector. */
+export function candidateSearchLimit(limit: number): number {
+  return Number.isInteger(limit) ? Math.min(5, Math.max(1, limit)) : 1;
 }
 
 // ─── Parsing helpers (the `unknown` boundary) ──────────────────────────────────
@@ -124,9 +141,16 @@ export function cheapestUnitPrice(breaks: PriceBreak[], options: { quantity?: nu
  * the transport's text, the request URL or a credential.
  */
 export class DistributorRequestError extends Error {
-  constructor(message: string) {
+  /** [B19-E E2] set when the boundary refused the request because the source is paused */
+  readonly paused?: "quota_exhausted" | "breaker_open";
+  readonly retryAtMs?: number;
+  constructor(message: string, pause?: { paused?: "quota_exhausted" | "breaker_open"; retryAtMs?: number }) {
     super(message);
     this.name = "DistributorRequestError";
+    if (pause?.paused) {
+      this.paused = pause.paused;
+      this.retryAtMs = pause.retryAtMs;
+    }
   }
 }
 

@@ -21,7 +21,7 @@
  */
 import type { LicenseDisposition, SourceClass } from "../atomic/types";
 
-export const SOURCE_REGISTRY_VERSION = "1.0.0";
+export const SOURCE_REGISTRY_VERSION = "1.1.0"; // [B19-E E2] candidate search + agentDisclosure
 
 export type AcquisitionSourceId = "digikey" | "mouser" | "octopart" | "lcsc";
 
@@ -77,6 +77,28 @@ export interface QuotaLimit {
 
 export type Basis = "documented" | "conservative-default" | "unknown";
 
+/** [B19-E E2] How a search names a part: by its exact published MPN, or by keywords. */
+export type CandidateSearchMode = "exact" | "keyword";
+
+/** [B19-E E2] The most candidates one search may return per source (OD-40). */
+export const CANDIDATE_SEARCH_MAX_RESULTS = 5;
+
+/**
+ * [B19-E E2] A source's bounded candidate search: the registered operation it calls, the modes it serves, its result ceiling,
+ * what one search costs against the quota (one request, or every matched part the query can return), and what a hit may be
+ * used to observe. Null: the source is never searched.
+ */
+export interface CandidateSearchPolicy {
+  operationUrl: string;
+  modes: readonly CandidateSearchMode[];
+  maxResults: number;
+  cost: "request" | "matched-parts-at-limit";
+  observations: readonly ObservationKind[];
+}
+
+/** [B19-E E2] May this source's observations be disclosed to an agent (and so to the LLM provider)? OD-36. */
+export type AgentDisclosure = "permitted" | "prohibited" | "unknown";
+
 export interface SourceRegistryEntry {
   id: AcquisitionSourceId;
   distributorName: AcquisitionDistributorName;
@@ -105,6 +127,7 @@ export interface SourceRegistryEntry {
     tokenLifetime: string;
   };
   observations: readonly ObservationKind[];
+  candidateSearch: CandidateSearchPolicy | null;
   quota: {
     limits: readonly QuotaLimit[];
     basis: Basis;
@@ -138,8 +161,12 @@ export interface SourceRegistryEntry {
     rawRedistribution: LicenseDisposition;
     derivedRedistribution: LicenseDisposition;
     exportDisposition: LicenseDisposition;
+    /** [B19-E E2] OD-36: "unknown" until a reviewed revision decides; never "permitted" for a blocked or disabled source. */
+    agentDisclosure: AgentDisclosure;
     repositoryCommit: "prohibited";
     attribution: string;
+    /** [B19-E E2 review] The followable https link the terms require beside the source's data (Nexar: octopart.com); null when none. */
+    attributionLink: string | null;
     restrictions: readonly string[];
   };
   scope: { region: string; currency: string; locale: string; account: string };
@@ -172,6 +199,7 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       notes: [
         "Since 2025-11-24 the account header is X-DIGIKEY-Account-ID (X-DIGIKEY-Customer-Id was removed); the connector sends neither and uses the default account.",
         "Since 4.0.3 KeywordSearch no longer fills MyPricing; ProductDetails is the real-time endpoint (not called).",
+        "[B19-E E2] The candidate search reuses the keyword search (Limit at most 5). Its keyword-search terms were not re-read for E2 (no network in the implementing session), so documentationCheckedOn keeps the earlier check.",
       ],
     },
     endpoints: {
@@ -179,6 +207,7 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       operations: [
         { purpose: "OAuth2 client-credentials token", method: "POST", url: "https://api.digikey.com/v1/oauth2/token" },
         { purpose: "keyword search by MPN", method: "POST", url: "https://api.digikey.com/products/v4/search/keyword" },
+        { purpose: "candidate search by exact MPN or keyword (Limit at most 5)", method: "POST", url: "https://api.digikey.com/products/v4/search/keyword" },
       ],
       notCalled: ["sandbox-api.digikey.com (sandbox apps may call only the sandbox)"],
     },
@@ -192,6 +221,13 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       tokenLifetime: "10 minutes (2-legged); cached in memory and refreshed early or on a 401",
     },
     observations: ["unit-price-breaks", "stock-quantity", "minimum-order-quantity", "lifecycle-claim", "manufacturer-name", "description", "datasheet-link", "product-page-link", "packaging-claim"],
+    candidateSearch: {
+      operationUrl: "https://api.digikey.com/products/v4/search/keyword",
+      modes: ["exact", "keyword"],
+      maxResults: CANDIDATE_SEARCH_MAX_RESULTS,
+      cost: "request",
+      observations: ["manufacturer-name", "description", "datasheet-link", "product-page-link", "stock-quantity", "unit-price-breaks", "minimum-order-quantity", "lifecycle-claim", "packaging-claim"],
+    },
     quota: {
       limits: [
         { window: "minute", max: 120, unit: "request" },
@@ -228,8 +264,10 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       rawRedistribution: "prohibited",
       derivedRedistribution: "prohibited",
       exportDisposition: "private_review_only",
+      agentDisclosure: "unknown", // [B19-E E2] OD-36
       repositoryCommit: "prohibited",
       attribution: "Credit DigiKey clearly as the source of its data",
+      attributionLink: null,
       restrictions: [
         "No building or updating a database from DigiKey data; no bulk download.",
         "No providing the data to third parties beyond the approved display.",
@@ -266,6 +304,7 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       tokenLifetime: "not applicable (static key)",
     },
     observations: ["unit-price-breaks", "stock-quantity", "minimum-order-quantity", "lifecycle-claim", "manufacturer-name", "description", "datasheet-link", "product-page-link", "distributor-sku"],
+    candidateSearch: null,
     quota: {
       limits: [
         { window: "minute", max: 30, unit: "request" },
@@ -298,8 +337,10 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       rawRedistribution: "prohibited",
       derivedRedistribution: "prohibited",
       exportDisposition: "private_review_only",
+      agentDisclosure: "unknown", // [B19-E E2] OD-36
       repositoryCommit: "prohibited",
       attribution: "Credit Mouser clearly as the source and keep its links intact",
+      attributionLink: null,
       restrictions: [
         "No caching, recording, pre-fetching or storing Mouser content; no bulk download; no database built from it.",
         "Display is licensed only inside the application; keep Mouser data distinguished from third-party content.",
@@ -334,11 +375,15 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       notes: [
         "Nexar issues access tokens by OAuth2 client credentials (scope supply.domain) at identity.nexar.com, valid 24 hours. The connector does NOT run that flow: it sends a pre-issued access token from the environment, which expires. Recorded as a connector gap.",
         "Nexar times a request out after 90 seconds and answers an exceeded part limit with an error.",
+        "[B19-E E2] The candidate search is one supSearchMpn (exact) or supSearch (keyword) query with limit at most 5; every part it can return is reserved. Its terms were not re-read for E2 (no network in the implementing session), so documentationCheckedOn keeps the earlier check.",
       ],
     },
     endpoints: {
       hosts: ["api.nexar.com"],
-      operations: [{ purpose: "supSearchMpn GraphQL query (limit 1 per MPN, aliased batches)", method: "POST", url: "https://api.nexar.com/graphql" }],
+      operations: [
+        { purpose: "supSearchMpn GraphQL query (limit 1 per MPN, aliased batches)", method: "POST", url: "https://api.nexar.com/graphql" },
+        { purpose: "candidate search: supSearchMpn (exact) or supSearch (keyword) GraphQL query (limit at most 5)", method: "POST", url: "https://api.nexar.com/graphql" },
+      ],
       notCalled: ["identity.nexar.com (token service; the connector uses a pre-issued token)"],
     },
     auth: {
@@ -348,6 +393,13 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       tokenLifetime: "24 hours (Nexar); a pre-issued token in the environment expires",
     },
     observations: ["unit-price-breaks", "stock-quantity", "lifecycle-claim", "manufacturer-name", "description", "datasheet-link", "product-page-link"],
+    candidateSearch: {
+      operationUrl: "https://api.nexar.com/graphql",
+      modes: ["exact", "keyword"],
+      maxResults: CANDIDATE_SEARCH_MAX_RESULTS,
+      cost: "matched-parts-at-limit",
+      observations: ["manufacturer-name", "description", "datasheet-link", "product-page-link", "stock-quantity", "unit-price-breaks", "lifecycle-claim"],
+    },
     quota: {
       limits: [{ window: "month", max: 2000, unit: "matched-part" }],
       basis: "documented",
@@ -381,8 +433,10 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       rawRedistribution: "prohibited",
       derivedRedistribution: "prohibited",
       exportDisposition: "private_review_only",
+      agentDisclosure: "unknown", // [B19-E E2] OD-36
       repositoryCommit: "prohibited",
       attribution: "Include a followable link to octopart.com or the part page; credit the domain of any image",
+      attributionLink: "https://octopart.com/", // [B19-E E2 review] shown with every hit: a hit may carry no part-page link
       restrictions: [
         "No caching or storing data for more than 24 hours.",
         "No self-hosting datasheets or images; no sublicensing or distributing the API; no benchmarking or competing products.",
@@ -426,6 +480,7 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       tokenLifetime: "not applicable (key, nonce, timestamp and signature per request; signing details UNKNOWN)",
     },
     observations: [],
+    candidateSearch: null,
     quota: {
       limits: [
         { window: "minute", max: 200, unit: "request" },
@@ -454,8 +509,10 @@ const ENTRIES: readonly SourceRegistryEntry[] = [
       rawRedistribution: "prohibited",
       derivedRedistribution: "prohibited",
       exportDisposition: "prohibited",
+      agentDisclosure: "unknown", // [B19-E E2] OD-36
       repositoryCommit: "prohibited",
       attribution: "Credit LCSC as the source",
+      attributionLink: null,
       restrictions: [
         "No bulk data capture; no hosting or providing retrieved material (datasheets, images) to third parties.",
         "No selling the data or derivatives, or feeding it to public or commercial APIs; credentials stay inside the company.",
@@ -535,6 +592,10 @@ const ENV_NAME = /^[A-Z][A-Z0-9_]*$/;
 const SECRET_SHAPES = /sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|hf_[A-Za-z0-9]{30,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/;
 const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** [B19-E E2 review] a plain https link: a host and a path, no credentials, query or fragment */
+const ATTRIBUTION_LINK = /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/[A-Za-z0-9._~/-]*$/;
+const AGENT_DISCLOSURES: readonly AgentDisclosure[] = ["permitted", "prohibited", "unknown"];
+const CANDIDATE_SEARCH_MODES: readonly CandidateSearchMode[] = ["exact", "keyword"];
 
 /** Every structural rule a registry revision must satisfy. Returns human-readable violations; empty means valid. */
 export function validateSourceRegistry(entries: readonly SourceRegistryEntry[] = ENTRIES): string[] {
@@ -584,6 +645,27 @@ export function validateSourceRegistry(entries: readonly SourceRegistryEntry[] =
     if (entry.license.storage === "no-storage" && (entry.freshness.offerTtlMs !== 0 || entry.license.retentionMaxMs !== 0)) at("a no-storage source may not be served from or kept in any cache");
     if (entry.license.storage === "bounded" && entry.freshness.offerTtlMs > entry.license.retentionMaxMs) at("an observation may not be served longer than it may be kept");
     if (entry.authorityClass !== "sourcing_observation") at("unknown authority class");
+    // [B19-E E2] OD-36: a disclosure decision is required, and a source Sirkit does not use is never disclosed to an agent
+    const disclosure = (entry.license as { agentDisclosure?: unknown }).agentDisclosure;
+    if (!AGENT_DISCLOSURES.includes(disclosure as AgentDisclosure)) at(`agentDisclosure is missing or not one of ${AGENT_DISCLOSURES.join("|")}`);
+    else if (entry.state.status !== "enabled" && disclosure === "permitted") at(`agentDisclosure may not be "permitted" for a ${entry.state.status} source`);
+    // [B19-E E2 review] the followable link the terms require is recorded, so every surface can show it with the data
+    const attributionLink = (entry.license as { attributionLink?: unknown }).attributionLink;
+    if (attributionLink === undefined) at("attributionLink is missing (null when the terms require no link)");
+    else if (attributionLink !== null && (typeof attributionLink !== "string" || !ATTRIBUTION_LINK.test(attributionLink))) at("attributionLink must be a plain https link with no credentials, query or fragment");
+    else if (attributionLink === null && /followable link/i.test(entry.license.attribution)) at("the attribution asks for a followable link, so attributionLink is required");
+    // [B19-E E2] a candidate search calls a registered operation, returns at most 5 and observes only what the source may
+    const search = (entry as { candidateSearch?: CandidateSearchPolicy | null }).candidateSearch;
+    if (search === undefined) at("candidateSearch is missing (null when the source is never searched)");
+    else if (search !== null) {
+      if (entry.state.status !== "enabled") at("a source that is not enabled may not declare a candidate search");
+      if (!entry.endpoints.operations.some((operation) => operation.method === "POST" && operation.url === search.operationUrl)) at(`candidate search operation ${search.operationUrl} is not a registered operation`);
+      if (search.modes.length === 0 || new Set(search.modes).size !== search.modes.length || search.modes.some((mode) => !CANDIDATE_SEARCH_MODES.includes(mode))) at("candidate search modes must be a non-empty set of exact|keyword");
+      if (!Number.isInteger(search.maxResults) || search.maxResults < 1 || search.maxResults > CANDIDATE_SEARCH_MAX_RESULTS) at(`a candidate search returns at most ${CANDIDATE_SEARCH_MAX_RESULTS} results`);
+      if (search.cost !== "request" && search.cost !== "matched-parts-at-limit") at("candidate search cost is not request|matched-parts-at-limit");
+      if (search.observations.length === 0) at("a candidate search observes nothing");
+      for (const observation of search.observations) if (!entry.observations.includes(observation)) at(`candidate search observation ${observation} is not among the source's observations`);
+    }
     if (SECRET_SHAPES.test(JSON.stringify(entry))) at("the entry contains something shaped like a secret value");
   }
   return errors;
@@ -604,9 +686,9 @@ function duration(ms: number): string {
 }
 
 export const SOURCE_REGISTRY_CSV_COLUMNS = [
-  "registry_version", "id", "status", "owner_decision", "api", "api_version", "docs_checked_on", "hosts", "operations", "auth_method", "secret_references",
+  "registry_version", "id", "status", "owner_decision", "api", "api_version", "docs_checked_on", "hosts", "operations", "candidate_search", "auth_method", "secret_references",
   "secret_query_params", "observations", "quota", "quota_basis", "request_spacing", "deadline", "max_response_bytes", "redirects", "automatic_retries",
-  "breaker", "served_for", "storage", "retention", "retention_basis", "bulk_refresh", "export_disposition", "repository_commit", "attribution",
+  "breaker", "served_for", "storage", "retention", "retention_basis", "bulk_refresh", "export_disposition", "agent_disclosure", "repository_commit", "attribution", "attribution_link",
   "region", "currency", "source_class", "authority_class", "never_proves",
 ] as const;
 
@@ -623,6 +705,7 @@ export function renderSourceRegistryCsv(entries: readonly SourceRegistryEntry[] 
       entry.provider.documentationCheckedOn,
       entry.endpoints.hosts.join(";"),
       entry.endpoints.operations.map((operation) => `${operation.method} ${operation.url}`).join(";"),
+      entry.candidateSearch ? `${entry.candidateSearch.modes.join("|")}; max ${entry.candidateSearch.maxResults}; cost ${entry.candidateSearch.cost}; observes ${entry.candidateSearch.observations.join("|")}` : "",
       entry.auth.method,
       entry.auth.secrets.map((reference) => [reference.env, ...reference.fallbacks].join("|")).join(";"),
       entry.auth.secretQueryParams.join(";"),
@@ -641,8 +724,10 @@ export function renderSourceRegistryCsv(entries: readonly SourceRegistryEntry[] 
       entry.license.retentionBasis,
       entry.license.bulkRefresh,
       entry.license.exportDisposition,
+      entry.license.agentDisclosure,
       entry.license.repositoryCommit,
       entry.license.attribution,
+      entry.license.attributionLink ?? "",
       entry.scope.region,
       entry.scope.currency,
       entry.sourceClass,

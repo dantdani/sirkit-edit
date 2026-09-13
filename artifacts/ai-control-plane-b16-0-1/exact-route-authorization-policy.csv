@@ -92,6 +92,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/parts/[id],GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/[id]/alternates,GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/categories,GET,public,none,false,,,false,false,false,false,catalog read
+/api/parts/external-search,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,true,true,false,false,"external candidate search of the enabled distributors (LIVE, metered vendor quota; at most 5 per source; nothing persisted; trusted project scope)"
 /api/parts/search,POST,public,none,false,,,false,false,false,false,catalog read
 /api/passive-policy,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/passive-policy,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)

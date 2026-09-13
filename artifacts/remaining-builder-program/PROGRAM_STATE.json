@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-E E1 complete (E1-C review fixed)",
+  "currentCheckpoint": "B19-E E2 complete (external candidate search, reviewed)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "076d542",
+  "lastGreenSha": "58cdc89",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19-E E2 (bounded external candidate search with source and freshness labels, fake-server tests), then E3-E6 per the discovery plan, then the B19 closeout.",
-  "updatedAt": "2026-09-13T11:14:12-04:00"
+  "nextAction": "B19-E E3 (exact-revision integrity at the durable atomic boundary: publication validation, collision refusal, append-only withdrawal, selectable vs pinned loaders), then E4-E6, then the B19 closeout.",
+  "updatedAt": "2026-09-13T12:48:50-04:00"
 }

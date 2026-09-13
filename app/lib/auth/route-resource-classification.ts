@@ -80,6 +80,9 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // credit. Its previous classification (durable=none, caller-supplied-only)
   // was untrue.
   "/api/replacement-authority": { durable: "read", sensitivity: "project-durable" },
+  // [B19-E E2] the external candidate search spends provider credit (the policy row says so) and keeps its answers in process
+  // memory only: it reads and writes no durable store, and a search query is caller-supplied data.
+  "/api/parts/external-search": { durable: "none", sensitivity: "caller-supplied-only" },
 };
 
 /**

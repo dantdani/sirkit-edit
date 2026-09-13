@@ -1563,3 +1563,40 @@ _(discovery, reproduction and results appended below as they are observed)_
   through a helper in a file that never names an upload URL is not caught lexically; out-of-order /api/bom answers (pre-existing
   race; a result is labelled with the request it answered); no-storage sources are hidden only offline (both disabled or blocked).
 
+### B19-E E2 — bounded external candidate search (2026-09-13 local; implementation, review and fix workflow + lead; this commit)
+
+- Implemented test-first by a workflow agent (all 7 new test files failed on the unchanged code: missing modules, the missing
+  registry `candidateSearch` field, and 4 of 5 purpose-share cases). Everything is tested against fake vendors through the egress
+  injection; no live network.
+  - Registry 1.1.0: a `candidateSearch` record per enabled source (DigiKey keyword search, Nexar `supSearch`/`supSearchMpn`,
+    at most 5 results), `license.agentDisclosure` = unknown everywhere (OD-36), `license.attributionLink` (Nexar's required
+    octopart.com link). The keyword-search terms were not re-read (no network); the registry and `source-registry.md` say so.
+  - Admission: an agent purpose share (at most 25% of each window, OD-40) and a non-reserving `previewAdmission`, so a paused
+    source sends nothing, not even a token request. The per-process clients moved to `distributors/clients.ts`, shared by
+    pricing and search.
+  - `acquisition/external-search.ts`: bounded printable-ASCII queries (1–64), limit 1–5, admitted enabled sources only (Mouser
+    and LCSC never constructed), exact/keyword modes (agent exact only), a memo per tenant and project for the source's
+    freshness (never for no-storage sources), no `part_offers` write, every hit through the quarantine observation path,
+    exact-match computed never relabelled, inert bounded vendor text, safe https links only, per-source status.
+  - `POST /api/parts/external-search`: authenticated project read with provider credit (same policy shape as /api/bom),
+    4 KB body, forbidden and undeclared keys refused, a fixed failure sentence. Route ratchet 158/155 → 159/156, every
+    route-policy artifact regenerated (also correcting a stale public `/api/bom` row in two B16.0.4/B16.0.7 matrices).
+  - Action record `parts.external-observation-read` (tool exposure none until E6); Build Library "Search distributors"
+    section with labels per hit, a credit line and no place or buy control; control inventory 584 → 590.
+- Review in the same workflow: 17 findings, 12 confirmed (process memo shared across tenants; Nexar attribution link not
+  guaranteed; Nexar GraphQL error answers memoized as empty for 24 h — medium; Octopart click links dropped; tripwire missing the
+  new vendor modules; a PGlite suite in the no-database CI job; a stale ratchet header; the registry document at 1.0.0; four
+  test-strength gaps). All fixed test-first (19 failing cases first; 16 deliberate source breakages caught), confirmed by an
+  independent checker.
+- Lead follow-ups on the checker's three new low issues (3 cases failed first): `sig` is exempt only on octopart.com page links
+  (an Azure SAS `sig` on a datasheet link is dropped; the DigiKey `?sig=` expectation moved from kept to dropped, reviewed); a
+  Nexar answer with field errors beside a result list is a partial answer shown and not counted toward the breaker BOM pricing
+  shares; the CI job-scope guard follows relative imports and test harnesses (the previous detector missed both forms).
+- Tests (lead re-run, bounded): acquisition, distributors, parts routes and the panel 28 files / 318; BOM, workbench, registries,
+  B17 and no-purchase gates 12 / 145; auth, route-policy, invariant and injection gates 25 / 335 (+9 env-gated skips); B01 byte
+  gates, AST import gates and B16.0.24 parity 4 / 83; tsc 0; eslint clean on every changed file except the 14 pre-existing
+  `app/page.tsx` react-hooks errors (E2 changes one prop there); control inventory and route-policy artifacts regenerate with no
+  drift.
+- Recorded, not fixed: the Nexar pricing path has the same GraphQL-error handling gap (a batch with errors is remembered as
+  "no exact match"); it needs its own decision on partial batches. Memo scope is tenant plus project (stricter than tenant).
+

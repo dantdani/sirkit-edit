@@ -12,9 +12,7 @@
 import { eq } from "drizzle-orm";
 import type { DistributorClient, DistributorName, LifecycleStatus, PartPricing } from "./types";
 import type { DistributorChoice, AggregatedPricing } from "./shared";
-import { makeDigiKeyClient } from "./digikey";
-import { makeOctopartClient } from "./octopart";
-import { makeMouserClient } from "./mouser";
+import { admittedDistributorClient } from "./clients";
 import { consolidateLifecycle } from "./lifecycle";
 import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
 import { getDb } from "../db/client";
@@ -44,31 +42,10 @@ export {
 } from "./cache";
 
 // ── Lazy, process-wide client singletons, admitted by the source registry ─────
-// Built once so token caches and request queues persist across calls.
-// [B19-A I3] A client is built only when the registry ADMITS its source: never a blocked one, a disabled one only after a
-// reviewed registry change, and not when the operator has switched it off or its credentials are missing. Credentials are
-// read by reference (the registry names the variables) and handed only to the connector that uses them. The decision is
-// taken once per process, like the credentials were before.
+// Built once so token caches and request queues persist across calls. [B19-E E2] They live in ./clients, shared with the
+// external candidate search; [B19-A I3] a client is built only when the registry admits its source.
 const CHOICE_SOURCES: readonly AcquisitionSourceId[] = ["digikey", "mouser", "octopart"];
-const clients = new Map<AcquisitionSourceId, DistributorClient | null>();
-
-function clientFor(id: AcquisitionSourceId): DistributorClient | null {
-  if (clients.has(id)) return clients.get(id) ?? null;
-  const admission = admitSource(id, process.env);
-  let client: DistributorClient | null = null;
-  if (admission.admitted) {
-    const secret = (name: string): string => admission.secrets[name] ?? "";
-    try {
-      if (id === "digikey") client = makeDigiKeyClient({ clientId: secret("DIGIKEY_CLIENT_ID"), clientSecret: secret("DIGIKEY_CLIENT_SECRET") });
-      else if (id === "mouser") client = makeMouserClient({ apiKey: secret("MOUSER_API_KEY") });
-      else if (id === "octopart") client = makeOctopartClient({ apiKey: secret("OCTOPART_API_KEY") });
-    } catch {
-      client = null;
-    }
-  }
-  clients.set(id, client);
-  return client;
-}
+const clientFor = admittedDistributorClient;
 
 /** Does `choice` intend to query source `id`? */
 function intends(choice: DistributorChoice, id: AcquisitionSourceId): boolean {

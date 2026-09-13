@@ -16,7 +16,10 @@ import {
   asNumber,
   asRecord,
   asString,
+  candidateSearchLimit,
   cheapestUnitPrice,
+  type CandidateSearchAnswer,
+  type CandidateSearchOptions,
   type DistributorClient,
   type PartPricing,
   type PriceBreak,
@@ -59,7 +62,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     throw new Error("OCTOPART credentials not configured");
   }
 
-  async function runQuery(query: string, variables: Record<string, string>, matchedPartsAtMost: number): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
+  async function runQuery(query: string, variables: Record<string, string | number>, matchedPartsAtMost: number, purpose: CandidateSearchOptions["purpose"] = "interactive", isErrorAnswer?: (value: unknown) => boolean): Promise<{ value: unknown; contentHash: string; retrievedAt: number }> {
     const res = await distributorJson("octopart", {
       url: GRAPHQL_URL,
       method: "POST",
@@ -68,9 +71,37 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({ query, variables }),
-    }, egress, matchedPartsAtMost); // [B19-B I3b] Nexar's quota counts matched parts: each aliased search asks for at most one
-    if (!res.ok) throw new DistributorRequestError(`Octopart query failed: ${res.message}`);
+    }, egress, matchedPartsAtMost, purpose, isErrorAnswer); // [B19-B I3b] Nexar's quota counts matched parts: each aliased search asks for at most one
+    if (!res.ok) throw new DistributorRequestError(`Octopart query failed: ${res.message}`, { paused: res.paused, retryAtMs: res.retryAtMs });
     return { value: res.value, contentHash: res.contentHash, retrievedAt: res.retrievedAt };
+  }
+
+  /**
+   * [B19-E E2] One supSearchMpn (exact) or supSearch (keyword) query for up to 5 parts. Every part it can return counts against
+   * Nexar's matched-part quota, so the whole limit is reserved before it is sent. Nothing is memoized or remembered.
+   * [B19-E E2 review] Nexar answers an exceeded part limit (and other faults) with HTTP 200 and GraphQL `errors`: that is a failed
+   * search the breaker counts, never "nothing found".
+   */
+  async function searchCandidates(query: string, options: CandidateSearchOptions): Promise<CandidateSearchAnswer> {
+    const limit = candidateSearchLimit(options.limit);
+    const field = options.mode === "exact" ? "supSearchMpn" : "supSearch";
+    try {
+      const graphql = `query CandidateSearch($q: String!, $limit: Int!) {\n  s0: ${field}(q: $q, limit: $limit) { ${PART_FRAGMENT} }\n}`;
+      const answer = await runQuery(graphql, { q: query, limit }, limit, options.purpose, candidateAnswerIsError);
+      const results = asArray(asRecord(asRecord(asRecord(answer.value).data).s0).results).slice(0, limit);
+      const hits = results.flatMap((result) => {
+        const pricing = mapNexarPart(asRecord(asRecord(result).part));
+        if (!pricing) return [];
+        const labelled: PartPricing = { ...pricing, fetchedAt: answer.retrievedAt, evidence: { rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt }, provenance: { servedFrom: "live", retrievedAt: answer.retrievedAt } };
+        return [{ pricing: labelled, exactMatch: sameExactMpn(pricing.mpn, query) }];
+      });
+      return { ok: true, hits, rawContentHash: answer.contentHash, retrievedAt: answer.retrievedAt };
+    } catch (err) {
+      console.error(`[octopart] candidate search failed: ${describeFailure(err)}`);
+      return err instanceof DistributorRequestError && err.paused
+        ? { ok: false, message: "paused", paused: err.paused, ...(err.retryAtMs === undefined ? {} : { retryAtMs: err.retryAtMs }) }
+        : { ok: false, message: "the search failed (details withheld)" };
+    }
   }
 
   async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
@@ -151,7 +182,19 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     return out;
   }
 
-  return { name: "octopart-aggregated", lookupByMpn, lookupBatch };
+  return { name: "octopart-aggregated", lookupByMpn, lookupBatch, searchCandidates };
+}
+
+/** [B19-E E2 review] A candidate-search answer carrying GraphQL errors, or without its own `s0` result set, is an error. */
+function candidateAnswerIsError(value: unknown): boolean {
+  const answer = asRecord(value);
+  const search = asRecord(answer.data).s0;
+  if (typeof search !== "object" || search === null || Array.isArray(search)) return true;
+  // [B19-E E2 follow-up] errors beside a usable result list are a partial answer (e.g. one part's datasheet field failed): its
+  // parts are shown, and it does not count toward the breaker BOM pricing shares. Errors with no result list are a failure.
+  const hasErrors = answer.errors !== undefined && answer.errors !== null && !(Array.isArray(answer.errors) && answer.errors.length === 0);
+  const results = asRecord(search).results;
+  return hasErrors && !Array.isArray(results);
 }
 
 /** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */
@@ -166,9 +209,15 @@ function inFlightKey(mpn: string): string {
 // ─── Response mapping ──────────────────────────────────────────────────────────
 
 function mapPart(requestedMpn: string, part: Record<string, unknown>): PartPricing | null {
-  const mpn = asString(part.mpn);
   // [B19-D I5b row 01] a search result for a different (or confusably spelled) MPN answers nothing
-  if (!mpn || !sameExactMpn(mpn, requestedMpn)) return null;
+  if (!sameExactMpn(asString(part.mpn), requestedMpn)) return null;
+  return mapNexarPart(part);
+}
+
+/** One Nexar part, its sellers' offers collapsed, under the MPN Nexar published; null without one. */
+function mapNexarPart(part: Record<string, unknown>): PartPricing | null {
+  const mpn = asString(part.mpn);
+  if (!mpn) return null;
 
   const sellers = asArray(part.sellers);
   const priceBreaks: PriceBreak[] = [];

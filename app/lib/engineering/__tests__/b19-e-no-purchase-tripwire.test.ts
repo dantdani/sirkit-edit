@@ -10,7 +10,8 @@
  *     location.href =, or a programmatic click on a link with an href or target);
  *  3. no API route implements an order, checkout or cart operation;
  *  4. the distributor import and sourcing worksheet routes price from the cache only: they never pass `live` (pricing
- *     options are absent or a literal), never import the outbound fetch boundary or a distributor client.
+ *     options are absent or a literal), never import the outbound fetch boundary or a distributor client ([B19-E E2 review]
+ *     the shared admitted clients and the external candidate search included).
  * Each checker is also run against a reintroduced violation, so a tripwire that stops biting fails here too.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -171,7 +172,8 @@ function apiRoutes(): string[] {
   return files.map((file) => relative(cwd, file).split(sep).join("/")).filter((file) => /\/route\.ts$/.test(file)).sort();
 }
 
-const VENDOR_MODULE = /(^|\/)distributors\/(digikey|octopart|mouser|lcsc|egress)(\.ts)?$|(^|\/)net\/outbound-fetch(\.ts)?$/;
+/** [B19-E E2 review] the shared admitted clients and the external candidate search reach vendors as surely as a connector does */
+const VENDOR_MODULE = /(^|\/)distributors\/(digikey|octopart|mouser|lcsc|egress|clients)(\.ts)?$|(^|\/)net\/outbound-fetch(\.ts)?$|(^|\/)acquisition\/external-search(\.ts)?$/;
 
 /** [B19-E E1-C review] the builders whose third argument carries the pricing options (`live`) */
 const PRICING_BUILDERS = new Set(["buildBomRows", "getPricingFor", "buildBom"]);
@@ -331,6 +333,15 @@ describe("[B19-E E1] the distributor import and sourcing worksheet routes are ca
     expect(liveVendorReach("r.ts", 'const m = await import("../../../lib/distributors/mouser");')).toHaveLength(1);
     expect(liveVendorReach("r.ts", 'import { vendorRequest } from "@/app/lib/distributors/egress";')).toHaveLength(1);
     expect(liveVendorReach("r.ts", 'import { toDigiKeyCsv } from "@/app/lib/cart-formats"; await buildBomRows(state, choice, { live: false });')).toEqual([]);
+  });
+
+  it("[B19-E E2 review] the checker bites: the shared admitted clients and the external candidate search are vendor reach too", () => {
+    expect(liveVendorReach("r.ts", 'import { admittedDistributorClient } from "@/app/lib/distributors/clients";')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'const { admittedDistributorClient } = await import("../../../lib/distributors/clients.ts");')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'import { searchExternalCandidates } from "@/app/lib/acquisition/external-search"; await searchExternalCandidates(query, opts);')).toHaveLength(1);
+    expect(liveVendorReach("r.ts", 'export { searchExternalCandidates } from "../../../lib/acquisition/external-search";')).toHaveLength(1);
+    // precision: the browser-safe contract reaches no vendor
+    expect(liveVendorReach("r.ts", 'import { EXTERNAL_SEARCH_MAX_LIMIT } from "@/app/lib/acquisition/external-search-contract";')).toEqual([]);
   });
 
   it("[B19-E E1-C review] the checker bites: pricing options that are not a literal without live (the request body, a variable, a spread, an alias) are found", () => {

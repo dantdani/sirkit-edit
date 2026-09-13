@@ -26,7 +26,7 @@ GET,/api/bom/notifications,auth,authenticated,authenticatedRoute(…),load-beari
 PATCH,/api/bom/notifications,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 DELETE,/api/bom/notifications,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/bom/procurement-packet,public,public,publicJsonRoute(…),n/a(public),-,-
-POST,/api/bom,public,public,publicJsonRoute(…),n/a(public),-,-
+POST,/api/bom,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/bom/snapshot,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/bom/snapshot,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/calculation/corners,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
@@ -92,6 +92,7 @@ POST,/api/model-simulation/readiness,auth+csrf,authenticated,authenticatedJsonRo
 GET,/api/parts/[id]/alternates,public,public,publicRoute(…),n/a(public),-,-
 GET,/api/parts/[id],public,public,publicRoute(…),n/a(public),-,-
 GET,/api/parts/categories,public,public,publicRoute(…),n/a(public),-,-
+POST,/api/parts/external-search,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/parts/search,public,public,publicJsonRoute(…),n/a(public),-,-
 GET,/api/passive-policy,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/passive-policy,auth+csrf,authenticated,createPassivePolicyPostHandler(…),load-bearing,factory,createPassivePolicyPostHandler → scopedPassivePolicyJson → !parsed.ok refused (union); dominance holds

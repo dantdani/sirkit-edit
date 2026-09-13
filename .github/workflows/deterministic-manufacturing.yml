@@ -167,11 +167,12 @@ jobs:
           app/lib/kicad/__tests__/b19-d-pinned-checkout.test.ts
           app/api/pcb/autoroute/__tests__/route.test.ts
           app/lib/distributors/__tests__/b19-e-pricing-provenance-counts.test.ts
-          app/lib/acquisition/__tests__/b19-e-source-labels.test.ts
           app/lib/bom/__tests__/b19-e-bom-sources.test.ts
           app/lib/__tests__/b19-e-packet-provenance.test.ts
           app/components/bom/__tests__/b19-e-bom-workbench.test.tsx
           app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts
+          app/api/parts/__tests__/b19-e-external-search-route.test.ts
+          app/components/editor/__tests__/b19-e-build-library-external-search.test.tsx
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
@@ -240,6 +241,7 @@ jobs:
           app/lib/durable-workflow/__tests__/tenant-scope.test.ts
           app/lib/distributors/__tests__/b19-offer-retention.test.ts
           app/lib/distributors/__tests__/b19-e-pricing-provenance-cache.test.ts
+          app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

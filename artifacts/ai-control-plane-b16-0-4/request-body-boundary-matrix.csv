@@ -26,7 +26,7 @@ GET,/api/bom/notifications,auth,authenticated,authenticatedRoute(…),-,-,-,no-b
 PATCH,/api/bom/notifications,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 DELETE,/api/bom/notifications,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,16000,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/bom/procurement-packet,public,public,publicJsonRoute(…),application/json,8000000,30000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
-POST,/api/bom,public,public,publicJsonRoute(…),application/json,8000000,30000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/bom,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/bom/snapshot,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,8000000,30000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/bom/snapshot,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/calculation/corners,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,CALCULATION_API_MAX_BYTES,CALCULATION_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
@@ -92,6 +92,7 @@ POST,/api/model-simulation/readiness,auth+csrf,authenticated,authenticatedJsonRo
 GET,/api/parts/[id]/alternates,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/parts/[id],public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/parts/categories,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/parts/external-search,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,4096,5000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/parts/search,public,public,publicJsonRoute(…),application/json,200000,10000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/passive-policy,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/passive-policy,auth+csrf,authenticated,createPassivePolicyPostHandler(…),application/json,64000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts via handler.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
