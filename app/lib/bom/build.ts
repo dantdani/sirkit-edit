@@ -114,7 +114,8 @@ function currencyOfBest(pricing: AggregatedPricing | null): string | null {
 export async function buildBom(
   state: SchematicState,
   pricingChoice: DistributorChoice,
-  forceRefresh = false,
+  /** [B19-B I2] `live` must be granted by an authenticated caller; the default prices from the cache only. */
+  pricing: { live?: boolean; forceRefresh?: boolean } = {},
   componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
 ): Promise<BomResult> {
   const kicadComponents = state.kicadComponents ?? [];
@@ -178,7 +179,10 @@ export async function buildBom(
     for (const name of missingCredentials(pricingChoice)) {
       warnings.push(credentialWarning(name));
     }
-    pricingMap = await getPricingFor(partsForPricing, pricingChoice, { forceRefresh });
+    pricingMap = await getPricingFor(partsForPricing, pricingChoice, { live: pricing.live === true, forceRefresh: pricing.forceRefresh === true });
+    if (pricing.live !== true) {
+      warnings.push("Prices shown are cached offers only. Live distributor pricing is fetched in the BOM workbench by a project member.");
+    }
     // Counts are per (part, source): sum the aggregator's per-source tallies.
     for (const agg of pricingMap.values()) {
       cached += agg.sourcesFromCache;

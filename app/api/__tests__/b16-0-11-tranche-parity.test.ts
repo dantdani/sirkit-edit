@@ -104,8 +104,10 @@ afterEach(() => {
 // ── PUBLIC methods ───────────────────────────────────────────────────────────
 
 interface PublicCase { name: string; path: string; handler: (r: Request) => Promise<Response>; missingStateError: string }
+// [B19-B I2] `/api/bom` left this list: it prices LIVE, which spends a metered vendor quota, so it is an authenticated
+// project read now (pinned below with the other authenticated methods). The five routes that remain public price from
+// the cache only.
 const PUBLIC: PublicCase[] = [
-  { name: "bom", path: "/api/bom", handler: bomPost, missingStateError: "Body must include a `state` with components/kicadComponents." },
   { name: "bom/cart/digikey", path: "/api/bom/cart/digikey", handler: digikeyPost, missingStateError: "Body must include a `state`." },
   { name: "bom/cart/lcsc", path: "/api/bom/cart/lcsc", handler: lcscPost, missingStateError: "Body must include a `state`." },
   { name: "bom/cart/mouser", path: "/api/bom/cart/mouser", handler: mouserPost, missingStateError: "Body must include a `state`." },
@@ -113,7 +115,7 @@ const PUBLIC: PublicCase[] = [
   { name: "bom/procurement-packet", path: "/api/bom/procurement-packet", handler: packetPost, missingStateError: "Body must include a `state`." },
 ];
 
-describe("B16.0.11 §A — public BOM boundary pins (×6)", () => {
+describe("B16.0.11 §A — public BOM boundary pins (×5 since B19-B I2)", () => {
   it.each(PUBLIC)("[$name] text/plain → 415 with ZERO body pulls and ZERO business calls", async (r) => {
     installRepo();
     const counter = { pulls: 0 };
@@ -146,12 +148,13 @@ describe("B16.0.11 §A — public BOM boundary pins (×6)", () => {
 });
 
 describe("B16.0.11 §F — public output parity (real cart-formats bytes; headers; call counts)", () => {
-  it("[bom] valid → buildBomRows ONCE with (state, choice, forceRefresh); result passthrough verbatim", async () => {
+  it("[bom] valid (a project member) → buildBomRows ONCE with (state, choice, { live: true, forceRefresh }); result passthrough verbatim", async () => {
+    authed(); // [B19-B I2] an authenticated project read: live pricing is granted to a member, and so is their refresh
     mockRows.mockResolvedValue(BUILD_RESULT as never);
     const res = await bomPost(jsonReq("/api/bom", JSON.stringify({ state: STATE, pricingChoice: "digikey", forceRefresh: true })));
     expect(mockRows).toHaveBeenCalledTimes(1);
     expect(mockRows.mock.calls[0]![1]).toBe("digikey");
-    expect(mockRows.mock.calls[0]![2]).toBe(true);
+    expect(mockRows.mock.calls[0]![2]).toEqual({ live: true, forceRefresh: true });
     expect(res.status).toBe(200);
     expect((await payload(res)).marker).toBe("result-passthrough");
   });
@@ -192,6 +195,7 @@ describe("B16.0.11 §F — public output parity (real cart-formats bytes; header
 
 interface AuthCase { name: string; method: string; make: (body: string) => Request; handler: (r: Request) => Promise<Response>; oversize: number }
 const AUTH: AuthCase[] = [
+  { name: "bom POST", method: "POST", make: (b) => jsonReq("/api/bom", b), handler: bomPost, oversize: 8_000_001 }, // [B19-B I2]
   { name: "bom/diff POST", method: "POST", make: (b) => jsonReq("/api/bom/diff", b), handler: diffPost, oversize: 8_000_001 },
   { name: "bom/snapshot POST", method: "POST", make: (b) => jsonReq("/api/bom/snapshot", b), handler: snapPost, oversize: 8_000_001 },
   { name: "bom/notifications PATCH", method: "PATCH", make: (b) => jsonReq("/api/bom/notifications", b, "PATCH"), handler: notifPatch, oversize: 16_001 },
@@ -203,7 +207,7 @@ const AUTH_GETS: Array<{ name: string; path: string; handler: (r: Request) => Pr
 ];
 
 describe("B16.0.11 §A — authenticated BOM boundary pins", () => {
-  it.each([...AUTH.map((a) => ({ name: a.name, handler: a.handler, method: a.method, path: a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications" })), ...AUTH_GETS.map((g) => ({ name: g.name, handler: g.handler, method: "GET", path: g.path }))])(
+  it.each([...AUTH.map((a) => ({ name: a.name, handler: a.handler, method: a.method, path: a.name === "bom POST" ? "/api/bom" : a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications" })), ...AUTH_GETS.map((g) => ({ name: g.name, handler: g.handler, method: "GET", path: g.path }))])(
     "[$name] anonymous → 401 with ZERO body pulls and ZERO repository calls", async (c) => {
       installRepo();
       injectIdentity(null);
@@ -220,7 +224,7 @@ describe("B16.0.11 §A — authenticated BOM boundary pins", () => {
   it.each(AUTH)("[$name] production cross-origin → 403 CSRF with ZERO pulls + ZERO repository calls", async (a) => {
     installRepo(); stubProduction(); authed();
     const counter = { pulls: 0 };
-    const path = a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications";
+    const path = a.name === "bom POST" ? "/api/bom" : a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications";
     const res = await a.handler(countingReq(path, { origin: "http://evil.example" }, counter, a.method));
     expect(res.status).toBe(403);
     expect(counter.pulls).toBe(0);
@@ -238,7 +242,7 @@ describe("B16.0.11 §A — authenticated BOM boundary pins", () => {
 
   it.each(AUTH)("[$name] text/plain → 415 with ZERO pulls; malformed JSON → 400; oversized → 413 — all zero repository calls", async (a) => {
     installRepo(); authed();
-    const path = a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications";
+    const path = a.name === "bom POST" ? "/api/bom" : a.name.includes("diff") ? "/api/bom/diff" : a.name.includes("snapshot") ? "/api/bom/snapshot" : "/api/bom/notifications";
     const counter = { pulls: 0 };
     const m = await a.handler(countingReq(path, { origin: "http://localhost", "content-type": "text/plain" }, counter, a.method));
     expect(m.status).toBe(415);

@@ -10,6 +10,7 @@
  */
 
 import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { rowToSnapshotRow, type BomSnapshotMeta } from "@/app/lib/snapshots";
 import { resolveBomRepository } from "@/app/lib/bom/snapshot-repository";
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
@@ -35,7 +36,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
   const label = typeof body.label === "string" && body.label.trim() !== "" ? body.label.trim().slice(0, 200) : null;
 
   try {
-    const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice));
+    const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice), { live: true }); // [B19-B I2] authenticated: live pricing granted
     const snapshotRows = result.rows.filter((r) => r.partId).map(rowToSnapshotRow);
     const costValue = result.estimatedProjectCost.value;
     const meta: BomSnapshotMeta = {
@@ -47,8 +48,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
     const created = await resolveBomRepository().createSnapshot(scope, { label, rows: snapshotRows, meta });
     return Response.json({ ok: true, id: created.id }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/snapshot", err);
   }
 });
 
@@ -67,7 +67,6 @@ export const GET = authenticatedRoute({}, async ({ context }): Promise<Response>
     }));
     return Response.json({ ok: true, snapshots }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/snapshot", err);
   }
 });

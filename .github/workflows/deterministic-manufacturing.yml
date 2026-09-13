@@ -119,6 +119,8 @@ jobs:
           app/lib/engineering/__tests__/b18-e-scenario-5.test.ts
           app/lib/net
           app/lib/distributors/__tests__/b19-distributor-egress.test.ts
+          app/lib/distributors/__tests__/b19-pricing-live-gate.test.ts
+          app/api/bom/__tests__/b19-bom-quota.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts

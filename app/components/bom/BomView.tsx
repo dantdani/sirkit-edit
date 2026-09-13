@@ -338,6 +338,9 @@ function searchUrlFor(offer: PartPricing): string | null {
   return null;
 }
 
+/** [B19-B I2] shown when there is no project scope to authorize a live-priced BOM request with. */
+const BOM_NEEDS_PROJECT = "Open or save a project to build its BOM. Live distributor pricing is a project read.";
+
 export function BomView(props: Props) {
   const state: SchematicState = useMemo(() => {
     if ("state" in props) return props.state;
@@ -430,13 +433,21 @@ export function BomView(props: Props) {
       setResult(null);
       return;
     }
+    // [B19-B I2] live pricing spends a metered vendor quota, so /api/bom is an authenticated project read: it needs the
+    // project scope. Until the scope is known there is nothing to authorize the request with, so nothing is sent, and
+    // the view says why instead of showing an empty table.
+    if (!projectKey) {
+      setResult(null);
+      setError(BOM_NEEDS_PROJECT);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const forceRefresh = forceRef.current;
       const res = await fetch("/api/bom", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...selectorHeaders },
         body: JSON.stringify({ state: stateRef.current, pricingChoice, forceRefresh }),
       });
       const data = (await res.json()) as BomResult | { ok: false; error: string };
@@ -456,7 +467,7 @@ export function BomView(props: Props) {
     // signature is included so a content change refetches; stateRef carries the
     // live state into the request without retriggering on object identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pricingChoice, signature, refreshNonce, isEmpty]);
+  }, [pricingChoice, signature, refreshNonce, isEmpty, projectKey, selectorHeaders]);
 
   useEffect(() => {
     void fetchBom();

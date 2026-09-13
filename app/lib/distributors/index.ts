@@ -124,7 +124,7 @@ export function missingCredentials(choice: DistributorChoice): DistributorName[]
 export async function getPricingFor(
   parts: Array<{ partId: string; mpn: string }>,
   choice: DistributorChoice,
-  opts: { forceRefresh?: boolean } = {},
+  opts: { forceRefresh?: boolean; live?: boolean } = {},
 ): Promise<Map<string, AggregatedPricing>> {
   const result = new Map<string, AggregatedPricing>();
   if (choice === "none") return result;
@@ -142,7 +142,11 @@ export async function getPricingFor(
   const sources = activeSources(choice);
   if (sources.length === 0) return result;
 
-  const forceRefresh = opts.forceRefresh === true;
+  // [B19-B I2] Live pricing spends a metered vendor quota, so it is a capability the CALLER must be granted: without an
+  // explicit `live: true` this serves the cache and never calls a vendor, and `forceRefresh` means nothing without it.
+  // The safe value is the default, so a new caller that forgets to decide cannot spend quota by accident.
+  const livePricing = opts.live === true;
+  const forceRefresh = livePricing && opts.forceRefresh === true;
   const sourceNames = sources.map((s) => s.name);
 
   // Seed an aggregation accumulator per part.
@@ -181,6 +185,8 @@ export async function getPricingFor(
       }
     }
     if (misses.length === 0) continue;
+    // [B19-B I2] a caller without live pricing gets the cache and nothing else.
+    if (!livePricing) continue;
 
     // forceRefresh must pierce the clients' own in-memory MPN caches too.
     if (forceRefresh) {
@@ -191,7 +197,8 @@ export async function getPricingFor(
     try {
       live = await client.lookupBatch(misses.map((m) => m.mpn));
     } catch (err) {
-      console.error(`[distributors] ${name} batch failed:`, err);
+      // [B19-B I1/I2] never the raw error: it can carry the request or the transport's own text.
+      console.error(`[distributors] ${name} batch failed (details withheld): ${err instanceof Error ? err.name : "non-error"}`);
       live = new Map();
     }
 

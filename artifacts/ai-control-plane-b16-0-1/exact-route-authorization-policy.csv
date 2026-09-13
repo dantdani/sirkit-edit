@@ -17,7 +17,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/auth/callback,GET,public,none,false,,,false,false,false,false,app/api/auth/callback (PKCE code exchange; safe same-origin redirect)
 /api/auth/signin,POST,public,none,false,,,false,true,false,false,app/api/auth/signin (credential verification is the authentication; in-route CSRF)
 /api/auth/signout,POST,public,none,false,,,false,true,false,false,app/api/auth/signout (clears the caller's own session cookies; in-route CSRF)
-/api/bom,POST,public,none,false,,,false,false,false,false,stateless BOM compute
+/api/bom,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,true,true,false,false,BOM workbench with LIVE distributor pricing (metered vendor quota; trusted project scope)
 /api/bom/cart/digikey,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
 /api/bom/cart/lcsc,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
 /api/bom/cart/mouser,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)

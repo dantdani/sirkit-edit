@@ -106,3 +106,14 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Question: each bootstrapped browser spec adds minutes to page-browser-e2e (timeout 30 min). Accept a longer job, or split it?
 - Default applied: accept a longer job while it stays well inside its timeout; split it if a run comes within five minutes of the limit.
 - The owner may choose otherwise.
+
+## OD-31 — Who may spend live distributor quota (B19-B I2, 2026-09-13)
+
+- Question: live pricing spends a metered vendor quota (Mouser's is about 1000 queries a month). Before B19 any anonymous
+  caller could spend it, and force a refresh. Who should be able to?
+- Default applied: a project member, in the BOM workbench (`/api/bom`, authenticated, `providerCredit`), and the
+  authenticated snapshot and diff. Exports, the procurement packet and the cart routes stay public and price from the
+  cache only, so an anonymous visitor sees cached offers (labelled as such) and never spends quota.
+- Not decided here: a per-project or per-user quota budget. Nothing reads `providerCredit` yet; metering it is recorded
+  for the source registry (I3).
+- The owner may choose otherwise.

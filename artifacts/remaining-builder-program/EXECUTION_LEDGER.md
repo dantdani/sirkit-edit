@@ -1163,3 +1163,28 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-outbound-fetch 19/19 and b19-distributor-egress 8/8 (both new, in the CI list); the existing atomic security
   suites unchanged and green; broad run: 279 files, 3569 passed, 10 expected skips; tsc 0; eslint clean on the changed files (one pre-existing warning in
   the untouched `lcsc.ts`).
+
+### B19 I2 — who may spend paid quota, and what a failure may say (2026-09-13 local, solo; this commit)
+
+- Reproduction widened D19-1: six public BOM routes priced live (the workbench, the CSV export, the procurement packet and
+  three carts), and the server resolves part ids to catalog MPNs, so an anonymous caller spent quota on real parts. The
+  pricing layer had no notion of a caller.
+- Live pricing is now a capability the caller must be granted: `getPricingFor` serves the cache unless `live: true`, and
+  `forceRefresh` means nothing without it. The safe value is the default.
+- `/api/bom` is an authenticated project read declared `providerCredit: true` and is the route that asks for live pricing;
+  snapshot and diff (already authenticated) ask explicitly; the export and cart routes stay public and cache-only.
+- D19-2 was wider too: every BOM route repeated a failure's message. All nine now answer with a fixed sentence and log a
+  redacted, bounded line.
+- The workbench sends its project scope, and says why when there is no project.
+- Reviewed pin moves (strengthenings) in b16-0-4, b16-0-5 and b16-0-11; three route CSVs regenerated, one row each; the
+  migration ratchet unchanged at 158.
+- A vacuous pass recorded: the five public-route cases passed against the old code; the pricing-layer test is the real
+  reproduction.
+- A pre-existing isolated timeout (chat-surface revocation) proven unrelated by stashing I2; follow-up filed, not called a
+  flake.
+- Not proven here: the workbench in a browser (no spec reaches it; the dev server was stopped before it could spend real
+  quota). Carried by I6. Owner decision OD-31 recorded.
+- `/api/schematic/cross-verify` (D19-6) is I2b.
+- Tests: b19-pricing-live-gate 4/4 and b19-bom-quota 12/12 (both new, in the CI list); the moved pins, the migration
+  ratchet and invariant tripwires 171/171; the route artifact and control-inventory gates 51/51; broad run: 281 files,
+  3585 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.

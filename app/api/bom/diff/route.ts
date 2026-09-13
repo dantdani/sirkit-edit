@@ -15,6 +15,7 @@
  */
 
 import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { diffSnapshots, rowToSnapshotRow, type BomSnapshot, type BomSnapshotMeta } from "@/app/lib/snapshots";
 import { resolveBomRepository, type BomSnapshotFull } from "@/app/lib/bom/snapshot-repository";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
@@ -56,7 +57,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
       if (!isSchematicState(body.state)) {
         return Response.json({ ok: false, error: "`state` is required (and must be a schematic state) when `to=current`." }, { status: 400 });
       }
-      const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice));
+      const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice), { live: true }); // [B19-B I2] authenticated: live pricing granted
       const rows = result.rows.filter((r) => r.partId).map(rowToSnapshotRow);
       const costValue = result.estimatedProjectCost.value;
       const meta: BomSnapshotMeta = {
@@ -76,7 +77,6 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
     const changes = diffSnapshots(fromSnap, toSnap);
     return Response.json({ ok: true, from: fromSnap.id, to: toId, changes }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/diff", err);
   }
 });

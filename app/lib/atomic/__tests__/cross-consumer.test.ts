@@ -149,7 +149,7 @@ describe("Stage 5 project persistence and cross-consumer integrity", () => {
         atomicPartRevisionId: pin.atomicRevisionId,
       }],
     };
-    const result = await buildBom(state, "none", false, { U1: pin });
+    const result = await buildBom(state, "none", {}, { U1: pin });
     expect(result.rows[0]).toMatchObject({
       atomicRevisionId: fixture.published.id,
       mpn: "FX-100-QFN",

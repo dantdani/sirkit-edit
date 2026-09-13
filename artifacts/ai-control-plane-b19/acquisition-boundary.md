@@ -90,3 +90,66 @@ poisons the global fetch for every case, so that can never recur silently.
 `/api/schematic/cross-verify` is an outbound call too (D19-6: it follows redirects with its bearer and reflects 200 bytes
 of the remote body), but it is not an acquisition source and its endpoint is operator-configured. Its two leaks move to I2
 with `/api/bom`'s error reflection, where both route-level fixes can be reproduced together.
+
+## I2 — who may spend paid quota, and what a failure may say (CONFIRMED)
+
+### Reproduced first, and wider than discovery recorded
+
+Discovery named one route (D19-1): `/api/bom` was public, CSRF-free, priced live and honoured a caller-sent
+`forceRefresh`. Reading every caller of the pricing layer found **six** public BOM routes that priced live: `/api/bom`,
+`/api/bom/export-csv`, `/api/bom/procurement-packet` and the three cart routes. Each accepts a schematic body, and the
+server resolves a part id to its catalog MPN before pricing, so an anonymous caller who names catalog parts spends quota
+on real MPNs without typing one. The pricing layer had no notion of a caller: `getPricingFor` went live for every cache
+miss, whoever asked.
+
+D19-2 was wider too: **every** BOM route (the six above plus snapshot, diff and notifications) answered a failure with
+the failure's own `message` — database hosts, connection strings, a distributor's status text.
+
+### What changed
+
+| rule | where |
+|---|---|
+| Live pricing is a capability the caller must be GRANTED: `getPricingFor(..., { live })` serves the cache and never calls a vendor unless `live: true`; `forceRefresh` means nothing without it. The safe value is the default, so a new caller that forgets to decide cannot spend quota | `app/lib/distributors/index.ts` |
+| The builders carry the grant explicitly (`buildBom(state, choice, { live, forceRefresh }, selections)`); a cache-only build says so in its warnings | `app/lib/bom/build.ts`, `app/lib/bom-builder.ts` |
+| `/api/bom` — the workbench, where a person asks for fresh prices — is an **authenticated project read** declared `providerCredit: true`, with the trusted project scope and the server-derived-key refusal the other authenticated BOM routes already had. It is the one route that asks for live pricing, and a member's refresh is honoured | `app/api/bom/route.ts`, `app/lib/auth/route-policy.ts` |
+| The authenticated snapshot and diff routes ask for live pricing explicitly | `app/api/bom/snapshot/route.ts`, `app/api/bom/diff/route.ts` |
+| The CSV export, procurement packet and three cart routes stay public and price from the cache only. A body claiming `live: true` or `forceRefresh: true` is not a grant | the five routes (unchanged code path; the default now fails closed) |
+| No BOM route repeats a failure: a fixed sentence to the caller, a redacted and bounded line to the server log | `app/api/bom/_failure.ts`, all nine BOM routes |
+| The batch failure log names the error class only | `app/lib/distributors/index.ts` |
+| The workbench sends the project scope with its request, and without a project it says why instead of showing an empty table | `app/components/bom/BomView.tsx` |
+
+### Proven
+
+- `b19-pricing-live-gate.test.ts` (4): with no grant, a cache miss calls no vendor and `forceRefresh` does not pierce
+  the cache; with the grant, it does both. **This is the real reproduction**: run against the old pricing layer, the
+  vendor was called with no grant.
+- `b19-bom-quota.test.ts` (12): the five public routes, under production auth with no identity, build once and never with
+  a live grant or a refresh — even when the body claims both; `/api/bom`'s policy is `requiresAuth + providerCredit +
+  trusted-context`; an anonymous production caller gets 401 with zero builds; a member gets `{ live: true, forceRefresh:
+  true }`; a failure carrying a host, a password and a key is never in any response.
+- A vacuous pass, recorded: against the old routes, the five "never asks for live" cases **passed**, because the old
+  builder took a positional `forceRefresh` and live was the implicit default — the route-level assertion could not see
+  it. The pricing-layer test above is what failed before the fix.
+- Reviewed pin moves, each a strengthening: `b16-0-4` and `b16-0-5` list `/api/bom` as authenticated, and every body and
+  media-type contract still runs against it; `b16-0-11` moves it from the public tranche (now x5) to the authenticated
+  one, where the oversize, CSRF, 401 and scope cases now run against it too, and its passthrough pin is exercised as a
+  member. The three committed route CSVs were regenerated; each changed exactly one row, `/api/bom POST`.
+- The migration ratchet is unchanged at 158 (155 canonical + 3 factories + 0 raw): the route moved between canonical
+  wrappers.
+
+### Measured along the way
+
+- In isolation (cold imports), the pre-existing "a revoked member is refused at the chat surface" case times out at
+  5 s. Stashing all of I2 (`git stash push --include-untracked`) reproduced the same timeout on the I1 tree, so it is not
+  caused by this change; the tree was restored identically. It passes in the broad run. A follow-up task was filed to give
+  it a cold-import budget rather than calling it a flake.
+- `BomView.tsx` has four `react-hooks/set-state-in-effect` lint errors; the same four exist on the committed file (the
+  line numbers moved by three). None is introduced here.
+
+### Not proven here
+
+- The workbench in a browser. No Playwright spec reaches the BOM tab today, and the local dev server loads the owner's
+  `.env.local`, which may carry real vendor credentials; it was stopped before any pricing request rather than spend
+  quota. The browser proof (a member's BOM loads with its scope; no project shows the sentence) is carried by B19-E (I6),
+  which changes that surface anyway. Label: **PROPOSED** for the browser, **CONFIRMED** at the route and pricing layer.
+- The owner decision this makes is recorded as OD-31: an anonymous visitor now sees cached prices only.

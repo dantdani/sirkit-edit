@@ -17,7 +17,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/auth/callback,GET,true,none,none,false,,false,false,false,true
 /api/auth/signin,POST,true,none,none,false,,false,false,false,true
 /api/auth/signout,POST,true,none,none,false,,false,false,false,true
-/api/bom,POST,true,none,none,false,,false,false,false,true
+/api/bom,POST,false,none,caller-supplied-only,true,,false,false,false,false
 /api/bom/cart/digikey,POST,true,none,none,false,,false,false,false,true
 /api/bom/cart/lcsc,POST,true,none,none,false,,false,false,false,true
 /api/bom/cart/mouser,POST,true,none,none,false,,false,false,false,true

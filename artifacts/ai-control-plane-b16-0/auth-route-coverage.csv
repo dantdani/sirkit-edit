@@ -14,7 +14,7 @@ path,methods,auth_class,identity_source,migrated
 /api/auth/callback,GET,public,none,no
 /api/auth/signin,POST,public,none,no
 /api/auth/signout,POST,public,none,no
-/api/bom,POST,public,none,no
+/api/bom,POST,authenticated-read,trusted-context,yes
 /api/bom/cart/digikey,POST,public,none,no
 /api/bom/cart/lcsc,POST,public,none,no
 /api/bom/cart/mouser,POST,public,none,no

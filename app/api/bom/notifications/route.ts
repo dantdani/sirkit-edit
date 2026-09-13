@@ -13,6 +13,7 @@
  */
 
 import { resolveBomRepository } from "@/app/lib/bom/snapshot-repository";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { BOM_FORBIDDEN_BODY_KEYS, bomNotFound, bomOwnershipScope } from "../_scope";
 
@@ -37,8 +38,7 @@ export const GET = authenticatedRoute({ query: true }, async ({ context, meta })
     const notifications = await resolveBomRepository().listNotifications(scope, { unreadOnly, limit: 200 });
     return Response.json({ ok: true, notifications }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/notifications", err);
   }
 });
 
@@ -83,8 +83,7 @@ export const PATCH = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadline
     if (!changed) return bomNotFound("Notification");
     return Response.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/notifications", err);
   }
 });
 
@@ -100,7 +99,6 @@ export const DELETE = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlin
     const deleted = await resolveBomRepository().deleteNotifications(scope, olderThan ? { olderThan } : {});
     return Response.json({ ok: true, deleted }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/notifications", err);
   }
 });

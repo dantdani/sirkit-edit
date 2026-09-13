@@ -7,6 +7,7 @@
  */
 
 import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 import { toProcurementPacketCsv } from "@/app/lib/cart-formats";
 
@@ -45,7 +46,6 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/procurement-packet", err);
   }
 });

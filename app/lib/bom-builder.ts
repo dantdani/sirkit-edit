@@ -30,7 +30,8 @@ export function isSchematicState(value: unknown): value is SchematicState {
 export async function buildBomRows(
   state: SchematicState,
   pricingChoice: DistributorChoice,
-  forceRefresh = false,
+  /** [B19-B I2] `live` must be granted by an authenticated caller; the default prices from the cache only. */
+  pricing: { live?: boolean; forceRefresh?: boolean } = {},
 ): Promise<BomResult> {
-  return buildBom(state, pricingChoice, forceRefresh);
+  return buildBom(state, pricingChoice, pricing);
 }

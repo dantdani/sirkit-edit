@@ -215,7 +215,8 @@ const ALL: RoutePolicy[] = [
 
   // ── Public reads / stateless compute (no project data, no credit, no write) ─
   ...pub("/api/ai/runtime", ["GET"], "static runtime config"),
-  ...pub("/api/bom", ["POST"], "stateless BOM compute"),
+  // [B19-B I2] live distributor pricing spends metered quota: an authenticated project read, declared as spending credit.
+  ...read("/api/bom", ["POST"], "BOM workbench with LIVE distributor pricing (metered vendor quota; trusted project scope)").map((policy) => ({ ...policy, providerCredit: true })),
   ...pub("/api/bom/export-csv", ["POST"], "stateless export"),
   ...pub("/api/bom/procurement-packet", ["POST"], "stateless export"),
   ...pub("/api/bom/cart/digikey", ["POST"], "stateless cart payload (no funds)"),
