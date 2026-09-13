@@ -48,6 +48,13 @@ function membership(overrides: Partial<ProjectMembershipRecord> = {}): ProjectMe
   };
 }
 
+// Mock the provider so no credits are spent even if the route proceeded.
+// Cold-import budget, not a relaxation of the 22/23 assertion: run alone, this import loads the whole /api/chat graph
+// cold (~2.5 s idle, 8-50 s measured under CPU load) and outran the 5 s test timeout. Loading it here, while the file is
+// collected, keeps the timed test body to the POST, which takes milliseconds.
+vi.doMock("@/app/lib/agent/adapters", () => ({ agentAdapterFor: () => ({ provider: "anthropic", async start() { return { text: "", toolCalls: [], stopReason: "end", usage: {}, model: "x", continuation: { provider: "anthropic", state: null } }; }, async continueWith() { return { text: "", toolCalls: [], stopReason: "end", usage: {}, model: "x", continuation: { provider: "anthropic", state: null } }; } }) }));
+const { POST } = await import("@/app/api/chat/route");
+
 describe("B16.0 — identity/membership change invalidates a bound capability", () => {
   it("21/23: a role change or revocation changes the membership revision", () => {
     const base = membershipRevisionOf(membership());
@@ -62,9 +69,6 @@ describe("B16.0 — identity/membership change invalidates a bound capability", 
   });
 
   it("22/23: a revoked member is refused at the chat surface — no proposal can be issued", async () => {
-    // Mock the provider so no credits are spent even if the route proceeded.
-    vi.doMock("@/app/lib/agent/adapters", () => ({ agentAdapterFor: () => ({ provider: "anthropic", async start() { return { text: "", toolCalls: [], stopReason: "end", usage: {}, model: "x", continuation: { provider: "anthropic", state: null } }; }, async continueWith() { return { text: "", toolCalls: [], stopReason: "end", usage: {}, model: "x", continuation: { provider: "anthropic", state: null } }; } }) }));
-    const { POST } = await import("@/app/api/chat/route");
     injectIdentity({ userId: "u1" });
     injectMembership([{ projectId: "p1", userId: "u1", role: "admin", state: "revoked" }]);
     const response = await POST(new Request("http://localhost/api/chat", {
