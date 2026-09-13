@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-D I5a complete",
+  "currentCheckpoint": "B19-D I5b planned (matrix recorded)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "ad3f066",
+  "lastGreenSha": "bea0d35",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I5b (B19-D): the import security matrix against the surfaces that exist — KiCad assets, library paths, vendor text and links, confusable MPNs, unit ambiguity, stale revisions, conflicting pin data, prompt injection.",
-  "updatedAt": "2026-09-13T00:48:00-04:00"
+  "nextAction": "B19 I5b: acquisition-path rows 01, 03, 20, 26, 27a, 36, 39, 40, 41, 42, 43, 51 — failing tests first, then fixes.",
+  "updatedAt": "2026-09-13T01:43:08-04:00"
 }

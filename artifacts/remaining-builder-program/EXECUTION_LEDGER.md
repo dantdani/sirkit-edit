@@ -1313,3 +1313,21 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-export-license 7/7 (new, in the CI list); atomic, API and PCB suites green (three PCB performance cases timed
   out once under a full parallel run and pass in isolation, 41/41 — machine load, recorded, not a code change); broad run:
   293 files, 3723 passed, 10 expected skips; tsc 0 in the changed files; eslint clean.
+
+### Record correction — timestamps (2026-09-13 local)
+
+- The `updatedAt` stamps written to `PROGRAM_STATE.json` during B19 I2b through I4b (e.g. `03:01`, `03:37`, `03:49`,
+  `04:06`, `04:16` with a `-04:00` offset) were read from a shell clock that was reporting UTC; they are UTC times mislabelled
+  as Eastern. The dates are right. From I5a on, stamps are local Eastern time (the shell now reports EDT). Commit dates in
+  git were always correct: git records the offset itself.
+
+### B19 I5b plan — the import security matrix (2026-09-13 local, solo; this commit)
+
+- CI on I5a (`bea0d35`): green on every job.
+- A read-only multi-agent sweep (5 scouts, 5 adversarial skeptics, 1 synthesis; no file edits, no test runs) mapped the
+  runbook's B19-D cases onto the surfaces that exist. 51 rows kept (1 high, 7 medium, 43 low; none refuted, 2 marked
+  reproduce-first), 6 verified controls to pin, and the absent surfaces recorded with search evidence (no inbound
+  archive/PDF/SVG/CSV import, no model-file ingestion, no distributor text in model prompts).
+- The skeptics corrected several scout claims and test designs before anything was built (e.g. a proposed CSV fix that
+  would have corrupted negative pick-and-place coordinates; tests placed under `lib/__tests__`, which vitest never runs).
+- Recorded as `artifacts/ai-control-plane-b19/import-security-matrix.md`; batches I5b–I5e follow, each test-first.

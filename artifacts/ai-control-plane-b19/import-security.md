@@ -46,3 +46,20 @@ published, and the export reads the pinned snapshot as the caller sends it. One 
   by the manufacturing release chapters; whether their geometry sources' `derivedRedistribution` is checked there is
   **UNKNOWN** from this chapter and recorded for the validation increment.
 - A BOM export carries identity metadata (MPN, manufacturer, quantities), not CAD content, and is not gated here.
+
+## I5b — the import security matrix (plan; rows close as batches land)
+
+A read-only multi-agent sweep (`import-security-matrix.md`) mapped every inbound surface for the runbook's B19-D cases,
+had an adversarial skeptic try to refute each suspected gap, and kept 51 rows (none refuted; two marked
+reproduce-first) plus six verified controls to pin as regression tests. It also confirmed which surfaces do NOT exist:
+no inbound archive, PDF or SVG import, no CSV/BOM import, no model-file ingestion, and no distributor text in any model
+prompt. Every row carries a proposed failing test; nothing is claimed until that test fails on the unchanged code.
+
+The rows land in four test-first batches:
+
+| batch | rows | theme |
+|---|---|---|
+| I5b | 01, 03, 20, 26, 27a, 36, 39, 40, 41, 42, 43, 51 | the acquisition path: exact-MPN binding, derived lifecycle retention, price semantics, lifecycle mapping, confusable identity in bundles, quarantine hygiene, ingestion bounds |
+| I5c | 02, 04, 09, 10, 15, 16, 17, 18, 21, 33, 34, 35 | output injection: chat markdown images, KiCad emitters, CSV formulas and CR, vendor hrefs, report escaping, export selection shape |
+| I5d | 06, 07, 08, 22, 23, 27c, 37, 38, 44–50 | KiCad parsing and atomic data integrity: symbols, inheritance, s-expression bounds, paths, value keys, claims, mapping conflicts, quantities |
+| I5e | 05, 11–14, 19, 24, 25, 28–32 | model context and project import: untrusted catalog text, prompt delimiters, tool-result hygiene, end-to-end injection ratchet, import bounds |
