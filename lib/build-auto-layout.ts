@@ -987,7 +987,7 @@ export function autoLayoutBuild(
     // this part at this value ('' link = value-agnostic default). Instances
     // without a matching link simply carry no authority and fail closed at
     // durable PCB publication — never guessed here.
-    const assignment = valueKeyLink(part?.atomicAssignments, c.value); // [B19-D I5d row 06] own links only
+    const assignment = valueKeyLink(part?.atomicAssignments, c.value, part?.withdrawnValueKeys); // [B19-D I5d row 06] own links only; [B19-E E3 review] no default for a withdrawn value
     byRefDes.set(c.refDes, {
       comp: c,
       part,

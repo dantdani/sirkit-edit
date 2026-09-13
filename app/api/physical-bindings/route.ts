@@ -9,7 +9,7 @@ import type { NewPhysicalBindingCandidate } from "@/app/lib/physical-binding/dom
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
 import { pcbBoardLineageOf } from "@/app/lib/pcb/board-identity";
-import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
+import { loadSelectablePortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { DurableComponentReviewStore, listComponentReviews, REVIEW_REQUESTER_ROLES, REVIEW_RESOLVER_ROLES, requestComponentReview, resolveComponentReview, withdrawComponentReview, type ComponentReviewDeps, type ComponentReviewStatus } from "@/app/lib/physical-binding/review-handoff";
 import { PHYSICAL_BINDING_API_DEADLINE_MS, PHYSICAL_BINDING_API_MAX_BYTES, bindingScopeFromContext, object } from "./_scope";
@@ -41,7 +41,7 @@ const REVIEW_STATUSES: ReadonlySet<string> = new Set(["pending", "approved", "re
 function reviewDeps(): ComponentReviewDeps {
   return {
     store: new DurableComponentReviewStore(getDurableWorkflowRepository()),
-    loadSnapshot: loadPublishedPortableSnapshot,
+    loadSnapshot: loadSelectablePortableSnapshot, // [B19-E E3] a review request asks for a new binding: never a withdrawn revision
     membership: resolveMembershipRepository(),
     bind: (input) => bindAtomicSelection(service, repository, { scope: input.scope, actor: input.actor, boardInstanceId: input.boardInstanceId, componentInstanceId: input.componentInstanceId, atomicPartRevisionId: input.atomicPartRevisionId }),
   };

@@ -122,3 +122,34 @@ export function verifyMembershipAndOwnership(snapshot: SchemaSnapshot): SchemaCr
   }
   return rows;
 }
+
+/**
+ * [B19-E E3] The append-only withdrawal record (migration 0030), evaluated against the catalog: the columns and their
+ * nullability, the withdrawal-state / reason / successor / human-actor checks, the revision, successor and audit keys, and
+ * the one-event-per-state unique index.
+ */
+export function verifyAtomicRevisionStatusEvents(snapshot: SchemaSnapshot): SchemaCriterion[] {
+  const rows: SchemaCriterion[] = [];
+  const has = (id: string, ok: boolean, detail: string) => rows.push({ id, ok, detail });
+  const TABLE = "atomic_revision_status_events";
+  const column = (name: string) => snapshot.columns.find((item) => item.table === TABLE && item.name === name);
+  const definition = (name: string) => snapshot.constraints.find((item) => item.table === TABLE && item.name === name)?.definition ?? "";
+
+  has("atomic-status.table", snapshot.tables.some((item) => item.name === TABLE), `${TABLE} exists`);
+  for (const [name, nullable] of [["id", false], ["revision_id", false], ["to_state", false], ["successor_revision_id", true], ["actor_id", false], ["actor_role", false], ["reason", false], ["at", false], ["audit_event_id", false]] as const) {
+    const col = column(name);
+    has(`atomic-status.column.${name}`, Boolean(col) && col!.nullable === nullable && (name !== "at" || col!.type === "timestamp with time zone"), col ? `${col.type} ${col.nullable ? "NULL" : "NOT NULL"}` : "missing");
+  }
+  const toState = definition("atomic_status_event_to_state_check");
+  has("atomic-status.check.to-state", ["deprecated", "superseded", "revoked"].every((state) => toState.includes(`'${state}'`)) && !/'published'/.test(toState), toState || "missing");
+  has("atomic-status.check.reason", /btrim\(reason\) <> ''/.test(definition("atomic_status_event_reason_check")), definition("atomic_status_event_reason_check") || "missing");
+  has("atomic-status.check.successor", /successor_revision_id IS NULL/.test(definition("atomic_status_event_successor_check")) && /successor_revision_id <> revision_id/.test(definition("atomic_status_event_successor_check")), definition("atomic_status_event_successor_check") || "missing");
+  const actor = definition("atomic_status_event_actor_check");
+  has("atomic-status.check.actor", /llm\|ocr\|agent/.test(actor) && /'publisher'/.test(actor) && /'admin'/.test(actor) && /btrim\(actor_id\) <> ''/.test(actor), actor || "missing");
+  for (const [name, target] of [["atomic_status_event_revision_fk", /FOREIGN KEY \(revision_id\) REFERENCES atomic_part_revisions\(id\)/], ["atomic_status_event_successor_fk", /FOREIGN KEY \(successor_revision_id\) REFERENCES atomic_part_revisions\(id\)/], ["atomic_status_event_audit_fk", /FOREIGN KEY \(audit_event_id\) REFERENCES atomic_audit_events\(id\)/]] as const) {
+    has(`atomic-status.fk.${name}`, target.test(definition(name)), definition(name) || "missing");
+  }
+  const unique = snapshot.indexes.find((item) => item.table === TABLE && item.name === "atomic_status_event_revision_state_uniq")?.definition ?? "";
+  has("atomic-status.index.revision-state-unique", /UNIQUE INDEX .* \(revision_id, to_state\)/.test(unique), unique || "missing");
+  return rows;
+}

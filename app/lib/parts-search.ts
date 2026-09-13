@@ -33,6 +33,7 @@ import {
 } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, alternates, partsAtomicLinks } from "@/app/lib/db/schema";
+import { selectableRevisionIdSql } from "@/app/lib/atomic/revision-status-sql";
 import { embedQuery } from "@/app/lib/embeddings";
 import { RERANK_RANK_TOOL, RERANK_SYSTEM_PROMPT } from "@/app/lib/prompts";
 import { rerankCandidatePayload } from "@/app/lib/parts-rerank-payload"; // [B19-D I5e row 05]
@@ -166,11 +167,19 @@ export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
       footprintAssetVersionId: partsAtomicLinks.footprintAssetVersionId,
       mappingCertificateId: partsAtomicLinks.mappingCertificateId,
       footprintFullName: partsAtomicLinks.footprintFullName,
+      selectable: selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId),
     })
     .from(partsAtomicLinks)
     .where(inArray(partsAtomicLinks.partId, unique));
   const byPart = new Map<string, Record<string, NonNullable<CachedPart["atomicAssignment"]>>>();
+  const withdrawnByPart = new Map<string, string[]>();
   for (const link of links) {
+    // [B19-E E3] a link to a withdrawn or missing revision carries no authority into a new instance; approved is derived
+    if (link.selectable !== true) {
+      // [B19-E E3 review] ...and its value never falls back to the '' default
+      if (link.valueKey !== "") withdrawnByPart.set(link.partId, [...(withdrawnByPart.get(link.partId) ?? []), link.valueKey]);
+      continue;
+    }
     const entry = byPart.get(link.partId) ?? {};
     entry[link.valueKey] = {
       revisionId: link.atomicPartRevisionId,
@@ -178,13 +187,14 @@ export async function getFullPartsByIds(ids: string[]): Promise<CachedPart[]> {
       footprintVersionId: link.footprintAssetVersionId,
       mappingCertificateId: link.mappingCertificateId,
       footprintFullName: link.footprintFullName,
-      approved: true,
+      approved: link.selectable,
     };
     byPart.set(link.partId, entry);
   }
   return rows.map((row) => {
     const assignments = byPart.get(row.id);
-    return (assignments ? { ...row, atomicAssignments: assignments } : row) as CachedPart;
+    const withdrawn = withdrawnByPart.get(row.id);
+    return { ...row, ...(assignments ? { atomicAssignments: assignments } : {}), ...(withdrawn ? { withdrawnValueKeys: withdrawn } : {}) } as CachedPart;
   });
 }
 
@@ -288,12 +298,12 @@ export async function searchPartsForAI(
   // Exception: a generic symbol that has been linked to a PUBLISHED atomic part
   // revision *is* buyable — the link carries an exact MPN plus verified
   // symbol/footprint/mapping authority — so it stays visible. Unlinked generics
-  // remain hidden.
+  // remain hidden. [B19-E E3] so do generics whose links all name withdrawn revisions.
   const excludeGenerics = options?.excludeGenerics ?? true;
   const genericWhere: SQL | undefined = excludeGenerics
     ? or(
         eq(parts.isGeneric, false),
-        sql`exists (select 1 from ${partsAtomicLinks} where ${partsAtomicLinks.partId} = ${parts.id})`,
+        sql`exists (select 1 from ${partsAtomicLinks} where ${partsAtomicLinks.partId} = ${parts.id} and ${selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId)})`,
       )
     : undefined;
   const baseWhere: SQL | undefined = and(categoryWhere, genericWhere);
@@ -384,7 +394,7 @@ export async function searchPartsForAI(
       .from(parts)
       .innerJoin(libraries, eq(parts.libraryId, libraries.id))
       .innerJoin(partsAtomicLinks, eq(partsAtomicLinks.partId, parts.id))
-      .where(and(categoryWhere, anyToken))
+      .where(and(categoryWhere, anyToken, selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId))) // [B19-E E3] selectable authority only
       .groupBy(parts.id, libraries.mainCategory)
       .orderBy(desc(authScore))
       .limit(AUTHORITY_POOL);
@@ -437,7 +447,7 @@ async function attachOrderableValues(
   const links = await db
     .select({ partId: partsAtomicLinks.partId, valueKey: partsAtomicLinks.valueKey, footprintFullName: partsAtomicLinks.footprintFullName })
     .from(partsAtomicLinks)
-    .where(inArray(partsAtomicLinks.partId, ids));
+    .where(and(inArray(partsAtomicLinks.partId, ids), selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId))); // [B19-E E3] a withdrawn revision is not orderable authority
   if (links.length === 0) return results;
   const byPart = new Map<string, { values: string[]; footprint: string }>();
   for (const link of links) {

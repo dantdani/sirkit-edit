@@ -119,6 +119,14 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(startsPostgresVia("app/lib/acquisition/__tests__/plain.test.ts", read)).toBe(false);
   });
 
+  it("[B19-E E3 review] every B19 suite runs in CI: a PGlite suite in database-delivery, every other one in prompt-to-gerber", () => {
+    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+    const databaseDelivery = selected(jobFilters("database-delivery"));
+    const b19 = ALL_TESTS.filter((file) => /\/b19-/.test(file));
+    expect(b19).toEqual(expect.arrayContaining(["app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts"]));
+    expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
+  }, 60_000);
+
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {
     const filters = jobFilters("prompt-to-gerber");
     const redundant = filters.filter((filter) => /\.test\.tsx?$/.test(filter) && filters.some((other) => other !== filter && filter.includes(other)));

@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import {
   atomicCadAssets,
@@ -32,12 +32,13 @@ import type {
 } from "./types";
 import { semanticHash } from "./stable";
 import { searchAtomicCatalog, type SearchCatalogView } from "./search";
+import { neverWithdrawnSql } from "./revision-status-sql";
 
 export async function loadAtomicSearchView(): Promise<SearchCatalogView> {
   const db = getDb();
   const revisionRows = await db.select({ revision: atomicPartRevisions.revisionData })
     .from(atomicPartRevisions)
-    .where(eq(atomicPartRevisions.publicationState, "published"));
+    .where(and(eq(atomicPartRevisions.publicationState, "published"), neverWithdrawnSql(atomicPartRevisions.id))); // [B19-E E3] search is a new selection
   const revisions = revisionRows.map((row) => row.revision as AtomicPartRevision).sort((a, b) => a.id.localeCompare(b.id));
   const assetIds = [...new Set(revisions.flatMap((revision) => revision.cadBundles.flatMap((bundle) => [bundle.symbolVersionId, ...(bundle.footprintVersionId ? [bundle.footprintVersionId] : []), ...bundle.modelVersionIds])))];
   const mappingIds = [...new Set(revisions.flatMap((revision) => revision.cadBundles.map((bundle) => bundle.mappingCertificateId).filter((id): id is string => Boolean(id))))];

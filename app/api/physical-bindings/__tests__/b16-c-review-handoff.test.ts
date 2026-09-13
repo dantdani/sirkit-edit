@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-const seams = vi.hoisted(() => ({ snapshotOverride: null as null | ((revisionId: string, snapshot: unknown) => unknown) }));
+const seams = vi.hoisted(() => ({ snapshotOverride: null as null | ((revisionId: string, snapshot: unknown) => unknown), deprecated: new Set<string>() }));
 vi.mock("@/app/lib/durable-workflow/runtime", async () => {
   const { InMemoryDurableWorkflowRepository } = await import("@/app/lib/durable-workflow/repository");
   const repo = new InMemoryDurableWorkflowRepository();
@@ -30,12 +30,16 @@ vi.mock("@/app/lib/physical-binding/server-repository", async (orig) => {
 });
 vi.mock("@/app/lib/atomic/server-catalog", async () => {
   const { blinkerCatalog } = await import("@/app/lib/fixture-runtime/blinker/catalog");
-  return {
-    loadPublishedPortableSnapshot: async (revisionId: string) => {
-      const snapshot = structuredClone(blinkerCatalog().snapshots.get(revisionId) ?? null);
-      return snapshot && seams.snapshotOverride ? seams.snapshotOverride(revisionId, snapshot) : snapshot;
-    },
+  const load = async (revisionId: string) => {
+    const snapshot = structuredClone(blinkerCatalog().snapshots.get(revisionId) ?? null);
+    return snapshot && seams.snapshotOverride ? seams.snapshotOverride(revisionId, snapshot) : snapshot;
   };
+  // [B19-E E3] the review handoff and a new binding read the selectable loader, a bind replay reads the status; the committed
+  // catalog is published and never withdrawn, except the revisions a test deprecates ([B19-E E3 review]: the two loaders then
+  // differ, so the route's choice of loader is observable)
+  const loadSelectable = async (revisionId: string) => (seams.deprecated.has(revisionId) ? null : load(revisionId));
+  const loadAtomicRevisionStatus = async (ids: readonly string[]) => new Map(ids.flatMap((id) => { const snapshot = blinkerCatalog().snapshots.get(id); const deprecated = seams.deprecated.has(id); return snapshot ? [[id, { revisionId: id, logicalPartId: snapshot.atomicRevision.logicalPartId, state: deprecated ? "deprecated" : "published", selectable: !deprecated, pinnable: true }] as const] : []; }));
+  return { loadPublishedPortableSnapshot: load, loadSelectablePortableSnapshot: loadSelectable, loadAtomicRevisionStatus };
 });
 
 import { GET as bindingsGet, POST as physicalBindings } from "@/app/api/physical-bindings/route";
@@ -240,5 +244,32 @@ describe("B16-C.2 component-binding review handoff (real route, isolated stores)
     signIn("reviewer", { editor: { role: "editor", version: 4 } });
     expect((await physicalBindings(post({ operation: "resolve_review_request", requestId: target.requestId, decision: "maybe", reason: "x" }))).status).toBe(400);
     expect((await physicalBindings(post({ operation: "request_atomic_review", componentInstanceId: "c-9" }))).status).toBe(400);
+  });
+
+  it("8. [B19-E E3 review] a deprecated revision cannot be put up for review, approved from an earlier request, or bound anew — though the pinned loader still serves it", async () => {
+    const REV_D = revisions[3]!;
+    signIn("editor", { editor: { role: "editor", version: 4 } });
+    const opened = await json<{ request: ComponentReviewRequest }>(await physicalBindings(post({ operation: "request_atomic_review", componentInstanceId: "c-8", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_D })));
+    expect(opened.request.status).toBe("pending");
+    seams.deprecated.add(REV_D);
+    try {
+      const { loadPublishedPortableSnapshot, loadSelectablePortableSnapshot } = await import("@/app/lib/atomic/server-catalog");
+      expect(await loadPublishedPortableSnapshot(REV_D)).not.toBeNull();
+      expect(await loadSelectablePortableSnapshot(REV_D)).toBeNull();
+      // a NEW request reads the selectable loader: refused, and nothing pending is created
+      const refused = await physicalBindings(post({ operation: "request_atomic_review", componentInstanceId: "c-8-new", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_D }));
+      expect(refused.status).toBe(404);
+      expect((await json(refused)).code).toBe("PB_ATOMIC_REVISION_NOT_FOUND");
+      const pending = await json<ListBody>(await physicalBindings(post({ operation: "list_review_requests", boardInstanceId: BOARD_ID, status: "pending" })));
+      expect(pending.requests.some((item) => item.componentInstanceId === "c-8-new")).toBe(false);
+      // the request opened before the deprecation cannot be approved into a binding, and a reviewer cannot bind it directly
+      signIn("reviewer", { editor: { role: "editor", version: 4 } });
+      const approve = await physicalBindings(post({ operation: "resolve_review_request", requestId: opened.request.requestId, decision: "approve", reason: "approved after deprecation" }));
+      expect(approve.status).toBe(404);
+      expect((await json(approve)).code).toBe("PB_ATOMIC_REVISION_NOT_FOUND");
+      const bind = await physicalBindings(post({ operation: "bind_atomic_selection", componentInstanceId: "c-8-bind", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_D }));
+      expect(bind.status).toBe(404);
+      expect((await json(bind)).code).toBe("PB_ATOMIC_REVISION_NOT_FOUND");
+    } finally { seams.deprecated.clear(); }
   });
 });

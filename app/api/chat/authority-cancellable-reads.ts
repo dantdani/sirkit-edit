@@ -11,7 +11,9 @@
  * Scope: READS ONLY, and only the authority queries —
  *  - binding-set lookup (`physical_binding_sets` by full component scope),
  *  - binding revision/aggregate reads (`physical_binding_revisions`),
- *  - atomic revision lookup (`atomic_part_revisions`, published only),
+ *  - atomic revision lookup (`atomic_part_revisions`, published only; [B19-E E3]
+ *    "pinned" excludes revoked revisions, "selectable" excludes every
+ *    withdrawn one — the same predicates as `app/lib/atomic/server-catalog.ts`),
  *  - CAD asset lookup (`atomic_cad_assets`, symbol + footprint versions),
  *  - mapping lookup (`atomic_mapping_certificates`, approved only),
  *  - exact-part lookup (`atomic_exact_parts` — the manufacturer identity is
@@ -108,8 +110,16 @@ const SQL_BINDING_SETS =
   'select "binding_set" from "physical_binding_sets" where "tenant_id" = $1 and "project_id" = $2 and "branch_id" = $3 and "board_instance_id" = $4 and "component_instance_id" = $5';
 const SQL_BINDING_REVISIONS = (count: number): string =>
   `select "binding" from "physical_binding_revisions" where "revision_id" in (${Array.from({ length: count }, (_, index) => `$${index + 1}`).join(", ")})`;
-const SQL_ATOMIC_REVISION =
-  'select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2';
+// [B19-E E3] withdrawal is append-only (`atomic_revision_status_events`): an existing pin reads a revision unless it was revoked
+// (OD-38), a new selection reads it only if it was never withdrawn. Mirrors `readModeSql` in app/lib/atomic/revision-status-sql.ts.
+const SQL_ATOMIC_REVISION_PINNED =
+  `select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2 and not exists (select 1 from "atomic_revision_status_events" where "atomic_revision_status_events"."revision_id" = "atomic_part_revisions"."id" and "atomic_revision_status_events"."to_state" = 'revoked')`;
+const SQL_ATOMIC_REVISION_SELECTABLE =
+  'select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2 and not exists (select 1 from "atomic_revision_status_events" where "atomic_revision_status_events"."revision_id" = "atomic_part_revisions"."id")';
+
+/** [B19-E E3] "pinned": a revision an existing pin names (published, not revoked); "selectable": a new selection (never withdrawn). */
+export type AtomicAuthorityReadMode = "pinned" | "selectable";
+const atomicRevisionSql = (mode: AtomicAuthorityReadMode): string => (mode === "selectable" ? SQL_ATOMIC_REVISION_SELECTABLE : SQL_ATOMIC_REVISION_PINNED);
 const SQL_CAD_ASSETS =
   'select "kind", "payload" from "atomic_cad_assets" where "version_id" in ($1, $2)';
 const SQL_MAPPING_CERTIFICATE =
@@ -179,8 +189,9 @@ export async function confirmPublishedAtomicRevisionCancellable(
   client: CancellableAuthoritySqlClient,
   atomicPartRevisionId: string,
   signal: AbortSignal | undefined,
+  mode: AtomicAuthorityReadMode = "pinned",
 ): Promise<AtomicRevisionConfirmation | null> {
-  const revisionRows = await runCancellableAuthorityRead(client, SQL_ATOMIC_REVISION, [atomicPartRevisionId, "published"], signal);
+  const revisionRows = await runCancellableAuthorityRead(client, atomicRevisionSql(mode), [atomicPartRevisionId, "published"], signal);
   const revision = revisionRows[0]?.revision_data as AtomicPartRevision | undefined;
   if (!revision || typeof revision !== "object") return null;
   if (revision.id !== atomicPartRevisionId || revision.publicationState !== "published") return null;
@@ -250,8 +261,9 @@ export async function loadPublishedSymbolPinFactsCancellable(
   client: CancellableAuthoritySqlClient,
   atomicPartRevisionId: string,
   signal: AbortSignal | undefined,
+  mode: AtomicAuthorityReadMode = "pinned",
 ): Promise<PublishedSymbolPinFacts | null> {
-  const revisionRows = await runCancellableAuthorityRead(client, SQL_ATOMIC_REVISION, [atomicPartRevisionId, "published"], signal);
+  const revisionRows = await runCancellableAuthorityRead(client, atomicRevisionSql(mode), [atomicPartRevisionId, "published"], signal);
   const revision = revisionRows[0]?.revision_data as AtomicPartRevision | undefined;
   if (!revision || typeof revision !== "object") return null;
   if (revision.id !== atomicPartRevisionId || revision.publicationState !== "published") return null;

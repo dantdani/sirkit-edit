@@ -33,6 +33,7 @@ export const REGISTERED_POST_JOURNAL_MIGRATIONS: readonly string[] = Object.free
   "0027_project_membership",
   "0028_bom_project_ownership",
   "0029_part_offers_mpn", // [B19-D I5b] offers carry their exact MPN
+  "0030_atomic_revision_status_events", // [B19-E E3] append-only withdrawal of published atomic revisions
 ]);
 
 export const MIGRATION_RUNNER_VERSION = "sirkit.db-migration-runner.v1" as const;

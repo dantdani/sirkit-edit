@@ -93,13 +93,23 @@ const BASE = {
   schematicState: SCHEMATIC,
 };
 
+/**
+ * [B19-E E3] harness fix, not a pin move: the test holds every Request it sends until the test ends, as the server does
+ * while a handler runs. A Request relays its init signal's abort through an AbortController only the Request references;
+ * once the route has taken `request.signal`, nothing else holds the Request, so a garbage collection inside 23b's 25 ms
+ * window dropped the relay and the abort reached the route only at the 5 s authority deadline. Proven in isolation (a
+ * forced collection reproduced the 5 s settlement with the Request dropped and a 1 ms settlement with it held).
+ */
+const inFlightRequests: Request[] = [];
 function post(body: unknown, init?: { signal?: AbortSignal }): Promise<Response> {
-  return POST(new Request("http://localhost/api/chat", {
+  const request = new Request("http://localhost/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     ...(init?.signal ? { signal: init.signal } : {}),
-  }));
+  });
+  inFlightRequests.push(request);
+  return POST(request);
 }
 
 /** Drive the real handler and return the toolset the provider actually
@@ -135,7 +145,7 @@ function recordingSource(aggregates: readonly AuthorityBindingAggregate[], opts?
 }
 
 describe("B13.2 §E — the ACTUAL /api/chat handler proves the production authority path", () => {
-  afterEach(() => { resetComponentAuthoritySourceFactory(); providerCalls.start = 0; });
+  afterEach(() => { resetComponentAuthoritySourceFactory(); providerCalls.start = 0; inFlightRequests.length = 0; });
 
   it("19. a matching durable aggregate becomes the sealed resource and exposes the tool in the REAL run toolset", async () => {
     const aggregate = await validApprovedAggregate(COMPONENT, { scopeOverrides: ROUTE_BOARD_SCOPE });

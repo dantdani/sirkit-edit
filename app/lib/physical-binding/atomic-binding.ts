@@ -12,7 +12,7 @@
  * carries the same digests the pcb-sync materialization boundary re-verifies.
  */
 
-import { loadPublishedPortableSnapshot } from "../atomic/server-catalog";
+import { loadAtomicRevisionStatus, loadSelectablePortableSnapshot } from "../atomic/server-catalog";
 import { sha256 } from "../atomic/stable";
 import type { EngineeringActor } from "../engineering/types";
 import { createPhysicalBindingCandidate } from "./domain";
@@ -76,6 +76,10 @@ export async function bindAtomicSelection(
   for (const state of existingSets) {
     const selected = state.bindings.find((binding) => binding.revisionId === state.set.effectiveSelectedRevisionId);
     if (selected && selected.exactPart?.atomicPartRevisionId === input.atomicPartRevisionId && selected.approval.state === "approved") {
+      // [B19-E E3] the replay re-reads the revision's status: an existing pin survives deprecation or supersession (OD-38),
+      // never revocation or a revision the catalog no longer publishes
+      const status = (await loadAtomicRevisionStatus([input.atomicPartRevisionId])).get(input.atomicPartRevisionId);
+      if (!status?.pinnable) throw new Error(status ? "PB_ATOMIC_REVISION_REVOKED" : "PB_ATOMIC_REVISION_NOT_FOUND");
       return { setId: state.set.setId, bindingRevisionId: selected.revisionId, lifecycleState: selected.lifecycleState, alreadyBound: true };
     }
   }
@@ -84,7 +88,8 @@ export async function bindAtomicSelection(
   if (!["reviewer", "project_admin"].includes(input.actor.role)) {
     throw new Error("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
   }
-  const snapshot = await loadPublishedPortableSnapshot(input.atomicPartRevisionId);
+  // [B19-E E3] a NEW binding is a new selection: published and never withdrawn
+  const snapshot = await loadSelectablePortableSnapshot(input.atomicPartRevisionId);
   if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
   const { footprint, mapping, symbol, exactPart, manufacturer } = snapshot;
   if (!footprint || !mapping || !exactPart || !manufacturer) throw new Error("PB_ATOMIC_REVISION_INCOMPLETE");

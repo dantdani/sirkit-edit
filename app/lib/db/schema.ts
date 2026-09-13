@@ -688,6 +688,33 @@ export const atomicAuditEvents = pgTable("atomic_audit_events", {
   event: jsonb("event").$type<AuditEvent>().notNull(),
 }, (table) => ({ objectIdx: index("atomic_audit_object_idx").on(table.objectType, table.objectId, table.at) }));
 
+/**
+ * [B19-E E3] Append-only withdrawal of a published atomic revision (migration 0030). `publication_state` is part of the
+ * revision's record hash, so a withdrawal is never an in-place update: the latest event (states only move forward) is the
+ * revision's catalog status. Each state is entered at most once per revision; every event names its audit row.
+ */
+export const atomicRevisionStatusEvents = pgTable("atomic_revision_status_events", {
+  id: text("id").primaryKey(),
+  revisionId: text("revision_id").notNull(),
+  toState: text("to_state").$type<"deprecated" | "superseded" | "revoked">().notNull(),
+  successorRevisionId: text("successor_revision_id"),
+  actorId: text("actor_id").notNull(),
+  actorRole: text("actor_role").$type<"publisher" | "admin">().notNull(),
+  reason: text("reason").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  auditEventId: text("audit_event_id").notNull(),
+}, (table) => ({
+  revisionStateUniq: uniqueIndex("atomic_status_event_revision_state_uniq").on(table.revisionId, table.toState),
+  successorIdx: index("atomic_status_event_successor_idx").on(table.successorRevisionId),
+  toStateCheck: check("atomic_status_event_to_state_check", sql`${table.toState} IN ('deprecated', 'superseded', 'revoked')`),
+  reasonCheck: check("atomic_status_event_reason_check", sql`btrim(${table.reason}) <> ''`),
+  successorCheck: check("atomic_status_event_successor_check", sql`${table.successorRevisionId} IS NULL OR ${table.successorRevisionId} <> ${table.revisionId}`),
+  actorCheck: check("atomic_status_event_actor_check", sql`btrim(${table.actorId}) <> '' AND lower(btrim(${table.actorId})) !~ '^(llm|ocr|agent):' AND ${table.actorRole} IN ('publisher', 'admin')`),
+  revisionFk: foreignKey({ name: "atomic_status_event_revision_fk", columns: [table.revisionId], foreignColumns: [atomicPartRevisions.id] }).onDelete("no action").onUpdate("no action"),
+  successorFk: foreignKey({ name: "atomic_status_event_successor_fk", columns: [table.successorRevisionId], foreignColumns: [atomicPartRevisions.id] }).onDelete("no action").onUpdate("no action"),
+  auditFk: foreignKey({ name: "atomic_status_event_audit_fk", columns: [table.auditEventId], foreignColumns: [atomicAuditEvents.id] }).onDelete("no action").onUpdate("no action"),
+}));
+
 // ─── Stage 6 immutable hierarchical constraint records ─────────────────────
 
 export const constraintSetRevisions = pgTable("constraint_set_revisions", {

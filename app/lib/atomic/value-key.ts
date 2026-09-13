@@ -40,10 +40,13 @@ export function normalizeValueKey(value: string | undefined | null): string {
 /**
  * [B19-D I5d row 06] The link for a schematic value: its own value key, else the value-agnostic '' default. Own properties
  * only — a value such as `constructor` must not read the object's prototype as an assignment.
+ * [B19-E E3 review] A value whose own link points at a withdrawn or missing revision (`withdrawnKeys`) has no link: it never
+ * falls back to the '' default, which can be a different exact part.
  */
-export function valueKeyLink<T>(links: Readonly<Record<string, T>> | null | undefined, value: string | undefined | null): T | undefined {
+export function valueKeyLink<T>(links: Readonly<Record<string, T>> | null | undefined, value: string | undefined | null, withdrawnKeys?: readonly string[] | null): T | undefined {
   if (!links) return undefined;
   const key = normalizeValueKey(value);
   if (Object.hasOwn(links, key)) return links[key];
+  if (withdrawnKeys?.includes(key)) return undefined;
   return Object.hasOwn(links, "") ? links[""] : undefined;
 }

@@ -13,11 +13,14 @@ import {
   atomicMappingCertificates,
   atomicOfferSnapshots,
   atomicPartRevisions,
+  atomicRevisionStatusEvents,
   atomicSourceRecords,
   atomicRawObjects,
   atomicSources,
   atomicSupplierParts,
 } from "@/app/lib/db/schema";
+import { readModeSql } from "./revision-status-sql";
+import { revisionStatusFromEvents, type AtomicRevisionReadMode, type AtomicRevisionStatus } from "./revision-status";
 import type {
   ApplicationGuidance,
   AtomicPartRevision,
@@ -45,14 +48,60 @@ function oneOfKind<T extends { kind: string }>(rows: Array<{ kind: string; paylo
   return rows.find((row) => row.kind === kind)?.payload as T | undefined;
 }
 
-/** Server-only reconstruction of the immutable portable snapshot from Stage 5 tables. */
+const STATUS_BATCH = 500;
+
+/**
+ * [B19-E E3] The catalog status of each published revision named (published, deprecated, superseded or revoked, with its
+ * successor and whether it is selectable or pinnable). Ids that name no published revision are absent from the map.
+ */
+export async function loadAtomicRevisionStatus(revisionIds: readonly string[]): Promise<Map<string, AtomicRevisionStatus>> {
+  const unique = [...new Set(revisionIds.filter((id): id is string => typeof id === "string" && id.length > 0))];
+  const statuses = new Map<string, AtomicRevisionStatus>();
+  if (unique.length === 0) return statuses;
+  // the fixture runtime's committed catalog is published and never withdrawn
+  if (fixtureRuntimeEnabled()) {
+    const snapshots = fixtureContainer().catalog.snapshots;
+    for (const id of unique) {
+      const snapshot = snapshots.get(id);
+      if (snapshot) statuses.set(id, revisionStatusFromEvents(id, snapshot.atomicRevision.logicalPartId, []));
+    }
+    return statuses;
+  }
+  const db = getDb();
+  for (let index = 0; index < unique.length; index += STATUS_BATCH) {
+    const batch = unique.slice(index, index + STATUS_BATCH);
+    const rows = await db.select({ id: atomicPartRevisions.id, logicalPartId: atomicPartRevisions.logicalPartId })
+      .from(atomicPartRevisions)
+      .where(and(inArray(atomicPartRevisions.id, batch), eq(atomicPartRevisions.publicationState, "published")));
+    if (rows.length === 0) continue;
+    const events = await db.select({ revisionId: atomicRevisionStatusEvents.revisionId, toState: atomicRevisionStatusEvents.toState, successorRevisionId: atomicRevisionStatusEvents.successorRevisionId, at: atomicRevisionStatusEvents.at, reason: atomicRevisionStatusEvents.reason })
+      .from(atomicRevisionStatusEvents)
+      .where(inArray(atomicRevisionStatusEvents.revisionId, rows.map((row) => row.id)));
+    for (const row of rows) statuses.set(row.id, revisionStatusFromEvents(row.id, row.logicalPartId, events.filter((event) => event.revisionId === row.id)));
+  }
+  return statuses;
+}
+
+/**
+ * Server-only reconstruction of the immutable portable snapshot from Stage 5 tables, for a revision an EXISTING pin names:
+ * [B19-E E3] published and not revoked — deprecated and superseded revisions keep materializing, syncing and exporting (OD-38).
+ */
 export async function loadPublishedPortableSnapshot(revisionId: string): Promise<PortableAtomicSnapshot | null> {
-  // [B16-C §5] fixture runtime: the committed blinker catalog's published revisions (no database).
+  return loadPortableSnapshot(revisionId, "pinned");
+}
+
+/** [B19-E E3] The portable snapshot for a NEW selection, binding or link: published and never withdrawn. */
+export async function loadSelectablePortableSnapshot(revisionId: string): Promise<PortableAtomicSnapshot | null> {
+  return loadPortableSnapshot(revisionId, "selectable");
+}
+
+async function loadPortableSnapshot(revisionId: string, mode: AtomicRevisionReadMode): Promise<PortableAtomicSnapshot | null> {
+  // [B16-C §5] fixture runtime: the committed blinker catalog's published revisions (no database, never withdrawn).
   if (fixtureRuntimeEnabled()) return structuredClone(fixtureContainer().catalog.snapshots.get(revisionId) ?? null);
   const db = getDb();
   const [revisionRow] = await db.select({ revision: atomicPartRevisions.revisionData })
     .from(atomicPartRevisions)
-    .where(and(eq(atomicPartRevisions.id, revisionId), eq(atomicPartRevisions.publicationState, "published")))
+    .where(and(eq(atomicPartRevisions.id, revisionId), eq(atomicPartRevisions.publicationState, "published"), readModeSql(atomicPartRevisions.id, mode)))
     .limit(1);
   if (!revisionRow) return null;
   const revision = revisionRow.revision as AtomicPartRevision;

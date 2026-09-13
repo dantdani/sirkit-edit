@@ -24,7 +24,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadMigrationManifest, truncateManifest } from "../migrations/manifest";
 import { createPostgresMigrationExecutor } from "../migrations/postgres-executor";
 import { checkMigrationPrerequisites, migrateDatabase, migrationStatus } from "../migrations/runner";
-import { captureSchemaSnapshot, schemaFingerprint, verifyMembershipAndOwnership } from "../migrations/verify-schema";
+import { captureSchemaSnapshot, schemaFingerprint, verifyAtomicRevisionStatusEvents, verifyMembershipAndOwnership } from "../migrations/verify-schema";
 import { databaseQualification, withQualifiedDatabase } from "../test-qualification";
 
 const qualification = databaseQualification();
@@ -55,6 +55,8 @@ describe.runIf(qualification.enabled)("B16-B §qualified PostgreSQL — clean, r
     const snapshot = await captureSchemaSnapshot(executor);
     const criteria = verifyMembershipAndOwnership(snapshot);
     expect(criteria.filter((row) => !row.ok), JSON.stringify(criteria.filter((row) => !row.ok))).toEqual([]);
+    const statusEvents = verifyAtomicRevisionStatusEvents(snapshot).filter((row) => !row.ok); // [B19-E E3] migration 0030
+    expect(statusEvents, JSON.stringify(statusEvents)).toEqual([]);
     cleanPrint = schemaFingerprint(snapshot);
     console.log(`[b16-b postgres qualification] clean fingerprint ${cleanPrint}`);
   }, 300_000);
@@ -73,7 +75,7 @@ describe.runIf(qualification.enabled)("B16-B §qualified PostgreSQL — clean, r
       await requireEmpty(upgrader, "SIRKIT_DB_QUALIFICATION_URL_2");
       await migrateDatabase(upgrader, { manifest: truncateManifest(manifest, 27) });
       const upgrade = await migrateDatabase(upgrader, { manifest });
-      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn"]); // [B19-D I5b review] pin move missed in I5b
+      expect(upgrade.applied).toEqual(["0027_project_membership", "0028_bom_project_ownership", "0029_part_offers_mpn", "0030_atomic_revision_status_events"]); // [B19-D I5b review] pin move missed in I5b; [B19-E E3] reviewed pin move: + 0030
       expect(schemaFingerprint(await captureSchemaSnapshot(upgrader))).toBe(cleanPrint);
     } finally {
       await upgrader.close();

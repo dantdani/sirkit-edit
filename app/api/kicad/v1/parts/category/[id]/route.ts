@@ -1,6 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { atomicPartRevisions } from "@/app/lib/db/schema";
+import { neverWithdrawnSql } from "@/app/lib/atomic/revision-status-sql";
 import { kicadLibraryRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export const GET = kicadLibraryRoute({ routeParams: ["id"] }, async ({ params })
   try {
     const rows = await getDb().select({ id: atomicPartRevisions.id, revision: atomicPartRevisions.revisionData })
       .from(atomicPartRevisions)
-      .where(eq(atomicPartRevisions.publicationState, "published"))
+      .where(and(eq(atomicPartRevisions.publicationState, "published"), neverWithdrawnSql(atomicPartRevisions.id))) // [B19-E E3] never a withdrawn revision
       .orderBy(asc(atomicPartRevisions.id))
       .limit(5_000);
     return Response.json(rows.map((row) => ({

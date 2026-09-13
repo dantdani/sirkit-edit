@@ -1612,3 +1612,43 @@ _(discovery, reproduction and results appended below as they are observed)_
 - The E3 workflow started before the machine restarted did not complete and left no working-tree changes; it is re-run on
   this commit.
 
+### B19-E E3 — exact-revision integrity at the durable atomic boundary (2026-09-13 local; two workflows + lead; this commit)
+
+- Incident, recorded as it happened: the first E3 workflow (started before the machine restart) was still running when a second
+  E3 run was launched on 5b2c3ca. The second run's implementer saw the first one writing, stood aside and changed nothing; its
+  reviewers and fixer then worked on the first run's implementation while the first run's own review and fix continued. The
+  lead stopped the first run during its fix stage, backed up the tree, and re-verified everything below on the combined result.
+- Implementation (first run, test-first: 45 new cases failed on the unchanged code — the collision resolved instead of
+  rejecting, an identical re-publish wrote a second audit row, 20 validation refusals did not throw, AI and single-person
+  transitions were allowed, withdrawal did not exist):
+  - publication validation recomputes id and semanticHash, requires approve and publish by different humans (never
+    llm:/ocr:/agent:, compared after trimming, NFKC and case folding), the publish actor equals the caller, and a runtime role
+    check; the revision insert ignores conflicts only on its id, so a (logicalPartId, revision) collision throws and rolls back
+    revision, links and audit row; an identical re-publish is idempotent;
+  - `withdrawPublishedAtomicRevision` appends to the new `atomic_revision_status_events` table (migration 0030, registered,
+    forward-only; CHECKs, FKs, a unique (revision, state) index; verify-schema criteria) with an audit row in one transaction;
+    only legal edges, selectable same-part successors, a reason, publisher/admin humans;
+  - catalog transitions refuse AI actors for approve/publish/withdraw states and approver == publisher (OD-37);
+  - loaders: `loadAtomicRevisionStatus`, `loadSelectablePortableSnapshot` (new selection and binding) and a pinned loader that
+    keeps deprecated/superseded but refuses revoked (OD-38), mirrored in the chat raw-SQL reads; new-selection reads (atomic
+    catalog, KiCad category, catalog search, parts search, part detail) list only selectable revisions and derive `approved`;
+    a bind replay on a revoked revision is refused.
+- Review fixes (second run's fixer, test-first; an independent checker confirmed all ten): a withdrawn revision is never
+  re-published or linked, and a replay may not add links (the publish audit now names approver, role and links); CI lists carry
+  the three E3 suites and the CI job-scope guard requires every B19 suite to run; strengthened two-person, successor,
+  handoff-loader, snapshot-id and collision tests, each proven by a deliberate breakage. First run's review: withdrawal refusal
+  assertions are anchored so drizzle's query text cannot satisfy them.
+- Lead fix (split reviewer verdicts, resolved fail-closed): a value whose own link points at a withdrawn or missing revision no
+  longer falls back to the part's '' default link, which can be a different exact part. Parts carry `withdrawnValueKeys` and
+  `valueKeyLink` refuses the fallback for them (test failed first; a mutation removing the auto-layout guard is caught).
+- Reviewed pin moves: B16-B migration pins 30 → 31 entries and the qualification upgrade list gain 0030; three suites' server-
+  catalog mocks export the new loaders (no assertion changed); the b13-2 chat cancellation harness keeps each Request alive for
+  the test (a garbage-collected Request dropped the abort; proven with a temporary file, since deleted; no assertion changed).
+- Gates (lead re-run on the combined tree, bounded batches): atomic 19 files / 298; db, physical binding 13 / 101 (+9 opt-in
+  skips); catalog routes and tranche parity 5 / 183; chat and fixture runtime 14 / 84; engineering authority, project suites,
+  AST import gates, CI scope, no-purchase and b13-2 22 / 354; prompt-to-gerber, PCB sync, auth ratchets and parts-search
+  consumers 35 / 444 (+10 skips); tsc 0 (4 GB heap); eslint clean on 30 changed files. No route added (ratchet 159).
+- Recorded, not fixed: the operator seed script's reuse path still reads through the pinned loader; the FOR SHARE lock on
+  re-publish is not exercised by a concurrent test (PGlite has one connection); whether Next.js keeps a Request alive for the
+  life of a handler (abort propagation on client disconnect) is unverified and is a separate hardening item.
+

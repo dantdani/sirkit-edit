@@ -35,12 +35,26 @@ export interface CatalogSnapshot {
 
 export type CatalogActorRole = "ingestion_worker" | "reviewer" | "publisher" | "admin" | "agent";
 
-function roleMayTransition(role: CatalogActorRole, to: RecordState): boolean {
+export function roleMayTransition(role: CatalogActorRole, to: RecordState): boolean {
   if (role === "admin") return true;
   if (to === "needs_review") return role === "ingestion_worker" || role === "reviewer" || role === "agent";
   if (to === "approved" || to === "draft") return role === "reviewer";
   if (to === "published" || to === "deprecated" || to === "revoked" || to === "superseded") return role === "publisher";
   return false;
+}
+
+/** [B19-E E3] States that carry catalog authority: only a human may move a revision into one. */
+export const HUMAN_AUTHORITY_STATES: ReadonlySet<RecordState> = new Set<RecordState>(["approved", "published", "deprecated", "revoked", "superseded"]);
+
+/** [B19-E E3] The comparable form of an actor id: NFKC, trimmed, case-folded (so ` LLM:x` and `llm:x` are one actor). */
+export function catalogActorKey(actorId: string): string {
+  return typeof actorId === "string" ? actorId.normalize("NFKC").trim().toLowerCase() : "";
+}
+
+/** [B19-E E3] An `llm:`, `ocr:` or `agent:` id (in any case, behind any whitespace) or a blank id is never a human actor. */
+export function isHumanCatalogActorId(actorId: string): boolean {
+  const key = catalogActorKey(actorId);
+  return key.length > 0 && !/^(llm|ocr|agent):/.test(key);
 }
 
 export function createAtomicRevision(input: Omit<AtomicPartRevision, "id" | "semanticHash" | "validatorVersion" | "schemaVersion">): AtomicPartRevision {
@@ -79,7 +93,7 @@ export function createAtomicRevision(input: Omit<AtomicPartRevision, "id" | "sem
   }) as AtomicPartRevision;
 }
 
-const TRANSITIONS: Record<RecordState, RecordState[]> = {
+export const TRANSITIONS: Readonly<Record<RecordState, readonly RecordState[]>> = {
   quarantined: ["draft"],
   draft: ["needs_review"],
   needs_review: ["approved", "draft"],
@@ -175,7 +189,14 @@ export class AtomicCatalog {
     if (!current) throw new Error(`Unknown atomic revision ${input.revisionId}`);
     if (!TRANSITIONS[current.publicationState].includes(input.to)) throw new Error(`Illegal publication transition ${current.publicationState} -> ${input.to}`);
     if (!roleMayTransition(input.actorRole, input.to)) throw new Error(`${input.actorRole} role cannot transition a revision to ${input.to}`);
-    if ((input.to === "approved" || input.to === "published") && /^(llm|ocr|agent):/i.test(input.actorId)) throw new Error("Agents, LLMs, and OCR workers cannot approve or publish");
+    // [B19-E E3] withdrawal states carry authority too; a padded or upper-case automated id is still automated
+    if (HUMAN_AUTHORITY_STATES.has(input.to) && !isHumanCatalogActorId(input.actorId)) throw new Error("Agents, LLMs, and OCR workers cannot approve, publish, deprecate, revoke or supersede");
+    if (input.to === "published") {
+      // [B19-E E3] OD-37: the approval being published names its approver, and the publisher is a different person (admin included)
+      const approval = current.reviewHistory.at(-1);
+      if (!approval || approval.action !== "approve" || approval.toState !== "approved") throw new Error("Publication requires the recorded approval it publishes");
+      if (catalogActorKey(approval.actorId) === catalogActorKey(input.actorId)) throw new Error("The publisher must be a different person from the approver");
+    }
     if (input.to === "approved" || input.to === "published") {
       const decision = evaluateApproval(current, "schematic_only", this.validationContext(), input.now);
       if (!decision.eligible) throw new Error(`Approval blocked: ${decision.blockers.join("; ")}`);
