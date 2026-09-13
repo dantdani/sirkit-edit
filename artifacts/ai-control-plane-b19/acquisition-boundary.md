@@ -153,3 +153,60 @@ the failure's own `message` — database hosts, connection strings, a distributo
   quota. The browser proof (a member's BOM loads with its scope; no project shows the sentence) is carried by B19-E (I6),
   which changes that surface anyway. Label: **PROPOSED** for the browser, **CONFIRMED** at the route and pricing layer.
 - The owner decision this makes is recorded as OD-31: an anonymous visitor now sees cached prices only.
+
+## I2b — the second opinion's outbound call (CONFIRMED)
+
+`/api/schematic/cross-verify` POSTs the user's prompt, with a bearer, to the operator-configured `SCHGEN_ENDPOINT_URL`. It
+is not an acquisition source, but it is a server-side outbound call carrying a credential, so it takes the same boundary.
+
+### Measured first: what the old call really did
+
+Two loopback servers and a dummy bearer (`scratchpad` script, nothing left the machine), driving the old call shape on
+Node 24.15:
+
+| endpoint answer | followed? | bearer at the destination | prompt re-sent | the old route's reply to the caller |
+|---|---|---|---|---|
+| 307 to another origin (a loopback port) | yes | **absent** — Node drops `Authorization` cross-origin | yes | `SchGen endpoint 500: ` + the destination's body |
+| 307 to the same origin | yes | present (by design) | yes | the same, from the same-origin page |
+
+So discovery's D19-6 is **corrected**: the bearer does not cross origins on this runtime. What was real: a redirect is
+followed to any address, loopback included; the prompt is re-sent there; the answer is buffered whole; and the caller is
+told the final hop's status plus the first 200 bytes of its body — or the transport's own error text.
+
+### Reproduced in the suite, before the fix
+
+`b19-cross-verify-egress.test.ts` against the old route: **9 of 12 failed** — the redirect case (no `redirect: "manual"`),
+all five non-permitted endpoints (a request was made to each: metadata over HTTP, `127.0.0.1`, `[::1]`, a name resolving
+to `10.0.0.5`, plain HTTP), the body reflection, the transport-text reflection, and the oversized answer (accepted). Three
+passed as baselines: the working path, the unconfigured path, and "nothing logged carries the token" — **vacuous** on the
+old code, which logged nothing at all; it guards the new log line.
+
+A test-harness mistake was found and fixed before recording: the unconfigured case passed `undefined` to a helper whose
+default filled in the endpoint, so it "reproduced" a request that the old route never made. With the helper taking `null`,
+that case passes on the old code, as it should.
+
+### What changed
+
+| rule | where |
+|---|---|
+| One client for the endpoint, through `outboundFetch`: HTTPS, the configured host is the only allowed host, no URL credentials, no loopback / link-local / private name or resolved address, a 240 s deadline per attempt, a 1 MB body ceiling, JSON only | `app/lib/schgen/endpoint-client.ts` |
+| Redirects refused outright (`maxRedirects: 0`): the request carries a bearer and the prompt | same |
+| The 503 wake-up retry kept, bounded: 3 attempts, 5 s / 10 s back-off, and a 300 s total budget (the old loop had none: up to three 240 s attempts plus back-off) | same |
+| Configuration read at request time, not frozen at module load | same |
+| A failure is a closed reason with a fixed sentence (`HTTP <status>` is the only remote detail kept); the server log gets the boundary's redacted line | same; `app/api/schematic/cross-verify/route.ts` |
+
+### Proven
+
+- Route (12): the redirect is refused after one request; five non-permitted endpoints make no request; neither the
+  endpoint's body nor the transport's text nor the token reaches the caller; nothing logged carries the token; a 2 MB
+  answer is refused; the working path sends the bearer to the configured URL only and compares; unconfigured stays
+  `available: false` with no request.
+- Client (14): configuration and policy; four refusals before any byte; the bounded retry (3 calls, 5000/10000 ms), the
+  still-starting stop, no retry on other statuses; the attempt deadline on a hung endpoint; the total budget ending a
+  retry run; the three answer shapes; non-JSON, invalid JSON and empty code; the bearer as a header with manual redirects.
+- The B16.0.10 cross-verify pins (401, CSRF, 415, 413, the refusal, unconfigured) unchanged and green.
+
+### Stated limit
+
+As in I1: the transport resolves the name again at connect, so a sub-connect rebinding window is not excluded here; the
+exact configured host is the only name allowed.

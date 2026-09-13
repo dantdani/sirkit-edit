@@ -1188,3 +1188,19 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: b19-pricing-live-gate 4/4 and b19-bom-quota 12/12 (both new, in the CI list); the moved pins, the migration
   ratchet and invariant tripwires 171/171; the route artifact and control-inventory gates 51/51; broad run: 281 files,
   3585 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I2b — the second opinion's outbound call through the same boundary (2026-09-13 local, solo; this commit)
+
+- Measured before changing anything (two loopback servers, a dummy bearer, Node 24.15): the old cross-verify call followed
+  a redirect to any address and re-sent the prompt there; Node dropped the bearer on the cross-origin hop and kept it on a
+  same-origin one; the caller was told the final hop's status and first 200 bytes of its body. Discovery's D19-6 is
+  corrected accordingly (the bearer did not cross origins; the rest was real).
+- Reproduced in the suite: 9 of 12 route cases failed against the old route. One harness mistake (a default parameter
+  filling in the endpoint for the "unconfigured" case) was found and fixed before recording. The log-token case is
+  vacuous on the old code, which logged nothing.
+- The call now goes through `outboundFetch` in `app/lib/schgen/endpoint-client.ts`: HTTPS, the configured host only, no
+  inward address, no redirects, 240 s per attempt, 1 MB, JSON; the 503 retry bounded at 3 attempts and 300 s total;
+  configuration read per request; a closed failure with a fixed sentence to the caller and a redacted log line.
+- Tests: b19-cross-verify-egress 12/12 and b19-schgen-endpoint-client 14/14 (both new, in the CI list); the B16.0.10
+  cross-verify pins unchanged; broad run (now including app/lib/schgen and app/api/schematic): 284 files, 3620 passed,
+  10 expected skips; tsc 0 in the changed areas; eslint clean on the changed files.

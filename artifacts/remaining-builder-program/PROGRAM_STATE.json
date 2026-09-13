@@ -2,17 +2,18 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-B I2 complete",
+  "currentCheckpoint": "B19-B I2b complete",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "cf8ad68",
+  "lastGreenSha": "85a0fa9",
+  "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19 I2b: reproduce and close /api/schematic/cross-verify's credential-carrying redirects and remote-body reflection (D19-6); then I3, the versioned source registry (B19-A).",
-  "updatedAt": "2026-09-13T02:50:00-04:00"
+  "nextAction": "B19 I3: the versioned source registry (B19-A) — every field the runbook names, secret references only, LCSC blocked, checked against current official API documentation; the connectors read their policy from it.",
+  "updatedAt": "2026-09-13T03:01:00-04:00"
 }

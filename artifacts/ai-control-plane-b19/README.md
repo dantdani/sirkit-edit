@@ -11,7 +11,7 @@ authoritative engineering truth.
 |---|---|---|
 | discovery | `discovery.md` (six read-only readers over the connectors, the outbound boundary, the quarantine-to-authority pipeline, import security, the product surfaces and the existing tests) | INFERRED — to be confirmed by reproduction in I1 |
 | B19-A source and connector registry | `source-registry.md` | planned |
-| B19-B safe acquisition boundary | `acquisition-boundary.md` | I1 CONFIRMED (the egress path and the three clients); I2 CONFIRMED (who may spend quota; no failure text repeated); I2b planned |
+| B19-B safe acquisition boundary | `acquisition-boundary.md` | I1 CONFIRMED (the egress path and the three clients); I2 CONFIRMED (who may spend quota; no failure text repeated); I2b CONFIRMED (cross-verify's call through the same boundary) |
 | B19-C quarantine-to-authority pipeline | `quarantine-pipeline.md` | planned |
 | B19-D import security and licensing | `import-security.md` | planned |
 | B19-E product and agent experience | `acquisition-ux.md` | planned |
