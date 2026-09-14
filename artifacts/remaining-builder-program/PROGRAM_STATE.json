@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-E E5 complete (lifecycle and binding, reviewed)",
+  "currentCheckpoint": "B19-E E5 complete; durable review digest fixed",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "Fix the pre-existing PostgreSQL component-review evidence digest (capturedAt), then B19-E E6 (bounded read-only agent tools for external search and evidence), then the B19 closeout.",
-  "updatedAt": "2026-09-14T02:19:52-04:00"
+  "nextAction": "B19-E E6 (bounded read-only agent tools for external search and evidence, OD-36/OD-40), then the B19 closeout (artifacts, live contract check, PR #9 ready and merged after green CI).",
+  "updatedAt": "2026-09-14T02:22:15-04:00"
 }

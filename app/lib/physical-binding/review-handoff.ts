@@ -135,7 +135,11 @@ export function buildComponentReviewEvidence(snapshot: PortableAtomicSnapshot, i
       ? { blockers: [`${SYMBOL_DIFFERS_FROM_REVISION}: the instance has symbol ${instance.symbolAssetVersionId.slice(0, 128)} installed, the revision's symbol is ${snapshot.symbol.versionId}`] }
       : {}),
   };
-  return { ...content, evidenceDigest: `sha256:${sha256(stable(content))}` };
+  // [B19-E E5 follow-up] the digest covers the reviewed evidence, not when the catalog was read: `capturedAt` is the snapshot's
+  // read time (the PostgreSQL loader stamps it on every load), so including it refused every durable approval as evidence drift
+  const { capturedAt: _readAt, ...reviewedSources } = content.sourceRevisions;
+  void _readAt;
+  return { ...content, evidenceDigest: `sha256:${sha256(stable({ ...content, sourceRevisions: reviewedSources }))}` };
 }
 
 function workflowScope(scope: ComponentReviewScope): DurableWorkflowScope {

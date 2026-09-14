@@ -1736,3 +1736,18 @@ _(discovery, reproduction and results appended below as they are observed)_
   because `server-catalog.ts` stamps `capturedAt` with the load time and the review evidence digest includes it (pre-existing,
   found by the E5 fixer; fixed next, test-first); no browser run of the new panels (memory).
 
+### B19-E E5 follow-up — durable component-review approvals were always refused (2026-09-14 local, solo; this commit)
+
+- Pre-existing defect found by the E5 fixer: the PostgreSQL catalog loader stamps each portable snapshot's `capturedAt` with the
+  read time, and the component review evidence digest included it, so the evidence re-read at approval never matched the
+  evidence the reviewer saw — every durable approval answered 409 PB_REVIEW_EVIDENCE_CHANGED_CONFLICT. The in-memory fixture
+  catalog hid it (a constant `capturedAt`).
+- Reproduced through the real `/api/physical-bindings` route (B16-C handoff suite, new test 9: the catalog read twice at two
+  times → 409 before the fix). `capturedAt` itself cannot be made constant: mapping verification uses it as "now" to judge
+  source freshness. Fix: the digest covers the reviewed evidence without the read time (still shown to the reviewer); real
+  evidence drift is still refused (test 6 unchanged).
+- Reviews requested before this change carry a digest that included the read time; approving one now asks for a fresh request
+  (409), as the PostgreSQL path already did.
+- Tests: physical bindings (API and library), both component review panels, prompt-to-gerber 17 files / 119 (+6 skips); tsc 0;
+  eslint clean on both files.
+

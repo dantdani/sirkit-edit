@@ -272,4 +272,22 @@ describe("B16-C.2 component-binding review handoff (real route, isolated stores)
       expect((await json(bind)).code).toBe("PB_ATOMIC_REVISION_NOT_FOUND");
     } finally { seams.deprecated.clear(); }
   });
+
+  // [B19-E E5 follow-up] the PostgreSQL catalog loader stamps each snapshot's capturedAt with the time it was read, so the evidence
+  // loaded again at approval always differed from the evidence the reviewer saw at request time: every durable approval was
+  // refused 409 PB_REVIEW_EVIDENCE_CHANGED_CONFLICT. The read time is not reviewed evidence (real drift is still refused, test 6).
+  it("9. [B19-E E5 follow-up] a snapshot read again at a later time is the same evidence: the approval binds", async () => {
+    let reads = 0;
+    seams.snapshotOverride = (_id, snapshot) => { reads += 1; (snapshot as { capturedAt: string }).capturedAt = new Date(Date.UTC(2026, 8, 14, 12, 0, reads)).toISOString(); return snapshot; };
+    try {
+      signIn("editor", { editor: { role: "editor", version: 4 } });
+      const pending = await json<{ request: ComponentReviewRequest }>(await physicalBindings(post({ operation: "request_atomic_review", componentInstanceId: "c-9", boardInstanceId: BOARD_ID, atomicPartRevisionId: REV_A })));
+      expect(pending.request.status).toBe("pending");
+      signIn("reviewer", { editor: { role: "editor", version: 4 } });
+      const approved = await physicalBindings(post({ operation: "resolve_review_request", requestId: pending.request.requestId, decision: "approve", reason: "same evidence, read later" }));
+      expect(reads, "the catalog was read again at approval").toBeGreaterThanOrEqual(2);
+      expect(approved.status).toBe(200);
+      expect((await json<{ request: ComponentReviewRequest }>(approved)).request.status).toBe("approved");
+    } finally { seams.snapshotOverride = null; }
+  });
 });
