@@ -19,7 +19,7 @@
  */
 import type { KicadPin, KicadPinType } from "@/app/lib/kicad/types";
 import type { AtomicPartRevision, MappingCertificate, PortableAtomicSnapshot, SymbolAssetVersion } from "@/app/lib/atomic/types";
-import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
+import { loadAtomicRevisionStatus, loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { PostgresPhysicalBindingRepository } from "@/app/lib/physical-binding/server-repository";
 import type { AtomicRevisionConfirmation, ComponentAuthoritySourceDeps } from "@/app/lib/engineering/component-authority-source";
 import type { PublishedSymbolPinFacts } from "@/app/lib/engineering/replacement-pin-facts";
@@ -98,6 +98,11 @@ export function fixtureComponentAuthoritySource(): ComponentAuthoritySourceDeps 
         footprintAssetVersionId: snapshot.footprint.versionId,
         mappingCertificateId: mapping.id,
       };
+    },
+    // [B19-E E5] the committed catalog's status (published and never withdrawn), through the same loader production reads
+    catalogStatus: async (atomicPartRevisionId) => {
+      const status = (await loadAtomicRevisionStatus([atomicPartRevisionId])).get(atomicPartRevisionId);
+      return status ? { state: status.state, ...(status.successorRevisionId ? { successorRevisionId: status.successorRevisionId } : {}) } : null;
     },
   };
 }

@@ -162,6 +162,14 @@ export async function loadSelectablePortableSnapshot(revisionId: string): Promis
   return loadPortableSnapshot(revisionId, "selectable");
 }
 
+/**
+ * [B19-E E5] The portable snapshot of a revision an existing pin is being moved OFF (a successor diff's from side): published,
+ * whatever was withdrawn since, revoked included. It grants nothing — callers read its assets only to describe the move.
+ */
+export async function loadHistoricalPortableSnapshot(revisionId: string): Promise<PortableAtomicSnapshot | null> {
+  return loadPortableSnapshot(revisionId, "historical");
+}
+
 async function loadPortableSnapshot(revisionId: string, mode: AtomicRevisionReadMode): Promise<PortableAtomicSnapshot | null> {
   // [B16-C §5] fixture runtime: the committed blinker catalog's published revisions (no database, never withdrawn).
   if (fixtureRuntimeEnabled()) return structuredClone(fixtureContainer().catalog.snapshots.get(revisionId) ?? null);

@@ -56,7 +56,7 @@
 
 import { loadRunComponentAuthority } from "@/app/lib/engineering/component-authority-source";
 import { resolveComponentAuthoritySource } from "../chat/component-authority-runtime";
-import { loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "../chat/replacement-facts-runtime";
+import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "../chat/replacement-facts-runtime";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 
@@ -150,8 +150,9 @@ export const POST = authenticatedJsonRoute(
     const record = authority.records.find((candidate) => candidate.componentId === componentInstanceId);
     const targetRevisionId = record?.exactAuthority?.atomicPartRevisionId ?? null;
     const factsSource = resolveReplacementPinFactsSource();
-    const targetPinFacts = targetRevisionId ? await loadRunReplacementPinFacts(factsSource, targetRevisionId, signal) : null;
-    const currentPinFacts = currentAtomicPartRevisionId ? await loadRunReplacementPinFacts(factsSource, currentAtomicPartRevisionId, signal) : null;
+    // [B19-E E5] the target only if selectable; the current revision (the one being left) whatever was withdrawn since (OD-38)
+    const targetPinFacts = targetRevisionId ? await loadRunReplacementPinFacts(factsSource, targetRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, "target") : null;
+    const currentPinFacts = currentAtomicPartRevisionId ? await loadRunReplacementPinFacts(factsSource, currentAtomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, "current") : null;
 
     // Allowlisted bounded result — records/candidates are already the allowlisted
     // authority projection; pin facts are the §B projection. [B14.2 §C]

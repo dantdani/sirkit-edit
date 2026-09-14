@@ -51,9 +51,17 @@ export interface ComponentReviewEvidence {
   } | null;
   sourceRevisions: { atomicPartRevisionId: string; symbolVersionId: string; footprintVersionId: string | null; mappingId: string | null; capturedAt: string };
   evidenceRefs: string[];
+  /**
+   * [B19-E E5] What makes this evidence unapprovable, e.g. "symbol differs from revision: …" when the instance's installed symbol
+   * is not the revision's. Present only when non-empty (a clean request's digest is what it was before E5).
+   */
+  blockers?: string[];
   /** Digest of everything above — the reviewer approves THIS evidence, not a later edit of it. */
   evidenceDigest: string;
 }
+
+/** [B19-E E5] the blocker a request gets when the instance's installed symbol is not the revision's symbol */
+export const SYMBOL_DIFFERS_FROM_REVISION = "symbol differs from revision" as const;
 
 export interface ComponentReviewRequest {
   schemaVersion: typeof COMPONENT_REVIEW_REQUEST_SCHEMA;
@@ -70,6 +78,8 @@ export interface ComponentReviewRequest {
   requestReason: string;
   /** The requester's membership version at request time; a change retires the request. */
   requesterMembershipRevision: string | null;
+  /** [B19-E E5] the symbol version the requesting instance had installed, when the request named one */
+  instanceSymbolAssetVersionId?: string;
   evidence: ComponentReviewEvidence;
   decision?: { decidedBy: EngineeringActor; decidedAt: string; reason: string; bindingSetId?: string; bindingRevisionId?: string; lifecycleState?: string };
   retirement?: { retiredAt: string; reasonCode: "REQUESTER_MEMBERSHIP_REVOKED" | "REQUESTER_ROLE_CHANGED"; detail: string };
@@ -93,7 +103,7 @@ export function componentReviewKey(scope: ComponentReviewScope, target: { boardI
 }
 
 /** The reviewer's evidence, projected verbatim from the PUBLISHED snapshot the binding would use. */
-export function buildComponentReviewEvidence(snapshot: PortableAtomicSnapshot): ComponentReviewEvidence {
+export function buildComponentReviewEvidence(snapshot: PortableAtomicSnapshot, instance: { symbolAssetVersionId?: string } = {}): ComponentReviewEvidence {
   const footprint = snapshot.footprint ?? null;
   const mapping = snapshot.mapping ?? null;
   const electrical = footprint ? footprint.pads.filter((pad) => !pad.mechanical) : [];
@@ -120,6 +130,10 @@ export function buildComponentReviewEvidence(snapshot: PortableAtomicSnapshot): 
     } : null,
     sourceRevisions: { atomicPartRevisionId: snapshot.atomicRevision.id, symbolVersionId: snapshot.symbol.versionId, footprintVersionId: footprint?.versionId ?? null, mappingId: mapping?.id ?? null, capturedAt: snapshot.capturedAt },
     evidenceRefs: [...new Set([...snapshot.evidence.map((item) => item.id), ...(mapping?.evidenceIds ?? [])])].sort(compareCodePoints),
+    // [B19-E E5] atomic-binding never compared the instance's symbol with the revision's: a review would approve a mismatch
+    ...(instance.symbolAssetVersionId !== undefined && instance.symbolAssetVersionId !== snapshot.symbol.versionId
+      ? { blockers: [`${SYMBOL_DIFFERS_FROM_REVISION}: the instance has symbol ${instance.symbolAssetVersionId.slice(0, 128)} installed, the revision's symbol is ${snapshot.symbol.versionId}`] }
+      : {}),
   };
   return { ...content, evidenceDigest: `sha256:${sha256(stable(content))}` };
 }
@@ -173,7 +187,7 @@ export interface ComponentReviewDeps {
   loadSnapshot: (atomicPartRevisionId: string) => Promise<PortableAtomicSnapshot | null>;
   /** Null when the runtime cannot verify memberships (then no retirement is inferred, and that is REPORTED). */
   membership: ProjectMembershipRepository | null;
-  bind: (input: { scope: ComponentReviewScope; actor: EngineeringActor; boardInstanceId: string; componentInstanceId: string; atomicPartRevisionId: string }) => Promise<BindAtomicSelectionResult>;
+  bind: (input: { scope: ComponentReviewScope; actor: EngineeringActor; boardInstanceId: string; componentInstanceId: string; atomicPartRevisionId: string; expectedSymbolAssetVersionId?: string }) => Promise<BindAtomicSelectionResult>;
 }
 
 export interface RequestComponentReviewInput {
@@ -186,6 +200,8 @@ export interface RequestComponentReviewInput {
   requestedAt: string;
   requesterMembershipRevision: string | null;
   idempotencyKey: string;
+  /** [B19-E E5] the symbol version the instance has installed (a mismatch with the revision's symbol blocks approval) */
+  symbolAssetVersionId?: string;
 }
 
 /** Editor (or reviewer/admin) asks for review. Idempotent on the (board, component, candidate) key while pending/approved. */
@@ -197,14 +213,16 @@ export async function requestComponentReview(deps: ComponentReviewDeps, input: R
   if (existing && (existing.request.status === "pending" || existing.request.status === "approved")) return { stored: existing, created: false };
   const snapshot = await deps.loadSnapshot(input.atomicPartRevisionId);
   if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
-  const evidence = buildComponentReviewEvidence(snapshot);
+  const evidence = buildComponentReviewEvidence(snapshot, { symbolAssetVersionId: input.symbolAssetVersionId });
   const request = seal({
     schemaVersion: COMPONENT_REVIEW_REQUEST_SCHEMA,
     requestId: `review:${sha256(stable({ key, requestedAt: input.requestedAt, by: input.actor.actorId })).slice(0, 32)}`,
     tenantId: input.scope.tenantId, projectId: input.scope.projectId, branchId: input.scope.branchId,
     boardInstanceId: input.boardInstanceId, componentInstanceId: input.componentInstanceId, atomicPartRevisionId: input.atomicPartRevisionId,
     status: "pending", requestedBy: structuredClone(input.actor), requestedAt: input.requestedAt, requestReason: input.reason.trim(),
-    requesterMembershipRevision: input.requesterMembershipRevision, evidence,
+    requesterMembershipRevision: input.requesterMembershipRevision,
+    ...(input.symbolAssetVersionId !== undefined ? { instanceSymbolAssetVersionId: input.symbolAssetVersionId } : {}),
+    evidence,
   });
   const stored = await deps.store.put(request, { expectedRevision: existing?.revision ?? 0, idempotencyKey: input.idempotencyKey, committedAt: input.requestedAt });
   return { stored, created: true };
@@ -269,9 +287,11 @@ export async function resolveComponentReview(deps: ComponentReviewDeps, input: R
   // The evidence the reviewer saw must still be what the binding would use.
   const snapshot = await deps.loadSnapshot(request.atomicPartRevisionId);
   if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
-  const fresh = buildComponentReviewEvidence(snapshot);
+  const fresh = buildComponentReviewEvidence(snapshot, { symbolAssetVersionId: request.instanceSymbolAssetVersionId });
   if (fresh.evidenceDigest !== request.evidence.evidenceDigest) throw new Error("PB_REVIEW_EVIDENCE_CHANGED_CONFLICT");
-  const bound = await deps.bind({ scope: input.scope, actor: input.actor, boardInstanceId: request.boardInstanceId, componentInstanceId: request.componentInstanceId, atomicPartRevisionId: request.atomicPartRevisionId });
+  // [B19-E E5] evidence with a blocker (a symbol that differs from the revision's) is never approved into a binding
+  if ((fresh.blockers ?? []).length > 0) throw new Error("PB_REVIEW_BLOCKED_CONFLICT");
+  const bound = await deps.bind({ scope: input.scope, actor: input.actor, boardInstanceId: request.boardInstanceId, componentInstanceId: request.componentInstanceId, atomicPartRevisionId: request.atomicPartRevisionId, ...(request.instanceSymbolAssetVersionId !== undefined ? { expectedSymbolAssetVersionId: request.instanceSymbolAssetVersionId } : {}) });
   const approved = seal({ ...request, status: "approved", decision: { decidedBy: structuredClone(input.actor), decidedAt: input.at, reason: input.reason.trim(), bindingSetId: bound.setId, bindingRevisionId: bound.bindingRevisionId, lifecycleState: bound.lifecycleState } });
   return deps.store.put(approved, { expectedRevision: stored.revision, idempotencyKey: input.idempotencyKey, committedAt: input.at });
 }

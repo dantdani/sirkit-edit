@@ -230,6 +230,8 @@ const ALL: RoutePolicy[] = [
   ...read("/api/components/atomic/publication", ["GET"], "app/api/components/atomic/publication (publication requests; governance project only)"),
   ...mutate("/api/components/atomic/publication", ["POST"], "app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)", { roles: REVIEW_EDITORS }),
   ...pub("/api/components/atomic/search", ["POST"], "catalog read"),
+  // [B19-E E5] a member reads the catalog status of the revisions the project pins (bounded ids, no quota, no write)
+  ...read("/api/components/revision-status", ["POST"], "app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)"),
   ...pub("/api/parts/search", ["POST"], "catalog read"),
   ...pub("/api/parts/categories", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]", ["GET"], "catalog read"),

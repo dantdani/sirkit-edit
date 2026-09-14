@@ -182,6 +182,18 @@ jobs:
           app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts
           app/api/components/__tests__/b19-e-atomic-publication-route.test.ts
           app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx
+          app/api/components/__tests__/b19-e-revision-status-route.test.ts
+          app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts
+          app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts
+          app/lib/atomic/__tests__/b19-e-upgrade-diff-status.test.ts
+          app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts
+          app/lib/bom/__tests__/b19-e-bom-catalog-status.test.ts
+          app/components/bom/__tests__/b19-e-bom-catalog-status.test.tsx
+          app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx
+          app/components/parts/__tests__/b19-e-publication-withdraw-revision.test.tsx
+          app/components/editor/__tests__/b19-e-build-library-exact-revision.test.tsx
+          app/api/bom/__tests__/b19-e-bom-catalog-status-scope.test.ts
+          app/api/chat/__tests__/b14-route-replacement.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
@@ -255,6 +267,7 @@ jobs:
           app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts
           app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts
           app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts
+          app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

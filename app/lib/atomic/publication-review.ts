@@ -16,7 +16,8 @@
  *  3. a DIFFERENT administrator PUBLISHES while the requester and the approver still hold their authority: the draft is
  *     re-assembled, the catalog transitions are replayed through `AtomicCatalog.transition`, and the E3-hardened
  *     `publishPortableAtomicSnapshot` writes the revision, its links and its audit row in one transaction;
- *  4. the requester may WITHDRAW an unpublished request (never while its publication may be in flight).
+ *  4. the requester may WITHDRAW an unpublished request (never while its publication may be in flight);
+ *  5. [B19-E E5] a project administrator WITHDRAWS a published revision (deprecate, supersede, revoke): E3's append-only status events.
  * The history is append-only (every transition is a new aggregate record). No AI actor can take any step.
  */
 import { membershipRevisionOf, projectRoleFromMembership, type ProjectMembershipRepository } from "../auth/project-membership";
@@ -28,7 +29,8 @@ import { inertExternalText } from "../net/external-href";
 import { buildEvidenceBundle, candidateFromObservation, type ExternalObservation, type NormalizedCandidate } from "../acquisition/quarantine";
 import { buildImportReviewEvidence } from "../acquisition/import-review";
 import { assembleAtomicDraft, AtomicAuthoringError, authoringCandidates, normalizeAtomicPublicationLinks, normalizeAtomicPublicationSpec, terminalTableText, type AssembledAtomicDraft, type AtomicAuthoringIdentity, type BundledKicadLibrary } from "./authoring";
-import { catalogActorKey, isHumanCatalogActorId, type CatalogActorRole } from "./catalog";
+import { catalogActorKey, isHumanCatalogActorId, TRANSITIONS, type CatalogActorRole } from "./catalog";
+import { ATOMIC_REVISION_ID_PATTERN, isWithdrawalState, type AtomicCatalogStatus, type AtomicWithdrawalState } from "./revision-status";
 import { canonicalExactMpn } from "./identity";
 import { canonicalJson, sha256 } from "./stable";
 import { evaluateApproval } from "./validation";
@@ -96,6 +98,12 @@ const STATUS = Object.freeze({
   ATOMIC_PUBLICATION_REQUEST_REPLACED: 409,
   /** [B19-E E4 review follow-up] a publication failed and whether it committed cannot be known yet: the request is held */
   ATOMIC_PUBLICATION_PUBLISH_OUTCOME_UNKNOWN: 409,
+  /** [B19-E E5] withdraw_revision: the id names no published revision */
+  ATOMIC_PUBLICATION_REVISION_NOT_FOUND: 404,
+  /** [B19-E E5] withdraw_revision: not a legal edge from the revision's latest state */
+  ATOMIC_PUBLICATION_WITHDRAWAL_ILLEGAL: 409,
+  /** [B19-E E5] withdraw_revision: the successor is not a selectable revision of the same logical part */
+  ATOMIC_PUBLICATION_SUCCESSOR_REFUSED: 409,
 } as const);
 export type AtomicPublicationErrorCode = keyof typeof STATUS;
 /** [B19-E E4 review follow-up] every refusal code and its HTTP status (the route keeps a message for each) */
@@ -212,7 +220,9 @@ export interface AtomicPublicationDeps {
   loadIdentity(input: { exactMpn: string; manufacturerName: string | null }): Promise<AtomicAuthoringIdentity>;
   /** [B19-E E4 review] The catalog parts links name (MPN, KiCad symbol, value keys already linked): a read. */
   loadLinkTargets(partIds: readonly string[]): Promise<ReadonlyMap<string, AtomicLinkTarget>>;
-  loadRevisionStatus(revisionIds: readonly string[]): Promise<ReadonlyMap<string, { state: string }>>;
+  loadRevisionStatus(revisionIds: readonly string[]): Promise<ReadonlyMap<string, { state: string; logicalPartId?: string; selectable?: boolean }>>;
+  /** [B19-E E5] E3's append-only withdrawal transaction (the route composes `withdrawPublishedAtomicRevision`). */
+  withdraw?(input: { revisionId: string; to: AtomicWithdrawalState; successorRevisionId?: string; actorId: string; actorRole: "publisher" | "admin"; reason: string }): Promise<{ revisionId: string; from: string; to: AtomicWithdrawalState; eventId: string; auditId: string }>;
   /**
    * The publication transaction. [B19-E E4 review follow-up] A rejection raised at or after its COMMIT carries
    * `commitOutcomeUnknown: true` (see `publicationCommitOutcomeUnknown`): the revision may commit after the answer was lost.
@@ -744,4 +754,55 @@ export async function withdrawAtomicPublicationRequest(deps: AtomicPublicationDe
   }
   const withdrawn = seal({ ...stored.request, status: "withdrawn", withdrawal: { withdrawnBy: structuredClone(input.actor), withdrawnAt, reason } });
   return deps.store.put(withdrawn, { expectedRevision: stored.revision, idempotencyKey: callerKey(input.actor, "withdraw_request", stored.request.requestId, input.idempotencyKey) ?? `atomic-publication-withdraw:${stored.request.requestId}:${stored.revision}`, committedAt: withdrawnAt });
+}
+
+// ── [B19-E E5] withdraw a published revision ─────────────────────────────────
+
+const WITHDRAWAL_REFUSALS: ReadonlyArray<[RegExp, AtomicPublicationErrorCode]> = [
+  [/^Illegal withdrawal /, "ATOMIC_PUBLICATION_WITHDRAWAL_ILLEGAL"],
+  [/^Successor .* is not a selectable published revision|^A successor must be a revision of the same logical part/, "ATOMIC_PUBLICATION_SUCCESSOR_REFUSED"],
+  [/ is not a published atomic revision$/, "ATOMIC_PUBLICATION_REVISION_NOT_FOUND"],
+];
+
+/**
+ * [B19-E E5] Deprecate, supersede or revoke a published revision (OD-37, OD-38): the governance project, a human project
+ * administrator, a reason, only a legal edge from the revision's latest state, and a successor (required to supersede) that is a
+ * selectable revision of the same logical part. The checks run on the status read first (nothing is written on a refusal) and
+ * again inside E3's append-only transaction, whose refusals keep their truthful status.
+ */
+export async function withdrawAtomicRevision(deps: AtomicPublicationDeps, input: { scope: AtomicPublicationScope; actor: EngineeringActor; revisionId: unknown; to: unknown; successorRevisionId?: unknown; reason: unknown }): Promise<{ revisionId: string; from: string; to: AtomicWithdrawalState; eventId: string; auditId: string }> {
+  assertGovernance(deps, input.scope);
+  assertActor(input.actor, PUBLICATION_PUBLISHER_ROLES);
+  const revisionId = input.revisionId;
+  if (typeof revisionId !== "string" || !ATOMIC_REVISION_ID_PATTERN.test(revisionId)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["revisionId"]);
+  if (!isWithdrawalState(input.to)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["to"]);
+  const to = input.to;
+  const successor = input.successorRevisionId;
+  if (successor !== undefined && (typeof successor !== "string" || !ATOMIC_REVISION_ID_PATTERN.test(successor) || successor === revisionId)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["successorRevisionId"]);
+  if (to === "superseded" && successor === undefined) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["successorRevisionId"]);
+  const reason = typeof input.reason === "string" && input.reason.trim() ? reasonText(input.reason) : null;
+  // [B19-E E5 review] reasonText bounds code points; E3's transaction bounds UTF-16 units (astral characters count twice), and its
+  // refusal matched no withdrawal pattern (500): refuse such a reason here, before anything is read or written
+  if (!reason || reason.trim().length > MAX_REASON) throw new AtomicPublicationError("ATOMIC_PUBLICATION_INPUT_INVALID", ["reason"]);
+  if (!deps.withdraw) throw new Error("The withdrawal transaction is not composed on this server");
+
+  const statuses = await deps.loadRevisionStatus(successor ? [revisionId, successor] : [revisionId]);
+  const current = statuses.get(revisionId);
+  if (!current) throw new AtomicPublicationError("ATOMIC_PUBLICATION_REVISION_NOT_FOUND");
+  const from = current.state as AtomicCatalogStatus;
+  if (!(TRANSITIONS[from] ?? []).includes(to)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_WITHDRAWAL_ILLEGAL", [`${from} -> ${to}`]);
+  if (successor) {
+    const next = statuses.get(successor);
+    if (!next || next.selectable !== true || next.state !== "published" || !current.logicalPartId || next.logicalPartId !== current.logicalPartId) throw new AtomicPublicationError("ATOMIC_PUBLICATION_SUCCESSOR_REFUSED");
+  }
+  try {
+    return await deps.withdraw({ revisionId, to, ...(successor ? { successorRevisionId: successor } : {}), actorId: input.actor.actorId, actorRole: "admin", reason });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    const refusal = WITHDRAWAL_REFUSALS.find(([pattern]) => pattern.test(message));
+    if (refusal) throw new AtomicPublicationError(refusal[1]);
+    // the (revision, state) unique index: a concurrent withdrawal to the same state committed first
+    if (/duplicate key|unique/i.test(message)) throw new AtomicPublicationError("ATOMIC_PUBLICATION_CONCURRENT_CHANGE");
+    throw error;
+  }
 }

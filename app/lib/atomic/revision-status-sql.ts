@@ -18,7 +18,12 @@ export function notRevokedSql(revisionId: AnyColumn): SQL {
 }
 
 export function readModeSql(revisionId: AnyColumn, mode: AtomicRevisionReadMode): SQL {
-  return mode === "selectable" ? neverWithdrawnSql(revisionId) : notRevokedSql(revisionId);
+  switch (mode) {
+    case "selectable": return neverWithdrawnSql(revisionId);
+    case "pinned": return notRevokedSql(revisionId);
+    // [B19-E E5] the revision an existing pin is being moved off: withdrawal does not hide it (it grants nothing)
+    case "historical": return sql`true`;
+  }
 }
 
 /** A boolean: the id (e.g. a `parts_atomic_links` column) names a published revision that was never withdrawn. */

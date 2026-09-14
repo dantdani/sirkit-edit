@@ -35,7 +35,8 @@ import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout";
+import { kicadPlacementCommand } from "@/lib/kicad-placement"; // [B19-E E5 review]
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { buildReviewInput } from "@/lib/netlist-review";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
@@ -1198,6 +1199,7 @@ function SchematicEditor({
   kicadComponents,
   selectedKicadId, setSelectedKicadId,
   placementPartId,
+  placementExactIdentity,
   netLabels,
   pendingNetLabel, setPendingNetLabel,
   pageSize, setPageSize,
@@ -1219,6 +1221,8 @@ function SchematicEditor({
   selectedKicadId: string | null;
   setSelectedKicadId: (id: string | null) => void;
   placementPartId: string | null;
+  /** [B19-E E5] the exact identity the placement adopts (identity only; binding stays a reviewer's act); null for a plain Place */
+  placementExactIdentity: AdoptedAtomicIdentity | null;
   netLabels: NetLabel[];
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
@@ -1585,17 +1589,13 @@ function SchematicEditor({
       // B07: placement is a canonical graph command — the snapshot is minted
       // at click time, the insert executes against the serialized head.
       const part = getCachedPart(placementPartId);
-      const newId = crypto.randomUUID();
-      graph.run("Placed part", "schematic.add-component", (state) => ({
-        kicadComponents: [...(state.kicadComponents ?? []), {
-          id: newId,
-          partId: placementPartId,
-          x: w.x, y: w.y,
-          rotation: placementRotation,
-          refDes: nextKicadRefDes(part, state.kicadComponents ?? []),
-          value: kicadDefaultValue(part),
-        }],
-      }));
+      // [B19-E E5] "Use published exact revision": the identity the Build Library resolved from the part's fresh selectable link
+      // ([B19-E E5 review] never re-read from the part cache), or nothing for a plain Place
+      const placement = kicadPlacementCommand({
+        id: crypto.randomUUID(), partId: placementPartId, x: w.x, y: w.y, rotation: placementRotation, value: kicadDefaultValue(part),
+        refDesFor: (existing) => nextKicadRefDes(part, [...existing]), exactIdentity: placementExactIdentity,
+      });
+      graph.run(placement.label, "schematic.add-component", placement.recipe);
       // Stay in kicad-place for LTspice-style repeated placement.
     } else if (tool === "wire") {
       if (!wireDraftStart) {
@@ -2578,6 +2578,7 @@ export default function Home() {
   const [kicadComponents, setKicadComponents] = useState<KicadComponentInstance[]>([]);
   const [selectedKicadId, setSelectedKicadId] = useState<string | null>(null);
   const [placementPartId, setPlacementPartId] = useState<string | null>(null);
+  const [placementExactIdentity, setPlacementExactIdentity] = useState<AdoptedAtomicIdentity | null>(null); // [B19-E E5]
 
   // Net labels (both modes) + the preset held by the quick-place tool.
   const [netLabels, setNetLabels] = useState<NetLabel[]>([]);
@@ -2597,8 +2598,10 @@ export default function Home() {
   }
 
   // Begin modal placement of a KiCad part (from the Build library panel).
-  function startKicadPlacement(partId: string) {
+  // [B19-E E5] `exactIdentity`: the placed instance adopts the part's published exact revision for its value (identity only)
+  function startKicadPlacement(partId: string, options?: { exactIdentity?: AdoptedAtomicIdentity }) {
     setPlacementPartId(partId);
+    setPlacementExactIdentity(options?.exactIdentity ?? null);
     setTool("kicad-place");
     setSelectedId(null);
     setSelectedKicadId(null);
@@ -4279,6 +4282,7 @@ export default function Home() {
           setTool("select");
           setWireDraftStart(null);
           setPlacementPartId(null);
+          setPlacementExactIdentity(null); // [B19-E E5 review]
           setPendingNetLabel(null);
         } else {
           setSelectedId(null);
@@ -6315,6 +6319,7 @@ export default function Home() {
                     kicadComponents={kicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
+                    placementExactIdentity={placementExactIdentity}
                     netLabels={netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
                     pageSize={pageSize} setPageSize={changeSheetSize}
@@ -6403,6 +6408,8 @@ export default function Home() {
                   state={authoritativeSchematic}
                   projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only — never a content hash)
                   onSwapPart={handleSwapPart}
+                  // [B19-E E5] a withdrawn revision's successor is reviewed and rebound in the PCB component review (a reviewer's act)
+                  onReviewSuccessor={(row) => { workspaceView.open("pcb"); showToast(`Review the successor for ${row.refDesList.join(", ")} in the Component review panel: preview the diff, then a reviewer rebinds.`); }}
                 />
               ) : view !== "pcb" ? (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">

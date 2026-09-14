@@ -61,6 +61,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/components/atomic/publication,GET,false,read-write,project-durable,false,,false,false,false,false
 /api/components/atomic/publication,POST,false,read-write,project-durable,false,,false,true,false,false
 /api/components/atomic/search,POST,true,none,none,false,,false,false,false,true
+/api/components/revision-status,POST,false,read,none,false,,false,false,false,false
 /api/constraints/explain,POST,true,none,none,false,,false,false,false,true
 /api/constraints/preview,POST,true,none,none,false,,false,false,false,true
 /api/engineering-effects,POST,false,write,project-durable,false,,false,true,false,false

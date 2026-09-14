@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B19",
-  "currentCheckpoint": "B19-E E4 complete (two-person publication, reviewed)",
+  "currentCheckpoint": "B19-E E5 complete (lifecycle and binding, reviewed)",
   "status": "in_progress",
   "baseSha": "5a59a1f",
   "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "875da8f",
+  "lastGreenSha": "40c15b6",
   "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,6 +14,6 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19-E E5 (lifecycle and project binding: revision-status route and BOM badge, withdraw op, successor rebind, adopting an exact revision), then E6 (bounded agent tools), then the B19 closeout.",
-  "updatedAt": "2026-09-13T17:52:26-04:00"
+  "nextAction": "Fix the pre-existing PostgreSQL component-review evidence digest (capturedAt), then B19-E E6 (bounded read-only agent tools for external search and evidence), then the B19 closeout.",
+  "updatedAt": "2026-09-14T02:19:52-04:00"
 }

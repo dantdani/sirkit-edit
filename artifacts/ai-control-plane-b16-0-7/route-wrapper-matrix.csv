@@ -61,6 +61,7 @@ GET,/api/components/atomic/publication,auth,canonical-wrapper,authenticatedRoute
 POST,/api/components/atomic/publication,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/components/atomic,public,canonical-wrapper,publicRoute,(adopted),adopted
 POST,/api/components/atomic/search,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
+POST,/api/components/revision-status,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/constraints/explain,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
 POST,/api/constraints/preview,public,canonical-wrapper,publicJsonRoute,(adopted),adopted
 POST,/api/engineering-effects,auth,canonical-wrapper,workerRoute,(adopted),adopted

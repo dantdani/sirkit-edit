@@ -133,13 +133,15 @@
     "app/components/editor/BuildLibraryPanel.tsx": [
       "Close",
       "Close evidence review",
-      "Distributor search query"
+      "Distributor search query",
+      "Place with the part's published exact atomic revision (a reviewer still binds it)"
     ],
     "app/components/bom/BomView.tsx": [
       "Bypass the cache and re-fetch live pricing from all selected sources",
       "Close",
       "Dismiss",
       "Open distributor product page",
+      "Open the component review to preview the successor and rebind (a reviewer's act)",
       "Supply-chain notifications",
       "View alternate parts",
       "best price",

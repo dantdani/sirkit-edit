@@ -45,6 +45,8 @@ export interface UseAtomicPublicationReviewResult {
   resolve(input: AtomicPublicationResolveInput): Promise<boolean>;
   publish(requestId: string, reason: string): Promise<boolean>;
   withdraw(requestId: string, reason: string): Promise<boolean>;
+  /** [B19-E E5] deprecate, supersede or revoke a published revision (a project administrator; the server checks the edge) */
+  withdrawRevision(input: { revisionId: string; to: "deprecated" | "superseded" | "revoked"; successorRevisionId?: string; reason: string }): Promise<boolean>;
 }
 
 type Failure = { operation: string; code: string; message: string; detail: string[] };
@@ -143,5 +145,8 @@ export function useAtomicPublicationReview(input: UseAtomicPublicationReviewInpu
   const withdraw = useCallback((requestId: string, reason: string) =>
     run(`withdraw:${requestId}`, "withdraw", { operation: "withdraw_request", requestId, reason }, [200]), [run]);
 
-  return { listing, busy, lastError, notice, refresh, submit, resolve, publish, withdraw };
+  const withdrawRevision = useCallback((input: { revisionId: string; to: "deprecated" | "superseded" | "revoked"; successorRevisionId?: string; reason: string }) =>
+    run(`withdraw-revision:${input.revisionId}`, "withdraw-revision", { operation: "withdraw_revision", revisionId: input.revisionId, to: input.to, ...(input.successorRevisionId ? { successorRevisionId: input.successorRevisionId } : {}), reason: input.reason }, [200]), [run]);
+
+  return { listing, busy, lastError, notice, refresh, submit, resolve, publish, withdraw, withdrawRevision };
 }

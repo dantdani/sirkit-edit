@@ -61,6 +61,7 @@ GET,/api/components/atomic/publication,auth,authenticated,authenticatedRoute(…
 POST,/api/components/atomic/publication,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/components/atomic,public,public,publicRoute(…),n/a(public),-,-
 POST,/api/components/atomic/search,public,public,publicJsonRoute(…),n/a(public),-,-
+POST,/api/components/revision-status,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/constraints/explain,public,public,publicJsonRoute(…),n/a(public),-,-
 POST,/api/constraints/preview,public,public,publicJsonRoute(…),n/a(public),-,-
 POST,/api/engineering-effects,auth,authenticated,workerRoute(…),load-bearing,wrapper,workerRoute

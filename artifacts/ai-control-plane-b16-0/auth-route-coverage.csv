@@ -54,6 +54,7 @@ path,methods,auth_class,identity_source,migrated
 /api/components/atomic,GET,public,none,no
 /api/components/atomic/publication,GET;POST,authenticated-mutation,trusted-context,yes
 /api/components/atomic/search,POST,public,none,no
+/api/components/revision-status,POST,authenticated-read,trusted-context,yes
 /api/constraints/explain,POST,public,none,no
 /api/constraints/preview,POST,public,none,no
 /api/engineering-effects,POST,internal-worker,worker-secret,yes

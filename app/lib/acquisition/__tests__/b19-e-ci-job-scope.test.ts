@@ -127,6 +127,10 @@ describe("[B19-E E2 review] CI job scope", () => {
     // [B19-E E4] the publication review suites: two start PGlite, the rest (a shared fixture harness included) do not
     expect(["app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts", "app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts"].every(startsPostgres)).toBe(true);
     expect(["app/lib/atomic/__tests__/b19-e-publication-review.test.ts", "app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts", "app/api/components/__tests__/b19-e-atomic-publication-route.test.ts", "app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx"].some(startsPostgres)).toBe(false);
+    // [B19-E E5] lifecycle and binding: the durable withdrawal, rebind and B14 suite starts PGlite; the rest do not (the rebind
+    // route suite is under app/api/physical-bindings/__tests__, which prompt-to-gerber selects by directory)
+    expect(startsPostgres("app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts")).toBe(true);
+    expect(["app/api/components/__tests__/b19-e-revision-status-route.test.ts", "app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts", "app/api/physical-bindings/__tests__/b19-e-successor-rebind.test.ts", "app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts", "app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx"].some(startsPostgres)).toBe(false);
     expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
   }, 60_000);
 

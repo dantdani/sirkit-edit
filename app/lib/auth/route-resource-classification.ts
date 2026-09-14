@@ -86,6 +86,9 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // [B19-E E2] the external candidate search spends provider credit (the policy row says so) and keeps its answers in process
   // memory only: it reads and writes no durable store, and a search query is caller-supplied data.
   "/api/parts/external-search": { durable: "none", sensitivity: "caller-supplied-only" },
+  // [B19-E E5] the atomic catalog's append-only status events, read for the ids a member names: durable, but catalog data shared
+  // by every tenant, never a project's own data
+  "/api/components/revision-status": { durable: "read", sensitivity: "none" },
 };
 
 /**

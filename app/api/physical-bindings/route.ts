@@ -9,7 +9,9 @@ import type { NewPhysicalBindingCandidate } from "@/app/lib/physical-binding/dom
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
 import { pcbBoardLineageOf } from "@/app/lib/pcb/board-identity";
-import { loadSelectablePortableSnapshot } from "@/app/lib/atomic/server-catalog";
+import { loadAtomicRevisionStatus, loadHistoricalPortableSnapshot, loadSelectablePortableSnapshot } from "@/app/lib/atomic/server-catalog";
+import { ATOMIC_REVISION_ID_PATTERN } from "@/app/lib/atomic/revision-status";
+import { effectiveAtomicSelections, MAX_EFFECTIVE_SELECTION_COMPONENTS, previewAtomicSuccessor, rebindAtomicSuccessor, type AtomicSuccessorDeps } from "@/app/lib/physical-binding/atomic-successor";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { DurableComponentReviewStore, listComponentReviews, REVIEW_REQUESTER_ROLES, REVIEW_RESOLVER_ROLES, requestComponentReview, resolveComponentReview, withdrawComponentReview, type ComponentReviewDeps, type ComponentReviewStatus } from "@/app/lib/physical-binding/review-handoff";
 import { PHYSICAL_BINDING_API_DEADLINE_MS, PHYSICAL_BINDING_API_MAX_BYTES, bindingScopeFromContext, object } from "./_scope";
@@ -29,9 +31,10 @@ function errorResponse(error: unknown): Response {
   const status = code.includes("NOT_FOUND") ? 404
     : code.includes("CONFLICT") || code.includes("ACTIVE_SELECTION") ? 409
     : code.includes("UNAUTHORIZED") || code.includes("HUMAN_REQUIRED") || code.includes("REVIEWER_REQUIRED") || code.includes("FORBIDDEN") ? 403
-    : code.endsWith("REASON_INVALID") ? 400
+    : code.endsWith("REASON_INVALID") || (code.startsWith("PB_API_") && code.endsWith("_INPUT_INVALID")) ? 400
     : 422;
-  const handoff = code === "PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED" ? { handoff: "request_atomic_review" } : {};
+  // [B19-E E5 review] a refused rebind hands off to a reviewer's rebind: a review request cannot complete one
+  const handoff = code === "PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED" ? { handoff: "request_atomic_review" } : code === "PB_ATOMIC_REBIND_REVIEWER_REQUIRED" ? { handoff: "reviewer_rebind_atomic_successor" } : {};
   return Response.json({ ok: false, code, error: code, ...handoff }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
@@ -43,8 +46,43 @@ function reviewDeps(): ComponentReviewDeps {
     store: new DurableComponentReviewStore(getDurableWorkflowRepository()),
     loadSnapshot: loadSelectablePortableSnapshot, // [B19-E E3] a review request asks for a new binding: never a withdrawn revision
     membership: resolveMembershipRepository(),
-    bind: (input) => bindAtomicSelection(service, repository, { scope: input.scope, actor: input.actor, boardInstanceId: input.boardInstanceId, componentInstanceId: input.componentInstanceId, atomicPartRevisionId: input.atomicPartRevisionId }),
+    bind: (input) => bindAtomicSelection(service, repository, { scope: input.scope, actor: input.actor, boardInstanceId: input.boardInstanceId, componentInstanceId: input.componentInstanceId, atomicPartRevisionId: input.atomicPartRevisionId, ...(input.expectedSymbolAssetVersionId !== undefined ? { expectedSymbolAssetVersionId: input.expectedSymbolAssetVersionId } : {}) }),
   };
+}
+
+/** [B19-E E5] successor preview and rebind compose the SAME binding service/repository; the from side reads historically. */
+function successorDeps(): AtomicSuccessorDeps {
+  return { service, repository, loadStatus: loadAtomicRevisionStatus, loadSnapshot: loadHistoricalPortableSnapshot };
+}
+
+/** [B19-E E5] an installed symbol version, when a request names one (bounded; anything else is malformed) */
+function symbolVersionOf(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  return typeof value === "string" && ATOMIC_REVISION_ID_PATTERN.test(value) ? value : null;
+}
+
+/** [B19-E E5 review] the project scope a successor digest pins: never the actor the trusted scope also carries */
+function projectScopeOf(scope: { tenantId: string; projectId: string; branchId: string }): { tenantId: string; projectId: string; branchId: string } {
+  return { tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId };
+}
+
+/** [B19-E E5 review] the effective-selection read's closed input: a board and 1-50 bounded component ids */
+function effectiveSelectionInput(body: Record<string, unknown>): { boardInstanceId: string; componentInstanceIds: string[] } | null {
+  const { boardInstanceId, componentInstanceIds } = body;
+  if (typeof boardInstanceId !== "string" || !boardInstanceId || boardInstanceId.length > 200) return null;
+  if (!Array.isArray(componentInstanceIds) || componentInstanceIds.length === 0 || componentInstanceIds.length > MAX_EFFECTIVE_SELECTION_COMPONENTS) return null;
+  if (!componentInstanceIds.every((id): id is string => typeof id === "string" && id.length > 0 && id.length <= 200)) return null;
+  return { boardInstanceId: pcbBoardLineageOf(boardInstanceId).rootBoardId, componentInstanceIds: [...new Set(componentInstanceIds)] };
+}
+
+/** [B19-E E5] the successor operations' closed target: bounded ids only */
+function successorTarget(body: Record<string, unknown>): { componentInstanceId: string; boardInstanceId: string; fromRevisionId: string; toRevisionId: string } | null {
+  const { componentInstanceId, boardInstanceId, fromRevisionId, toRevisionId } = body;
+  if (typeof componentInstanceId !== "string" || !componentInstanceId || componentInstanceId.length > 200) return null;
+  if (typeof boardInstanceId !== "string" || !boardInstanceId || boardInstanceId.length > 200) return null;
+  if (typeof fromRevisionId !== "string" || !ATOMIC_REVISION_ID_PATTERN.test(fromRevisionId)) return null;
+  if (typeof toRevisionId !== "string" || !ATOMIC_REVISION_ID_PATTERN.test(toRevisionId)) return null;
+  return { componentInstanceId, boardInstanceId: pcbBoardLineageOf(boardInstanceId).rootBoardId, fromRevisionId, toRevisionId };
 }
 
 function sameScope(candidate: PhysicalBindingScope, scope: { tenantId: string; projectId: string; branchId: string }): boolean {
@@ -113,10 +151,12 @@ export const POST = authenticatedJsonRoute(
       return Response.json({ ok: true, dryRun: false, state }, { status: 201, headers: { "Cache-Control": "no-store" } });
     }
     if (operation === "bind_atomic_selection") {
-      if (typeof body.componentInstanceId !== "string" || typeof body.boardInstanceId !== "string" || typeof body.atomicPartRevisionId !== "string") {
+      const expectedSymbol = symbolVersionOf(body.symbolAssetVersionId); // [B19-E E5]
+      if (typeof body.componentInstanceId !== "string" || typeof body.boardInstanceId !== "string" || typeof body.atomicPartRevisionId !== "string" || expectedSymbol === null) {
         return Response.json({ ok: false, code: "PB_API_BIND_INPUT_INVALID", error: "componentInstanceId, boardInstanceId, and atomicPartRevisionId are required." }, { status: 400 });
       }
       const result = await bindAtomicSelection(service, repository, {
+        ...(expectedSymbol !== undefined ? { expectedSymbolAssetVersionId: expectedSymbol } : {}),
         scope,
         actor: scope.actor,
         boardInstanceId: pcbBoardLineageOf(body.boardInstanceId).rootBoardId, // [B16-C.1] bindings are per lineage, not per revision
@@ -142,14 +182,15 @@ export const POST = authenticatedJsonRoute(
     }
     // ── [B16-C.2] component-binding review handoff ─────────────────────────
     if (operation === "request_atomic_review") {
-      if (typeof body.componentInstanceId !== "string" || typeof body.boardInstanceId !== "string" || typeof body.atomicPartRevisionId !== "string") {
+      const instanceSymbol = symbolVersionOf(body.symbolAssetVersionId); // [B19-E E5]
+      if (typeof body.componentInstanceId !== "string" || typeof body.boardInstanceId !== "string" || typeof body.atomicPartRevisionId !== "string" || instanceSymbol === null) {
         return Response.json({ ok: false, code: "PB_API_REVIEW_INPUT_INVALID", error: "componentInstanceId, boardInstanceId, and atomicPartRevisionId are required." }, { status: 400 });
       }
       const now = new Date().toISOString();
       const reason = typeof body.reason === "string" && body.reason.trim() ? body.reason : "Exact component binding requested for reviewer approval.";
       const { stored, created } = await requestComponentReview(reviewDeps(), {
         scope, actor: scope.actor, boardInstanceId: pcbBoardLineageOf(body.boardInstanceId).rootBoardId, componentInstanceId: body.componentInstanceId, atomicPartRevisionId: body.atomicPartRevisionId,
-        reason, requestedAt: now, requesterMembershipRevision: context.membershipRevision ?? null,
+        reason, requestedAt: now, requesterMembershipRevision: context.membershipRevision ?? null, ...(instanceSymbol !== undefined ? { symbolAssetVersionId: instanceSymbol } : {}),
         idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-request:${body.componentInstanceId}:${body.atomicPartRevisionId}:${now}`,
       });
       return Response.json({ ok: true, created, request: stored.request, revision: stored.revision }, { status: created ? 201 : 200, headers: { "Cache-Control": "no-store" } });
@@ -178,6 +219,26 @@ export const POST = authenticatedJsonRoute(
       const now = new Date().toISOString();
       const stored = await withdrawComponentReview(reviewDeps(), { scope, actor: scope.actor, requestId: body.requestId, reason: typeof body.reason === "string" ? body.reason : "", at: now, idempotencyKey: typeof body.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey : `review-withdraw:${body.requestId}:${now}` });
       return Response.json({ ok: true, request: stored.request, revision: stored.revision }, { headers: { "Cache-Control": "no-store" } });
+    }
+    // ── [B19-E E5] successor preview (a read) and rebind (a human reviewer's or administrator's act) ──
+    if (operation === "preview_atomic_successor" || operation === "rebind_atomic_successor") {
+      const target = successorTarget(body);
+      if (!target) return Response.json({ ok: false, code: "PB_API_REBIND_INPUT_INVALID", error: "componentInstanceId, boardInstanceId, fromRevisionId and toRevisionId are required." }, { status: 400 });
+      if (operation === "preview_atomic_successor") {
+        const preview = await previewAtomicSuccessor(successorDeps(), { scope: projectScopeOf(scope), ...target });
+        return Response.json({ ok: true, preview }, { headers: { "Cache-Control": "no-store" } });
+      }
+      // the rebind checks the human reviewer or administrator first, then the reason and the previewed digest (400 when malformed)
+      const rebind = await rebindAtomicSuccessor(successorDeps(), { scope: projectScopeOf(scope), ...target, actor: scope.actor, diffDigest: body.diffDigest, reason: body.reason });
+      return Response.json({ ok: true, rebind }, { status: rebind.alreadyBound ? 200 : 201, headers: { "Cache-Control": "no-store" } });
+    }
+    // [B19-E E5 review] a member's read: each component's effective approved binding revision, so a successor preview is offered
+    // only where the from revision is that binding's (the rebind refuses every other move)
+    if (operation === "list_effective_atomic_selections") {
+      const input = effectiveSelectionInput(body);
+      if (!input) return Response.json({ ok: false, code: "PB_API_EFFECTIVE_INPUT_INVALID", error: `boardInstanceId and 1-${MAX_EFFECTIVE_SELECTION_COMPONENTS} componentInstanceIds are required.` }, { status: 400, headers: { "Cache-Control": "no-store" } });
+      const selections = await effectiveAtomicSelections(successorDeps(), { scope: projectScopeOf(scope), ...input });
+      return Response.json({ ok: true, selections }, { headers: { "Cache-Control": "no-store" } });
     }
     return Response.json({ ok: false, code: "PB_API_OPERATION_UNSUPPORTED", error: "Unsupported physical-binding operation." }, { status: 400 });
   } catch (error) { return errorResponse(error); }

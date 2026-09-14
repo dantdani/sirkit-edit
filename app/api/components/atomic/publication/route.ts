@@ -6,9 +6,11 @@
  * operation).
  *
  *  GET   the project's publication requests (a member read, no-store), with the viewer's server-derived permissions.
- *  POST  { operation: "submit_request" | "resolve_request" | "publish_request" | "withdraw_request", ... }
+ *  POST  { operation: "submit_request" | "resolve_request" | "publish_request" | "withdraw_request" | "withdraw_revision", ... }
  *        submit and withdraw: editors, reviewers, administrators (withdraw: the requester only); resolve (approve | reject):
  *        a reviewer or an administrator; publish: an administrator who did not approve. Humans only.
+ *        [B19-E E5] withdraw_revision { revisionId, to: deprecated | superseded | revoked, successorRevisionId?, reason }: an
+ *        administrator; only a legal edge; a successor must be a selectable revision of the same logical part.
  *
  * Canonical wrappers: authorization (membership, the policy row's roles, exact-origin CSRF) -> media -> bounded body (64 KB,
  * 10 s) -> forbidden authority keys (a snapshot, assets, facts, values, evidence, a source class or a reviewer stamp). The
@@ -19,7 +21,7 @@ import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
 import { getDurableWorkflowRepository } from "@/app/lib/durable-workflow/runtime";
 import { loadCachedExternalObservations } from "@/app/lib/acquisition/offer-cache-observations";
 import { bundledKicadLibrary } from "@/app/lib/atomic/authoring";
-import { publishPortableAtomicSnapshot } from "@/app/lib/atomic/server-repository";
+import { publishPortableAtomicSnapshot, withdrawPublishedAtomicRevision } from "@/app/lib/atomic/server-repository";
 import { loadAtomicAuthoringIdentity, loadAtomicLinkTargets, loadAtomicRevisionStatus } from "@/app/lib/atomic/server-catalog";
 import { atomicCatalogGovernanceProjectId, atomicCatalogGovernanceTenantId, DurableAtomicPublicationStore, type AtomicPublicationDeps } from "@/app/lib/atomic/publication-review";
 import { ATOMIC_PUBLICATION_DEADLINE_MS, ATOMIC_PUBLICATION_FORBIDDEN_BODY_KEYS, ATOMIC_PUBLICATION_MAX_BYTES } from "@/app/lib/atomic/publication-review-contract";
@@ -42,6 +44,7 @@ function routeDeps(): AtomicPublicationRouteDeps {
       loadLinkTargets: loadAtomicLinkTargets, // [B19-E E4 review] security-unreviewed-links
       loadRevisionStatus: loadAtomicRevisionStatus,
       publish: publishPortableAtomicSnapshot,
+      withdraw: withdrawPublishedAtomicRevision, // [B19-E E5] withdraw_revision
     }),
   };
 }

@@ -7,7 +7,7 @@
  * response shape is preserved exactly.
  */
 
-import { buildBom, type BomResult } from "@/app/lib/bom/build";
+import { buildBom, type BomBuildOptions, type BomResult } from "@/app/lib/bom/build";
 import type { DistributorChoice } from "@/app/lib/distributors";
 import type { SchematicState } from "@/lib/schematic-types";
 
@@ -29,7 +29,7 @@ export function isSchematicState(value: unknown): value is SchematicState {
  * are public, their bodies may be eight megabytes, and every distinct part id becomes a database lookup. The bounds sit far
  * above a real board (a dense 1 000-part design has a few hundred distinct parts).
  */
-export const BOM_TABLE_LIMITS = Object.freeze({ instances: 10_000, theoryComponents: 10_000, distinctParts: 2_000, textChars: 256 });
+export const BOM_TABLE_LIMITS = Object.freeze({ instances: 10_000, theoryComponents: 10_000, distinctParts: 2_000, textChars: 256, /** [B19-E E5 review] each is a catalog status read on /api/bom */ distinctAtomicRevisions: 2_000 });
 
 export type BomStateCheck =
   | { ok: true; state: SchematicState }
@@ -54,14 +54,17 @@ export function checkBomState(
   if (instances.length > BOM_TABLE_LIMITS.instances) return tooLarge(`The BOM has too many placed parts (${instances.length}; the limit is ${BOM_TABLE_LIMITS.instances}).`);
   if (state.components.length > BOM_TABLE_LIMITS.theoryComponents) return tooLarge(`The BOM has too many schematic components (the limit is ${BOM_TABLE_LIMITS.theoryComponents}).`);
   const partIds = new Set<string>();
+  const atomicRevisionIds = new Set<string>(); // [B19-E E5 review]
   for (const item of instances) {
     if (!item || typeof item !== "object") return invalid("Every placed part must be an object.");
     const instance = item as Record<string, unknown>;
     if (!boundedText(instance.partId, false) || !boundedText(instance.refDes) || !boundedText(instance.value)) return invalid("Every placed part needs a part id, a reference and a value (bounded text).");
     if (instance.atomicPartRevisionId !== undefined && !boundedText(instance.atomicPartRevisionId, false)) return invalid("A placed part's atomic revision id must be bounded text.");
     partIds.add(instance.partId as string);
+    if (typeof instance.atomicPartRevisionId === "string") atomicRevisionIds.add(instance.atomicPartRevisionId);
   }
   if (partIds.size > BOM_TABLE_LIMITS.distinctParts) return tooLarge(`The BOM references too many distinct parts (${partIds.size}; the limit is ${BOM_TABLE_LIMITS.distinctParts}).`);
+  if (atomicRevisionIds.size > BOM_TABLE_LIMITS.distinctAtomicRevisions) return tooLarge(`The BOM references too many distinct atomic revisions (${atomicRevisionIds.size}; the limit is ${BOM_TABLE_LIMITS.distinctAtomicRevisions}).`);
   for (const item of state.components as unknown[]) if (!item || typeof item !== "object") return invalid("Every schematic component must be an object.");
   return { ok: true, state: value as SchematicState };
 }
@@ -77,6 +80,8 @@ export async function buildBomRows(
   pricingChoice: DistributorChoice,
   /** [B19-B I2] `live` must be granted by an authenticated caller; the default prices from the cache only. */
   pricing: { live?: boolean; forceRefresh?: boolean } = {},
+  /** [B19-E E5 review] `catalogStatus` reads the atomic catalog: the authenticated BOM workbench read only */
+  options: BomBuildOptions = {},
 ): Promise<BomResult> {
-  return buildBom(state, pricingChoice, pricing);
+  return buildBom(state, pricingChoice, pricing, {}, options);
 }

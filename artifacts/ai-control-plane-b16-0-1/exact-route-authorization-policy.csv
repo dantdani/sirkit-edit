@@ -61,6 +61,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/components/atomic/publication,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/components/atomic/publication (publication requests; governance project only)
 /api/components/atomic/publication,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,"app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)"
 /api/components/atomic/search,POST,public,none,false,,,false,false,false,false,catalog read
+/api/components/revision-status,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)
 /api/constraints/explain,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/constraints/preview,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/engineering-effects,POST,internal-worker,worker-secret,true,,,false,false,true,false,app/api/engineering-effects

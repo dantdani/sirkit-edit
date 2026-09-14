@@ -52,6 +52,7 @@ import type {
   ComponentCatalogCandidate,
   ComponentExactAuthority,
 } from "./component-authority";
+import type { AtomicCatalogStatus } from "../atomic/revision-status";
 
 /** Bounds — deterministic, defensive. */
 export const MAX_AUTHORITY_COMPONENTS = 512;
@@ -132,9 +133,20 @@ export type AtomicRevisionConfirmer = (
   signal?: AbortSignal,
 ) => Promise<AtomicRevisionConfirmation | null>;
 
+/**
+ * [B19-E E5] The catalog status of a published atomic revision, from its append-only withdrawal events (null when the id names
+ * no published revision). Production: `loadAtomicCatalogStatusCancellable`; the fixture runtime: its committed catalog.
+ */
+export type AtomicCatalogStatusReader = (
+  atomicPartRevisionId: string,
+  signal?: AbortSignal,
+) => Promise<{ state: AtomicCatalogStatus; successorRevisionId?: string } | null>;
+
 export interface ComponentAuthoritySourceDeps {
   bindings: AuthorityBindingSource;
   atomic: AtomicRevisionConfirmer;
+  /** [B19-E E5] when present, a verified selection's revision status becomes the record's catalogStatus facet (OD-38) */
+  catalogStatus?: AtomicCatalogStatusReader;
 }
 
 export interface LoadComponentAuthorityInput {
@@ -325,7 +337,23 @@ export async function loadComponentAuthorityRecords(
       conflict: record.conflict, footprintAsset: record.footprintAsset,
       mappingVerification: record.mappingVerification, hasSelectedPart: true,
     })) {
-      const exact = await resolveExactAuthority(deps, selected, input.signal);
+      // [B19-E E5] the revision's catalog status first: a revoked revision mints no exact authority (OD-38); a deprecated or
+      // superseded one keeps its pin's authority with a facet naming the successor; a status read that fails fails closed
+      const revisionId = selected.exactPart?.atomicPartRevisionId;
+      let revoked = false;
+      if (deps.catalogStatus && revisionId) {
+        let status: Awaited<ReturnType<AtomicCatalogStatusReader>>;
+        try {
+          status = await deps.catalogStatus(revisionId, input.signal);
+        } catch {
+          return { status: "unavailable", reason: "atomic catalog status source is unavailable" };
+        }
+        if (status && status.state !== "published") {
+          record.catalogStatus = { atomicPartRevisionId: revisionId, state: status.state, ...(status.successorRevisionId ? { successorRevisionId: status.successorRevisionId } : {}) };
+          revoked = status.state === "revoked";
+        }
+      }
+      const exact = revoked ? null : await resolveExactAuthority(deps, selected, input.signal);
       if (exact === "unavailable") return { status: "unavailable", reason: "atomic confirmation source is unavailable" };
       if (exact) record.exactAuthority = exact;
     }

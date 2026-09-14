@@ -13,7 +13,8 @@ export const ATOMIC_PUBLICATION_ROUTE = "/api/components/atomic/publication" as 
 /** The panel's banner, verbatim. */
 export const ATOMIC_PUBLICATION_BANNER = "A bundle proves nothing; only a published atomic revision controls schematic/PCB";
 
-export const ATOMIC_PUBLICATION_OPERATIONS = ["submit_request", "resolve_request", "publish_request", "withdraw_request"] as const;
+/** [B19-E E5] `withdraw_revision` deprecates, supersedes or revokes a published revision (its name deliberately avoids "publish"). */
+export const ATOMIC_PUBLICATION_OPERATIONS = ["submit_request", "resolve_request", "publish_request", "withdraw_request", "withdraw_revision"] as const;
 export type AtomicPublicationOperation = (typeof ATOMIC_PUBLICATION_OPERATIONS)[number];
 
 /** Top-level body keys that could only ever claim authority; the canonical wrapper refuses them before the handler runs. */
@@ -225,6 +226,24 @@ export function approvalBlockers(request: AtomicPublicationRequestView, viewer: 
   const undecided = evidence.facts.filter((fact) => fact.establishes === "quarantined" && !draft.dispositions[fact.factId]).length;
   if (undecided > 0) reasons.push(`Reject or mark reviewed ${undecided} quarantined fact${undecided === 1 ? "" : "s"}.`);
   if (!draft.reason.trim()) reasons.push("Write the approval reason.");
+  return reasons;
+}
+
+/** [B19-E E5] A withdrawal the panel is drafting for a published revision. */
+export interface WithdrawRevisionDraft {
+  to: "deprecated" | "superseded" | "revoked";
+  successorRevisionId: string;
+  reason: string;
+}
+
+/** [B19-E E5] Why Withdraw revision is not available yet, in words (empty when it is); the server checks the edge and successor. */
+export function withdrawRevisionBlockers(revisionId: string, viewer: AtomicPublicationViewer | null, draft: WithdrawRevisionDraft): string[] {
+  const reasons: string[] = [];
+  if (!viewer?.canPublish) reasons.push("Only a project administrator can withdraw a revision.");
+  const successor = draft.successorRevisionId.trim();
+  if (draft.to === "superseded" && !successor) reasons.push("Name the successor revision that supersedes this one.");
+  if (successor && successor === revisionId) reasons.push("A revision cannot be its own successor.");
+  if (!draft.reason.trim()) reasons.push("Write the withdrawal reason.");
   return reasons;
 }
 

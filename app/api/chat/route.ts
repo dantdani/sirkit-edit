@@ -29,7 +29,8 @@ import { AGENT_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT_VERSION } from "@/app/lib/prom
 import { buildAgentResourceBundle } from "@/app/lib/agent/context";
 import { loadRunComponentAuthority } from "@/app/lib/engineering/component-authority-source";
 import { resolveComponentAuthoritySource } from "./component-authority-runtime";
-import { loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
+import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
+import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
@@ -382,7 +383,7 @@ export const POST = agentStreamRoute(
     // [B18-C] pinned into every grant's origin; the dispatch refuses without it.
     promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
     ...(replacementFactsSource
-      ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
+      ? { replacementPinFacts: (atomicPartRevisionId: string, role: ReplacementPinFactsRole) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) } // [B19-E E5] current or target
       : {}),
     // [B17-F] the SAME local FreeRouting pass executor the autoroute route
     // uses, bound to this request's signal and the tool's deadline; an

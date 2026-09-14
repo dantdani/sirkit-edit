@@ -46,7 +46,8 @@ export const POST = authenticatedJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30
   const forceRefresh = body.forceRefresh === true;
 
   try {
-    const result = await buildBomRows(stateCheck.state, pricingChoice, { live: true, forceRefresh });
+    // [B19-E E5 review] the workbench's line badge: this authenticated read is the one build that reads the catalog status
+    const result = await buildBomRows(stateCheck.state, pricingChoice, { live: true, forceRefresh }, { catalogStatus: true });
     return Response.json(result);
   } catch (err) {
     return bomFailure("api/bom", err);

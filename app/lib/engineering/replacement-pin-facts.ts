@@ -26,6 +26,13 @@ export interface ReplacementCertificateFacts {
   state: "approved";
 }
 
+/**
+ * [B19-E E5] Which side of a replacement the pin facts describe. "current": the revision the instance is being moved OFF — read
+ * whatever was withdrawn since, so a project can leave a revoked part (the facts grant nothing). "target": the revision it is
+ * moved ONTO — a new selection, so only a published, never-withdrawn revision (OD-38).
+ */
+export type ReplacementPinFactsRole = "current" | "target";
+
 export interface PublishedSymbolPinFacts {
   atomicPartRevisionId: string;
   symbolAssetVersionId: string;

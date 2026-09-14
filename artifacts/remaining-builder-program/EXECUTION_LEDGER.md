@@ -1697,3 +1697,42 @@ _(discovery, reproduction and results appended below as they are observed)_
   reported as an unknown outcome; AAL2 step-up not enforced (OD-37); no browser check of the panel (memory); the bundled
   KiCad reader was exercised with fixture libraries, not the uncommitted data/ checkout.
 
+### B19-E E5 — lifecycle and project binding (2026-09-14 local; workflow resumed across a restart + lead; this commit)
+
+- The E5 workflow was interrupted by a machine restart during its fix stage; the fixer had only recorded start hashes, and all 68
+  files still matched them, so the run was resumed (implementation and reviews from cache; the verifiers re-ran live).
+- Implemented test-first (non-PGlite batch 63 failing / 7 baseline; PGlite 6 of 6 failing first):
+  - `withdraw_revision` on the governance publication route (human project_admin, closed body, reason, status checked first,
+    E3 refusal codes kept);
+  - `POST /api/components/revision-status` (16 KB, 1–500 revision ids, member read, no project data, no withdrawal reason);
+    route ratchet 161/158 → 162/159; `BomRow.catalogStatus` with a badge and "Review successor" (the status read runs only
+    for the authenticated `/api/bom`; public exports never read the catalog; at most 2,000 distinct atomic ids);
+  - component authority `catalogStatus` facet (revoked: no exact authority, a gap; deprecated/superseded: verified-exact
+    with a successor gap); `diffAtomicUpgrade` blocks deprecated, superseded, revoked and unpublished targets;
+  - successor preview and rebind (reviewer or admin, human; digest over the project scope only; supersede and bind staged
+    and written in one commit, so a failure leaves the old binding; the replay re-reads the successor's status; the chain
+    of successors is followed up to 8 hops, cycle-safe; an editor gets a reviewer handoff; a leftover identical candidate is
+    reused); replacement pin facts take a role — current pins are read historically, target pins must be selectable;
+    a "symbol differs from revision" blocker in review and bind, replay included;
+  - "Use published exact revision": the Build Library resolves the identity from its fresh part detail; the placement
+    carries it only for the value it was resolved for; authority still needs the reviewed binding.
+- Review in the workflow: 21 findings, 14 confirmed and fixed test-first (mutations prove the strengthened tests), confirmed
+  by a checker: a successor-chain dead end (medium), actor/session in the diff digest, preview offered without an effective
+  binding, replay skipping the status re-read, an editor handoff that could not complete a rebind, a 500 for an astral
+  reason, public BOM routes reading the catalog, the plain Place control carrying the E5 note, and six test-strength gaps
+  (target pin facts, gateway role wiring, client symbol forwarding, page adoption wiring, effective-selection check, replay
+  symbol check).
+- Lead follow-up (the checker's one new issue; failed first, mutation caught): an adopted identity names the value it was
+  resolved for (`AdoptedAtomicIdentity.forValue`), and a placement of any other value — "" before the part cache fills — carries
+  no revision.
+- OD-38 amended twice (historical current-pin reads; following the successor chain).
+- Gates (lead re-run, bounded batches): atomic, physical binding 35 files / 489 (+6 skips); components, BOM, parts, editor and
+  review panels 19 / 205; authority, replacement, B14, chat, replacement-authority, fixture runtime, prompt-to-gerber 36 / 415;
+  auth gates and B16.1C tripwires 38 / 444 (+9); registries, exposure sweeps, no-purchase, AST gates, CI scope 11 / 113; suites
+  reading the page, PCB editor, sync and placement 67 / 820 (+3); tsc 0; eslint: no new problems (BomView 4, PcbEditor 1,
+  page 14 and b14-replacement-proposal test 3, all equal to HEAD); B17 inventory (628 controls) and route-policy artifacts
+  regenerate with no drift.
+- Recorded, not fixed here: on the PostgreSQL path a component review approval fails with PB_REVIEW_EVIDENCE_CHANGED_CONFLICT,
+  because `server-catalog.ts` stamps `capturedAt` with the load time and the review evidence digest includes it (pre-existing,
+  found by the E5 fixer; fixed next, test-first); no browser run of the new panels (memory).
+

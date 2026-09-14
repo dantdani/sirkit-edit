@@ -26,6 +26,7 @@ import {
   resolveAtomicPublicationRequest,
   submitAtomicPublicationRequest,
   withdrawAtomicPublicationRequest,
+  withdrawAtomicRevision,
   type AtomicPublicationDeps,
   type AtomicPublicationErrorCode,
   type StoredAtomicPublication,
@@ -42,6 +43,7 @@ const OPERATION_ROLES: Readonly<Record<AtomicPublicationOperation, ReadonlySet<P
   withdraw_request: PUBLICATION_REQUESTER_ROLES,
   resolve_request: PUBLICATION_RESOLVER_ROLES,
   publish_request: PUBLICATION_PUBLISHER_ROLES,
+  withdraw_revision: PUBLICATION_PUBLISHER_ROLES, // [B19-E E5] OD-37: a project administrator withdraws
 });
 
 const OPERATION_KEYS: Readonly<Record<AtomicPublicationOperation, readonly string[]>> = Object.freeze({
@@ -49,6 +51,7 @@ const OPERATION_KEYS: Readonly<Record<AtomicPublicationOperation, readonly strin
   resolve_request: ["operation", "requestId", "decision", "reason", "reviewEvidenceDigest", "resolutions", "factDispositions", "idempotencyKey"],
   publish_request: ["operation", "requestId", "reason", "idempotencyKey"],
   withdraw_request: ["operation", "requestId", "reason", "idempotencyKey"],
+  withdraw_revision: ["operation", "revisionId", "to", "successorRevisionId", "reason"], // [B19-E E5] no idempotency key: a repeat is an illegal edge
 });
 
 const MESSAGE_TABLE = Object.freeze({
@@ -78,6 +81,10 @@ const MESSAGE_TABLE = Object.freeze({
   // [B19-E E4 review follow-up]
   ATOMIC_PUBLICATION_REQUEST_REPLACED: "The revision was published to the catalog, but its request had been withdrawn and replaced by a new request for the same part; the new request was not changed. The detail names the published request, then the new one.",
   ATOMIC_PUBLICATION_PUBLISH_OUTCOME_UNKNOWN: `Whether the publication committed could not be confirmed, so the request is held until its revision status can be read. Try again after ${PUBLISH_MARKER_LEASE_MS / 60_000} minutes: once the status can be read, a revision that committed is recorded, and none is published twice.`,
+  // [B19-E E5]
+  ATOMIC_PUBLICATION_REVISION_NOT_FOUND: "No published atomic revision has that id.",
+  ATOMIC_PUBLICATION_WITHDRAWAL_ILLEGAL: "The revision cannot move to that state from its current one (published, then deprecated, superseded or revoked; a revoked revision stays revoked).",
+  ATOMIC_PUBLICATION_SUCCESSOR_REFUSED: "A successor must be a published, never-withdrawn revision of the same logical part.",
 });
 
 // [B19-E E4 review follow-up] every refusal code the aggregate can raise has a message: a missing one fails the type check
@@ -164,6 +171,11 @@ export async function handleAtomicPublicationPost(input: { context: TrustedReque
     if (op === "publish_request") {
       const stored = await publishAtomicPublicationRequest(deps.review(), { scope, actor, requestId: body.requestId, reason: body.reason, ...(idempotencyKey ? { idempotencyKey } : {}) });
       return Response.json({ ok: true, request: view(stored) }, { headers: NO_STORE });
+    }
+    if (op === "withdraw_revision") {
+      // [B19-E E5] an append-only status event through E3's withdrawal transaction (OD-37, OD-38)
+      const withdrawal = await withdrawAtomicRevision(deps.review(), { scope, actor, revisionId: body.revisionId, to: body.to, successorRevisionId: body.successorRevisionId, reason: body.reason });
+      return Response.json({ ok: true, withdrawal }, { headers: NO_STORE });
     }
     const stored = await withdrawAtomicPublicationRequest(deps.review(), { scope, actor, requestId: body.requestId, reason: body.reason, ...(idempotencyKey ? { idempotencyKey } : {}) });
     return Response.json({ ok: true, request: view(stored) }, { headers: NO_STORE });

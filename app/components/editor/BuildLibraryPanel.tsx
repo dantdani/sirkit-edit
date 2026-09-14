@@ -13,6 +13,9 @@
  *
  * [B19-E E4] "Request evidence review" (a part preview with an MPN, or an exact external hit) opens the atomic publication
  * review for that exact MPN: a bundle proves nothing, and only a published atomic revision controls schematic/PCB.
+ *
+ * [B19-E E5] "Use published exact revision" (a part preview whose value has a selectable atomic link) starts a placement that
+ * adopts that exact identity, resolved as Build auto-layout resolves it; binding it stays a reviewer's act downstream.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -35,6 +38,8 @@ import { KicadSymbol } from "@/app/components/schematic/KicadSymbol";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { DatasheetLink } from "@/app/components/parts/DatasheetLink"; // [B19-D I5c row 34, review]
 import { AtomicPublicationReviewSection, type AtomicPublicationPrefill } from "@/app/components/parts/AtomicPublicationReviewPanel"; // [B19-E E4]
+import { adoptPublishedExactRevision, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout"; // [B19-E E5]
+import type { CachedPart } from "@/app/lib/parts-cache";
 import { projectSelectorHeaders, type ProjectSelectorScope } from "@/app/lib/project/project-selector";
 import { safeHref, VENDOR_PAGE_HOSTS } from "@/app/lib/net/href-policy";
 import { SERVED_FROM_WORDS, utcMinute } from "@/app/lib/acquisition/source-labels"; // [B19-E E2]
@@ -85,7 +90,7 @@ type PartDetail = {
     unresolved: string[];
   };
   /** [B19-E E4 review] the part's selectable atomic links by value key ('' is the default link) */
-  atomicAssignments?: Record<string, unknown>;
+  atomicAssignments?: CachedPart["atomicAssignments"];
   /** [B19-E E4 review follow-up] value keys whose link points at a withdrawn or missing revision ('' when the default link does) */
   withdrawnValueKeys?: string[];
 };
@@ -136,8 +141,9 @@ export function BuildLibraryPanel({
   onSelectForPlacement,
   projectScope = null,
 }: {
-  // Called when the user clicks "Place on canvas" for a part (Phase 2B).
-  onSelectForPlacement?: (partId: string) => void;
+  // Called when the user clicks "Place on canvas" for a part (Phase 2B). [B19-E E5] `exactIdentity`: "Use published exact revision",
+  // resolved from this panel's fresh /api/parts/[id] detail ([B19-E E5 review]: never the page's never-invalidated part cache).
+  onSelectForPlacement?: (partId: string, options?: { exactIdentity: AdoptedAtomicIdentity }) => void;
   /** [B19-E E2] the active project's selector: the distributor search is a member's read of that project */
   projectScope?: ProjectSelectorScope | null;
 } = {}) {
@@ -608,12 +614,19 @@ function PreviewPanel({
   isLoading: boolean;
   error: boolean;
   onClose: () => void;
-  onPlace?: (partId: string) => void;
+  onPlace?: (partId: string, options?: { exactIdentity: AdoptedAtomicIdentity }) => void;
   /** [B19-E E4] open the evidence review for this part's exact MPN */
   requestEvidenceReview?: (prefill: AtomicPublicationPrefill) => void;
 }) {
   // [B19-E E4 review follow-up] a default link counts whether its revision is selectable or was withdrawn (the server refuses both)
   const alreadyLinked = detail !== null && hasDefaultLink(detail);
+  // [B19-E E5] the value a placement takes (as the canvas places it) has a selectable link to adopt, or nothing is offered
+  const exactIdentity = detail !== null ? adoptPublishedExactRevision(detail, detail.properties?.["Value"] || detail.name) : null;
+  const adoptable = exactIdentity !== null;
+  function placeExactRevision(partId: string) {
+    // [B19-E E5 review] the identity this fresh detail resolved travels with the placement; the page never re-resolves it
+    if (exactIdentity) onPlace?.(partId, { exactIdentity });
+  }
   return (
     <aside className="absolute top-0 left-full h-full w-96 z-30 bg-zinc-950 border-l border-zinc-800 shadow-2xl flex flex-col">
       <div className="h-10 px-3 flex items-center gap-2 border-b border-zinc-800 shrink-0">
@@ -623,6 +636,11 @@ function PreviewPanel({
         {detail && onPlace && (
           <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => onPlace(detail.id)}>
             <Plus className="size-3.5" /> Place
+          </Button>
+        )}
+        {detail && onPlace && adoptable && (
+          <Button size="sm" variant="secondary" className="h-7 text-xs" title="Place with the part's published exact atomic revision (a reviewer still binds it)" onClick={() => placeExactRevision(detail.id)}>
+            Use published exact revision
           </Button>
         )}
         <button onClick={onClose} title="Close" className="text-zinc-500 hover:text-zinc-200 transition">

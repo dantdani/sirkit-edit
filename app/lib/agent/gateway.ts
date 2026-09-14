@@ -32,7 +32,7 @@ import { sealTier1Proposal, type SealedTier1Proposal, type Tier1ProposalScope } 
 import { assembleReplacementProposal } from "../engineering/replacement-proposal-assembler";
 import { buildAuthorizationBinding, type SchematicProposalAuthorizationBinding } from "../engineering/proposal-authorization";
 import type { SealedReplacementProposal } from "../engineering/replacement-proposals";
-import type { PublishedSymbolPinFacts } from "../engineering/replacement-pin-facts";
+import type { PublishedSymbolPinFacts, ReplacementPinFactsRole } from "../engineering/replacement-pin-facts";
 import { schematicStateDigest } from "../engineering/schematic-model";
 import { validateSchematicCanonicalMark } from "../engineering/schematic-projection";
 import { computeProjectRevision } from "../engineering/revision";
@@ -66,7 +66,7 @@ export const AGENT_PCB_PROPOSAL_TOOL_VERSION = PCB_EDIT_PROPOSAL_TOOL_VERSION;
 /** [B14 §B] server-owned published pin facts, injected by the SERVER
  *  composition root (the /api/chat route wires the cancellable production
  *  reads; tests inject deterministic sources). Never browser/provider data. */
-export type ReplacementPinFactsFetcher = (atomicPartRevisionId: string) => Promise<PublishedSymbolPinFacts | null>;
+export type ReplacementPinFactsFetcher = (atomicPartRevisionId: string, role: ReplacementPinFactsRole) => Promise<PublishedSymbolPinFacts | null>; // [B19-E E5] role: current (being left) or target (selectable)
 
 /**
  * [B09.2/B09.3] actor/discovery authority claims must agree EXACTLY —
@@ -364,10 +364,10 @@ export class ProposalInvocationService {
     let targetPinFacts: PublishedSymbolPinFacts | null = null;
     try {
       if (this.replacementPinFacts && instance?.atomicPartRevisionId) {
-        currentPinFacts = await this.replacementPinFacts(instance.atomicPartRevisionId);
+        currentPinFacts = await this.replacementPinFacts(instance.atomicPartRevisionId, "current");
       }
       if (this.replacementPinFacts && exact?.atomicPartRevisionId) {
-        targetPinFacts = await this.replacementPinFacts(exact.atomicPartRevisionId);
+        targetPinFacts = await this.replacementPinFacts(exact.atomicPartRevisionId, "target");
       }
     } catch {
       currentPinFacts = null;

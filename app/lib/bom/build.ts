@@ -31,6 +31,8 @@ import {
   type DesignRiskSummary,
 } from "@/app/lib/risk-scoring";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { loadAtomicRevisionStatus } from "@/app/lib/atomic/server-catalog";
+import { ATOMIC_REVISION_ID_PATTERN, type AtomicCatalogStatus } from "@/app/lib/atomic/revision-status";
 import { PRICING_CURRENCY } from "@/app/lib/distributors/types"; // [B19-D I5b row 20]
 import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
 
@@ -49,6 +51,18 @@ const THEORY_LABEL: Record<SchComponentType, string> = {
   ground: "Ground",
 };
 
+/**
+ * [B19-E E5] A line's atomic revision status (OD-38): published, deprecated, superseded (with its successor) or revoked;
+ * "unpublished" when the id names no published revision; "unavailable" when the status could not be read.
+ */
+export type BomCatalogStatus = { state: AtomicCatalogStatus | "unpublished" | "unavailable"; successorRevisionId: string | null };
+
+/**
+ * [B19-E E5 review] What a build attaches beyond pricing. `catalogStatus` reads the atomic catalog: only the authenticated BOM
+ * workbench read (/api/bom) asks for it. The public export, cart and packet builds never do (their outputs show no status).
+ */
+export type BomBuildOptions = { catalogStatus?: boolean };
+
 export type BomRow = {
   partId: string | null; // FK to parts table, null for SchComponent (Theory)
   atomicRevisionId: string | null;
@@ -66,6 +80,8 @@ export type BomRow = {
   lifecycleStatus: LifecycleStatus; // consolidated; fresh from offers, else persisted
   alternatesCount: number; // # of precomputed drop_in + fff alternates
   riskScore: LineRiskBreakdown; // synthesized supply-chain risk (Stage 5)
+  /** [B19-E E5] the line's atomic revision status; null when the line names no atomic revision; absent unless the build asked */
+  catalogStatus?: BomCatalogStatus | null;
 };
 
 /** Aggregate lifecycle counts + a single risk verdict for the whole BOM. */
@@ -134,6 +150,7 @@ export async function buildBom(
   /** [B19-B I2] `live` must be granted by an authenticated caller; the default prices from the cache only. */
   pricing: { live?: boolean; forceRefresh?: boolean } = {},
   componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
+  options: BomBuildOptions = {},
 ): Promise<BomResult> {
   const kicadComponents = state.kicadComponents ?? [];
   const components = state.components ?? [];
@@ -250,6 +267,7 @@ export async function buildBom(
   }
 
   rows.sort((a, b) => refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name));
+  if (options.catalogStatus === true) await attachCatalogStatus(rows); // [B19-E E5 review] an authenticated caller's request only
 
   // ── Totals ───────────────────────────────────────────────────────────────────
   const totalUnitsAvailable = partsForPricing.map(({ partId, mpn }) => ({
@@ -283,6 +301,29 @@ export async function buildBom(
     sources: pricingSourceStatuses(pricingChoice),
     generatedAt: Date.now(),
   };
+}
+
+/**
+ * [B19-E E5] One status read for every line's atomic revision; a failed read marks them unavailable and the BOM still builds.
+ * [B19-E E5 review] Only bounded revision ids are read (anything else names no published revision); checkBomState bounds how many.
+ */
+async function attachCatalogStatus(rows: BomRow[]): Promise<void> {
+  const ids = [...new Set(rows.map((row) => row.atomicRevisionId).filter((id): id is string => typeof id === "string" && ATOMIC_REVISION_ID_PATTERN.test(id)))];
+  let statuses: Awaited<ReturnType<typeof loadAtomicRevisionStatus>> | null = new Map(); // nothing readable: every id is unpublished
+  if (ids.length > 0) {
+    try {
+      statuses = await loadAtomicRevisionStatus(ids);
+    } catch {
+      statuses = null;
+    }
+  }
+  for (const row of rows) {
+    if (!row.atomicRevisionId) { row.catalogStatus = null; continue; }
+    const status = statuses?.get(row.atomicRevisionId);
+    row.catalogStatus = statuses === null
+      ? { state: "unavailable", successorRevisionId: null }
+      : { state: status?.state ?? "unpublished", successorRevisionId: status?.successorRevisionId ?? null };
+  }
 }
 
 /** Tally lifecycle states across rows and derive the overall risk verdict. */

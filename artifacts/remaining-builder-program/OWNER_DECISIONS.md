@@ -201,6 +201,17 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   visible gap naming the successor; such revisions are excluded from new selection, new binding and link reads. A revoked
   revision fails closed everywhere.
 - The owner may choose otherwise: e.g. block export of superseded revisions, or allow new binding to a deprecated one.
+- Amendment (B19-E E5, 2026-09-13): "fails closed everywhere" withholds every AUTHORITY from a revoked revision (exact authority,
+  new selection, binding, sync, export), but a project must still be able to move OFF it. So the pins of the revision being
+  left — a replacement's current pin facts and the from side of a successor diff — are read whatever was withdrawn since (a
+  "historical" read that grants nothing), while the revision moved ONTO must be published and never withdrawn. A component's
+  authority names a deprecated or superseded pin with a gap naming the successor, and a revoked one with no exact authority.
+  Moving to a successor is a human reviewer's or administrator's rebind of the reviewed binding (never automatic), followed by
+  the existing B14 replacement of the schematic instance.
+- Amendment (B19-E E5 review, 2026-09-14): a revoked revision never gets a new event, so when the successor it names is later
+  withdrawn itself, the move follows the successor chain (at most 8 hops, cycle-safe) to its first published, never-withdrawn
+  revision; any revision on the chain may be previewed, and only a selectable one can be rebound. Withdrawing a revision that
+  others name as their successor stays allowed (a revocation must never be blocked by the revisions that point at it).
 
 ## OD-39 — May distributor values leave Sirkit? (B19-E, 2026-09-13)
 

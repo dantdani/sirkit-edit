@@ -61,6 +61,7 @@ GET,/api/components/atomic/publication,auth,authenticated,authenticatedRoute(…
 POST,/api/components/atomic/publication,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,ATOMIC_PUBLICATION_MAX_BYTES,ATOMIC_PUBLICATION_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/components/atomic,public,public,publicRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/components/atomic/search,public,public,publicJsonRoute(…),application/json,200000,10000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
+POST,/api/components/revision-status,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,ATOMIC_REVISION_STATUS_MAX_BYTES,10000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/constraints/explain,public,public,publicJsonRoute(…),application/json,2000000,15000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/constraints/preview,public,public,publicJsonRoute(…),application/json,2000000,15000,bounded-body-before-compute,canonical-wrapper:publicJsonRoute,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 POST,/api/engineering-effects,auth,authenticated,workerRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

@@ -24,7 +24,7 @@ import type {
   SchComponent,
   KicadComponentInstance,
 } from "@/lib/schematic-types";
-import type { BomRow, BomResult, BomLifecycleSummary } from "@/app/lib/bom/build";
+import type { BomCatalogStatus, BomRow, BomResult, BomLifecycleSummary } from "@/app/lib/bom/build";
 import { LIFECYCLE_SEVERITY } from "@/app/lib/distributors/shared";
 import type { DistributorChoice, PartPricing, LifecycleStatus } from "@/app/lib/distributors/shared";
 import type { RiskGrade, DesignRiskSummary } from "@/app/lib/risk-scoring";
@@ -54,6 +54,11 @@ type Props = (
    * implements the schematic-state mutation. When undefined, Swap is disabled.
    */
   onSwapPart?: (sourcePartId: string, newPartId: string) => void;
+  /**
+   * [B19-E E5] Called when the user clicks "Review successor" on a line whose atomic revision was withdrawn and names a successor.
+   * The page opens the component review, where a reviewer previews and rebinds; nothing is changed from here. Absent ⇒ no action.
+   */
+  onReviewSuccessor?: (row: BomRow) => void;
 };
 
 // ─── Snapshot / notification client types & helpers ─────────────────────────--
@@ -436,6 +441,9 @@ export function BomView(props: Props) {
   const [highlightPartId, setHighlightPartId] = useState<string | null>(null);
 
   const onSwapPart = props.onSwapPart;
+  const onReviewSuccessor = props.onReviewSuccessor; // [B19-E E5]
+  // [B19-E E5] hands the line to the page, which opens the component review; nothing is changed from the BOM
+  const openSuccessorReview = useCallback((row: BomRow) => { onReviewSuccessor?.(row); }, [onReviewSuccessor]);
   // [B16.0.2 §B] the active project identity is the ONLY key the durable BOM
   // surfaces use, and it travels as a selector — never a content hash.
   const projectScope = props.projectScope ?? null;
@@ -1183,6 +1191,24 @@ export function BomView(props: Props) {
                     <Td>
                       <div className="font-medium text-zinc-100">{row.name}</div>
                       {row.category && <div className="text-[10px] text-zinc-500">{row.category}</div>}
+                      {/* [B19-E E5] a withdrawn or unpublished atomic revision says so; a named successor can be reviewed (OD-38) */}
+                      {row.catalogStatus && row.catalogStatus.state !== "published" && (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <CatalogStatusBadge status={row.catalogStatus} />
+                          {onReviewSuccessor && row.catalogStatus.successorRevisionId && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSuccessorReview(row);
+                              }}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/15 text-sky-300 border border-sky-500/40 hover:bg-sky-500/25 transition"
+                              title="Open the component review to preview the successor and rebind (a reviewer's act)"
+                            >
+                              Review successor
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </Td>
                     <Td className="font-mono text-[11px]">{dash(row.mpn)}</Td>
                     <Td>{dash(row.manufacturer)}</Td>
@@ -1825,6 +1851,25 @@ function Td({ children, className = "" }: { children?: ReactNode; className?: st
 
 function Muted({ children }: { children: ReactNode }) {
   return <span className="text-zinc-600">{children}</span>;
+}
+
+/** [B19-E E5] the words for a line's atomic revision status (OD-38); published lines show no badge */
+const CATALOG_STATUS_BADGE: Record<Exclude<BomCatalogStatus["state"], "published">, { label: string; tip: string; className: string }> = {
+  deprecated: { label: "Deprecated revision", tip: "Deprecated atomic revision: existing pins keep working, but it is excluded from new selection and binding.", className: "bg-amber-500/15 text-amber-300 border border-amber-500/40" },
+  superseded: { label: "Superseded revision", tip: "Superseded atomic revision: existing pins keep working; a successor revision replaces it for new selection and binding.", className: "bg-amber-500/15 text-amber-300 border border-amber-500/40" },
+  revoked: { label: "Revoked revision", tip: "Revoked atomic revision: it fails closed — no exact authority, no PCB sync and no export until the line moves to another revision.", className: "bg-red-500/15 text-red-300 border border-red-500/40" },
+  unpublished: { label: "Unpublished revision", tip: "The atomic revision this line names is not published in the catalog.", className: "bg-zinc-800 text-zinc-300 border border-zinc-700" },
+  unavailable: { label: "Revision status unavailable", tip: "The atomic revision status could not be read; try again.", className: "bg-zinc-800 text-zinc-400 border border-zinc-700" },
+};
+
+function CatalogStatusBadge({ status }: { status: BomCatalogStatus }) {
+  if (status.state === "published") return null;
+  const badge = CATALOG_STATUS_BADGE[status.state];
+  return (
+    <span data-testid="bom-catalog-status" title={badge.tip} className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
 }
 
 function LifecycleBadge({ status }: { status: LifecycleStatus }) {

@@ -318,6 +318,29 @@ describe("B14 — valid sealed proposals and artifact integrity", () => {
     expect(schematicStateDigest(baseState())).toBe(before);
   });
 
+  it("[B19-E E5 review] the REAL gateway asks for the instance's pins as current and the exact authority's pins as target", async () => {
+    // current pins are read from the revision being left (even a withdrawn one); target pins only from a selectable revision.
+    // This source serves each revision ONLY in its own role, so a swapped or dropped role cannot seal.
+    const calls: Array<[string, string]> = [];
+    const gateway = createAgentToolGateway(sirkitToolRegistry(), {
+      replacementPinFacts: async (revision, role) => {
+        calls.push([revision, role]);
+        if (revision === "rev-old" && role === "current") return CURRENT_FACTS;
+        if (revision === "rev-new" && role === "target") return TARGET_FACTS;
+        return null;
+      },
+    });
+    const outcome = await gateway.invoke({
+      runId: "run-b14-roles", provider: "openai",
+      toolId: AGENT_REPLACEMENT_PROPOSAL_TOOL_ID, version: "1.0.0",
+      args: { componentId: "u1-id" },
+      context: contextFor({ records: [record()] }),
+      timeoutMs: 10_000,
+    });
+    expect(calls).toEqual([["rev-old", "current"], ["rev-new", "target"]]);
+    expect(outcome.kind, JSON.stringify(outcome).slice(0, 300)).toBe("proposal");
+  });
+
   it("the model can never supply asset identities, pins, authority, approvals, or drop acknowledgements", async () => {
     const gateway = createAgentToolGateway(sirkitToolRegistry());
     for (const forbidden of [

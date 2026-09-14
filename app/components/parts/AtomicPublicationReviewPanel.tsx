@@ -9,6 +9,9 @@
  * live, observed, expires, stale), each document fact with its value — resolves the manufacturer and every conflict, rejects or
  * marks reviewed every quarantined fact, and approves; Approve stays disabled, with the reason shown, until all of that is done.
  * A different administrator publishes. Roles come from the server's viewer block; the server enforces every rule again.
+ *
+ * [B19-E E5] On a published request an administrator may withdraw the revision: deprecate, supersede (naming the successor) or
+ * revoke, with a reason (OD-37, OD-38). Existing pins keep a deprecated or superseded revision; a revoked one fails closed.
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,12 +22,14 @@ import {
   approvalBlockers,
   publishBlockers,
   requiredResolutionProperties,
+  withdrawRevisionBlockers,
   resolvableFact,
   type AtomicPublicationRequestView,
   type AtomicPublicationSpec,
   type ImportReviewFact,
   type ImportReviewLink,
   type ReviewDraftChoices,
+  type WithdrawRevisionDraft,
 } from "@/app/lib/atomic/publication-review-contract";
 import { useAtomicPublicationReview, type UseAtomicPublicationReviewResult } from "./hooks/useAtomicPublicationReview";
 
@@ -53,6 +58,7 @@ const STATE_CLASS: Record<string, string> = {
 type SubmitDraft = { exactMpn: string; profile: "schematic_only" | "pcb_assignable"; symbolLibrary: string; symbolName: string; footprintLibrary: string; footprintName: string; terminals: string; packageCode: string; mounting: "smd" | "through_hole"; datasheetUrl: string; datasheetLocator: string; manufacturer: string; linkPart: boolean; reason: string };
 
 const EMPTY_CHOICES: ReviewDraftChoices = { resolutions: {}, dispositions: {}, reason: "" };
+const EMPTY_WITHDRAWAL: WithdrawRevisionDraft = { to: "deprecated", successorRevisionId: "", reason: "" };
 const inputClass = "rounded border border-zinc-700 bg-zinc-950 px-2 py-0.5 text-[10px] text-zinc-100";
 
 /** "1 GND" or "1 GND 1,1A" per line: terminal number, function, optional pads (defaults to the terminal number). */
@@ -166,6 +172,7 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
   const [expanded, setExpanded] = useState<string | null>(null);
   const [choices, setChoices] = useState<Record<string, ReviewDraftChoices>>({});
   const [publishReasons, setPublishReasons] = useState<Record<string, string>>({});
+  const [withdrawals, setWithdrawals] = useState<Record<string, WithdrawRevisionDraft>>({}); // [B19-E E5] by request id
   const [draft, setDraft] = useState<SubmitDraft>(() => ({
     exactMpn: prefill?.exactMpn ?? "", profile: "pcb_assignable",
     symbolLibrary: prefill?.symbol?.library ?? "", symbolName: prefill?.symbol?.name ?? "",
@@ -204,6 +211,18 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
 
   async function withdrawRequest(request: AtomicPublicationRequestView) {
     await review.withdraw(request.requestId, "withdrawn by the requester");
+  }
+
+  // [B19-E E5] the drafted withdrawal of a published request's revision; nothing is sent until withdrawRevision
+  const withdrawalOf = (requestId: string): WithdrawRevisionDraft => withdrawals[requestId] ?? EMPTY_WITHDRAWAL;
+  const setWithdrawalDraft = (requestId: string, patch: Partial<WithdrawRevisionDraft>) => setWithdrawals((current) => ({ ...current, [requestId]: { ...(current[requestId] ?? EMPTY_WITHDRAWAL), ...patch } }));
+
+  async function withdrawRevision(request: AtomicPublicationRequestView) {
+    const revisionId = request.publication?.revisionId;
+    if (!revisionId) return;
+    const draft = withdrawalOf(request.requestId);
+    const successor = draft.successorRevisionId.trim();
+    await review.withdrawRevision({ revisionId, to: draft.to, ...(successor ? { successorRevisionId: successor } : {}), reason: draft.reason.trim() });
   }
 
   const requests = listing.status === "loaded" ? listing.requests : [];
@@ -287,6 +306,26 @@ export function AtomicPublicationReviewPanel({ review, prefill }: AtomicPublicat
                   <Button size="sm" variant="outline" className="h-5 px-2 text-[10px]" data-testid={`atomic-withdraw-${request.requestId}`} disabled={busy !== null} onClick={() => void withdrawRequest(request)}>Withdraw</Button>
                 )}
               </div>
+              {/* [B19-E E5] an administrator withdraws the published revision: deprecate, supersede with its successor, or revoke */}
+              {request.effectiveStatus === "published" && request.publication && viewer?.canPublish && (() => {
+                const draft = withdrawalOf(request.requestId);
+                const blockers = withdrawRevisionBlockers(request.publication.revisionId, viewer, draft);
+                return (
+                  <div className="mt-1 grid gap-1 rounded border border-zinc-800 p-1" data-testid={`atomic-withdraw-revision-form-${request.requestId}`}>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <select className={inputClass} aria-label="Withdrawal state" data-testid={`atomic-withdraw-revision-state-${request.requestId}`} value={draft.to} onChange={(event) => setWithdrawalDraft(request.requestId, { to: event.target.value as WithdrawRevisionDraft["to"] })}>
+                        <option value="deprecated">deprecate (existing pins keep it)</option>
+                        <option value="superseded">supersede by a successor</option>
+                        <option value="revoked">revoke (fails closed everywhere)</option>
+                      </select>
+                      <input className={inputClass} aria-label="Successor revision" placeholder="Successor revision id" data-testid={`atomic-withdraw-revision-successor-${request.requestId}`} value={draft.successorRevisionId} onChange={(event) => setWithdrawalDraft(request.requestId, { successorRevisionId: event.target.value })} />
+                      <input className={`${inputClass} min-w-[12rem] flex-1`} aria-label="Withdrawal reason" placeholder="Withdrawal reason" data-testid={`atomic-withdraw-revision-reason-${request.requestId}`} value={draft.reason} onChange={(event) => setWithdrawalDraft(request.requestId, { reason: event.target.value })} />
+                      <Button size="sm" variant="destructive" className="h-5 px-2 text-[10px]" data-testid={`atomic-withdraw-revision-${request.requestId}`} disabled={busy !== null || blockers.length > 0} onClick={() => void withdrawRevision(request)}>Withdraw revision</Button>
+                    </div>
+                    {blockers.length > 0 && <ul className="list-disc pl-4 text-amber-300" data-testid={`atomic-withdraw-revision-blockers-${request.requestId}`}>{blockers.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
+                  </div>
+                );
+              })()}
               {open && (
                 <>
                   <Evidence request={request} choices={current} canResolve={Boolean(viewer?.canResolve)} setResolution={setResolution} setManufacturer={setManufacturer} setFactDisposition={setFactDisposition} />

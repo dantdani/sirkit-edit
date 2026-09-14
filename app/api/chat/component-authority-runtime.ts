@@ -31,6 +31,7 @@ import type {
 } from "@/app/lib/engineering/component-authority-source";
 import {
   confirmPublishedAtomicRevisionCancellable,
+  loadAtomicCatalogStatusCancellable,
   loadBindingAggregatesCancellable,
   type CancellableAuthoritySqlClient,
 } from "./authority-cancellable-reads";
@@ -84,7 +85,10 @@ function productionSource(scope: ComponentAuthorityRuntimeScope): ComponentAutho
   const atomic: AtomicRevisionConfirmer = (atomicPartRevisionId, signal) =>
     confirmPublishedAtomicRevisionCancellable(sql(), atomicPartRevisionId, signal);
   void scope;
-  return { bindings, atomic };
+  // [B19-E E5] the bound revision's catalog status (OD-38): the same cancellable client, the append-only status events
+  const catalogStatus: ComponentAuthoritySourceDeps["catalogStatus"] = (atomicPartRevisionId, signal) =>
+    loadAtomicCatalogStatusCancellable(sql(), atomicPartRevisionId, signal);
+  return { bindings, atomic, catalogStatus };
 }
 
 /** Defaults to the REAL production source (not null). Tests may override and

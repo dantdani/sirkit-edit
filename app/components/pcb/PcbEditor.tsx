@@ -137,7 +137,7 @@ import { SyncButton } from "./SyncButton";
 import { SyncPlacementDialog } from "./SyncPlacementDialog";
 import { ManufacturingWorkflowPanel } from "./ManufacturingWorkflowPanel"; // [B16.1C §F]
 import { useManufacturingWorkflow } from "./hooks/useManufacturingWorkflow"; // [B16.1C §C/§F]
-import { useComponentReview } from "./hooks/useComponentReview"; // [B16-C.2]
+import { atomicBindRequestBody, reviewableComponentOf, useComponentReview, type ReviewableComponent } from "./hooks/useComponentReview"; // [B16-C.2]; [B19-E E5 review] the shared request bodies
 import { ComponentReviewPanel } from "./ComponentReviewPanel"; // [B16-C.2]
 import { usePcb3dViewSession } from "./hooks/usePcb3dViewSession"; // [B17-C]
 import { usePcbViewSession } from "./hooks/usePcbViewSession"; // [B17-D]
@@ -494,7 +494,7 @@ export default function PcbEditor({
     "x-sirkit-branch-id": syncIdentity.branchId,
   } : {}, [syncIdentity]);
   const reviewableComponents = useMemo(
-    () => (schematic.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId).map((k) => ({ id: k.id, refDes: k.refDes, atomicPartRevisionId: k.atomicPartRevisionId! })),
+    () => (schematic.kicadComponents ?? []).map(reviewableComponentOf).filter((component): component is ReviewableComponent => component !== null), // [B19-E E5 review] with the installed symbol
     [schematic.kicadComponents],
   );
   const componentReview = useComponentReview({
@@ -504,6 +504,7 @@ export default function PcbEditor({
     components: reviewableComponents,
     refreshToken: manufacturingRefreshToken + hydrateToken,
     onNotice: setToast,
+    catalogStatus: true, // [B19-E E5] bound revisions' catalog status, successor preview and rebind
   });
   const bumpManufacturingTruth = useCallback(() => setManufacturingRefreshToken((n) => n + 1), []);
   // B09.0 — the live history/gesture-tool/teardown trio lives behind ONE
@@ -842,7 +843,7 @@ export default function PcbEditor({
     // (create → select → revalidate → approve) under this user's identity
     // before publication, so preflight resolution finds rank-1 authority.
     // Instances without atomic identity are left alone and fail closed.
-    const atomicInstances = (s.kicadComponents ?? []).filter((k) => k.atomicPartRevisionId);
+    const atomicInstances = (s.kicadComponents ?? []).filter((k): k is typeof k & { atomicPartRevisionId: string } => Boolean(k.atomicPartRevisionId)); // [B19-E E5 review] typed for the bind body
     // B16.0: only the project/branch SELECTOR is sent; identity/role are
     // server-derived from the authenticated session + project membership.
     const bindingHeaders = {
@@ -876,7 +877,7 @@ export default function PcbEditor({
           const res = await fetch("/api/physical-bindings", {
             method: "POST",
             headers: bindingHeaders,
-            body: JSON.stringify({ operation: "bind_atomic_selection", componentInstanceId: k.id, boardInstanceId: syncIdentity.boardId, atomicPartRevisionId: k.atomicPartRevisionId }),
+            body: JSON.stringify(atomicBindRequestBody(k, syncIdentity.boardId)), // [B19-E E5 review] with the installed symbol
             signal,
           });
           if (res.ok) return { ok: true };
@@ -885,6 +886,20 @@ export default function PcbEditor({
           if (res.status === 403 && detail?.handoff === "request_atomic_review") {
             void componentReview.refresh();
             return { ok: false, failure: `${k.refDes} (reviewer approval required — use “Request review” in the Component review panel)` };
+          }
+          // [B19-E E5] a revoked revision fails closed and a revision that is not selectable is not bound anew; [B19-E E5 review] the
+          // panel shows the revision's status and the step that can actually be taken (a successor preview only from an approved
+          // binding on it), and NOT_FOUND is never described as a withdrawal (the revision may never have been published)
+          if (detail?.code === "PB_ATOMIC_REVISION_REVOKED") {
+            void componentReview.refresh();
+            return { ok: false, failure: `${k.refDes} (its atomic revision was revoked and fails closed — see its status and next step in the Component review panel)` };
+          }
+          if (detail?.code === "PB_ATOMIC_REVISION_NOT_FOUND") {
+            void componentReview.refresh();
+            return { ok: false, failure: `${k.refDes} (its atomic revision is not a published revision that can be bound — see its status and next step in the Component review panel)` };
+          }
+          if (detail?.code === "PB_ATOMIC_SYMBOL_MISMATCH_CONFLICT") {
+            return { ok: false, failure: `${k.refDes} (the placed symbol differs from the revision's symbol — replace the component before binding)` };
           }
           return { ok: false, failure: `${k.refDes} (${detail?.code ?? res.status})` };
         } catch {
