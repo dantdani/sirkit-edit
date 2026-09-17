@@ -1859,3 +1859,26 @@ _(discovery, reproduction and results appended below as they are observed)_
   (4 GB heap); eslint clean on 36 changed files; the B09/B04/B01/B11 agent artifacts, the B17 inventory and the route-policy
   artifacts regenerate with no drift (ratchet unchanged at 162/159: E6 adds no route).
 
+
+### B19 closeout — validation on the final tree (2026-09-17 local, solo; this commit and f158d28)
+
+- Final code commit bf88eba (E6); the closeout commits change only artifacts. CI on bf88eba: both workflows green
+  (prompt-to-gerber, database-delivery, benchmark-core, page-browser-e2e; benchmark-quality).
+- Full suite, alone, two workers (`run-batch.sh`, 12.2 min): 634 files (628 passed, 6 skipped whole), 6,595 tests (6,560 passed,
+  35 skipped), 0 failures, 0 timeouts, no process left behind. Every skip is an environment gate without its marker (live
+  acquisition contract, live PCB assist, SPICE worker, Postgres qualification, durable-workflow tenant scope, ingest integrity;
+  the live Supabase matrix 9, physical-binding schema integrity on Postgres 6, kicad-cli oracle 2, three single cases).
+- tsc 0 (non-incremental, 37 s, 4 GB heap; the incremental check agrees). eslint over the 306 .ts/.tsx/.js files the chapter
+  changed (batches of 60: one command line was too long for Windows): 25 findings, all pre-existing and equal to the counts
+  recorded at the increments (page 14, BomView 4, PcbEditor 1, b14-replacement-proposal test 3, one unused-import warning each in
+  lcsc.ts, ingest-kicad.ts and project-state.test.tsx — the last on a line from 2026-08-04 that B19 never touched); no new finding.
+- 14 generators re-run sequentially (source registry, B16.0 route-policy set and the B16.0.8 baseline, action toolability, agent,
+  tool registry, B11, read invocation, B10, B17 inventory): exit 0 each, `git status` identical before and after (zero drift).
+  Ratchets inside the full run: tripwires 7/7 (162 = 159 + 3 + 0), agent exposure 9/9, CI job scope 4/4, import closure 5/5,
+  no-purchase 13/13, B11.5 18/18, AST import gates 22/22, never-execution sweep 4/4.
+- Artifacts: `changed-files.md` (generated: 31 commits, 342 files), `unknowns-and-owner-decisions.md` (OD-31..OD-40 with
+  amendments, UNKNOWN and BLOCKED-LIVE items, every recorded follow-up, out-of-scope decisions), `test-and-validation-report.md`,
+  `final-verdict.md` (B19 PASSES its deterministic gate; every runbook criterion mapped to executed evidence); README rows for
+  B19-D, B19-E and validation updated. Not run: the optional live contract check (no vendor credentials here; a run spends the
+  operator's quota) — BLOCKED-LIVE-QUALIFICATION; no browser run this chapter (memory) — CI's browser job covers the committed specs.
+- Next: PR #9 description rewritten for the whole chapter, un-drafted, merged normally after green CI on the closeout commit; then B20.
