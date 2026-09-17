@@ -202,7 +202,7 @@ export function computeDesignRisk(rows: BomRow[]): DesignRiskSummary {
 
   let recommendation: string;
   if (productionReady && rowsAtRisk === 0) {
-    recommendation = "Design is production-ready.";
+    recommendation = "Supply signals OK in the observed offers. This is not a production-readiness verdict."; // [B19-E E1] observed offers prove nothing about the design
   } else if (productionReady) {
     recommendation = `Mostly safe. Review ${rowsAtRisk} part${rowsAtRisk === 1 ? "" : "s"} before locking BOM.`;
   } else if (eolPresent) {

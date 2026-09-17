@@ -52,7 +52,9 @@ path,methods,record_id,class
 /api/component-selection/sourcing,POST,cd.component-selection.workbench,propose
 /api/component-selection/transaction,POST,cd.component-selection.workbench,mutate
 /api/components/atomic,GET,parts.catalog-read,read
+/api/components/atomic/publication,GET;POST,parts.atomic-publication-review,mutate
 /api/components/atomic/search,POST,parts.catalog-read,read
+/api/components/revision-status,POST,parts.catalog-read,read
 /api/constraints/explain,POST,validation.constraints-inspect,read
 /api/constraints/preview,POST,validation.constraints-inspect,read
 /api/engineering-effects,POST,project.engineering-effects,read
@@ -84,6 +86,7 @@ path,methods,record_id,class
 /api/parts/[id],GET,parts.catalog-read,read
 /api/parts/[id]/alternates,GET,parts.catalog-read,read
 /api/parts/categories,GET,parts.catalog-read,read
+/api/parts/external-search,POST,parts.external-observation-read,read
 /api/parts/search,POST,parts.catalog-read,read
 /api/passive-policy,GET;POST,pcb.footprint-resolution,mutate
 /api/pcb-sync,GET;POST,pcb.sync-durable,mutate

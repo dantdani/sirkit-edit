@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseFootprintAsset, parseSymbolAssets } from "../kicad-assets";
 import { parseLibraryTable, resolveLibraryTables } from "../library-resolver";
@@ -111,6 +112,11 @@ describe("Stage 5 version-aware KiCad asset parsing", () => {
 });
 
 describe("Stage 5 deterministic KiCad library tables", () => {
+  // [B19-D I5d row 49] reviewed pin move: library paths must now be absolute (a relative path used to resolve against the
+  // process working directory). "C:\\workspace\\project" is absolute only on Windows, so these fixtures use the platform's own
+  // absolute paths; every assertion is unchanged.
+  const projectDirectory = path.resolve("workspace", "project");
+  const kicadSymbols = path.resolve("kicad", "symbols");
   const globalTable = `(sym_lib_table (lib (name "Device") (type "KiCad") (uri "\${KICAD_SYMBOL_DIR}/Device.kicad_sym") (options "") (descr "global")))`;
   const projectTable = `(sym_lib_table (lib (name "Device") (type "KiCad") (uri "\${KIPRJMOD}/Device.kicad_sym") (options "") (descr "project")))`;
 
@@ -118,8 +124,8 @@ describe("Stage 5 deterministic KiCad library tables", () => {
     const resolved = resolveLibraryTables({
       global: parseLibraryTable(globalTable, "symbol", "global"),
       project: parseLibraryTable(projectTable, "symbol", "project"),
-      projectDirectory: "C:\\workspace\\project",
-      pathPolicy: { roots: ["C:\\workspace\\project", "C:\\kicad\\symbols"], variables: { KICAD_SYMBOL_DIR: "C:\\kicad\\symbols" }, extensions: [".kicad_sym"] },
+      projectDirectory,
+      pathPolicy: { roots: [projectDirectory, kicadSymbols], variables: { KICAD_SYMBOL_DIR: kicadSymbols }, extensions: [".kicad_sym"] },
     });
     expect(resolved).toHaveLength(1);
     expect(resolved[0].scope).toBe("project");
@@ -132,8 +138,8 @@ describe("Stage 5 deterministic KiCad library tables", () => {
     const resolved = resolveLibraryTables({
       global: [...entries, { ...entries[0], uri: "\${KICAD_SYMBOL_DIR}/Other.kicad_sym", order: 1 }],
       project: [],
-      projectDirectory: "C:\\workspace\\project",
-      pathPolicy: { roots: ["C:\\kicad\\symbols"], variables: { KICAD_SYMBOL_DIR: "C:\\kicad\\symbols" }, extensions: [".kicad_sym"] },
+      projectDirectory,
+      pathPolicy: { roots: [kicadSymbols], variables: { KICAD_SYMBOL_DIR: kicadSymbols }, extensions: [".kicad_sym"] },
     });
     expect(resolved[0].diagnostics).toContain('duplicate nickname "Device" in global table');
   });

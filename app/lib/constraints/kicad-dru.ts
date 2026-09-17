@@ -1,4 +1,4 @@
-import { findChild, getNumber, getString, head, isList, parseSExp, type SExpr } from "@/app/lib/kicad/sexp";
+import { findChild, getNumber, getString, head, isList, parseSExpForms, type SExpr } from "@/app/lib/kicad/sexp";
 import type {
   ConstraintDefinition,
   ConstraintDocument,
@@ -129,7 +129,9 @@ export function importKicadDru(input: {
   if (new TextEncoder().encode(input.text).byteLength > 500_000) return { ok: false, quarantined: true, losses: [], diagnostics: ["KiCad rule file exceeds 500000 bytes."] };
   let root: SExpr;
   try {
-    root = parseSExp(`(sirkit_dru_root ${stripComments(input.text)})`);
+    // [B19-D I5d row 46] the file is a sequence of forms. Wrapping it in a synthetic root let a stray ')' close that root
+    // early and silently drop every rule after it; a bounded depth refuses hostile nesting before the tree is walked.
+    root = ["sirkit_dru_root", ...parseSExpForms(stripComments(input.text), { maxDepth: 40 })];
   } catch (error) {
     return { ok: false, quarantined: true, losses: [], diagnostics: [error instanceof Error ? error.message : "Invalid KiCad S-expression."] };
   }
@@ -141,6 +143,13 @@ export function importKicadDru(input: {
   const losses: ConstraintAdapterLoss[] = [];
   const constraints: ConstraintDefinition[] = [];
   const fileHash = constraintSemanticHash({ sourceId: input.sourceId, text: input.text });
+  // [B19-D I5d review] a form the importer does not understand is an error loss, never dropped: a missing ')' nests the next
+  // rule inside this one, and a rule list wrapped in another form would otherwise vanish with ok: true
+  for (const [formIndex, node] of root.slice(1).entries()) {
+    const name = isList(node) ? head(node) : null;
+    if (name === "version" || name === "rule") continue;
+    losses.push({ sourceId: `${input.sourceId}:form:${formIndex + 1}`, constraintIds: [], disposition: "unsupported", severity: "error", message: `KiCad rule file form '${String(name ?? "atom").slice(0, 40)}' is outside the supported subset; nothing in it was imported.` });
+  }
   const rules = root.filter((node): node is SExpr[] => isList(node) && head(node) === "rule");
   for (const [ruleIndex, ruleNode] of rules.entries()) {
     const ruleName = getString(ruleNode[1]) ?? `rule-${ruleIndex + 1}`;
@@ -148,6 +157,11 @@ export function importKicadDru(input: {
     const severity = getString(findChild(ruleNode, "severity")?.[1]);
     const resolved = conditionSelector(condition, input.netNameToStableIds);
     const sourceRuleId = `${input.sourceId}:${ruleName}`;
+    for (const child of ruleNode.slice(2)) {
+      const name = isList(child) ? head(child) : null;
+      if (name === "condition" || name === "constraint" || name === "severity") continue;
+      losses.push({ sourceId: sourceRuleId, constraintIds: [], disposition: "unsupported", severity: "error", message: `Rule child '${String(name ?? "atom").slice(0, 40)}' is outside the supported subset (a nested rule means a missing ')'); it was not imported.` });
+    }
     if (!resolved.selector) {
       losses.push({ sourceId: sourceRuleId, constraintIds: [], disposition: "unsupported", severity: "error", message: resolved.loss ?? "Unsupported KiCad condition." });
       continue;
@@ -159,7 +173,7 @@ export function importKicadDru(input: {
     const constraintNodes = ruleNode.filter((node): node is SExpr[] => isList(node) && head(node) === "constraint");
     for (const [constraintIndex, constraintNode] of constraintNodes.entries()) {
       const externalKind = getString(constraintNode[1]);
-      const kind = externalKind ? KICAD_KIND[externalKind] : undefined;
+      const kind = externalKind && Object.hasOwn(KICAD_KIND, externalKind) ? KICAD_KIND[externalKind] : undefined; // [B19-D I5c row 18]
       const requirement = kind ? requirementFromConstraint(constraintNode, kind) : null;
       const id = stableConstraintId("kicad-rule", { fileHash, ruleName, constraintIndex, externalKind });
       if (!kind || !requirement) {

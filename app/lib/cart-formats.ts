@@ -11,13 +11,18 @@
 import type { BomRow } from "@/app/lib/bom/build";
 import type { PartPricing } from "@/app/lib/distributors";
 import { digiKeyProductUrl, mouserProductUrl } from "./distributor-links";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "./distributors/types"; // [B19-D I5b row 20]
 
 const CRLF = "\r\n";
+import { spreadsheetText } from "./spreadsheet-cell"; // [B19-D I5c row 09]
+import { safeHref, VENDOR_PAGE_HOSTS } from "./net/href-policy";
+import { sourceForDistributorName } from "./acquisition/source-registry"; // [B19-E E1] browser-safe registry
 
 // ─── RFC 4180 helpers ───────────────────────────────────────────────────────--
 
 function csvCell(value: string | number | null | undefined): string {
-  const s = value === null || value === undefined ? "" : String(value);
+  // [B19-D I5c row 09] text cells never start a formula; numbers stay numbers
+  const s = value === null || value === undefined ? "" : typeof value === "number" ? String(value) : spreadsheetText(value);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -53,12 +58,10 @@ function descriptionFor(row: BomRow): string {
   );
 }
 
-/** Unit price at quantity 1: the highest break with qty ≤ 1, else the smallest. */
+/** Unit price at quantity 1, in the pricing currency. [B19-D I5b row 20] never another currency's number. */
 function priceAtQty1(offer: PartPricing | null): number | null {
   if (!offer || offer.priceBreaks.length === 0) return null;
-  const sorted = [...offer.priceBreaks].sort((a, b) => a.qty - b.qty);
-  const atMost1 = sorted.filter((b) => b.qty <= 1).pop();
-  return (atMost1 ?? sorted[0]).price;
+  return cheapestUnitPrice(offer.priceBreaks, { quantity: 1 });
 }
 
 function truncate(s: string, max: number): string {
@@ -164,7 +167,38 @@ const PACKET_COLUMNS = [
   "Extended Cost",
   "Risk Score",
   "Risk Notes",
+  // [B19-E E1] appended, so every earlier column keeps its index
+  "Best Source Observed At (UTC)",
+  "Best Source Basis",
 ];
+
+const SERVED_FROM_CELL: Record<NonNullable<PartPricing["provenance"]>["servedFrom"], string> = {
+  live: "live (vendor answer)",
+  "process-memo": "cached (recent answer)",
+  "offer-cache": "cached (offer cache)",
+};
+
+/** [B19-E E1] When the best offer's vendor answered, and whether it was live or cached. */
+function observationCells(best: PartPricing | null): [string, string] {
+  if (!best) return ["", ""];
+  const servedFrom = best.provenance?.servedFrom ?? (best.evidence ? "live" : "offer-cache");
+  const at = best.provenance?.retrievedAt ?? best.evidence?.retrievedAt ?? best.fetchedAt;
+  return [Number.isFinite(at) && at > 0 ? new Date(at).toISOString() : "", SERVED_FROM_CELL[servedFrom]];
+}
+
+/** [B19-E E1] The attribution each source's terms require, for the sources whose offers appear in the packet. */
+function licenseLine(rows: BomRow[]): string {
+  const attributions: string[] = [];
+  for (const row of rows) {
+    for (const offer of row.pricing?.offers ?? []) {
+      const entry = sourceForDistributorName(offer.distributor);
+      if (entry && !attributions.includes(`${entry.displayName}: ${entry.license.attribution}`)) attributions.push(`${entry.displayName}: ${entry.license.attribution}`);
+    }
+  }
+  return attributions.length === 0
+    ? "License: no distributor data in this packet."
+    : `License: ${attributions.join("; ")}. Distributor values are for this project's sourcing review only and not for redistribution (OD-39).`;
+}
 
 const SOURCE_LABEL: Record<PartPricing["distributor"], string> = {
   digikey: "DigiKey",
@@ -173,16 +207,14 @@ const SOURCE_LABEL: Record<PartPricing["distributor"], string> = {
   lcsc: "LCSC",
 };
 
-/** Currency of the best-overall offer's cheapest break, defaulting USD. */
-function bestCurrency(row: BomRow): string {
-  const best = row.pricing?.bestOverall;
-  if (!best) return "USD";
-  return best.priceBreaks.find((b) => b.price === best.bestUnitPrice)?.currency ?? "USD";
+/** [B19-D I5b row 20] Every unit price is in the one pricing currency, so every priced line and the total are too. */
+function bestCurrency(): string {
+  return PRICING_CURRENCY;
 }
 
 export function toProcurementPacketCsv(
   rows: BomRow[],
-  meta: { title: string; buildQuantity: number; date: Date; notes?: string },
+  meta: { title: string; buildQuantity: number; date: Date; notes?: string; pricingMode?: "none" | "cache-only" | "live"; warnings?: readonly string[] },
 ): string {
   const buildQty = Math.max(1, Math.floor(meta.buildQuantity) || 1);
   const lines: string[] = [];
@@ -192,6 +224,13 @@ export function toProcurementPacketCsv(
   lines.push(csvRow([`Build Quantity: ${buildQty}`]));
   lines.push(csvRow([`Date: ${meta.date.toISOString().slice(0, 10)}`]));
   lines.push(csvRow([`Notes: ${meta.notes ?? ""}`]));
+  // [B19-E E1] what this file is, how its prices were obtained, and the sources' terms
+  lines.push(csvRow(["Status: sourcing worksheet of observed distributor offers; not verified procurement. No order was placed. Prices and stock and lifecycle may have changed since each observation."]));
+  lines.push(csvRow([meta.pricingMode === "live"
+    ? "Pricing basis: live vendor answers where a source answered and cached offers otherwise; each line's observation time and basis are in the last two columns."
+    : "Pricing basis: cached offers only (no vendor was asked for this file); each line's observation time and basis are in the last two columns."]));
+  lines.push(csvRow([licenseLine(rows)]));
+  for (const warning of meta.warnings ?? []) lines.push(csvRow([`Warning: ${warning}`]));
   lines.push("");
   lines.push(csvRow(PACKET_COLUMNS));
 
@@ -206,8 +245,9 @@ export function toProcurementPacketCsv(
     const dkPrice1 = priceAtQty1(dk);
     const moPrice1 = priceAtQty1(mo);
     const best = row.pricing?.bestOverall ?? null;
-    const bestUnit = best?.bestUnitPrice ?? null;
-    const currency = bestCurrency(row);
+    // [B19-D I5b row 20] the price at the quantity actually ordered, in the pricing currency
+    const bestUnit = best ? cheapestUnitPrice(best.priceBreaks, { quantity: totalRequired }) : null;
+    const currency = bestCurrency();
     const extended = bestUnit === null ? null : Number((bestUnit * totalRequired).toFixed(4));
     if (extended !== null) {
       totalCost += extended;
@@ -215,8 +255,9 @@ export function toProcurementPacketCsv(
       sawPrice = true;
     }
 
-    const dkUrl = dk?.productUrl ?? (dk?.sku ?? row.mpn ? digiKeyProductUrl(dk?.sku ?? row.mpn ?? "") : "");
-    const moUrl = mo?.productUrl ?? (mo?.sku ?? row.mpn ? mouserProductUrl(mo?.sku ?? row.mpn ?? "") : "");
+    // [B19-D I5c row 09] a stored vendor link is used only when it is an HTTPS page on a distributor's domain
+    const dkUrl = safeHref(dk?.productUrl, "page", VENDOR_PAGE_HOSTS) ?? (dk?.sku ?? row.mpn ? digiKeyProductUrl(dk?.sku ?? row.mpn ?? "") : "");
+    const moUrl = safeHref(mo?.productUrl, "page", VENDOR_PAGE_HOSTS) ?? (mo?.sku ?? row.mpn ? mouserProductUrl(mo?.sku ?? row.mpn ?? "") : "");
 
     lines.push(
       csvRow([
@@ -243,6 +284,7 @@ export function toProcurementPacketCsv(
         extended ?? "",
         row.riskScore.total,
         row.riskScore.notes.join("; "),
+        ...observationCells(best),
       ]),
     );
   });

@@ -47,7 +47,10 @@ vi.mock("@/app/lib/physical-binding/server-repository", async (orig) => {
 });
 vi.mock("@/app/lib/atomic/server-catalog", async () => {
   const { blinkerCatalog } = await import("./fixtures/blinker-catalog");
-  return { loadPublishedPortableSnapshot: async (revisionId: string) => structuredClone(blinkerCatalog().snapshots.get(revisionId) ?? null) };
+  const load = async (revisionId: string) => structuredClone(blinkerCatalog().snapshots.get(revisionId) ?? null);
+  // [B19-E E3] a new binding reads the selectable loader and a bind replay reads the status: the committed catalog is published and never withdrawn
+  const loadAtomicRevisionStatus = async (ids: readonly string[]) => new Map(ids.flatMap((id) => { const snapshot = blinkerCatalog().snapshots.get(id); return snapshot ? [[id, { revisionId: id, logicalPartId: snapshot.atomicRevision.logicalPartId, state: "published", selectable: true, pinnable: true }] as const] : []; }));
+  return { loadPublishedPortableSnapshot: load, loadSelectablePortableSnapshot: load, loadAtomicRevisionStatus };
 });
 vi.mock("@/app/lib/llm/router", async (orig) => {
   const actual = await orig() as object;

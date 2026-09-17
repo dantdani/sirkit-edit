@@ -106,3 +106,127 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Question: each bootstrapped browser spec adds minutes to page-browser-e2e (timeout 30 min). Accept a longer job, or split it?
 - Default applied: accept a longer job while it stays well inside its timeout; split it if a run comes within five minutes of the limit.
 - The owner may choose otherwise.
+
+## OD-31 — Who may spend live distributor quota (B19-B I2, 2026-09-13)
+
+- Question: live pricing spends a metered vendor quota (Mouser's is about 1000 queries a month). Before B19 any anonymous
+  caller could spend it, and force a refresh. Who should be able to?
+- Default applied: a project member, in the BOM workbench (`/api/bom`, authenticated, `providerCredit`), and the
+  authenticated snapshot and diff. Exports, the procurement packet and the cart routes stay public and price from the
+  cache only, so an anonymous visitor sees cached offers (labelled as such) and never spends quota.
+- Not decided here: a per-project or per-user quota budget. Nothing reads `providerCredit` yet; metering it is recorded
+  for the source registry (I3).
+- The owner may choose otherwise.
+
+## OD-32 — Mouser (B19-A I3, 2026-09-13)
+
+- Question: Mouser's current API terms (last modified 2013-03-11) prohibit caching, recording, pre-fetching or storing
+  its content, license display only inside the application, and require the application's primary purpose to be driving
+  sales to Mouser. Sirkit's BOM compares several distributors and cached their offers. May Sirkit use the Mouser API?
+- Default applied: **disabled** in the source registry. Even if enabled later, Mouser offers are never persisted or
+  memoized, never served from a cache, and never bulk-refreshed. Choosing Mouser in the BOM prices nothing and says why.
+- To enable: the owner confirms Sirkit's use complies (or obtains Mouser's agreement), and the registry entry is changed
+  in a reviewed revision (the artifact gate makes that change visible).
+- The owner may choose otherwise.
+
+## OD-33 — DigiKey and Nexar storage, and bulk refresh (B19-A I3, 2026-09-13)
+
+- Question: DigiKey's API agreement prohibits building or updating a database from its data and bulk download, and
+  states no retention period; Nexar's terms allow storage for at most 24 hours and prohibit mass aggregation. How long
+  may Sirkit keep their offers, may the operator job pre-fetch pricing in bulk, and does a consolidated lifecycle status
+  written to `parts` count as a database built from their data?
+- Default applied: DigiKey offers are served and kept for at most **1 hour**; Nexar's at most **24 hours**; older rows are
+  deleted. The `refresh-bom-pricing` bulk job touches no source (DigiKey prohibited, Nexar unclear), and logs that. The
+  derived lifecycle status is left as it was, and recorded here as undecided.
+- The owner may choose otherwise (for example: permit Nexar bulk refresh within its plan, or stop persisting derived
+  lifecycle status).
+
+## OD-34 — What counts as the same part number (B19-D I5b, 2026-09-13)
+
+- Question: when a distributor answers a request for an MPN, which spellings are the same part?
+- Default applied: an exact published MPN compares after trimming surrounding whitespace and upper-casing ASCII letters
+  only. Every other character is significant (`MAX3232CSE+` is not `MAX3232CSE`; `LT1086CM#PBF` is not `LT1086CMPBF`). An
+  MPN containing anything outside printable ASCII (zero-width or bidirectional characters, homoglyphs, a long s, full-width
+  digits) never matches and is refused as an evidence identity. The manufacturer is not compared (distributor manufacturer
+  names have aliases Sirkit cannot resolve yet), so two manufacturers publishing the same exact string remain one pricing
+  identity.
+- Also applied: prices are compared and totalled in USD only; an offer without a USD break has no unit price.
+- The owner may choose otherwise (e.g. suffix-insensitive matching for specific manufacturers, or currency conversion).
+- Amendment (B19-E E4, 2026-09-13): a publication links a catalog part to an exact revision only when the part's `mpn` is
+  empty or IS the exact MPN (and, in review, its symbol is the draft's). A family-level link — a symbol part whose backfilled
+  `mpn` is its symbol name, such as `Timer:NE555D` (mpn NE555D) to the exact part NE555DR — is refused with
+  LINK_MPN_MISMATCH. This fails closed under the exact-MPN rule above; the operator seed still writes such links directly.
+  The owner may choose otherwise (e.g. an explicit reviewed family-link kind).
+
+## OD-35 — Who may declare a requirements source's authority class (B19-D I5e, 2026-09-13)
+
+- Question: `POST /api/requirements/sources` takes the source's `authorityClass` from the authenticated caller's body. Classes
+  such as `project_owner_confirmed`, `authorized_stakeholder_confirmed`, `organizational_policy` and
+  `contractual_customer_source` describe WHO stands behind the source. Should the server derive the class from the caller's
+  role instead of accepting it?
+- Default applied: the caller (an authenticated editor or reviewer of that project, same-origin, scope-checked) still declares
+  the class, and it must now be one of the defined classes. A confirmed requirement still needs the compiler's separate
+  approval (`CONFIRMING_AUTHORITIES` plus an approval), and AI extraction can never confirm. Nothing is weakened; no class is
+  inferred.
+- The owner may choose otherwise: e.g. derive `project_owner_confirmed` only for the project owner's principal, or require a
+  reviewer role for the organisational and contractual classes.
+
+## OD-36 — May distributor observations be sent to the LLM provider? (B19-E, 2026-09-13)
+
+- Question: DigiKey's API terms forbid providing its data to third parties, and Nexar's forbid distributing it
+  (`source-registry.ts`). Sending a vendor's price, stock, description or links to the model provider may be such a disclosure.
+- Default applied: every source's `license.agentDisclosure` is `unknown`. The agent's external-search and evidence tools (E6)
+  return labels only — source, status, served-from, observed and expiry times, exact-match flag, conflict property names and
+  the missing-evidence list — and never trigger a live vendor call. A blocked or disabled source can never be `permitted`.
+- The owner may choose otherwise: set `permitted` for a source in a reviewed registry revision after confirming its terms, so
+  values reach the model bounded under an untrusted key.
+
+## OD-37 — Who holds global catalog authority? (B19-E, 2026-09-13)
+
+- Question: the atomic catalog tables have no tenant column, and the catalog role was supplied by the caller. Who may approve,
+  publish and withdraw an atomic revision that every project can bind?
+- Default applied: approval, publication and withdrawal happen only in the one governance project named by
+  `SIRKIT_ATOMIC_CATALOG_PROJECT_ID` (on its default branch); when unset, every such operation is refused. A reviewer approves
+  and a project admin publishes or withdraws; the approver is never the publisher (an admin is not exempt); the actor is always
+  a human. AAL2 step-up is not enforced (authentication strength is never checked) and is recorded as open.
+- The owner may choose otherwise: e.g. per-tenant catalogs, a separate catalog-publisher role, or enforced step-up.
+- Amendment (B19-E E4, 2026-09-13): the governance scope is a tenant AND a project, because the atomic catalog is shared by
+  every tenant — a project id alone could be matched by another tenant's project. Both `SIRKIT_ATOMIC_CATALOG_TENANT_ID` and
+  `SIRKIT_ATOMIC_CATALOG_PROJECT_ID` must be set (on the default branch); with either unset every publication operation,
+  including the list, is refused with 403. A deployment must set the tenant variable before E4 publication can be used.
+
+## OD-38 — What deprecated and superseded mean for a project (B19-E, 2026-09-13)
+
+- Default applied: an existing pin to a deprecated or superseded revision keeps materializing, syncing and exporting, with a
+  visible gap naming the successor; such revisions are excluded from new selection, new binding and link reads. A revoked
+  revision fails closed everywhere.
+- The owner may choose otherwise: e.g. block export of superseded revisions, or allow new binding to a deprecated one.
+- Amendment (B19-E E5, 2026-09-13): "fails closed everywhere" withholds every AUTHORITY from a revoked revision (exact authority,
+  new selection, binding, sync, export), but a project must still be able to move OFF it. So the pins of the revision being
+  left — a replacement's current pin facts and the from side of a successor diff — are read whatever was withdrawn since (a
+  "historical" read that grants nothing), while the revision moved ONTO must be published and never withdrawn. A component's
+  authority names a deprecated or superseded pin with a gap naming the successor, and a revoked one with no exact authority.
+  Moving to a successor is a human reviewer's or administrator's rebind of the reviewed binding (never automatic), followed by
+  the existing B14 replacement of the schematic instance.
+- Amendment (B19-E E5 review, 2026-09-14): a revoked revision never gets a new event, so when the successor it names is later
+  withdrawn itself, the move follows the successor chain (at most 8 hops, cycle-safe) to its first published, never-withdrawn
+  revision; any revision on the chain may be previewed, and only a selectable one can be rebound. Withdrawing a revision that
+  others name as their successor stays allowed (a revocation must never be blocked by the revisions that point at it).
+
+## OD-39 — May distributor values leave Sirkit? (B19-E, 2026-09-13)
+
+- Question: the registry marks distributor values `private_review_only`, but the BOM exports are public and cache-only and
+  BOM snapshots keep values indefinitely.
+- Default applied: exports are unchanged apart from status, pricing-basis and license lines, per-line observation time and
+  basis, and "not for redistribution" wording. No new export, snapshot or review record carries vendor values. Recorded as
+  undecided, following OD-33's precedent; the B19 closeout's "no terms bypass" claim cites this decision.
+- The owner may choose otherwise: require authentication for exports, blank `private_review_only` cells, or purge snapshot
+  vendor fields at the source's retention.
+
+## OD-40 — External search scope and quota sharing (B19-E, 2026-09-13)
+
+- Default applied: project members may run keyword or exact-MPN searches in the product (at most 5 candidates per source),
+  consistent with OD-31. The agent gets exact MPNs only (1–5 per call, at most 5 live MPNs per run, at most 25% of each
+  source's quota window). Meters are per process, not cluster-wide.
+- The owner may choose otherwise: agent keyword search, other limits, or a shared quota meter.
+

@@ -14,6 +14,7 @@ import { ACTION_COVERAGE_REGISTRY, renderActionToolabilityCsv } from "../action-
 import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
 import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
 import { resolveReadBinding } from "../tool-bindings-readonly";
+import { resolveExternalReadBinding } from "../../agent/acquisition-reads"; // [B19-E E6]
 import {
   discoverTools,
   type DiscoveryContext,
@@ -343,7 +344,13 @@ describe("truthful classification", () => {
     expect(exposed).toEqual([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]);
     expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], count: INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length });
     for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
-      if (descriptor.operationClass === "read") {
+      if (descriptor.operationClass === "read" && descriptor.binding.status === "bound-external-read") {
+        // [B19-E E6] reviewed pin move: an exposed read is backed EITHER by the B05 allowlist OR — for the two bounded external
+        // reads — by the external read allowlist over the chat route's injected port (never a B05 binding; still a real binding).
+        expect(resolveExternalReadBinding(descriptor).state, descriptor.toolId).toBe("resolved");
+        expect(resolveReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable");
+        expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["external-observation"]);
+      } else if (descriptor.operationClass === "read") {
         // A registry declaration is NOT executable coverage: the read tool
         // must resolve against the B05 allowlist.
         const resolution = resolveReadBinding(descriptor);

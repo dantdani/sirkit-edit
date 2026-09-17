@@ -14,7 +14,7 @@ path,methods,auth_class,identity_source,migrated
 /api/auth/callback,GET,public,none,no
 /api/auth/signin,POST,public,none,no
 /api/auth/signout,POST,public,none,no
-/api/bom,POST,public,none,no
+/api/bom,POST,authenticated-read,trusted-context,yes
 /api/bom/cart/digikey,POST,public,none,no
 /api/bom/cart/lcsc,POST,public,none,no
 /api/bom/cart/mouser,POST,public,none,no
@@ -52,7 +52,9 @@ path,methods,auth_class,identity_source,migrated
 /api/component-selection/sourcing,POST,authenticated-propose,trusted-context,yes
 /api/component-selection/transaction,POST,authenticated-mutation,trusted-context,yes
 /api/components/atomic,GET,public,none,no
+/api/components/atomic/publication,GET;POST,authenticated-mutation,trusted-context,yes
 /api/components/atomic/search,POST,public,none,no
+/api/components/revision-status,POST,authenticated-read,trusted-context,yes
 /api/constraints/explain,POST,public,none,no
 /api/constraints/preview,POST,public,none,no
 /api/engineering-effects,POST,internal-worker,worker-secret,yes
@@ -84,6 +86,7 @@ path,methods,auth_class,identity_source,migrated
 /api/parts/[id],GET,public,none,no
 /api/parts/[id]/alternates,GET,public,none,no
 /api/parts/categories,GET,public,none,no
+/api/parts/external-search,POST,authenticated-read,trusted-context,yes
 /api/parts/search,POST,public,none,no
 /api/passive-policy,GET;POST,authenticated-mutation,trusted-context,yes
 /api/pcb-sync,GET;POST,authenticated-mutation,trusted-context,yes

@@ -1,6 +1,7 @@
 import type { ManufacturingIr, ManufacturingSnapshot } from "./types";
 import { csvField, computeBomRows, emitBomCsv } from "../emit-bom";
 import { compareCodePoints, compareNatural } from "@/app/lib/stable-compare";
+import { spreadsheetText } from "../../../spreadsheet-cell";
 
 const mm6 = (nm: number): string => {
   const text = (nm / 1_000_000).toFixed(6);
@@ -26,13 +27,14 @@ export function emitNativePlacement(snapshot: ManufacturingSnapshot): string {
       x: fp.at.x - snapshot.transform.originXNm,
       y: snapshot.transform.originYNm - fp.at.y,
     };
+    // [B19-D I5c row 33] text columns never start a formula; coordinates and rotation stay numbers
     lines.push([
-      fp.ref,
+      spreadsheetText(fp.ref),
       mm6(point.x),
       mm6(point.y),
       fp.side === "top" ? "Top" : "Bottom",
       rotation(fp.rotationDeg),
-      fp.def.name,
+      spreadsheetText(fp.def.name),
     ].map(csvField).join(","));
   }
   return `${lines.join("\r\n")}\r\n`;

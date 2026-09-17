@@ -54,6 +54,18 @@ export interface ComponentExactAuthority {
   selectionRecordId?: string;
 }
 
+/**
+ * [B19-E E5] The catalog status of the atomic revision a selection names, when it is no longer plainly published (OD-38).
+ * Absent while published, so a published record's digest is unchanged. Revoked: the loader supplies no exactAuthority and the
+ * record is never verified-exact. Deprecated or superseded: the existing pin keeps its exact authority, with a gap naming the
+ * successor.
+ */
+export interface ComponentCatalogStatusFacet {
+  atomicPartRevisionId: string;
+  state: "deprecated" | "superseded" | "revoked";
+  successorRevisionId?: string;
+}
+
 /** One component instance's authority facts, as recorded — never inferred. */
 export interface ComponentAuthorityRecord {
   /** Stable identity of THIS authority record (audit anchor). */
@@ -89,6 +101,8 @@ export interface ComponentAuthorityRecord {
    *  present ONLY when the loader resolved every exact asset from durable
    *  facts. Absent ⇒ inspectable but not a verified replacement target. */
   exactAuthority?: ComponentExactAuthority;
+  /** [B19-E E5] the bound revision's catalog status facet; absent while the revision is published */
+  catalogStatus?: ComponentCatalogStatusFacet;
   /** Audit/evidence references (ids, digests) — never credentials. */
   evidenceRefs?: readonly string[];
 }
@@ -197,6 +211,8 @@ function classify(record: ComponentAuthorityRecord): ComponentAuthorityState {
   if (!footprintVerified) return "exact-missing-footprint";
   // [B13.1 §E] verified facets are necessary but NOT sufficient.
   if (!hasCompleteExactAuthority(record)) return "exact-authority-unresolved";
+  // [B19-E E5] a revoked revision fails closed, whatever exact block a record carries (OD-38)
+  if (record.catalogStatus?.state === "revoked") return "exact-authority-unresolved";
   return "verified-exact";
 }
 
@@ -211,6 +227,10 @@ function gapsFor(record: ComponentAuthorityRecord, state: ComponentAuthorityStat
   // [B13.1 §E] a truthful gap when facets pass but server-owned exact
   // authority is missing/incomplete.
   if (state === "exact-authority-unresolved") gaps.push("server-owned exact authority is missing or incomplete");
+  // [B19-E E5] the bound revision's catalog status (OD-38)
+  const status = record.catalogStatus;
+  if (status?.state === "revoked") gaps.push(`atomic revision ${status.atomicPartRevisionId} was revoked: it carries no exact authority${status.successorRevisionId ? `; successor ${status.successorRevisionId}` : ""}`);
+  else if (status) gaps.push(`atomic revision ${status.atomicPartRevisionId} is ${status.state}: the existing pin keeps working; ${status.successorRevisionId ? `successor ${status.successorRevisionId}` : "no successor is named"}`);
   return gaps.sort();
 }
 

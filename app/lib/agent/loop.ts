@@ -15,6 +15,7 @@
  * can only complete or fail on that provider.
  */
 
+import { sanitizeModelBoundText } from "./redaction"; // [B19-D I5e row 25]
 import { discoverTools } from "../engineering/tool-discovery";
 import { grantedExecutionViolations } from "../engineering/granted-execution-families";
 import { permissionTierOfDescriptor } from "../engineering/permission-tiers";
@@ -22,6 +23,7 @@ import type { ExecutionDecisionMode, PublicExecutionGrant } from "../engineering
 import { REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
+import { resolveExternalReadBinding } from "./acquisition-reads"; // [B19-E E6]
 import type { AgentTraceRecorder } from "./trace-recorder";
 import type { ReadResourceKind } from "../engineering/resource-envelopes";
 import { REPLACEMENT_PROPOSAL_SCHEMA } from "../engineering/replacement-proposals";
@@ -73,8 +75,25 @@ export interface AgentLoopDeps {
   executionGrants?: AgentExecutionGrantMinter;
 }
 
+/**
+ * [B19-D I5e row 25] every string in a tool result is cleaned before the model sees it (bounded walk, cycle-safe).
+ * [B19-D I5e review] only the objects on the current path count as a cycle; an object shared by two branches is written in both.
+ */
+function modelSafe(value: unknown, depth = 0, ancestors = new Set<object>()): unknown {
+  if (typeof value === "string") return sanitizeModelBoundText(value);
+  if (!value || typeof value !== "object") return value;
+  if (depth > 32 || ancestors.has(value)) return "[omitted]";
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) return value.map((item) => modelSafe(item, depth + 1, ancestors));
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [sanitizeModelBoundText(key), modelSafe(item, depth + 1, ancestors)]));
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
 function resultText(payload: Record<string, unknown>): string {
-  const text = JSON.stringify(payload);
+  const text = JSON.stringify(modelSafe(payload));
   if (text.length <= MAX_RESULT_CHARS) return text;
   return JSON.stringify({ ok: false, status: "output_too_large_for_model", note: "The tool result exceeded the model transfer budget; ask a narrower question." });
 }
@@ -198,6 +217,19 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
         if (descriptor.toolId === "sirkit.schematic.propose-component-replacement"
           && !availableResourceKinds(context).has("component-authority-records")) {
           warn(`Tool ${descriptor.toolId} unavailable: required resource(s) component-authority-records cannot be supplied for this run.`);
+          return false;
+        }
+        return true;
+      }
+      // [B19-E E6] a bound external read is advertised only when its allowlisted binding resolves, the server bound an external
+      // acquisition port to this run (the availability fact) and a verified canonical state exists; it has no B05 read binding.
+      if (descriptor.binding.status === "bound-external-read") {
+        if (resolveExternalReadBinding(descriptor).state !== "resolved") {
+          warn(`Tool ${descriptor.toolId} unavailable: no resolved external read binding.`);
+          return false;
+        }
+        if (context.externalAcquisitionAvailable !== true || !context.canonicalState || !context.canonicalRevisionDigest) {
+          warn(`Tool ${descriptor.toolId} unavailable: no external acquisition source and verified canonical state for this run.`);
           return false;
         }
         return true;

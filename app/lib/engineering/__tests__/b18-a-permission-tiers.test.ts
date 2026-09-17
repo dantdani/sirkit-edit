@@ -56,6 +56,10 @@ describe("B18-A §1 — tiers map onto the existing approval vocabulary", () => 
     expect(actionTier("pcb.dimension")).toBe(1); // [B18-C I7] OD-13 — the record and the descriptor move together
     expect(actionTier("view.canvas-navigation")).toBe(0);
     expect(actionTier("pcb.qualify-route")).toBe(3); // [B18-E E6] scenario 8: qualification is Tier 3, like release
+    // [B19-E E4 review] gates-2: catalog publication is publish authority (OD-37: humans only), never a proposal for the agent
+    expect(actionTier("parts.atomic-publication-review")).toBe(3);
+    expect(decideAgentExecution({ tier: actionTier("parts.atomic-publication-review"), setting: null, actorRole: "project_admin", explicitUserRequest: true })).toMatchObject({ decision: "never" });
+    expect(TIER3_FAMILY_PATTERN.test("sirkit.parts.publication-review")).toBe(true);
     // [B18-E E6] the family floor also catches every qualify spelling a model might invent
     for (const id of ["manufacturing.release", "sirkit.manufacturing.release", "bom.order", "publish-authority", "external.upload", "purchase", "pcb.qualify-route", "sirkit.pcb.qualify", "qualify-board"]) expect(TIER3_FAMILY_PATTERN.test(id), id).toBe(true);
   });

@@ -9,8 +9,9 @@
  *       quarantined and never listed).
  */
 
-import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
-import { rowToSnapshotRow, type BomSnapshotMeta } from "@/app/lib/snapshots";
+import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
+import { rowToSnapshotRow, SNAPSHOT_PRICE_BASIS, type BomSnapshotMeta } from "@/app/lib/snapshots";
 import { resolveBomRepository } from "@/app/lib/bom/snapshot-repository";
 import { authenticatedJsonRoute, authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { BOM_FORBIDDEN_BODY_KEYS, bomOwnershipScope } from "../_scope";
@@ -29,16 +30,16 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
   for (const key of BOM_FORBIDDEN_BODY_KEYS) {
     if (key in body) return Response.json({ ok: false, code: "AUTH_AUTHORITATIVE_INPUT_FORBIDDEN", error: `\`${key}\` is server-derived and may not be supplied.` }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
-  if (!isSchematicState(body.state)) {
-    return Response.json({ ok: false, error: "Body must include a `state`." }, { status: 400 });
-  }
+  const stateCheck = checkBomState(body.state, "Body must include a `state`."); // [B19-D I5e row 19] shape and table bounds before any lookup
+  if (!stateCheck.ok) return bomStateRefusal(stateCheck);
   const label = typeof body.label === "string" && body.label.trim() !== "" ? body.label.trim().slice(0, 200) : null;
 
   try {
-    const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice));
+    const result = await buildBomRows(stateCheck.state, normalizeChoice(body.pricingChoice), { live: true }); // [B19-B I2] authenticated: live pricing granted
     const snapshotRows = result.rows.filter((r) => r.partId).map(rowToSnapshotRow);
     const costValue = result.estimatedProjectCost.value;
     const meta: BomSnapshotMeta = {
+      priceBasis: SNAPSHOT_PRICE_BASIS, // [B19-D I5b review]
       totalRows: snapshotRows.length,
       totalCostCents: costValue === null ? null : Math.round(costValue * 100),
       currency: result.estimatedProjectCost.currency,
@@ -47,8 +48,7 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
     const created = await resolveBomRepository().createSnapshot(scope, { label, rows: snapshotRows, meta });
     return Response.json({ ok: true, id: created.id }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/snapshot", err);
   }
 });
 
@@ -67,7 +67,6 @@ export const GET = authenticatedRoute({}, async ({ context }): Promise<Response>
     }));
     return Response.json({ ok: true, snapshots }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/snapshot", err);
   }
 });

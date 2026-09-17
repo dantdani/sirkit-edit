@@ -14,12 +14,16 @@ import type { SchematicState, SchComponentType } from "@/lib/schematic-types";
 import { schDisplayRef } from "@/lib/schematic-types";
 import {
   getPricingFor,
-  missingCredentials,
+  pausedSources,
+  pricingKey,
+  pricingSourceStatuses,
+  unavailableSources,
   type AggregatedPricing,
   type DistributorChoice,
-  type DistributorName,
   type LifecycleStatus,
+  type PricingSourceStatus,
 } from "@/app/lib/distributors";
+import { SOURCE_REGISTRY_VERSION } from "@/app/lib/acquisition/source-registry";
 import {
   computeLineRisk,
   computeDesignRisk,
@@ -27,7 +31,15 @@ import {
   type DesignRiskSummary,
 } from "@/app/lib/risk-scoring";
 import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import { loadAtomicRevisionStatus } from "@/app/lib/atomic/server-catalog";
+import { ATOMIC_REVISION_ID_PATTERN, type AtomicCatalogStatus } from "@/app/lib/atomic/revision-status";
+import { PRICING_CURRENCY } from "@/app/lib/distributors/types"; // [B19-D I5b row 20]
+import { lineUnitPrice } from "@/app/lib/bom/line-price"; // [B19-D I5b review]
+
+export { lineUnitPrice };
 import { safeSpreadsheetCell } from "@/app/lib/atomic/security";
+import { safeHref } from "@/app/lib/net/href-policy"; // [B19-D I5c review]
+import { vendorProductPageUrl } from "@/app/lib/distributor-links"; // [B19-D I5c review]
 
 const THEORY_LABEL: Record<SchComponentType, string> = {
   resistor: "Resistor",
@@ -38,6 +50,18 @@ const THEORY_LABEL: Record<SchComponentType, string> = {
   "current-source": "Current source",
   ground: "Ground",
 };
+
+/**
+ * [B19-E E5] A line's atomic revision status (OD-38): published, deprecated, superseded (with its successor) or revoked;
+ * "unpublished" when the id names no published revision; "unavailable" when the status could not be read.
+ */
+export type BomCatalogStatus = { state: AtomicCatalogStatus | "unpublished" | "unavailable"; successorRevisionId: string | null };
+
+/**
+ * [B19-E E5 review] What a build attaches beyond pricing. `catalogStatus` reads the atomic catalog: only the authenticated BOM
+ * workbench read (/api/bom) asks for it. The public export, cart and packet builds never do (their outputs show no status).
+ */
+export type BomBuildOptions = { catalogStatus?: boolean };
 
 export type BomRow = {
   partId: string | null; // FK to parts table, null for SchComponent (Theory)
@@ -56,6 +80,8 @@ export type BomRow = {
   lifecycleStatus: LifecycleStatus; // consolidated; fresh from offers, else persisted
   alternatesCount: number; // # of precomputed drop_in + fff alternates
   riskScore: LineRiskBreakdown; // synthesized supply-chain risk (Stage 5)
+  /** [B19-E E5] the line's atomic revision status; null when the line names no atomic revision; absent unless the build asked */
+  catalogStatus?: BomCatalogStatus | null;
 };
 
 /** Aggregate lifecycle counts + a single risk verdict for the whole BOM. */
@@ -81,6 +107,14 @@ export type BomResult = {
   lifecycleSummary: BomLifecycleSummary;
   riskSummary: DesignRiskSummary;
   warnings: string[];
+  /** [B19-E E1] "live" when a project member's request could ask vendors; "cache-only" otherwise; "none" without pricing. */
+  pricingMode: "none" | "cache-only" | "live";
+  /** [B19-E E1] the source registry revision every label and status below comes from */
+  registryVersion: string;
+  /** [B19-E E1] each source the choice names, with its state as data (the sentences stay in `warnings`) */
+  sources: PricingSourceStatus[];
+  /** [B19-E E1-C review] the server clock (ms) when the result was built: a client judges offer expiry in server time */
+  generatedAt: number;
 };
 
 // Natural refDes order: alpha prefix, then numeric suffix (R2 < R10).
@@ -103,19 +137,20 @@ type Group = {
   atomicRevisionId: string | null;
 };
 
-/** Currency of the price break that produced `bestUnitPrice`, defaulting USD. */
+/** [B19-D I5b row 20] Every unit price is in the one pricing currency (`cheapestUnitPrice`), so that is its currency. */
 function currencyOfBest(pricing: AggregatedPricing | null): string | null {
   const best = pricing?.bestOverall;
   if (!best || best.bestUnitPrice === null) return null;
-  const match = best.priceBreaks.find((b) => b.price === best.bestUnitPrice);
-  return match?.currency ?? "USD";
+  return PRICING_CURRENCY;
 }
 
 export async function buildBom(
   state: SchematicState,
   pricingChoice: DistributorChoice,
-  forceRefresh = false,
+  /** [B19-B I2] `live` must be granted by an authenticated caller; the default prices from the cache only. */
+  pricing: { live?: boolean; forceRefresh?: boolean } = {},
   componentSelections: Readonly<Record<string, ProjectComponentPin>> = {},
+  options: BomBuildOptions = {},
 ): Promise<BomResult> {
   const kicadComponents = state.kicadComponents ?? [];
   const components = state.components ?? [];
@@ -156,29 +191,37 @@ export async function buildBom(
     loadAlternatesCounts(partIds),
   ]);
 
-  // ── Fetch pricing for every distinct part (by partId + its catalog MPN) ───────
+  // ── Fetch pricing for every distinct (part, exact MPN) ───────────────────────
+  // [B19-D I5b row 36] keyed by the exact MPN too: two exact parts filed under one catalog row are priced separately
   const partsForPricing: Array<{ partId: string; mpn: string }> = [];
-  const seenPid = new Set<string>();
+  const seenPricing = new Set<string>();
   for (const g of groups.values()) {
-    if (!g.partId || seenPid.has(g.partId)) continue;
+    if (!g.partId) continue;
     const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
     const mpn = pinned?.exactPart?.exactMpn ?? partMeta.get(g.partId)?.mpn ?? null;
-    if (mpn) {
+    if (mpn && !seenPricing.has(pricingKey(g.partId, mpn))) {
       partsForPricing.push({ partId: g.partId, mpn });
-      seenPid.add(g.partId);
+      seenPricing.add(pricingKey(g.partId, mpn));
     }
   }
 
   const warnings: string[] = [];
-  let pricingMap = new Map<string, AggregatedPricing>(); // keyed by partId
+  let pricingMap = new Map<string, AggregatedPricing>(); // keyed by pricingKey(partId, exact MPN)
   let cached = 0;
   let fetched = 0;
 
   if (pricingChoice !== "none" && partsForPricing.length > 0) {
-    for (const name of missingCredentials(pricingChoice)) {
-      warnings.push(credentialWarning(name));
+    // [B19-A I3] each unavailable source says why: blocked, disabled (with its owner decision), switched off, or missing credentials
+    for (const source of unavailableSources(pricingChoice)) {
+      warnings.push(source.message);
     }
-    pricingMap = await getPricingFor(partsForPricing, pricingChoice, { forceRefresh });
+    pricingMap = await getPricingFor(partsForPricing, pricingChoice, { live: pricing.live === true, forceRefresh: pricing.forceRefresh === true });
+    if (pricing.live !== true) {
+      warnings.push("Prices shown are cached offers only. Live distributor pricing is fetched in the BOM workbench by a project member.");
+    } else {
+      // [B19-B I3b] a source whose quota is used up or whose breaker is open says so, and when it may be tried again
+      for (const paused of pausedSources(pricingChoice)) warnings.push(paused.message);
+    }
     // Counts are per (part, source): sum the aggregator's per-source tallies.
     for (const agg of pricingMap.values()) {
       cached += agg.sourcesFromCache;
@@ -193,7 +236,7 @@ export async function buildBom(
     const meta = g.partId ? partMeta.get(g.partId) : undefined;
     const pinned = g.componentInstanceIds.map((id) => componentSelections[id]).find(Boolean)?.embeddedSnapshot;
     const mpn = pinned?.exactPart?.exactMpn ?? meta?.mpn ?? null;
-    const pricing = g.partId ? pricingMap.get(g.partId) ?? null : null;
+    const pricing = g.partId && mpn ? pricingMap.get(pricingKey(g.partId, mpn)) ?? null : null;
 
     // Lifecycle is sourced from the aggregator's consolidated verdict, which
     // already folds in cached offers. We deliberately do NOT fall back to the
@@ -224,17 +267,19 @@ export async function buildBom(
   }
 
   rows.sort((a, b) => refDesSort(a.refDesList[0] ?? a.name, b.refDesList[0] ?? b.name));
+  if (options.catalogStatus === true) await attachCatalogStatus(rows); // [B19-E E5 review] an authenticated caller's request only
 
   // ── Totals ───────────────────────────────────────────────────────────────────
   const totalUnitsAvailable = partsForPricing.map(({ partId, mpn }) => ({
     mpn,
-    available: pricingMap.get(partId)?.bestOverall?.inStock ?? null,
+    available: pricingMap.get(pricingKey(partId, mpn))?.bestOverall?.inStock ?? null,
   }));
 
   let costValue: number | null = null;
   let costCurrency: string | null = null;
   for (const row of rows) {
-    const unit = row.pricing?.bestOverall?.bestUnitPrice ?? null;
+    // [B19-D I5b row 20 + review] the unit price that applies at the line's quantity — the same one the table and CSV show
+    const unit = lineUnitPrice(row);
     if (unit === null) continue;
     costValue = (costValue ?? 0) + unit * row.qty;
     costCurrency = costCurrency ?? currencyOfBest(row.pricing);
@@ -251,7 +296,34 @@ export async function buildBom(
     lifecycleSummary: summarizeLifecycle(rows),
     riskSummary: computeDesignRisk(rows),
     warnings,
+    pricingMode: pricingChoice === "none" ? "none" : pricing.live === true ? "live" : "cache-only",
+    registryVersion: SOURCE_REGISTRY_VERSION,
+    sources: pricingSourceStatuses(pricingChoice),
+    generatedAt: Date.now(),
   };
+}
+
+/**
+ * [B19-E E5] One status read for every line's atomic revision; a failed read marks them unavailable and the BOM still builds.
+ * [B19-E E5 review] Only bounded revision ids are read (anything else names no published revision); checkBomState bounds how many.
+ */
+async function attachCatalogStatus(rows: BomRow[]): Promise<void> {
+  const ids = [...new Set(rows.map((row) => row.atomicRevisionId).filter((id): id is string => typeof id === "string" && ATOMIC_REVISION_ID_PATTERN.test(id)))];
+  let statuses: Awaited<ReturnType<typeof loadAtomicRevisionStatus>> | null = new Map(); // nothing readable: every id is unpublished
+  if (ids.length > 0) {
+    try {
+      statuses = await loadAtomicRevisionStatus(ids);
+    } catch {
+      statuses = null;
+    }
+  }
+  for (const row of rows) {
+    if (!row.atomicRevisionId) { row.catalogStatus = null; continue; }
+    const status = statuses?.get(row.atomicRevisionId);
+    row.catalogStatus = statuses === null
+      ? { state: "unavailable", successorRevisionId: null }
+      : { state: status?.state ?? "unpublished", successorRevisionId: status?.successorRevisionId ?? null };
+  }
 }
 
 /** Tally lifecycle states across rows and derive the overall risk verdict. */
@@ -287,10 +359,23 @@ type PartMeta = {
   mainCategory: string;
 };
 
+/** [B19-D I5e row 19] catalog lookups in bounded IN lists */
+const IN_LIST_CHUNK = 500;
+function chunks<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < items.length; index += IN_LIST_CHUNK) out.push(items.slice(index, index + IN_LIST_CHUNK));
+  return out;
+}
+
 async function loadPartMeta(partIds: string[]): Promise<Map<string, PartMeta>> {
   const map = new Map<string, PartMeta>();
   if (partIds.length === 0) return map;
+  for (const chunk of chunks(partIds)) for (const [id, meta] of await loadPartMetaChunk(chunk)) map.set(id, meta);
+  return map;
+}
 
+async function loadPartMetaChunk(partIds: string[]): Promise<Map<string, PartMeta>> {
+  const map = new Map<string, PartMeta>();
   const db = getDb();
   const rows = await db
     .select({
@@ -314,6 +399,12 @@ async function loadPartMeta(partIds: string[]): Promise<Map<string, PartMeta>> {
 async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, number>> {
   const map = new Map<string, number>();
   if (partIds.length === 0) return map;
+  for (const chunk of chunks(partIds)) for (const [id, count] of await loadAlternatesCountsChunk(chunk)) map.set(id, count);
+  return map;
+}
+
+async function loadAlternatesCountsChunk(partIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
 
   const db = getDb();
   const rows = await db
@@ -331,24 +422,11 @@ async function loadAlternatesCounts(partIds: string[]): Promise<Map<string, numb
   return map;
 }
 
-function credentialWarning(name: DistributorName): string {
-  switch (name) {
-    case "digikey":
-      return "DigiKey API key not configured — add DIGIKEY_CLIENT_ID and DIGIKEY_CLIENT_SECRET to .env.local.";
-    case "mouser":
-      return "Mouser API key not configured — add MOUSER_API_KEY to .env.local.";
-    case "lcsc":
-      return "LCSC integration is not yet available (partner API access required).";
-    case "octopart-aggregated":
-      return "Octopart API key not configured — add OCTOPART_API_KEY (or NEXAR_API_KEY) to .env.local.";
-  }
-}
-
 // ─── CSV serialization (shared with the export route) ──────────────────────────
 
 function csvCell(v: string | number | null): string {
   const s = v === null ? "" : safeSpreadsheetCell(String(v));
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; // [B19-D I5c row 10] a lone CR is quoted too
 }
 
 export function bomToCsv(result: BomResult): string {
@@ -374,8 +452,8 @@ export function bomToCsv(result: BomResult): string {
 
   const rows = result.rows.map((row) => {
     const best = row.pricing?.bestOverall ?? null;
-    const unit = best?.bestUnitPrice ?? null;
-    const currency = currencyOfBest(row.pricing);
+    const unit = lineUnitPrice(row); // [B19-D I5b review] the price the line's quantity reaches, as the estimate uses
+    const currency = unit === null ? null : currencyOfBest(row.pricing);
     const ext = unit === null ? null : Number((unit * row.qty).toFixed(4));
     return [
       row.refDes,
@@ -390,8 +468,9 @@ export function bomToCsv(result: BomResult): string {
       currency ?? "",
       ext ?? "",
       best?.inStock ?? "",
-      row.datasheet ?? "",
-      best?.productUrl ?? "",
+      // [B19-D I5c review] the link columns follow the same policy as the view and the procurement packet
+      safeHref(row.datasheet, "document") ?? "",
+      vendorProductPageUrl(best?.productUrl) ?? "",
       row.riskScore.total,
       row.riskScore.grade,
       row.riskScore.notes.join("; "),

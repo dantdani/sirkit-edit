@@ -2,11 +2,12 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { atomicPartRevisions } from "@/app/lib/db/schema";
 import { semanticHash } from "@/app/lib/atomic/stable";
+import { neverWithdrawnSql } from "@/app/lib/atomic/revision-status-sql";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 export const runtime = "nodejs";
 
-/** Read-only, stable-id paginated catalog view for approved clients/KiCad glue. */
+/** Read-only, stable-id paginated catalog view for approved clients/KiCad glue. [B19-E E3] Lists selectable revisions only: never a withdrawn one. */
 // [B16.0.12] canonical wrapper — policy -> bounded metadata/body run inside
 // the wrapper; the callback receives only bounded projections, never the Request.
 export const GET = publicRoute({ query: true }, async ({ meta }): Promise<Response> => {
@@ -17,13 +18,13 @@ export const GET = publicRoute({ query: true }, async ({ meta }): Promise<Respon
     const rows = await getDb()
       .select({ id: atomicPartRevisions.id, semanticHash: atomicPartRevisions.semanticHash, revision: atomicPartRevisions.revisionData })
       .from(atomicPartRevisions)
-      .where(and(eq(atomicPartRevisions.publicationState, "published"), after ? gt(atomicPartRevisions.id, after) : undefined))
+      .where(and(eq(atomicPartRevisions.publicationState, "published"), neverWithdrawnSql(atomicPartRevisions.id), after ? gt(atomicPartRevisions.id, after) : undefined))
       .orderBy(asc(atomicPartRevisions.id))
       .limit(limit + 1);
     const snapshotRows = await getDb()
       .select({ id: atomicPartRevisions.id })
       .from(atomicPartRevisions)
-      .where(eq(atomicPartRevisions.publicationState, "published"))
+      .where(and(eq(atomicPartRevisions.publicationState, "published"), neverWithdrawnSql(atomicPartRevisions.id)))
       .orderBy(asc(atomicPartRevisions.id));
     const items = rows.slice(0, limit).map((row) => ({
       id: row.id,

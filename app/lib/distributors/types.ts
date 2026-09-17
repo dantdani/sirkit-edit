@@ -40,14 +40,49 @@ export type PartPricing = {
   lifecycleStatus: LifecycleStatus; // normalized lifecycle for this source
   lifecycleRaw: string | null; // the distributor's original term, kept for debugging
   fetchedAt: number; // unix ms
+  /**
+   * [B19-C I4] The live answer this came from: the SHA-256 of the exact response bytes and when they were retrieved.
+   * Absent when served from a cache (a stored offer keeps no raw-content reference).
+   */
+  evidence?: { rawContentHash: string; retrievedAt: number };
+  /**
+   * [B19-E E1] Where this offer was served from and when the vendor answered it: `live` (a vendor request made for this
+   * lookup), `process-memo` (a connector's in-process memo of an earlier answer) or `offer-cache` (a stored `part_offers` row).
+   * Freshness is measured from `retrievedAt`, never from when the offer was re-served or re-stored.
+   */
+  provenance?: OfferProvenance;
 };
+
+export type OfferServedFrom = "live" | "process-memo" | "offer-cache";
+export type OfferProvenance = { servedFrom: OfferServedFrom; retrievedAt: number };
 
 export type DistributorName = PartPricing["distributor"];
 
 export interface DistributorClient {
   name: DistributorName;
   lookupByMpn(mpn: string): Promise<PartPricing | null>;
-  lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>>;
+  /** [B19-E E6] `options.purpose` meters the live lookups at that purpose's quota share (default interactive; the agent: 25%, OD-40). */
+  lookupBatch(mpns: string[], options?: LookupBatchOptions): Promise<Map<string, PartPricing>>;
+  /**
+   * [B19-E E2] A bounded candidate search (exact MPN or keyword), at most 5 hits. Every hit is the vendor's own part, labelled
+   * live with when the vendor answered; `exactMatch` says whether its published MPN is the query (a hit is never relabelled).
+   * Never throws; never memoizes, persists or remembers a miss. Absent: the source is never searched.
+   */
+  searchCandidates?(query: string, options: CandidateSearchOptions): Promise<CandidateSearchAnswer>;
+}
+
+export type CandidateSearchOptions = { mode: "exact" | "keyword"; limit: number; purpose: "interactive" | "agent" };
+/** [B19-E E6] Who an exact-MPN batch lookup is for. */
+export type LookupPurpose = "interactive" | "agent";
+export type LookupBatchOptions = { purpose?: LookupPurpose };
+export type CandidateSearchHit = { pricing: PartPricing; exactMatch: boolean };
+export type CandidateSearchAnswer =
+  | { ok: true; hits: CandidateSearchHit[]; rawContentHash: string; retrievedAt: number }
+  | { ok: false; message: string; paused?: "quota_exhausted" | "breaker_open"; retryAtMs?: number };
+
+/** [B19-E E2] A search asks for 1 to 5 results, whatever a caller hands a connector. */
+export function candidateSearchLimit(limit: number): number {
+  return Number.isInteger(limit) ? Math.min(5, Math.max(1, limit)) : 1;
 }
 
 // ─── Parsing helpers (the `unknown` boundary) ──────────────────────────────────
@@ -68,20 +103,62 @@ export function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-/** Coerce numbers, numeric strings, and currency-formatted strings ("$1.23"). */
+/**
+ * Coerce numbers and numeric strings, including a leading currency sign ("$1.23") and US thousands separators ("1,234.56").
+ * [B19-D I5b row 51] Only an unambiguous form is read: a decimal comma ("0,34"), a European group separator ("1.234,56"),
+ * or digits mixed with text ("12abc34") are NOT numbers — they used to be read by deleting every other character.
+ */
 export function asNumber(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
   if (typeof value === "string") {
-    const cleaned = value.replace(/[^0-9.eE+-]/g, "");
-    if (cleaned === "") return null;
-    const n = Number(cleaned);
+    const match = /^\s*[$\u00a3\u20ac\u00a5]?\s*(-?)([1-9]\d{0,2}(?:,\d{3})+|\d+)(\.\d+)?\s*$/.exec(value);
+    if (!match) return null;
+    const n = Number(`${match[1]}${match[2]!.replace(/,/g, "")}${match[3] ?? ""}`);
     return Number.isFinite(n) ? n : null;
   }
   return null;
 }
 
-/** Cheapest unit price across a set of price breaks, or null when none exist. */
-export function cheapestUnitPrice(breaks: PriceBreak[]): number | null {
-  const prices = breaks.map((b) => b.price).filter((p) => Number.isFinite(p) && p > 0);
-  return prices.length > 0 ? Math.min(...prices) : null;
+/** [B19-D I5b row 20] The one currency Sirkit compares and totals prices in (every registered source's default). */
+export const PRICING_CURRENCY = "USD";
+
+/**
+ * The unit price that applies at `quantity` (default 1), in ONE currency (default USD).
+ * [B19-D I5b row 20] It used to be the minimum over EVERY break — a 10 000-piece break priced a one-off line, and a GBP or
+ * JPY number could win. Now: among the breaks in the currency, those whose quantity is reachable (≤ `quantity`) apply and
+ * the cheapest wins (several sellers may quote); when none is reachable, the smallest order's price applies (the order
+ * minimum). No break in the currency is no price.
+ */
+export function cheapestUnitPrice(breaks: PriceBreak[], options: { quantity?: number; currency?: string } = {}): number | null {
+  const quantity = Number.isFinite(options.quantity) && (options.quantity ?? 0) > 0 ? options.quantity! : 1;
+  const currency = (options.currency ?? PRICING_CURRENCY).trim().toUpperCase();
+  const usable = breaks.filter((b) => Number.isFinite(b.price) && b.price > 0 && Number.isFinite(b.qty) && b.qty > 0 && (b.currency ?? PRICING_CURRENCY).trim().toUpperCase() === currency);
+  if (usable.length === 0) return null;
+  const reachable = usable.filter((b) => b.qty <= quantity);
+  if (reachable.length > 0) return Math.min(...reachable.map((b) => b.price));
+  const smallest = Math.min(...usable.map((b) => b.qty));
+  return Math.min(...usable.filter((b) => b.qty === smallest).map((b) => b.price));
+}
+
+/**
+ * [B19-B I1] A vendor request that failed at the boundary. Its message is the boundary's own redacted sentence and never
+ * the transport's text, the request URL or a credential.
+ */
+export class DistributorRequestError extends Error {
+  /** [B19-E E2] set when the boundary refused the request because the source is paused */
+  readonly paused?: "quota_exhausted" | "breaker_open";
+  readonly retryAtMs?: number;
+  constructor(message: string, pause?: { paused?: "quota_exhausted" | "breaker_open"; retryAtMs?: number }) {
+    super(message);
+    this.name = "DistributorRequestError";
+    if (pause?.paused) {
+      this.paused = pause.paused;
+      this.retryAtMs = pause.retryAtMs;
+    }
+  }
+}
+
+/** What a client may log about a failure: a boundary sentence, or a fixed string for anything it did not produce. */
+export function describeFailure(error: unknown): string {
+  return error instanceof DistributorRequestError ? error.message : "the lookup failed (details withheld)";
 }

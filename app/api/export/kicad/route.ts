@@ -9,21 +9,27 @@
  * Body: { state: SchematicState; title?: string; description?: string; company?: string }
  */
 
-import { exportToKicadSch, SchematicExportValidationError } from "@/app/lib/kicad-export";
+import { exportToKicadSch, SchematicExportLicenseError, SchematicExportValidationError } from "@/app/lib/kicad-export";
 import { validateSchematicStateIntegrity } from "@/app/lib/engineering/schematic-model";
 import { getFullPartsByIds } from "@/app/lib/parts-search";
 import type { SchematicState } from "@/lib/schematic-types";
-import type { ProjectComponentPin } from "@/app/lib/atomic/types";
+import type { PortableAtomicSnapshot, ProjectComponentPin } from "@/app/lib/atomic/types";
+import { loadPublishedPortableSnapshot } from "@/app/lib/atomic/server-catalog";
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { redactSecrets } from "@/app/lib/atomic/security";
 
 export const runtime = "nodejs";
+
+/** [B19-D I5c review] published revisions loaded at once (each load is several catalog queries). */
+const PINNED_LOAD_CONCURRENCY = 4;
 
 type ExportBody = {
   state?: SchematicState;
   title?: string;
   description?: string;
   company?: string;
-  componentSelections?: Record<string, ProjectComponentPin>;
+  /** [B19-D I5c row 16] accepted for compatibility and IGNORED: pinned parts come from the server's published snapshots */
+  componentSelections?: unknown;
 };
 
 /** Make a title safe to use as a file name. */
@@ -71,18 +77,60 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
     );
   }
 
-  // Collect unique partIds and load full catalog data from the DB (server-side;
-  // the client parts cache / ensurePartLoaded can't be called from a route).
-  const hasExactSelection = (component: (typeof kicadComponents)[number]): boolean => {
-    const selection = body.componentSelections?.[component.id];
-    return Boolean(
-      selection
-      && selection.atomicRevisionId === component.atomicPartRevisionId
-      && selection.symbolVersionId === component.symbolAssetVersionId
-      && selection.embeddedSnapshot.atomicRevision.id === selection.atomicRevisionId
-      && selection.embeddedSnapshot.symbol.versionId === selection.symbolVersionId,
+  // [B19-D I5c rows 15, 16] Every instance that declares an atomic revision is exported from the PUBLISHED snapshot the server
+  // loads for that revision — its symbol and its licenses — and the declared symbol version must match. Selections in the
+  // request body are never trusted (a body snapshot could carry its own s-expressions or claim any license). An instance
+  // whose pinned revision cannot be loaded is refused, never silently exported from a catalog row.
+  // [B19-D I5c review] each revision is loaded once (a board of sixty passives pins a handful of revisions), a few at a time.
+  // A loader that THROWS means the catalog could not be reached — a 503, logged and redacted — never "not published".
+  const revisionIds = [...new Set(kicadComponents.map((component) => component.atomicPartRevisionId).filter((id): id is string => Boolean(id)))];
+  const snapshotsByRevision = new Map<string, PortableAtomicSnapshot | null>();
+  try {
+    for (let index = 0; index < revisionIds.length; index += PINNED_LOAD_CONCURRENCY) {
+      const batch = revisionIds.slice(index, index + PINNED_LOAD_CONCURRENCY);
+      const loaded = await Promise.all(batch.map((revisionId) => loadPublishedPortableSnapshot(revisionId)));
+      batch.forEach((revisionId, position) => snapshotsByRevision.set(revisionId, loaded[position] ?? null));
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : typeof error === "string" ? error : "non-error rejection";
+    const safe = redactSecrets(detail).replace(/\b(password|passwd|pwd|secret|token|apikey|api_key|key)=\S+/gi, "$1=[REDACTED]");
+    console.error(`[api/export/kicad] loading published component revisions failed: ${safe.slice(0, 300)}`);
+    return Response.json(
+      { ok: false, code: "EXPORT_CATALOG_UNAVAILABLE", error: "The component catalog could not be reached, so nothing was exported. Try again shortly." },
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "30" } },
     );
-  };
+  }
+  const pinnedSelections: Record<string, ProjectComponentPin> = {};
+  const unavailable: string[] = [];
+  for (const component of kicadComponents) {
+    if (!component.atomicPartRevisionId) continue;
+    const snapshot = snapshotsByRevision.get(component.atomicPartRevisionId) ?? null;
+    if (!snapshot || !component.symbolAssetVersionId || snapshot.symbol.versionId !== component.symbolAssetVersionId) {
+      unavailable.push(component.refDes);
+      continue;
+    }
+    pinnedSelections[component.id] = {
+      selectionRecordId: component.selectionRecordId ?? `published:${snapshot.atomicRevision.id}`,
+      atomicRevisionId: snapshot.atomicRevision.id,
+      symbolVersionId: snapshot.symbol.versionId,
+      ...(snapshot.footprint ? { footprintVersionId: snapshot.footprint.versionId } : {}),
+      ...(snapshot.mapping ? { mappingCertificateId: snapshot.mapping.id } : {}),
+      modelVersionIds: snapshot.models.map((model) => model.versionId),
+      embeddedSnapshot: snapshot,
+    };
+  }
+  if (unavailable.length > 0) {
+    return Response.json(
+      {
+        ok: false,
+        code: "EXPORT_PINNED_PART_UNAVAILABLE",
+        error: "Some parts are pinned to a component revision that is not published (or no longer matches), so nothing was exported.",
+        components: [...new Set(unavailable)].sort(),
+      },
+      { status: 422, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  const hasExactSelection = (component: (typeof kicadComponents)[number]): boolean => Boolean(pinnedSelections[component.id]);
   const partIds = [...new Set(kicadComponents.filter((component) => !hasExactSelection(component)).map((c) => c.partId))];
   const loaded = await getFullPartsByIds(partIds);
   const parts = new Map(loaded.map((p) => [p.id, p] as const));
@@ -103,9 +151,22 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       title: body.title,
       description: body.description,
       company: body.company,
-      componentSelections: body.componentSelections,
+      componentSelections: pinnedSelections,
     });
   } catch (error) {
+    // [B19-D I5a] a pinned symbol whose license does not permit export: refuse, name the components, send nothing of the symbol
+    if (error instanceof SchematicExportLicenseError) {
+      return Response.json(
+        {
+          ok: false,
+          code: "EXPORT_LICENSE_PROHIBITED",
+          error: "Some pinned parts' symbol licenses do not permit export, so nothing was exported. Replace or re-license these parts.",
+          components: [...new Set(error.violations.map((item) => item.refDes))].sort(),
+          violations: error.violations.slice(0, 50),
+        },
+        { status: 422, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     // Defense in depth: the serializer's own typed validation (should be
     // unreachable after the pre-check above) still maps to a structured 422.
     if (error instanceof SchematicExportValidationError) {

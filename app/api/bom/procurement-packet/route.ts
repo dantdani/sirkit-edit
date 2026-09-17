@@ -2,11 +2,15 @@
  * POST /api/bom/procurement-packet
  *
  * Body: { state; pricingChoice; title?; buildQuantity?; notes? }
- * Returns a comprehensive procurement CSV (metadata header, per-line detail,
- * total project cost) for sending to contract manufacturers / procurement.
+ * Returns a sourcing worksheet CSV (metadata header with status, pricing basis
+ * and license lines, per-line detail with each best offer's observation time
+ * and basis, total estimated cost) to review with a contract manufacturer or a
+ * buyer. [B19-E E1] It is not verified procurement and never places an order;
+ * it prices from cached offers only.
  */
 
-import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 import { toProcurementPacketCsv } from "@/app/lib/cart-formats";
 
@@ -25,9 +29,8 @@ type Body = {
 // only and cannot reach the raw request.
 export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
   const body = rawBody as unknown as Body;
-  if (!isSchematicState(body.state)) {
-    return Response.json({ ok: false, error: "Body must include a `state`." }, { status: 400 });
-  }
+  const stateCheck = checkBomState(body.state, "Body must include a `state`."); // [B19-D I5e row 19] shape and table bounds before any lookup
+  if (!stateCheck.ok) return bomStateRefusal(stateCheck);
 
   const title = typeof body.title === "string" && body.title.trim() !== "" ? body.title.trim() : "sirkit BOM";
   const buildQtyRaw = typeof body.buildQuantity === "number" ? body.buildQuantity : Number(body.buildQuantity);
@@ -35,8 +38,8 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
   const notes = typeof body.notes === "string" ? body.notes : "";
 
   try {
-    const { rows } = await buildBomRows(body.state, normalizeChoice(body.pricingChoice));
-    const csv = toProcurementPacketCsv(rows, { title, buildQuantity, date: new Date(), notes });
+    const { rows, pricingMode, warnings } = await buildBomRows(stateCheck.state, normalizeChoice(body.pricingChoice));
+    const csv = toProcurementPacketCsv(rows, { title, buildQuantity, date: new Date(), notes, pricingMode, warnings });
     return new Response(csv, {
       status: 200,
       headers: {
@@ -45,7 +48,6 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/procurement-packet", err);
   }
 });

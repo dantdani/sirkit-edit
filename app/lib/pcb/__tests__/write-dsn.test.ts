@@ -2,7 +2,7 @@
 // net-name quoting, and deterministic (golden) output. Pure — no subprocess.
 
 import { describe, it, expect } from "vitest";
-import { boardToDsn, writeDsn } from "../dsn/write-dsn";
+import { boardToDsn, DsnEmitError, writeDsn } from "../dsn/write-dsn";
 import { assertDsnReady, validateDsn } from "../dsn/preflight";
 import { createEmptyBoard } from "../types";
 import type { PcbBoard, FootprintDef, FootprintInstance, Pad } from "../types";
@@ -104,10 +104,12 @@ describe("boardToDsn / writeDsn", () => {
     expect(dsn.vias.every((via) => via.onLayers.length === 4)).toBe(true);
   });
 
-  it("(d) net names with special characters are double-quoted and escaped", () => {
+  it("(d) net names with special characters are double-quoted; a quote FreeRouting cannot read back is refused", () => {
     const fp = inst("r1", "R1", [smdPad("1", 0), smdPad("2", 1)], { "1": 1, "2": 1 });
-    const text = writeDsn(boardToDsn(board({ 1: 'A"B' }, [fp])));
-    expect(text).toContain('(net "A\\"B"');
+    expect(writeDsn(boardToDsn(board({ 1: "A B/C+" }, [fp])))).toContain('(net "A B/C+"');
+    // [B19-D I5e review; reviewed pin move] this case pinned `(net "A\\"B"`, but FreeRouting's lexer has no escape inside a
+    // quoted string: the backslash is a plain character and the quote ends the string, so the old output was the injection
+    expect(() => writeDsn(boardToDsn(board({ 1: 'A"B' }, [fp])))).toThrow(DsnEmitError);
   });
 
   it("(f) NPTH pads and phantom padNets entries never produce dangling network nodes", () => {

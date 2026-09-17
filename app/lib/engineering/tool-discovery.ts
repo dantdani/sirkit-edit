@@ -150,7 +150,8 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
   const capabilities = new Set(context.grantedCapabilities ?? []);
   const grantable = new Set(context.grantableCapabilities ?? []);
   const projectState = new Set(context.projectState ?? []);
-  const authority = new Set(context.availableAuthority ?? []);
+  // [B19-E E6] the external-observation authority is a per-run chat fact: it never counts on any other channel
+  const authority = new Set((context.availableAuthority ?? []).filter((source) => source !== "external-observation" || context.channel === "assistant-agent"));
   const flags = new Set(context.enabledFlags ?? []);
   const requestedCategories = new Set(context.requestedCategories ?? []);
   const approvals = new Set(context.approvalsAvailable ?? []);

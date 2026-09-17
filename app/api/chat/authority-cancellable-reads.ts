@@ -11,7 +11,11 @@
  * Scope: READS ONLY, and only the authority queries —
  *  - binding-set lookup (`physical_binding_sets` by full component scope),
  *  - binding revision/aggregate reads (`physical_binding_revisions`),
- *  - atomic revision lookup (`atomic_part_revisions`, published only),
+ *  - atomic revision lookup (`atomic_part_revisions`, published only; [B19-E E3]
+ *    "pinned" excludes revoked revisions, "selectable" excludes every
+ *    withdrawn one — the same predicates as `app/lib/atomic/server-catalog.ts`;
+ *    [B19-E E5] "historical" ignores withdrawal, for the pins being moved off),
+ *  - [B19-E E5] catalog status lookup (`atomic_revision_status_events`),
  *  - CAD asset lookup (`atomic_cad_assets`, symbol + footprint versions),
  *  - mapping lookup (`atomic_mapping_certificates`, approved only),
  *  - exact-part lookup (`atomic_exact_parts` — the manufacturer identity is
@@ -44,6 +48,7 @@ import type { PublishedSymbolPinFacts } from "@/app/lib/engineering/replacement-
 import type { KicadPin, KicadPinType } from "@/app/lib/kicad/types";
 import type { ComponentPhysicalBinding, ComponentPhysicalBindingSet } from "@/app/lib/physical-binding/types";
 import type { AtomicPartRevision, FootprintAssetVersion, MappingCertificate, SymbolAssetVersion } from "@/app/lib/atomic/types";
+import { revisionStatusFromEvents, type AtomicCatalogStatus } from "@/app/lib/atomic/revision-status";
 
 /** Normalized failure codes — the ONLY errors this module throws. */
 export const AUTHORITY_READ_ABORTED = "AUTHORITY_READ_ABORTED";
@@ -108,8 +113,22 @@ const SQL_BINDING_SETS =
   'select "binding_set" from "physical_binding_sets" where "tenant_id" = $1 and "project_id" = $2 and "branch_id" = $3 and "board_instance_id" = $4 and "component_instance_id" = $5';
 const SQL_BINDING_REVISIONS = (count: number): string =>
   `select "binding" from "physical_binding_revisions" where "revision_id" in (${Array.from({ length: count }, (_, index) => `$${index + 1}`).join(", ")})`;
-const SQL_ATOMIC_REVISION =
+// [B19-E E3] withdrawal is append-only (`atomic_revision_status_events`): an existing pin reads a revision unless it was revoked
+// (OD-38), a new selection reads it only if it was never withdrawn. Mirrors `readModeSql` in app/lib/atomic/revision-status-sql.ts.
+const SQL_ATOMIC_REVISION_PINNED =
+  `select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2 and not exists (select 1 from "atomic_revision_status_events" where "atomic_revision_status_events"."revision_id" = "atomic_part_revisions"."id" and "atomic_revision_status_events"."to_state" = 'revoked')`;
+const SQL_ATOMIC_REVISION_SELECTABLE =
+  'select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2 and not exists (select 1 from "atomic_revision_status_events" where "atomic_revision_status_events"."revision_id" = "atomic_part_revisions"."id")';
+// [B19-E E5] the revision an existing pin is being moved OFF (a replacement's current pins): published, withdrawal ignored
+const SQL_ATOMIC_REVISION_HISTORICAL =
   'select "revision_data" from "atomic_part_revisions" where "id" = $1 and "publication_state" = $2';
+
+/**
+ * [B19-E E3] "pinned": a revision an existing pin names (published, not revoked); "selectable": a new selection (never
+ * withdrawn). [B19-E E5] "historical": the revision a pin is being moved off (published, whatever was withdrawn; grants nothing).
+ */
+export type AtomicAuthorityReadMode = "pinned" | "selectable" | "historical";
+const atomicRevisionSql = (mode: AtomicAuthorityReadMode): string => (mode === "selectable" ? SQL_ATOMIC_REVISION_SELECTABLE : mode === "historical" ? SQL_ATOMIC_REVISION_HISTORICAL : SQL_ATOMIC_REVISION_PINNED);
 const SQL_CAD_ASSETS =
   'select "kind", "payload" from "atomic_cad_assets" where "version_id" in ($1, $2)';
 const SQL_MAPPING_CERTIFICATE =
@@ -179,8 +198,9 @@ export async function confirmPublishedAtomicRevisionCancellable(
   client: CancellableAuthoritySqlClient,
   atomicPartRevisionId: string,
   signal: AbortSignal | undefined,
+  mode: AtomicAuthorityReadMode = "pinned",
 ): Promise<AtomicRevisionConfirmation | null> {
-  const revisionRows = await runCancellableAuthorityRead(client, SQL_ATOMIC_REVISION, [atomicPartRevisionId, "published"], signal);
+  const revisionRows = await runCancellableAuthorityRead(client, atomicRevisionSql(mode), [atomicPartRevisionId, "published"], signal);
   const revision = revisionRows[0]?.revision_data as AtomicPartRevision | undefined;
   if (!revision || typeof revision !== "object") return null;
   if (revision.id !== atomicPartRevisionId || revision.publicationState !== "published") return null;
@@ -210,6 +230,24 @@ export async function confirmPublishedAtomicRevisionCancellable(
     footprintAssetVersionId: footprint.versionId,
     mappingCertificateId: mapping.id,
   };
+}
+
+const SQL_REVISION_STATUS_EVENTS =
+  'select "to_state", "successor_revision_id" from "atomic_revision_status_events" where "revision_id" = $1';
+
+/**
+ * [B19-E E5] Cancellable read of one revision's catalog status from its append-only withdrawal events: the furthest state
+ * reached and the successor it names (published when there are none). Whether the revision is published at all is the
+ * confirmation's question, not this one's. Once aborted, no query starts.
+ */
+export async function loadAtomicCatalogStatusCancellable(
+  client: CancellableAuthoritySqlClient,
+  atomicPartRevisionId: string,
+  signal: AbortSignal | undefined,
+): Promise<{ state: AtomicCatalogStatus; successorRevisionId?: string }> {
+  const rows = await runCancellableAuthorityRead(client, SQL_REVISION_STATUS_EVENTS, [atomicPartRevisionId], signal);
+  const status = revisionStatusFromEvents(atomicPartRevisionId, "", rows.map((row) => ({ toState: String(row.to_state), successorRevisionId: typeof row.successor_revision_id === "string" ? row.successor_revision_id : null })));
+  return { state: status.state, ...(status.successorRevisionId ? { successorRevisionId: status.successorRevisionId } : {}) };
 }
 
 const SQL_SYMBOL_ASSET =
@@ -250,8 +288,9 @@ export async function loadPublishedSymbolPinFactsCancellable(
   client: CancellableAuthoritySqlClient,
   atomicPartRevisionId: string,
   signal: AbortSignal | undefined,
+  mode: AtomicAuthorityReadMode = "pinned",
 ): Promise<PublishedSymbolPinFacts | null> {
-  const revisionRows = await runCancellableAuthorityRead(client, SQL_ATOMIC_REVISION, [atomicPartRevisionId, "published"], signal);
+  const revisionRows = await runCancellableAuthorityRead(client, atomicRevisionSql(mode), [atomicPartRevisionId, "published"], signal);
   const revision = revisionRows[0]?.revision_data as AtomicPartRevision | undefined;
   if (!revision || typeof revision !== "object") return null;
   if (revision.id !== atomicPartRevisionId || revision.publicationState !== "published") return null;

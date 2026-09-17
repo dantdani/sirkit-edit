@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadMigrationManifest, splitMigrationStatements } from "../migrations/manifest";
 import { migrateDatabase } from "../migrations/runner";
-import { captureSchemaSnapshot, verifyMembershipAndOwnership, type SchemaSnapshot } from "../migrations/verify-schema";
+import { captureSchemaSnapshot, verifyAtomicRevisionStatusEvents, verifyMembershipAndOwnership, type SchemaSnapshot } from "../migrations/verify-schema";
 import { disposablePostgres, type DisposablePostgres } from "../disposable-postgres";
 
 let pushed: DisposablePostgres, migrated: DisposablePostgres;
@@ -80,6 +80,13 @@ describe("B16-B §schema parity — schema-first push vs SQL migrations", () => 
     expect(viaPush, JSON.stringify(viaPush)).toEqual([]);
   });
 
+  it("[B19-E E3] both paths carry the atomic revision status events table with every check, key and index", async () => {
+    const viaPush = verifyAtomicRevisionStatusEvents(await captureSchemaSnapshot(pushed)).filter((row) => !row.ok);
+    const viaMigrations = verifyAtomicRevisionStatusEvents(await captureSchemaSnapshot(migrated)).filter((row) => !row.ok);
+    expect(viaMigrations, JSON.stringify(viaMigrations)).toEqual([]);
+    expect(viaPush, JSON.stringify(viaPush)).toEqual([]);
+  });
+
   it("records the exact structural differences and refuses any that touch membership, ownership or policies", async () => {
     const push = await captureSchemaSnapshot(pushed), viaMigrations = await captureSchemaSnapshot(migrated);
     const diff = differences(push, viaMigrations);
@@ -96,6 +103,8 @@ describe("B16-B §schema parity — schema-first push vs SQL migrations", () => 
     }
     const sensitive = [...diff.onlyInPush, ...diff.onlyInMigrations, ...diff.changed].filter((key) => /project_members|bom_snapshots|bom_notifications|policy:/.test(key) && !KNOWN_DIVERGENCES.has(key));
     expect(sensitive, JSON.stringify(sensitive)).toEqual([]);
+    // [B19-E E3] the append-only withdrawal table (0030) is declared identically in schema.ts and the migration
+    expect([...diff.onlyInPush, ...diff.onlyInMigrations, ...diff.changed].filter((key) => key.includes("atomic_revision_status_events"))).toEqual([]);
     // Evidence for the closeout artifact (read by the orchestrator from the test output).
     console.log(`[B16-B schema parity] onlyInPush=${diff.onlyInPush.length} onlyInMigrations=${diff.onlyInMigrations.length} changed=${diff.changed.length}\n${[...diff.onlyInPush.map((k) => `  push-only ${k}`), ...diff.onlyInMigrations.map((k) => `  migrations-only ${k}`), ...diff.changed.map((k) => `  changed ${k}`)].join("\n")}`);
   });

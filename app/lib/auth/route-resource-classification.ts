@@ -47,6 +47,9 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   "/api/bom/diff": { durable: "read", sensitivity: "project-durable" },
   "/api/pcb-sync": { durable: "read-write", sensitivity: "project-durable" },
   "/api/physical-bindings": { durable: "read-write", sensitivity: "project-durable" },
+  // [B19-E E4] the durable-workflow aggregate atomic.publication-request.v1, and the atomic catalog tables a publication writes
+  // ([B19-E E4 review] gates-1: those tables are shared by every tenant; only the configured governance tenant AND project reach them)
+  "/api/components/atomic/publication": { durable: "read-write", sensitivity: "project-durable" },
   "/api/assignment-queue": { durable: "read-write", sensitivity: "project-durable" },
   "/api/pcb/release": { durable: "read-write", sensitivity: "project-durable", expensive: true, externalProcess: "kicad-cli (server-authoritative)" },
   "/api/pcb/qualify": { durable: "read-write", sensitivity: "project-durable", expensive: true },
@@ -80,6 +83,12 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // credit. Its previous classification (durable=none, caller-supplied-only)
   // was untrue.
   "/api/replacement-authority": { durable: "read", sensitivity: "project-durable" },
+  // [B19-E E2] the external candidate search spends provider credit (the policy row says so) and keeps its answers in process
+  // memory only: it reads and writes no durable store, and a search query is caller-supplied data.
+  "/api/parts/external-search": { durable: "none", sensitivity: "caller-supplied-only" },
+  // [B19-E E5] the atomic catalog's append-only status events, read for the ids a member names: durable, but catalog data shared
+  // by every tenant, never a project's own data
+  "/api/components/revision-status": { durable: "read", sensitivity: "none" },
 };
 
 /**

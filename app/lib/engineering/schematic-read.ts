@@ -13,6 +13,14 @@
 import { schDisplayRef, type SchematicState } from "@/lib/schematic-types";
 import { schematicStateDigest } from "./schematic-model";
 
+/** [B19-D I5e row 25] identity strings a model reads are bounded; the full values stay in the project */
+const INSPECTION_TEXT_CHARS = 256;
+const bounded = (value: unknown): string => {
+  const text = typeof value === "string" ? value : "";
+  const points = Array.from(text);
+  return points.length <= INSPECTION_TEXT_CHARS ? text : `${points.slice(0, INSPECTION_TEXT_CHARS - 1).join("")}…`;
+};
+
 export interface SchematicInspection {
   valid: boolean;
   /** Present only when the snapshot was structurally usable. */
@@ -42,25 +50,25 @@ export function inspectSchematicState(schematic: unknown): SchematicInspection {
   }
   const theory = schematic.components.map((component) => ({
     family: "theory" as const,
-    id: component.id,
-    displayRef: schDisplayRef(component),
+    id: bounded(component.id),
+    displayRef: bounded(schDisplayRef(component)),
     type: component.type,
-    value: component.value ?? "",
+    value: bounded(component.value ?? ""),
     x: component.x,
     y: component.y,
   }));
   const kicad = (schematic.kicadComponents ?? []).map((component) => ({
     family: "kicad" as const,
-    id: component.id,
-    displayRef: component.refDes,
-    type: component.partId,
-    value: component.value ?? "",
+    id: bounded(component.id),
+    displayRef: bounded(component.refDes),
+    type: bounded(component.partId),
+    value: bounded(component.value ?? ""),
     x: component.x,
     y: component.y,
   }));
   const components = [...theory, ...kicad].sort((a, b) => a.displayRef.localeCompare(b.displayRef) || a.id.localeCompare(b.id));
   const netLabels = (schematic.netLabels ?? [])
-    .map((label) => ({ id: label.id, name: label.name }))
+    .map((label) => ({ id: bounded(label.id), name: bounded(label.name) }))
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   return {
     valid: true,

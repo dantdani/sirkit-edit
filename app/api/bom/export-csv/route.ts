@@ -6,9 +6,10 @@
  */
 
 import { buildBom, bomToCsv } from "@/app/lib/bom/build";
+import { bomStateRefusal, checkBomState } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
 import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
 import type { DistributorChoice } from "@/app/lib/distributors";
-import type { SchematicState } from "@/lib/schematic-types";
 
 export const runtime = "nodejs";
 
@@ -25,12 +26,8 @@ type BomBody = {
 export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
   const body = rawBody as unknown as BomBody;
 
-  if (!isSchematicState(body.state)) {
-    return Response.json(
-      { ok: false, error: "Body must include a `state` with components/kicadComponents." },
-      { status: 400 },
-    );
-  }
+  const stateCheck = checkBomState(body.state); // [B19-D I5e row 19] shape and table bounds before any lookup
+  if (!stateCheck.ok) return bomStateRefusal(stateCheck);
 
   const pricingChoice: DistributorChoice =
     body.pricingChoice === "both"
@@ -40,7 +37,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
         : "none";
 
   try {
-    const result = await buildBom(body.state, pricingChoice);
+    const result = await buildBom(stateCheck.state, pricingChoice);
     const csv = bomToCsv(result);
     return new Response(csv, {
       status: 200,
@@ -50,12 +47,7 @@ export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 },
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/export-csv", err);
   }
 });
 
-function isSchematicState(value: unknown): value is SchematicState {
-  if (!value || typeof value !== "object") return false;
-  return Array.isArray((value as Record<string, unknown>).components);
-}

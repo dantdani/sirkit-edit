@@ -221,6 +221,17 @@ describe("POST /api/pcb/autoroute", () => {
     expect(runMock).not.toHaveBeenCalled();
   });
 
+  // [B19-D I5e review] a name the DSN writer refuses (FreeRouting cannot read a quote back) is the caller's input, not a server error
+  it("refuses a net name the DSN writer cannot write with 422 before launching the engine", async () => {
+    const board = chainBoard();
+    board.nets[1]!.name = 'CHAIN" ) (sirkit_injected yes) ("';
+    const res = await post({ board });
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toMatch(/^DSN input refused: /);
+    expect(runMock).not.toHaveBeenCalled();
+  });
+
   it("maps a runner timeout to 500 with error:'timeout'", async () => {
     runMock.mockResolvedValue({ ok: false, error: "timeout", stderr: "", elapsedMs: 1, processStatus: "timeout", outputFileStatus: "not-checked" });
     const res = await post({ board: buildRoutedDemo() });

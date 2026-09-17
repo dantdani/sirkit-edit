@@ -1113,3 +1113,772 @@ _(discovery, reproduction and results appended below as they are observed)_
   `final-verdict.md`. Verdict: **B18 PASSES its deterministic gate.**
 - Measured on the final tree: broad 268 files / 3439 passed / 10 expected skips; browser 29/29 in 11.1 min; tsc 0;
   eslint clean; seven generators idempotent with zero drift; 158-route ratchet and the exposure ratchet intact.
+
+### B19 — chapter start and discovery (2026-09-12 local, solo; this commit)
+
+- B18 merged normally into `main` as `5a59a1f` (PR #8) with both workflows green on `cf8ad68`. B19 opens from that base
+  on `chapter/b19-external-acquisition`.
+- Discovery by six parallel read-only readers (workflow `wf_30aa690a-0c4`): the connectors, the outbound boundary, the
+  quarantine-to-authority pipeline, inbound import security, the product/agent surfaces and the existing tests — 113
+  findings, 53 gaps, every claim with a file:line. Recorded in `artifacts/ai-control-plane-b19/discovery.md`.
+- What exists: three live distributor clients (DigiKey V4 OAuth, Mouser v1, Nexar GraphQL) and an LCSC stub, all in one
+  directory; the back half of the authority pipeline (atomic revisions, mapping certificates, physical bindings) is
+  strong; there is NO purchase path anywhere, which is the state the runbook wants kept.
+- The most useful single finding: a complete, unit-tested SSRF guard already exists (`app/lib/atomic/security.ts:121`)
+  with ZERO production callers, and a bounded response reader exists that no server-side outbound call uses. B19 wires
+  them rather than writing new ones — with two gaps to close while wiring (hostname-string validation with no resolved-IP
+  check; an IPv4-only private-range table).
+- Seven defects recorded to reproduce first: a PUBLIC, CSRF-free `/api/bom` whose caller-supplied `forceRefresh` can
+  drain a paid monthly quota anonymously; that route reflecting raw distributor errors; the Mouser API key travelling in
+  the URL query string; no timeout on any distributor call; unbounded response reads everywhere; the cross-verify
+  endpoint following redirects with its bearer attached and reflecting 200 bytes of the remote body; and license enforced
+  at publication but not at export.
+- Increments I1–I7 planned in `discovery.md` §4, one per runbook checkpoint plus validation.
+
+### B19 I1 — one bounded, validated egress path for acquisition sources (2026-09-13 local, solo; this commit)
+
+- Built on what already existed rather than beside it: the SSRF guard with no production callers and the bounded stream
+  reader no server-side outbound call used are now wired into one path, `app/lib/net/outbound-fetch.ts`, which never
+  throws and returns a closed code with a redacted sentence.
+- Every request: HTTPS only, no URL credentials, the source's exact allowlisted host, a name and EVERY resolved address
+  outside loopback / link-local (incl. cloud metadata) / private / CGNAT / ULA / multicast, one hard deadline over
+  resolution through body, a bounded read, a media-type check, and no implicit redirect — each hop revalidated, bounded,
+  credentials never crossing an origin, and a request carrying a secret in its URL never redirected at all.
+- Three gaps reproduced before they were fixed. The existing guard's private-range table was IPv4-only, so an allowlisted
+  `[::1]`, `[fd00::1]`, `[::ffff:127.0.0.1]` or `100.64.0.1` passed. Closing that exposed a subtler one: the URL parser
+  REWRITES `[::ffff:127.0.0.1]` to `[::ffff:7f00:1]` before any check sees it, so IPv6 is now read as numbers. And a
+  resolver that never answered ignored the deadline; resolution now races the same abort.
+- A limit stated rather than claimed: addresses are checked at admission and the transport resolves again at connect, so
+  a sub-connect rebinding window is not excluded by this module; the exact-host allowlists close it in practice, and
+  pinning the connection is recorded as a follow-up.
+- DigiKey (token + search), Mouser and Nexar now call only their own host through per-source policies (15/15/20 s, 2/2/4 MB,
+  no redirects, JSON only), and log only the boundary's sentence instead of the raw error object.
+- Corrected a discovery finding instead of "fixing" it: Mouser's current documentation authenticates the Search API with
+  an `apiKey` query parameter by design. It is contained — declared a secret, never logged or messaged, never redirected.
+- Measured while writing the client suite: run against the unwired clients, the seam did not exist and they used the real
+  global fetch with dummy credentials, so some cases passed only because a real call failed fast. Only the failing cases
+  were genuine reproductions. The suite now poisons the global fetch so a bypass can never pass silently.
+- `/api/schematic/cross-verify`'s credential-carrying redirects and body reflection (D19-6) moved to I2 with `/api/bom`'s
+  error reflection, where the two route-level fixes are reproduced together.
+- Tests: b19-outbound-fetch 19/19 and b19-distributor-egress 8/8 (both new, in the CI list); the existing atomic security
+  suites unchanged and green; broad run: 279 files, 3569 passed, 10 expected skips; tsc 0; eslint clean on the changed files (one pre-existing warning in
+  the untouched `lcsc.ts`).
+
+### B19 I2 — who may spend paid quota, and what a failure may say (2026-09-13 local, solo; this commit)
+
+- Reproduction widened D19-1: six public BOM routes priced live (the workbench, the CSV export, the procurement packet and
+  three carts), and the server resolves part ids to catalog MPNs, so an anonymous caller spent quota on real parts. The
+  pricing layer had no notion of a caller.
+- Live pricing is now a capability the caller must be granted: `getPricingFor` serves the cache unless `live: true`, and
+  `forceRefresh` means nothing without it. The safe value is the default.
+- `/api/bom` is an authenticated project read declared `providerCredit: true` and is the route that asks for live pricing;
+  snapshot and diff (already authenticated) ask explicitly; the export and cart routes stay public and cache-only.
+- D19-2 was wider too: every BOM route repeated a failure's message. All nine now answer with a fixed sentence and log a
+  redacted, bounded line.
+- The workbench sends its project scope, and says why when there is no project.
+- Reviewed pin moves (strengthenings) in b16-0-4, b16-0-5 and b16-0-11; three route CSVs regenerated, one row each; the
+  migration ratchet unchanged at 158.
+- A vacuous pass recorded: the five public-route cases passed against the old code; the pricing-layer test is the real
+  reproduction.
+- A pre-existing isolated timeout (chat-surface revocation) proven unrelated by stashing I2; follow-up filed, not called a
+  flake.
+- Not proven here: the workbench in a browser (no spec reaches it; the dev server was stopped before it could spend real
+  quota). Carried by I6. Owner decision OD-31 recorded.
+- `/api/schematic/cross-verify` (D19-6) is I2b.
+- Tests: b19-pricing-live-gate 4/4 and b19-bom-quota 12/12 (both new, in the CI list); the moved pins, the migration
+  ratchet and invariant tripwires 171/171; the route artifact and control-inventory gates 51/51; broad run: 281 files,
+  3585 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I2b — the second opinion's outbound call through the same boundary (2026-09-13 local, solo; this commit)
+
+- Measured before changing anything (two loopback servers, a dummy bearer, Node 24.15): the old cross-verify call followed
+  a redirect to any address and re-sent the prompt there; Node dropped the bearer on the cross-origin hop and kept it on a
+  same-origin one; the caller was told the final hop's status and first 200 bytes of its body. Discovery's D19-6 is
+  corrected accordingly (the bearer did not cross origins; the rest was real).
+- Reproduced in the suite: 9 of 12 route cases failed against the old route. One harness mistake (a default parameter
+  filling in the endpoint for the "unconfigured" case) was found and fixed before recording. The log-token case is
+  vacuous on the old code, which logged nothing.
+- The call now goes through `outboundFetch` in `app/lib/schgen/endpoint-client.ts`: HTTPS, the configured host only, no
+  inward address, no redirects, 240 s per attempt, 1 MB, JSON; the 503 retry bounded at 3 attempts and 300 s total;
+  configuration read per request; a closed failure with a fixed sentence to the caller and a redacted log line.
+- Tests: b19-cross-verify-egress 12/12 and b19-schgen-endpoint-client 14/14 (both new, in the CI list); the B16.0.10
+  cross-verify pins unchanged; broad run (now including app/lib/schgen and app/api/schematic): 284 files, 3620 passed,
+  10 expected skips; tsc 0 in the changed areas; eslint clean on the changed files.
+
+### B19 I3 — the versioned source registry, enforced (2026-09-13 local, solo; this commit)
+
+- Read the vendors' own current documentation first (DigiKey developer portal and API agreement, Mouser's Search API
+  specifications and terms, Nexar's support articles, plans and legal terms, LCSC's Open API docs); every fact in the
+  registry cites them, and anything they do not state is UNKNOWN.
+- `app/lib/acquisition/source-registry.ts` (1.0.0) records, per source: identity and API version, exact hosts and
+  operations, authentication method and secret REFERENCES, observations, quota, deadline/body/redirect/spacing/retry/
+  breaker, freshness, storage and retention, bulk refresh, redistribution and export disposition, attribution, region,
+  source and authority class, and state. `source-registry.csv` is its generated, byte-gated render.
+- The connectors read it: egress policies, admission (blocked never; disabled only by a reviewed change; operator can
+  only switch off), request spacing, freshness, storage, retention purge, bulk refresh, and the BOM's unavailable-source
+  sentences.
+- Checking the documentation found, and reproduction confirmed before each fix: DigiKey requests 214/203 ms apart
+  against a 120-a-minute limit (now 500 ms); Mouser offers persisted despite a no-storage clause; every stored row served
+  24 h and kept forever (DigiKey now 1 h, Nexar 24 h, purged past retention, one serving rule for every reader);
+  Mouser used whenever its key was set despite its terms (now disabled, OD-32).
+- A regression I2 introduced, found while reading every reader of stored offers: the operator refresh job passed only
+  `forceRefresh`, so it silently refreshed nothing after live pricing became a grant. It is now granted live pricing as
+  a declared bulk refresh, which touches only sources whose terms permit it (none today, OD-33) and says so.
+- A claim corrected before recording: the Mouser client never memoized answers (that case passes on the old client);
+  the storage defect was one layer up.
+- Recorded, not changed: Nexar's connector sends a pre-issued token instead of running client credentials (D19-12).
+  Quotas, breakers and coalescing are recorded but enforced in I3b.
+- Reviewed pin move: b19-pricing-live-gate now configures credentials (admission needs them) and expects Mouser at 0.
+- Tests: b19-source-registry 24/24, b19-connector-policy 6/6, b19-source-admission 7/7 and b19-offer-retention 5/5 against a
+  migrated PGlite (all new; the first three in the prompt-to-gerber CI list, the last in database-delivery); distributor and
+  BOM suites 56/56; database suites green; broad run: 288 files, 3662 passed, 10 expected skips; tsc 0 in the changed areas;
+  eslint: no new findings (the pre-existing `lcsc.ts` unused-parameter warning remains).
+
+### B19 I3b — request quotas, circuit breakers and in-flight coalescing (2026-09-13 local, solo; this commit)
+
+- Reproduced first: against the connectors as I3 left them, 6 of 7 cases failed — the 121st DigiKey request of a minute
+  was sent, a Nexar batch past 2,000 matched parts was sent, requests kept going after five 503s and after a 429, and
+  concurrent identical lookups each paid for a vendor call. The 404 case is a baseline, passing before and after.
+- `app/lib/acquisition/admission-control.ts`: every registered quota window is reserved before a request is sent (cost:
+  1 request, a Nexar batch's matched parts, or 0 for DigiKey's token request); the breaker opens after 5 consecutive
+  failures or at once on a 429, allows one trial after 10 minutes, and ignores neutral answers; per-client coalescing
+  joins lookups already in flight. Enforced in `distributorJson`, the one path every vendor request takes.
+- A BOM priced live names a paused source and when it may be tried again.
+- Stated limits: per-process meters (a durable shared meter is a follow-up); a Nexar batch larger than the remaining
+  quota is refused whole.
+- Tests: b19-quota-breaker-coalescing 7/7 (new, in the CI list), b19-admission-control 9/9 (new, under app/lib/acquisition),
+  the pause sentence added to b19-source-admission (8/8); distributor, registry and BOM suites 97/97; broad run: 290 files,
+  3679 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I4 — the quarantine pipeline's front half (2026-09-13 local, solo; this commit)
+
+- Measured first: a live distributor lookup carried no evidence reference at all, and nothing implemented the pipeline's
+  front half (types only, from before B19).
+- Every live distributor answer is now pinned to the SHA-256 of the exact response bytes and when they arrived; the bytes
+  are never kept.
+- `app/lib/acquisition/quarantine.ts`: deterministic, frozen external observations (source, source and authority class,
+  registry and normalizer versions, raw hash, expiry, `rawRetained: false`; blocked or disabled sources refused);
+  normalized candidates whose every fact is classified sourcing / identity hint / engineering candidate / quarantined
+  (model and OCR extractions always quarantined; engineering facts from distributors, third-party CAD or geometry
+  inference quarantined); evidence bundles for one part with conflicts, stale observations, parser versions and missing
+  engineering evidence, and `engineering.proven` always false. No export can approve, publish, create a revision or bind.
+- Not built, and why: a distributor `SourceAdapter` (discovery planned one) would page a vendor catalog, which every
+  registered source's terms prohibit or leave unclear; observations are made per interactive lookup.
+- Recorded for I4b: the approval validator does not check what kind of source backs an engineering fact, or whether a
+  model extracted it; the downstream mapping verifier does.
+- Tests: b19-quarantine-pipeline 20/20 (new, under app/lib/acquisition in the CI list); acquisition, distributor and BOM
+  suites 117/117; broad run: 291 files, 3699 passed, 10 expected skips; tsc 0 in the changed areas; eslint: no new findings.
+
+### B19 I4b — what evidence a reviewed atomic revision may rest on (2026-09-13 local, solo; this commit)
+
+- Reproduced first, 12 of 17 cases failing on the unchanged validator: a mapping certificate resting only on a distributor,
+  third-party CAD, geometry inference or an LLM suggestion was PCB-assignable, and a published snapshot like that passed the
+  publication transaction; a context with no provenance was trusted; trusted terminal/package/identity claims resting only
+  on a distributor, and verified claims resting only on unreviewed LLM/OCR extraction, raised no blocker. Five baselines.
+- `evaluateApproval` now requires engineering-authoritative evidence (manufacturer, official library, organization,
+  human-reviewed; not an unreviewed model/OCR extraction) for approved mapping certificates and for trusted
+  identity/terminal/package/mechanical claims; refuses any trusted claim resting only on unreviewed model/OCR extraction;
+  and refuses provenance it cannot judge, naming exactly what is missing.
+- All four callers supply provenance, including the server search view, which now loads the source records and sources
+  behind its evidence (not DB-tested: INFERRED for that path).
+- The governance suite's half-publication pin holds unchanged (the new message names a missing evidence source record);
+  that suite was in no CI list and now is.
+- Tests: b19-approval-evidence-authority 17/17 (new, in the CI list with governance-security); atomic, component-selection,
+  fixture-runtime 123/123; workflow, mapping-verification, physical-binding, assignment-queue, kicad, circuit-knowledge 151
+  passed / 6 skipped; broad run: 292 files, 3716 passed, 10 expected skips; tsc 0; eslint clean on the changed files.
+
+### B19 I4b CI fix — a governance case that had never run on Linux (2026-09-13 local, solo; this commit)
+
+- I4b added `app/lib/atomic/__tests__/governance-security.test.ts` to CI; it had only ever run on the Windows development
+  machine. On Linux one case failed: "rejects path traversal and unsupported 3D formats" used Windows paths
+  (`C:\safe\models`, backslash-separated references). A backslash is not a separator on POSIX, so the file-type reference
+  resolved outside the root first and threw the path error instead; and the traversal assertion passed on Linux only for
+  that same reason. The code under test (`resolvePermittedPath`) was right on both platforms — fail-closed.
+- Not called a flake: reproduced from the CI log, reasoned under both path semantics (simulated with `path.posix` and
+  `path.win32`), and fixed in the test: the assertions use the platform's own separator and an absolute native root, add a
+  permitted-path case, and add the other platform's separator as a traversal that must also be refused.
+- Tests: governance-security 25/25 locally; CI confirms on Linux.
+
+### B19 I5a — license enforced at export (2026-09-13 local, solo; this commit)
+
+- CI record first: I4 (`583691e`) green; I4b (`d1d5ed0`) red on prompt-to-gerber only — the Windows-only governance path
+  case, fixed in `ad3f066`, which is green on every job.
+- Reproduced (6 of 7 failing on the unchanged export): a pinned symbol whose license export disposition was `prohibited`,
+  `private_review_only`, `metadata_only` or `unknown`, or whose license record was absent, was copied into the downloaded
+  `.kicad_sch`; `POST /api/export/kicad` answered 200 with the file. One baseline (redistributable) passes before and after.
+- `exportToKicadSch` checks every pinned symbol's own license before serializing and throws `SchematicExportLicenseError`;
+  the route answers 422 `EXPORT_LICENSE_PROHIBITED` naming the components and sends nothing of any symbol.
+- Recorded: the app's export button sends no pinned selections today, so this protects the public export API and pinned
+  exports; PCB/fabrication geometry licensing is UNKNOWN from this chapter and carried to the validation increment.
+- Tests: b19-export-license 7/7 (new, in the CI list); atomic, API and PCB suites green (three PCB performance cases timed
+  out once under a full parallel run and pass in isolation, 41/41 — machine load, recorded, not a code change); broad run:
+  293 files, 3723 passed, 10 expected skips; tsc 0 in the changed files; eslint clean.
+
+### Record correction — timestamps (2026-09-13 local)
+
+- The `updatedAt` stamps written to `PROGRAM_STATE.json` during B19 I2b through I4b (e.g. `03:01`, `03:37`, `03:49`,
+  `04:06`, `04:16` with a `-04:00` offset) were read from a shell clock that was reporting UTC; they are UTC times mislabelled
+  as Eastern. The dates are right. From I5a on, stamps are local Eastern time (the shell now reports EDT). Commit dates in
+  git were always correct: git records the offset itself.
+
+### B19 I5b plan — the import security matrix (2026-09-13 local, solo; this commit)
+
+- CI on I5a (`bea0d35`): green on every job.
+- A read-only multi-agent sweep (5 scouts, 5 adversarial skeptics, 1 synthesis; no file edits, no test runs) mapped the
+  runbook's B19-D cases onto the surfaces that exist. 51 rows kept (1 high, 7 medium, 43 low; none refuted, 2 marked
+  reproduce-first), 6 verified controls to pin, and the absent surfaces recorded with search evidence (no inbound
+  archive/PDF/SVG/CSV import, no model-file ingestion, no distributor text in model prompts).
+- The skeptics corrected several scout claims and test designs before anything was built (e.g. a proposed CSV fix that
+  would have corrupted negative pick-and-place coordinates; tests placed under `lib/__tests__`, which vitest never runs).
+- Recorded as `artifacts/ai-control-plane-b19/import-security-matrix.md`; batches I5b–I5e follow, each test-first.
+
+### B19 I5b — the acquisition path, hardened (2026-09-13 local, solo; this commit)
+
+- Twelve matrix rows, each reproduced first: 40 of 67 new cases failed on the unchanged code; 27 baselines pass before and
+  after. One harness mistake found and fixed before recording: connector cases had been placed in a file whose hoisted
+  module mocks replaced the connectors, so they briefly tested fakes; they moved to their own unmocked file.
+- High (row 01): connectors answered with a different part's offer and the pricing layer relabelled it; now exact-MPN only
+  (OD-34), no relabelling, stored offers carry their MPN (migration `0029_part_offers_mpn`, registered; migration pins moved
+  by one registered entry, every contract unchanged; schema parity holds).
+- Medium (row 03): vendor-derived lifecycle re-stamped on every read and never cleared; now live-only and expired by the
+  purge at the strictest bounded retention.
+- Also: per-exact-MPN pricing keys (36), quantity- and currency-correct unit prices and totals (20), lifecycle negations
+  (26), unambiguous number parsing (51), exact-MPN bundle identity with confusable refusal (27a), complete conflict
+  properties (39), requested-MPN and superseded-revision tracking (40), inert vendor text and safe links (41), ingestion
+  media-type/size/record/deadline bounds (42), archive budget integer checks (43).
+- Tests: exact-MPN connectors 7/7, exact-MPN pricing 5/5, vendor values 26/26, lifecycle retention 2/2, quarantine
+  hardening 16/16, ingestion bounds 16/16, BOM per-MPN pricing 1/1 (all new, in the CI list), offer retention on migrated
+  PGlite 7/7 (2 new cases, database-delivery job); database suites 55 passed / 3 skipped; broad run (now including app/lib/db
+  and app/lib/component-selection): 306 files, 3867 passed, 13 expected skips; tsc 0; eslint clean on the changed files.
+- An adversarial review workflow over this exact diff is running; its verified findings are fixed in the next commit.
+
+### B19 I5b review — the adversarial review's verified findings, fixed (2026-09-13 local, solo; this commit)
+
+- CI on I5b (`2feaeee`): green on every job, database-delivery with migration 0029 included.
+- Review workflow (4 lenses + 4 skeptics, read-only, over the saved diff): 39 findings, 22 verified real (1 medium, 21 low),
+  17 refuted with reasons.
+- Reproduced first: 42 of 67 new cases failed on the I5b code; 22 baselines; 3 pins that already passed, kept because the
+  reviewer showed the earlier deadline test could not tell the mechanisms apart.
+- Medium: remembered "no exact match" answers (per source and canonical MPN, for the source's freshness; failures and
+  no-storage sources excluded). Low: canonical memo keys; decimal-comma groups; all negated lifecycle phrases; Unicode-property
+  inert text and code-point truncation; normalised host allowlists; explicit archive counts; canonical MPN conflicts;
+  live-only lifecycle verdicts stamped at answer time; one line-price rule for estimate, CSV and view; snapshot price basis;
+  quantity-1 USD pricing in notify and alternates; `offersForExactMpn` for every other offer reader; read-time lifecycle
+  expiry (`partLifecycleStatus`) in every lifecycle reader, verified on migrated PGlite; backfill clears vendor stamps; the
+  qualification pin missed in I5b.
+- Tests: review-connectors 5/5, review-values 36/36, review-lifecycle 2/2, review-price-consistency 16/16 (all new, in the CI
+  list), offer retention on PGlite 8/8; affected suites 412 passed / 3 skipped; broad run: 310 files, 3927 passed, 13
+  expected skips; tsc 0; eslint: no new findings (BomView's four pre-existing effect warnings unchanged).
+- Three I5c reproduction files written in parallel are left uncommitted on purpose; they land with I5c.
+
+### B19 I5c — output injection (2026-09-13 local, solo; this commit)
+
+- Twelve matrix rows, reproduced first: all 42 new cases failed before the fix (5 only on missing helpers). Two proposed tests
+  corrected while reproducing (a formula-shaped reference is already refused by board integrity; a comma in a neutralised
+  cell stays quoted).
+- Medium: chat markdown images (02) — one `ChatMarkdown` renderer that never fetches images and keeps only web/mail links, plus
+  an `img-src 'self' data: blob:` policy; `.kicad_pcb` structure injection (04) — every leaf child validated.
+- Also: KiCad string escaping and string-aware indentation (17); own-property table lookups (18); export pinned parts from the
+  server's published snapshots, body selections ignored, single-symbol validation (15, 16); one browser-safe link policy for
+  vendor pages, datasheets and KiCad extraction (34); datasheet policy at export, recorded as policy because KiCad was not
+  available to reproduce (35); CSV formula neutralisation in carts, the packet and both fab writers, and quoted CR (09, 10, 33);
+  SPICE report escaping (21).
+- Tests: chat markdown 7/7, href and CSV output 11/11, export selections 7/7, fab CSV 2/2, KiCad emit injection 13/13, report
+  escaping 1/1 (all new, in the CI list; the fab file under the already-listed fab directory); PCB, constraints, KiCad,
+  SPICE, project and component suites 1387 passed / 8 skipped; broad run 312 files, 3941 passed, 13 expected skips; control
+  inventory gate green; tsc 0; eslint clean on the changed files.
+- Browser proof for the UI changes is CI's page-browser-e2e job.
+
+### B19 I5c review — adversarial diff review, verified findings fixed (2026-09-13 local, workflow + solo fixes; this commit)
+
+- Review workflow over the committed I5c diff (regressions, security, coverage, tests; a skeptic per finding): 20 findings,
+  17 verified real, 3 refuted with reasons.
+- Reproduced first: 18 new or strengthened cases failed on the I5c code; pins that already passed were each proven by
+  reverting their control (5 mutants, 5 killed).
+- Medium: pinned export lost the Datasheet (fixed from the published symbol's property; fixture-runtime route test with the
+  real loader); silk text anchor injected `.kicad_pcb` nodes (closed set through the token layer; all eight PCB writers
+  audited); the row-16 test could not catch its own regression (well-formed forged symbol and license-precedence cases).
+- Low: `lib_symbols` Datasheet policy; scheme-less `www.` datasheets; one load per revision with 503 on catalog failure;
+  closed Side token; BOM CSV link columns; discriminating chat link cases; served-header e2e spec; indent, power-label, native
+  placement and DRU pins; `DatasheetLink` and the distributor link helpers replace regex tripwires; local host names.
+- Decision: pinned parts keep MPN-named library items (unique per pinned part; symbol-named items would collide) — the cost
+  to "Update symbols from library" is recorded in import-security.md.
+- Added to later batches instead of dropped: row 27b (identity resolution confusables) was missing from the batch table and
+  lands in I5d; the refuted-as-out-of-scope FreeRouting DSN token finding becomes I5e row 52.
+- Correction: the I5c entry above said "Browser proof for the UI changes is CI's page-browser-e2e job" — no spec exercised
+  those changes, so that proof did not exist. The corrected proof is the component/helper tests and the new served-header spec.
+- Tests: broad run 473 files (469 passed, 4 env-gated skips), 5025 passed, 25 expected skips (live auth, Postgres qualification, kicad-cli oracle, live assist, SPICE worker, ingest data); e2e security headers 2/2 locally against the running fixture-runtime app (next dev); tsc 0; eslint: no new findings (page.tsx 14 and BomView 4 pre-existing,
+  identical on HEAD).
+- The I5d work in progress is parked in a git stash (not committed) while this lands.
+
+### B19 I5d — KiCad parsing and atomic data integrity (2026-09-13 local, solo; this commit)
+
+- Seventeen matrix rows (06, 07, 08, 22, 23, 27b, 27c, 37, 38, 44–50), reproduced first: 48 of 67 cases failed on the
+  unchanged code; 19 baselines and verified controls; 5 cases added with the fix; 6 mutants of the new controls all killed.
+- Parsing: one bounded iterative s-expression reader that reads exactly one document; DRU files read as forms; raw symbol
+  blocks from the lossless parser's spans; iterative bounded `extends` with cycle/missing/duplicate issues; pin, pad and
+  expanded-pin budgets; embedded payloads, missing or impossible versions and model paths outside the model variables are
+  unsupported; path policy with own variables, absolute paths and segment-based escapes.
+- Data integrity: mega/milli value keys (no re-key) and own-key links; superseded claims; strict supplier freshness in approval
+  and search; unqualified criteria never read absolute maximums; explicit units, ambiguity refusal and percentage tolerances;
+  canonical identity in resolution (confusables are conflicts) and at publication (search key recomputed); certificate
+  conflicts, reclassification and unknown terminals; publication re-verifies certificates and hashes blob bytes;
+  PCB materialization hashes and bounds the footprint bytes.
+- Corpus check over the local upstream KiCad library: extractor output identical; 12 231 per-file derived symbols that were
+  "valid" with zero pins are now unsupported (`extends_missing_parent`); one footprint's doubled model-path separator was
+  first refused, then accepted by a corrected policy (pinned).
+- Tests: claims-values 27/27, KiCad hostile 21/21, s-expression hostile 8/8, atomic integrity 16/16 (all new, in the CI
+  list); full unit suite 573 files (568 passed, 5 env-gated skips), 5790 passed, 33 expected skips; tsc 0; eslint clean on
+  every changed file.
+- Reviewed pin move: the library-table test uses the platform's absolute paths (a relative library path is now refused);
+  assertions unchanged.
+
+### B19 I5e-1 — project import, BOM table and source shapes, DSN tokens (2026-09-13 local, solo; this commit)
+
+- Seven matrix rows (11, 12, 13, 14, 19, 28, 52), reproduced first: 37 of 43 new cases failed on the unchanged code (5 of
+  them only on missing named exports); 6 baselines.
+- Project files: size bound before reading, linear nesting bound before hashing, no rejected promise; checkpoint schematic,
+  chat and board validated; table and distinct-part bounds; eight lookups at a time; a part is resolved only when the catalog
+  returns it; a refused save is a failed import (`trySaveProject`).
+- BOM routes: one `checkBomState` for all eight routes (shape, 10 000 instances, 2 000 distinct parts, bounded text) before any
+  lookup; chunked IN lists.
+- Requirements sources: runtime unions at ingestion and validation, compile-time exhaustive. OD-35 recorded (authority
+  class remains caller-declared; must be a defined class).
+- FreeRouting DSN: `DsnEmitError` refusals for layer names, directions, costs, design token, coordinates and control
+  characters in quoted names.
+- Reviewed pin move: the project-state parts mock uses the route's real `{ ok, part }` shape.
+- Tests: project import bounds 13/13, BOM table bounds 9/9, source unions 11/11, DSN tokens 10/10 (all new, in the CI list);
+  affected suites 52 files / 430 passed; full unit suite 577 files (572 passed, 5 env-gated skips), 5833 passed, 33 expected skips — the first full run found 5 failures in the B16.0.11 parity pins, which require each BOM route's exact historical 400 wording for a missing state; the implementation now passes each route's own wording (the pins were not changed); tsc 0; eslint: no new findings.
+- The I5d adversarial review is still running over commit cf3993e; its findings land in their own commit.
+
+### B19 I5d review — adversarial diff review, verified findings fixed (2026-09-13 local, workflow + solo fixes; this commit)
+
+- Review workflow over cf3993e (regressions against the upstream corpus, security, missed sites, tests; a skeptic per lens):
+  30 findings, 12 verified real, 18 refuted with reasons.
+- Reproduced first: 32 of 37 new cases failed on cf3993e; 5 baselines.
+- Medium: inheritance property amplification (resolution cost counted from the chain before any map is built; property and
+  raw budgets; shared maps); suffixed mega/milli value-key collisions.
+- Low: duplicated-ancestor symbols; DRU forms and rule children that were silently dropped; Unicode whitespace around
+  published MPNs; wider unit ambiguity patterns; allowlisted limit semantics for unqualified criteria; ingest script skips
+  symbols with extraction issues; supersession chains through the whole claim map and in component-selection gates;
+  publication re-derives every KiCad asset from its verified bytes.
+- Reviewed pin moves: the governance "complete bundle" and two I5d publication cases use a real blinker snapshot (the synthetic
+  fixture's blobs are not KiCad text).
+- Corpus re-check: outcomes identical to I5d; whole-library ingest over the 230 upstream symbol libraries accepts 22 756, skips 0.
+- Tests: I5d review 32/32, DRU structure 3/3, ingest issues 2/2 (all new, in the CI list); affected suites 29 files / 297
+  passed; full unit suite 580 files (575 passed, 5 env-gated skips), 5870 passed, 33 expected skips; tsc 0; eslint: no new findings (ingest-kicad's unused `sha256` import is pre-existing).
+- The I5e-2 reproduction tests written meanwhile are parked outside the repository until this lands.
+
+### B19 I5e-2 — what reaches a model (2026-09-13 local, solo; this commit)
+
+- Rows 05, 24, 25, 29, 30 (synthetic reproduction), 32 reproduced first: 17 of 18 cases failed; 1 baseline; row 31 adopted as
+  the ratchet (4 cases, passing before and after); 3 cases added with the fix.
+- Catalog text bounded and labelled untrusted in Build tool results, rerank and review inputs; the data rule in five prompts;
+  review findings quoted as data in the Apply-suggestions instruction; escaped and capped context sections; cleaned tool
+  results and bounded inspection strings; circuit-knowledge excerpts labelled and locators bounded; closed failure sentences
+  and URL-credential redaction; SchGen label grammar, bounded findings and advisory messages kept out of the chat history.
+- Ratchet note: the vendor-code import closure first failed on the policy-only source registry (reached through the lifecycle
+  SQL expression); allowlisted explicitly and still walked.
+- Tests: build-loop injection 11/11, compose escaping 3/3, tool-result hygiene 2/2, excerpt injection 2/2, SchGen and advisory
+  history 4/4, external-text injection route 4/4 (all new, in the CI list); full unit suite 586 files (581 passed, 5 env-gated skips), 5895 passed, 33 expected skips; tsc 0; eslint: no new
+  findings; control inventory regenerated with no drift.
+- Browser proof for the chat-history change is CI's page-browser-e2e job running the existing chat and build specs over this
+  commit (they send and render messages; none asserts the advisory flag itself — the flag is proven by the unit tests above).
+
+### B19 I5e review — adversarial diff review fixes (2026-09-13 local, solo; this commit)
+
+- Review workflow over 8df97ff and a75fc1e: 35 findings, 19 confirmed (14 distinct), 16 refuted. 28 cases failed on the
+  unchanged code first; baselines that already held are pinned.
+- Fixed: ngspice deck element names (HIGH, new matrix row 53); DSN quote/backslash refusal with autoroute 422 (MEDIUM);
+  find_alternates catalog text (MEDIUM); every review-input string; save rollback that never deletes an existing record;
+  imported checkpoint page size; SchGen KiCad label grammar; exports that always fit the import bound; imported chat marked
+  advisory; layout-critic message advisory with anchored per-site tripwires (3 mutations caught); strict circuit-knowledge
+  locators; URL-credential redaction; path-only cycle detection and token-anchored `sk-` redaction for model-bound text; KiCad
+  ingests pinned to reviewed commits (live check: both checkouts at their pins).
+- Follow-ups recorded (untouched routes): SPICE AI route, layout-critic prompt/manifest, architecture/interfaces/power
+  propose prompts; locally stored pre-I5e-2 assistant messages.
+- Tests: the new and extended files above, plus the B16.0.24 simulate parity and confinement gates and the autoroute route
+  suite; full unit suite under a loaded machine (a per-file eslint loop ran alongside; 65 min): 5870 passed, 68 failed in 47 files - 67 timeouts or perf thresholds and 1 real failure (the write-dsn escaped-quote pin, moved above); all 47 files re-run afterwards with two workers and nothing else running: 47 files, 544 tests passed; tsc 0; eslint: no new findings; control inventory regenerated with no drift.
+
+### B19-E E1-A/B — pricing provenance, per-source status, packet labels (2026-09-13 local, solo; this commit)
+
+- Plan: the B19-E discovery workflow (six increments E1–E6); owner decisions OD-36..OD-40 recorded with their safe defaults.
+- E1-A reproduced first (6 of 8 cases failed): a connector's memo answer was indistinguishable from a live one and was
+  persisted as `now` (served past DigiKey's hour from when it answered); a cache-only build listed every source as queried; a
+  memo answer counted as live. Now every offer carries `provenance {servedFrom: live | process-memo | offer-cache,
+  retrievedAt}`, the memo and the offer cache expire from the vendor's answer, a future time is never stamped, and the counts
+  say what happened. Fixture correction: the I3 retention fixture's `fetchedAt: 0` became a real fetch time.
+- E1-B reproduced first (8 of 10 failed; formula safety and cart bytes held): `source-labels.ts` (browser-safe) labels a
+  source and an offer from the registry; the BOM result carries `pricingMode`, `registryVersion` and `sources[]` (available,
+  paused with retryAt, blocked, disabled with owner decision, operator-disabled, credentials missing — no values); the
+  procurement packet has Status, Pricing basis and License lines, optional warnings, and two appended columns (observation
+  time, basis) with columns 19/20 and the cart files' bytes unchanged; the risk summary no longer says "production-ready".
+- Tests: provenance cache (PGlite) 5/5, counts 3/3, source labels 7/7, BOM sources 5/5, packet 5/5; distributor, acquisition,
+  BOM routes and B16.0.11 parity suites green; tsc 0.
+- Next: E1-C — the BOM workbench (source chips and labels, offline state, no window.open, sourcing-worksheet wording), the
+  no-purchase tripwire and the control inventory.
+
+### B19-E E1-C — BOM workbench labels, offline state, no-purchase wording (2026-09-13 local; implementation workflow; this commit)
+
+- Implemented by a workflow agent test-first (9 of 16 new cases failed on the unchanged code: every workbench case, the
+  purchase-wording scan with three hits in BomView, and the navigation check on its `window.open`); reviewed by three lenses
+  with skeptics in the same workflow.
+- BomView: picker from the static registry (Mouser disabled with OD-32, LCSC blocked, a stale stored choice falls back);
+  "Export for distributor" with no `window.open` — a dismissible notice says nothing was sent and no order was placed and
+  links the vendor upload page (safeHref, noopener noreferrer); "N cached · M live"; "Sourcing worksheet (CSV, unverified)";
+  per-source chips (paused with retry time, disabled with owner decision, credentials not configured, switched off);
+  "Supply signals OK (observed)"; offer details show basis, observed and expiry; a failed refetch keeps the last result with
+  an offline banner and Retry, and blanks expired offers. Registry wording updated; control inventory 581 → 583 (Retry
+  semantic under bom.workbench, Dismiss view), B01 toolability matrix re-rendered for the wording change.
+- Tests: workbench 7/7, no-purchase tripwire 9/9 (5 reintroduction checks), B17 gates, action registry, BOM routes and
+  library green (11 files, 98 tests, re-run by the lead); tsc 0; eslint: the 4 `set-state-in-effect` errors in BomView are
+  pre-existing in HEAD, none new.
+- Review (same workflow): 17 findings, 15 confirmed (13 distinct) — a frozen clock while online (medium), non-network errors
+  shown as offline, expired offers still steering sort, risk and the summary badge, a kept result under a changed choice,
+  client clock skew, and seven test-strength gaps. They are fixed test-first in the next commit (E1-C review).
+
+### B19-E E1-C review — fixes for the confirmed workbench findings (2026-09-13 local; fix workflow + lead; this commit)
+
+- Fix workflow, test-first: 12 new cases failed on the unchanged code; the tests that only strengthen existing ones were proven
+  by 18 deliberate breakages of the source (each caught). Two independent checkers confirmed all 13 distinct findings fixed and
+  every new test failing on revert.
+  - The clock ticks every 30 s whenever a result is shown; an expired offer is blanked online too, with a "Get current offers"
+    notice; only a rejected fetch is offline, and an error answer shows its HTTP status and clears the result.
+  - Expired offers steer no sort order, no priced note and no supply-OK badge ("Observations expired"); counts say
+    "last result"; a kept result for a different pricing choice or design shows no cost, chips or prices; pricing None never
+    shows a cost.
+  - `BomResult.generatedAt` lets the client judge expiry and observation times in server time (a two-hour-slow client clock
+    tested).
+  - Test strength: fixture separates expiry from basis, rank and distributor; the risk breakdown and every vendor's notice are
+    asserted; programmatic anchor clicks, bare `open()`, `.click()` on href-assigned elements and location navigations are
+    caught; the wording scan covers every production .tsx; export routes may not pass pricing options from anywhere but an
+    object literal.
+- Lead follow-ups on the checkers' three new low issues (3 cases failed first): a connection dropping while the body downloads is
+  offline (not "HTTP 200"); rows are keyed by their references so a clock-driven re-sort keeps an expanded row; the notice's
+  refetch is named "Get current offers", distinct from the header's cache-bypassing "Refresh prices".
+- Control inventory 583 → 584 (the notice button, semantic under bom.workbench). Tests: 14 files, 173 passed (workbench 19,
+  tripwire 12+, source labels, BOM library and routes, B17 gates, action and tool registries, href/CSV); tsc 0; eslint: the 4
+  pre-existing `set-state-in-effect` errors only.
+- Recorded, not fixed: the tripwire has no bare "cart" pattern outside BomView (the component test covers BomView); a navigation
+  through a helper in a file that never names an upload URL is not caught lexically; out-of-order /api/bom answers (pre-existing
+  race; a result is labelled with the request it answered); no-storage sources are hidden only offline (both disabled or blocked).
+
+### B19-E E2 — bounded external candidate search (2026-09-13 local; implementation, review and fix workflow + lead; this commit)
+
+- Implemented test-first by a workflow agent (all 7 new test files failed on the unchanged code: missing modules, the missing
+  registry `candidateSearch` field, and 4 of 5 purpose-share cases). Everything is tested against fake vendors through the egress
+  injection; no live network.
+  - Registry 1.1.0: a `candidateSearch` record per enabled source (DigiKey keyword search, Nexar `supSearch`/`supSearchMpn`,
+    at most 5 results), `license.agentDisclosure` = unknown everywhere (OD-36), `license.attributionLink` (Nexar's required
+    octopart.com link). The keyword-search terms were not re-read (no network); the registry and `source-registry.md` say so.
+  - Admission: an agent purpose share (at most 25% of each window, OD-40) and a non-reserving `previewAdmission`, so a paused
+    source sends nothing, not even a token request. The per-process clients moved to `distributors/clients.ts`, shared by
+    pricing and search.
+  - `acquisition/external-search.ts`: bounded printable-ASCII queries (1–64), limit 1–5, admitted enabled sources only (Mouser
+    and LCSC never constructed), exact/keyword modes (agent exact only), a memo per tenant and project for the source's
+    freshness (never for no-storage sources), no `part_offers` write, every hit through the quarantine observation path,
+    exact-match computed never relabelled, inert bounded vendor text, safe https links only, per-source status.
+  - `POST /api/parts/external-search`: authenticated project read with provider credit (same policy shape as /api/bom),
+    4 KB body, forbidden and undeclared keys refused, a fixed failure sentence. Route ratchet 158/155 → 159/156, every
+    route-policy artifact regenerated (also correcting a stale public `/api/bom` row in two B16.0.4/B16.0.7 matrices).
+  - Action record `parts.external-observation-read` (tool exposure none until E6); Build Library "Search distributors"
+    section with labels per hit, a credit line and no place or buy control; control inventory 584 → 590.
+- Review in the same workflow: 17 findings, 12 confirmed (process memo shared across tenants; Nexar attribution link not
+  guaranteed; Nexar GraphQL error answers memoized as empty for 24 h — medium; Octopart click links dropped; tripwire missing the
+  new vendor modules; a PGlite suite in the no-database CI job; a stale ratchet header; the registry document at 1.0.0; four
+  test-strength gaps). All fixed test-first (19 failing cases first; 16 deliberate source breakages caught), confirmed by an
+  independent checker.
+- Lead follow-ups on the checker's three new low issues (3 cases failed first): `sig` is exempt only on octopart.com page links
+  (an Azure SAS `sig` on a datasheet link is dropped; the DigiKey `?sig=` expectation moved from kept to dropped, reviewed); a
+  Nexar answer with field errors beside a result list is a partial answer shown and not counted toward the breaker BOM pricing
+  shares; the CI job-scope guard follows relative imports and test harnesses (the previous detector missed both forms).
+- Tests (lead re-run, bounded): acquisition, distributors, parts routes and the panel 28 files / 318; BOM, workbench, registries,
+  B17 and no-purchase gates 12 / 145; auth, route-policy, invariant and injection gates 25 / 335 (+9 env-gated skips); B01 byte
+  gates, AST import gates and B16.0.24 parity 4 / 83; tsc 0; eslint clean on every changed file except the 14 pre-existing
+  `app/page.tsx` react-hooks errors (E2 changes one prop there); control inventory and route-policy artifacts regenerate with no
+  drift.
+- Recorded, not fixed: the Nexar pricing path has the same GraphQL-error handling gap (a batch with errors is remembered as
+  "no exact match"); it needs its own decision on partial batches. Memo scope is tenant plus project (stricter than tenant).
+
+### B19-E E2 CI — the type-check step ran out of memory (2026-09-13 local; this commit)
+
+- CI on 5c8de9d failed in both workflows at `pnpm exec tsc --noEmit`: V8 aborted with "JavaScript heap out of memory" at about
+  2 GB (prompt-to-gerber and benchmark-core); database-delivery and page-browser-e2e passed. Not a type error, and not dismissed:
+  reproduced locally with a full, non-incremental check capped at 2048 MB (the local incremental cache had hidden it).
+- Measured with `--extendedDiagnostics --incremental false`: 2dee62c 5,434 files, 625,428 types, 2.12 GB; 5c8de9d 5,446 files,
+  629,894 types, 2.19 GB, exit 0 with a 4 GB heap. E2 added 0.7% types and 65 MB — no pathological type; the project had
+  reached Node's default heap on the runner.
+- Fix: the two tsc steps run with `NODE_OPTIONS=--max-old-space-size=4096`. Resources only; no check, test or type changed.
+- The E3 workflow started before the machine restarted did not complete and left no working-tree changes; it is re-run on
+  this commit.
+
+### B19-E E3 — exact-revision integrity at the durable atomic boundary (2026-09-13 local; two workflows + lead; this commit)
+
+- Incident, recorded as it happened: the first E3 workflow (started before the machine restart) was still running when a second
+  E3 run was launched on 5b2c3ca. The second run's implementer saw the first one writing, stood aside and changed nothing; its
+  reviewers and fixer then worked on the first run's implementation while the first run's own review and fix continued. The
+  lead stopped the first run during its fix stage, backed up the tree, and re-verified everything below on the combined result.
+- Implementation (first run, test-first: 45 new cases failed on the unchanged code — the collision resolved instead of
+  rejecting, an identical re-publish wrote a second audit row, 20 validation refusals did not throw, AI and single-person
+  transitions were allowed, withdrawal did not exist):
+  - publication validation recomputes id and semanticHash, requires approve and publish by different humans (never
+    llm:/ocr:/agent:, compared after trimming, NFKC and case folding), the publish actor equals the caller, and a runtime role
+    check; the revision insert ignores conflicts only on its id, so a (logicalPartId, revision) collision throws and rolls back
+    revision, links and audit row; an identical re-publish is idempotent;
+  - `withdrawPublishedAtomicRevision` appends to the new `atomic_revision_status_events` table (migration 0030, registered,
+    forward-only; CHECKs, FKs, a unique (revision, state) index; verify-schema criteria) with an audit row in one transaction;
+    only legal edges, selectable same-part successors, a reason, publisher/admin humans;
+  - catalog transitions refuse AI actors for approve/publish/withdraw states and approver == publisher (OD-37);
+  - loaders: `loadAtomicRevisionStatus`, `loadSelectablePortableSnapshot` (new selection and binding) and a pinned loader that
+    keeps deprecated/superseded but refuses revoked (OD-38), mirrored in the chat raw-SQL reads; new-selection reads (atomic
+    catalog, KiCad category, catalog search, parts search, part detail) list only selectable revisions and derive `approved`;
+    a bind replay on a revoked revision is refused.
+- Review fixes (second run's fixer, test-first; an independent checker confirmed all ten): a withdrawn revision is never
+  re-published or linked, and a replay may not add links (the publish audit now names approver, role and links); CI lists carry
+  the three E3 suites and the CI job-scope guard requires every B19 suite to run; strengthened two-person, successor,
+  handoff-loader, snapshot-id and collision tests, each proven by a deliberate breakage. First run's review: withdrawal refusal
+  assertions are anchored so drizzle's query text cannot satisfy them.
+- Lead fix (split reviewer verdicts, resolved fail-closed): a value whose own link points at a withdrawn or missing revision no
+  longer falls back to the part's '' default link, which can be a different exact part. Parts carry `withdrawnValueKeys` and
+  `valueKeyLink` refuses the fallback for them (test failed first; a mutation removing the auto-layout guard is caught).
+- Reviewed pin moves: B16-B migration pins 30 → 31 entries and the qualification upgrade list gain 0030; three suites' server-
+  catalog mocks export the new loaders (no assertion changed); the b13-2 chat cancellation harness keeps each Request alive for
+  the test (a garbage-collected Request dropped the abort; proven with a temporary file, since deleted; no assertion changed).
+- Gates (lead re-run on the combined tree, bounded batches): atomic 19 files / 298; db, physical binding 13 / 101 (+9 opt-in
+  skips); catalog routes and tranche parity 5 / 183; chat and fixture runtime 14 / 84; engineering authority, project suites,
+  AST import gates, CI scope, no-purchase and b13-2 22 / 354; prompt-to-gerber, PCB sync, auth ratchets and parts-search
+  consumers 35 / 444 (+10 skips); tsc 0 (4 GB heap); eslint clean on 30 changed files. No route added (ratchet 159).
+- Recorded, not fixed: the operator seed script's reuse path still reads through the pinned loader; the FOR SHARE lock on
+  re-publish is not exercised by a concurrent test (PGlite has one connection); whether Next.js keeps a Request alive for the
+  life of a handler (abort propagation on client disconnect) is unverified and is a separate hardening item.
+
+### B19-E E4 — import candidate review and two-person human publication (2026-09-13 local; workflow + follow-up workflow + lead; this commit)
+
+- Implemented test-first by a single-writer workflow (quarantine suite: 11 of 13 cases failed first; every other new suite
+  failed on missing modules):
+  - quarantine: `missing` counts only non-superseded engineering candidates; conflict values carry `establishes` and
+    `sourceClass`; `quarantinedDisagreements` are information only; extraction text is inert and bounded;
+  - `acquisition/import-review.ts`: labelled review evidence (source, freshness, cached/live, registry version, stale) and a
+    `reviewEvidenceDigest` over identity, engineering candidates, quarantined facts, conflicts and supersession — not sourcing
+    facts, distributor TTL or a distributor's MPN spelling; distributor facts are persisted as SHA-256 hashes only;
+  - `atomic/authoring.ts`: drafts assembled server-side from the bundled KiCad library, source classes set by rule
+    (person-entered data is organization_authored, never manufacturer_datasheet), revision = latest + 1;
+  - `atomic/publication-review.ts`: durable `atomic.publication-request.v1` (CAS, namespaced idempotency, human actors,
+    retirement when the requester or approver loses membership or role); approve refuses digest drift, unresolved conflicts,
+    quarantined/superseded/distributor resolutions, an unresolved manufacturer, missing evidence and undispositioned facts;
+    publish by a different person re-assembles the draft and calls the E3 boundary with reviewed links in one transaction;
+  - `POST/GET /api/components/atomic/publication`: governance tenant + project + default branch, human only, per-op roles,
+    64 KiB body, forbidden and undeclared keys refused, closed refusal codes, cache only (0 vendor calls end to end);
+  - `AtomicPublicationReviewPanel` from the Build Library preview and exact E2 hits; never-exposed tool patterns and
+    `publica` in the Tier-3 family pattern; route ratchet 159/156 → 161/158; B01 record `parts.atomic-publication-review`;
+    control inventory 590 → 619.
+- Review in the workflow: 24 findings, 16 confirmed and fixed test-first (13 failing tests first, 3 test-strength findings by
+  deliberate breakages), confirmed by a checker — among them unreviewed requester-chosen links (now checked for exact MPN,
+  symbol and existing links at submit, approve and publish, named in evidence and the digest, and refused inside the
+  transaction), idempotency-key poisoning, an in-flight publish racing a withdrawal or a second publisher (marker lease),
+  authority not re-checked at publish, a truncated pin map, and the governance gate ignoring the tenant (new required
+  `SIRKIT_ATOMIC_CATALOG_TENANT_ID`, recorded as an OD-37 amendment).
+- Follow-up workflow (four checker items, each failing first; checker confirmed): a late publication is never recorded onto a
+  replacing request (409 REQUEST_REPLACED); an ambiguous publish outcome keeps the marker (409 PUBLISH_OUTCOME_UNKNOWN; the
+  E3 boundary flags failures after its callback as commit-outcome-unknown); a withdrawn '' default link is reported in
+  `withdrawnValueKeys`, so the panel no longer offers a link the server refuses; the concurrent-publish test now reproduces
+  the shared-marker-key interleaving (proven against the old key format).
+- Lead follow-ups on the second checker (2 cases failed first): every refusal code has a client message, enforced at compile
+  time (a deleted message fails tsc — checked) and by a test; the outcome read accepts any ReadonlyMap-shaped answer; the
+  unknown-outcome message no longer promises a retry succeeds while the status cannot be read.
+- Decisions recorded: OD-37 amendment (tenant + project governance scope); OD-34 amendment (a link needs an empty or exact
+  `mpn`; family-level links are refused, fail closed).
+- Gates (lead re-run, bounded batches): atomic + acquisition 35 files / 579; component, parts, editor and review panels,
+  physical binding, durable workflow 15 / 124 (+8 skips); prompt-to-gerber, B14 AST gates, chat injection ratchet, fixture
+  runtime 9 / 77; all auth gates and B16.1C tripwires 38 / 444 (+9 skips); engineering registries, B17, B18 exposure and
+  never-execution sweeps, no-purchase 9 / 87; tsc 0 (4 GB heap); eslint clean on 38 files; B17 inventory and route-policy
+  artifacts regenerate with no drift.
+- Recorded, not fixed: a status-read outage holds a request (fail closed) beyond the lease; a definite rollback at COMMIT is
+  reported as an unknown outcome; AAL2 step-up not enforced (OD-37); no browser check of the panel (memory); the bundled
+  KiCad reader was exercised with fixture libraries, not the uncommitted data/ checkout.
+
+### B19-E E5 — lifecycle and project binding (2026-09-14 local; workflow resumed across a restart + lead; this commit)
+
+- The E5 workflow was interrupted by a machine restart during its fix stage; the fixer had only recorded start hashes, and all 68
+  files still matched them, so the run was resumed (implementation and reviews from cache; the verifiers re-ran live).
+- Implemented test-first (non-PGlite batch 63 failing / 7 baseline; PGlite 6 of 6 failing first):
+  - `withdraw_revision` on the governance publication route (human project_admin, closed body, reason, status checked first,
+    E3 refusal codes kept);
+  - `POST /api/components/revision-status` (16 KB, 1–500 revision ids, member read, no project data, no withdrawal reason);
+    route ratchet 161/158 → 162/159; `BomRow.catalogStatus` with a badge and "Review successor" (the status read runs only
+    for the authenticated `/api/bom`; public exports never read the catalog; at most 2,000 distinct atomic ids);
+  - component authority `catalogStatus` facet (revoked: no exact authority, a gap; deprecated/superseded: verified-exact
+    with a successor gap); `diffAtomicUpgrade` blocks deprecated, superseded, revoked and unpublished targets;
+  - successor preview and rebind (reviewer or admin, human; digest over the project scope only; supersede and bind staged
+    and written in one commit, so a failure leaves the old binding; the replay re-reads the successor's status; the chain
+    of successors is followed up to 8 hops, cycle-safe; an editor gets a reviewer handoff; a leftover identical candidate is
+    reused); replacement pin facts take a role — current pins are read historically, target pins must be selectable;
+    a "symbol differs from revision" blocker in review and bind, replay included;
+  - "Use published exact revision": the Build Library resolves the identity from its fresh part detail; the placement
+    carries it only for the value it was resolved for; authority still needs the reviewed binding.
+- Review in the workflow: 21 findings, 14 confirmed and fixed test-first (mutations prove the strengthened tests), confirmed
+  by a checker: a successor-chain dead end (medium), actor/session in the diff digest, preview offered without an effective
+  binding, replay skipping the status re-read, an editor handoff that could not complete a rebind, a 500 for an astral
+  reason, public BOM routes reading the catalog, the plain Place control carrying the E5 note, and six test-strength gaps
+  (target pin facts, gateway role wiring, client symbol forwarding, page adoption wiring, effective-selection check, replay
+  symbol check).
+- Lead follow-up (the checker's one new issue; failed first, mutation caught): an adopted identity names the value it was
+  resolved for (`AdoptedAtomicIdentity.forValue`), and a placement of any other value — "" before the part cache fills — carries
+  no revision.
+- OD-38 amended twice (historical current-pin reads; following the successor chain).
+- Gates (lead re-run, bounded batches): atomic, physical binding 35 files / 489 (+6 skips); components, BOM, parts, editor and
+  review panels 19 / 205; authority, replacement, B14, chat, replacement-authority, fixture runtime, prompt-to-gerber 36 / 415;
+  auth gates and B16.1C tripwires 38 / 444 (+9); registries, exposure sweeps, no-purchase, AST gates, CI scope 11 / 113; suites
+  reading the page, PCB editor, sync and placement 67 / 820 (+3); tsc 0; eslint: no new problems (BomView 4, PcbEditor 1,
+  page 14 and b14-replacement-proposal test 3, all equal to HEAD); B17 inventory (628 controls) and route-policy artifacts
+  regenerate with no drift.
+- Recorded, not fixed here: on the PostgreSQL path a component review approval fails with PB_REVIEW_EVIDENCE_CHANGED_CONFLICT,
+  because `server-catalog.ts` stamps `capturedAt` with the load time and the review evidence digest includes it (pre-existing,
+  found by the E5 fixer; fixed next, test-first); no browser run of the new panels (memory).
+
+### B19-E E5 follow-up — durable component-review approvals were always refused (2026-09-14 local, solo; this commit)
+
+- Pre-existing defect found by the E5 fixer: the PostgreSQL catalog loader stamps each portable snapshot's `capturedAt` with the
+  read time, and the component review evidence digest included it, so the evidence re-read at approval never matched the
+  evidence the reviewer saw — every durable approval answered 409 PB_REVIEW_EVIDENCE_CHANGED_CONFLICT. The in-memory fixture
+  catalog hid it (a constant `capturedAt`).
+- Reproduced through the real `/api/physical-bindings` route (B16-C handoff suite, new test 9: the catalog read twice at two
+  times → 409 before the fix). `capturedAt` itself cannot be made constant: mapping verification uses it as "now" to judge
+  source freshness. Fix: the digest covers the reviewed evidence without the read time (still shown to the reviewer); real
+  evidence drift is still refused (test 6 unchanged).
+- Reviews requested before this change carry a digest that included the read time; approving one now asks for a fresh request
+  (409), as the PostgreSQL path already did.
+- Tests: physical bindings (API and library), both component review panels, prompt-to-gerber 17 files / 119 (+6 skips); tsc 0;
+  eslint clean on both files.
+
+### B19-E E4 follow-up — the B11.5 write-closure gate admits the E4 KiCad-library fixture test (2026-09-16 local, solo; this commit)
+
+- Found by the E6 implementer: `b11-5-capture-exactness.test.ts` check 12 (no test writes under app/, lib/, scripts/ or
+  artifacts/) failed since E4 (40c15b6), because `b19-e-publication-boundaries.test.ts` builds throwaway KiCad library fixtures
+  with `mkdirSync`/`writeFileSync`. Not caught by CI: that gate is not in a CI list (it is in the full suite only).
+- Every one of its 8 write lines (the symlink and junction included) is rooted at `mkdtempSync(path.join(tmpdir(),
+  "b19e-e4-kicad-…"))` scratch roots, so it was admitted the way the gate admits the other temp-directory tests: a justification
+  predicate that requires the scratch root and refuses any write line not rooted at it. Proven: rerooting one write outside
+  the scratch root fails the gate (mutation, file restored by hash). The gate passes 18/18.
+- The E6 workflow was resumed after its four review agents hit the weekly usage limit; its implementation stage came back
+  from cache and only the review, fix and check stages re-ran.
+
+
+### B19-E E6 — bounded read-only agent tools for external search and evidence (2026-09-16/17 local; workflow + review-fix workflow + lead; this commit)
+
+- Implemented test-first against the plan's E6 section (OD-36, OD-40): the five new suites and the ratchet amendment failed
+  first (`b19-e-external-read-descriptors`, `b19-e-external-read-service`, `b19-e-agent-read-port`,
+  `b19-e-chat-external-acquisition`, `b19-e-live-contract` could not import their modules; the amended import-closure tripwire
+  failed on the unchanged walker).
+  - Registry and catalog: binding status `bound-external-read`, authority source `external-observation`, a validator rule
+    (read class, side effects none or derived-cache, approval tier none, exactly the external-observation authority, module and
+    symbol required); `sirkit.parts.external-search` 1.0.0 (1-5 exact MPNs, derived-cache, 12 s) and
+    `sirkit.parts.evidence-read` 1.0.0 (one MPN, cache only), both Tier 0 and agent-exposed with reasons; the "orderable"
+    wording became "published physical-authority"; action record `parts.external-observation-read` exposed to chat.
+  - Agent boundary `app/lib/agent/acquisition-reads.ts`: allowlisted bindings, fresh discovery and role/capability rechecks,
+    canonical state required, exact keys, safe-JSON and schema checks, `canonicalExactMpn` per MPN, a deadline composed with
+    the run's cancellation, at most 5 live MPNs per run, a closed projection (labels; vendor values only under
+    `untrustedVendorText`, bounded, only for a source whose registry entry permits agent disclosure), at most 8,000 characters,
+    errors by class name only.
+  - Server port `app/lib/acquisition/agent-read-port.ts` (admission, the agent's pause, the new `lookupExactMpns` in
+    `app/lib/distributors/index.ts` — cache first, `lookupBatch` for misses at the agent purpose only when the server's live
+    policy allows, pending at the deadline — the quarantine front half, the E4 import-review projection, E3/E5 revision status;
+    closed refusal codes, never an environment name); `getCachedOffersForExactMpns` in the offer cache; `LookupBatchOptions`
+    (purpose) on the three connectors.
+  - Chat wiring: `app/api/chat/external-acquisition-runtime.ts` (the one approved boundary, resolve/set/reset), the route passes
+    the port and the availability fact, the assembler advertises `external-observation` only with that fact and canonical
+    state, the gateway's integrity check holds in both directions, the loop withholds the tools otherwise; prompt 1.3.0 with
+    the sourcing-observation rule.
+  - Reviewed pin moves, reason beside each: `b17-f-agent-exposure` and `b18-c-exposure-lift` (the two Tier 0 external reads),
+    `b04-tool-registry` (an exposed read is backed by the B05 allowlist or the external-read allowlist),
+    `b18-c-gateway-execution` (prompt 1.2.1 → 1.3.0 pinned into a grant), `b19-e-external-search-route` (toolExposure none →
+    chat); `b09-3-closure` and `b09-1-boundary` needed no move (still 12 without the port).
+  - Reviewed amendment to the chat import-closure ratchet (`b19-d-external-text-injection-route.test.ts`): the walk stops at
+    `external-acquisition-runtime.ts`; tripwires pin that only the chat route imports it, that it imports only
+    `agent-read-port.ts`, that build-loop.ts and llm/router.ts stay fully forbidden.
+  - Artifacts regenerated (b01 matrix, b04 registry and parity, b09 manifest, activation audit, replay fixtures and parity,
+    b11 evaluation results and replay pins); CI lists (the three new prompt-to-gerber entries); `acquisition-ux.md` (E1-E6
+    product and agent UX, OD-36..OD-40, out of scope with reasons); README status row.
+- Adversarial review (four lenses) confirmed 15 findings; every one fixed test-first in the fix workflow, the reproducing test
+  run on the unchanged code first, test-strength findings proven by a deliberate breakage that the strengthened test caught
+  (each mutated file restored and verified by SHA-1):
+  - **A slow vendor defeated the per-run cap and the "pending" promise (security + correctness + tests-01).** The port's
+    deadline equalled the service's timer, so a hung vendor made the whole call time out (the model never saw `pending`, nor
+    the call's cached observations), and the run's live budget was charged only after a successful answer — every retry got a
+    fresh 5 MPNs. Reproduced through the real port and gateway with a hung fake vendor (timeout refused; a second call sent five
+    more MPNs) and at the service (budgets seen [5, 5, 5]). Fix: the port's deadline ends a margin before the service's
+    (`EXTERNAL_READ_DEADLINE_MARGIN_MS`, a quarter of a short timeout), `lookupExactMpns` counts its deadline from the call's
+    start, and the run is charged BEFORE the port is asked for every MPN the call may send (a timed-out, cancelled or failed
+    call keeps the charge; a projected answer settles it to what was sent; an evidence read never charges); a port can claim no
+    more live MPNs than the call asked for. After: pending per MPN with `liveLookups.thisRun` 5, the next call `run_live_limit`
+    with no vendor request; budgets [5, 2, 2] and 0 after a five-MPN timeout.
+  - **The exact-MPN offer-cache read took an arbitrary 64 rows before choosing the newest (correctness).** Reproduced against
+    PGlite: a fresh Nexar row behind 64 stale DigiKey rows of the same MPN was not served. Fix: `DISTINCT ON (upper(mpn),
+    distributor)` ordered newest first, so one row per MPN and source is chosen in the database; new suite
+    `b19-e-exact-mpn-offer-cache.test.ts` in the database-delivery job (pinned in the CI scope test).
+  - **Test strength.** The ratchet's "not vacuous" assertion was tautological (`walk(APPROVED_BOUNDARY)` stops at its own
+    entry): removed, the manual walk behind the port carries the proof (a type-only import of the distributor index fails it).
+    The chat "withheld" case depended on the shell having no DATABASE_URL (shown failing with a placeholder DATABASE_URL):
+    it stubs the variable, and the resolver's three states (no database, fixture runtime, a port built without I/O) are pinned.
+    Evidence labels (revision states with successors, conflicts, stale ids, quarantined names) and search labels are now
+    asserted after the projection, in the model's own input and through the gateway with the real port (omitting `revoked`
+    or nulling every ISO time fails them). Test d advertises the move tool under a real grant minter with
+    `execute_explicit_tier1`, so "nothing executes" is a real claim: the vendor's instruction yields a preview and never a
+    settlement (a minter that treats every request as explicit fails it). The loop's withholding guard and the integrity
+    clause "claimed without canonical state" have tests that fail when either is deleted. The refuse-rather-than-cut branch is
+    exercised (raising the budget fails it). Under a permitting source (test-only disclosure), an instruction reaches the
+    model only under `untrustedVendorText`, while credential-shaped tokens and links are removed from vendor text before the
+    bound (a decision recorded in `acquisition-ux.md`).
+  - **Report accuracy.** The B11.5 write-gate failure named in the E6 report was fixed in b363b0f; app/lib/agent is green on
+    the current base. This ledger entry and PROGRAM_STATE.json were missing from the E6 working tree.
+- Gate re-run after the fixes (fix workflow, bounded batches, 2 workers): the five affected suites and the CI scope pin 5 files
+  / 68; the PGlite cache suite 1 / 2; app/lib/agent 34 / 391 (the B11.5 write gate included); engineering 48 / 708 and
+  47 / 348; chat, acquisition and the B14.4 AST gates 27 files (+1 skipped) / 292 (+2 skipped); distributors 17 / 139 (four
+  PGlite suites); auth gates and B16.1C tripwires 38 / 444 (+9 skipped); fixture runtime and prompt-to-gerber 7 / 51; tsc 0;
+  eslint clean on the 36 changed .ts/.tsx files. Artifacts b01/b04/b09/b11 were regenerated by the E6 workflow; the fixes
+  change no descriptor, so they regenerate with no drift.
+- The auth batch first failed `b16-0-ai-approval-lifecycle` 22/23 at the 5 s test timeout: the test cold-imports the whole
+  /api/chat route graph inside its body, and E6 made that graph heavier (the port, the connectors, the offer cache and the
+  database client). Measured on this branch with a scratch probe: import 7.9 s idle, POST 15 ms, status 403 — the refusal is
+  correct, the body is outrun. The reviewed hunk from `9335704` (fix/b16-0-revoked-member-cold-import-timeout, pushed, not
+  merged) was applied to the working tree: the provider mock and the route import run at collection, the timed body keeps
+  the identical setup, POST and 403 assertion. The file alone passes 5/5 with the body at 62 ms.
+- Not done here: threading the run's abort signal into the connectors' `lookupBatch` (an abandoned vendor request still runs
+  to its egress deadline; its quota was already metered, so nothing is spent twice); the live contract check was not run.
+- Lead follow-ups on the checker's four new low items (2026-09-17; 2 cases failed first, 2 pins added): a live lookup whose
+  deadline the offer-cache reads already used up settles its misses as pending and asks no vendor (a request whose answer
+  could only be discarded was still metered and charged); the vendor-text scrub runs over a bounded prefix (4× the visible
+  bound) with a bounded leading run, so a 50 KB keyword-repeat word no longer backtracks for seconds (1.67 s → under 500 ms in
+  the test); the deliberate fail-closed reservation is pinned for a port that throws and for a call cancelled mid-flight; the
+  scrub's over-match of benign "…key:" text is recorded as a trade-off in acquisition-ux.md. The b16-0 cold-import hunk the
+  fixer applied (from fix/b16-0-revoked-member-cold-import-timeout, unmerged) is kept: mock and import hoisted, assertion
+  unchanged.
+- Lead re-run of the E6 gates on the combined tree (bounded batches, one at a time): agent, chat, CI scope and AST gates
+  49 files / 493; engineering 95 / 1,056; auth gates, B16.1C tripwires, fixture runtime, prompt-to-gerber and the external-
+  search route 46 / 514 (+9 env-gated skips); acquisition, distributors and the two E6 service/port suites 19 / 198; tsc 0
+  (4 GB heap); eslint clean on 36 changed files; the B09/B04/B01/B11 agent artifacts, the B17 inventory and the route-policy
+  artifacts regenerate with no drift (ratchet unchanged at 162/159: E6 adds no route).
+
+
+### B19 closeout — validation on the final tree (2026-09-17 local, solo; this commit and f158d28)
+
+- Final code commit bf88eba (E6); the closeout commits change only artifacts. CI on bf88eba: both workflows green
+  (prompt-to-gerber, database-delivery, benchmark-core, page-browser-e2e; benchmark-quality).
+- Full suite, alone, two workers (`run-batch.sh`, 12.2 min): 634 files (628 passed, 6 skipped whole), 6,595 tests (6,560 passed,
+  35 skipped), 0 failures, 0 timeouts, no process left behind. Every skip is an environment gate without its marker (live
+  acquisition contract, live PCB assist, SPICE worker, Postgres qualification, durable-workflow tenant scope, ingest integrity;
+  the live Supabase matrix 9, physical-binding schema integrity on Postgres 6, kicad-cli oracle 2, three single cases).
+- tsc 0 (non-incremental, 37 s, 4 GB heap; the incremental check agrees). eslint over the 306 .ts/.tsx/.js files the chapter
+  changed (batches of 60: one command line was too long for Windows): 25 findings, all pre-existing and equal to the counts
+  recorded at the increments (page 14, BomView 4, PcbEditor 1, b14-replacement-proposal test 3, one unused-import warning each in
+  lcsc.ts, ingest-kicad.ts and project-state.test.tsx — the last on a line from 2026-08-04 that B19 never touched); no new finding.
+- 14 generators re-run sequentially (source registry, B16.0 route-policy set and the B16.0.8 baseline, action toolability, agent,
+  tool registry, B11, read invocation, B10, B17 inventory): exit 0 each, `git status` identical before and after (zero drift).
+  Ratchets inside the full run: tripwires 7/7 (162 = 159 + 3 + 0), agent exposure 9/9, CI job scope 4/4, import closure 5/5,
+  no-purchase 13/13, B11.5 18/18, AST import gates 22/22, never-execution sweep 4/4.
+- Artifacts: `changed-files.md` (generated: 31 commits, 342 files), `unknowns-and-owner-decisions.md` (OD-31..OD-40 with
+  amendments, UNKNOWN and BLOCKED-LIVE items, every recorded follow-up, out-of-scope decisions), `test-and-validation-report.md`,
+  `final-verdict.md` (B19 PASSES its deterministic gate; every runbook criterion mapped to executed evidence); README rows for
+  B19-D, B19-E and validation updated. Not run: the optional live contract check (no vendor credentials here; a run spends the
+  operator's quota) — BLOCKED-LIVE-QUALIFICATION; no browser run this chapter (memory) — CI's browser job covers the committed specs.
+- Next: PR #9 description rewritten for the whole chapter, un-drafted, merged normally after green CI on the closeout commit; then B20.

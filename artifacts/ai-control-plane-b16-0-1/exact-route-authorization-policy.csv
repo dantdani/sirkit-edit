@@ -17,7 +17,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/auth/callback,GET,public,none,false,,,false,false,false,false,app/api/auth/callback (PKCE code exchange; safe same-origin redirect)
 /api/auth/signin,POST,public,none,false,,,false,true,false,false,app/api/auth/signin (credential verification is the authentication; in-route CSRF)
 /api/auth/signout,POST,public,none,false,,,false,true,false,false,app/api/auth/signout (clears the caller's own session cookies; in-route CSRF)
-/api/bom,POST,public,none,false,,,false,false,false,false,stateless BOM compute
+/api/bom,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,true,true,false,false,BOM workbench with LIVE distributor pricing (metered vendor quota; trusted project scope)
 /api/bom/cart/digikey,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
 /api/bom/cart/lcsc,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
 /api/bom/cart/mouser,POST,public,none,false,,,false,false,false,false,stateless cart payload (no funds)
@@ -58,7 +58,10 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/component-selection/sourcing,POST,authenticated-propose,trusted-context,true,pcb_editor;reviewer;project_admin;automation,,false,true,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/component-selection/transaction,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/components/atomic,GET,public,none,false,,,false,false,false,false,catalog read
+/api/components/atomic/publication,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api/components/atomic/publication (publication requests; governance project only)
+/api/components/atomic/publication,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,"app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)"
 /api/components/atomic/search,POST,public,none,false,,,false,false,false,false,catalog read
+/api/components/revision-status,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,true,false,false,app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)
 /api/constraints/explain,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/constraints/preview,POST,public,none,false,,,false,false,false,false,stateless compute
 /api/engineering-effects,POST,internal-worker,worker-secret,true,,,false,false,true,false,app/api/engineering-effects
@@ -92,6 +95,7 @@ path,method,auth_class,identity_source,requires_auth,permitted_roles,required_ca
 /api/parts/[id],GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/[id]/alternates,GET,public,none,false,,,false,false,false,false,catalog read
 /api/parts/categories,GET,public,none,false,,,false,false,false,false,catalog read
+/api/parts/external-search,POST,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,true,true,false,false,"external candidate search of the enabled distributors (LIVE, metered vendor quota; at most 5 per source; nothing persisted; trusted project scope)"
 /api/parts/search,POST,public,none,false,,,false,false,false,false,catalog read
 /api/passive-policy,GET,authenticated-read,trusted-context,true,viewer;commenter;pcb_editor;automation;reviewer;project_admin;migration_admin,,false,false,false,false,app/api CD-stage route (B16.0.1 migrated to trusted context)
 /api/passive-policy,POST,authenticated-mutation,trusted-context,true,pcb_editor;reviewer;project_admin,,false,true,true,false,app/api CD-stage route (B16.0.1 migrated to trusted context)

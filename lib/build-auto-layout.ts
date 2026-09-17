@@ -36,7 +36,7 @@ import {
 } from "./schematic-types";
 import { planPageFit, type Bounds } from "./page-sizes";
 import type { CachedPart } from "@/app/lib/parts-cache";
-import { normalizeValueKey } from "@/app/lib/atomic/value-key";
+import { valueKeyLink } from "@/app/lib/atomic/value-key";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import type { Direction } from "@/app/lib/geometry";
 import {
@@ -970,6 +970,40 @@ function staggerCrowdedLabels(netLabels: NetLabel[], wires: Wire[], occupied: Se
  */
 export type AutoLayoutOptions = { spread?: Record<string, number> };
 
+/** [B19-E E5] The exact atomic identity a KiCad instance carries for a part at a value. */
+export interface PublishedAtomicIdentity {
+  atomicPartRevisionId: string;
+  symbolAssetVersionId: string;
+  footprintAssetVersionId: string;
+  mappingCertificateId: string;
+}
+
+/**
+ * Published atomic authority: exact symbol/footprint/mapping identity for this part at this value ('' link = value-agnostic
+ * default, never for a value whose own link was withdrawn). [B19-E E5] Exported: manual placement adopts through the same
+ * resolution Build auto-layout uses.
+ */
+export function publishedAtomicIdentity(part: Pick<CachedPart, "atomicAssignments" | "withdrawnValueKeys"> | null | undefined, value: string): PublishedAtomicIdentity | null {
+  const assignment = valueKeyLink(part?.atomicAssignments, value, part?.withdrawnValueKeys); // [B19-D I5d row 06] own links only; [B19-E E3 review] no default for a withdrawn value
+  return assignment ? { atomicPartRevisionId: assignment.revisionId, symbolAssetVersionId: assignment.symbolVersionId, footprintAssetVersionId: assignment.footprintVersionId, mappingCertificateId: assignment.mappingCertificateId } : null;
+}
+
+/**
+ * [B19-E E5] "Use published exact revision": the identity a manually placed instance adopts — only from a selectable link
+ * (/api/parts/[id] serves selectable links only, approved); null when the part has none for that value. Identity only: authority
+ * still needs the reviewed physical binding downstream.
+ */
+export function adoptPublishedExactRevision(part: Pick<CachedPart, "atomicAssignments" | "withdrawnValueKeys"> | null | undefined, value: string): AdoptedAtomicIdentity | null {
+  const assignment = valueKeyLink(part?.atomicAssignments, value, part?.withdrawnValueKeys);
+  const identity = assignment?.approved === true ? publishedAtomicIdentity(part, value) : null;
+  return identity ? { ...identity, forValue: value } : null;
+}
+
+/** [B19-E E5 review follow-up] an adopted identity names the value it was resolved for; it applies only to that value */
+export interface AdoptedAtomicIdentity extends PublishedAtomicIdentity {
+  forValue: string;
+}
+
 export function autoLayoutBuild(
   netlist: BuildLogicalNetlist,
   parts: Map<string, CachedPart>,
@@ -987,9 +1021,7 @@ export function autoLayoutBuild(
     // this part at this value ('' link = value-agnostic default). Instances
     // without a matching link simply carry no authority and fail closed at
     // durable PCB publication — never guessed here.
-    const assignment =
-      part?.atomicAssignments?.[normalizeValueKey(c.value)] ??
-      part?.atomicAssignments?.[""];
+    const identity = publishedAtomicIdentity(part, c.value); // [B19-E E5] the resolution manual placement adopts too
     byRefDes.set(c.refDes, {
       comp: c,
       part,
@@ -1006,14 +1038,7 @@ export function autoLayoutBuild(
         rotation: 0,
         refDes: c.refDes,
         value: c.value,
-        ...(assignment
-          ? {
-              atomicPartRevisionId: assignment.revisionId,
-              symbolAssetVersionId: assignment.symbolVersionId,
-              footprintAssetVersionId: assignment.footprintVersionId,
-              mappingCertificateId: assignment.mappingCertificateId,
-            }
-          : {}),
+        ...(identity ?? {}),
       },
     });
   }

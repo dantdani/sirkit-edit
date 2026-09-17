@@ -12,10 +12,10 @@
  * carries the same digests the pcb-sync materialization boundary re-verifies.
  */
 
-import { loadPublishedPortableSnapshot } from "../atomic/server-catalog";
+import { loadAtomicRevisionStatus, loadSelectablePortableSnapshot } from "../atomic/server-catalog";
 import { sha256 } from "../atomic/stable";
 import type { EngineeringActor } from "../engineering/types";
-import { createPhysicalBindingCandidate } from "./domain";
+import { createBindingSet, createPhysicalBindingCandidate } from "./domain";
 import type { PhysicalBindingService } from "./repository";
 import type { PhysicalBindingRepository } from "./repository";
 import type { ComponentPhysicalBinding, PhysicalBindingScope } from "./types";
@@ -30,6 +30,8 @@ export interface BindAtomicSelectionInput {
   atomicPartRevisionId: string;
   hierarchyPath?: string[];
   assemblyVariantIds?: string[];
+  /** [B19-E E5] the symbol version the schematic instance has installed: a revision whose symbol differs is refused */
+  expectedSymbolAssetVersionId?: string;
 }
 
 export interface BindAtomicSelectionResult {
@@ -76,6 +78,12 @@ export async function bindAtomicSelection(
   for (const state of existingSets) {
     const selected = state.bindings.find((binding) => binding.revisionId === state.set.effectiveSelectedRevisionId);
     if (selected && selected.exactPart?.atomicPartRevisionId === input.atomicPartRevisionId && selected.approval.state === "approved") {
+      // [B19-E E5] the instance's installed symbol must be the bound revision's symbol, on a replay too
+      if (input.expectedSymbolAssetVersionId !== undefined && selected.pinPadMapping.symbolAssetVersionId !== input.expectedSymbolAssetVersionId) throw new Error("PB_ATOMIC_SYMBOL_MISMATCH_CONFLICT");
+      // [B19-E E3] the replay re-reads the revision's status: an existing pin survives deprecation or supersession (OD-38),
+      // never revocation or a revision the catalog no longer publishes
+      const status = (await loadAtomicRevisionStatus([input.atomicPartRevisionId])).get(input.atomicPartRevisionId);
+      if (!status?.pinnable) throw new Error(status ? "PB_ATOMIC_REVISION_REVOKED" : "PB_ATOMIC_REVISION_NOT_FOUND");
       return { setId: state.set.setId, bindingRevisionId: selected.revisionId, lifecycleState: selected.lifecycleState, alreadyBound: true };
     }
   }
@@ -84,9 +92,12 @@ export async function bindAtomicSelection(
   if (!["reviewer", "project_admin"].includes(input.actor.role)) {
     throw new Error("PB_ATOMIC_BIND_HUMAN_REVIEWER_REQUIRED");
   }
-  const snapshot = await loadPublishedPortableSnapshot(input.atomicPartRevisionId);
+  // [B19-E E3] a NEW binding is a new selection: published and never withdrawn
+  const snapshot = await loadSelectablePortableSnapshot(input.atomicPartRevisionId);
   if (!snapshot) throw new Error("PB_ATOMIC_REVISION_NOT_FOUND");
   const { footprint, mapping, symbol, exactPart, manufacturer } = snapshot;
+  // [B19-E E5] symbol differs from revision: binding it would pin a symbol the schematic does not show
+  if (input.expectedSymbolAssetVersionId !== undefined && symbol.versionId !== input.expectedSymbolAssetVersionId) throw new Error("PB_ATOMIC_SYMBOL_MISMATCH_CONFLICT");
   if (!footprint || !mapping || !exactPart || !manufacturer) throw new Error("PB_ATOMIC_REVISION_INCOMPLETE");
   if (mapping.state !== "approved") throw new Error("PB_ATOMIC_MAPPING_UNAPPROVED");
 
@@ -100,7 +111,8 @@ export async function bindAtomicSelection(
   const evidenceRefs = [...new Set([...datasheetEvidence, ...mapping.evidenceIds])].sort();
 
   const candidateKey = `atomic-${input.componentInstanceId}-${input.atomicPartRevisionId}`;
-  const candidate: ComponentPhysicalBinding = createPhysicalBindingCandidate({
+  // [B19-E E5 review] the candidate as created at a time by an actor: the creation fields are the only ones that are not the revision's
+  const candidateAt = (at: { createdAt: string; verifiedAt: string; actor: EngineeringActor }): ComponentPhysicalBinding => createPhysicalBindingCandidate({
     scope,
     classification: {
       populationKind: "physical",
@@ -162,15 +174,15 @@ export async function bindAtomicSelection(
       footprintAssetVersionId: footprint.versionId,
       footprintContentDigest: footprint.contentHash,
       verifierVersion: mapping.validatorVersion,
-      verifiedAt: now,
+      verifiedAt: at.verifiedAt,
       evidenceRefs: [...mapping.evidenceIds].sort(),
       reasonCodes: [],
     },
     origin: {
       kind: "exact_catalog_binding",
-      actor: input.actor,
+      actor: at.actor,
       sourceRef: snapshot.atomicRevision.id,
-      createdAt: now,
+      createdAt: at.createdAt,
       evidenceRefs: datasheetEvidence,
       ruleVersion: "atomic-catalog/1",
     },
@@ -186,10 +198,24 @@ export async function bindAtomicSelection(
       exactPartEvidenceDigest: `sha256:${sha256(datasheetEvidence.join("\n"))}`,
       exactPartFootprintCompatibility: "compatible",
     },
-    createdAt: now,
-    createdBy: input.actor,
+    createdAt: at.createdAt,
+    createdBy: at.actor,
     candidateKey,
   });
+  let candidate = candidateAt({ createdAt: now, verifiedAt: now, actor: input.actor });
+
+  // [B19-E E5 review] A candidate for this exact revision may already exist, never transitioned: `select` refuses
+  // (PB_ACTIVE_SELECTION_CONFLICT) only after createCandidate committed, e.g. when a review of the successor is approved while the
+  // old binding is still in effect. Re-creating it with a new time and actor collided (PB_CANDIDATE_IDENTITY_COLLISION) on every
+  // later attempt, so the rebind to that revision could never happen. Rebuilt with the earlier creation time and creator, an
+  // otherwise identical candidate IS that record (createCandidate answers it, nothing is written) and the ordinary select,
+  // revalidate and approve follow under this actor; any other difference still refuses as a collision.
+  const joining = await repository.load(createBindingSet(candidate).setId);
+  const earlier = joining?.bindings.find((binding) => binding.bindingId === candidate.bindingId);
+  if (earlier && earlier.revision === 1 && earlier.lifecycleState === "candidate" && earlier.pinPadMapping.verifiedAt) {
+    const rebuilt = candidateAt({ createdAt: earlier.createdAt, verifiedAt: earlier.pinPadMapping.verifiedAt, actor: earlier.createdBy });
+    if (rebuilt.recordDigest === earlier.recordDigest) candidate = rebuilt;
+  }
 
   let state = await service.createCandidate(candidate, `create-${candidateKey}`);
   const created = state.bindings.find((binding) => binding.bindingId === candidate.bindingId);

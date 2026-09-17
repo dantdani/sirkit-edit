@@ -38,7 +38,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # [B19-E E2 CI] a full, non-incremental type check needs about 2.2 GB (measured locally: 2.12 GB at 2dee62c, 2.19 GB at
+      # 5c8de9d), past Node's default heap on the runner, where tsc was killed out of memory. Resources only; no check changed.
       - run: pnpm exec tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       # Narrow, deterministic suites only (never the whole suite here): the
       # acceptance + recovery pipelines, the manufacturing routes and their
       # hardening tests, the fabrication gate, the browser workflow panel, the
@@ -117,6 +121,84 @@ jobs:
           app/api/chat/__tests__/b18-e-scenario-4-route.test.ts
           app/lib/project/__tests__/b18-e-scenario-4-chat.test.ts
           app/lib/engineering/__tests__/b18-e-scenario-5.test.ts
+          app/lib/net
+          app/lib/distributors/__tests__/b19-distributor-egress.test.ts
+          app/lib/distributors/__tests__/b19-pricing-live-gate.test.ts
+          app/api/bom/__tests__/b19-bom-quota.test.ts
+          app/lib/schgen
+          app/api/schematic/__tests__/b19-cross-verify-egress.test.ts
+          app/lib/acquisition
+          app/lib/distributors/__tests__/b19-connector-policy.test.ts
+          app/lib/distributors/__tests__/b19-source-admission.test.ts
+          app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts
+          app/lib/atomic/__tests__/b19-approval-evidence-authority.test.ts
+          app/lib/atomic/__tests__/governance-security.test.ts
+          app/lib/atomic/__tests__/b19-export-license.test.ts
+          app/lib/atomic/__tests__/b19-d-ingestion-bounds.test.ts
+          app/lib/distributors/__tests__/b19-d-exact-mpn-connectors.test.ts
+          app/lib/distributors/__tests__/b19-d-exact-mpn-binding.test.ts
+          app/lib/distributors/__tests__/b19-d-vendor-values.test.ts
+          app/lib/distributors/__tests__/b19-d-lifecycle-retention.test.ts
+          app/lib/bom/__tests__/b19-d-pricing-mpn-binding.test.ts
+          app/lib/distributors/__tests__/b19-d-review-connectors.test.ts
+          app/lib/distributors/__tests__/b19-d-review-values.test.ts
+          app/lib/distributors/__tests__/b19-d-review-lifecycle.test.ts
+          app/lib/bom/__tests__/b19-d-review-price-consistency.test.ts
+          app/components/chat/__tests__/b19-d-chat-markdown.test.tsx
+          app/lib/__tests__/b19-d-href-and-csv-output.test.ts
+          app/lib/atomic/__tests__/b19-d-kicad-export-selections.test.ts
+          app/lib/atomic/__tests__/b19-d-kicad-export-fixture-runtime.test.ts
+          app/lib/atomic/__tests__/b19-d-claims-values.test.ts
+          app/lib/atomic/__tests__/b19-d-kicad-hostile.test.ts
+          app/lib/atomic/__tests__/b19-d-atomic-integrity.test.ts
+          app/lib/atomic/__tests__/kicad-compatibility.test.ts
+          app/lib/kicad/__tests__/b19-d-sexp-hostile.test.ts
+          app/lib/project/__tests__/b19-d-project-import-bounds.test.tsx
+          app/api/bom/__tests__/b19-d-bom-table-bounds.test.ts
+          app/lib/requirements/__tests__/b19-d-source-unions.test.ts
+          app/lib/pcb/__tests__/b19-d-dsn-tokens.test.ts
+          app/lib/atomic/__tests__/b19-d-i5d-review.test.ts
+          app/lib/constraints/__tests__/b19-d-dru-structure.test.ts
+          app/lib/kicad/__tests__/b19-d-ingest-issues.test.ts
+          app/lib/__tests__/b19-d-build-loop-injection.test.ts
+          app/lib/llm/__tests__/b19-d-compose-instructions-escaping.test.ts
+          app/lib/agent/__tests__/b19-d-tool-result-hygiene.test.ts
+          app/api/circuit-knowledge/__tests__/b19-d-excerpt-injection.test.ts
+          app/api/schematic/__tests__/b19-d-schgen-netname-injection.test.ts
+          app/api/chat/__tests__/b19-d-external-text-injection-route.test.ts
+          app/api/simulate/__tests__/b19-d-deck-injection.test.ts
+          app/lib/__tests__/b19-d-review-input-bounds.test.ts
+          app/lib/kicad/__tests__/b19-d-pinned-checkout.test.ts
+          app/api/pcb/autoroute/__tests__/route.test.ts
+          app/lib/distributors/__tests__/b19-e-pricing-provenance-counts.test.ts
+          app/lib/bom/__tests__/b19-e-bom-sources.test.ts
+          app/lib/__tests__/b19-e-packet-provenance.test.ts
+          app/components/bom/__tests__/b19-e-bom-workbench.test.tsx
+          app/lib/engineering/__tests__/b19-e-no-purchase-tripwire.test.ts
+          app/api/parts/__tests__/b19-e-external-search-route.test.ts
+          app/components/editor/__tests__/b19-e-build-library-external-search.test.tsx
+          app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-review.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-boundaries.test.ts
+          app/api/components/__tests__/b19-e-atomic-publication-route.test.ts
+          app/components/parts/__tests__/b19-e-atomic-publication-panel.test.tsx
+          app/api/components/__tests__/b19-e-revision-status-route.test.ts
+          app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts
+          app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts
+          app/lib/atomic/__tests__/b19-e-upgrade-diff-status.test.ts
+          app/lib/atomic/__tests__/b19-e-adopt-exact-revision.test.ts
+          app/lib/bom/__tests__/b19-e-bom-catalog-status.test.ts
+          app/components/bom/__tests__/b19-e-bom-catalog-status.test.tsx
+          app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx
+          app/components/parts/__tests__/b19-e-publication-withdraw-revision.test.tsx
+          app/components/editor/__tests__/b19-e-build-library-exact-revision.test.tsx
+          app/api/bom/__tests__/b19-e-bom-catalog-status-scope.test.ts
+          app/lib/engineering/__tests__/b19-e-external-read-descriptors.test.ts
+          app/lib/agent/__tests__/b19-e-external-read-service.test.ts
+          app/api/chat/__tests__/b19-e-chat-external-acquisition.test.ts
+          app/api/chat/__tests__/b14-route-replacement.test.ts
+          app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
+          app/lib/spice/__tests__/b19-d-report-escaping.test.ts
           app/lib/engineering/__tests__/b18-e-lost-settlement.test.ts
           app/lib/project/__tests__/b18-e-claimed-nothing.test.ts
           app/api/chat/__tests__/b18-c-chat-execution-availability.test.ts
@@ -181,6 +263,15 @@ jobs:
           app/lib/pcb/__tests__/ingest-integrity.test.ts
           app/lib/physical-binding/__tests__/schema-integrity.test.ts
           app/lib/durable-workflow/__tests__/tenant-scope.test.ts
+          app/lib/distributors/__tests__/b19-offer-retention.test.ts
+          app/lib/distributors/__tests__/b19-e-pricing-provenance-cache.test.ts
+          app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts
+          app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts
+          app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts
+          app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts
+          app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts
+          app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts
           --reporter=dot --reporter=junit --outputFile=vitest-database-delivery.xml
       - name: Upload diagnostics
         if: failure()

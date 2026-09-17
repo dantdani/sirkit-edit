@@ -1,15 +1,15 @@
 {
   "schemaVersion": "sirkit.ui-control-inventory-summary.v1",
-  "sites": 581,
-  "surfaces": 61,
+  "sites": 628,
+  "surfaces": 62,
   "byKind": {
-    "change": 153,
-    "click": 330,
+    "change": 177,
+    "click": 352,
     "context-menu": 1,
     "dialog": 11,
     "double-click": 1,
     "gesture": 12,
-    "key": 10,
+    "key": 11,
     "palette": 23,
     "pointer": 24,
     "shortcut": 13,
@@ -18,8 +18,8 @@
   "byClassification": {
     "dispatcher": 21,
     "internal": 8,
-    "semantic": 267,
-    "view": 285
+    "semantic": 288,
+    "view": 311
   },
   "recordsReached": [
     "agent.autonomy-setting",
@@ -31,7 +31,9 @@
     "cd.power.workbench",
     "manufacturing.export-engineering",
     "manufacturing.release",
+    "parts.atomic-publication-review",
     "parts.catalog-read",
+    "parts.external-observation-read",
     "pcb.ai-rules-brief",
     "pcb.arrange",
     "pcb.assignment-queue",

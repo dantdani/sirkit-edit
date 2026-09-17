@@ -31,8 +31,9 @@ export const PERMISSION_TIER_TITLES: Readonly<Record<PermissionTier, string>> = 
   3: "irreversible: publish authority, manufacturing release, external upload, purchasing/order (never agent-executable)",
 });
 
-/** A defensive floor: an id in one of these families is Tier 3 whatever its record says. */
-export const TIER3_FAMILY_PATTERN = /(release|publish|upload|order|purchas|qualif|ship|deliver)/i;
+/** A defensive floor: an id in one of these families is Tier 3 whatever its record says. [B19-E E4 review] gates-2: `publica`
+ *  (publication) is publish authority too — "publication" does not contain "publish". */
+export const TIER3_FAMILY_PATTERN = /(release|publish|publica|upload|order|purchas|qualif|ship|deliver)/i;
 
 /** The tier of an operation from the registry's approval tier and its operation kind/class. */
 export function permissionTierOfApproval(approvalTier: ApprovalTier, kind: ActionCoverageRecord["kind"] | ToolOperationClass): PermissionTier {

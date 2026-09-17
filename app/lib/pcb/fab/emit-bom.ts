@@ -16,6 +16,7 @@ import { assertValidBoardReferences } from "../integrity";
 import type { PcbNetlist } from "../netlist-bridge";
 import type { BomColumn } from "./types";
 import { compareNatural } from "@/app/lib/stable-compare";
+import { spreadsheetText } from "../../spreadsheet-cell";
 
 export interface BomRow {
   refs: string; // "R7,R8,R9"
@@ -102,7 +103,8 @@ export function csvField(value: string | number): string {
 export function emitBomCsv(rows: BomRow[], columns: BomColumn[]): string {
   const lines = [columns.map((c) => csvField(HEADERS[c])).join(",")];
   for (const row of rows) {
-    lines.push(columns.map((c) => csvField(row[c])).join(","));
+    // [B19-D I5c row 33] text columns never start a formula; the quantity column stays a number
+    lines.push(columns.map((c) => csvField(c === "quantity" ? row[c] : spreadsheetText(String(row[c])))).join(","));
   }
   return lines.join("\r\n") + "\r\n";
 }

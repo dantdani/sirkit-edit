@@ -12,6 +12,7 @@ import type { PosFormat } from "./types";
 import { csvField } from "./emit-bom";
 import { assertValidBoardReferences } from "../integrity";
 import { compareNatural } from "@/app/lib/stable-compare";
+import { spreadsheetText } from "../../spreadsheet-cell";
 
 const NM_PER_MM = 1_000_000;
 
@@ -43,16 +44,18 @@ interface PosSpec {
 const FORMATS: Record<PosFormat, PosSpec> = {
   "jlcpcb-cpl": {
     header: ["Designator", "Mid X", "Mid Y", "Layer", "Rotation"],
-    row: (i) => [i.ref, mm4(i.at.x), mm4(i.at.y), i.side === "bottom" ? "B" : "T", deg4(i.rotationDeg)],
+    row: (i) => [spreadsheetText(i.ref), mm4(i.at.x), mm4(i.at.y), i.side === "bottom" ? "B" : "T", deg4(i.rotationDeg)],
   },
   "kicad-default": {
     header: ["Ref", "Val", "Package", "PosX", "PosY", "Rot", "Side"],
-    row: (i) => [i.ref, valueOf(i), i.def.name, mm4(i.at.x), mm4(i.at.y), deg4(i.rotationDeg), i.side],
+    // [B19-D I5c row 33] text columns never start a formula; coordinates and rotation stay numbers
+    // [B19-D I5c review] Side is a closed token, as in the other formats — never the stored text
+    row: (i) => [spreadsheetText(i.ref), spreadsheetText(valueOf(i)), spreadsheetText(i.def.name), mm4(i.at.x), mm4(i.at.y), deg4(i.rotationDeg), i.side === "bottom" ? "bottom" : "top"],
   },
   "pcbway-standard": {
     header: ["Designator", "Center-X(mm)", "Center-Y(mm)", "Rotation", "Layer"],
     row: (i) => [
-      i.ref,
+      spreadsheetText(i.ref),
       mm4(i.at.x),
       mm4(i.at.y),
       deg4(i.rotationDeg),

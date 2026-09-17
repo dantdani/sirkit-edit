@@ -76,6 +76,8 @@ export const NEVER_EXPOSED_TOOL_PATTERNS: readonly RegExp[] = Object.freeze([
   /qualif/i,                  // qualification
   /^sirkit\.pcb\.undo-redo-canonical$/, // the internal canonical replay primitive ([B18-C I8] exact: the granted replay is reviewed above)
   /^sirkit\.pcb\.(edit-track|delete-item|create-via|zone-edit)$/, // canonical mutations not reviewed as granted executions ([B18-C I7] dimension lifted)
+  /\.atomic\.(approve|publish|revoke|deprecate|supersede|transition)/, // [B19-E E4] catalog authority stays human (OD-37)
+  /publication-(request|resolve|review)/, // [B19-E E4] the publication review is a human surface, never a tool
 ]);
 
 export type GrantedExecutionCandidate = Pick<ToolDescriptor, "toolId" | "operationClass" | "binding" | "approvalTier" | "requiredCapability" | "owningCommandId" | "agentExposed" | "sideEffects" | "executionMode">;

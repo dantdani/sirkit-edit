@@ -31,6 +31,9 @@ export function licensePermitsRecipeUse(license: LicenseRecord, scope: RecipePub
     : value === "redistributable" || value === "metadata_only");
 }
 
+/** [B19-D I5e review] the fields a source location may carry */
+export const SOURCE_LOCATION_KEYS: ReadonlySet<string> = new Set(["evidenceId", "sourceRecordId", "page", "section", "figureOrTable", "excerpt", "excerptHash"]);
+
 export function validateRecipeSourceBundle(
   bundle: RecipeSourceBundle,
   options: { now?: string; publicationScope?: RecipePublicationScope } = {},
@@ -69,9 +72,24 @@ export function validateRecipeSourceBundle(
     const item = evidence.get(location.evidenceId);
     if (!item || item.sourceRecordId !== location.sourceRecordId) errors.push("RECIPE_SOURCE_LOCATION_REFERENCE_INVALID");
     if (!location.page && !location.section && !location.figureOrTable) errors.push("RECIPE_SOURCE_LOCATION_NOT_EXACT");
+    // [B19-D I5e row 29] a locator names where the evidence is; it is not a place to carry text to the model
+    // [B19-D I5e review] measured on the value itself: a page is a finite number, a section or figure is a string of at most 200
+    // characters, the identifiers and hash are bounded strings, and a location carries no other key
+    const locationRecord = location as unknown as Record<string, unknown>;
+    if (Object.keys(locationRecord).some((key) => !SOURCE_LOCATION_KEYS.has(key))) errors.push("RECIPE_SOURCE_LOCATION_FIELD_UNKNOWN");
+    if (location.page !== undefined && (typeof location.page !== "number" || !Number.isFinite(location.page))) errors.push("RECIPE_SOURCE_LOCATOR_INVALID");
+    for (const locator of [location.section, location.figureOrTable]) {
+      if (locator !== undefined && typeof locator !== "string") errors.push("RECIPE_SOURCE_LOCATOR_INVALID");
+      else if (typeof locator === "string" && locator.length > 200) errors.push("RECIPE_SOURCE_LOCATOR_TOO_LONG");
+    }
+    for (const identifier of [location.evidenceId, location.sourceRecordId, location.excerptHash]) {
+      if (typeof identifier !== "string") errors.push("RECIPE_SOURCE_LOCATOR_INVALID");
+      else if (identifier.length > 200) errors.push("RECIPE_SOURCE_LOCATOR_TOO_LONG");
+    }
+    if (location.excerpt !== undefined && typeof location.excerpt !== "string") errors.push("RECIPE_SOURCE_LOCATOR_INVALID");
     if (location.excerpt && location.excerpt.length > EMBEDDED_CIRCUIT_KNOWLEDGE_PROFILE_V1.limits.maximumSourceExcerptCharacters) errors.push("RECIPE_SOURCE_EXCERPT_TOO_LONG");
     if (location.excerpt && location.excerptHash !== circuitDigest(location.excerpt)) errors.push("RECIPE_SOURCE_EXCERPT_HASH_MISMATCH");
-    if (!location.excerpt && !location.excerptHash.trim()) errors.push("RECIPE_SOURCE_EXCERPT_HASH_MISSING");
+    if (!location.excerpt && (typeof location.excerptHash !== "string" || !location.excerptHash.trim())) errors.push("RECIPE_SOURCE_EXCERPT_HASH_MISSING");
     if (location.excerpt) {
       const record = records.get(location.sourceRecordId); const source = record ? sources.get(record.sourceId) : undefined; const license = source ? licenses.get(source.licenseId) : undefined;
       if (!license || license.rawRedistribution !== "redistributable") errors.push("RECIPE_SOURCE_EXCERPT_LICENSE_BLOCKED");

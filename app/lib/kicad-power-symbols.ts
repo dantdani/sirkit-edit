@@ -57,12 +57,14 @@ export const POWER_SYMBOLS: Record<string, string> = {
 
 /** Look up a stock power-port symbol by bare name (e.g. "+3V3", "GND"). */
 export function getPowerSymbol(name: string): string | null {
-  return POWER_SYMBOLS[name] ?? null;
+  return Object.hasOwn(POWER_SYMBOLS, name) ? POWER_SYMBOLS[name]! : null; // [B19-D I5c row 18] own entries only
 }
 
 /** Quote and escape a string for an S-expression token. */
 function sExpQuote(s: string): string {
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  // [B19-D I5c row 17] escaped as KiCad writes them; no string ever spans a line
+  const escaped = s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u2028\u2029]/g, " ");
+  return `"${escaped}"`;
 }
 
 /**

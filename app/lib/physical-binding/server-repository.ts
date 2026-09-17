@@ -138,7 +138,9 @@ export class PostgresPhysicalBindingRepository implements PhysicalBindingReposit
         // index — fails the digest comparison and throws the same
         // PB_IMMUTABLE_*_CONFLICT the per-row probe raised).
         {
-          const intendedRows = input.state.bindings.map(bindingRow);
+          // [B19-E E5] a staged commit's intermediate revisions are rows too (the audit foreign keys name them); head unchanged
+          const headIds = new Set(input.state.bindings.map((binding) => binding.revisionId));
+          const intendedRows = [...input.state.bindings, ...(input.historicalBindings ?? []).filter((binding) => !headIds.has(binding.revisionId))].map(bindingRow);
           const inserted = intendedRows.length ? await tx.insert(physicalBindingRevisions).values(intendedRows).onConflictDoNothing().returning({ id: physicalBindingRevisions.revisionId }) : [];
           const insertedIds = new Set(inserted.map((row) => row.id));
           const missing = intendedRows.filter((row) => !insertedIds.has(row.revisionId));

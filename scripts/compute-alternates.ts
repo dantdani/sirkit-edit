@@ -20,6 +20,8 @@ loadEnvLocal();
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { getDb, getSqlClient } from "../app/lib/db/client";
 import { parts, partOffers, alternates, type Part, type PartOffer } from "../app/lib/db/schema";
+import { offersForExactMpn } from "../app/lib/distributors/offer-selection";
+import { effectiveLifecycleStatus } from "../app/lib/distributors/lifecycle-sql";
 import {
   findCandidateAlternates,
   computeAlternateScore,
@@ -122,14 +124,17 @@ async function processPart(source: Part): Promise<void> {
     list.push(o);
     offersByPart.set(o.partId, list);
   }
-  const sourceOffers = offersByPart.get(source.id) ?? [];
+  // [B19-A I3 + B19-D I5b review] fresh offers stored for each part's own exact MPN; vendor lifecycle expires at read time
+  const sourceOffers = offersForExactMpn(offersByPart.get(source.id) ?? [], source.mpn);
+  const sourceNow = { ...source, lifecycleStatus: effectiveLifecycleStatus(source.lifecycleStatus, source.lastRefreshedAt) as Part["lifecycleStatus"] };
 
   const scored: AlternateMatch[] = [];
   for (const m of matches) {
     const alt = altById.get(m.alternatePartId);
     if (!alt) continue;
-    const altOffers = offersByPart.get(m.alternatePartId) ?? [];
-    const { score, reasons } = computeAlternateScore(source, alt, m.kind, altOffers, sourceOffers);
+    const altOffers = offersForExactMpn(offersByPart.get(m.alternatePartId) ?? [], alt.mpn);
+    const altNow = { ...alt, lifecycleStatus: effectiveLifecycleStatus(alt.lifecycleStatus, alt.lastRefreshedAt) as Part["lifecycleStatus"] };
+    const { score, reasons } = computeAlternateScore(sourceNow, altNow, m.kind, altOffers, sourceOffers);
     scored.push({ ...m, score, matchReasons: reasons });
   }
 

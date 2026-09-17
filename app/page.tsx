@@ -1,14 +1,11 @@
 "use client";
 
+import { ChatMarkdown } from "@/app/components/chat/ChatMarkdown";
+import { DatasheetLink } from "@/app/components/parts/DatasheetLink"; // [B19-D I5c row 34, review]
 import { useState, useRef, useEffect, useLayoutEffect, useReducer, useMemo, useCallback, type Dispatch, type SetStateAction, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 const PcbEditor = dynamic(() => import("@/app/components/pcb/PcbEditor"), { ssr: false }); // Pixi needs window
 const SpiceStudio = dynamic(() => import("@/app/components/spice/SpiceStudio"), { ssr: false });
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
-import rehypeKatex from "rehype-katex";
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,7 +35,8 @@ import { WORKSPACE_TABS } from "@/app/lib/view-session/workspace"; // [B17-D]
 import { PIN_NAMES, normalizeComponentRole } from "@/lib/schematic-types";
 import { pageSizePx, titleBlockPx, PAGE_MARGIN_PX } from "@/lib/page-sizes";
 import { generateSchematic } from "@/lib/apply-netlist";
-import { autoLayoutBuildValidated } from "@/lib/build-auto-layout";
+import { autoLayoutBuildValidated, type AdoptedAtomicIdentity } from "@/lib/build-auto-layout";
+import { kicadPlacementCommand } from "@/lib/kicad-placement"; // [B19-E E5 review]
 import { schematicToBuildNetlist } from "@/lib/schematic-to-netlist";
 import { buildReviewInput } from "@/lib/netlist-review";
 import { BuildLibraryPanel } from "@/app/components/editor/BuildLibraryPanel";
@@ -116,7 +114,9 @@ import { evaluateSchematicConsumerGate } from "@/app/lib/engineering/schematic-c
 import { LatestRequestGate, OwnedRecoveryDecisionAdapter, OwnedSimulationRunner, ProjectAsyncScopeRegistry, evaluateSuggestionBatch, type ProjectAsyncScope, type ScopedSuggestionBatch } from "@/app/lib/engineering/project-async-scope";
 import type { CanonicalSchematic } from "@/app/lib/engineering/schematic-model";
 import type { EngineeringOperation } from "@/app/lib/engineering/types";
-import { exportProjectFile, importProjectFile, PROJECT_FILE_EXTENSION } from "@/app/lib/project/file";
+import { exportProjectFile, importProjectFile, MAX_PROJECT_FILE_BYTES, PROJECT_FILE_EXTENSION, readProjectFile } from "@/app/lib/project/file";
+import { chatHistoryForModel } from "@/app/lib/project/chat-history"; // [B19-D I5e row 32]
+import { buildSuggestionInstruction } from "@/app/lib/project/suggestion-instruction"; // [B19-D I5e row 05]
 import { requestBoardRestore } from "@/app/lib/pcb/board-restore";
 import { Undo2, Redo2, History, Save, FolderInput } from "lucide-react";
 
@@ -132,7 +132,8 @@ type SchematicSnapshot = {
   netLabels: NetLabel[];
 };
 type LeftPanel = "projects" | "library" | null;
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
+// [B19-D I5e row 32] `advisory`: another model's output (build explanation, review, second opinion) — shown, never resent as the assistant's words
+type ChatMessage = { id: string; role: "user" | "assistant"; content: string; advisory?: boolean };
 type ActivityLogEntry = { id: string; text: string; status: "running" | "done" | "error" };
 type ActivityLogMessage = {
   id: string;
@@ -1198,6 +1199,7 @@ function SchematicEditor({
   kicadComponents,
   selectedKicadId, setSelectedKicadId,
   placementPartId,
+  placementExactIdentity,
   netLabels,
   pendingNetLabel, setPendingNetLabel,
   pageSize, setPageSize,
@@ -1219,6 +1221,8 @@ function SchematicEditor({
   selectedKicadId: string | null;
   setSelectedKicadId: (id: string | null) => void;
   placementPartId: string | null;
+  /** [B19-E E5] the exact identity the placement adopts (identity only; binding stays a reviewer's act); null for a plain Place */
+  placementExactIdentity: AdoptedAtomicIdentity | null;
   netLabels: NetLabel[];
   pendingNetLabel: PendingNetLabel | null;
   setPendingNetLabel: (p: PendingNetLabel | null) => void;
@@ -1585,17 +1589,13 @@ function SchematicEditor({
       // B07: placement is a canonical graph command — the snapshot is minted
       // at click time, the insert executes against the serialized head.
       const part = getCachedPart(placementPartId);
-      const newId = crypto.randomUUID();
-      graph.run("Placed part", "schematic.add-component", (state) => ({
-        kicadComponents: [...(state.kicadComponents ?? []), {
-          id: newId,
-          partId: placementPartId,
-          x: w.x, y: w.y,
-          rotation: placementRotation,
-          refDes: nextKicadRefDes(part, state.kicadComponents ?? []),
-          value: kicadDefaultValue(part),
-        }],
-      }));
+      // [B19-E E5] "Use published exact revision": the identity the Build Library resolved from the part's fresh selectable link
+      // ([B19-E E5 review] never re-read from the part cache), or nothing for a plain Place
+      const placement = kicadPlacementCommand({
+        id: crypto.randomUUID(), partId: placementPartId, x: w.x, y: w.y, rotation: placementRotation, value: kicadDefaultValue(part),
+        refDesFor: (existing) => nextKicadRefDes(part, [...existing]), exactIdentity: placementExactIdentity,
+      });
+      graph.run(placement.label, "schematic.add-component", placement.recipe);
       // Stay in kicad-place for LTspice-style repeated placement.
     } else if (tool === "wire") {
       if (!wireDraftStart) {
@@ -2521,10 +2521,7 @@ function KicadPropertiesPanel({
         {part && <KicadMetaRow label="Library" value={part.libraryName} />}
         {part && <KicadMetaRow label="Pins" value={String(part.pins.length)} />}
         {part?.footprintHint && <KicadMetaRow label="Footprint" value={part.footprintHint} />}
-        {part?.datasheet && (
-          <a href={part.datasheet} target="_blank" rel="noopener noreferrer"
-            className="inline-block text-teal-400 hover:text-teal-300 transition pt-0.5">Datasheet ↗</a>
-        )}
+        <DatasheetLink href={part?.datasheet} className="inline-block text-teal-400 hover:text-teal-300 transition pt-0.5">Datasheet ↗</DatasheetLink>
       </div>
 
       <div className="flex gap-1">
@@ -2581,6 +2578,7 @@ export default function Home() {
   const [kicadComponents, setKicadComponents] = useState<KicadComponentInstance[]>([]);
   const [selectedKicadId, setSelectedKicadId] = useState<string | null>(null);
   const [placementPartId, setPlacementPartId] = useState<string | null>(null);
+  const [placementExactIdentity, setPlacementExactIdentity] = useState<AdoptedAtomicIdentity | null>(null); // [B19-E E5]
 
   // Net labels (both modes) + the preset held by the quick-place tool.
   const [netLabels, setNetLabels] = useState<NetLabel[]>([]);
@@ -2600,8 +2598,10 @@ export default function Home() {
   }
 
   // Begin modal placement of a KiCad part (from the Build library panel).
-  function startKicadPlacement(partId: string) {
+  // [B19-E E5] `exactIdentity`: the placed instance adopts the part's published exact revision for its value (identity only)
+  function startKicadPlacement(partId: string, options?: { exactIdentity?: AdoptedAtomicIdentity }) {
     setPlacementPartId(partId);
+    setPlacementExactIdentity(options?.exactIdentity ?? null);
     setTool("kicad-place");
     setSelectedId(null);
     setSelectedKicadId(null);
@@ -2952,7 +2952,7 @@ export default function Home() {
   function toStoredChat(all: Message[]): StoredChatMessage[] {
     return all.slice(-200).map((message) => message.role === "log"
       ? { id: message.id, role: "log" as const, title: message.title, status: message.status, entries: message.entries.map((entry) => ({ id: entry.id, text: entry.text, status: entry.status })) }
-      : { id: message.id, role: message.role, content: message.content });
+      : { id: message.id, role: message.role, content: message.content, ...(message.advisory ? { advisory: true } : {}) });
   }
 
   /** Reload during a pending operation must show a truthful interrupted state. */
@@ -4140,13 +4140,17 @@ export default function Home() {
     anchor.download = result.fileName;
     anchor.click();
     URL.revokeObjectURL(url);
-    showToast(`Project saved to ${result.fileName}`);
+    showToast(result.omittedCheckpoints > 0
+      ? `Project saved to ${result.fileName}. The ${result.omittedCheckpoints} oldest checkpoint(s) were left out so the file stays within the ${MAX_PROJECT_FILE_BYTES / (1024 * 1024)} MB limit for opening it again.`
+      : `Project saved to ${result.fileName}`);
   }, []);
 
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const handleImportProjectFile = useCallback(async (file: File) => {
-    const content = await file.text();
-    const result = await importProjectFile(content);
+    // [B19-D I5e row 12] the size bound comes before the file is read; the import itself never rejects
+    const read = await readProjectFile(file);
+    if (!read.ok) { showToast(`Open project failed: ${read.reason}`); return; }
+    const result = await importProjectFile(read.content);
     if (!result.ok) { showToast(`Open project failed: ${result.reason}`); return; }
     // B12.4 §E — the imported record/checkpoints are persisted; activation
     // (the pointer) belongs to the winning install.
@@ -4278,6 +4282,7 @@ export default function Home() {
           setTool("select");
           setWireDraftStart(null);
           setPlacementPartId(null);
+          setPlacementExactIdentity(null); // [B19-E E5 review]
           setPendingNetLabel(null);
         } else {
           setSelectedId(null);
@@ -4466,9 +4471,7 @@ export default function Home() {
 
     try {
       appendActivityStep(logId, "Calling assistant");
-      const apiMessages = [...messages, userMsg]
-        .filter((message): message is ChatMessage => message.role === "user" || message.role === "assistant")
-        .map(({ role, content }) => ({ role, content }));
+      const apiMessages = chatHistoryForModel([...messages, userMsg]); // [B19-D I5e row 32] advisory output is not replayed
       // B07.3 — chat context is ONE immutable authoritative snapshot (never
       // the visible arrays, which may be showing a gesture preview), and it
       // is validated before it leaves the client: an invalid projection
@@ -4912,7 +4915,7 @@ export default function Home() {
         setTool("select");
         const appendedMessages = opts?.suppressChat ? [] : [
           ...(opts?.promptAlreadyLogged ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: prompt }]),
-          { id: crypto.randomUUID(), role: "assistant" as const, content: explanation },
+          { id: crypto.randomUUID(), role: "assistant" as const, content: explanation, advisory: true },
         ];
         if (appendedMessages.length > 0) setMessages((prev) => [...prev, ...appendedMessages]);
         // B07.4 (failure C) — the generation checkpoint is written
@@ -5472,7 +5475,7 @@ export default function Home() {
         ...prev,
         // Auto-runs post only the result; a fake user turn would read as noise.
         ...(auto ? [] : [{ id: crypto.randomUUID(), role: "user" as const, content: "Review the circuit" }]),
-        { id: crypto.randomUUID(), role: "assistant", content: md },
+        { id: crypto.randomUUID(), role: "assistant", content: md, advisory: true },
       ]);
     } catch (err) {
       if (isAbortError(err) || !reviewScope.isCurrent()) return; // cancellation, not a failure
@@ -5653,6 +5656,7 @@ export default function Home() {
             id: crypto.randomUUID(),
             role: "assistant",
             content: `**Layout review** — ${reason}\n\n${groupLines}${summary ? `\n\n_${summary}_` : ""}`,
+            advisory: true, // [B19-D I5e review] the layout critic's own words (reasons and summary): shown, never replayed
           },
         ]);
       }
@@ -5783,7 +5787,7 @@ export default function Home() {
       appendChatFor(opinionPin.projectId, (prev) => [
         ...prev,
         { id: crypto.randomUUID(), role: "user", content: "Get a second opinion" },
-        { id: crypto.randomUUID(), role: "assistant", content: opinionStillCurrent ? md : `${md}\n\n_The schematic changed while this ran — treat as a snapshot comparison, not current suggestions._` },
+        { id: crypto.randomUUID(), role: "assistant", content: opinionStillCurrent ? md : `${md}\n\n_The schematic changed while this ran — treat as a snapshot comparison, not current suggestions._`, advisory: true },
       ]);
     } catch (err) {
       if (isAbortError(err) || !opinionScope.isCurrent()) return; // cancellation, not a failure
@@ -5822,25 +5826,8 @@ export default function Home() {
         return role === "processor" ? `${k.refDes} (${k.value || part?.name || "processor"})` : null;
       })
       .filter((p): p is string => p !== null);
-    const suggestionLines = batch.items.map((s) => {
-      const refs = s.refs && s.refs.length > 0 ? ` [refs: ${s.refs.join(", ")}]` : "";
-      const category = s.category ? `${s.category}: ` : "";
-      return `- ${category}${s.title}${refs}: ${s.detail}`;
-    });
-    const guardedInstruction =
-      "Apply ONLY the bounded support-circuit suggestions below. Keep the design's existing " +
-      "functional blocks intact; do not redesign the schematic.\n\n" +
-      "Hard constraints:\n" +
-      "- Do NOT add another MCU, microcontroller, processor, controller, module, or other large IC.\n" +
-      "- Do NOT remove, replace, rename, or duplicate any existing MCU/processor/controller.\n" +
-      "- Preserve every existing correct component and connection unless a listed support fix directly requires a local connection change.\n" +
-      "- You may add only support/protection/passive parts such as decoupling or bulk capacitors, pull-up/pull-down/series/current-limit/termination resistors, ferrite beads, crystals/load capacitors, TVS/ESD/protection/flyback diodes, or equivalent local support parts.\n" +
-      "- If a suggestion would require adding a second controller or a broad redesign, ignore that suggestion and explain why.\n" +
-      (existingProcessors.length > 0
-        ? `\nExisting processor/controller parts that must remain unique: ${existingProcessors.join(", ")}.\n`
-        : "\n") +
-      "\nSupport suggestions to apply where genuinely appropriate:\n" +
-      suggestionLines.join("\n");
+    // [B19-D I5e row 05] the findings are quoted as untrusted data inside a delimited, bounded block
+    const guardedInstruction = buildSuggestionInstruction({ existingProcessors, items: batch.items });
     setPendingSuggestions(null);
     setSuggestionsMinimized(false);
     await handleEditSchematic(guardedInstruction, { displayPrompt: "Apply suggestions" });
@@ -6241,7 +6228,7 @@ export default function Home() {
                 </ScrollArea>
               </>
             ) : mode === "build" ? (
-              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} />
+              <BuildLibraryPanel onSelectForPlacement={startKicadPlacement} projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} />
             ) : (
               <>
                 <div className="p-3 border-b border-zinc-800">
@@ -6332,6 +6319,7 @@ export default function Home() {
                     kicadComponents={kicadComponents}
                     selectedKicadId={selectedKicadId} setSelectedKicadId={setSelectedKicadId}
                     placementPartId={placementPartId}
+                    placementExactIdentity={placementExactIdentity}
                     netLabels={netLabels}
                     pendingNetLabel={pendingNetLabel} setPendingNetLabel={setPendingNetLabel}
                     pageSize={pageSize} setPageSize={changeSheetSize}
@@ -6420,6 +6408,8 @@ export default function Home() {
                   state={authoritativeSchematic}
                   projectScope={project ? { tenantId: "local", projectId: project.id, branchId: "main" } : null} // [B16.0.2 §B] the ACTIVE project identity (selector only — never a content hash)
                   onSwapPart={handleSwapPart}
+                  // [B19-E E5] a withdrawn revision's successor is reviewed and rebound in the PCB component review (a reviewer's act)
+                  onReviewSuccessor={(row) => { workspaceView.open("pcb"); showToast(`Review the successor for ${row.refDesList.join(", ")} in the Component review panel: preview the diff, then a reviewer rebinds.`); }}
                 />
               ) : view !== "pcb" ? (
                 <div className="absolute inset-0 flex items-center justify-center text-zinc-600 text-sm select-none">
@@ -8416,36 +8406,7 @@ function MessageBubble({ message, undoStates, onUndoExecution }: { message: Mess
   return (
     <div className="flex justify-start w-full">
       <div className="w-full rounded-lg px-3 py-2.5 text-xs leading-relaxed bg-zinc-900 border border-zinc-800 overflow-hidden">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeHighlight, rehypeKatex]}
-          components={{
-            p:          ({ children }) => <p className="mb-2 last:mb-0 text-zinc-200 leading-relaxed">{children}</p>,
-            h1:         ({ children }) => <h1 className="text-sm font-medium text-zinc-100 mt-3 mb-1.5">{children}</h1>,
-            h2:         ({ children }) => <h2 className="text-sm font-medium text-zinc-100 mt-3 mb-1.5">{children}</h2>,
-            h3:         ({ children }) => <h3 className="text-xs font-medium text-zinc-100 mt-2 mb-1">{children}</h3>,
-            ul:         ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5 text-zinc-300">{children}</ul>,
-            ol:         ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5 text-zinc-300">{children}</ol>,
-            li:         ({ children }) => <li className="text-zinc-300">{children}</li>,
-            strong:     ({ children }) => <strong className="font-medium text-zinc-100">{children}</strong>,
-            em:         ({ children }) => <em className="text-zinc-200">{children}</em>,
-            a:          ({ children, href }) => <a href={href} target="_blank" rel="noreferrer" className="text-teal-400 hover:underline">{children}</a>,
-            code:       ({ className, children, ...props }) => {
-              const isInline = !className?.includes("language-");
-              if (isInline) return <code className="bg-zinc-800 text-teal-300 px-1 py-0.5 rounded font-mono text-[11px]">{children}</code>;
-              return <code className={`${className ?? ""} font-mono text-[11px]`} {...props}>{children}</code>;
-            },
-            pre:        ({ children }) => <pre className="bg-zinc-950 border border-zinc-800 rounded-md p-2.5 my-2 overflow-x-auto text-[11px] leading-relaxed">{children}</pre>,
-            table:      ({ children }) => <div className="my-2 overflow-x-auto"><table className="w-full text-[11px] border border-zinc-800 rounded">{children}</table></div>,
-            thead:      ({ children }) => <thead className="bg-zinc-800/40">{children}</thead>,
-            th:         ({ children }) => <th className="text-left px-2 py-1 border-b border-zinc-800 font-medium text-zinc-200">{children}</th>,
-            td:         ({ children }) => <td className="px-2 py-1 border-t border-zinc-900/60 text-zinc-300">{children}</td>,
-            blockquote: ({ children }) => <blockquote className="border-l-2 border-zinc-700 pl-3 my-2 text-zinc-400 italic">{children}</blockquote>,
-            hr:         () => <hr className="my-3 border-zinc-800" />,
-          }}
-        >
-          {message.content}
-        </ReactMarkdown>
+        <ChatMarkdown content={message.content} /> {/* [B19-D I5c row 02] images never fetched; links web/mail only */}
       </div>
     </div>
   );

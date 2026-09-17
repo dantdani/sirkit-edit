@@ -11,6 +11,10 @@
 import type { BomRow } from "@/app/lib/bom/build";
 import type { LifecycleStatus } from "@/app/lib/distributors/shared";
 import { LIFECYCLE_SEVERITY } from "@/app/lib/distributors/lifecycle";
+import { PRICING_CURRENCY } from "@/app/lib/distributors/types";
+
+/** [B19-D I5b review] What `bestPriceCents` means in snapshots written since B19-D: the USD price at quantity 1. */
+export const SNAPSHOT_PRICE_BASIS = "usd-at-quantity-1";
 
 // ─── Thresholds ─────────────────────────────────────────────────────────────--
 export const STOCK_DROP_THRESHOLD_PCT = 50; // ≥50% drop (or to zero) → notify
@@ -35,6 +39,8 @@ export type SnapshotRow = {
 };
 
 export type BomSnapshotMeta = {
+  /** [B19-D I5b review] absent on snapshots written before B19-D, whose prices meant the lowest break in any currency */
+  priceBasis?: string;
   totalRows: number;
   totalCostCents: number | null;
   currency: string | null;
@@ -67,10 +73,7 @@ export function rowToSnapshotRow(row: BomRow): SnapshotRow {
   const best = row.pricing?.bestOverall ?? null;
   const bestUnit = best?.bestUnitPrice ?? null;
   const bestPriceCents = bestUnit === null ? null : Math.round(bestUnit * 100);
-  const bestPriceCurrency =
-    best && bestUnit !== null
-      ? best.priceBreaks.find((b) => b.price === bestUnit)?.currency ?? "USD"
-      : null;
+  const bestPriceCurrency = best && bestUnit !== null ? PRICING_CURRENCY : null; // [B19-D I5b review] never a same-numbered break's currency
 
   return {
     partId: row.partId ?? "",
@@ -107,6 +110,8 @@ function pctRise(before: number, after: number): number {
 export function diffSnapshots(prev: BomSnapshot, curr: BomSnapshot): Change[] {
   const prevByPart = new Map(prev.rows.map((r) => [r.partId, r]));
   const changes: Change[] = [];
+  // [B19-D I5b review] prices written under different meanings are not comparable: no price spike, no "supplier lost"
+  const pricesComparable = (prev.meta?.priceBasis ?? null) === (curr.meta?.priceBasis ?? null);
 
   for (const after of curr.rows) {
     if (!after.partId) continue;
@@ -138,6 +143,7 @@ export function diffSnapshots(prev: BomSnapshot, curr: BomSnapshot): Change[] {
 
     // Best price spiked ≥25%.
     if (
+      pricesComparable &&
       before.bestPriceCents !== null &&
       after.bestPriceCents !== null &&
       after.bestPriceCents > before.bestPriceCents * (1 + PRICE_SPIKE_THRESHOLD_PCT / 100)
@@ -165,6 +171,7 @@ export function diffSnapshots(prev: BomSnapshot, curr: BomSnapshot): Change[] {
     // The previously-best supplier no longer leads (changed/disappeared) while it
     // had stock before — a "supplier lost" signal.
     if (
+      pricesComparable &&
       before.bestSourceDistributor !== null &&
       before.totalStock > 0 &&
       after.bestSourceDistributor !== before.bestSourceDistributor

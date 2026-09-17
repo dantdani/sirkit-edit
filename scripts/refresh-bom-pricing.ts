@@ -9,7 +9,12 @@
  * lifecycle to parts.lifecycleStatus). Built for ops use (e.g. a nightly cron).
  *
  * Concurrency is capped at 50 parts per chunk; the aggregator's per-distributor
- * request queues (DigiKey 200ms, Mouser 2s) further throttle live calls.
+ * request queues (spaced by the source registry) further throttle live calls.
+ *
+ * [B19-A I3] This job is an operator's BULK refresh. It is granted live pricing (after B19-B I2 made live pricing a grant,
+ * it passed only `forceRefresh` and silently refreshed nothing) and it declares itself a bulk refresh, so it touches only
+ * the sources whose terms permit pre-fetching — none today: DigiKey's agreement prohibits bulk download, Mouser is disabled
+ * and prohibits storage, and Nexar's terms are unclear (OD-33).
  */
 
 import { loadEnvLocal } from "../app/lib/load-env-local";
@@ -27,10 +32,14 @@ import {
   type NewBomNotification,
 } from "../app/lib/db/schema";
 import { getPricingFor } from "../app/lib/distributors";
+import { offersForExactMpn } from "../app/lib/distributors/offer-selection";
+import { partLifecycleStatus } from "../app/lib/distributors/lifecycle-sql";
+import { cheapestUnitPrice, PRICING_CURRENCY } from "../app/lib/distributors/types";
 import {
   diffSnapshots,
   type BomSnapshot,
   type SnapshotRow,
+  SNAPSHOT_PRICE_BASIS,
 } from "../app/lib/snapshots";
 import { changeToNotification } from "../app/lib/notifications";
 
@@ -99,7 +108,7 @@ async function main(): Promise<void> {
     let withOffers = 0;
     for (let i = 0; i < items.length; i += CHUNK_SIZE) {
       const chunk = items.slice(i, i + CHUNK_SIZE);
-      const pricing = await getPricingFor(chunk, "all", { forceRefresh: true });
+      const pricing = await getPricingFor(chunk, "all", { live: true, forceRefresh: true, purpose: "bulk-refresh" });
       for (const agg of pricing.values()) {
         live += agg.sourcesFromLive;
         if (agg.offers.length > 0) withOffers += 1;
@@ -162,7 +171,7 @@ async function generateNotifications(): Promise<void> {
       label: null,
       takenAt: new Date(),
       rows: nowRows,
-      meta: prevSnap.meta,
+      meta: { ...prevSnap.meta, priceBasis: SNAPSHOT_PRICE_BASIS }, // [B19-D I5b review] the synthetic prices use the current meaning
     };
 
     const changes = diffSnapshots(prevSnap, nowSnap);
@@ -221,7 +230,7 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
 
   // Current lifecycle per part.
   const partRows = await db
-    .select({ id: parts.id, lifecycleStatus: parts.lifecycleStatus })
+    .select({ id: parts.id, lifecycleStatus: partLifecycleStatus }) // [B19-D I5b review] vendor lifecycle expires at read time
     .from(parts)
     .where(inArray(parts.id, partIds));
   const lifecycleById = new Map(partRows.map((p) => [p.id, p.lifecycleStatus ?? "unknown"]));
@@ -248,25 +257,26 @@ async function buildSyntheticNowRows(prevRows: SnapshotRow[]): Promise<SnapshotR
   }
 
   return prevRows.map((prev) => {
-    const offers = offersByPart.get(prev.partId) ?? [];
+    // [B19-A I3 + B19-D I5b review] fresh offers stored for this row's exact MPN, priced like the snapshot it is compared with
+    const offers = offersForExactMpn(offersByPart.get(prev.partId) ?? [], prev.mpn);
     const totalStock = offers.reduce((s, o) => s + (o.stock ?? 0), 0);
 
     let bestCents: number | null = null;
     let bestCurrency: string | null = null;
     let bestSource: string | null = null;
     for (const o of offers) {
-      for (const b of o.priceBreaks ?? []) {
-        if (b.price > 0 && (bestCents === null || b.price * 100 < bestCents)) {
-          bestCents = Math.round(b.price * 100);
-          bestCurrency = b.currency;
-          bestSource = o.distributor;
-        }
+      const unit = cheapestUnitPrice(o.priceBreaks ?? []);
+      if (unit !== null && (bestCents === null || Math.round(unit * 100) < bestCents)) {
+        bestCents = Math.round(unit * 100);
+        bestCurrency = PRICING_CURRENCY;
+        bestSource = o.distributor;
       }
     }
 
     return {
       ...prev,
-      lifecycleStatus: lifecycleById.get(prev.partId) ?? prev.lifecycleStatus,
+      // an expired (unknown) current status is no information, not a change
+      lifecycleStatus: lifecycleById.get(prev.partId) && lifecycleById.get(prev.partId) !== "unknown" ? lifecycleById.get(prev.partId)! : prev.lifecycleStatus,
       totalStock,
       bestPriceCents: bestCents,
       bestPriceCurrency: bestCurrency,

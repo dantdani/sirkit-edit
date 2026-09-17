@@ -26,7 +26,11 @@ jobs:
       # Output redirection captures the diagnostics for the failure artifact
       # WITHOUT masking the exit code (no pipes, no continue-on-error).
       - run: pnpm run benchmark:validate > benchmark-validate.json
+      # [B19-E E2 CI] a full, non-incremental type check needs about 2.2 GB (measured locally: 2.12 GB at 2dee62c, 2.19 GB at
+      # 5c8de9d), past Node's default heap on the runner, where tsc was killed out of memory. Resources only; no check changed.
       - run: pnpm exec tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
       - run: pnpm exec vitest run app/lib/benchmark/__tests__/stage-09-benchmark-core.test.ts --reporter=dot --reporter=junit --outputFile=vitest-benchmark-core.xml
       - run: pnpm run stage10:test -- --reporter=dot --reporter=junit --outputFile=vitest-stage10.xml
       - name: Upload failure diagnostics

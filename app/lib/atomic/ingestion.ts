@@ -7,7 +7,7 @@ import type {
   SourceIdentity,
   SourceRecord,
 } from "./types";
-import { assertBoundedSExpression, assertPermittedRedirect, assertPermittedUrl, redactSecrets } from "./security";
+import { assertBoundedSExpression, assertPermittedRedirect, assertPermittedUrl, INGEST_LIMITS, IngestSecurityError, redactSecrets } from "./security";
 import { contentId, sha256 } from "./stable";
 
 export type IngestionStage =
@@ -55,6 +55,17 @@ export interface QuarantinedObject {
   confidential: boolean;
 }
 
+/** [B19-D I5b row 42] The only text media types quarantine accepts. PDFs, SVG, HTML and archives are not text imports. */
+export const QUARANTINE_TEXT_MEDIA_TYPES: readonly string[] = Object.freeze([
+  "text/plain",
+  "text/csv",
+  "application/json",
+  "application/x-kicad-symbol",
+  "application/x-kicad-footprint",
+  "application/x-kicad-s-expression",
+  "application/x-kicad-library-table",
+]);
+
 export function quarantineText(input: {
   content: string;
   mediaType: string;
@@ -63,7 +74,11 @@ export function quarantineText(input: {
   confidential?: boolean;
   now?: Date;
 }): QuarantinedObject {
-  if (/kicad|s-expression|sexpr/i.test(input.mediaType)) assertBoundedSExpression(input.content);
+  const mediaType = input.mediaType.split(";")[0]!.trim().toLowerCase();
+  if (!QUARANTINE_TEXT_MEDIA_TYPES.includes(mediaType)) throw new IngestSecurityError("file_type", `Unsupported media type for text quarantine: ${mediaType || "none"}`);
+  if (Buffer.byteLength(input.content, "utf8") > INGEST_LIMITS.maxTextBytes) throw new IngestSecurityError("file_too_large", `Text exceeds ${INGEST_LIMITS.maxTextBytes} bytes`);
+  // bounded whatever it claims to be: anything that looks like an s-expression is preflighted before any parser sees it
+  if (/kicad|s-expression|sexpr/i.test(mediaType) || input.content.trimStart().startsWith("(")) assertBoundedSExpression(input.content);
   const hash = sha256(input.content);
   return Object.freeze({
     id: contentId("quarantine", hash),
@@ -135,6 +150,9 @@ export class SourceAdapterError extends Error {
   }
 }
 
+/** [B19-D I5b row 42] Paging never gathers more than this many records, whatever the adapter keeps returning. */
+export const MAX_ADAPTER_RECORDS = 50_000;
+
 /** Fetch all pages with an enforced deadline; adapters never receive secrets in domain objects. */
 export async function collectAdapterPages(
   adapter: SourceAdapter,
@@ -147,23 +165,33 @@ export async function collectAdapterPages(
     const pages: SourceFetchPage[] = [];
     let cursor: string | undefined;
     const seen = new Set<string>();
+    let records = 0;
+    // [B19-D I5b row 42] the deadline holds even against an adapter that ignores its signal: every wait races the abort
+    const deadline = new Promise<never>((_resolve, reject) => {
+      controller.signal.addEventListener("abort", () => reject(new Error("Source adapter deadline exceeded")), { once: true });
+    });
+    deadline.catch(() => undefined);
     do {
+      if (controller.signal.aborted) throw new Error("Source adapter deadline exceeded");
       let page: SourceFetchPage | undefined;
       const maxRetries = Math.max(0, Math.min(5, retry.maxRetries ?? 2));
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-          page = await adapter.fetchPage({ cursor, signal: controller.signal });
+          page = await Promise.race([adapter.fetchPage({ cursor, signal: controller.signal }), deadline]);
           break;
         } catch (error) {
           const typed = error instanceof SourceAdapterError ? error : null;
           const retryable = typed?.code === "rate_limited" || typed?.code === "timeout" || typed?.code === "network";
           if (!retryable || attempt === maxRetries) throw error;
           const waitMs = Math.min(5_000, Math.max(0, typed.retryAfterMs ?? 100 * 2 ** attempt));
-          if (retry.wait) await retry.wait(waitMs);
-          else await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
+          if (retry.wait) await Promise.race([retry.wait(waitMs), deadline]);
+          else await Promise.race([new Promise<void>((resolve) => setTimeout(resolve, waitMs)), deadline]);
         }
       }
       if (!page) throw new Error("Source adapter produced no page");
+      const pageRecords = Array.isArray(page.records) ? page.records.length : 0;
+      if (records + pageRecords > MAX_ADAPTER_RECORDS) throw new Error(`Adapter record limit exceeded (${MAX_ADAPTER_RECORDS})`);
+      records += pageRecords;
       pages.push(page);
       cursor = page.nextCursor;
       if (cursor && seen.has(cursor)) throw new Error("Adapter pagination cursor loop");

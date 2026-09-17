@@ -24,79 +24,13 @@ import { normalizeBuildNetlist, crossCheckNetlists } from "@/lib/netlist-crossch
 import { parseSchGenSource } from "@/lib/schgen-netlist";
 import type { CachedPart } from "@/app/lib/parts-cache";
 import type { SchematicState } from "@/lib/schematic-types";
+import { callSchGenEndpoint, schgenEndpointFromEnv, SCHGEN_FAILURE_SENTENCES } from "@/app/lib/schgen/endpoint-client";
 
 export const runtime = "nodejs";
 
-const SCHGEN_URL = process.env.SCHGEN_ENDPOINT_URL;
-// HF Inference Endpoints are protected by default — send a bearer token.
-const SCHGEN_TOKEN = process.env.SCHGEN_ENDPOINT_TOKEN ?? process.env.HF_TOKEN;
-// gpt-oss-20b is slow (~20 tok/s); cap tokens so a call fits the timeout.
-const SCHGEN_TIMEOUT_MS = 240_000;
-const SCHGEN_MAX_NEW_TOKENS = 4096;
-
-/**
- * Pull the generated code out of the endpoint response. Accepts a custom handler
- * that returns `{ code }` (preferred contract) OR a raw HF text-generation
- * response (`{ generated_text }` / `[{ generated_text }]`) — parseSchGenSource
- * scans for DSL calls anywhere, so raw harmony-format text still works.
- */
-function extractCode(data: unknown): string {
-  if (Array.isArray(data)) {
-    const first = data[0] as Record<string, unknown> | undefined;
-    if (first && typeof first.generated_text === "string") return first.generated_text;
-    return "";
-  }
-  if (data && typeof data === "object") {
-    const o = data as Record<string, unknown>;
-    if (typeof o.code === "string") return o.code;
-    if (typeof o.generated_text === "string") return o.generated_text;
-  }
-  return "";
-}
-
-/** POST the prompt to the SchGen endpoint, retrying while it wakes from zero. */
-async function callSchGen(prompt: string): Promise<string> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (SCHGEN_TOKEN) headers.Authorization = `Bearer ${SCHGEN_TOKEN}`;
-
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), SCHGEN_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(SCHGEN_URL!, {
-        method: "POST",
-        headers,
-        // HF's endpoint router requires an `inputs` key; our handler also reads
-        // `prompt`. Send both, plus a bounded token budget.
-        body: JSON.stringify({
-          inputs: prompt,
-          prompt,
-          parameters: { max_new_tokens: SCHGEN_MAX_NEW_TOKENS },
-        }),
-        signal: ctrl.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    // 503 = endpoint scaling from zero / model still loading — back off and retry.
-    if (res.status === 503 && attempt < maxAttempts) {
-      await new Promise((r) => setTimeout(r, 5000 * attempt));
-      continue;
-    }
-    if (!res.ok) {
-      // Surface the endpoint's own message (e.g. "endpoint is paused").
-      const body = await res.text().catch(() => "");
-      const detail = body ? `: ${body.slice(0, 200)}` : "";
-      throw new Error(`SchGen endpoint ${res.status}${detail}`);
-    }
-    const code = extractCode(await res.json()).trim();
-    if (!code) throw new Error("SchGen endpoint returned no usable code");
-    return code;
-  }
-  throw new Error("SchGen endpoint unavailable after retries (still loading?)");
-}
+// [B19-B I2b] The endpoint call lives in `app/lib/schgen/endpoint-client.ts`: the bounded egress path (HTTPS, the
+// configured host only, no inward address, no redirect, a deadline, a bounded body), a bounded 503 retry, and a closed
+// failure reason. This route never repeats the endpoint's body or the transport's text.
 
 // [B16.0.10] canonical wrapper — authorization -> CSRF -> media -> bounded body
 // (16 MB / 45 s) run inside the wrapper; the callback receives the parsed body
@@ -115,7 +49,8 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
   }
 
   // Not configured → advertise unavailability rather than failing.
-  if (!SCHGEN_URL) {
+  const endpoint = schgenEndpointFromEnv();
+  if (!endpoint) {
     return Response.json({
       ok: true,
       available: false,
@@ -133,13 +68,15 @@ export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 4
   const primary = normalizeBuildNetlist(schematicToBuildNetlist(state, parts), parts);
 
   // Second opinion: call the SchGen inference endpoint for the same prompt.
-  let code: string;
-  try {
-    code = await callSchGen(prompt);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: `Second-opinion generation failed: ${msg}` }, { status: 502 });
+  const outcome = await callSchGenEndpoint(prompt, endpoint);
+  if (!outcome.ok) {
+    console.error(`[api/schematic/cross-verify] second opinion failed (${outcome.failure}): ${outcome.logLine}`);
+    const status = outcome.failure === "http_error" && outcome.status !== undefined ? ` (HTTP ${outcome.status})` : "";
+    const sentence = SCHGEN_FAILURE_SENTENCES[outcome.failure];
+    const error = `Second-opinion generation failed: ${status ? sentence.replace(/\.$/, `${status}.`) : sentence}`;
+    return Response.json({ ok: false, error }, { status: 502, headers: { "Cache-Control": "no-store" } });
   }
+  const code = outcome.code;
 
   // Parse (no execution) → netlist → cross-check.
   const { netlist: second, coverage } = parseSchGenSource(code);

@@ -104,6 +104,7 @@ export function parseSchGenSource(python: string): SchGenParseResult {
   const components: NormComponent[] = [];
   const symLibName = new Map<string, string>(); // refDes → "lib:name" (for classification)
   const labelText = new Map<string, string>();  // label_ref → label_text (net name)
+  const labelRefs = new Set<string>();             // every label_ref, named or not
 
   // 1) Components.
   const symCalls = findCalls(python, "add_schematic_symbol");
@@ -126,7 +127,16 @@ export function parseSchGenSource(python: string): SchGenParseResult {
     // Signature: (label_pos, label_text, label_ref, label_type, text_orient)
     const text = unquote(kw.get("label_text") ?? pos[1] ?? "");
     const ref = unquote(kw.get("label_ref") ?? pos[2] ?? "");
-    if (ref && text) labelText.set(ref, text.toUpperCase());
+    // [B19-D I5e row 32] a label names a net only when it is a net name. Any other label still connects its pins, but it names
+    // nothing — a sentence written by the independent model never becomes a net name shown to anyone.
+    // [B19-D I5e review] the grammar is KiCad's net-name characters without whitespace (SchGen is not given Sirkit's build-prompt
+    // grammar): letters, digits, '_', '-', '/', '+', '.', '~', '#', braces and brackets, at most 64 characters — so '+3.3V',
+    // '~{RESET}', 'RESET#' and 'D[0..7]' name their nets again.
+    if (ref && text) {
+      labelRefs.add(ref);
+      const name = text.toUpperCase();
+      if (/^[+A-Z0-9_\-/.~#{}\[\]]{1,64}$/.test(name)) labelText.set(ref, name);
+    }
   }
 
   // 3) Connections → union endpoints; a label endpoint carries its net name.
@@ -155,7 +165,7 @@ export function parseSchGenSource(python: string): SchGenParseResult {
 
     const resolve = (sym: string, pin: string): string => {
       // A label reference contributes its net name rather than a pin endpoint.
-      if (labelText.has(sym)) return `@${sym}`; // sentinel node for the label
+      if (labelRefs.has(sym)) return `@${sym}`; // sentinel node for the label
       return `${sym}.${pin}`;
     };
     const a = resolve(symA, pinA);

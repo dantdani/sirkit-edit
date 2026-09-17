@@ -7,6 +7,7 @@ import type {
   UpgradeImpact,
 } from "./types";
 import { semanticHash } from "./stable";
+import type { AtomicCatalogStatus } from "./revision-status";
 
 function bundle(revision: AtomicPartRevision) {
   return revision.cadBundles.find((item) => item.disposition === "primary_approved") ?? revision.cadBundles[0];
@@ -20,14 +21,19 @@ export function diffAtomicUpgrade(input: {
   mappingSemanticHashes: ReadonlyMap<string, string>;
   claimSemanticHashes: ReadonlyMap<string, string>;
   guidanceSemanticHashes: ReadonlyMap<string, string>;
+  /** [B19-E E5] the target's durable catalog status (withdrawal is append-only: the row itself stays `published`) */
+  toStatus?: AtomicCatalogStatus;
 }): AtomicUpgradeDiff {
   const impacts = new Set<UpgradeImpact>();
   const invalidates = new Set<AtomicUpgradeDiff["invalidates"][number]>();
   const blockers: string[] = [];
   if (input.from.logicalPartId !== input.to.logicalPartId) blockers.push("target is a different logical part");
-  if (input.to.publicationState === "revoked") {
-    impacts.add("revoked_target");
-    blockers.push("target revision is revoked");
+  // [B19-E E5] a target must be published and never withdrawn (OD-38): an in-memory record's own state, or the durable status
+  const withdrawnStates = new Set<string>(["deprecated", "superseded", "revoked"]);
+  const targetStates = [input.to.publicationState, input.toStatus].filter((state): state is NonNullable<typeof state> => state !== undefined && state !== "published");
+  for (const state of new Set(targetStates.map((state) => (withdrawnStates.has(state) ? state : "unpublished")))) {
+    if (state === "revoked") impacts.add("revoked_target");
+    blockers.push(state === "unpublished" ? "target revision is not published" : `target revision is ${state}`);
   }
   const fromBundle = bundle(input.from);
   const toBundle = bundle(input.to);
@@ -66,6 +72,24 @@ export function diffAtomicUpgrade(input: {
     safeForAutomaticMetadataRefresh,
     blockers,
   };
+}
+
+/**
+ * [B19-E E5] The upgrade diff between two portable snapshots (a pin's current revision and its successor), with the asset,
+ * mapping, claim and guidance hashes taken from the snapshots themselves and the target's durable catalog status.
+ */
+export function diffAtomicSnapshots(from: PortableAtomicSnapshot, to: PortableAtomicSnapshot, toStatus: AtomicCatalogStatus): AtomicUpgradeDiff {
+  const pairs = <T>(items: ReadonlyArray<T | undefined>, key: (item: T) => [string, string]) => new Map(items.filter((item): item is T => item !== undefined).map(key));
+  return diffAtomicUpgrade({
+    from: from.atomicRevision,
+    to: to.atomicRevision,
+    symbolSemanticHashes: pairs([from.symbol, to.symbol], (asset) => [asset.versionId, asset.semanticHash]),
+    footprintSemanticHashes: pairs([from.footprint, to.footprint], (asset) => [asset.versionId, asset.semanticHash]),
+    mappingSemanticHashes: pairs([from.mapping, to.mapping], (mapping) => [mapping.id, mapping.semanticHash]),
+    claimSemanticHashes: pairs([...from.claims, ...to.claims], (claim) => [claim.id, semanticHash(claim)]),
+    guidanceSemanticHashes: pairs([...from.guidance, ...to.guidance], (item) => [item.id, semanticHash(item)]),
+    toStatus,
+  });
 }
 
 export function pinFromSelection(selection: SelectionRecord): ProjectComponentPin {

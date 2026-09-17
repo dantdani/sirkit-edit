@@ -36,6 +36,11 @@ export interface PhysicalBindingCommitRequest {
   /** Canonical logical request identity. Optional only for pre-B01 callers. */
   requestDigest?: string;
   state: PhysicalBindingAggregateState;
+  /**
+   * [B19-E E5] Immutable binding revisions a single commit introduced and then replaced (a staged rebind's intermediate
+   * select/revalidate revisions): written as rows so every audit event names a durable revision, never part of the head.
+   */
+  historicalBindings?: readonly ComponentPhysicalBinding[];
 }
 
 export function assertPhysicalBindingReplay(event: Pick<PhysicalBindingAuditEvent, "aggregateSetId" | "requestDigest">, input: { setId: string; requestDigest?: string }): void {

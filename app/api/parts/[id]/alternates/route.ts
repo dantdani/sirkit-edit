@@ -10,7 +10,9 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/app/lib/db/client";
 import { parts, partOffers, alternates } from "@/app/lib/db/schema";
 import { bestOfferPrice, type AlternateKind } from "@/app/lib/alternates";
+import { offersForExactMpn } from "@/app/lib/distributors/offer-selection";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
+import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 
 export const runtime = "nodejs";
 
@@ -61,7 +63,7 @@ export const GET = publicRoute({ routeParams: ["id"], query: true }, async ({ pa
         name: parts.name,
         mpn: parts.mpn,
         manufacturer: parts.manufacturer,
-        lifecycleStatus: parts.lifecycleStatus,
+        lifecycleStatus: partLifecycleStatus,
       })
       .from(parts)
       .where(eq(parts.id, id))
@@ -81,7 +83,7 @@ export const GET = publicRoute({ routeParams: ["id"], query: true }, async ({ pa
         mpn: parts.mpn,
         manufacturer: parts.manufacturer,
         packageNormalized: parts.packageNormalized,
-        lifecycleStatus: parts.lifecycleStatus,
+        lifecycleStatus: partLifecycleStatus,
       })
       .from(alternates)
       .innerJoin(parts, eq(parts.id, alternates.alternatePartId))
@@ -103,7 +105,8 @@ export const GET = publicRoute({ routeParams: ["id"], query: true }, async ({ pa
     }
 
     const alternatesOut: AlternateOut[] = rows.map((r) => {
-      const partOffersForAlt = offersByPart.get(r.alternatePartId) ?? [];
+      // [B19-A I3 + B19-D I5b review] fresh offers stored for THIS alternate's exact MPN only
+      const partOffersForAlt = offersForExactMpn(offersByPart.get(r.alternatePartId) ?? [], r.mpn);
       const stock =
         partOffersForAlt.length > 0
           ? partOffersForAlt.reduce((sum, o) => sum + (o.stock ?? 0), 0)

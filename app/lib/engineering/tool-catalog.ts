@@ -436,7 +436,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     toolId: "sirkit.parts.search", version: "1.0.0",
     owningCommandId: "parts.catalog-read",
     title: "Search parts catalog",
-    description: "Search the parts catalog with authority annotations (verified/orderable).",
+    description: "Search the parts catalog with authority annotations (verified/published physical-authority).", // [B19-E E6] was "orderable"
     category: "parts", operationClass: "read",
     inputSchema: obj({ query: { type: "string" }, limit: { type: "number" } }, ["query"]), outputSchema: OUT_RESULT,
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
@@ -447,6 +447,49 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     validationStrategy: "query schema", verificationStrategy: "authority annotations surfaced verbatim",
     sourceEvidence: ["app/lib/parts-search.ts"],
     versionNotes: "B04 initial registration.",
+  },
+  // ── [B19-E E6] External acquisition — bounded Tier 0 reads over the server's injected port (OD-36, OD-40) ──
+  {
+    ...readDefaults,
+    toolId: "sirkit.parts.external-search", version: "1.0.0",
+    agentExposed: true, // B19-E E6 — per-run availability requires the server's external acquisition fact and canonical state
+    owningCommandId: "parts.external-observation-read",
+    title: "Search distributors by exact MPN",
+    description: "Look up 1-5 EXACT manufacturer part numbers at the registered distributors (cache first; a live lookup only when the server allows it for the source, at most 5 live MPNs per run). The answer is a sourcing observation, never engineering authority: per source its status, and per MPN where the answer was served from, when it was observed and when it expires, and whether its MPN is exactly the one asked. Vendor values appear only for a source whose terms permit showing them to the assistant, under untrustedVendorText. It never places, binds, publishes or buys a part.",
+    category: "parts", operationClass: "read",
+    sideEffects: "derived-cache", // a live answer may be kept in the connector's own in-process memo for the source's registered freshness
+    // [B09.1] 1-5 and the exact-MPN rule are enforced server-side (acquisition-reads.ts), never wire keywords
+    inputSchema: obj({ mpns: { type: "array", items: { type: "string" }, description: "1-5 exact manufacturer part numbers, printable ASCII, as published (every suffix character counts)." } }, ["mpns"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["board-present"], requiredAuthority: ["external-observation"],
+    binding: { status: "bound-external-read", module: "app/lib/acquisition/agent-read-port.ts", symbol: "searchExactMpnsForAgent", notes: "B19-E E6: invoked only through ExternalReadInvocationService (app/lib/agent/acquisition-reads.ts) over the port the chat route injects through app/api/chat/external-acquisition-runtime.ts; labels only while the registry's agentDisclosure is unknown (OD-36)." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 12_000,
+    validationStrategy: "exact keys {mpns}; safe JSON and schema; 1-5 printable-ASCII exact MPNs (canonicalExactMpn), de-duplicated; the server's availability fact, canonical state, role and capability rechecked per call",
+    verificationStrategy: "closed projection of the port's answer (registry sources, closed statuses and outcomes, ISO times, requested MPNs only); vendor values only for a permitting source, bounded; at most 8,000 characters",
+    sourceEvidence: ["app/lib/agent/acquisition-reads.ts", "app/lib/acquisition/agent-read-port.ts", "app/lib/distributors/index.ts", "app/api/chat/external-acquisition-runtime.ts", "app/lib/acquisition/source-registry.ts"],
+    versionNotes: "1.0.0 (B19-E E6): first exposure, reviewed in agent-exposure.ts; exact MPNs only and at most 5 live MPNs per run at the agent's 25% quota share (OD-40).",
+  },
+  {
+    ...readDefaults,
+    toolId: "sirkit.parts.evidence-read", version: "1.0.0",
+    agentExposed: true, // B19-E E6 — per-run availability requires the server's external acquisition fact and canonical state
+    owningCommandId: "parts.external-observation-read",
+    title: "Read the evidence for an exact MPN",
+    description: "Read, from the offer cache only (never a vendor), the evidence an import review would see for ONE exact MPN: the cached sourcing observations with their freshness (stale ones flagged), the names of conflicting properties, the engineering evidence still missing, and each published atomic revision's catalog status (published, deprecated or superseded with its successor, revoked). proven is always false: a bundle proves nothing, and publication and binding are human steps.",
+    category: "parts", operationClass: "read",
+    inputSchema: obj({ mpn: { type: "string", description: "One exact manufacturer part number, printable ASCII, as published." } }, ["mpn"]),
+    outputSchema: OUT_RESULT,
+    requiredCapability: "read_project", requiredRoles: ALL_ROLES,
+    requiredProjectState: ["board-present"], requiredAuthority: ["external-observation"],
+    binding: { status: "bound-external-read", module: "app/lib/acquisition/agent-read-port.ts", symbol: "readEvidenceForAgent", notes: "B19-E E6: cache-only composition of the E4 import-review projection and E3's revision status; invoked only through ExternalReadInvocationService." },
+    discovery: "discoverable", callability: "callable",
+    timeoutMs: 12_000,
+    validationStrategy: "exact keys {mpn}; safe JSON and schema; one printable-ASCII exact MPN (canonicalExactMpn); the server's availability fact, canonical state, role and capability rechecked per call",
+    verificationStrategy: "closed projection: offer-cache observations only, property names only, the closed missing-evidence vocabulary, bounded revision ids and closed catalog states; proven false; at most 8,000 characters",
+    sourceEvidence: ["app/lib/agent/acquisition-reads.ts", "app/lib/acquisition/agent-read-port.ts", "app/lib/acquisition/import-review.ts", "app/lib/acquisition/offer-cache-observations.ts", "app/lib/atomic/server-catalog.ts"],
+    versionNotes: "1.0.0 (B19-E E6): first exposure, reviewed in agent-exposure.ts; cache only, so it spends no vendor quota.",
   },
   {
     ...readDefaults,

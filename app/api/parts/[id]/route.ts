@@ -11,10 +11,12 @@ import { getDb } from "@/app/lib/db/client";
 import { parts, libraries, partsAtomicLinks, type KeySpecs } from "@/app/lib/db/schema";
 import type { KicadPin } from "@/app/lib/kicad/types";
 import { legacyPartToAtomicDraft, type LegacyAtomicDraft } from "@/app/lib/atomic/compatibility";
+import { selectableRevisionIdSql } from "@/app/lib/atomic/revision-status-sql";
 import { publicRoute } from "@/app/lib/auth/route-handlers";
 
 import { fixtureContainer } from "@/app/lib/fixture-runtime/container";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
+import { partLifecycleStatus } from "@/app/lib/distributors/lifecycle-sql"; // [B19-D I5b review] vendor lifecycle expires at read time
 export const runtime = "nodejs";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,11 +50,16 @@ type PartDetail = {
   atomicCompatibility?: LegacyAtomicDraft;
   /**
    * Published atomic authority links keyed by normalized value ('' = value
-   * agnostic default). Present only when a published atomic part revision has
-   * been linked to this catalog part — carries exact symbol/footprint/mapping
+   * agnostic default). Present only when a published, never-withdrawn atomic
+   * part revision has been linked to this catalog part — carries exact symbol/footprint/mapping
    * identity for footprint-ready schematic instances.
    */
   atomicAssignments?: Record<string, AtomicAssignment>;
+  /**
+   * [B19-E E3 review] value keys whose own link points at a withdrawn or missing revision: no '' default fallback for them.
+   * [B19-E E4 review follow-up] '' is included when the default link itself points at one.
+   */
+  withdrawnValueKeys?: string[];
 };
 
 type AtomicAssignment = {
@@ -81,6 +88,7 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
       footprintHint: cached.footprintHint ?? null, mainCategory: cached.mainCategory, libraryName: cached.libraryName, pins: cached.pins, symbolRaw: cached.symbolRaw, properties: cached.properties ?? {},
       internalPartNumber: null, lifecycleStatus: null, rohsStatus: null, packageNormalized: null, keySpecs: null, isGeneric: false,
       ...(cached.atomicAssignments ? { atomicAssignments: cached.atomicAssignments as PartDetail["atomicAssignments"] } : {}),
+      ...(cached.withdrawnValueKeys ? { withdrawnValueKeys: cached.withdrawnValueKeys } : {}),
     };
     return Response.json({ ok: true, part });
   }
@@ -107,7 +115,7 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
         symbolRaw: parts.symbolRaw,
         properties: parts.properties,
         internalPartNumber: parts.internalPartNumber,
-        lifecycleStatus: parts.lifecycleStatus,
+        lifecycleStatus: partLifecycleStatus,
         rohsStatus: parts.rohsStatus,
         packageNormalized: parts.packageNormalized,
         keySpecs: parts.keySpecs,
@@ -127,19 +135,29 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
             footprintAssetVersionId: partsAtomicLinks.footprintAssetVersionId,
             mappingCertificateId: partsAtomicLinks.mappingCertificateId,
             footprintFullName: partsAtomicLinks.footprintFullName,
+            selectable: selectableRevisionIdSql(partsAtomicLinks.atomicPartRevisionId),
           })
           .from(partsAtomicLinks)
           .where(eq(partsAtomicLinks.partId, id))
       : [];
     const atomicAssignments: Record<string, AtomicAssignment> = {};
+    const withdrawnValueKeys: string[] = [];
     for (const link of linkRows) {
+      // [B19-E E3] a link to a withdrawn or missing revision is no assignment for a new selection; approved is derived
+      if (link.selectable !== true) {
+        // [B19-E E3 review] ...and no '' default fallback. [B19-E E4 review follow-up] the '' default is reported too: the part still
+        // HAS that link (a publication never repoints it); valueKeyLink's fallback check reads only a value's own key, so no
+        // value's link changes
+        withdrawnValueKeys.push(link.valueKey);
+        continue;
+      }
       atomicAssignments[link.valueKey] = {
         revisionId: link.atomicPartRevisionId,
         symbolVersionId: link.symbolAssetVersionId,
         footprintVersionId: link.footprintAssetVersionId,
         mappingCertificateId: link.mappingCertificateId,
         footprintFullName: link.footprintFullName,
-        approved: true,
+        approved: link.selectable,
       };
     }
 
@@ -147,7 +165,8 @@ export const GET = publicRoute({ routeParams: ["id"] }, async ({ params }): Prom
     const part: PartDetail | null = row
       ? {
           ...row,
-          ...(linkRows.length ? { atomicAssignments } : {}),
+          ...(Object.keys(atomicAssignments).length ? { atomicAssignments } : {}),
+          ...(withdrawnValueKeys.length ? { withdrawnValueKeys } : {}),
           atomicCompatibility: legacyPartToAtomicDraft({
             id: row.id,
             name: row.name,

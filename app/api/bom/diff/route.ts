@@ -14,8 +14,9 @@
  * is bound to the trusted scope (a foreign/legacy id is a uniform 404).
  */
 
-import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
-import { diffSnapshots, rowToSnapshotRow, type BomSnapshot, type BomSnapshotMeta } from "@/app/lib/snapshots";
+import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
+import { bomFailure } from "../_failure"; // [B19-B I2] a failure is reported, never repeated
+import { diffSnapshots, rowToSnapshotRow, SNAPSHOT_PRICE_BASIS, type BomSnapshot, type BomSnapshotMeta } from "@/app/lib/snapshots";
 import { resolveBomRepository, type BomSnapshotFull } from "@/app/lib/bom/snapshot-repository";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
 import { BOM_FORBIDDEN_BODY_KEYS, bomNotFound, bomOwnershipScope } from "../_scope";
@@ -53,13 +54,16 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
     let toSnap: BomSnapshot;
     let toId = to;
     if (to === "current") {
-      if (!isSchematicState(body.state)) {
+      if (body.state === undefined || body.state === null) {
         return Response.json({ ok: false, error: "`state` is required (and must be a schematic state) when `to=current`." }, { status: 400 });
       }
-      const result = await buildBomRows(body.state, normalizeChoice(body.pricingChoice));
+      const stateCheck = checkBomState(body.state, "`state` is required (and must be a schematic state) when `to=current`."); // [B19-D I5e row 19] shape and table bounds before any lookup
+      if (!stateCheck.ok) return bomStateRefusal(stateCheck);
+      const result = await buildBomRows(stateCheck.state, normalizeChoice(body.pricingChoice), { live: true }); // [B19-B I2] authenticated: live pricing granted
       const rows = result.rows.filter((r) => r.partId).map(rowToSnapshotRow);
       const costValue = result.estimatedProjectCost.value;
       const meta: BomSnapshotMeta = {
+        priceBasis: SNAPSHOT_PRICE_BASIS, // [B19-D I5b review]
         totalRows: rows.length,
         totalCostCents: costValue === null ? null : Math.round(costValue * 100),
         currency: result.estimatedProjectCost.currency,
@@ -76,7 +80,6 @@ export const POST = authenticatedJsonRoute({ maxBytes: MAX_BODY_BYTES, deadlineM
     const changes = diffSnapshots(fromSnap, toSnap);
     return Response.json({ ok: true, from: fromSnap.id, to: toId, changes }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom/diff", err);
   }
 });

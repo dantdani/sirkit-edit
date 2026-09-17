@@ -9,8 +9,10 @@
  */
 
 import type { BomRow, BomLifecycleSummary } from "@/app/lib/bom/build";
-import { buildBomRows, isSchematicState, normalizeChoice } from "@/app/lib/bom-builder";
-import { publicJsonRoute } from "@/app/lib/auth/route-handlers";
+import { bomStateRefusal, buildBomRows, checkBomState, normalizeChoice } from "@/app/lib/bom-builder";
+import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
+import { BOM_FORBIDDEN_BODY_KEYS } from "./_scope";
+import { bomFailure } from "./_failure";
 import type { LineRiskBreakdown, DesignRiskSummary } from "@/app/lib/risk-scoring";
 
 export const runtime = "nodejs";
@@ -26,28 +28,28 @@ type BomBody = {
   forceRefresh?: unknown;
 };
 
-// [B16.0.11] canonical wrapper — exact route policy -> media -> bounded body
-// (8 MB / 30 s) run inside the wrapper; the callback receives the parsed body
-// only and cannot reach the raw request.
-export const POST = publicJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
-  const body = rawBody as unknown as BomBody;
+// [B16.0.11] canonical wrapper — authorization -> CSRF -> media -> bounded body (8 MB / 30 s) run inside the wrapper.
+// [B19-B I2] This route prices LIVE, which spends a metered distributor quota, so it is an AUTHENTICATED project read
+// (it was public, and an anonymous caller could spend that quota — repeatedly, with `forceRefresh`). The public export
+// and cart routes price from the cache only.
+export const POST = authenticatedJsonRoute({ maxBytes: 8_000_000, deadlineMs: 30_000 }, async ({ body: rawBody }): Promise<Response> => {
+  const body = rawBody as unknown as BomBody & Record<string, unknown>;
+  for (const key of BOM_FORBIDDEN_BODY_KEYS) {
+    if (key in body) return Response.json({ ok: false, code: "AUTH_AUTHORITATIVE_INPUT_FORBIDDEN", error: `\`${key}\` is server-derived and may not be supplied.` }, { status: 400, headers: { "Cache-Control": "no-store" } });
+  }
 
   const state = body.state;
-  if (!isSchematicState(state)) {
-    return Response.json(
-      { ok: false, error: "Body must include a `state` with components/kicadComponents." },
-      { status: 400 },
-    );
-  }
+  const stateCheck = checkBomState(state); // [B19-D I5e row 19] shape and table bounds before any lookup
+  if (!stateCheck.ok) return bomStateRefusal(stateCheck);
 
   const pricingChoice = normalizeChoice(body.pricingChoice);
   const forceRefresh = body.forceRefresh === true;
 
   try {
-    const result = await buildBomRows(state, pricingChoice, forceRefresh);
+    // [B19-E E5 review] the workbench's line badge: this authenticated read is the one build that reads the catalog status
+    const result = await buildBomRows(stateCheck.state, pricingChoice, { live: true, forceRefresh }, { catalogStatus: true });
     return Response.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return Response.json({ ok: false, error: message }, { status: 500 });
+    return bomFailure("api/bom", err);
   }
 });

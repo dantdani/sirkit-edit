@@ -9,8 +9,8 @@ export class QuantityError extends Error {
 
 type UnitDefinition = { dimension: QuantityDimension; factor: number; offset?: number; canonical: string };
 
+// [B19-D I5d row 50] no empty unit: "no unit" and "forgot the unit" were the same key. Dimensionless is written "1".
 const UNITS: Record<string, UnitDefinition> = {
-  "": { dimension: "dimensionless", factor: 1, canonical: "1" },
   "1": { dimension: "dimensionless", factor: 1, canonical: "1" },
   "%": { dimension: "dimensionless", factor: 0.01, canonical: "1" },
   V: { dimension: "voltage", factor: 1, canonical: "V" },
@@ -68,10 +68,24 @@ const UNITS: Record<string, UnitDefinition> = {
 
 function unitDefinition(unit: string): UnitDefinition {
   const normalized = unit.trim().replace(/^μ/, "µ");
-  const definition = UNITS[normalized];
+  if (normalized === "") throw new QuantityError('A unit is required (write "1" for a dimensionless value)');
+  // own entries only; compatibility forms (the Ohm sign, the degree-Celsius sign) are not silently folded into units
+  const definition = Object.hasOwn(UNITS, normalized) ? UNITS[normalized] : undefined;
   if (!definition) throw new QuantityError(`Unsupported engineering unit: ${unit}`);
   return definition;
 }
+
+/**
+ * [B19-D I5d row 50] Spellings whose source text reads as a different magnitude than the unit claims: `10K` is ten kilo-ohms
+ * on a schematic, not ten kelvin; `MF`/`MFD` is the legacy microfarad, not a millifarad; `1M` after a digit is mega. The
+ * extractor must say which it meant — with a unit whose source text agrees — rather than have the quantity guess.
+ */
+const AMBIGUOUS_SOURCE_TEXT: ReadonlyArray<{ units: ReadonlySet<string>; pattern: RegExp; reason: string }> = [
+  { units: new Set(["K"]), pattern: /\d[Kk](?![A-Za-z])|\d\s+k(?![A-Za-z])/, reason: "a digit followed by K, or by a lower-case k, reads as kilo, not kelvin" },
+  { units: new Set(["mF"]), pattern: /[Mm][Ff][Dd]|(?:^|[\d\s])MF(?![A-Za-z])/, reason: "MF and MFD are the legacy microfarad spellings" },
+  { units: new Set(["m"]), pattern: /\dM(?![A-Za-z])/, reason: "M after a digit reads as mega" },
+  { units: new Set(["MΩ", "Mohm"]), pattern: /\d\s*m(?:[Ω\u2126]|[Oo][Hh][Mm])/, reason: "a lower-case m before the ohm is milli" },
+];
 
 function finite(value: number | undefined, field: string): number | undefined {
   if (value === undefined) return undefined;
@@ -92,10 +106,16 @@ export function quantity(input: {
   max?: number;
   toleranceMinus?: number;
   tolerancePlus?: number;
+  /** [B19-D I5d row 50] a symmetric tolerance as a percentage of the nominal value (e.g. 1 for "1 %") */
+  tolerancePercent?: number;
   unit: string;
   sourceText: string;
 }): Quantity {
   const definition = unitDefinition(input.unit);
+  const normalizedUnit = input.unit.trim().replace(/^μ/, "µ");
+  for (const rule of AMBIGUOUS_SOURCE_TEXT) {
+    if (rule.units.has(normalizedUnit) && rule.pattern.test(input.sourceText)) throw new QuantityError(`The unit ${normalizedUnit} is ambiguous with its source text: ${rule.reason}`);
+  }
   const normalized: Quantity = {
     dimension: definition.dimension,
     sourceText: input.sourceText,
@@ -112,6 +132,16 @@ export function quantity(input: {
   normalized.tolerancePlus = finite(input.tolerancePlus, "tolerancePlus") === undefined
     ? undefined
     : Math.abs(input.tolerancePlus!) * definition.factor;
+  const percent = finite(input.tolerancePercent, "tolerancePercent");
+  if (percent !== undefined) {
+    if (percent < 0) throw new QuantityError("tolerancePercent must not be negative");
+    if (input.toleranceMinus !== undefined || input.tolerancePlus !== undefined) throw new QuantityError("Give tolerancePercent or absolute tolerances, not both");
+    if (input.value === undefined) throw new QuantityError("tolerancePercent needs a nominal value");
+    if (definition.offset) throw new QuantityError("tolerancePercent is not defined for an offset unit; give an absolute tolerance");
+    const delta = (Math.abs(input.value) * definition.factor * percent) / 100;
+    normalized.toleranceMinus = delta;
+    normalized.tolerancePlus = delta;
+  }
 
   const ordered = [normalized.min, normalized.typical, normalized.max]
     .filter((item): item is number => item !== undefined);

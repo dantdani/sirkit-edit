@@ -25,13 +25,13 @@ import { loadEnvLocal } from "../app/lib/load-env-local";
 import { eq, sql } from "drizzle-orm";
 import { getDb, getSqlClient } from "../app/lib/db/client";
 import { libraries, parts, type NewPart } from "../app/lib/db/schema";
-import { extractLibrary, type ExtractedSymbol } from "../app/lib/kicad/extract";
+import { extractLibrary, symbolsSafeToIngest, type ExtractedSymbol } from "../app/lib/kicad/extract";
 import { categorizeLib } from "../app/lib/kicad/categories";
 import { embedBatch, MAX_EMBED_BATCH_SIZE } from "../app/lib/embeddings";
+import { ensurePinnedCheckout, KICAD_LIBRARY_PINS } from "../app/lib/kicad/pinned-checkout";
 
 const execFileAsync = promisify(execFile);
 
-const KICAD_SYMBOLS_REPO = "https://gitlab.com/kicad/libraries/kicad-symbols.git";
 const DATA_DIR = join(process.cwd(), "data", "kicad-symbols");
 
 // Bump when the parsing/extraction logic changes — it is folded into each
@@ -51,18 +51,18 @@ const summary = {
 
 // ─── Step 1: source checkout ────────────────────────────────────────────────
 
+// [B19-D I5e review] the checkout is the reviewed, pinned commit — never upstream HEAD (a failure stops the ingest)
 async function ensureKicadSymbolsCloned(): Promise<void> {
-  if (existsSync(join(DATA_DIR, ".git"))) {
-    console.log("[ingest] kicad-symbols already cloned — pulling latest…");
-    try {
-      await execFileAsync("git", ["-C", DATA_DIR, "pull", "--ff-only"]);
-    } catch (err) {
-      console.warn("[ingest] git pull failed (continuing with local copy):", messageOf(err));
-    }
-    return;
-  }
-  console.log(`[ingest] cloning ${KICAD_SYMBOLS_REPO} → ${DATA_DIR} …`);
-  await execFileAsync("git", ["clone", "--depth", "1", KICAD_SYMBOLS_REPO, DATA_DIR]);
+  const pin = KICAD_LIBRARY_PINS.symbols;
+  console.log(`[ingest] kicad-symbols: ensuring pinned commit ${pin.commit} (${pin.committedAt})…`);
+  const result = await ensurePinnedCheckout({
+    directory: DATA_DIR,
+    repository: pin.repository,
+    commit: pin.commit,
+    git: async (args) => (await execFileAsync("git", [...args], { maxBuffer: 64 * 1024 * 1024 })).stdout,
+    exists: existsSync,
+  });
+  console.log(`[ingest] kicad-symbols at ${result.commit}${result.fetched ? " (fetched)" : ""}`);
 }
 
 // ─── Step 2: extension ──────────────────────────────────────────────────────
@@ -159,7 +159,11 @@ async function ingestLibraryUnit(unit: LibraryUnit): Promise<void> {
 
   // Extract every part in the library, resolving `extends` inheritance. Returns
   // one symbol per unique name (already the upsert key).
-  const symbols: ExtractedSymbol[] = extractLibrary(contents);
+  // [B19-D I5d review] a symbol with an extraction issue (duplicate name, cyclic/dangling/cut extends chain, missing block)
+  // is skipped and reported, never upserted silently
+  const extraction = symbolsSafeToIngest(extractLibrary(contents));
+  const symbols: ExtractedSymbol[] = extraction.accepted;
+  for (const skipped of extraction.skipped) console.warn(`[ingest] ${name}: skipped symbol ${JSON.stringify(skipped.name).slice(0, 120)} (${skipped.codes.join(", ")})`);
 
   // Upsert the library row and get its id — but DO NOT stamp the new fileHash
   // yet. The hash is the "fully ingested" marker; writing it before the parts

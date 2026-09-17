@@ -36,7 +36,7 @@ import { validateFullFlowProject } from "@/app/lib/full-flow/project";
 
 /** Persisted, user-visible AI interaction — never keys, never hidden reasoning. */
 export type StoredChatMessage =
-  | { id: string; role: "user" | "assistant"; content: string }
+  | { id: string; role: "user" | "assistant"; content: string; /** [B19-D I5e row 32] another model's output, shown but not resent */ advisory?: boolean }
   | { id: string; role: "log"; title: string; status: "running" | "done" | "error"; entries: { id: string; text: string; status: "running" | "done" | "error" }[] };
 
 /**
@@ -402,6 +402,8 @@ export function saveProjectFields(
 }
 
 export function saveProject(project: SavedProject): SavedProject {
+  // [B19-D I5e review] the long-standing contract, kept: the record is written, and an index write the browser refuses is not
+  // fatal (an unlisted record still loads through the current-project pointer, and autosave keeps working)
   const updated: SavedProject = { ...project, updatedAt: Date.now() };
   try {
     localStorage.setItem(STORAGE_PREFIX + updated.id, JSON.stringify(updated));
@@ -411,6 +413,35 @@ export function saveProject(project: SavedProject): SavedProject {
     }
   } catch {
     // quota exceeded or unavailable
+  }
+  return updated;
+}
+
+/**
+ * [B19-D I5e row 13] `saveProject` that REPORTS failure: `null` when browser storage refused the record or the project index
+ * (quota exceeded, storage unavailable). Callers that tell a person "saved" or "imported" must use this one.
+ * [B19-D I5e review] A failed save undoes only its own write: a record this call created is removed again (nothing is left
+ * half-listed), and a record that was already stored is put back exactly as it was, never deleted.
+ */
+export function trySaveProject(project: SavedProject): SavedProject | null {
+  const updated: SavedProject = { ...project, updatedAt: Date.now() };
+  const key = STORAGE_PREFIX + updated.id;
+  let previous: string | null;
+  try {
+    previous = localStorage.getItem(key);
+    localStorage.setItem(key, JSON.stringify(updated));
+  } catch {
+    return null;
+  }
+  try {
+    const index = getIndex();
+    if (!index.includes(updated.id)) localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify([...index, updated.id]));
+  } catch {
+    try {
+      if (previous === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, previous);
+    } catch { /* storage unavailable: nothing more to undo */ }
+    return null;
   }
   return updated;
 }
@@ -695,7 +726,7 @@ export function isStoredChatMessage(v: unknown): v is StoredChatMessage {
   if (typeof v !== "object" || v === null) return false;
   const m = v as Record<string, unknown>;
   if (typeof m["id"] !== "string") return false;
-  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string";
+  if (m["role"] === "user" || m["role"] === "assistant") return typeof m["content"] === "string" && (m["advisory"] === undefined || typeof m["advisory"] === "boolean");
   if (m["role"] !== "log") return false;
   return typeof m["title"] === "string"
     && (m["status"] === "running" || m["status"] === "done" || m["status"] === "error")

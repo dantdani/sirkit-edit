@@ -29,7 +29,9 @@ import { AGENT_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT_VERSION } from "@/app/lib/prom
 import { buildAgentResourceBundle } from "@/app/lib/agent/context";
 import { loadRunComponentAuthority } from "@/app/lib/engineering/component-authority-source";
 import { resolveComponentAuthoritySource } from "./component-authority-runtime";
-import { loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
+import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
+import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
+import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { agentRunTraceDigest, validateAgentRunTrace } from "@/app/lib/agent/trace";
@@ -268,6 +270,11 @@ export const POST = agentStreamRoute(
     ? { autonomy, authClass: context.authMethod }
     : null;
   const executionGrantsAvailable = minterAuthority !== null;
+  // [B19-E E6] ONE server fact decides whether this run has the external read tools: a port resolved through the approved
+  // runtime boundary. The SAME resolution feeds the gateway (the port) and both context assemblies (the fact); whether a live
+  // vendor lookup may happen is the server's policy (a human principal only), never the body's or the model's.
+  const externalAcquisition = resolveExternalAcquisitionPort({ live: context.actor.actorKind === "human" });
+  const externalAcquisitionAvailable = externalAcquisition !== null;
 
   const assembly = assembleAgentRunContext({
     ...requestScope,
@@ -282,6 +289,7 @@ export const POST = agentStreamRoute(
     view: body.viewContext,
     autonomy,
     executionGrantsAvailable,
+    externalAcquisitionAvailable, // [B19-E E6]
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -339,6 +347,7 @@ export const POST = agentStreamRoute(
           view: body.viewContext,
           autonomy,
           executionGrantsAvailable,
+          externalAcquisitionAvailable, // [B19-E E6]
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -381,8 +390,10 @@ export const POST = agentStreamRoute(
     ...(executionGrants ? { executionGrants } : {}),
     // [B18-C] pinned into every grant's origin; the dispatch refuses without it.
     promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
+    // [B19-E E6] the external acquisition port (the same resolution as the context's availability fact)
+    ...(externalAcquisition ? { externalAcquisition } : {}),
     ...(replacementFactsSource
-      ? { replacementPinFacts: (atomicPartRevisionId: string) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal) }
+      ? { replacementPinFacts: (atomicPartRevisionId: string, role: ReplacementPinFactsRole) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) } // [B19-E E5] current or target
       : {}),
     // [B17-F] the SAME local FreeRouting pass executor the autoroute route
     // uses, bound to this request's signal and the tool's deadline; an

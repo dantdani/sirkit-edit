@@ -159,6 +159,30 @@ describe("B14 §H — the ACTUAL /api/chat handler produces the sealed replaceme
     expect(schematicStateDigest(SCHEMATIC)).toBe(schematicStateDigest(chatBody().schematicState));
   });
 
+  it("52a. [B19-E E5 review] the ACTUAL route forwards each pin-fact role to the source: current for the instance, target for the authority", async () => {
+    // current pins are read from the revision being left (even a withdrawn one); target pins only from a selectable revision.
+    // This source serves each revision ONLY in its own role: a dropped role (defaulting to target) or a swapped one cannot seal.
+    const aggregate = await validApprovedAggregate(COMPONENT, { scopeOverrides: ROUTE_BOARD_SCOPE });
+    setComponentAuthoritySourceFactory(() => ({
+      bindings: { async loadForComponent() { return [aggregate]; } },
+      atomic: matchingAtomicConfirmer(),
+    }));
+    const calls: Array<[string, string | undefined]> = [];
+    setReplacementPinFactsSourceFactory(() => ({
+      loadPinFacts: async (revision, _signal, role) => {
+        calls.push([revision, role]);
+        if (revision === "rev-current" && role === "current") return CURRENT_FACTS;
+        if (revision === FIXTURE_EXACT.atomicPartRevisionId && role === "target") return TARGET_FACTS;
+        return null;
+      },
+    }));
+    const events = await runChat();
+    expect(calls).toEqual([["rev-current", "current"], [FIXTURE_EXACT.atomicPartRevisionId, "target"]]);
+    const ready = events.find((event) => event.type === "proposal_ready");
+    expect(ready, JSON.stringify(events.map((event) => event.type))).toBeTruthy();
+    expect((ready!.proposal as SealedReplacementProposal).impact.droppedConnections).toEqual([]);
+  });
+
   it("52b. without the durable authority source the tool is withheld from the ACTUAL run", async () => {
     setComponentAuthoritySourceFactory(() => null);
     const events = await runChat();

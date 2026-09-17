@@ -13,6 +13,7 @@
  * the principal's earlier live grant for that editor. Unavailable storage
  * mints nothing (never a preview record either).
  */
+import { renderUnknownError } from "../agent/redaction"; // [B19-D I5e row 30]
 import { randomBytes } from "node:crypto";
 import type { AgentAutonomySetting } from "../engineering/permission-tiers";
 import { decideAgentExecution } from "../engineering/permission-tiers";
@@ -136,8 +137,8 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
         try {
           resolved = await resolveReplayReference({ store, scope, principalId: ctx.principalId, editor: request.session.editor, base: request.base.pcb, direction: plan.replayDirection, now: now() });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          return { ok: false, reason: "grant_unavailable", diagnostics: [`The execution grant store is unavailable (${message.slice(0, 120)}); nothing was minted and nothing changed.`] };
+          // [B19-D I5e row 30] the diagnostic reaches the model: the store's own error text is rendered through the redactor
+          return { ok: false, reason: "grant_unavailable", diagnostics: [`The execution grant store is unavailable (${renderUnknownError(error, 120)}); nothing was minted and nothing changed.`] };
         }
         if (!resolved.ok) return { ok: false, reason: "nothing_to_replay", diagnostics: resolved.diagnostics };
         replay = resolved.replay;
@@ -193,8 +194,7 @@ export function createExecutionGrantMinter(ctx: MinterContext): ExecutionGrantMi
         minted.push(record.grantId);
         return { ok: true, grant: publicExecutionGrant(record), decision, note };
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        return { ok: false, reason: "grant_unavailable", diagnostics: [`The execution grant store is unavailable (${message.slice(0, 120)}); nothing was minted and nothing changed.`] };
+        return { ok: false, reason: "grant_unavailable", diagnostics: [`The execution grant store is unavailable (${renderUnknownError(error, 120)}); nothing was minted and nothing changed.`] };
       }
     },
 

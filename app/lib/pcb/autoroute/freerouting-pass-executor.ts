@@ -7,7 +7,7 @@
  */
 import { createHash } from "crypto";
 import type { PcbBoard, Track, Via } from "../types";
-import { boardToDsn, writeDsn } from "../dsn/write-dsn";
+import { boardToDsn, DsnEmitError, writeDsn } from "../dsn/write-dsn";
 import { parseSes, SesImportError, type SesLayerUsage } from "../dsn/read-ses";
 import { validateDsn } from "../dsn/preflight";
 import type { DsnBoard } from "../dsn/types";
@@ -153,7 +153,8 @@ export function createFreeroutingPassExecutor(input: { runtimeInfo: FreeroutingR
         authoritativeSourceRevision: pass.requestedSourceRevision,
         sourceRevision: pass.requestedSourceRevision,
         phase: "file",
-        error: `DSN generation failed: ${errMsg(error)}`,
+        // [B19-D I5e review] a token the writer refuses came from the caller's board: an input refusal, not an engine failure
+        error: error instanceof DsnEmitError ? `DSN input refused: ${error.message}` : `DSN generation failed: ${errMsg(error)}`,
         elapsedMs: 0,
         evidence: { router: routerEvidence, processStatus: "not-started", outputFileStatus: "not-checked", parserStatus: "not-run", semanticStatus: "not-run" },
       };

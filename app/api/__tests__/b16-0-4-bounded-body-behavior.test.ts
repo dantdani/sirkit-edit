@@ -51,7 +51,8 @@ const ROUTES: RouteCase[] = [
   { family: "spice-ai", path: "/api/spice/ai", handler: spiceAi, auth: "authenticated" },
   { family: "requirements", path: "/api/requirements/compile", handler: requirementsCompile, auth: "authenticated" },
   { family: "spice-compile", path: "/api/spice/compile", handler: spiceCompile, auth: "public" },
-  { family: "bom", path: "/api/bom", handler: bomRoute, auth: "public" },
+  // [B19-B I2] /api/bom prices LIVE (metered vendor quota): an authenticated project read. Every contract below still holds.
+  { family: "bom", path: "/api/bom", handler: bomRoute, auth: "authenticated" },
   { family: "public-misc", path: "/api/parts/search", handler: partsSearch, auth: "public" },
   { family: "worker", path: "/api/assignment-queue/materialize", handler: assignmentMaterialize, auth: "worker" },
 ];

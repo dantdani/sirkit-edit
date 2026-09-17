@@ -11,10 +11,36 @@
 export type SExpr = string | number | SExpr[];
 
 /**
- * Parse a full S-expression document into a tree.
- * Throws on malformed input (unterminated string/list, stray characters).
+ * [B19-D I5d row 46] The deepest list nesting accepted. Real KiCad symbol and footprint files nest a handful of levels; the
+ * atomic ingestion preflight (`assertBoundedSExpression`) uses the same bound. The parser is iterative, so a hostile file
+ * gets this refusal instead of a stack overflow.
  */
-export function parseSExp(input: string): SExpr {
+export const SEXP_MAX_DEPTH = 160;
+
+export interface SExpParseOptions {
+  /** deepest list nesting accepted (default {@link SEXP_MAX_DEPTH}) */
+  maxDepth?: number;
+}
+
+/**
+ * Parse a full S-expression document into a tree. The document is exactly one expression: content after it is refused.
+ * Throws on malformed input (unterminated string/list, stray characters, trailing content, nesting beyond the bound).
+ */
+export function parseSExp(input: string, options: SExpParseOptions = {}): SExpr {
+  const forms = parseForms(input, options.maxDepth ?? SEXP_MAX_DEPTH, true);
+  if (forms.length !== 1) throw new Error("S-expression parse error at offset 0: the document is empty");
+  return forms[0];
+}
+
+/**
+ * [B19-D I5d row 46] Parse a sequence of top-level expressions (a `.kicad_dru` file is a list of forms, not one list). A
+ * stray `)` is an error, never the silent end of a synthetic wrapper.
+ */
+export function parseSExpForms(input: string, options: SExpParseOptions = {}): SExpr[] {
+  return parseForms(input, options.maxDepth ?? SEXP_MAX_DEPTH, false);
+}
+
+function parseForms(input: string, maxDepth: number, single: boolean): SExpr[] {
   let pos = 0;
 
   function fail(message: string): never {
@@ -24,7 +50,8 @@ export function parseSExp(input: string): SExpr {
   function skipWhitespace(): void {
     while (pos < input.length) {
       const ch = input[pos];
-      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r") {
+      // a U+FEFF byte-order mark is trivia, as in the lossless reader (`pcb/sexpr.ts`), so both readers split a file alike
+      if (ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\uFEFF") {
         pos++;
       } else {
         break;
@@ -64,7 +91,7 @@ export function parseSExp(input: string): SExpr {
     while (pos < input.length) {
       const ch = input[pos];
       if (
-        ch === " " || ch === "\t" || ch === "\n" || ch === "\r" ||
+        ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\uFEFF" ||
         ch === "(" || ch === ")" || ch === '"'
       ) {
         break;
@@ -80,29 +107,33 @@ export function parseSExp(input: string): SExpr {
     return text;
   }
 
-  function parseList(): SExpr[] {
-    pos++; // consume "("
-    const items: SExpr[] = [];
-    while (pos < input.length) {
-      skipWhitespace();
-      const ch = input[pos];
-      if (ch === ")") { pos++; return items; }
-      if (ch === undefined) break;
-      items.push(parseNode());
-    }
-    fail("unterminated list");
-  }
-
-  function parseNode(): SExpr {
+  // Iterative: an explicit stack of open lists replaces recursion, so nesting depth is a checked number, not the call stack.
+  const forms: SExpr[] = [];
+  const open: SExpr[][] = [];
+  const place = (node: SExpr): void => {
+    if (open.length > 0) open[open.length - 1].push(node);
+    else forms.push(node);
+  };
+  for (;;) {
     skipWhitespace();
+    if (pos >= input.length) break;
     const ch = input[pos];
-    if (ch === "(") return parseList();
-    if (ch === '"') return parseQuotedString();
-    return parseAtom();
+    if (single && open.length === 0 && forms.length > 0) fail("unexpected content after the top-level expression");
+    if (ch === "(") {
+      if (open.length >= maxDepth) fail(`nesting depth exceeds ${maxDepth}`);
+      open.push([]);
+      pos++;
+    } else if (ch === ")") {
+      const closed = open.pop();
+      if (!closed) fail("unexpected ')'");
+      pos++;
+      place(closed);
+    } else {
+      place(ch === '"' ? parseQuotedString() : parseAtom());
+    }
   }
-
-  skipWhitespace();
-  return parseNode();
+  if (open.length > 0) fail("unterminated list");
+  return forms;
 }
 
 // ─── Tree-navigation helpers ────────────────────────────────────────────────

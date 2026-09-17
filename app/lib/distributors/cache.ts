@@ -1,69 +1,108 @@
 /**
- * In-memory pricing cache, keyed by `${distributor}:${mpn}`.
+ * Pricing caches: an in-memory per-MPN memo, and the persistent `part_offers` table.
  *
- * The full distributor response (a `PartPricing`) is cached as one unit. The
- * spec calls for tiered freshness — stock 1h, pricing 24h, metadata 7d — but a
- * `PartPricing` bundles all three, and serving a half-stale object would mean
- * silently returning hour-old stock under a 24h pricing window. So we collapse
- * to a single, per-distributor TTL chosen to honor the *binding* constraint for
- * each source:
- *
- *   - DigiKey: STOCK_TTL (1h). Its 1000 req/day budget is generous, so we
- *     prefer fresh stock and refetch hourly.
- *   - Octopart: PRICING_TTL (24h). Its ~1000 queries/MONTH quota is the binding
- *     constraint, so we cache aggressively and tolerate day-old stock.
- *
- * In-memory only — resets on dev server restart. Production would move this to
- * Redis or the DB; not needed for the MVP.
+ * [B19-A I3] How long an offer may be served and kept is no longer chosen here: it comes from the source registry
+ * (`app/lib/acquisition/source-registry.ts`), which records each vendor's current terms.
+ *   - DigiKey: served 1 h, kept 1 h (no database may be built from its data; retention unstated — OD-33).
+ *   - Octopart via Nexar: served and kept at most 24 h, the limit its terms set.
+ *   - Mouser: never memoized, never persisted — its terms prohibit caching or storing its content.
+ *   - an unregistered source: never served, and purged.
+ * Every reader of stored offers applies `isOfferServable`, and `purgeExpiredOffers` deletes what may no longer be kept.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, ne, not, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { partOffers, type PartOffer } from "../db/schema";
-import { cheapestUnitPrice, type DistributorName, type PartPricing, type PriceBreak } from "./types";
+import { partOffers, parts, type PartOffer } from "../db/schema";
+import { cheapestUnitPrice, type DistributorName, type LookupPurpose, type PartPricing, type PriceBreak } from "./types";
+import { SOURCE_IDS, SOURCE_REGISTRY, sourceForDistributorName } from "../acquisition/source-registry";
+import { canonicalExactMpn } from "../atomic/identity";
 
 export const STOCK_TTL_MS = 60 * 60 * 1000; // 1 hour
 export const PRICING_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const METADATA_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (informational)
 
-/** TTLs for the persistent (part_offers) cache. */
-type CacheTTLs = { pricing: number };
-const DEFAULT_TTLS: CacheTTLs = { pricing: 24 * 60 * 60 * 1000 }; // 24h
 
-/** Per-distributor effective TTL. See the module doc for the rationale. */
-export function ttlFor(distributor: DistributorName): number {
-  return distributor === "digikey" ? STOCK_TTL_MS : PRICING_TTL_MS;
+/**
+ * Per-distributor effective TTL. [B19-A I3] Taken from the source registry: DigiKey 1 h, Nexar 24 h (its terms' storage
+ * limit), and 0 — never cached — for a source whose terms prohibit storage (Mouser) or that is not registered.
+ */
+export function ttlFor(distributor: DistributorName | string): number {
+  const entry = sourceForDistributorName(distributor);
+  return entry && entry.license.storage === "bounded" ? entry.freshness.offerTtlMs : 0;
 }
 
 type Entry = { value: PartPricing; expiresAt: number };
 
 const store = new Map<string, Entry>();
 
-function keyOf(distributor: DistributorName, mpn: string): string {
-  return `${distributor}:${mpn.toLowerCase()}`;
-}
-
-/** Fresh cached value for this distributor+mpn, or null on miss/expiry. */
-export function getCached(distributor: DistributorName, mpn: string): PartPricing | null {
-  const hit = store.get(keyOf(distributor, mpn));
-  if (!hit) return null;
-  if (Date.now() >= hit.expiresAt) {
-    store.delete(keyOf(distributor, mpn));
+/**
+ * [B19-D I5b review] A memo key is the canonical exact MPN; a confusable spelling has no key and is never memoized, so it can
+ * never be answered from the plain MPN's entry (Unicode case-folding turned a Kelvin sign K into k).
+ */
+function keyOf(distributor: DistributorName | string, mpn: string): string | null {
+  try {
+    return `${distributor}:${canonicalExactMpn(mpn)}`;
+  } catch {
     return null;
   }
-  return hit.value;
+}
+
+/** [B19-D I5b review] "The vendor has no exact product for this MPN", remembered for the source's freshness. */
+const noExactMatch = new Map<string, number>();
+
+export function rememberNoExactMatch(distributor: DistributorName, mpn: string): void {
+  const key = keyOf(distributor, mpn);
+  const ttl = ttlFor(distributor);
+  if (key && ttl > 0) noExactMatch.set(key, Date.now() + ttl);
+}
+
+export function isKnownNoExactMatch(distributor: DistributorName, mpn: string): boolean {
+  const key = keyOf(distributor, mpn);
+  if (!key) return false;
+  const until = noExactMatch.get(key);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    noExactMatch.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/** [B19-E E1] When the vendor answered: the recorded retrieval, else the fetch time; never later than now. */
+export function offerRetrievedAt(offer: PartPricing, now: number = Date.now()): number {
+  const at = offer.provenance?.retrievedAt ?? offer.evidence?.retrievedAt ?? offer.fetchedAt;
+  return Number.isFinite(at) ? Math.min(at, now) : now;
+}
+
+/** Fresh cached value for this distributor+mpn, or null on miss/expiry. [B19-E E1] Labelled as a memo answer. */
+export function getCached(distributor: DistributorName, mpn: string): PartPricing | null {
+  const key = keyOf(distributor, mpn);
+  if (!key) return null;
+  const hit = store.get(key);
+  if (!hit) return null;
+  if (Date.now() >= hit.expiresAt) {
+    store.delete(key);
+    return null;
+  }
+  return { ...hit.value, provenance: { servedFrom: "process-memo", retrievedAt: offerRetrievedAt(hit.value) } };
 }
 
 export function setCached(distributor: DistributorName, mpn: string, value: PartPricing): void {
-  store.set(keyOf(distributor, mpn), {
-    value,
-    expiresAt: Date.now() + ttlFor(distributor),
-  });
+  if (ttlFor(distributor) <= 0) return; // [B19-A I3] a source whose terms prohibit storage is never memoized
+  const key = keyOf(distributor, mpn);
+  if (!key) return;
+  // [B19-E E1] the memo expires a freshness window after the vendor answered, not after it was memoized
+  const expiresAt = offerRetrievedAt(value) + ttlFor(distributor);
+  if (expiresAt <= Date.now()) return;
+  store.set(key, { value, expiresAt });
 }
 
 /** Drop a single in-memory entry — used by forceRefresh to compel a live fetch. */
 export function evictCached(distributor: DistributorName, mpn: string): void {
-  store.delete(keyOf(distributor, mpn));
+  const key = keyOf(distributor, mpn);
+  if (!key) return;
+  store.delete(key);
+  noExactMatch.delete(key); // a forced refresh asks the vendor again
 }
 
 /**
@@ -75,16 +114,17 @@ export function evictCached(distributor: DistributorName, mpn: string): void {
  */
 export function makeCachedLookup(
   distributor: DistributorName,
-  fetcher: (mpn: string) => Promise<PartPricing | null>,
+  fetcher: (mpn: string, purpose?: LookupPurpose) => Promise<PartPricing | null>,
 ): {
-  lookup: (mpn: string) => Promise<PartPricing | null>;
+  lookup: (mpn: string, purpose?: LookupPurpose) => Promise<PartPricing | null>;
   wasCached: (mpn: string) => boolean;
 } {
   return {
-    async lookup(mpn: string): Promise<PartPricing | null> {
+    async lookup(mpn: string, purpose?: LookupPurpose): Promise<PartPricing | null> {
       const cached = getCached(distributor, mpn);
       if (cached) return cached;
-      const fresh = await fetcher(mpn);
+      if (isKnownNoExactMatch(distributor, mpn)) return null; // [B19-D I5b review] remembered: no exact product
+      const fresh = await fetcher(mpn, purpose); // [B19-E E6] a miss is metered for whom it is looked up
       if (fresh) setCached(distributor, mpn, fresh);
       return fresh;
     },
@@ -96,6 +136,7 @@ export function makeCachedLookup(
 
 /** Test/maintenance hook — clears the whole cache. */
 export function clearPricingCache(): void {
+  noExactMatch.clear();
   store.clear();
 }
 
@@ -126,7 +167,10 @@ function lruGet(key: string): PartPricing | null {
 
 function lruSet(key: string, value: PartPricing): void {
   if (lru.has(key)) lru.delete(key);
-  lru.set(key, { value, expiresAt: Date.now() + LRU_TTL_MS });
+  // [B19-A I3] never past the source's own freshness: a memo may not outlive what the offer cache itself would serve
+  const sourceExpiry = value.fetchedAt + ttlFor(value.distributor);
+  if (sourceExpiry <= Date.now()) return;
+  lru.set(key, { value, expiresAt: Math.min(Date.now() + LRU_TTL_MS, sourceExpiry) });
   while (lru.size > LRU_MAX) {
     const oldest = lru.keys().next().value;
     if (oldest === undefined) break;
@@ -141,7 +185,7 @@ function offerRowToPricing(row: PartOffer): PartPricing {
     // The union is wider than the stored string; the writers only ever persist
     // valid distributor names, so this cast is safe.
     distributor: row.distributor as PartPricing["distributor"],
-    mpn: "", // unknown from the row alone — the aggregator fills it from input
+    mpn: row.mpn ?? "", // [B19-D I5b] the exact MPN stored with the offer; "" (never matches) for rows stored before 0029
     manufacturer: null,
     description: null,
     datasheet: null,
@@ -155,12 +199,59 @@ function offerRowToPricing(row: PartOffer): PartPricing {
     lifecycleStatus: row.lifecycleStatus ?? "unknown",
     lifecycleRaw: row.lifecycleRaw ?? null,
     fetchedAt: row.lastRefreshedAt ? new Date(row.lastRefreshedAt).getTime() : Date.now(),
+    // [B19-E E1] a stored row was served from the offer cache; its stamp is when the vendor answered
+    provenance: { servedFrom: "offer-cache", retrievedAt: row.lastRefreshedAt ? new Date(row.lastRefreshedAt).getTime() : 0 },
   };
 }
 
-function isFresh(lastRefreshedAt: Date | null): boolean {
-  const ts = lastRefreshedAt ? new Date(lastRefreshedAt).getTime() : 0;
-  return Date.now() - ts < DEFAULT_TTLS.pricing;
+/**
+ * [B19-A I3] The ONE rule every reader of stored offers applies: a row is served only while it is within its source's
+ * registered freshness. A no-storage source, an unregistered source and a row without a timestamp are never served.
+ */
+export function isOfferServable(distributor: string, lastRefreshedAt: Date | null, now: number = Date.now()): boolean {
+  if (!lastRefreshedAt) return false;
+  const ttl = ttlFor(distributor);
+  if (ttl <= 0) return false;
+  return now - new Date(lastRefreshedAt).getTime() < ttl;
+}
+
+/**
+ * [B19-A I3] Delete every stored offer its source's terms no longer allow Sirkit to keep: rows older than a bounded
+ * source's retention, and every row of a no-storage or unregistered source. Returns the number of rows deleted.
+ */
+export async function purgeExpiredOffers(now: Date = new Date()): Promise<number> {
+  const db = getDb();
+  const keep = SOURCE_IDS.map((id) => SOURCE_REGISTRY[id])
+    .filter((entry) => entry.license.storage === "bounded" && entry.license.retentionMaxMs > 0)
+    .map((entry) => and(eq(partOffers.distributor, entry.distributorName), gte(partOffers.lastRefreshedAt, new Date(now.getTime() - entry.license.retentionMaxMs))));
+  const kept = or(...keep);
+  const deleted = kept
+    ? await db.delete(partOffers).where(not(kept)).returning({ id: partOffers.id })
+    : await db.delete(partOffers).returning({ id: partOffers.id });
+  // [B19-D I5b row 03] a lifecycle status the pricing layer derived from vendor offers (it stamps `last_refreshed_at`) expires
+  // with them: its provenance mixes sources, so it is kept no longer than the STRICTEST bounded retention. KiCad-derived
+  // statuses carry no stamp and are untouched.
+  const strictest = Math.min(...SOURCE_IDS.map((id) => SOURCE_REGISTRY[id]).filter((entry) => entry.license.storage === "bounded" && entry.license.retentionMaxMs > 0).map((entry) => entry.license.retentionMaxMs));
+  if (Number.isFinite(strictest)) {
+    await db.update(parts)
+      .set({ lifecycleStatus: "unknown", lastRefreshedAt: null })
+      .where(and(isNotNull(parts.lastRefreshedAt), lt(parts.lastRefreshedAt, new Date(now.getTime() - strictest)), ne(parts.lifecycleStatus, "unknown")));
+  }
+  return deleted.length;
+}
+
+const PURGE_INTERVAL_MS = 5 * 60 * 1000;
+let lastPurgeAt = 0;
+
+/** Purge at most every five minutes per process, on the read path, so retention holds even when no job runs. */
+async function purgeExpiredOffersThrottled(): Promise<void> {
+  if (Date.now() - lastPurgeAt < PURGE_INTERVAL_MS) return;
+  lastPurgeAt = Date.now();
+  try {
+    await purgeExpiredOffers();
+  } catch (err) {
+    console.error(`[distributors] offer purge failed (details withheld): ${err instanceof Error ? err.name : "non-error"}`);
+  }
 }
 
 /**
@@ -183,7 +274,7 @@ export async function getCachedOffer(
     .limit(1);
 
   const row = rows[0];
-  if (!row || !isFresh(row.lastRefreshedAt)) return null;
+  if (!row || !isOfferServable(row.distributor, row.lastRefreshedAt)) return null;
 
   const pricing = offerRowToPricing(row);
   lruSet(key, pricing);
@@ -196,11 +287,15 @@ export async function putCachedOffer(
   distributor: string,
   offer: PartPricing,
 ): Promise<void> {
+  // [B19-A I3] only a source the registry allows to store is ever persisted (Mouser's terms prohibit storing its content)
+  if (ttlFor(distributor) <= 0) return;
   const db = getDb();
-  const now = new Date();
+  // [B19-E E1] stamped with when the vendor answered (a memo answer is not "now"), so freshness is measured from the answer
+  const now = new Date(offerRetrievedAt(offer));
   const values = {
     partId,
     distributor,
+    mpn: offer.mpn || null, // [B19-D I5b] the exact MPN the offer answers for
     distributorSku: offer.sku ?? null,
     priceBreaks: offer.priceBreaks,
     stock: offer.inStock ?? null,
@@ -217,6 +312,7 @@ export async function putCachedOffer(
     .onConflictDoUpdate({
       target: [partOffers.partId, partOffers.distributor],
       set: {
+        mpn: values.mpn,
         distributorSku: values.distributorSku,
         priceBreaks: values.priceBreaks,
         stock: values.stock,
@@ -228,7 +324,50 @@ export async function putCachedOffer(
         lastRefreshedAt: values.lastRefreshedAt,
       },
     });
-  lruSet(lruKey(partId, distributor), offer);
+  lruSet(lruKey(partId, distributor), { ...offer, fetchedAt: now.getTime() });
+}
+
+const EXACT_MPN_ROW_LIMIT = 64;
+
+/**
+ * [B19-E E6] Stored offers for exact MPNs, whatever catalog part they were stored under: for each canonical MPN, each source's
+ * newest row — one per MPN and source, chosen in the database (DISTINCT ON), so no other row stored under the same MPN can
+ * push it out of the read — served only while still servable (`isOfferServable`). A read of `part_offers` only; a confusable
+ * spelling is never read.
+ */
+export async function getCachedOffersForExactMpns(mpns: readonly string[], now: number = Date.now()): Promise<Map<string, Map<string, PartPricing>>> {
+  const out = new Map<string, Map<string, PartPricing>>();
+  const canonical = [...new Set(mpns.flatMap((mpn) => {
+    try {
+      return [canonicalExactMpn(mpn)];
+    } catch {
+      return [];
+    }
+  }))];
+  if (canonical.length === 0) return out;
+  const canonicalMpn = sql<string>`upper(${partOffers.mpn})`;
+  const rows = await getDb()
+    .selectDistinctOn([canonicalMpn, partOffers.distributor])
+    .from(partOffers)
+    .where(inArray(canonicalMpn, canonical))
+    .orderBy(canonicalMpn, partOffers.distributor, desc(partOffers.lastRefreshedAt))
+    .limit(EXACT_MPN_ROW_LIMIT);
+  for (const row of rows) {
+    if (!row.mpn || !isOfferServable(row.distributor, row.lastRefreshedAt, now)) continue;
+    let key: string;
+    try {
+      key = canonicalExactMpn(row.mpn);
+    } catch {
+      continue;
+    }
+    if (!canonical.includes(key)) continue;
+    const inner = out.get(key) ?? new Map<string, PartPricing>();
+    const pricing = offerRowToPricing(row);
+    const kept = inner.get(row.distributor);
+    if (!kept || (kept.provenance?.retrievedAt ?? 0) < (pricing.provenance?.retrievedAt ?? 0)) inner.set(row.distributor, pricing);
+    out.set(key, inner);
+  }
+  return out;
 }
 
 /**
@@ -242,11 +381,12 @@ export async function getCachedOffersForParts(
   const ids = [...new Set(partIds)];
   if (ids.length === 0) return out;
 
+  await purgeExpiredOffersThrottled();
   const db = getDb();
   const rows = await db.select().from(partOffers).where(inArray(partOffers.partId, ids));
 
   for (const row of rows) {
-    if (!isFresh(row.lastRefreshedAt)) continue;
+    if (!isOfferServable(row.distributor, row.lastRefreshedAt)) continue;
     let inner = out.get(row.partId);
     if (!inner) {
       inner = new Map<string, PartPricing>();

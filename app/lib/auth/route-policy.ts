@@ -215,14 +215,23 @@ const ALL: RoutePolicy[] = [
 
   // ── Public reads / stateless compute (no project data, no credit, no write) ─
   ...pub("/api/ai/runtime", ["GET"], "static runtime config"),
-  ...pub("/api/bom", ["POST"], "stateless BOM compute"),
+  // [B19-B I2] live distributor pricing spends metered quota: an authenticated project read, declared as spending credit.
+  ...read("/api/bom", ["POST"], "BOM workbench with LIVE distributor pricing (metered vendor quota; trusted project scope)").map((policy) => ({ ...policy, providerCredit: true })),
+  // [B19-E E2] a member's bounded external candidate search spends the same metered quota: the /api/bom shape (OD-31).
+  ...read("/api/parts/external-search", ["POST"], "external candidate search of the enabled distributors (LIVE, metered vendor quota; at most 5 per source; nothing persisted; trusted project scope)").map((policy) => ({ ...policy, providerCredit: true })),
   ...pub("/api/bom/export-csv", ["POST"], "stateless export"),
   ...pub("/api/bom/procurement-packet", ["POST"], "stateless export"),
   ...pub("/api/bom/cart/digikey", ["POST"], "stateless cart payload (no funds)"),
   ...pub("/api/bom/cart/lcsc", ["POST"], "stateless cart payload (no funds)"),
   ...pub("/api/bom/cart/mouser", ["POST"], "stateless cart payload (no funds)"),
   ...pub("/api/components/atomic", ["GET"], "catalog read"),
+  // [B19-E E4] two-person human publication of exact atomic revisions, in the catalog governance project only (OD-37): the
+  // physical-bindings review handoff shape; per-operation roles, the governance project and a human actor are checked in-route.
+  ...read("/api/components/atomic/publication", ["GET"], "app/api/components/atomic/publication (publication requests; governance project only)"),
+  ...mutate("/api/components/atomic/publication", ["POST"], "app/api/components/atomic/publication (request, resolve, publish, withdraw; governance project only; humans only; cache-only)", { roles: REVIEW_EDITORS }),
   ...pub("/api/components/atomic/search", ["POST"], "catalog read"),
+  // [B19-E E5] a member reads the catalog status of the revisions the project pins (bounded ids, no quota, no write)
+  ...read("/api/components/revision-status", ["POST"], "app/api/components/revision-status (catalog status of pinned atomic revisions; at most 500 ids; trusted project scope)"),
   ...pub("/api/parts/search", ["POST"], "catalog read"),
   ...pub("/api/parts/categories", ["GET"], "catalog read"),
   ...pub("/api/parts/[id]", ["GET"], "catalog read"),

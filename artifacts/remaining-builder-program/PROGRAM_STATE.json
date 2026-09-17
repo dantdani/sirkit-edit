@@ -1,18 +1,19 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B18",
-  "currentCheckpoint": "B18 validation complete",
+  "currentChapter": "B19",
+  "currentCheckpoint": "B19 validation complete (final tree green: suite, tsc, eslint, generators, ratchets); closeout artifacts committed",
   "status": "in_progress",
-  "baseSha": "804a08d",
-  "branch": "chapter/b18-agent-execution",
-  "lastGreenSha": "313eafa",
+  "baseSha": "5a59a1f",
+  "branch": "chapter/b19-external-acquisition",
+  "lastGreenSha": "bf88eba",
+  "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "Mark PR #8 ready and merge normally once CI is green on the final commit; then B19 (external component and evidence acquisition).",
-  "updatedAt": "2026-09-12T10:30:00-04:00"
+  "nextAction": "B19: rewrite PR #9 description for the chapter, un-draft, merge normally after green CI on the closeout commit; then B20 (MCP consumption and Sirkit MCP exposure): re-read the current MCP specification at execution time, discovery, one branch, checkpoint loop.",
+  "updatedAt": "2026-09-17T01:03:03-04:00"
 }

@@ -126,11 +126,14 @@ describe("working-copy authority rules (Section 5)", () => {
 });
 
 describe("project file export/import (Section 6)", () => {
+  // [B19-D I5e row 14] reviewed pin move: the mock answers with the real /api/parts/[id] shape — 200 { ok: true, part } for a
+  // catalog part and 200 { ok: true, part: null } for a missing one (the route never answers 404). The old "{}" / 404 mock
+  // is what hid a missing part being counted as resolved.
   function mockPartsApi(okIds: string[]): void {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       const id = decodeURIComponent(url.split("/").pop() ?? "");
-      return new Response(okIds.includes(id) ? "{}" : "missing", { status: okIds.includes(id) ? 200 : 404 });
+      return new Response(JSON.stringify({ ok: true, part: okIds.includes(id) ? { id } : null }), { status: 200, headers: { "content-type": "application/json" } });
     }));
   }
 

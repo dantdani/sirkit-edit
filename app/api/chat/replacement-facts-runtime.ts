@@ -18,14 +18,15 @@
 import { getSqlClient } from "@/app/lib/db/client";
 import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 import { fixtureReplacementPinFactsSource } from "@/app/lib/fixture-runtime/blinker/authority";
-import type { PublishedSymbolPinFacts } from "@/app/lib/engineering/replacement-pin-facts";
+import type { PublishedSymbolPinFacts, ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import {
   loadPublishedSymbolPinFactsCancellable,
   type CancellableAuthoritySqlClient,
 } from "./authority-cancellable-reads";
 
 export interface ReplacementPinFactsSource {
-  loadPinFacts(atomicPartRevisionId: string, signal?: AbortSignal): Promise<PublishedSymbolPinFacts | null>;
+  /** [B19-E E5] `role` (default "target"): current pins are read from the revision being left, target pins only from a selectable one */
+  loadPinFacts(atomicPartRevisionId: string, signal?: AbortSignal, role?: ReplacementPinFactsRole): Promise<PublishedSymbolPinFacts | null>;
 }
 
 function productionSource(): ReplacementPinFactsSource | null {
@@ -36,7 +37,8 @@ function productionSource(): ReplacementPinFactsSource | null {
   let client: CancellableAuthoritySqlClient | null = null;
   const sql = (): CancellableAuthoritySqlClient => (client ??= getSqlClient() as unknown as CancellableAuthoritySqlClient);
   return {
-    loadPinFacts: (atomicPartRevisionId, signal) => loadPublishedSymbolPinFactsCancellable(sql(), atomicPartRevisionId, signal),
+    // [B19-E E5] a project may move OFF a withdrawn (even revoked) part, but only ONTO a published, never-withdrawn one (OD-38)
+    loadPinFacts: (atomicPartRevisionId, signal, role = "target") => loadPublishedSymbolPinFactsCancellable(sql(), atomicPartRevisionId, signal, role === "current" ? "historical" : "selectable"),
   };
 }
 
@@ -73,6 +75,7 @@ export async function loadRunReplacementPinFacts(
   atomicPartRevisionId: string,
   externalSignal?: AbortSignal,
   deadlineMs: number = DEFAULT_PIN_FACTS_DEADLINE_MS,
+  role: ReplacementPinFactsRole = "target", // [B19-E E5]
 ): Promise<PublishedSymbolPinFacts | null> {
   if (!source) return null;
   if (externalSignal?.aborted) return null; // pre-aborted → no I/O
@@ -90,7 +93,7 @@ export async function loadRunReplacementPinFacts(
     function onExternalAbort(): void { controller.abort(); settle(null); }
     const timer = setTimeout(() => { controller.abort(); settle(null); }, deadlineMs);
     externalSignal?.addEventListener("abort", onExternalAbort, { once: true });
-    source.loadPinFacts(atomicPartRevisionId, controller.signal).then(
+    source.loadPinFacts(atomicPartRevisionId, controller.signal, role).then(
       (facts) => settle(facts),
       () => settle(null),
     );

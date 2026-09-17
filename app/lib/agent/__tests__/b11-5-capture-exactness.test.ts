@@ -417,6 +417,14 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
         && !source.split("\n").some((line) =>
           /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream)\s*\(/.test(line)
           && !/\b(?:cache|config)\b/.test(line)),
+      // [B19-E E4] builds throwaway KiCad library fixtures (and a symlink or junction that leaves the library) EXCLUSIVELY
+      // under OS temp scratch roots `mkdtempSync(path.join(tmpdir(), "b19e-e4-kicad-…"))` (`root`, and `symbols` inside it);
+      // EVERY write-primitive line — the symlink included — must be rooted at one of them, or the admission lapses.
+      "b19-e-publication-boundaries.test.ts": (source) =>
+        source.includes('mkdtempSync(path.join(tmpdir(), "b19e-e4-kicad-')
+        && !source.split("\n").some((line) =>
+          /(?:writeFileSync|mkdirSync|rmSync|appendFileSync|unlinkSync|cpSync|rmdirSync|createWriteStream|symlinkSync)\s*\(/.test(line)
+          && !/\b(?:root|symbols)\b/.test(line)),
     };
 
     const offenders: string[] = [];
