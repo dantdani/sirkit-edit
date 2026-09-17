@@ -1882,3 +1882,26 @@ _(discovery, reproduction and results appended below as they are observed)_
   B19-D, B19-E and validation updated. Not run: the optional live contract check (no vendor credentials here; a run spends the
   operator's quota) — BLOCKED-LIVE-QUALIFICATION; no browser run this chapter (memory) — CI's browser job covers the committed specs.
 - Next: PR #9 description rewritten for the whole chapter, un-drafted, merged normally after green CI on the closeout commit; then B20.
+
+### B20 — chapter start and discovery (2026-09-17 local, workflow + lead; this commit)
+
+- B19 merged normally into `main` as `102dd27` (PR #9) with both workflows green on `3296753`. B20 opens from that base on
+  `chapter/b20-mcp-adapter`; the draft PR is opened with this commit so every increment gets CI.
+- References re-read live before any code was read (runbook: never a remembered or deprecated draft): the current MCP
+  revision is 2026-07-28 (stateless; `server/discover`; MRTR; no sessions; `Mcp-Method`/`Mcp-Name`/`MCP-Protocol-Version`
+  headers; `ttlMs`/`cacheScope`; error codes -32020/-32021/-32022); the TypeScript SDK 1.30.0 (latest, no prerelease) speaks
+  2025-11-25 only; Anthropic's connector (`mcp-client-2025-11-20`) and OpenAI's `type: "mcp"` tool are handshake-era, remote
+  HTTP only, tools only. Recorded in `artifacts/ai-control-plane-b20/mcp-reference-notes.md`; OD-41 (dual era, current
+  revision as the authority path) and OD-42 (no SDK dependency) recorded in `OWNER_DECISIONS.md`.
+- Discovery by six parallel read-only readers (workflow `wf_dacb9f05-091`, 7 agents, no process started): 211 facts and 69
+  gaps with file:line, synthesized into `discovery.md` and spot-checked by the lead (nine load-bearing claims re-read, all
+  as cited). 36 candidate defects D20-1 … D20-36 — among them: exposure is one boolean with no per-protocol dimension; a
+  registry-generated list would advertise the six granted Tier 1 mutations; no bearer principal, no audience validation,
+  and a missing `Origin` is refused on every authenticated POST; no server-side canonical-state source for a browser-less
+  read; view-session commands and inert proposals exist only as chat-stream events; the egress path discards response
+  headers and cannot consume an SSE stream; no OAuth 2.1 client, no token store, host-level allowlist, per-source-only quota;
+  no MCP feature flag; the CI admission guard covers `b19-` only.
+- Owner decisions the chapter needs (OD-41 … OD-59) listed with a safe default each; increments A0 … A5, B1 … B4, C1 … C3,
+  D1 … D3 planned test-first with their suites, CI lists, ratchet moves and artifacts (`discovery.md` section 7, adjusted in
+  section 9: the protected-resource metadata document and a Sirkit-issued short-lived MCP token are part of B20-B2; B5
+  view-session delivery and B6 stdio deferred by default).

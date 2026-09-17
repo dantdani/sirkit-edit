@@ -230,3 +230,27 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   source's quota window). Meters are per process, not cluster-wide.
 - The owner may choose otherwise: agent keyword search, other limits, or a shared quota meter.
 
+
+## OD-41 — Which MCP protocol era Sirkit implements (B20, 2026-09-17)
+
+- Facts read at execution time: the current specification revision is 2026-07-28 (stateless, `server/discover`, multi
+  round-trip requests, no protocol sessions, required `_meta` protocol fields, `resultType` on every result); the official
+  TypeScript SDK 1.30.0 and the Anthropic (`mcp-client-2025-11-20`) and OpenAI (`type: "mcp"`) connectors speak the previous
+  era (2025-11-25 and earlier: `initialize` handshake, `Mcp-Session-Id`, GET stream, server-initiated requests).
+- Default applied: the 2026-07-28 revision is the authority path on both sides (Sirkit's client and Sirkit's server). A
+  2025-11-25 compatibility path exists only where the specification's own backward-compatibility rules define it, behind its
+  own flag, never as the authority path; in B20 the Sirkit server is modern-only (GET/DELETE answer 405, `Mcp-Session-Id` is
+  ignored, `Last-Event-ID` is ignored), and the client falls back to the handshake era only for a server that answers a modern
+  probe with an unrecognised error.
+- The owner may choose otherwise: current revision only (no compatibility path), or handshake-era server support for the
+  provider connectors before they adopt the current revision.
+
+## OD-42 — MCP implementation dependency (B20, 2026-09-17)
+
+- Default applied: no `@modelcontextprotocol/sdk` dependency. The SDK's latest release (1.30.0, no prerelease tag) cannot speak
+  the current revision (it defines none of `server/discover`, `subscriptions/listen`, `InputRequiredResult`, `resultType`,
+  `CacheableResult`, `Mcp-Method`), so the JSON-RPC, Streamable HTTP and authorization behaviour B20 needs is implemented in
+  the repository against the specification text, on top of the existing bounded egress path and route wrappers, with fake
+  servers in tests.
+- The owner may choose otherwise: adopt the SDK for the compatibility era once it publishes a release that implements the
+  current revision.

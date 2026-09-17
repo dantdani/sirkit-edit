@@ -1,19 +1,20 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B19",
-  "currentCheckpoint": "B19 validation complete (final tree green: suite, tsc, eslint, generators, ratchets); closeout artifacts committed",
+  "currentChapter": "B20",
+  "currentCheckpoint": "B20 discovery recorded (36 candidate defects D20-1..36; increments A0..D3 planned; OD-41/OD-42 recorded)",
   "status": "in_progress",
-  "baseSha": "5a59a1f",
-  "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "bf88eba",
-  "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
+  "baseSha": "102dd27",
+  "branch": "chapter/b20-mcp-adapter",
+  "lastGreenSha": "3296753",
+  "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19: rewrite PR #9 description for the chapter, un-draft, merge normally after green CI on the closeout commit; then B20 (MCP consumption and Sirkit MCP exposure): re-read the current MCP specification at execution time, discovery, one branch, checkpoint loop.",
-  "updatedAt": "2026-09-17T01:03:03-04:00"
+  "nextAction": "B20-A0 test-first: MCP server registry (canonical URI, pinned descriptor digests, secret references by env name), generalised admission keys (server + tool), SIRKIT_MCP_ENABLED flag off, CI job-scope guard extended to b20-; then A1 transport.",
+  "updatedAt": "2026-09-17T01:44:16-04:00",
+  "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }
