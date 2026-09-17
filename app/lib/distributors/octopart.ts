@@ -21,6 +21,8 @@ import {
   type CandidateSearchAnswer,
   type CandidateSearchOptions,
   type DistributorClient,
+  type LookupBatchOptions,
+  type LookupPurpose,
   type PartPricing,
   type PriceBreak,
 } from "./types";
@@ -113,7 +115,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
   const coalesce = makeCoalescer<PartPricing | null>();
 
   /** One aliased GraphQL query for MPNs nobody is querying yet. Never rejects: a failure is an empty result. */
-  async function queryMisses(misses: string[]): Promise<Map<string, PartPricing>> {
+  async function queryMisses(misses: string[], purpose: LookupPurpose = "interactive"): Promise<Map<string, PartPricing>> {
     const found = new Map<string, PartPricing>();
     try {
       const aliases = misses.map((mpn, i) => ({ mpn, alias: `s${i}`, varName: `q${i}` }));
@@ -125,7 +127,7 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
       const variables: Record<string, string> = {};
       for (const a of aliases) variables[a.varName] = a.mpn;
 
-      const answer = await runQuery(query, variables, aliases.length);
+      const answer = await runQuery(query, variables, aliases.length, purpose); // [B19-E E6] metered for its purpose
       const data = asRecord(asRecord(answer.value).data);
 
       for (const a of aliases) {
@@ -150,7 +152,8 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     return found;
   }
 
-  async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
+  async function lookupBatch(mpns: string[], options: LookupBatchOptions = {}): Promise<Map<string, PartPricing>> {
+    const purpose = options.purpose ?? "interactive";
     const out = new Map<string, PartPricing>();
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
 
@@ -168,10 +171,11 @@ export function makeOctopartClient(opts: { apiKey: string; egress?: DistributorE
     const fresh: string[] = [];
     let freshQuery: Promise<Map<string, PartPricing>> | null = null;
     for (const mpn of misses) {
-      const key = inFlightKey(mpn);
+      // [B19-E E6] an agent lookup joins only another agent lookup, so each purpose's meter stays its own
+      const key = purpose === "agent" ? `agent\u0000${inFlightKey(mpn)}` : inFlightKey(mpn);
       pending.set(mpn, coalesce(key, () => {
         fresh.push(mpn);
-        freshQuery ??= Promise.resolve().then(() => queryMisses(fresh));
+        freshQuery ??= Promise.resolve().then(() => queryMisses(fresh, purpose));
         return freshQuery.then((found) => found.get(mpn) ?? null);
       }));
     }

@@ -131,6 +131,13 @@ describe("[B19-E E2 review] CI job scope", () => {
     // route suite is under app/api/physical-bindings/__tests__, which prompt-to-gerber selects by directory)
     expect(startsPostgres("app/lib/physical-binding/__tests__/b19-e-successor-b14-durable.test.ts")).toBe(true);
     expect(["app/api/components/__tests__/b19-e-revision-status-route.test.ts", "app/api/components/__tests__/b19-e-withdraw-revision-route.test.ts", "app/api/physical-bindings/__tests__/b19-e-successor-rebind.test.ts", "app/lib/engineering/__tests__/b19-e-authority-catalog-status.test.ts", "app/components/pcb/__tests__/b19-e-component-review-successor.test.tsx"].some(startsPostgres)).toBe(false);
+    // [B19-E E6] the agent read tools: no suite starts PGlite (fake ports, fake vendors, fake cache and catalog reads); the live
+    // contract check is selected by the acquisition directory filter and skips itself unless an operator opts in
+    expect(["app/lib/engineering/__tests__/b19-e-external-read-descriptors.test.ts", "app/lib/agent/__tests__/b19-e-external-read-service.test.ts", "app/lib/acquisition/__tests__/b19-e-agent-read-port.test.ts", "app/api/chat/__tests__/b19-e-chat-external-acquisition.test.ts", "app/lib/acquisition/__tests__/b19-e-live-contract.test.ts"].some(startsPostgres)).toBe(false);
+    expect(promptToGerber).toEqual(expect.arrayContaining(["app/lib/acquisition/__tests__/b19-e-agent-read-port.test.ts", "app/lib/acquisition/__tests__/b19-e-live-contract.test.ts", "app/lib/agent/__tests__/b19-e-external-read-service.test.ts"]));
+    // [B19-E E6 review] the exact-MPN offer-cache read is proven against PGlite: that one suite runs in database-delivery
+    expect(startsPostgres("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts")).toBe(true);
+    expect(databaseDelivery).toContain("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts");
     expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
   }, 60_000);
 

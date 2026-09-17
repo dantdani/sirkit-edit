@@ -19,6 +19,8 @@ import {
   type CandidateSearchAnswer,
   type CandidateSearchOptions,
   type DistributorClient,
+  type LookupBatchOptions,
+  type LookupPurpose,
   type PartPricing,
   type PriceBreak,
 } from "./types";
@@ -127,9 +129,9 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
     }
   }
 
-  async function lookupByMpn(mpn: string): Promise<PartPricing | null> {
+  async function lookupByMpn(mpn: string, purpose: LookupPurpose = "interactive"): Promise<PartPricing | null> {
     try {
-      const answer = await enqueue(() => searchKeyword(mpn));
+      const answer = await enqueue(() => searchKeyword(mpn, 5, purpose)); // [B19-E E6] metered for its purpose
       const pricing = mapProduct(mpn, answer.value);
       if (!pricing) rememberNoExactMatch("digikey", mpn); // [B19-D I5b review] a successful answer with no exact product
       // [B19-C I4] pin the result to the exact bytes DigiKey sent
@@ -145,20 +147,21 @@ export function makeDigiKeyClient(opts: { clientId: string; clientSecret: string
   const cached = makeCachedLookup("digikey", lookupByMpn);
   // [B19-B I3b] a second identical lookup already in flight joins the first instead of paying for its own search
   const coalesce = makeCoalescer<PartPricing | null>();
-  const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(inFlightKey(mpn), () => cached.lookup(mpn));
+  // [B19-E E6] an agent lookup joins only another agent lookup, so each purpose's meter stays its own
+  const lookup = (mpn: string, purpose: LookupPurpose = "interactive"): Promise<PartPricing | null> => coalesce(purpose === "agent" ? `agent\u0000${inFlightKey(mpn)}` : inFlightKey(mpn), () => cached.lookup(mpn, purpose));
 
-  async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
+  async function lookupBatch(mpns: string[], options: LookupBatchOptions = {}): Promise<Map<string, PartPricing>> {
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
     const entries = await Promise.all(
       unique.map(async (mpn): Promise<[string, PartPricing] | null> => {
-        const pricing = await lookup(mpn);
+        const pricing = await lookup(mpn, options.purpose);
         return pricing ? [mpn, pricing] : null;
       }),
     );
     return new Map(entries.filter((e): e is [string, PartPricing] => e !== null));
   }
 
-  return { name: "digikey", lookupByMpn: lookup, lookupBatch, searchCandidates };
+  return { name: "digikey", lookupByMpn: (mpn: string) => lookup(mpn), lookupBatch, searchCandidates };
 }
 
 /** [B19-D I5b review] identical requests join; a confusable spelling only ever joins its own byte-identical twin */

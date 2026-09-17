@@ -14,7 +14,7 @@ authoritative engineering truth.
 | B19-B safe acquisition boundary | `acquisition-boundary.md` | I1 CONFIRMED (the egress path and the three clients); I2 CONFIRMED (who may spend quota; no failure text repeated); I2b CONFIRMED (cross-verify's call through the same boundary); I3b CONFIRMED (registered quotas, circuit breakers, in-flight coalescing) |
 | B19-C quarantine-to-authority pipeline | `quarantine-pipeline.md` | I4 CONFIRMED (front half: observation, candidate, evidence bundle); I4b CONFIRMED (approval refuses sourcing-only engineering evidence and unreviewed AI extraction) |
 | B19-D import security and licensing | `import-security.md` | I5a CONFIRMED (license at export); matrix recorded (51 rows); I5b CONFIRMED (acquisition path, 12 rows); I5c–I5e planned |
-| B19-E product and agent experience | `acquisition-ux.md` | planned |
+| B19-E product and agent experience | `acquisition-ux.md` | E1-E5 landed (`076d542`..`78a0d21`); E6 CONFIRMED (two bounded Tier 0 agent reads, `sirkit.parts.external-search` and `sirkit.parts.evidence-read`, through one approved chat runtime boundary; labels only while agentDisclosure is unknown, OD-36; exact MPNs, at most 5 live per run, OD-40) |
 | validation | `test-and-validation-report.md`, `changed-files.md`, `unknowns-and-owner-decisions.md`, `final-verdict.md` | planned |
 
 Program ledger: `artifacts/remaining-builder-program/`.

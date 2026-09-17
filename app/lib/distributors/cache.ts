@@ -10,10 +10,10 @@
  * Every reader of stored offers applies `isOfferServable`, and `purgeExpiredOffers` deletes what may no longer be kept.
  */
 
-import { and, eq, gte, inArray, isNotNull, lt, ne, not, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lt, ne, not, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { partOffers, parts, type PartOffer } from "../db/schema";
-import { cheapestUnitPrice, type DistributorName, type PartPricing, type PriceBreak } from "./types";
+import { cheapestUnitPrice, type DistributorName, type LookupPurpose, type PartPricing, type PriceBreak } from "./types";
 import { SOURCE_IDS, SOURCE_REGISTRY, sourceForDistributorName } from "../acquisition/source-registry";
 import { canonicalExactMpn } from "../atomic/identity";
 
@@ -114,17 +114,17 @@ export function evictCached(distributor: DistributorName, mpn: string): void {
  */
 export function makeCachedLookup(
   distributor: DistributorName,
-  fetcher: (mpn: string) => Promise<PartPricing | null>,
+  fetcher: (mpn: string, purpose?: LookupPurpose) => Promise<PartPricing | null>,
 ): {
-  lookup: (mpn: string) => Promise<PartPricing | null>;
+  lookup: (mpn: string, purpose?: LookupPurpose) => Promise<PartPricing | null>;
   wasCached: (mpn: string) => boolean;
 } {
   return {
-    async lookup(mpn: string): Promise<PartPricing | null> {
+    async lookup(mpn: string, purpose?: LookupPurpose): Promise<PartPricing | null> {
       const cached = getCached(distributor, mpn);
       if (cached) return cached;
       if (isKnownNoExactMatch(distributor, mpn)) return null; // [B19-D I5b review] remembered: no exact product
-      const fresh = await fetcher(mpn);
+      const fresh = await fetcher(mpn, purpose); // [B19-E E6] a miss is metered for whom it is looked up
       if (fresh) setCached(distributor, mpn, fresh);
       return fresh;
     },
@@ -325,6 +325,49 @@ export async function putCachedOffer(
       },
     });
   lruSet(lruKey(partId, distributor), { ...offer, fetchedAt: now.getTime() });
+}
+
+const EXACT_MPN_ROW_LIMIT = 64;
+
+/**
+ * [B19-E E6] Stored offers for exact MPNs, whatever catalog part they were stored under: for each canonical MPN, each source's
+ * newest row — one per MPN and source, chosen in the database (DISTINCT ON), so no other row stored under the same MPN can
+ * push it out of the read — served only while still servable (`isOfferServable`). A read of `part_offers` only; a confusable
+ * spelling is never read.
+ */
+export async function getCachedOffersForExactMpns(mpns: readonly string[], now: number = Date.now()): Promise<Map<string, Map<string, PartPricing>>> {
+  const out = new Map<string, Map<string, PartPricing>>();
+  const canonical = [...new Set(mpns.flatMap((mpn) => {
+    try {
+      return [canonicalExactMpn(mpn)];
+    } catch {
+      return [];
+    }
+  }))];
+  if (canonical.length === 0) return out;
+  const canonicalMpn = sql<string>`upper(${partOffers.mpn})`;
+  const rows = await getDb()
+    .selectDistinctOn([canonicalMpn, partOffers.distributor])
+    .from(partOffers)
+    .where(inArray(canonicalMpn, canonical))
+    .orderBy(canonicalMpn, partOffers.distributor, desc(partOffers.lastRefreshedAt))
+    .limit(EXACT_MPN_ROW_LIMIT);
+  for (const row of rows) {
+    if (!row.mpn || !isOfferServable(row.distributor, row.lastRefreshedAt, now)) continue;
+    let key: string;
+    try {
+      key = canonicalExactMpn(row.mpn);
+    } catch {
+      continue;
+    }
+    if (!canonical.includes(key)) continue;
+    const inner = out.get(key) ?? new Map<string, PartPricing>();
+    const pricing = offerRowToPricing(row);
+    const kept = inner.get(row.distributor);
+    if (!kept || (kept.provenance?.retrievedAt ?? 0) < (pricing.provenance?.retrievedAt ?? 0)) inner.set(row.distributor, pricing);
+    out.set(key, inner);
+  }
+  return out;
 }
 
 /**

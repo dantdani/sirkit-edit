@@ -178,6 +178,9 @@ export interface AssembleAgentContextInput {
   view?: unknown;
   /** [B18-C] SERVER fact from the composition root: an execution-grant minter is bound to this run. Never a body field. */
   executionGrantsAvailable?: boolean;
+  /** [B19-E E6] SERVER fact from the composition root: an external acquisition port is bound to this run. Never a body field.
+   *  It becomes the external-observation authority only alongside a verified canonical state. */
+  externalAcquisitionAvailable?: boolean;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -484,6 +487,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   // role, and a verified board with its PCB proposal basis exists — the capability rides the grant (D18-8); the actor's
   // own set stays read_project. Absent the grant context, the discovery object is byte-identical to before B18-C.
   const grantable = input.executionGrantsAvailable === true && (TIER1_EXECUTE_ROLES as readonly string[]).includes(actor.actorRole) && board !== null && pcbProposalBasis !== null;
+  // [B19-E E6] the external read tools need the server's port AND a verified canonical state (reads never run board-less)
+  const externalAcquisition = input.externalAcquisitionAvailable === true && canonicalState !== null;
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -509,7 +514,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     projectState,
     // [B13] durable-server-board authority is advertised ONLY when the
     // server-owned component-authority resource was loaded and verified.
-    availableAuthority: componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"],
+    // [B19-E E6] external-observation is advertised ONLY with the server's port fact and a verified canonical state.
+    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : [])],
     providerCapabilities: {
       supportsJsonSchema: input.providerSupportsJsonSchema ?? true,
       toolNameMaxLength: 64,
@@ -548,6 +554,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       componentAuthorityDigest,
       pcbProposalBasis,
       executionGrantsAvailable: grantable,
+      ...(externalAcquisition ? { externalAcquisitionAvailable: true } : {}),
       view,
       viewDigest,
       autonomy,

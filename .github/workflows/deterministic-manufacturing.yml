@@ -193,6 +193,9 @@ jobs:
           app/components/parts/__tests__/b19-e-publication-withdraw-revision.test.tsx
           app/components/editor/__tests__/b19-e-build-library-exact-revision.test.tsx
           app/api/bom/__tests__/b19-e-bom-catalog-status-scope.test.ts
+          app/lib/engineering/__tests__/b19-e-external-read-descriptors.test.ts
+          app/lib/agent/__tests__/b19-e-external-read-service.test.ts
+          app/api/chat/__tests__/b19-e-chat-external-acquisition.test.ts
           app/api/chat/__tests__/b14-route-replacement.test.ts
           app/lib/pcb/__tests__/b19-d-kicad-emit-injection.test.ts
           app/lib/spice/__tests__/b19-d-report-escaping.test.ts
@@ -263,6 +266,7 @@ jobs:
           app/lib/distributors/__tests__/b19-offer-retention.test.ts
           app/lib/distributors/__tests__/b19-e-pricing-provenance-cache.test.ts
           app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts
+          app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts
           app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts
           app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts
           app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts

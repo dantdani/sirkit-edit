@@ -65,11 +65,13 @@ describe("[B19-E E2] f — the route's registrations", () => {
     expect(row).toMatchObject({ isPublic: false, durableAccess: "none", projectDataSensitivity: "caller-supplied-only", providerCredit: true, externalProcess: "", authoritativeWrite: false, staticOrCatalog: false });
   });
 
-  it("is a canonical wrapper, covered by the action record parts.external-observation-read (a read, never a tool until E6)", () => {
+  it("is a canonical wrapper, covered by the action record parts.external-observation-read (a read; chat tools since E6)", () => {
     const source = readFileSync(join(process.cwd(), "app", "api", "parts", "external-search", "route.ts"), "utf8");
     expect(classifyRouteMethodForm(source, "POST", join(process.cwd(), "app", "api", "parts", "external-search", "route.ts"), process.cwd()).form).toBe("canonical-wrapper");
     const record = ACTION_COVERAGE_REGISTRY.find((item) => item.id === "parts.external-observation-read");
-    expect(record).toMatchObject({ kind: "read", toolExposure: "none", approvalTier: "none", status: "implemented" });
+    // [B19-E E6] reviewed pin move: toolExposure "none" -> "chat". Reason: E6 exposes the two bounded Tier 0 agent reads this record
+    // owns (sirkit.parts.external-search, sirkit.parts.evidence-read); the route itself is unchanged (pinned in b19-e-external-read-descriptors).
+    expect(record).toMatchObject({ kind: "read", toolExposure: "chat", approvalTier: "none", status: "implemented" });
     expect(record!.sources).toEqual(expect.arrayContaining(["app/api/parts/external-search/route.ts", "app/lib/acquisition/external-search.ts", "app/components/editor/BuildLibraryPanel.tsx"]));
     expect(API_ROUTE_COVERAGE.find((entry) => entry.path === PATH)).toEqual({ path: PATH, methods: ["POST"], recordId: "parts.external-observation-read", class: "read" });
   });

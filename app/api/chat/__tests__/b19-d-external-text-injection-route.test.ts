@@ -11,6 +11,8 @@
  *  - nothing the model receives carries a server secret, a grant nonce or the session identity;
  *  - the chat route, the Build-mode loop and the LLM router never import the distributor or acquisition code that fetches or
  *    stores vendor data (vendor text cannot reach a prompt through them).
+ *  - [B19-E E6 reviewed amendment] except the chat route through ONE approved boundary, external-acquisition-runtime.ts,
+ *    which imports only the agent read port (see the amendment below for the reason and its tripwires).
  */
 import { readFileSync, existsSync } from "node:fs";
 import path from "node:path";
@@ -134,22 +136,67 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
     return specs;
   }
 
-  it.each(["app/api/chat/route.ts", "app/lib/build-loop.ts", "app/lib/llm/router.ts"])("%s", (entry) => {
+  /**
+   * [B19-E E6] REVIEWED AMENDMENT (pin move). Reason: E6 gives the agent two bounded read-only tools over external acquisition
+   * (sirkit.parts.external-search and sirkit.parts.evidence-read), served by a server-only port. The chat route must reach that
+   * port, so the walk now STOPS at the ONE approved boundary, `app/api/chat/external-acquisition-runtime.ts`, instead of
+   * following it into vendor code. The amendment is limited to that file and pinned by the tripwires below: only the chat
+   * route imports it, it imports nothing but `app/lib/acquisition/agent-read-port.ts`, no other file in the chat closure
+   * reaches vendor code, and the Build-mode loop and the LLM router stay fully forbidden (the boundary is an offender there).
+   * What reaches the model through it is labels only while agentDisclosure is unknown (OD-36), checked in
+   * app/lib/agent/__tests__/b19-e-external-read-service.test.ts.
+   */
+  const APPROVED_BOUNDARY = "app/api/chat/external-acquisition-runtime.ts";
+  const APPROVED_BOUNDARY_ENTRY = "app/api/chat/route.ts";
+
+  function walk(entry: string): { seenFiles: Set<string>; offenders: string[]; boundaryImporters: string[] } {
     const seenFiles = new Set<string>();
     const offenders: string[] = [];
+    const boundaryImporters: string[] = [];
     const queue = [path.join(ROOT, entry)];
     while (queue.length > 0) {
       const file = queue.pop()!;
       if (seenFiles.has(file)) continue;
       seenFiles.add(file);
       const relative = path.relative(ROOT, file).split(path.sep).join("/");
+      if (relative === APPROVED_BOUNDARY) {
+        if (entry !== APPROVED_BOUNDARY_ENTRY) offenders.push(relative); // the Build-mode loop and the LLM router never reach it
+        continue;
+      }
       if (FORBIDDEN.some((rule) => rule.test(relative))) { offenders.push(relative); continue; }
       for (const spec of runtimeImports(file)) {
         const resolved = resolveImport(file, spec);
-        if (resolved) queue.push(resolved);
+        if (!resolved) continue;
+        if (path.relative(ROOT, resolved).split(path.sep).join("/") === APPROVED_BOUNDARY) boundaryImporters.push(relative);
+        queue.push(resolved);
       }
     }
+    return { seenFiles, offenders, boundaryImporters };
+  }
+
+  it.each(["app/api/chat/route.ts", "app/lib/build-loop.ts", "app/lib/llm/router.ts"])("%s", (entry) => {
+    const { seenFiles, offenders } = walk(entry);
     expect(seenFiles.size).toBeGreaterThan(5);
     expect(offenders).toEqual([]);
+  });
+
+  it("[B19-E E6] the chat closure reaches acquisition or distributor code only through external-acquisition-runtime.ts, which imports only agent-read-port", () => {
+    const chat = walk(APPROVED_BOUNDARY_ENTRY);
+    expect([...new Set(chat.boundaryImporters)]).toEqual([APPROVED_BOUNDARY_ENTRY]);
+    const boundaryImports = runtimeImports(path.join(ROOT, APPROVED_BOUNDARY)).map((spec) => resolveImport(path.join(ROOT, APPROVED_BOUNDARY), spec)).map((file) => (file ? path.relative(ROOT, file).split(path.sep).join("/") : "(unresolved)"));
+    expect(boundaryImports).toEqual(["app/lib/acquisition/agent-read-port.ts"]);
+    // not vacuous: walked WITHOUT the boundary stop, the port really fronts the vendor code the rest of the closure may never
+    // reach (the port itself and the distributor index are among the forbidden files behind it)
+    const throughBoundary = new Set<string>();
+    const queue = [path.join(ROOT, "app/lib/acquisition/agent-read-port.ts")];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      const relative = path.relative(ROOT, file).split(path.sep).join("/");
+      if (throughBoundary.has(relative)) continue;
+      throughBoundary.add(relative);
+      for (const spec of runtimeImports(file)) { const resolved = resolveImport(file, spec); if (resolved) queue.push(resolved); }
+    }
+    expect([...throughBoundary].filter((file) => FORBIDDEN.some((rule) => rule.test(file)))).toEqual(expect.arrayContaining(["app/lib/acquisition/agent-read-port.ts", "app/lib/distributors/index.ts"]));
+    for (const entry of ["app/lib/build-loop.ts", "app/lib/llm/router.ts"]) expect(walk(entry).boundaryImporters, entry).toEqual([]);
   });
 });

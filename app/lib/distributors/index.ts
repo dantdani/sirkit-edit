@@ -14,11 +14,11 @@ import type { DistributorClient, DistributorName, LifecycleStatus, PartPricing }
 import type { DistributorChoice, AggregatedPricing } from "./shared";
 import { admittedDistributorClient } from "./clients";
 import { consolidateLifecycle } from "./lifecycle";
-import { evictCached, getCachedOffersForParts, putCachedOffer } from "./cache";
+import { evictCached, getCached, getCachedOffersForExactMpns, getCachedOffersForParts, putCachedOffer } from "./cache";
 import { getDb } from "../db/client";
 import { parts } from "../db/schema";
 import { admitSource, SOURCE_IDS, SOURCE_REGISTRY, type AcquisitionSourceId, type AdmissionRefusal } from "../acquisition/source-registry";
-import { currentPause, type AdmissionPause } from "../acquisition/admission-control";
+import { currentPause, previewAdmission, type AdmissionPause } from "../acquisition/admission-control";
 import { canonicalExactMpn, sameExactMpn } from "../atomic/identity";
 
 // Re-export the browser-safe surface (types, lifecycle helpers, DistributorChoice,
@@ -333,4 +333,143 @@ function pickBestOverall(offers: PartPricing[]): PartPricing | null {
   }
   // If nobody had a price, still surface the first entry (stock/metadata useful).
   return best ?? offers[0] ?? null;
+}
+
+// ── [B19-E E6] Exact-MPN lookups for the agent's external search ─────────────
+
+/**
+ * cached: served from the connector's in-process memo or the offer cache; live: answered by a vendor request made now;
+ * not_cached: no cached answer and no live lookup allowed; no_exact_answer: asked, but no product with exactly this MPN came
+ * back (or the lookup failed); pending: asked, no answer before the deadline; paused: the agent's share or the breaker says no;
+ * unavailable: the source is not admitted or its connector could not be built.
+ */
+export type ExactMpnLookupOutcome = "cached" | "live" | "not_cached" | "no_exact_answer" | "pending" | "paused" | "unavailable";
+
+export interface ExactMpnLookupOptions {
+  /** The SERVER's decision that this call may ask the vendor (never a model or request flag). */
+  live: boolean;
+  /** The agent: its live lookups are metered at its purpose share (OD-40). */
+  purpose: "agent";
+  /** How long a live answer may take before it is reported pending (the connector keeps its own deadline). */
+  deadlineMs: number;
+  signal?: AbortSignal;
+  clock?: () => number;
+  env?: Readonly<Record<string, string | undefined>>;
+  /** Test seam: builds the admitted connector from its admission's secrets (default: the process-wide client). */
+  connect?: (id: AcquisitionSourceId, secrets: Readonly<Record<string, string>>) => DistributorClient | null;
+  /** Test seam: the offer cache read (default: `getCachedOffersForExactMpns`). */
+  readOfferCache?: (mpns: readonly string[], now: number) => Promise<ReadonlyMap<string, ReadonlyMap<string, PartPricing>>>;
+}
+
+export interface ExactMpnLookupResult {
+  sourceId: AcquisitionSourceId;
+  answers: Array<{ mpn: string; outcome: ExactMpnLookupOutcome; pricing: PartPricing | null }>;
+  /** The MPNs this call sent to the vendor. */
+  liveMpns: string[];
+  retryAtMs: number | null;
+}
+
+function canonicalMpns(mpns: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const mpn of mpns) {
+    try {
+      const canonical = canonicalExactMpn(mpn);
+      if (!out.includes(canonical)) out.push(canonical);
+    } catch {
+      // a confusable spelling is never looked up
+    }
+  }
+  return out;
+}
+
+/** The live answer, or "pending" once the deadline passes or the caller aborts; a late answer is discarded here. */
+function liveWithinDeadline(work: Promise<Map<string, PartPricing>>, deadlineMs: number, signal?: AbortSignal): Promise<Map<string, PartPricing> | "pending"> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) { resolve("pending"); return; }
+    let settled = false;
+    const finish = (value: Map<string, PartPricing> | "pending"): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    function onAbort(): void { finish("pending"); }
+    const timer = setTimeout(() => finish("pending"), Math.max(1, deadlineMs));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    work.then((value) => finish(value), () => finish(new Map()));
+  });
+}
+
+/**
+ * [B19-E E6] One registered source's answer for exact MPNs, for the agent. Cache first: the connector's in-process memo, then
+ * the offer cache. The admitted connector's lookupBatch is called only for the misses, only when the server's live policy
+ * allows, and metered at the agent's purpose share; an answer late for the deadline is pending. Nothing is written, refreshed or
+ * pre-fetched here, and an answer is attached only to its own exact MPN.
+ */
+export async function lookupExactMpns(sourceId: AcquisitionSourceId, mpns: readonly string[], options: ExactMpnLookupOptions): Promise<ExactMpnLookupResult> {
+  const clock = options.clock ?? Date.now;
+  const now = clock();
+  const startedAt = Date.now(); // the deadline counts from here: the cache read before a live lookup never extends it
+  const entry = SOURCE_REGISTRY[sourceId];
+  const name = entry.distributorName as DistributorName;
+  const requested = canonicalMpns(mpns);
+  const result: ExactMpnLookupResult = { sourceId, answers: [], liveMpns: [], retryAtMs: null };
+  const answers = new Map<string, { outcome: ExactMpnLookupOutcome; pricing: PartPricing | null }>();
+  const settleAll = (list: readonly string[], outcome: ExactMpnLookupOutcome): void => { for (const mpn of list) answers.set(mpn, { outcome, pricing: null }); };
+  const admission = admitSource(sourceId, options.env ?? process.env);
+  if (!admission.admitted) {
+    settleAll(requested, "unavailable");
+  } else if (requested.length > 0) {
+    let stored: ReadonlyMap<string, ReadonlyMap<string, PartPricing>> = new Map();
+    try {
+      stored = await (options.readOfferCache ?? getCachedOffersForExactMpns)(requested, now);
+    } catch (err) {
+      console.error(`[distributors] offer cache read for exact MPNs failed (details withheld): ${err instanceof Error ? err.name : "non-error"}`);
+    }
+    for (const mpn of requested) {
+      const memo = getCached(name, mpn);
+      const row = stored.get(mpn)?.get(name) ?? null;
+      const hit = memo && sameExactMpn(memo.mpn, mpn) ? memo : row && sameExactMpn(row.mpn, mpn) ? row : null;
+      if (hit) answers.set(mpn, { outcome: "cached", pricing: hit });
+    }
+    const misses = requested.filter((mpn) => !answers.has(mpn));
+    if (misses.length > 0 && !options.live) {
+      settleAll(misses, "not_cached");
+    } else if (misses.length > 0) {
+      const pause = previewAdmission(sourceId, misses.length, now, options.purpose);
+      let client: DistributorClient | null = null;
+      if (!pause) {
+        try {
+          client = (options.connect ?? ((id: AcquisitionSourceId) => clientFor(id)))(sourceId, admission.secrets);
+        } catch {
+          client = null;
+        }
+      }
+      if (pause) {
+        result.retryAtMs = pause.retryAtMs;
+        settleAll(misses, "paused");
+      } else if (!client) {
+        settleAll(misses, "unavailable");
+      } else {
+        const remainingMs = options.deadlineMs - (Date.now() - startedAt);
+        // [B19-E E6 review follow-up] a deadline the cache reads already used up: the misses are pending and the vendor is not
+        // asked — a request whose answer could only be discarded would still be metered and charged to the run
+        const live = remainingMs <= 0 ? "pending" : await (result.liveMpns = [...misses], liveWithinDeadline(client.lookupBatch(misses, { purpose: options.purpose }), remainingMs, options.signal));
+        if (live === "pending") {
+          settleAll(misses, "pending");
+        } else {
+          const after = live.size === 0 ? currentPause(sourceId, clock(), options.purpose) : null;
+          for (const mpn of misses) {
+            const offer = live.get(mpn);
+            if (offer && sameExactMpn(offer.mpn, mpn)) answers.set(mpn, { outcome: "live", pricing: offer });
+            else answers.set(mpn, { outcome: after ? "paused" : "no_exact_answer", pricing: null });
+          }
+          if (after) result.retryAtMs = after.retryAtMs;
+        }
+      }
+    }
+  }
+  result.answers = requested.map((mpn) => ({ mpn, ...(answers.get(mpn) ?? { outcome: "unavailable" as const, pricing: null }) }));
+  return result;
 }

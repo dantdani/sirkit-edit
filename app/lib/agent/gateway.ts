@@ -19,6 +19,9 @@
  *    rechecked, sealed purely against the verified board and MINTED as a
  *    one-shot grant through the composition root's closure. Nothing executes
  *    here — the browser's canonical editor session is the only committer.
+ *  - [B19-E E6] A bound EXTERNAL READ (external-search, evidence-read)
+ *    travels `ExternalReadInvocationService` (./acquisition-reads) over the
+ *    port the chat route injects; the model receives closed labels only.
  *
  * No provider SDK types, no CanonicalEditorSession/SchematicEditorSession
  * imports, no API-route-to-API-route execution, no LLM-backed routes as
@@ -46,6 +49,7 @@ import { buildAgentResourceBundle } from "./context";
 import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
 import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
 import { dispatchGrantedExecution } from "./execution-dispatch";
+import { ExternalReadInvocationService, type ExternalAcquisitionReadPort } from "./acquisition-reads"; // [B19-E E6]
 import type { AgentExecutionGrantMinter, AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
 import { TIER1_EXECUTE_ROLES } from "../engineering/permission-tiers"; // [B18-C]
 import { TIER1_GRANTABLE_CAPABILITIES } from "../engineering/execution-grant"; // [B18-C]
@@ -158,6 +162,14 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
   } else if (context.componentAuthorityDigest !== null) {
     issues.push("a component-authority digest is claimed without a component-authority resource");
   }
+  // [B19-E E6] the external-observation authority and the server's external acquisition fact agree in BOTH directions, and
+  // neither exists without canonical state (a widened authority or a dangling fact fails every invocation closed).
+  const externalAdvertised = discovery.availableAuthority.includes("external-observation");
+  const externalFact = context.externalAcquisitionAvailable === true;
+  if (context.externalAcquisitionAvailable !== undefined && typeof context.externalAcquisitionAvailable !== "boolean") issues.push("the external acquisition fact is malformed");
+  if (externalAdvertised && !externalFact) issues.push("the external-observation authority is advertised without the server's external acquisition fact");
+  if (externalFact && !externalAdvertised) issues.push("the server's external acquisition fact is present but the external-observation authority is not advertised");
+  if ((externalAdvertised || externalFact) && context.canonicalState === null) issues.push("external acquisition is claimed without canonical state");
   // [B18-A] the autonomy setting is server-owned and project-scoped: a setting
   // for another project (or a malformed one) fails every invocation closed.
   if (!context.autonomy || context.autonomy.schema !== "sirkit.agent-autonomy-setting.v1" || context.autonomy.tenantId !== context.tenantId || context.autonomy.projectId !== context.projectId) {
@@ -454,12 +466,17 @@ export interface AgentGatewayOptions {
   /** [B18-C] the system prompt version the run answers under — pinned into
    *  every grant's origin. Absent ⇒ granted executions are unavailable. */
   promptVersion?: string;
+  /** [B19-E E6] the server's external acquisition port, wired by the chat route through its one approved runtime boundary
+   *  (app/api/chat/external-acquisition-runtime.ts). Absent: both external read tools refuse authority_unavailable. */
+  externalAcquisition?: ExternalAcquisitionReadPort;
+  externalReadService?: ExternalReadInvocationService;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
   const readService = options?.readService ?? new ReadToolInvocationService(registry);
   const proposalService = options?.proposalService ?? new ProposalInvocationService(registry, options?.now, options?.replacementPinFacts);
   const layoutService = options?.layoutProposalService ?? new LayoutProposalService(registry, { now: options?.now, routingExecutor: options?.routingExecutor });
+  const externalReadService = options?.externalReadService ?? new ExternalReadInvocationService(registry, { ...(options?.externalAcquisition ? { port: options.externalAcquisition } : {}), integrity: verifyAgentContextIntegrity });
   return {
     async invoke(input): Promise<GatewayInvocationOutcome> {
       const descriptor = registry.get(input.toolId, input.version);
@@ -470,6 +487,11 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
       const integrity = verifyAgentContextIntegrity(input.context);
       if (integrity.length > 0) {
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "context_integrity", diagnostics: integrity.slice(0, 5) };
+      }
+      // [B19-E E6] a bound external read travels its own service BEFORE the B05 read service: it has no canonical-state read
+      // binding, and its port, its per-run live budget and its closed projection live there.
+      if (descriptor.binding.status === "bound-external-read") {
+        return externalReadService.invoke({ toolId: input.toolId, version: input.version, args: input.args, context: input.context, runId: input.runId, timeoutMs: input.timeoutMs, ...(input.signal ? { signal: input.signal } : {}) });
       }
       if (descriptor.operationClass === "read") {
         // [B09.3] without a COMPLETE validated canonical project resource,

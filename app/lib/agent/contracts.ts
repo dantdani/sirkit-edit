@@ -144,6 +144,9 @@ export interface AgentRunContext {
    *  readable autonomy setting). SERVER-derived; with the verified board, the PCB proposal basis and a Tier 1 execute role it
    *  makes granted executions discoverable — the actor still holds only read_project. */
   executionGrantsAvailable: boolean;
+  /** [B19-E E6] SERVER fact: the chat route bound an external acquisition port to this run AND a verified canonical state exists.
+   *  Present (true) exactly when the discovery context advertises the external-observation authority; absent otherwise. */
+  externalAcquisitionAvailable?: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */

@@ -1763,3 +1763,99 @@ _(discovery, reproduction and results appended below as they are observed)_
 - The E6 workflow was resumed after its four review agents hit the weekly usage limit; its implementation stage came back
   from cache and only the review, fix and check stages re-ran.
 
+
+### B19-E E6 — bounded read-only agent tools for external search and evidence (2026-09-16/17 local; workflow + review-fix workflow + lead; this commit)
+
+- Implemented test-first against the plan's E6 section (OD-36, OD-40): the five new suites and the ratchet amendment failed
+  first (`b19-e-external-read-descriptors`, `b19-e-external-read-service`, `b19-e-agent-read-port`,
+  `b19-e-chat-external-acquisition`, `b19-e-live-contract` could not import their modules; the amended import-closure tripwire
+  failed on the unchanged walker).
+  - Registry and catalog: binding status `bound-external-read`, authority source `external-observation`, a validator rule
+    (read class, side effects none or derived-cache, approval tier none, exactly the external-observation authority, module and
+    symbol required); `sirkit.parts.external-search` 1.0.0 (1-5 exact MPNs, derived-cache, 12 s) and
+    `sirkit.parts.evidence-read` 1.0.0 (one MPN, cache only), both Tier 0 and agent-exposed with reasons; the "orderable"
+    wording became "published physical-authority"; action record `parts.external-observation-read` exposed to chat.
+  - Agent boundary `app/lib/agent/acquisition-reads.ts`: allowlisted bindings, fresh discovery and role/capability rechecks,
+    canonical state required, exact keys, safe-JSON and schema checks, `canonicalExactMpn` per MPN, a deadline composed with
+    the run's cancellation, at most 5 live MPNs per run, a closed projection (labels; vendor values only under
+    `untrustedVendorText`, bounded, only for a source whose registry entry permits agent disclosure), at most 8,000 characters,
+    errors by class name only.
+  - Server port `app/lib/acquisition/agent-read-port.ts` (admission, the agent's pause, the new `lookupExactMpns` in
+    `app/lib/distributors/index.ts` — cache first, `lookupBatch` for misses at the agent purpose only when the server's live
+    policy allows, pending at the deadline — the quarantine front half, the E4 import-review projection, E3/E5 revision status;
+    closed refusal codes, never an environment name); `getCachedOffersForExactMpns` in the offer cache; `LookupBatchOptions`
+    (purpose) on the three connectors.
+  - Chat wiring: `app/api/chat/external-acquisition-runtime.ts` (the one approved boundary, resolve/set/reset), the route passes
+    the port and the availability fact, the assembler advertises `external-observation` only with that fact and canonical
+    state, the gateway's integrity check holds in both directions, the loop withholds the tools otherwise; prompt 1.3.0 with
+    the sourcing-observation rule.
+  - Reviewed pin moves, reason beside each: `b17-f-agent-exposure` and `b18-c-exposure-lift` (the two Tier 0 external reads),
+    `b04-tool-registry` (an exposed read is backed by the B05 allowlist or the external-read allowlist),
+    `b18-c-gateway-execution` (prompt 1.2.1 → 1.3.0 pinned into a grant), `b19-e-external-search-route` (toolExposure none →
+    chat); `b09-3-closure` and `b09-1-boundary` needed no move (still 12 without the port).
+  - Reviewed amendment to the chat import-closure ratchet (`b19-d-external-text-injection-route.test.ts`): the walk stops at
+    `external-acquisition-runtime.ts`; tripwires pin that only the chat route imports it, that it imports only
+    `agent-read-port.ts`, that build-loop.ts and llm/router.ts stay fully forbidden.
+  - Artifacts regenerated (b01 matrix, b04 registry and parity, b09 manifest, activation audit, replay fixtures and parity,
+    b11 evaluation results and replay pins); CI lists (the three new prompt-to-gerber entries); `acquisition-ux.md` (E1-E6
+    product and agent UX, OD-36..OD-40, out of scope with reasons); README status row.
+- Adversarial review (four lenses) confirmed 15 findings; every one fixed test-first in the fix workflow, the reproducing test
+  run on the unchanged code first, test-strength findings proven by a deliberate breakage that the strengthened test caught
+  (each mutated file restored and verified by SHA-1):
+  - **A slow vendor defeated the per-run cap and the "pending" promise (security + correctness + tests-01).** The port's
+    deadline equalled the service's timer, so a hung vendor made the whole call time out (the model never saw `pending`, nor
+    the call's cached observations), and the run's live budget was charged only after a successful answer — every retry got a
+    fresh 5 MPNs. Reproduced through the real port and gateway with a hung fake vendor (timeout refused; a second call sent five
+    more MPNs) and at the service (budgets seen [5, 5, 5]). Fix: the port's deadline ends a margin before the service's
+    (`EXTERNAL_READ_DEADLINE_MARGIN_MS`, a quarter of a short timeout), `lookupExactMpns` counts its deadline from the call's
+    start, and the run is charged BEFORE the port is asked for every MPN the call may send (a timed-out, cancelled or failed
+    call keeps the charge; a projected answer settles it to what was sent; an evidence read never charges); a port can claim no
+    more live MPNs than the call asked for. After: pending per MPN with `liveLookups.thisRun` 5, the next call `run_live_limit`
+    with no vendor request; budgets [5, 2, 2] and 0 after a five-MPN timeout.
+  - **The exact-MPN offer-cache read took an arbitrary 64 rows before choosing the newest (correctness).** Reproduced against
+    PGlite: a fresh Nexar row behind 64 stale DigiKey rows of the same MPN was not served. Fix: `DISTINCT ON (upper(mpn),
+    distributor)` ordered newest first, so one row per MPN and source is chosen in the database; new suite
+    `b19-e-exact-mpn-offer-cache.test.ts` in the database-delivery job (pinned in the CI scope test).
+  - **Test strength.** The ratchet's "not vacuous" assertion was tautological (`walk(APPROVED_BOUNDARY)` stops at its own
+    entry): removed, the manual walk behind the port carries the proof (a type-only import of the distributor index fails it).
+    The chat "withheld" case depended on the shell having no DATABASE_URL (shown failing with a placeholder DATABASE_URL):
+    it stubs the variable, and the resolver's three states (no database, fixture runtime, a port built without I/O) are pinned.
+    Evidence labels (revision states with successors, conflicts, stale ids, quarantined names) and search labels are now
+    asserted after the projection, in the model's own input and through the gateway with the real port (omitting `revoked`
+    or nulling every ISO time fails them). Test d advertises the move tool under a real grant minter with
+    `execute_explicit_tier1`, so "nothing executes" is a real claim: the vendor's instruction yields a preview and never a
+    settlement (a minter that treats every request as explicit fails it). The loop's withholding guard and the integrity
+    clause "claimed without canonical state" have tests that fail when either is deleted. The refuse-rather-than-cut branch is
+    exercised (raising the budget fails it). Under a permitting source (test-only disclosure), an instruction reaches the
+    model only under `untrustedVendorText`, while credential-shaped tokens and links are removed from vendor text before the
+    bound (a decision recorded in `acquisition-ux.md`).
+  - **Report accuracy.** The B11.5 write-gate failure named in the E6 report was fixed in b363b0f; app/lib/agent is green on
+    the current base. This ledger entry and PROGRAM_STATE.json were missing from the E6 working tree.
+- Gate re-run after the fixes (fix workflow, bounded batches, 2 workers): the five affected suites and the CI scope pin 5 files
+  / 68; the PGlite cache suite 1 / 2; app/lib/agent 34 / 391 (the B11.5 write gate included); engineering 48 / 708 and
+  47 / 348; chat, acquisition and the B14.4 AST gates 27 files (+1 skipped) / 292 (+2 skipped); distributors 17 / 139 (four
+  PGlite suites); auth gates and B16.1C tripwires 38 / 444 (+9 skipped); fixture runtime and prompt-to-gerber 7 / 51; tsc 0;
+  eslint clean on the 36 changed .ts/.tsx files. Artifacts b01/b04/b09/b11 were regenerated by the E6 workflow; the fixes
+  change no descriptor, so they regenerate with no drift.
+- The auth batch first failed `b16-0-ai-approval-lifecycle` 22/23 at the 5 s test timeout: the test cold-imports the whole
+  /api/chat route graph inside its body, and E6 made that graph heavier (the port, the connectors, the offer cache and the
+  database client). Measured on this branch with a scratch probe: import 7.9 s idle, POST 15 ms, status 403 — the refusal is
+  correct, the body is outrun. The reviewed hunk from `9335704` (fix/b16-0-revoked-member-cold-import-timeout, pushed, not
+  merged) was applied to the working tree: the provider mock and the route import run at collection, the timed body keeps
+  the identical setup, POST and 403 assertion. The file alone passes 5/5 with the body at 62 ms.
+- Not done here: threading the run's abort signal into the connectors' `lookupBatch` (an abandoned vendor request still runs
+  to its egress deadline; its quota was already metered, so nothing is spent twice); the live contract check was not run.
+- Lead follow-ups on the checker's four new low items (2026-09-17; 2 cases failed first, 2 pins added): a live lookup whose
+  deadline the offer-cache reads already used up settles its misses as pending and asks no vendor (a request whose answer
+  could only be discarded was still metered and charged); the vendor-text scrub runs over a bounded prefix (4× the visible
+  bound) with a bounded leading run, so a 50 KB keyword-repeat word no longer backtracks for seconds (1.67 s → under 500 ms in
+  the test); the deliberate fail-closed reservation is pinned for a port that throws and for a call cancelled mid-flight; the
+  scrub's over-match of benign "…key:" text is recorded as a trade-off in acquisition-ux.md. The b16-0 cold-import hunk the
+  fixer applied (from fix/b16-0-revoked-member-cold-import-timeout, unmerged) is kept: mock and import hoisted, assertion
+  unchanged.
+- Lead re-run of the E6 gates on the combined tree (bounded batches, one at a time): agent, chat, CI scope and AST gates
+  49 files / 493; engineering 95 / 1,056; auth gates, B16.1C tripwires, fixture runtime, prompt-to-gerber and the external-
+  search route 46 / 514 (+9 env-gated skips); acquisition, distributors and the two E6 service/port suites 19 / 198; tsc 0
+  (4 GB heap); eslint clean on 36 changed files; the B09/B04/B01/B11 agent artifacts, the B17 inventory and the route-policy
+  artifacts regenerate with no drift (ratchet unchanged at 162/159: E6 adds no route).
+

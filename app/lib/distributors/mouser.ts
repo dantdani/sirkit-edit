@@ -19,6 +19,7 @@ import {
   asString,
   cheapestUnitPrice,
   type DistributorClient,
+  type LookupBatchOptions,
   type PartPricing,
   type PriceBreak,
 } from "./types";
@@ -87,7 +88,9 @@ export function makeMouserClient(opts: { apiKey: string; egress?: DistributorEgr
   const coalesce = makeCoalescer<PartPricing | null>();
   const lookup = (mpn: string): Promise<PartPricing | null> => coalesce(inFlightKey(mpn), () => lookupByMpn(mpn));
 
-  async function lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>> {
+  // [B19-E E6] Mouser is disabled (OD-32) and never asked for the agent: an agent purpose is refused, never metered as a person's
+  async function lookupBatch(mpns: string[], options: LookupBatchOptions = {}): Promise<Map<string, PartPricing>> {
+    if (options.purpose === "agent") return new Map();
     const unique = [...new Set(mpns.filter((m) => m.trim() !== ""))];
     const entries = await Promise.all(
       unique.map(async (mpn): Promise<[string, PartPricing] | null> => {

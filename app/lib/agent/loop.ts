@@ -23,6 +23,7 @@ import type { ExecutionDecisionMode, PublicExecutionGrant } from "../engineering
 import { REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
+import { resolveExternalReadBinding } from "./acquisition-reads"; // [B19-E E6]
 import type { AgentTraceRecorder } from "./trace-recorder";
 import type { ReadResourceKind } from "../engineering/resource-envelopes";
 import { REPLACEMENT_PROPOSAL_SCHEMA } from "../engineering/replacement-proposals";
@@ -216,6 +217,19 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
         if (descriptor.toolId === "sirkit.schematic.propose-component-replacement"
           && !availableResourceKinds(context).has("component-authority-records")) {
           warn(`Tool ${descriptor.toolId} unavailable: required resource(s) component-authority-records cannot be supplied for this run.`);
+          return false;
+        }
+        return true;
+      }
+      // [B19-E E6] a bound external read is advertised only when its allowlisted binding resolves, the server bound an external
+      // acquisition port to this run (the availability fact) and a verified canonical state exists; it has no B05 read binding.
+      if (descriptor.binding.status === "bound-external-read") {
+        if (resolveExternalReadBinding(descriptor).state !== "resolved") {
+          warn(`Tool ${descriptor.toolId} unavailable: no resolved external read binding.`);
+          return false;
+        }
+        if (context.externalAcquisitionAvailable !== true || !context.canonicalState || !context.canonicalRevisionDigest) {
+          warn(`Tool ${descriptor.toolId} unavailable: no external acquisition source and verified canonical state for this run.`);
           return false;
         }
         return true;

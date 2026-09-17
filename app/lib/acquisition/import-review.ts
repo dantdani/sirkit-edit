@@ -25,6 +25,11 @@ const PROFILE_NEEDS: Readonly<Record<ImportReviewProfile, ReadonlyArray<readonly
 
 const valueText = (value: CandidateFact["value"]): string => (typeof value === "string" ? value : canonicalJson(value));
 
+/** [B19-E E6] Everything an approval profile needs, as the missing list reports it (what is missing before any evidence exists). */
+export function importReviewProfileNeeds(profile: ImportReviewProfile): string[] {
+  return PROFILE_NEEDS[profile].map(([, label]) => label);
+}
+
 /** SHA-256 of a fact's canonical value. */
 export function factValueHash(property: string, value: CandidateFact["value"]): string {
   return sha256(canonicalJson({ property, value }));

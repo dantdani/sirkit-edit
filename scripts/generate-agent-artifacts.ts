@@ -19,6 +19,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { sirkitToolRegistry } from "../app/lib/engineering/tool-catalog";
 import { ACTIVATED_READ_BINDINGS, resolveReadBinding } from "../app/lib/engineering/tool-bindings-readonly";
+import { resolveExternalReadBinding } from "../app/lib/agent/acquisition-reads"; // [B19-E E6]
 import { canonicalJson } from "../app/lib/engineering/stable";
 import { buildAgentToolDeclarations, renderAgentProviderParity, strictCompatibility } from "../app/lib/agent/provider-tools";
 
@@ -43,6 +44,8 @@ type Descriptor = NonNullable<ReturnType<typeof registry.get>>;
 function requiredRuntimeResources(item: Descriptor): string {
   // [B18-C] a granted execution needs the board, the PCB history basis and the run's execution-grant minter.
   if (item.operationClass === "mutate" && item.agentExposed) return "canonical-state;pcb-proposal-basis;execution-grant-minter";
+  // [B19-E E6] a bound external read needs the verified board and the external acquisition port the chat route binds
+  if (item.binding.status === "bound-external-read") return "canonical-state;external-acquisition-port";
   if (item.operationClass === "read") {
     const binding = ACTIVATED_READ_BINDINGS.find((entry) => entry.toolId === item.toolId);
     return binding ? [...binding.requiredResources].join(";") : "";
@@ -57,6 +60,12 @@ function requiredRuntimeResources(item: Descriptor): string {
  *  optional). Nothing is unconditionally "assemblable". */
 function browserRuntimeAvailability(item: Descriptor): { availability: string; reason: string } {
   if (!item.agentExposed) return { availability: "not-exposed", reason: reasonFor(item) };
+  if (item.binding.status === "bound-external-read") {
+    return {
+      availability: "conditional",
+      reason: "BOUND EXTERNAL READ (B19-E E6): requires the editorContext's validated board (canonical-state) AND an external acquisition port bound by /api/chat through app/api/chat/external-acquisition-runtime.ts (a server with its database; withheld in the fixture runtime); labels only while every source's agentDisclosure is unknown (OD-36); exact MPNs only, at most 5 live MPNs per run (OD-40); withheld per run otherwise",
+    };
+  }
   if (item.operationClass === "read") {
     const required = requiredRuntimeResources(item);
     if (required.includes("selection-snapshot")) {
@@ -84,6 +93,7 @@ function browserRuntimeAvailability(item: Descriptor): { availability: string; r
 
 function reasonFor(item: Descriptor): string {
   if (item.agentExposed) {
+    if (item.binding.status === "bound-external-read") return "STATICALLY EXPOSED: bound external read (B19-E E6) over the chat route's injected acquisition port; per-run availability requires the port and canonical state (see browser_runtime_availability)";
     if (item.operationClass === "read") return "STATICALLY EXPOSED: activated B05/B05.1 read binding; per-run availability requires every declared runtime resource (see browser_runtime_availability)";
     if (item.operationClass === "mutate") return "STATICALLY EXPOSED: reviewed Tier 1 granted execution (B18-C) — a call mints a server-bound one-shot grant; the user's canonical editor session is the only committer";
     return "STATICALLY EXPOSED: sealed tier-1 proposal binding (proposal-artifact only; apply stays the human-only destructive command); per-run availability requires validated schematic + canonical head mark";
@@ -111,7 +121,7 @@ const rows = registry.list().map((item) => {
     bindingSymbol: item.binding.symbol ?? "",
     discovery: item.discovery,
     staticallyExposed: item.agentExposed,
-    bindingResolved: item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
+    bindingResolved: item.binding.status === "bound-external-read" ? resolveExternalReadBinding(item).state === "resolved" : item.operationClass === "read" ? resolveReadBinding(item).state === "resolved" : item.operationClass === "mutate" ? item.agentExposed && item.binding.status === "bound-mutation-editor-session" : item.binding.status === "bound-proposal",
     requiredRuntimeResources: requiredRuntimeResources(item),
     browserRuntimeAvailability: runtime.availability,
     requiredProjectState: [...item.requiredProjectState].join(";"),

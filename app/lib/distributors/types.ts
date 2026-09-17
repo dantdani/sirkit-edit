@@ -61,7 +61,8 @@ export type DistributorName = PartPricing["distributor"];
 export interface DistributorClient {
   name: DistributorName;
   lookupByMpn(mpn: string): Promise<PartPricing | null>;
-  lookupBatch(mpns: string[]): Promise<Map<string, PartPricing>>;
+  /** [B19-E E6] `options.purpose` meters the live lookups at that purpose's quota share (default interactive; the agent: 25%, OD-40). */
+  lookupBatch(mpns: string[], options?: LookupBatchOptions): Promise<Map<string, PartPricing>>;
   /**
    * [B19-E E2] A bounded candidate search (exact MPN or keyword), at most 5 hits. Every hit is the vendor's own part, labelled
    * live with when the vendor answered; `exactMatch` says whether its published MPN is the query (a hit is never relabelled).
@@ -71,6 +72,9 @@ export interface DistributorClient {
 }
 
 export type CandidateSearchOptions = { mode: "exact" | "keyword"; limit: number; purpose: "interactive" | "agent" };
+/** [B19-E E6] Who an exact-MPN batch lookup is for. */
+export type LookupPurpose = "interactive" | "agent";
+export type LookupBatchOptions = { purpose?: LookupPurpose };
 export type CandidateSearchHit = { pricing: PartPricing; exactMatch: boolean };
 export type CandidateSearchAnswer =
   | { ok: true; hits: CandidateSearchHit[]; rawContentHash: string; retrievedAt: number }
