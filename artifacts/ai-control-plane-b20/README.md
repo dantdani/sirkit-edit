@@ -14,7 +14,7 @@ the Anthropic (`mcp-client-2025-11-20`) and OpenAI (`type: "mcp"`) connectors sp
 | checkpoint | artifact | state |
 |---|---|---|
 | discovery | `discovery.md` (six read-only readers over the canonical registry and provider adapters, principal binding, the outbound boundary, the agent loop and exposure subset, tests and CI, and prior obligations) | INFERRED — to be confirmed by reproduction in the first increment |
-| B20-A Sirkit consumes external MCP (read-only) | `mcp-client-boundary.md`, `mcp-server-registry.md` | planned |
+| B20-A Sirkit consumes external MCP (read-only) | `mcp-client-boundary.md`, `mcp-server-registry.md`, `mcp-server-registry.csv` (generated, gated) | A0 CONFIRMED (registry 1.0.0, empty by OD-48 and byte-gated; RFC 8707 canonical URIs, unique across rows, with origin-and-path endpoints — host, port, exact path — as registry data (wire enforcement A1); secret references by env name, none shared by two rows; `maxRedirects` pinned 0; admission key generalised to server + tool with per-server breaker, the agent share and a minute-window floor of 4; `SIRKIT_MCP_ENABLED` off unless exactly `1`, `SIRKIT_MCP_DISABLED_SERVERS` remove-only; CI guard generalised to b19-/b20-; OD-46/48/53/54/59 recorded; review fixes applied test-first); A1–A5 planned |
 | B20-B Sirkit exposes an MCP server | `mcp-exposure.md` | planned |
 | B20-C discovery, schemas and parity | `mcp-parity.md` | planned |
 | B20-D adversarial tests | `mcp-adversarial.md` | planned |

@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20 discovery recorded (36 candidate defects D20-1..36; increments A0..D3 planned; OD-41/OD-42 recorded)",
+  "currentCheckpoint": "B20-A0 complete (registry, admission key, flag, CI rule; reviewed and fixed)",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B20-A0 test-first: MCP server registry (canonical URI, pinned descriptor digests, secret references by env name), generalised admission keys (server + tool), SIRKIT_MCP_ENABLED flag off, CI job-scope guard extended to b20-; then A1 transport.",
-  "updatedAt": "2026-09-17T01:44:16-04:00",
+  "nextAction": "B20-A1 test-first: bounded response-header subset on OutboundResult, an incremental SSE reader with the bounded-stream discipline, app/lib/mcp/http-transport.ts (POST-only Streamable HTTP with MCP-Protocol-Version/Mcp-Method/Mcp-Name, 202 for notifications, bounded parse of 4xx JSON-RPC bodies, origin-and-path admission, cancellation by aborting the stream).",
+  "updatedAt": "2026-09-17T04:55:15-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

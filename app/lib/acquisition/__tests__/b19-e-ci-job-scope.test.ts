@@ -49,6 +49,9 @@ const ALL_TESTS = ["app", "lib", "components"].flatMap((root) => {
   }
 });
 const selected = (filters: readonly string[]): string[] => ALL_TESTS.filter((file) => filters.some((filter) => file.includes(filter)));
+/** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix. */
+const CHAPTERS = ["b19-", "b20-"] as const;
+const chapterFiles = (chapter: (typeof CHAPTERS)[number]): string[] => ALL_TESTS.filter((file) => file.includes(`/${chapter}`));
 
 /**
  * [B19-E E2 follow-up] Does a suite start PostgreSQL, itself or through a test helper it imports? Relative imports are followed
@@ -94,7 +97,7 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(promptToGerber.length).toBeGreaterThan(100);
     expect(promptToGerber.filter(startsPostgres)).toEqual([]);
     const databaseDelivery = selected(jobFilters("database-delivery"));
-    const b19Postgres = ALL_TESTS.filter((file) => /\/b19-/.test(file) && startsPostgres(file));
+    const b19Postgres = chapterFiles("b19-").filter(startsPostgres);
     expect(b19Postgres).toEqual(expect.arrayContaining(["app/lib/distributors/__tests__/b19-offer-retention.test.ts", "app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts"]));
     expect(b19Postgres.filter((file) => !databaseDelivery.includes(file))).toEqual([]);
   }, 60_000);
@@ -122,7 +125,7 @@ describe("[B19-E E2 review] CI job scope", () => {
   it("[B19-E E3 review] every B19 suite runs in CI: a PGlite suite in database-delivery, every other one in prompt-to-gerber", () => {
     const promptToGerber = selected(jobFilters("prompt-to-gerber"));
     const databaseDelivery = selected(jobFilters("database-delivery"));
-    const b19 = ALL_TESTS.filter((file) => /\/b19-/.test(file));
+    const b19 = chapterFiles("b19-");
     expect(b19).toEqual(expect.arrayContaining(["app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts"]));
     // [B19-E E4] the publication review suites: two start PGlite, the rest (a shared fixture harness included) do not
     expect(["app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts", "app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts"].every(startsPostgres)).toBe(true);
@@ -140,6 +143,25 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(databaseDelivery).toContain("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts");
     expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
   }, 60_000);
+
+  it.each(CHAPTERS)("[B20 A0] every %s suite runs in CI (OD-59): a PGlite suite in database-delivery, every other one in prompt-to-gerber", (chapter) => {
+    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+    const databaseDelivery = selected(jobFilters("database-delivery"));
+    const files = chapterFiles(chapter);
+    expect(files.length, `${chapter} suites exist`).toBeGreaterThan(0);
+    expect(files.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
+  }, 60_000);
+
+  it("[B20 A0] the B20 suites: app/lib/mcp is a prompt-to-gerber directory filter; no A0 suite starts PGlite", () => {
+    expect(jobFilters("prompt-to-gerber")).toContain("app/lib/mcp");
+    const b20 = chapterFiles("b20-");
+    expect(b20).toEqual(expect.arrayContaining([
+      "app/lib/mcp/__tests__/b20-a0-server-registry.test.ts",
+      "app/lib/mcp/__tests__/b20-a0-admission-by-server-and-tool.test.ts",
+      "app/lib/mcp/__tests__/b20-a0-feature-flag.test.ts",
+    ]));
+    expect(b20.filter(startsPostgres)).toEqual([]);
+  });
 
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {
     const filters = jobFilters("prompt-to-gerber");

@@ -64,6 +64,15 @@ export function containsSecretShapedText(text: string): boolean {
   return SECRET_PATTERNS.some((pattern) => { pattern.lastIndex = 0; return pattern.test(text); });
 }
 
+/**
+ * [B20 A0] The same denylist with the key prefixes anchored at a token boundary (`MODEL_BOUND_SECRET_PATTERNS`), for fields
+ * that are identities rather than diagnostics: a host label or a title such as "desk-lamp-tools" carries `sk-` inside a
+ * word and is not a key, while `sk-…` at the start of a token still is. The other classifiers are unchanged.
+ */
+export function containsTokenAnchoredSecretShapedText(text: string): boolean {
+  return MODEL_BOUND_SECRET_PATTERNS.some((pattern) => { pattern.lastIndex = 0; return pattern.test(text); });
+}
+
 /** [B12.7] The fixed diagnostic for thrown values from which no safe
  *  detail can be extracted. */
 export const UNRENDERABLE_THROWN_VALUE = "unrenderable thrown value";

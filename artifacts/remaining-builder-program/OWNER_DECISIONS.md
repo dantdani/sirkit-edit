@@ -254,3 +254,56 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   servers in tests.
 - The owner may choose otherwise: adopt the SDK for the compatibility era once it publishes a release that implements the
   current revision.
+
+## OD-46 — OAuth state storage for the MCP client (B20-A0, 2026-09-17)
+
+- Default applied: B20-A supports two credential shapes only, both read from the environment by NAME through the
+  registry's secret-reference pattern (`app/lib/mcp/server-registry.ts`: auth modes `client-credentials-env` and
+  `pre-issued-token-env`; `none` for a public server). No PKCE verifier, `state`, `iss`, refresh token or per-issuer client
+  credential is stored anywhere: authorization-code and refresh flows and any at-rest token store are deferred to a later
+  increment with an explicit owner decision. A token obtained at run time (A3) lives in process memory only.
+- The owner may choose otherwise: an encrypted credential/token table, or authorization-code flows inside B20.
+
+## OD-48 — The initial external MCP allowlist (B20-A0, 2026-09-17)
+
+- Default applied: empty. The registry ships with zero rows, so every server id is refused (`unknown_server`) and the MCP
+  client can reach nothing; the rendered artifact (`artifacts/ai-control-plane-b20/mcp-server-registry.csv`) is gated
+  byte-for-byte. A server is added only by a reviewed row in a reviewed PR: id, canonical URI (RFC 8707 form, unique across
+  rows) and its exact endpoint (origin — host and port — and path), supported protocol revisions, auth by environment NAME
+  (no credential name referenced by two rows; a client id may be shared), `descriptorPin` (tools/list digest and `pinnedAt`) once
+  the descriptor was reviewed, limits, `terms.documentationUrl` and `terms.checkedOn`, and `state.ownerDecision` naming the
+  decision that admitted it. While a row's pin is null, discovery results are never trusted as pinned.
+- The owner may choose otherwise: name the first approved servers (identity, canonical URL, terms) and the decision id each
+  row carries.
+
+## OD-53 — Per-process quota meters for MCP servers (B20-A0, 2026-09-17)
+
+- Default applied: per process, as OD-40 — each server's minute window, each named tool's minute window and the server's
+  breaker live in the process that runs the request (`app/lib/acquisition/admission-control.ts`); several instances can
+  together exceed one server's quota, and the server's own rate limiting is the backstop. The limit is stated in the
+  module header and in `mcp-client-boundary.md`. Every minute window (server and tool) has a floor of 4 requests in the
+  registry so the agent's 25% share (OD-40, `floor(max × 0.25)`) is never rounded to 0 — below that the window would
+  refuse the agent forever while reading as a temporary pause. No live server is enabled in B20 anyway (OD-48).
+- The owner may choose otherwise: a durable shared meter before the first server is approved.
+
+## OD-54 — The MCP feature flag (flag part; route classification decided in B20-B2) (B20-A0, 2026-09-17)
+
+- Default applied: one server-side flag, `SIRKIT_MCP_ENABLED`, keeps both surfaces (consuming external servers and
+  exposing Sirkit tools) off; only the exact value `1` enables it, compared untrimmed as `SIRKIT_DB_QUALIFICATION` is
+  (`app/lib/db/test-qualification.ts`; a padded `1` does not enable — the `.env.local` loader trims unquoted file values
+  before they reach the environment, so a file value needs no padding to begin with).
+  `SIRKIT_MCP_DISABLED_SERVERS` names registry ids an operator forces off; it can only remove, never add. Both are read
+  through the repository's environment-record pattern (`app/lib/mcp/rollout.ts`) and documented in `.env.example` without
+  values. Nothing else consumes the flag in A0; the `AuthRouteClass`/`IdentitySource` for `POST /api/mcp` and the census
+  move are decided and recorded in B20-B2.
+- The owner may choose otherwise: one flag per surface, or a different enabling value.
+
+## OD-59 — CI admission rule for B20 suites (B20-A0, 2026-09-17)
+
+- Default applied: the job-scope guard (`app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts`) is generalised to a
+  chapter list `["b19-", "b20-"]`: every suite whose file name carries `/b20-` must be selected by the right job — a
+  PGlite-backed suite by `database-delivery`, every other one by `prompt-to-gerber` — and `app/lib/mcp` is a
+  `prompt-to-gerber` directory filter, so an explicit file under it is refused by the redundancy rule.
+  `app/api/mcp/__tests__` is added as a filter by the increment that creates the endpoint (B20-B2). The guard failed
+  before the workflow edit and passes after it.
+- The owner may choose otherwise: a separate B20 guard file, or per-suite explicit admission.

@@ -1905,3 +1905,38 @@ _(discovery, reproduction and results appended below as they are observed)_
   D1 … D3 planned test-first with their suites, CI lists, ratchet moves and artifacts (`discovery.md` section 7, adjusted in
   section 9: the protected-resource metadata document and a Sirkit-issued short-lived MCP token are part of B20-B2; B5
   view-session delivery and B6 stdio deferred by default).
+
+### B20-A0 - the MCP server registry, generalised admission, the feature flag and the CI admission rule (2026-09-17 local; workflow + lead; this commit)
+
+- Implemented test-first by a single-writer workflow (`wf_ec6622a8-858`; the three new suites and the two new CI-guard cases
+  failed on the unchanged tree first): `app/lib/mcp/server-registry.ts` (registry 1.0.0, EMPTY by OD-48, deep-frozen with no
+  add/remove API; RFC 8707 canonical URIs with origin (host and port) and exact-path endpoints; supported protocol versions
+  with 2025-11-25 only under `compatibilityEra`; secret references by environment-variable NAME with closed roles; descriptor
+  pin; bounded limits with a minute-window floor of 4 so the agent's 25% share never rounds to 0; per-tool windows;
+  `maxRedirects` pinned 0; agentDisclosure unknown; state with an owner-decision id; a validator with 18 closed rule codes
+  that never echoes a malformed id; `admittedMcpServer(id, env = process.env)` that consults the flag and the operator
+  disabled list on every call; a 28-column CSV renderer), `app/lib/mcp/rollout.ts` (`SIRKIT_MCP_ENABLED` enables only on the
+  exact untrimmed string "1"; `SIRKIT_MCP_DISABLED_SERVERS` removes only), the generic admission key in
+  `admission-control.ts` (server + optional tool; both windows required; breaker per server; agent share on both; existing
+  distributor behaviour and signatures unchanged), the CI job-scope guard generalised to `b19-`/`b20-` with the
+  `app/lib/mcp` directory filter in the prompt-to-gerber job, `scripts/generate-b20-mcp-server-registry.ts` with the
+  byte-gated `mcp-server-registry.csv`, `mcp-server-registry.md`, `mcp-client-boundary.md` (registry and admission section),
+  `.env.example` entries, README row, OD-46/48/53/54/59.
+- Adversarial review (four lenses, one skeptic each): 20 findings, 18 confirmed, all fixed test-first by the fix workflow
+  (15 failing cases first; the deep-freeze strengthening proven by a deliberate shallow-freeze mutation caught, source restored
+  by hash) and confirmed by an independent checker: admission no longer fails open when the environment is omitted; the
+  endpoint keeps the port (a ported URI and its port-443 twin are different endpoints); the secret-shape scan uses the
+  token-anchored classifier (`containsTokenAnchoredSecretShapedText`, one new export in `redaction.ts`) so `desk-lamp-tools`
+  is an identity, not a key; cross-row uniqueness of canonical URIs and credential references; a malformed id is labelled
+  `(malformed id, row n)` in every message; the flag comparison untrimmed; artifact counts and citations corrected and one
+  test pins the page's column count to the renderer's constant.
+- Lead follow-ups on the checker's two residual low items (one case failed first): `shared-secret-reference` applies to
+  credential roles only (a `client-id` is a public identifier one OAuth client may present to several resource servers;
+  client secrets and access tokens stay one-server-only); discovery.md records D20-20 as closed on its registry half only,
+  with the wire half (origin-and-path admission instead of hostname-only) in A1 and the pin comparison in A2.
+- Gates (lead re-run on the combined tree, bounded batches, one at a time): mcp, acquisition, distributor quota/registry/
+  egress 18 files / 384 (+2 env-gated skips); agent, redaction consumers, AST import gates, B16.1C tripwires (ratchet unchanged
+  162 = 159 + 3 + 0: A0 adds no route), B17-F exposure, no-purchase 40 / 471; tsc 0; eslint clean on the 10 changed .ts files;
+  the B20 registry, B19 source registry, action-toolability and B16.0.1/0.2 generators re-run with zero drift; no CRLF or
+  control characters. Closes D20-20 (registry half), D20-21 (per-tool dimension; meters per process, OD-53), D20-24
+  (registry pins `maxRedirects` 0; the wire test follows in A1), D20-26, D20-27.
