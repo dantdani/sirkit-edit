@@ -1751,3 +1751,15 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Tests: physical bindings (API and library), both component review panels, prompt-to-gerber 17 files / 119 (+6 skips); tsc 0;
   eslint clean on both files.
 
+### B19-E E4 follow-up — the B11.5 write-closure gate admits the E4 KiCad-library fixture test (2026-09-16 local, solo; this commit)
+
+- Found by the E6 implementer: `b11-5-capture-exactness.test.ts` check 12 (no test writes under app/, lib/, scripts/ or
+  artifacts/) failed since E4 (40c15b6), because `b19-e-publication-boundaries.test.ts` builds throwaway KiCad library fixtures
+  with `mkdirSync`/`writeFileSync`. Not caught by CI: that gate is not in a CI list (it is in the full suite only).
+- Every one of its 8 write lines (the symlink and junction included) is rooted at `mkdtempSync(path.join(tmpdir(),
+  "b19e-e4-kicad-…"))` scratch roots, so it was admitted the way the gate admits the other temp-directory tests: a justification
+  predicate that requires the scratch root and refuses any write line not rooted at it. Proven: rerooting one write outside
+  the scratch root fails the gate (mutation, file restored by hash). The gate passes 18/18.
+- The E6 workflow was resumed after its four review agents hit the weekly usage limit; its implementation stage came back
+  from cache and only the review, fix and check stages re-ran.
+
