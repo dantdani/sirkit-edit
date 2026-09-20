@@ -1940,3 +1940,62 @@ _(discovery, reproduction and results appended below as they are observed)_
   the B20 registry, B19 source registry, action-toolability and B16.0.1/0.2 generators re-run with zero drift; no CRLF or
   control characters. Closes D20-20 (registry half), D20-21 (per-tool dimension; meters per process, OD-53), D20-24
   (registry pins `maxRedirects` 0; the wire test follows in A1), D20-26, D20-27.
+
+### B20-A1 - the Streamable HTTP transport of the MCP client (2026-09-17 to 2026-09-20 local; workflow, three review-fix rounds, lead; this commit)
+
+- Implemented test-first by a single-writer workflow (`wf_a330a7b8-60d`; 14 of 17 header cases failed and the two new modules
+  did not exist on the unchanged tree): additive options on `app/lib/net/outbound-fetch.ts` (a bounded, allowlisted response
+  header subset of at most 16 values of at most 2,048 bytes with `headersDropped`; `errorBody` for a bounded 4xx/5xx JSON body
+  under the closed code `http_error`; `streamBody` handing a 2xx `text/event-stream` body back unread - without it no SSE
+  reader can exist, since the bounded reader succeeds only at `done`), `app/lib/net/sse-reader.ts` (`readSseJsonRpc`:
+  incremental frames, keep-alive comments ignored, stops and cancels at the awaited response, per-event, total and
+  event-count caps, deadline, abort, server-initiated requests refused) and `app/lib/mcp/http-transport.ts` (`mcpPost`:
+  URL only from the row's canonical URI and admitted by origin AND exact path - the wire half of D20-20; `maxRedirects` 0
+  with the Authorization header never re-sent - D20-24 on the wire; `Accept`, `MCP-Protocol-Version`, `Mcp-Method`,
+  `Mcp-Name` with the Base64 sentinel; transport-owned `_meta` and forged reserved keys refused; Bearer only from injected
+  providers, on every request, never in a URL, error or result; admission and the in-flight bound before anything is sent;
+  one closed outcome per status, body and header - 202, JSON, SSE, -32020/-32021/-32022, 401/403 challenges parsed and only
+  recorded, 404/405 as `legacy_or_unknown` for A2's era probe, 429/5xx with `Retry-After`). `schgen/endpoint-client.ts` gains
+  one row in its total failure map. No route: ratchet unchanged at 162 = 159 + 3 + 0. Closes D20-16, D20-17.
+- Review round 1 (four lenses, one skeptic each): 28 findings, 23 confirmed, fixed test-first (14 cases failed first): unread
+  stream hand-offs cancelled on every non-consuming path, the sent token redacted from every result and notification leaf,
+  notification text inert and bounded, capability lists as validated names, error bodies read as JSON only with a 401's
+  challenge surviving an oversized body, the streamed event cap at the row's ceiling, a 400 with a Bearer challenge as
+  `unauthorized`, egress refusals counted for the breaker, a non-finite `errorBody.maxBytes` clamped. A session restart cut
+  off the checker; on resume the skeptics re-judged all 28 findings against the fixed tree (27 no longer real) and one more
+  was confirmed and fixed (the attribution's `method` is the validated plain name or empty, never the caller's raw string);
+  the lead closed the checker's residual (the attribution's `protocolVersion` likewise; one case failed first). Because the
+  resume had skipped the formal check of the first pass, four independent read-only checkers then re-examined its 23 fixes:
+  24 of 24 fixed (three documentation-only), and ten further distinct issues found.
+- Review round 2 (`wf_d45a360c-4da`, R2-A to R2-K, 19 of 106 cases failed first; two checkers: 11 of 11 fixed and
+  revert-sensitive): object KEYS redacted and scrubbed with a deterministic collision rule; the media-type sentence names only
+  a plain bounded type; a token straddling the scrub's cut no longer survives as a prefix; a wire-level bodiless 202 typed
+  `text/event-stream` is probed under min(1 s, remaining deadline) and accepted; an error body dropped for size is
+  `response_too_large`, never `legacy_or_unknown`; the SSE reader's caps withstand NaN, Infinity and negatives under a 16 MiB
+  ceiling; the read deadline is clamped against a clock stepping backwards; a caller abort is the MCP-only breaker outcome
+  `inconclusive` (as the half-open trial it re-opens the breaker; the identical distributor gap at
+  `distributors/egress.ts:74` is recorded as a B19 follow-up, not changed); the scrub's work is bounded (256 strings and keys
+  per notification, 262,144 characters per call, `notificationsDropped`); the B19 URL-credential redaction pattern runs in
+  linear time (a 100,000-character text: 3,184 ms before, 1.4 ms after; 1,500 of 1,875 corpus texts identical, the rest strict
+  supersets; every redaction consumer passes unchanged); plus one found by the fixer: NFC folded a KELVIN SIGN into a real K
+  after the comparison.
+- Review round 3 (`wf_cc422016-251`, R3-1 to R3-5, 9 of 96 cases failed first, 34 mutations each caught, checker 5 of 5):
+  the round-2 regression that a token followed by one combining mark survived the single NFC comparison - redaction is now
+  three passes, fail closed (raw window, NFC form, then a skeleton of NFKD without combining marks and format characters; a
+  disguised text is replaced whole; results get passes one and three only and are not normalised - a stated limit for A4);
+  the dropped-notification stub never names a method that carries the token; a rewritten key can never mint a structural
+  JSON-RPC name or `__proto__`; the 202 probe's four branches pinned; `mcpPost` never rejects (locked bodies, a throwing body
+  getter, a hostile signal) with the in-flight count and the breaker record consistent.
+- Lead follow-ups on the last checker's two low items (2 cases failed first; the digit-token fix also proven by mutation and
+  restored by hash): a clock that throws after admission no longer skips the breaker record or replaces the call's outcome;
+  a bearer token of digits only is refused before anything is sent, because a number in an answer is never redacted.
+- Gates (lead re-run on the final combined tree, bounded batches, one at a time): net, http, mcp 9 files / 323; acquisition,
+  distributor egress and quota, schgen, cross-verify 17 / 242 (+2 env-gated skips); agent and the other redaction consumers
+  36 / 420; AST import gates, B16.1C tripwires, B17-F exposure, no-purchase 4 / 51; tsc 0; eslint clean on the 10 changed
+  .ts files; the B20 and B19 registry generators with zero drift; no CRLF, control characters, console calls or mutation
+  markers. The four A1 suites hold 122 cases (20 + 28 + 70 + 4), pinned against the page by a test.
+- Recorded, not fixed: the DNS rebinding window of the egress path (D20-23, for D1); `x-mcp-header` mirroring, negotiation
+  and the era probe (A2); PRM and token flows (A3); trace attribution and result normalisation (A4); the redaction pattern
+  is still quadratic on many `scheme://` runs without `@` (bounded to about 210 ms per call by the scrub budget) and
+  `sanitizeModelBoundText` is slow on 100,000 spaces (B19 owner follow-ups); the SSE reader's own count of notifications
+  beyond its cap of 64 is not surfaced.

@@ -37,6 +37,12 @@ export type AdmissionPurpose = "interactive" | "agent";
 export const PURPOSE_QUOTA_SHARE: Readonly<Record<AdmissionPurpose, number>> = Object.freeze({ interactive: 1, agent: 0.25 });
 export type RequestAdmission = { allowed: true } | ({ allowed: false } & AdmissionPause);
 export type RequestOutcome = "success" | "failure" | "rate_limited" | "neutral";
+/**
+ * [B20 A1 review-2] MCP only: "inconclusive" is a call that judged NO answer of the server's (the caller aborted it). As the
+ * half-open trial it re-opens the breaker for another cooldown (nothing was learnt, so nothing may close it); otherwise it
+ * changes nothing: no failure counted, no success counted. The distributor entry points do not accept it.
+ */
+export type McpRequestOutcome = RequestOutcome | "inconclusive";
 
 /** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server. */
 export type AdmissionKey =
@@ -208,12 +214,16 @@ function admit(primary: Meter, secondary: Meter | null, cost: number, now: numbe
   return { allowed: true };
 }
 
-function settle(meter: Meter, outcome: RequestOutcome, now: number): void {
+function settle(meter: Meter, outcome: McpRequestOutcome, now: number): void {
   const breaker = meter.policy.breaker;
   if (!breaker) return;
   const state = stateOf(meter.key);
   const wasTrial = state.trialInFlight;
   state.trialInFlight = false;
+  if (outcome === "inconclusive") {
+    if (wasTrial) state.openUntil = now + breaker.openMs; // [B20 A1 review-2] the trial learnt nothing: open again, count unchanged
+    return;
+  }
   if (outcome === "success" || outcome === "neutral") {
     state.consecutiveFailures = 0;
     state.openUntil = 0;
@@ -276,7 +286,7 @@ export function requestMcpAdmission(server: McpServerRegistryEntry, tool: string
 }
 
 /** [B20 A0] Record how an allowed MCP request ended; the breaker is the server's, whichever tool was called. */
-export function recordMcpOutcome(server: McpServerRegistryEntry, outcome: RequestOutcome, now: number = Date.now()): void {
+export function recordMcpOutcome(server: McpServerRegistryEntry, outcome: McpRequestOutcome, now: number = Date.now()): void {
   settle(mcpServerMeter(server), outcome, now);
 }
 

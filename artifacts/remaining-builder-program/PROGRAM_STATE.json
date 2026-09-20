@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20-A0 complete (registry, admission key, flag, CI rule; reviewed and fixed)",
+  "currentCheckpoint": "B20-A1 complete (Streamable HTTP transport; three review-fix rounds, independently checked)",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "3296753",
+  "lastGreenSha": "c79b723",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B20-A1 test-first: bounded response-header subset on OutboundResult, an incremental SSE reader with the bounded-stream discipline, app/lib/mcp/http-transport.ts (POST-only Streamable HTTP with MCP-Protocol-Version/Mcp-Method/Mcp-Name, 202 for notifications, bounded parse of 4xx JSON-RPC bodies, origin-and-path admission, cancellation by aborting the stream).",
-  "updatedAt": "2026-09-17T04:55:15-04:00",
+  "nextAction": "B20-A2 test-first: server/discover probe with modern/legacy era detection (OD-41), tools/list with cursor paging, ttlMs/cacheScope cache, descriptor-digest pin comparison, foreign tool gates (name regex + Sirkit namespace prefix, inert bounded title/description with directive refusal, annotations never trusted, x-mcp-header constraints, inputSchema only within the wire subset with $ref rejected and depth/subschema bounds), reserved _meta prefix rejection.",
+  "updatedAt": "2026-09-20T09:12:06-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

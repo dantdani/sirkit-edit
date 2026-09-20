@@ -25,7 +25,11 @@ const SECRET_PATTERNS: readonly RegExp[] = [
   // [B19-D I5e row 30] credentials inside a URL (a connection string in a driver error: scheme://user:password@host).
   // [B19-D I5e review] the whole userinfo up to the last '@' of the token: an empty user, a token alone, and a password with
   // an unencoded '/' or '@' are all credentials (a URL with '@' in its path loses the part before it — over-redaction)
-  /\b[a-z][a-z0-9+.-]*:\/\/[^\s@]*@(?:[^\s@]*@)*/gi,
+  // [B20 A1 review-2] linear on a run of scheme characters: the pattern began with \b, so on "a.a.a.…" a scan started at every
+  // letter and each ran to the end of the run (quadratic, on server-controlled text). The scan now starts only at the FIRST
+  // letter of a run (the lookbehind: only non-letters of the class back to the run's start) — where B19 started whenever that
+  // letter was at a word boundary; after a digit of the run or an underscore it redacts MORE (B19 started later, or not at all)
+  /[a-z](?<=(?<![a-z0-9+.-])[0-9+.-]*[a-z])[a-z0-9+.-]*:\/\/[^\s@]*@(?:[^\s@]*@)*/gi,
   // [B11.1] JSON-QUOTED credential fields: a serialized document renders
   // `{"apiKey":"AKIA…"}`, which the unquoted `key: value` pattern above does
   // not match. Separators/case are folded so apiKey / api_key / API-KEY /
