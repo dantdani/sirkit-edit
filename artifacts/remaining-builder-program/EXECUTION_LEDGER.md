@@ -2210,3 +2210,41 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 521 passed;
   agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean on the three changed files. The A2 suites hold
   146 cases.
+
+### B20-B3 - MCP reads served from the durable server board (2026-09-21 local; server-track workflow + lead; 78c0339, merged in a097c3a)
+
+- Designed read-only first (designer, critic, reviser; `scratchpad/b20/task-B3.md`), answering where canonical state
+  lives for a principal without a browser: the durable pcb-sync board (the current generation of the lineage rooted at
+  `board:<projectId>`), the server-owned B13 component authority and the static presets; no table stores the editor's
+  `SchematicState`. `tools/call` on a listed read now answers from that board through the canonical B05 service on the
+  `mcp` channel with `durable-server-board` authority, behind `readOnlyDurableWorkflow` (its `commit` refuses
+  `DW_READ_ONLY_VIEW`, proven over the resolved production defaults). Each call binds its revision (`_meta
+  dev.sirkit/expectedRevision`, required except on the two revision reads), optionally the registry digest and an
+  idempotency key; the board (id, `pcb2-`, sha256 `pb1-`) and the membership are checked again after the read; refusals
+  are closed codes with fixed sentences; one `sirkit.mcp-read-trace.v1` record per call. `sirkit.schematic.inspect` and
+  `sirkit.project.history-inspect` are withheld (OD-69), so the subset is 14 (9 served reads, 5 listed proposals answering
+  `not_served` until B4). Six board reads declare `durable-server-board` (OD-68); the registry digest moved to
+  `eng1-4aacd63c7e0a6193` and the B09, B11, b16-0-2 and MCP manifest artifacts were regenerated. `/api/mcp` is classified
+  durable `read`; the census is unchanged at 165/162/3/0. Written test-first (9 mutations caught); OD-67..73.
+- Adversarial review (four lenses, one skeptic each): 13 findings confirmed and fixed test-first, each test-strength fix
+  proved by a named mutation with the source restored by sha256. The most serious: an aborted or timed-out read released
+  its admission slot while its durable query still ran, so the caps did not bound the load on the shared database pool
+  (now held until the query settles; C20, A14); the import gate and the dispatch header credited J2 with "no database
+  write", which since B3 is enforced at run time (G7, H15); the `pcb2-` output of `pcb.revision-inspect` read as the pin
+  (the instructions and sentences now name the `eng1-` pin's place; H17). U5 (the component id space) is CONFIRMED on the
+  prompt-to-Gerber acceptance run's synced board.
+- Lead follow-ups (test-first, mutation-proven): the review's slot hold had no ceiling, so a query that never settles
+  held its slot until the process restarted; the lead added `MCP_READ_STUCK_WORK_GRACE_MS` (60 s after the call answered,
+  a ninth read bound with its ceiling), releasing the slot and counting the abandonment once (C23 fails with the watchdog
+  removed). The endpoint page and the dispatch header now state exactly what the import gate proves (no approve, bind,
+  withdraw, rebind, purchase, qualify, release or process run); pcb-sync publication and board-lineage derivation are in
+  the closure, and every such write goes through `workflow.commit`, which the read-only view refuses. The page's line
+  references were re-derived and are pinned by F8 (a moved citation fails it).
+- Gates (lead re-run in the worktree, one heavy job at a time): auth, API MCP and lib MCP 59 files / 880 (+9 env-gated
+  skips); app/api 27 / 1 059; engineering, agent, CI scope, AST gates and the acceptance pipeline 135 / 1 534; tsc 0;
+  eslint clean on 34 files; 14 generators with zero drift (artifact hashes compared before and after). Merged into this
+  branch with a normal merge.
+- On the merged tree (lead, after recording OD-67..73, the closure clauses, the README row and the reference notes' re-read):
+  auth, API MCP, lib MCP, net and http 67 files / 1 107 (+9 env-gated skips); app/api 27 / 1 059; engineering, agent,
+  acquisition, AST gates and the acceptance pipeline 147 / 1 728 (+2 env-gated skips); tsc 0; 16 generators with zero
+  drift.

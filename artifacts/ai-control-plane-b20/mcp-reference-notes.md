@@ -147,3 +147,17 @@ prefixes whose second label is `modelcontextprotocol` or `mcp` are reserved; nam
 JSON Schema: 2020-12 MUST; unsupported dialect → error; network `$ref` MUST NOT be auto-dereferenced (opt-in only with host
 allowlist, private-range rejection, timeouts, size limits, logging); unresolved external $ref → reject; composition bounds
 (depth, subschema count, time budget) SHOULD. Icons: https or data: only, same-origin, no credentials, magic-byte checks.
+
+## 8. Re-read of 2026-09-21 (B20-B3: tools/call results and `_meta`)
+
+- **Sources:** modelcontextprotocol.io/specification/2026-07-28/server/tools, /specification/2026-07-28/basic/index, and schema/2026-07-28/schema.ts, all fetched live.
+- **`tools/call` results:**
+  - `structuredContent` is any JSON value that conforms to `outputSchema` when one is defined; servers MUST provide conforming structured results.
+  - A tool returning structured content SHOULD also return the serialized JSON in a TextContent block; the spec's own example carries both.
+  - `isError: true` reports tool execution errors (input validation, business logic); unknown tools and malformed requests are JSON-RPC errors such as `-32602`.
+  - Types: `CallToolResult extends Result { content: ContentBlock[]; structuredContent?: unknown; isError?: boolean }`, and `Result` requires `resultType` with an optional `_meta: ResultMetaObject`.
+- **`_meta`:**
+  - `RequestMetaObject extends MetaObject = Record<string, unknown>`; third-party extensions use their own vendor prefix.
+  - A prefix whose second label is `modelcontextprotocol` or `mcp` is reserved; a name begins and ends alphanumeric.
+  - A missing required `_meta` field is `-32602` with HTTP 400. `dev.sirkit/*` keys are valid on both request params and results.
+- **SEP-2567 ("Stateful Tools", non-normative):** the protocol has no handle concept; a handle is an ordinary string argument, "a name, not a capability", authorized on every call.
