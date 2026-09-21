@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20: A0, A1, A2 (review rounds 1-4 and the follow-up), B1, B2 committed and merged; B3 reviewed in the server-track worktree",
+  "currentCheckpoint": "B20: A0, A1, A2 (review rounds 1-4, the follow-up and round 6), B1, B2 committed and merged; B3 committed on the server track (78c0339)",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "84e778c",
+  "lastGreenSha": "38d4481",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "A2 round 6 (three items from the follow-up check) on the main tree; commit B3 on the server track and merge it here; then A3 (task scratchpad/b20/task-A3.md), A4 (task-A4.md) and B4.",
-  "updatedAt": "2026-09-21T03:31:45-04:00",
+  "nextAction": "Merge B3 (origin/chapter/b20-mcp-server) into this branch and record its decisions; then A3 (task scratchpad/b20/task-A3.md), A4, A5; B4 on the server track; C1..C3, D1..D3 and the B20 closeout.",
+  "updatedAt": "2026-09-21T04:26:47-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

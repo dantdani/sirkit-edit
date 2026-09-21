@@ -47,6 +47,9 @@
  *    format character inside a word); the aligned reading lets a '~' word run on from inside the word that holds its last two
  *    letters, and an always-verb glued to `always` run on into its object; and a schema node's name, title and description are
  *    read as one text.
+ *    [B20 A2 round 6] A '~' word runs on across a split only after its FIRST letter, and never in a word of three letters or
+ *    fewer; the exfiltration phrase is read within one judged string only, never across the line break that joins two strings
+ *    a model reads together; and the glued always-verb is stated as the two case-split streams read it.
  * Every bound is judged BEFORE the work it bounds (S5), every accepted descriptor is a NEW frozen object built field by
  * field (never the server's object, and no key from server data is ever created on it: S6), and `acceptForeignTools`
  * never throws (S4).
@@ -180,9 +183,18 @@ const DIRECTIVE_MARKERS = new RegExp([
  * `snake_case`, while spelled as one identifier (`ignoreAboveThreshold`) it is benign vocabulary of data filtering and needs
  * an instruction-like object after it (the phrase that follows it). `prior` no longer runs on (`ignorePriority`), `must` does
  * (`YOUMUSTCALL`), and a stem is found inside one word or from a word start (never across one: `complex filtration`).
- * [B20 A2 follow-up] A trailing '^' marks a LAST word that runs on only when it is GLUED to the word before it — no separator
- * and no case boundary between them — as a verb glued to its object is still read as the instruction
- * (`ALWAYSINVOKESIRKIT_PCB_EXPORT`), while after a boundary it must end its word (`always calls`, `alwaysUsed` are prose).
+ * [B20 A2 follow-up] A trailing '^' marks a LAST word that runs on only when it is GLUED to the word before it, as a verb glued
+ * to its object is still read as the instruction (`ALWAYSINVOKESIRKIT_PCB_EXPORT`), while after a separator or a lower-to-upper
+ * boundary it must end its word (`always calls`, `alwaysUsed` are prose). [B20 A2 round 6] GLUED means no space between them in
+ * the word stream OR in the acronym stream, and after an ALL-CAPS `ALWAYS` the acronym stream gives its last capital to the next
+ * word (`alway sused`): a lower-case verb there is glued to that `S`, so `ALWAYSinvokesirkit_pcb_export` is read and `ALWAYSused`,
+ * `ALWAYSrunning` and `ALWAYSuseful` are refused (stated false positives); a verb whose capitals end before its last letter is
+ * glued in neither stream (`alwaysi nvokesirkit`, `always invokesirkit`): `ALWAYSInvokesirkit_pcb_export` is not read (a limit).
+ * [B20 A2 round 6] A phrase opening with '!' is read only WITHIN one judged string, never across the line break that joins two
+ * strings a model reads together (`joinedDirectiveIn`): the exfiltration verbs (`email`, `post`, `upload`, `forward`, `send`)
+ * are the common NOUN labels of fields, so a name or title `Email` above a description `The address to notify.` is the benign
+ * case, not a split directive — and a directive split so that its verb ends one string and its object starts the next is not
+ * read (a stated limit).
  */
 export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
   "ignore|disregard|bypass|forget {all|any|the|your} previous~|preceding~|earlier~|system~|these~|instructions~",
@@ -206,7 +218,8 @@ export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
   "password",
   "credential|credentials",
   "authorization header~",
-  "send|post|upload|email|forward it~|them~|this~|these~|the~",
+  // [B20 A2 round 6] within one judged string only ('!')
+  "!send|post|upload|email|forward it~|them~|this~|these~|the~",
 ]);
 
 /**
@@ -227,50 +240,66 @@ export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
  * bounded by the list and the run it spells: linear in the stream.
  * [B20 A2 follow-up] Where an ALIGNED match may end inside a word (item 2, a regression of review-4: the substring squashing
  * of review-3 read `ALWAYSINVOKESIRKIT_PCB_EXPORT` and `iGNOREpREVIOUSLYgIVENiNSTRUCTIONS`). A match still starts at a word
- * start and ends at a word end, except: a '~' word runs on from inside the word that holds its LAST TWO letters — the rest of
- * it may be split by any boundary (`i gnore p reviously`), but never runs on from a word its last letter merely starts
- * (`new instruction set`, whose `s` starts `set`); and a '^' word glued to the word before it (no space in the stream between
- * them, its letters contiguous) runs on into whatever follows in its word. Each new form is still entered only after a letter
- * or a space the alternation already read, and every optional space in it is followed by a letter: linear as before.
+ * start and ends at a word end, except: a '~' word runs on across a split — [B20 A2 round 6] only a split after its FIRST
+ * letter, with the rest of its letters contiguous (`i gnore p reviously`, `n ever t elling`: the shape inverted case gives a
+ * word), and never in a word of three letters or fewer; the follow-up let the split fall anywhere before its last two letters,
+ * so `these~` read `the se<anything>` (`ignore the server certificate`) and `inform~` read `in form<anything>` (`never in
+ * formatted output`), two words of prose — and never runs on from a word its last letter merely starts (`new instruction set`,
+ * whose `s` starts `set`); and a '^' word glued to the word before it (no space in the stream between them, its letters
+ * contiguous) runs on into whatever follows in its word. Each form is still entered only after a letter or a separator the
+ * alternation already read, and every optional separator in it is followed by a letter: linear as before.
+ * [B20 A2 round 6] A separator of the streams is a space or — in a JOINED text (`wordStreams`) — the line break where two
+ * strings meet. Every phrase reads either as a separator, but a '!' phrase reads only a space: it never crosses a join.
  */
 function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; stems: RegExp; aligned: RegExp } {
   const words: string[] = [];
   const stems: string[] = [];
   const aligned: string[] = [];
-  const spaced = (letters: string): string => letters.split("").join(" ?");
+  /** [B20 A2 round 6] a separator a phrase reads across: a space, or the line break that joins two strings of a joined text */
+  const JOIN = "[ \\n]";
   for (const entry of phrases) {
-    if (entry.startsWith("*")) {
-      stems.push(entry.slice(1));
-      aligned.push(`${spaced(entry.slice(1))}[a-z]*`);
+    // [B20 A2 round 6] a '!' phrase reads only a space: within one judged string, never across a join
+    const alone = entry.startsWith("!");
+    const body = alone ? entry.slice(1) : entry;
+    const gap = alone ? " " : JOIN;
+    const spaced = (letters: string): string => letters.split("").join(`${gap}?`);
+    if (body.startsWith("*")) {
+      stems.push(body.slice(1));
+      aligned.push(`${spaced(body.slice(1))}[a-z]*`);
       continue;
     }
-    const separated = entry.startsWith("=");
-    const slots = (separated ? entry.slice(1) : entry).split(" ").map((slot) => ({ filler: slot.startsWith("{"), alternatives: slot.replace(/[{}]/g, "").split("|") }));
+    const separated = body.startsWith("=");
+    const slots = (separated ? body.slice(1) : body).split(" ").map((slot) => ({ filler: slot.startsWith("{"), alternatives: slot.replace(/[{}]/g, "").split("|") }));
     const last = slots.length - 1;
     words.push(slots.map((slot, index) => {
-      if (slot.filler) return `(?:(?:${slot.alternatives.join("|")}) )*`;
+      if (slot.filler) return `(?:(?:${slot.alternatives.join("|")})${gap})*`;
       // [B20 A2 follow-up] a '^' word is read as words like any other: after a separator it must end its word
-      const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, " ").replace(/\^$/, "").replace(/~$/, "[a-z]*"));
-      return `(?:${alternatives.join("|")})${index < last ? " " : ""}`;
+      const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, gap).replace(/\^$/, "").replace(/~$/, "[a-z]*"));
+      return `(?:${alternatives.join("|")})${index < last ? gap : ""}`;
     }).join(""));
     if (separated) continue;
     aligned.push(slots.map((slot, index) => {
       const letters = slot.alternatives.map((alternative) => alternative.replace(/[~^]$/, "").replace(/\+/g, ""));
-      if (slot.filler) return `(?: ?(?:${letters.map(spaced).join("|")}))*`;
-      const lead = index === 0 ? "" : " ?";
+      if (slot.filler) return `(?:${gap}?(?:${letters.map(spaced).join("|")}))*`;
+      const lead = index === 0 ? "" : `${gap}?`;
       if (index !== last) return `${lead}(?:${letters.map(spaced).join("|")})`;
-      // a '~' word of the LAST slot: spaced and ending the word, or — [B20 A2 follow-up] — running on from inside the word that
-      // holds its last two letters (review-4 required all of its letters contiguous for that)
+      // a '~' word of the LAST slot: spaced and ending the word, or running on in the word it ends in — [B20 A2 round 6] with its
+      // letters contiguous after at most its FIRST letter, and all of them contiguous when it has three letters or fewer (the
+      // follow-up split it anywhere before its last two letters; review-4 required all of them contiguous)
       const forms = slot.alternatives.map((alternative, at) => {
         const word = letters[at]!;
-        return alternative.endsWith("~") ? `${spaced(word.slice(0, -1))}${word.slice(-1)}[a-z]*|${spaced(word)}` : spaced(word);
+        if (!alternative.endsWith("~")) return spaced(word);
+        const runOn = word.length <= 3 ? word : `${word.charAt(0)}${gap}?${word.slice(1)}`;
+        return `${runOn}[a-z]*|${spaced(word)}`;
       });
       // [B20 A2 follow-up] a '^' word of the LAST slot, glued to the word before it: no space before it, running on in its word
       const glued = index === 0 ? [] : slot.alternatives.flatMap((alternative, at) => (alternative.endsWith("^") ? [`${letters[at]}[a-z]*`] : []));
       return glued.length === 0 ? `${lead}(?:${forms.join("|")})` : `(?:${lead}(?:${forms.join("|")})|${glued.join("|")})`;
     }).join(""));
   }
-  return { words: new RegExp(` (?:${words.join("|")})(?= )`), stems: new RegExp(stems.join("|")), aligned: new RegExp(` (?:${aligned.join("|")})(?= )`) };
+  // [B20 A2 round 6] every phrase starts after a separator and ends before one: a space or a join
+  const atWords = (alternation: string): RegExp => new RegExp(`${JOIN}(?:${alternation})(?=${JOIN})`);
+  return { words: atWords(words.join("|")), stems: new RegExp(stems.join("|")), aligned: atWords(aligned.join("|")) };
 }
 const DIRECTIVE_VOCABULARY = compileDirectivePhrases(MCP_DIRECTIVE_PHRASES);
 
@@ -312,8 +341,11 @@ const LATIN_LOOKALIKES: ReadonlyMap<number, number> = new Map(([
  * in the skeleton is a non-letter, so it separates words exactly as the display text's space does (issue 2). The squashed
  * stream is gone: the aligned reading squashes the word streams themselves. Read by code point (the enclosed letters are
  * astral).
+ * [B20 A2 round 6] In a JOINED text (`joined`: strings a model reads together, one line each) a line break is where two strings
+ * meet, so the one separator of a run of non-letters that holds one is a LINE BREAK in all three streams, not a space: every
+ * phrase reads it as a separator, and a '!' phrase does not read across it (`compileDirectivePhrases`).
  */
-function wordStreams(skeleton: string): { words: string; acronym: string; caseless: string } {
+function wordStreams(skeleton: string, joined: boolean): { words: string; acronym: string; caseless: string } {
   const words: string[] = [" "];
   const acronym: string[] = [" "];
   const caseless: string[] = [" "];
@@ -331,9 +363,10 @@ function wordStreams(skeleton: string): { words: string; acronym: string; casele
     if (code >= 0x80) code = LATIN_LOOKALIKES.get(code) ?? code;
     const kind = code >= 97 && code <= 122 ? "lower" : code >= 65 && code <= 90 ? "upper" : "other";
     if (kind === "other") {
-      if (words[words.length - 1] !== " ") words.push(" ");
-      if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
-      if (caseless[caseless.length - 1] !== " ") caseless.push(" ");
+      const separator = joined && code === 10 ? LINE_BREAK : " ";
+      separate(words, separator);
+      separate(acronym, separator);
+      separate(caseless, separator);
       previous = "other";
       capitals = 0;
       continue;
@@ -354,10 +387,17 @@ function wordStreams(skeleton: string): { words: string; acronym: string; casele
     caseless.push(letter);
     previous = kind;
   }
-  if (words[words.length - 1] !== " ") words.push(" ");
-  if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
-  if (caseless[caseless.length - 1] !== " ") caseless.push(" ");
+  separate(words, " ");
+  separate(acronym, " ");
+  separate(caseless, " ");
   return { words: words.join(""), acronym: acronym.join(""), caseless: caseless.join("") };
+}
+
+/** [B20 A2 round 6] End a stream's word: ONE separator for a run of non-letters, a line break (a join) winning over a space. */
+function separate(stream: string[], separator: string): void {
+  const last = stream[stream.length - 1];
+  if (last !== " " && last !== LINE_BREAK) stream.push(separator);
+  else if (separator === LINE_BREAK) stream[stream.length - 1] = LINE_BREAK;
 }
 
 export type McpToolExclusionReason =
@@ -535,19 +575,38 @@ const skeletonCap = (read: string): number => Math.min(read.length * MCP_SKELETO
  * (`Ig<U+200B>nore the above`, `previou<U+200B>sly`) no longer splits it into fragments no reading joins. A union of readings
  * only adds detections. The deleted skeleton is the one the markers already read: no longer than the charged skeleton, and
  * built only when the skeleton is not ASCII (a verbatim string admits no format character, a display text holds none).
+ * [B20 A2 round 6] ... of ONE judged string: every phrase is read within it, across its own line breaks too.
  */
-function directiveIn({ read, skeleton }: ReadText): boolean {
+function directiveIn(text: ReadText): boolean {
+  return readsDirective(text, false);
+}
+
+/**
+ * [B20 A2 round 6] The one matcher over a JOINED text — strings a model reads together, one line each: the title and the
+ * description, a property's name and its description, a schema node's one text, an enum's members. Its line breaks are where
+ * two strings meet (a display text holds none, as every control character is a space in it, and a property name or an enum
+ * member admits none), and every phrase but a '!' one reads across them (`wordStreams`).
+ */
+function joinedDirectiveIn(text: ReadText): boolean {
+  return readsDirective(text, true);
+}
+
+/** [B20 A2 round 6] The one matcher (review-3's `directiveIn`, whose body this is): `joined` reads line breaks as joins. */
+function readsDirective({ read, skeleton }: ReadText, joined: boolean): boolean {
   if (BIDI_CONTROL.test(read)) return true;
   const nonPrinting = (read.match(NON_PRINTING) ?? []).length;
   if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > read.length) return true;
-  const joined = NON_ASCII.test(skeleton) ? skeleton.replace(FORMAT, "") : skeleton;
-  if (DIRECTIVE_MARKERS.test(joined.toLowerCase())) return true;
-  return phrasesIn(skeleton) || (joined !== skeleton && phrasesIn(joined));
+  const deleted = NON_ASCII.test(skeleton) ? skeleton.replace(FORMAT, "") : skeleton;
+  if (DIRECTIVE_MARKERS.test(deleted.toLowerCase())) return true;
+  return phrasesIn(skeleton, joined) || (deleted !== skeleton && phrasesIn(deleted, joined));
 }
 
-/** [B20 A2 follow-up] The four phrase readings of one skeleton (review-4's): aligned over the word and acronym streams, words and stems over the case-free one. */
-function phrasesIn(skeleton: string): boolean {
-  const streams = wordStreams(skeleton);
+/**
+ * [B20 A2 follow-up] The four phrase readings of one skeleton (review-4's): aligned over the word and acronym streams, words and
+ * stems over the case-free one. [B20 A2 round 6] `joined`: its line breaks are joins (`wordStreams`).
+ */
+function phrasesIn(skeleton: string, joined: boolean): boolean {
+  const streams = wordStreams(skeleton, joined);
   return DIRECTIVE_VOCABULARY.aligned.test(streams.words)
     || (streams.acronym !== streams.words && DIRECTIVE_VOCABULARY.aligned.test(streams.acronym))
     || DIRECTIVE_VOCABULARY.words.test(streams.caseless)
@@ -771,7 +830,8 @@ function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly Read
     if (!(entry.kind === "value" && entry.joined) && directiveIn(read)) return "description_directive";
     // an enum's one text is judged where its last member is, so the order of the judgements is the order of the schema
     if (next < enums.length && enums[next]!.end === index + 1) {
-      if (directiveIn(joins[next]!)) return "description_directive";
+      // [B20 A2 round 6] its members joined, one line each: a '!' phrase is read within each member only
+      if (joinedDirectiveIn(joins[next]!)) return "description_directive";
       next += 1;
     }
   }
@@ -782,12 +842,13 @@ function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly Read
  * [B20 A2 review-4] A text as it is KEPT — a display text, or two kept texts a model reads together — read, charged to the
  * listing's scan budget by its skeleton (never less than its length) and judged by the one matcher: null when it passes, else
  * the reason. Its skeleton is held to 4 x its length like every judged string (`text_expansion`); a failure is charged too.
+ * [B20 A2 round 6] Read as a JOINED text (`joinedDirectiveIn`): a '!' phrase is read within each of its lines only.
  */
 function judgeShown(text: string, budget: ListingBudget): SchemaFailure | null {
   const shown = readJudged([text], MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
   budget.judged += shown.charge;
   if (!shown.ok) return shown.reason;
-  return directiveIn(shown.reads[0]!) ? "description_directive" : null;
+  return joinedDirectiveIn(shown.reads[0]!) ? "description_directive" : null;
 }
 
 /**
@@ -1105,7 +1166,7 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   budget.judged += own.charge;
   if (!own.ok) return { ok: false, reason: own.reason, label: name };
   // the raw text is judged for a directive BEFORE it is scrubbed: a scrub would hide the marker, not the intent
-  if (own.reads.slice(1).some(directiveIn)) return { ok: false, reason: "description_directive", label: name };
+  if (own.reads.slice(1).some((read) => directiveIn(read))) return { ok: false, reason: "description_directive", label: name };
 
   const annotations = readAnnotations(raw.annotations);
   if (annotations.readOnlyHint === false || annotations.destructiveHint === true) return { ok: false, reason: "declared_write", label: name };

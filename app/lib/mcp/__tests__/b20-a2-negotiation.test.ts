@@ -726,15 +726,20 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     const page = read("artifacts/ai-control-plane-b20/mcp-client-boundary.md");
     const section = flat(page.slice(page.indexOf("## Negotiation, discovery and foreign descriptor gates (A2)")));
     const phrases = [
-      "Line numbers are of the follow-up tree",
+      // [B20 A2 round 6] PIN MOVE: "Line numbers are of the follow-up tree" — round 6 re-derived every line number; the round-6
+      // case below pins its successor ("Line numbers are of the round-6 tree") and this wording's absence
       // item 4: the order the two halves are spent in, and what the 4 x bound counts
       "the tool's own text is charged to the scan half BEFORE its scrub charge is checked, and stays spent when that check fails",
       "the scrub charge is added only once the schemas' reads and the enums' separators both fit",
       "whose skeleton — the matcher's: NFKD without combining marks, its format characters KEPT — would hold more than 4 x the characters read of it",
       // items 1-3: the readings added
       "with the format characters as separators and with them DELETED",
-      "runs on from inside the word that holds its LAST TWO letters",
-      "GLUED to `always` — no separator and no case boundary between them",
+      // [B20 A2 round 6] PIN MOVE: "runs on from inside the word that holds its LAST TWO letters" — round 6, item 1, narrowed the
+      // rule to a split after the FIRST letter (a regression of this one: `the se<anything>`); the round-6 case pins the new rule
+      // and this wording's absence
+      // [B20 A2 round 6] PIN MOVE: "GLUED to `always` — no separator and no case boundary between them" — false (round 6, item 3:
+      // the acronym stream glues a lower-case verb to the last capital of `ALWAYS`); the round-6 case pins the exact statement and
+      // this wording's absence
       "each schema node's texts — its property's name, then its kept title and description in the node's key order",
       // item 2: the end-side limits, each beside the benign spelling it has the shape of, and the stated false positives
       "(`ALWAYS_INVOKESIRKIT_PCB_EXPORT`, `alwaysINVOKESIRKIT_PCB_EXPORT` — the shape of `always invokes`)",
@@ -759,6 +764,58 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     const discovery = flat(read("artifacts/ai-control-plane-b20/discovery.md"));
     const d2015 = discovery.slice(discovery.indexOf("**D20-15"), discovery.indexOf("**D20-16"));
     expect(d2015, "the D20-15 clause records the follow-up").toContain("Follow-up (2026-09-21)");
+  });
+
+  // [B20 A2 round 6] the scoped check after the follow-up: item 1 narrowed the '~' split, item 2 reads the exfiltration phrase
+  // within one judged string, and item 3 found the glued always-verb misstated on the page, in the code comment and in OD-81. The
+  // corrected statements, the new limits and the stated false positives are pinned here by phrase (the foreign-tools suite pins
+  // the code to them), the refuted wordings must be GONE from the A2 section, and OD-81, the README and D20-15 say the same.
+  it("the round-6 statements are exact and pinned: the '~' split after the first letter, the exfiltration phrase within one judged string, the glued always-verb as the streams read it, the stated limits and false positives, and the refuted wordings absent", () => {
+    const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8");
+    const flat = (text: string): string => text.replace(/\s+/g, " ");
+    const page = read("artifacts/ai-control-plane-b20/mcp-client-boundary.md");
+    const section = flat(page.slice(page.indexOf("## Negotiation, discovery and foreign descriptor gates (A2)")));
+    const phrases = [
+      "Line numbers are of the round-6 tree",
+      // item 1: the rule, the sweep, and the spellings it no longer reads
+      "a `~` word runs on across a split only after its FIRST letter, with the rest of its letters contiguous",
+      "a `~` word of three letters or fewer runs on only with its letters contiguous",
+      "no split the new rule allows has a benign sentence",
+      "(`iGNOREprEVIOUSLYgIVENiNSTRUCTIONS`, `ignore_pr_eviously` — the shape of `the server` and `in formatted`)",
+      // item 2: the phrase within one judged string, and its limit
+      "the exfiltration phrase is read only WITHIN one judged string, never across the line break of a joined text",
+      // ... and in the matcher row itself, beside the mark that does it
+      "never across the line break of a joined text (`'!'` in the phrase list)",
+      "an exfiltration directive split so that its verb ends one string and its object starts the next is not read",
+      // item 3: the glued always-verb as the two case-split streams read it
+      "GLUED to `always` — no space between them in the word stream or the acronym stream",
+      "after an ALL-CAPS `ALWAYS` the acronym stream gives its last capital to the next word",
+      "`ALWAYSused`, `ALWAYSrunning` and `ALWAYSuseful` are refused",
+      "`ALWAYSinvokesirkit_pcb_export` is excluded",
+      "`ALWAYSInvokesirkit_pcb_export` is not read",
+      // the evidence
+      "Round 6 (2026-09-21), failing-first on the committed tree (`38d4481`)",
+    ];
+    for (const phrase of phrases) expect(section, phrase).toContain(phrase);
+    const refuted = [
+      "Line numbers are of the follow-up tree",
+      "runs on from inside the word that holds its LAST TWO letters",
+      "no separator and no case boundary between them",
+      "while one after a boundary must end its word",
+      "or after a case boundary both case-split streams keep, that runs on into its object",
+      "The follow-up adds two",
+    ];
+    for (const wording of refuted) expect(section, wording).not.toContain(wording);
+    const decisions = flat(read("artifacts/remaining-builder-program/OWNER_DECISIONS.md"));
+    const od81 = decisions.slice(decisions.indexOf("## OD-81"), decisions.indexOf("## OD-43"));
+    for (const statement of ["`iGNOREprEVIOUSLYgIVENiNSTRUCTIONS`", "`ALWAYSInvokesirkit_pcb_export`", "`ALWAYSused`", "its verb ends one string and its object starts the next"]) {
+      expect(od81, `OD-81 states ${statement}`).toContain(statement);
+    }
+    expect(od81, "OD-81's refuted always-verb wording").not.toContain("an always-verb after a boundary that runs on into its object");
+    expect(flat(read("artifacts/ai-control-plane-b20/README.md"))).toContain("round-6 fixes applied test-first (three issues");
+    const discovery = flat(read("artifacts/ai-control-plane-b20/discovery.md"));
+    const d2015 = discovery.slice(discovery.indexOf("**D20-15"), discovery.indexOf("**D20-16"));
+    expect(d2015, "the D20-15 clause records round 6").toContain("Round 6 (2026-09-21)");
   });
 
   // [B20 A2 review] S7's line-reference half: every `file.ts:N-M` citation of the boundary page is resolved against the tree.
@@ -856,5 +913,34 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     expect(problems).toEqual([]);
     expect(citations, "the page cites code").toBeGreaterThan(100);
     expect(anchored, "most citations name what they cite").toBeGreaterThan(40);
+  });
+
+  // [B20 A2 round 6 lead] the round-6 check's two page statements, made exact by the lead and pinned (the behaviour they state is
+  // pinned in b20-a2-foreign-tools: "the exact end-side limits")
+  it("the round-6 check's statements are exact: the short '~' word split after its first letter is a stated limit, and the unread glued always-verb is the one whose capitals end before its last letter", () => {
+    const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8");
+    const flat = (text: string): string => text.replace(/\s+/g, " ");
+    const page = read("artifacts/ai-control-plane-b20/mcp-client-boundary.md");
+    const section = flat(page.slice(page.indexOf("## Negotiation, discovery and foreign descriptor gates (A2)")));
+    for (const phrase of [
+      "except for a `~` word of more than three letters run on across a split after its first letter",
+      "a `~` word of three letters or fewer split after its first letter that runs on (`nEVERlOGS`, `DOnOTlOGGING` — the shape of `doNotLOgout`",
+      "a verb whose run of capitals ends before its last letter is glued in neither stream",
+      "`ALWAYSInvokesirkit_pcb_export` and `ALWAYSINvokesirkit_pcb_export` are not read (Limits)",
+      "when the verb's run of capitals ends before its last letter",
+    ]) {
+      expect(section, phrase).toContain(phrase);
+    }
+    for (const wording of ["after `ALWAYS` and a capital verb neither stream glues them", "when the verb's own first letter is a capital too"]) {
+      expect(section, wording).not.toContain(wording);
+    }
+    const decisions = flat(read("artifacts/remaining-builder-program/OWNER_DECISIONS.md"));
+    const od81 = decisions.slice(decisions.indexOf("## OD-81"), decisions.indexOf("## OD-43"));
+    expect(od81).toContain("with its run of capitals ending before its last letter");
+    expect(od81).toContain("or, for a word of three letters or fewer, split at all (`nEVERlOGS`)");
+    expect(od81).not.toContain("with its own first letter a capital");
+    const source = flat(read("app/lib/mcp/foreign-tools.ts").replace(/\n \* /g, " "));
+    expect(source).toContain("a verb whose capitals end before its last letter is glued in neither stream");
+    expect(source).not.toContain("after `ALWAYS` and a capital verb neither stream");
   });
 });

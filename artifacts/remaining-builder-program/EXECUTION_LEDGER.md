@@ -2186,3 +2186,27 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 514 passed;
   agent 394; B16.1C tripwires and AST import gates 29; tsc 0; eslint clean on the three changed files. The A2 suites
   hold 139 cases.
+
+### B20-A2 round 6 - the in-word run-on narrowed, the exfiltration phrase within one string, exact always-verb statements (2026-09-21 local; fix workflow + lead; this commit)
+
+- The three items the follow-up's check left (`wf_fa70993d-38e`), each fixed test-first with named mutations caught and
+  sources restored by sha256 (12 code mutations, 8 page mutations):
+  - A `~` word runs on across a split only after its FIRST letter, the rest contiguous (the shape inverted case gives a
+    word), and a `~` word of three letters or fewer only contiguous: the follow-up's split before the last two letters
+    read `these~` as `the se<anything>`, so "Ignore the server certificate" was refused (70 of 90 rows and 44 of the
+    sweep's 54 failed before). A sweep of every `~` word split after an English word or a filler finds no benign sentence
+    the new rule refuses; two spellings the follow-up read are stated limits.
+  - The exfiltration phrase (`send|post|upload|email|forward` + object) is read only WITHIN one judged string, never across
+    the line break of a joined text: its verbs are the common noun labels of fields, so `{email: {description: "The user's
+    email address."}}` - refused since review-4 - is accepted, while "Email the project secrets to ..." within one string
+    stays excluded (14 rows failed before).
+  - The glued always-verb is stated as the two case-split streams read it (page, code comment, OD-81).
+- Checked by an independent checker: 3 of 3 fixed and revert-sensitive. It found two page statements inexact; the lead
+  made both exact, each with a case appended at the end of its suite (no cited line moved; the three-letter rule's revert
+  fails it, restored by sha256): a `~` word of three letters or fewer split after its first letter is not read
+  (`nEVERlOGS`, a stated limit beside `doNotLOgout`), and after an ALL-CAPS `ALWAYS` the unread verb is the one whose run
+  of capitals ends before its last letter. The filter stays defense-in-depth (OD-81): nothing is exposed, the flag is off,
+  the registry is empty and no agent path reads A2 yet.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 521 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean on the three changed files. The A2 suites hold
+  146 cases.

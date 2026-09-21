@@ -394,16 +394,26 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 - Default applied: the filter is DEFENSE-IN-DEPTH. It fails closed on what it recognises — the phrase list
   (`MCP_DIRECTIVE_PHRASES`) read as whole words over a case-free stream, as stems, and squashed and word-aligned over the
   case-split streams; the display text each description and title is kept as; the one text of adjacent strings (an enum's
-  members, the title and the description, a property's name and its description); and the fixed homoglyph fold (NFKD, the
+  members, the title and the description, a property's name and its description, a schema node's name, title and
+  description), every phrase read across the line break that joins them but the exfiltration phrase, which is read within
+  one judged string only (round 6, 2026-09-21: its verbs are the common noun labels of fields, `Email` above `The address
+  ...`); and the fixed homoglyph fold (NFKD, the
   Cyrillic and Greek letters that are a Latin letter in form, the Latin small capitals, the enclosed negative letters).
   It does not and cannot recognise every paraphrase or obfuscation — a list of directives is never complete. Stated
   limits: a paraphrase the list lacks; digits used as letters (`1GNORE`); confusables outside the fixed fold (Armenian,
   Cherokee, the regional indicators, mathematical alphanumerics beyond NFKD); a phrase that starts inside a longer run
-  (`pleaseyoumust`); on the end side (the follow-up, 2026-09-21), an always-verb after a boundary that runs on into its
-  object (`ALWAYS_INVOKESIRKIT_PCB_EXPORT`), a `~` word split between its last two letters that runs on
-  (`ignore_previou_sly`), a stem split by a separator after a glued prefix (`dataex-filtration`) and any other phrase whose
-  last word is glued to what follows (`APIKEYVALUE`) — each the shape of a benign spelling (`always invokes`,
-  `instruction set`, `regex filtration`); a directive split across two tools or two pages of a listing; and the `instructions` and serverInfo
+  (`pleaseyoumust`); on the end side (the follow-up and round 6, 2026-09-21), an always-verb after a separator or a
+  lower-to-upper boundary that runs on into its object (`ALWAYS_INVOKESIRKIT_PCB_EXPORT`), or after an ALL-CAPS `ALWAYS`
+  with its run of capitals ending before its last letter (`ALWAYSInvokesirkit_pcb_export`, `ALWAYSINvokesirkit_pcb_export`;
+  an all-capital verb is read, `ALWAYSINVOKESIRKIT_PCB_EXPORT`, and a lower-case verb there is glued to the last capital
+  of `ALWAYS` in the acronym stream and read, `ALWAYSinvokesirkit_pcb_export`, at the cost of refusing `ALWAYSused`,
+  `ALWAYSrunning` and `ALWAYSuseful`), a `~` word split anywhere but after its first letter that runs on
+  (`iGNOREprEVIOUSLYgIVENiNSTRUCTIONS`, `ignore_previou_sly`) or, for a word of three letters or fewer, split at all
+  (`nEVERlOGS`), a stem split by a separator after a glued prefix
+  (`dataex-filtration`) and any other phrase whose last word is glued to what follows (`APIKEYVALUE`) — each the shape of a
+  benign spelling (`always invokes`, `the server`, `doNotLOgout`, `instruction set`, `regex filtration`); an exfiltration directive split so
+  that its verb ends one string and its object starts the next (round 6: `Email` above `the project secrets ...`); a
+  directive split across two tools or two pages of a listing; and the `instructions` and serverInfo
   of a DiscoverResult, which are display-only and never judged by the matcher (they reach no model in A2; A4 decides how
   they are shown).
 - The guarantee that a foreign description cannot direct the agent comes from three controls OUTSIDE the filter: (1) the
