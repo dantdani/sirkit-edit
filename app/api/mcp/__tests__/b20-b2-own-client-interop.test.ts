@@ -104,11 +104,14 @@ describe("[B20 B2] H — Sirkit's own client against Sirkit's own endpoint", () 
     expect((listing.tools as Array<{ name: string }>).every((tool) => tool.name.startsWith("sirkit."))).toBe(true);
   });
 
-  it("4. the client's requests never trigger -32020, -32022 or -32602; a listed tools/call answers the not_served refusal", async () => {
+  it("4. the client's requests never trigger -32020, -32022 or -32602; a listed tools/call answers a closed tool refusal", async () => {
     const token = await mintedToken();
     const server = row("pre-issued-token-env");
     // [B20 B3] pin move: B3 serves the listed reads, so the not_served answer is a listed PROPOSAL's (B4 decides those)
-    const listed = (renderMcpToolListing(sirkitToolRegistry()).tools.find((tool) => sirkitToolRegistry().get(tool.name)!.requiredRoles.includes("pcb_editor") && sirkitToolRegistry().get(tool.name)!.operationClass === "propose"))!.name;
+    // [B20 B4] pin move (OD-82, OD-87): no proposal is listed since B4, so the listed call is the revision read, which needs no
+    // pin and answers the closed refusal no_durable_board from the empty in-memory durable repository
+    const listed = "sirkit.project.canonical-revision-inspect";
+    expect(renderMcpToolListing(sirkitToolRegistry()).tools.map((tool) => tool.name)).toContain(listed);
     const results = [
       await post(server, "server/discover", {}, 11, token),
       await post(server, "tools/list", {}, 12, token),
@@ -121,6 +124,6 @@ describe("[B20 B2] H — Sirkit's own client against Sirkit's own endpoint", () 
     const call = results[2]!;
     if (!(call.ok && call.kind === "complete")) return;
     const answer = call.result as Record<string, unknown>;
-    expect(answer).toMatchObject({ isError: true, _meta: { "dev.sirkit/refusal": "not_served" } });
+    expect(answer).toMatchObject({ resultType: "complete", isError: true, _meta: { "dev.sirkit/refusal": "no_durable_board" } });
   });
 });

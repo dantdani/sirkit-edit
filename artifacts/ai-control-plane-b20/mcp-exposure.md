@@ -4,8 +4,9 @@ Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **PR
 **RECORDED** (written down without a claim), **UNKNOWN**.
 
 B1 decides WHICH of Sirkit's own registry tools an MCP principal may ever be offered, and renders their MCP tool
-definitions from the canonical registry. It serves nothing itself: serving is B2 (the endpoint), B3 (the reads,
-`mcp-server-reads.md`) and B4 (the proposals). MCP stays an adapter around the canonical registry and command bus (runbook B20):
+definitions from the canonical registry. It serves nothing itself: serving is B2 (the endpoint) and B3 (the reads,
+`mcp-server-reads.md`); [B20 B4] B4 withheld every proposal, so MCP exposure is read-only in B20 (OD-82, OD-87;
+`mcp-server-proposals.md`). MCP stays an adapter around the canonical registry and command bus (runbook B20):
 the exposure subset is derived from the reviewed agent set and can only narrow it. The contract is code, not this page:
 `app/lib/engineering/mcp-exposure-review.ts` (the reviewed decision), `app/lib/engineering/mcp-exposure.ts` (the structural
 rule and the report) and `app/lib/mcp/server/tool-definitions.ts`, gated by
@@ -14,18 +15,19 @@ rule and the report) and `app/lib/mcp/server/tool-definitions.ts`, gated by
 Every `file:line` below is checked against the line it quotes by the first suite, which also checks the tables and these
 case counts; the tests, not the numbers, are the gate.
 
-## 1. The 14 exposed tools — CONFIRMED
+## 1. The 9 exposed tools — CONFIRMED
 
 A tool is exposed only when BOTH hold: the structural rule (section 3) admits its descriptor, AND the reviewed decision
 lists it — `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` (`app/lib/engineering/mcp-exposure-review.ts:14` (`export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS`)),
-one reason comment per id — and does not withhold it (`MCP_WITHHELD_TOOL_IDS`: empty at B1, two reads since B3). The exposure
-(the structural rule and the reviewed decision together) admits exactly these 14 from the production registry of 41 descriptors;
-the structural rule alone admits two more, the withheld reads of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
+one reason comment per id — and does not withhold it (`MCP_WITHHELD_TOOL_IDS`: empty at B1, two reads since B3, and the
+five proposals since B4). The exposure
+(the structural rule and the reviewed decision together) admits exactly these 9 from the production registry of 41 descriptors;
+the structural rule alone admits seven more, the withheld tools of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
 compares the two in both directions: an admitted id that is neither listed nor withheld is `unexpected` (never exposed, and
 drift until reviewed), a listed id that is not exposed is `missing`, any id outside the reviewed agent set is
 `outsideAgentSet`, and one id admitted under two versions is a `duplicate`; any of them makes the report not ok and the
-listing refuse. They are the agent set's 9 bound reads of project or design state and its 5 inert proposals ([B20 B3]
-pin move, OD-69: 11 reads at B1, two withheld since).
+listing refuse. They are the agent set's 9 bound reads of project or design state; its 5 inert proposals are withheld ([B20 B3]
+pin move, OD-69: 11 reads at B1, two withheld since; [B20 B4] pin move, OD-82 and OD-87: the five proposals withheld, 14 -> 9).
 
 | id | class | tier | exposure | binding | why it is exposed |
 |---|---|---|---|---|---|
@@ -33,14 +35,9 @@ pin move, OD-69: 11 reads at B1, two withheld since).
 | `sirkit.manufacturing.readiness-inspect` | read | 0 | exposed | bound-read | a fabrication readiness report; it never qualifies and never authorizes a release |
 | `sirkit.pcb.board-inspect` | read | 0 | exposed | bound-read | the canonical board snapshot |
 | `sirkit.pcb.mechanical-inspect` | read | 0 | exposed | bound-read | the board's extents and mounting holes only |
-| `sirkit.pcb.propose-bounded-edit` | propose | 2 | exposed | bound-proposal | a sealed bounded PCB proposal a human approves in the PCB editor |
 | `sirkit.pcb.revision-inspect` | read | 0 | exposed | bound-read | the pcb2 semantic content revision |
 | `sirkit.pcb.via-inspect` | read | 0 | exposed | bound-read | one net's vias with their padstack binding |
-| `sirkit.placement.propose` | propose | 2 | exposed | bound-proposal | a revision-bound layout candidate a human applies |
 | `sirkit.project.canonical-revision-inspect` | read | 0 | exposed | bound-read | the canonical ProjectRevision digest set |
-| `sirkit.routing.propose` | propose | 2 | exposed | bound-proposal | a revision-bound routing candidate a human applies |
-| `sirkit.schematic.propose-component-replacement` | propose | 2 | exposed | bound-proposal | a sealed exact-replacement proposal; apply stays human-only |
-| `sirkit.schematic.propose-tier1-edit` | propose | 2 | exposed | bound-proposal | a sealed tier-1 schematic proposal; apply stays human-only |
 | `sirkit.validation.connectivity-verify` | read | 0 | exposed | bound-read | board connectivity (a validation read, not readiness by itself) |
 | `sirkit.validation.drc-run` | read | 0 | exposed | bound-read | a DRC run over the canonical board (derived cache only) |
 
@@ -48,9 +45,10 @@ Every one is active, discoverable, callable, carries no approval tier of its own
 and none matches `NEVER_EXPOSED_TOOL_PATTERNS` (`app/lib/engineering/granted-execution-families.ts:74` (`export const NEVER_EXPOSED_TOOL_PATTERNS`))
 or the b17-f id tripwire (`process|exec|shell|database|db.|file.|replace-state|import-state`). Tiers are
 `permissionTierOfDescriptor` (`app/lib/engineering/permission-tiers.ts:51` (`export function permissionTierOfDescriptor(`)):
-a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves).
+a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves;
+[B20 B4] none is exposed).
 
-## 2. The 27 excluded descriptors, by closed reason — CONFIRMED
+## 2. The 32 excluded descriptors, by closed reason — CONFIRMED
 
 `MCP_EXCLUSION_REASONS` (`app/lib/engineering/mcp-exposure.ts:33` (`export const MCP_EXCLUSION_REASONS`)) is closed and
 ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first ten
@@ -68,21 +66,21 @@ are the structural rule; the last two are the reviewed decision over a descripto
 | `external_read` | `sirkit.parts.evidence-read`, `sirkit.parts.external-search` | OD-55: live vendor quota, labels only while agent disclosure is unknown (OD-36, OD-40) |
 | `view_state_read` | `sirkit.selection.inspect`, `sirkit.view.read-state` | OD-49 (D20-7): they read an open editor's selection or view state |
 | `not_servable` | none in the registry (a forged or future descriptor) | not an active, discoverable, callable descriptor bound to a server-side read or an inert proposal with no approval tier of its own |
-| `withheld` | `sirkit.project.history-inspect`, `sirkit.schematic.inspect` | structurally admissible, but withheld from MCP by a reviewed decision recorded with its reason (how B3 and B4 remove an id). [B20 B3] OD-69: each needs browser-only state — the captured project timeline, and the editor's `SchematicState` (browser storage; no durable table holds it) — so no durable server source can serve it (`mcp-server-reads.md`) |
+| `withheld` | `sirkit.pcb.propose-bounded-edit`, `sirkit.placement.propose`, `sirkit.project.history-inspect`, `sirkit.routing.propose`, `sirkit.schematic.inspect`, `sirkit.schematic.propose-component-replacement`, `sirkit.schematic.propose-tier1-edit` | structurally admissible, but withheld from MCP by a reviewed decision recorded with its reason (how B3 and B4 remove an id). [B20 B3] OD-69: the two reads each need browser-only state — the captured project timeline, and the editor's `SchematicState` (browser storage; no durable table holds it) — so no durable server source can serve it (`mcp-server-reads.md`). [B20 B4] OD-82 and OD-87: the five proposals — the schematic ones need the editor's `SchematicState` and head mark, the bounded edit the open editor's history head, lineage and DRC preset, routing runs the FreeRouting child process, and placement's engine blocks the event loop and cannot be stopped inside a spec (`mcp-server-proposals.md`) |
 | `not_mcp_reviewed` | none in the registry (a forged or future admissible descriptor under an id that is not listed) | structurally admissible, but not reviewed for MCP: never exposed, and the report calls it `unexpected` (drift) until it is listed or withheld |
 
 `tier3` and `never_exposed` precede `not_agent_exposed`, so a descriptor outside the agent set still names the stronger
 reason (`sirkit.manufacturing.release` is Tier 3 and matches `\.release$`; the page and the manifest say `tier3`).
 The agent set (`app/lib/engineering/agent-exposure.ts:30` (`export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS`)) holds:
-32 ids = the 14 above + 6 granted executions + 2 external reads + 6 view-session controls + 2 open-editor reads + 2 withheld reads.
+32 ids = the 9 above + 6 granted executions + 2 external reads + 6 view-session controls + 2 open-editor reads + 7 withheld tools.
 B3 and B4 may REMOVE an id they cannot serve safely, as a reviewed ratchet move of `app/lib/engineering/mcp-exposure-review.ts`:
 the id moves from `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` to `MCP_WITHHELD_TOOL_IDS`
-(`app/lib/engineering/mcp-exposure-review.ts:36` (`export const MCP_WITHHELD_TOOL_IDS`)) with its reason, and the pins of
+(`app/lib/engineering/mcp-exposure-review.ts:32` (`export const MCP_WITHHELD_TOOL_IDS`)) with its reason, and the pins of
 the two B1 suites and the manifest move with it. The descriptor, the registry digest and the agent path stay untouched. B3
-made that move for real on `sirkit.project.history-inspect` and `sirkit.schematic.inspect` (OD-69); the first suite now
-simulates a further one on `sirkit.pcb.via-inspect` (the modules loaded fresh with the moved lists) and proves a clean
-report, a 13-tool listing that names the id `withheld`, the channel excluding it and an unchanged agent discovery. Nothing in
-B20 adds an id without an owner decision.
+made that move for real on `sirkit.project.history-inspect` and `sirkit.schematic.inspect` (OD-69), and [B20 B4] B4 on the
+five proposals (OD-82, OD-87); the first suite now simulates a further one on `sirkit.pcb.via-inspect` (the modules loaded
+fresh with the moved lists) and proves a clean report, an 8-tool listing that names the id `withheld`, the channel excluding
+it and an unchanged agent discovery. Nothing in B20 adds an id without an owner decision.
 
 ## 3. The structural rule — CONFIRMED
 
@@ -128,7 +126,7 @@ the exclusion reasons gain `not_mcp_exposed`, appended. The channel is deny-by-d
 after the lifecycle and internal-only checks, a descriptor `mcpExclusionReason` excludes (structurally or by the reviewed
 decision) is dropped as `not_agent_exposed` (outside the agent set) or `not_mcp_exposed` (inside it), whatever the context
 claims — a release risk ceiling, every approval, a grant context and the external-observation authority together still
-yield exactly the 14, and an unreviewed admissible tool is never offered. The import carries its `[B20 B1]` tag on the line
+yield exactly the 9, and an unreviewed admissible tool is never offered. The import carries its `[B20 B1]` tag on the line
 above it (`app/lib/engineering/tool-discovery.ts:27` (`import { mcpExclusionReason } from "./mcp-exposure";`)), so the B04
 import gate, which matches only an import line that ends at its semicolon, sees it (pinned by the second suite). Every later contextual rule (role,
 capability, revision, lineage, editor, project state, authority, name length, budgets) applies unchanged, and internal-only
@@ -143,7 +141,7 @@ registry, per the Tool contract of revision 2026-07-28 (`mcp-reference-notes.md`
 
 - `name`: the raw registry id, checked against `app/lib/mcp/server/tool-definitions.ts:27` (`export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;`)
   before anything else (`app/lib/mcp/server/tool-definitions.ts:237` (`if (!MCP_TOOL_NAME_PATTERN.test(facts.toolId)) throw new McpToolRenderError("name_invalid");`))
-  (first-party naming, the OD-52 amendment; the longest exposed id is 46 characters); `title` and `description` verbatim.
+  (first-party naming, the OD-52 amendment; the longest exposed id is 41 characters, 46 before B4 withheld the proposals); `title` and `description` verbatim.
 - `inputSchema`: `app/lib/mcp/server/tool-definitions.ts:246` (`const strict = strictCompatibility(`) — the SAME conversion
   the OpenAI and Anthropic adapters use (`app/lib/agent/provider-tools.ts:289` (`export function strictCompatibility(`)), so for
   every exposed tool the MCP input schema deep-equals the declaration both adapters render (C1's three-way parity starts
@@ -154,8 +152,8 @@ registry, per the Tool contract of revision 2026-07-28 (`mcp-reference-notes.md`
   an explicit object root and no reserved key (`app/lib/mcp/server/tool-definitions.ts:153` (`function outputDecisionOf(`));
   otherwise omitted, and the manifest records `omitted (<closed reason>)`. It is the registry's declared schema, copied —
   not strict-normalized, because strict normalization turns optional fields into required nullable ones, which a
-  conforming output that omits the field would then violate. At B1 all 14 exposed tools declare it (the count since B3's
-move; the two withheld reads declare one too).
+  conforming output that omits the field would then violate. At B1 all 9 exposed tools declare it (the count since B4's
+move; the seven withheld tools declare one too).
 - `annotations`, derived only from Sirkit's classification: `readOnlyHint` = class `read`
   (`app/lib/mcp/server/tool-definitions.ts:250` (`readOnlyHint: facts.operationClass === "read",`)), which the rule admits
   only with no side effect or a derived cache; `destructiveHint` = false (nothing destructive passes the rule);
@@ -203,7 +201,8 @@ The manifest is `mcp-tool-manifest.csv` (one row per registry descriptor: `tool_
 - No tools/call and no server-side read: B2 answers tools/call and the `-32602` unknown tool; [B20 B3] the nine exposed
   reads are served from the durable server board with the expected revision, membership revision and idempotency bound to
   each call (`mcp-server-reads.md`, D20-6/9/10).
-- No proposal delivery: B4 (OD-50).
+- No proposal delivery: [B20 B4] none in B20 — every proposal is withheld (OD-82, OD-87; the discovery default of OD-50 is
+  superseded; `mcp-server-proposals.md`).
 - No pagination, `ttlMs` or `cacheScope` (the C2 half of D20-14, OD-57); no three-way parity report, no title/description
   lexical gate (C1, C3).
 - Nothing on the client side (A2..A5), and no new dependency (OD-42).
@@ -215,13 +214,13 @@ The manifest is `mcp-tool-manifest.csv` (one row per registry descriptor: `tool_
    source serves it, so B3 withheld it (the list move of section 2, OD-69), with `sirkit.schematic.inspect` (see
    `mcp-server-reads.md`).
 2. **CONFIRMED** (B3) — the nine exposed reads are served from the durable server board (`durable-server-board` authority,
-   `mcp-server-reads.md`); the five proposals are still bound to a bundle the browser assembles and answer `not_served` until
-   B4 decides each one.
+   `mcp-server-reads.md`). [B20 B4] The five proposals are withheld (OD-82, OD-87), so a `tools/call` naming one is B2's
+   identical `-32602` (`mcp-server-proposals.md`).
 3. **RECORDED** — the declared output schemas are the registry's own, which are shallow (`report: {type: "object"}` and
    similar): an MCP client can check the top level of `structuredContent`, not its contents. Tightening them is C1's.
-4. **RECORDED** — `idempotentHint` follows the registry's `natural` idempotency, so the five proposals render it true: a
-   repeated call has no additional effect on project state (the result is inert), though a routing or placement candidate
-   need not be byte-identical between calls.
+4. **RECORDED** — `idempotentHint` follows the registry's `natural` idempotency, so the five proposals would render it true
+   ([B20 B4] none is listed since B4): a repeated call has no additional effect on project state (the result is inert), though
+   a routing or placement candidate need not be byte-identical between calls.
 5. **RECORDED** — the listing's `excluded` array and the discovery channel's exclusion list are diagnostics for Sirkit; B2
    must serve `tools` only, never `excluded`.
 6. **RECORDED** — the b10 test title "… no MCP surface exists" (`app/lib/agent/__tests__/b10-editor-context.test.ts`) stays

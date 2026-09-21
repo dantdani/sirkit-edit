@@ -7,18 +7,21 @@
  *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private, the registry
  *    and listing digests in `_meta`, no pagination (a cursor is -32602);
  *  - tools/call: [B20 B3] a listed READ is served by the read pipeline (`read-call.ts`) from the project's durable server
- *    board; a listed proposal answers a closed refusal (`not_served`: B4 decides each one); any other name — role-filtered,
- *    never exposed or nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
+ *    board; [B20 B4] no proposal is listed (OD-82, OD-87); any other name — withheld, role-filtered, never exposed or
+ *    nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
  *
- * MCP is an adapter here: nothing this module reaches can approve, bind, withdraw, rebind, purchase, qualify or release,
- * or run a process (b20-b2-import-gates J2). [B20 B3 review] Since B3 its import closure also holds the B05 read service
- * (through read-call.ts alone, b20-b3-import-gates G1), the static fabrication preset data, and durable modules that CAN
- * write - pcb-sync snapshot and board PUBLICATION and board-lineage derivation, reached only through the durable read bundle,
- * and the durable workflow runtime, reached only through the read runtime (G7). [B20 B3 lead] Every one of those writes goes
- * through `workflow.commit`. That a served read writes no database is enforced at run
- * time, not by the import gate: the read reaches the durable repository only through `readOnlyDurableWorkflow`, which refuses
- * every write without delegating (b20-b3-durable-read-bundle A12, b20-b3-mcp-tools-call-reads H10 and H15). One closed trace
- * record is kept per handled request; anything thrown is the JSON-RPC internal error.
+ * MCP is an adapter here: nothing this module reaches can approve, bind, withdraw, rebind, purchase, qualify or release
+ * (b20-b2-import-gates J2), and none of its first-party modules starts a process or a thread through a process, thread or vm
+ * module, a built-in loaded by name, an internal binding or string-compiled code, and the third-party packages it reaches are
+ * a reviewed list ([B20 B4] b20-b4-process-gate, which does not walk inside those packages; J2 forbids only the fab runner).
+ * [B20 B3 review] Since B3 its import closure also holds the B05 read service (through read-call.ts alone, b20-b3-import-gates
+ * G1), the static fabrication preset data, and durable modules that CAN write - pcb-sync snapshot and board PUBLICATION and
+ * board-lineage derivation, reached only through the durable read bundle, and the durable workflow runtime, reached only
+ * through the read runtime (G7). [B20 B3 lead] Every one of those writes goes through `workflow.commit`. That a served read
+ * writes no database is enforced at run time, not by the import gate: the read reaches the durable repository only through
+ * `readOnlyDurableWorkflow`, which refuses every write without delegating (b20-b3-durable-read-bundle A12,
+ * b20-b3-mcp-tools-call-reads H10 and H15). One closed trace record is kept per handled request; anything thrown is the
+ * JSON-RPC internal error.
  */
 import type { McpBearerJsonInput } from "../../auth/route-handlers";
 import { mcpServerNowMs } from "../../auth/mcp-bearer";
@@ -44,7 +47,7 @@ import { serveMcpReadCall, type McpReadDependencies } from "./read-call";
 import { MCP_SERVER_TRACE_SCHEMA, recordMcpServerRequest, type McpServerTraceMethod, type McpServerTraceOutcome } from "./request-trace";
 import { MCP_TOOL_LISTING_SCHEMA, renderMcpToolListing, type McpToolDefinition, type McpToolListing } from "./tool-definitions";
 
-/** The text of the closed refusal a listed proposal answers until B4 decides it ([B20 B3] listed reads are served). */
+/** [B20 B4] The closed refusal of a listed tool with no serving path: none since B4 (every listed tool is a served read), kept as defence. */
 export const MCP_NOT_SERVED_TEXT = "This tool is listed but not yet served; nothing was done." as const;
 
 export interface McpDispatchDeps {
@@ -150,6 +153,7 @@ async function handle(input: McpBearerJsonInput, registry: ToolRegistry, reads: 
     const outcome: McpServerTraceOutcome = answer.outcome === "succeeded" || answer.outcome === "replayed" ? "read_served" : "read_refused";
     return done(mcpResultResponse(id, answer.result), outcome, 200, { toolId: name, listingDigest: served.listingDigest });
   }
+  // [B20 B4] defence only: a listed tool with no serving path (none since B4; the ratchet is b20-b4-withhold-proposals case 5)
   const refusal = {
     resultType: "complete",
     content: [{ type: "text", text: MCP_NOT_SERVED_TEXT }],

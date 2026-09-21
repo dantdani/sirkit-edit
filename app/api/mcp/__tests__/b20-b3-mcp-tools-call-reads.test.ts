@@ -173,16 +173,17 @@ afterEach(() => {
 });
 
 describe("[B20 B3] H — MCP reads through POST /api/mcp", () => {
-  it("1. tools/list per stored role lists exactly the served reads and proposals the role may use, and no withheld id", async () => {
+  it("1. tools/list per stored role lists exactly the served reads the role may use, and no withheld id and no proposal", async () => {
     const registry = sirkitToolRegistry();
     for (const stored of ["viewer", "commenter", "editor", "reviewer", "admin"] as MembershipRole[]) {
       member(stored);
       const { status, body } = await post(rpc("tools/list"), await tokenFor());
       expect(status).toBe(200);
       const names = (resultOf(body).tools as Array<{ name: string }>).map((tool) => tool.name);
-      const expected = [...SERVED_READS, ...PROPOSALS].filter((id) => registry.get(id)!.requiredRoles.includes(ROLE_MAP[stored])).sort();
+      // [B20 B4] pin move (OD-82, OD-87): the proposals are withheld, so a role's listing is its served reads only
+      const expected = SERVED_READS.filter((id) => registry.get(id)!.requiredRoles.includes(ROLE_MAP[stored])).sort();
       expect(names, stored).toEqual(expected);
-      for (const id of WITHHELD) expect(names).not.toContain(id);
+      for (const id of [...WITHHELD, ...PROPOSALS]) expect(names).not.toContain(id);
     }
   });
 
@@ -288,14 +289,19 @@ describe("[B20 B3] H — MCP reads through POST /api/mcp", () => {
     expect(bodies.size).toBe(1);
   });
 
-  it("8. all five proposals answer not_served", async () => {
+  it("8. all five proposals, withheld since B4, answer B2's identical -32602 and read nothing", async () => {
+    // [B20 B4] pin move (OD-82, OD-87): the five proposals were listed and answered not_served; withheld, a call naming one is
+    // the one identical unknown-or-unlisted answer (the same bytes as a nonexistent id's), and still no durable read happens
     member("admin");
     const token = await tokenFor();
     const loadHead = vi.spyOn(workflow, "loadHead");
+    const reference = await post(callRpc("sirkit.no-such-tool", {}, {}, 8), token);
+    expect((reference.body.error as { code: number }).code).toBe(-32602);
     for (const name of PROPOSALS) {
-      const { status, body } = await post(callRpc(name, {}), token);
-      expect(status).toBe(200);
-      expect(resultOf(body)).toMatchObject({ isError: true, _meta: { "dev.sirkit/refusal": "not_served" } });
+      const { status, text } = await post(callRpc(name, {}, {}, 8), token);
+      expect(status, name).toBe(200);
+      expect(text, name).toBe(reference.text);
+      expect(text, name).not.toContain(name);
     }
     expect(loadHead).not.toHaveBeenCalled();
   });
