@@ -13,13 +13,16 @@
  * Sirkit declares no elicitation, sampling or roots capability, so a server may not ask for one (MRTR, notes section 2).
  * A `header_mismatch` (-32020) means the server read the mirrored headers differently from the body: the cached listing
  * of that server is invalidated and the closed outcome is returned — there is no automatic retry loop in A2.
+ * [B20 A3] The post goes through `mcpPostAuthorized` (a client-credentials row gets its token, one refresh and one step-up
+ * there) with no collector: this layer keeps no server text after the post, and the transport redacts the result.
  */
 import type { AdmissionPurpose } from "../acquisition/admission-control";
 import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, validateAgainstSchema } from "../engineering/tool-io-validation";
+import { mcpPostAuthorized, type McpAuthorizedPostResult } from "./authorization";
 import { isAcceptedMcpTool, utf8Exceeds, type McpAcceptedTool, type McpHeaderParameter } from "./foreign-tools";
 import {
-  encodeMcpNameHeader, MCP_PARAM_HEADER_VALUE_MAX_CHARS, mcpPost, mcpRedactionSubjects,
-  type McpPostAttribution, type McpPostResult, type McpTransportDeps,
+  encodeMcpNameHeader, MCP_PARAM_HEADER_VALUE_MAX_CHARS, mcpRedactionSubjects,
+  type McpPostAttribution, type McpTransportDeps,
 } from "./http-transport";
 import { displayText, isNegotiatedMcpServer, nextMcpRequestId, type McpNegotiatedServer } from "./negotiation";
 import type { McpServerRegistryEntry } from "./server-registry";
@@ -55,7 +58,7 @@ export interface McpToolCallClosed extends McpPostAttribution {
   readonly issues?: readonly string[];
 }
 
-export type McpToolCallOutcome = McpPostResult | McpToolCallClosed;
+export type McpToolCallOutcome = McpAuthorizedPostResult | McpToolCallClosed;
 
 export interface McpToolCallOptions {
   purpose: AdmissionPurpose;
@@ -208,7 +211,7 @@ export async function callMcpTool(
     const prepared = prepareMcpToolCall(accepted, args, redact);
     if (!prepared.ok) return closed(emptyAttribution(serverId), prepared.code, prepared.message, prepared.issues);
 
-    const post = await mcpPost(
+    const post = await mcpPostAuthorized(
       server,
       { jsonrpc: "2.0", id: nextMcpRequestId(), method: CALL_METHOD, params: { name: prepared.name, arguments: prepared.arguments } },
       { purpose: options.purpose, era: "current", protocolVersion: negotiated.negotiatedVersion, paramHeaders: prepared.paramHeaders, signal: options.signal, deps: options.deps },

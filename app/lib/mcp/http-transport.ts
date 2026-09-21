@@ -100,7 +100,17 @@ const PROTOCOL_VERSION_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const B64TOKEN_PATTERN = /^[A-Za-z0-9._~+/-]+=*$/;
 /** [B20 A1 lead] A token of digits only is refused: a server could echo it as a JSON NUMBER, and numbers are never redacted. */
 const DIGITS_ONLY_TOKEN_PATTERN = /^[0-9]+=*$/;
-const isBearerToken = (value: string): boolean => B64TOKEN_PATTERN.test(value) && !DIGITS_ONLY_TOKEN_PATTERN.test(value);
+export const isBearerToken = (value: string): boolean => B64TOKEN_PATTERN.test(value) && !DIGITS_ONLY_TOKEN_PATTERN.test(value);
+/**
+ * [B20 A3] The bounds of a list of redaction subjects a caller hands the transport: at most 16 `redactAlso` entries per post
+ * (as many as one authorized call's collector holds: [B20 A3 review] security-2) and at most 8 of the tokens a provider's
+ * `redactionSubjects` names — the length judged first, so a huge array is never iterated — each a string of at most 8 192
+ * characters that is a bearer token; anything else is skipped, never refused, never echoed. [B20 A3 review] regressions-1: a
+ * token longer than that bound is never SENT (`token_malformed`), so every token a request carries fits every list.
+ */
+export const MCP_REDACT_ALSO_MAX = 16;
+export const MCP_HELD_REDACTION_SUBJECTS_MAX = 8;
+export const MCP_REDACTION_SUBJECT_MAX_CHARS = 8_192;
 /** the Base64 sentinel of header Value Encoding (section 3): a value that already looks like one is encoded again */
 const SENTINEL_PATTERN = /^=\?base64\?[\s\S]*\?=$/;
 const TRACE_META_KEYS: ReadonlySet<string> = new Set(["traceparent", "tracestate", "baggage"]);
@@ -135,8 +145,14 @@ export type McpEra = "current" | "legacy";
 export type McpTokenOutcome =
   | { ok: true; token: string | null }
   | { ok: false; code: "token_unavailable" | "token_malformed"; message: string };
-/** Answers with the token to send (null for none). A3 wires the client-credentials flow; A1 ships `none` and the pre-issued token. */
-export type McpTokenProvider = (server: McpServerRegistryEntry, environment: Readonly<Record<string, string | undefined>>) => McpTokenOutcome | Promise<McpTokenOutcome>;
+/**
+ * Answers with the token to send (null for none). A3 wires the client-credentials flow; A1 ships `none` and the pre-issued token.
+ * [B20 A3] A provider may carry `redactionSubjects`: the tokens it HOLDS for a row (sent or dropped), which the client layers
+ * redact without asking the provider for a token (`mcpRedactionSubjects`). Additive: every A1 provider is a plain function.
+ */
+export type McpTokenProvider = ((server: McpServerRegistryEntry, environment: Readonly<Record<string, string | undefined>>) => McpTokenOutcome | Promise<McpTokenOutcome>) & {
+  readonly redactionSubjects?: (server: McpServerRegistryEntry, environment: Readonly<Record<string, string | undefined>>) => readonly string[];
+};
 
 export interface McpBearerChallenge {
   scheme: "Bearer";
@@ -171,6 +187,12 @@ export interface McpPostOptions {
   paramHeaders?: Readonly<Record<string, string>>;
   signal?: AbortSignal;
   deps?: McpTransportDeps;
+  /**
+   * [B20 A3] Tokens this call must also redact from everything it hands back — tokens sent earlier in an authorized call,
+   * or held for the row — beside the one it sends. Read as `MCP_REDACT_ALSO_MAX` / `MCP_REDACTION_SUBJECT_MAX_CHARS` say;
+   * used only when a token is sent. Absent, the behaviour is exactly A1's.
+   */
+  redactAlso?: readonly string[];
 }
 
 export type McpTransportFailureCode =
@@ -572,16 +594,37 @@ function safeResourceMetadataUrl(raw: string): string | undefined {
   return url.toString();
 }
 
+/**
+ * [B20 A3 lead] The parameters of the Bearer challenge of a `WWW-Authenticate` value, in order, as [lower-cased name, value as
+ * written with quoted-string escapes undone]; null when the value carries no Bearer challenge. The Bearer challenge ends where
+ * another begins: a field may carry several challenges (RFC 9110 section 11.6.1; RFC 9728 section 5.1 lets another scheme name
+ * `resource_metadata` too), and what separates a later challenge's parameter from the one before it holds that challenge's
+ * scheme name. Only commas and whitespace may separate the Bearer challenge's own parameters; any other text ends it.
+ * Linear in the value, which the egress bound keeps at 2 048 bytes.
+ */
+function bearerChallengeParams(header: string): Array<[string, string]> | null {
+  const match = BEARER_CHALLENGE.exec(header);
+  if (!match) return null;
+  const span = match[1]!;
+  const out: Array<[string, string]> = [];
+  const params = new RegExp(CHALLENGE_PARAM.source, "g");
+  let from = 0;
+  for (let found = params.exec(span); found !== null; found = params.exec(span)) {
+    if (!/^[\s,]*$/.test(span.slice(from, found.index))) break;
+    out.push([found[1]!.toLowerCase(), found[2] !== undefined ? found[2].replace(/\\(.)/g, "$1") : found[3]!]);
+    from = params.lastIndex;
+  }
+  return out;
+}
+
 /** The Bearer challenge of a `WWW-Authenticate` header as a typed, bounded record; null when the header carries none. */
 export function parseBearerChallenge(header: string | undefined, redact: readonly string[] = []): McpBearerChallenge | null {
   if (typeof header !== "string") return null;
-  const match = BEARER_CHALLENGE.exec(header);
-  if (!match) return null;
+  const params = bearerChallengeParams(header);
+  if (params === null) return null;
   const challenge: McpBearerChallenge = { scheme: "Bearer" };
-  const params = new RegExp(CHALLENGE_PARAM.source, "g");
-  for (let found = params.exec(match[1]!); found !== null; found = params.exec(match[1]!)) {
-    const name = found[1]!.toLowerCase();
-    const value = found[2] !== undefined ? found[2].replace(/\\(.)/g, "$1") : found[3]!;
+  // [B20 A3 lead] only the Bearer challenge's OWN parameters: a later challenge's (DPoP) scope or URL is never read as its
+  for (const [name, value] of params) {
     // [B20 A1 review] a scope, an error code or a metadata URL that carries the sent token is dropped: the grammars admit a b64token
     // [B20 A1 review-3] by the one token comparison; the URL as it was written AND as the parser made it, both case-folded: the
     // parser lowercases and compatibility-folds a host, and percent-encodes what a disguise is made of
@@ -597,6 +640,25 @@ export function parseBearerChallenge(header: string | undefined, redact: readonl
     }
   }
   return challenge;
+}
+
+/**
+ * [B20 A3 review] Every value of one parameter of the Bearer challenge of a `WWW-Authenticate` header, AS WRITTEN — the same
+ * challenge and parameter grammar as `parseBearerChallenge`, quoted-string escapes undone, nothing dropped, nothing
+ * normalised — for a caller that must judge what the server sent rather than what the parser kept (the authorization
+ * client's credential-free probe judges `resource_metadata` so). An empty list when the header carries no Bearer challenge
+ * or no such parameter. The header is at most 2 048 bytes by the egress bound. Never throws.
+ */
+export function bearerChallengeParameters(header: string | undefined, name: string): readonly string[] {
+  const values: string[] = [];
+  try {
+    if (typeof header !== "string" || typeof name !== "string") return values;
+    const wanted = name.toLowerCase();
+    for (const [found, value] of bearerChallengeParams(header) ?? []) if (found === wanted) values.push(value);
+  } catch {
+    // a header that cannot be read carries no parameter
+  }
+  return values;
 }
 
 function retryAfterSeconds(headers: OutboundHeaders | undefined): number | undefined {
@@ -660,7 +722,7 @@ export const defaultTokenProvider: McpTokenProvider = (server, environment) => {
   switch (server.auth.mode) {
     case "none": return noneTokenProvider(server, environment);
     case "pre-issued-token-env": return preIssuedTokenEnvProvider(server, environment);
-    case "client-credentials-env": return { ok: false, code: "token_unavailable", message: `MCP server "${server.id}": the client-credentials flow is not wired in this increment (A3).` };
+    case "client-credentials-env": return { ok: false, code: "token_unavailable", message: `MCP server "${server.id}": the client-credentials flow runs only through mcpPostAuthorized with mcpAuthorizationTokenProvider.` };
   }
 };
 
@@ -671,10 +733,14 @@ export const defaultTokenProvider: McpTokenProvider = (server, environment) => {
  * result is data). They pass this list to `scrubVendorText` and to `skeletonCarries` so a text that carries the token in
  * ANY spelling, case-folded included, is replaced whole. It resolves the token through the same provider seam and never
  * throws: an unavailable, malformed or unexpected credential is simply no subject.
+ * [B20 A3] A provider that carries `redactionSubjects` (the authorization client's) is asked for the tokens it holds instead
+ * of for a token: its answer is read by the `redactAlso` bounds and frozen.
  */
 export async function mcpRedactionSubjects(server: McpServerRegistryEntry, deps: McpTransportDeps = {}): Promise<readonly string[]> {
   try {
     const provider = deps.tokenProvider ?? defaultTokenProvider;
+    const held: unknown = (provider as { redactionSubjects?: unknown }).redactionSubjects;
+    if (typeof held === "function") return Object.freeze(boundedRedactionSubjects((held as NonNullable<McpTokenProvider["redactionSubjects"]>)(server, deps.environment ?? process.env)));
     const outcome = await provider(server, deps.environment ?? process.env);
     if (!isPlainObject(outcome) || outcome.ok !== true) return Object.freeze([]);
     const token = (outcome as { token?: unknown }).token;
@@ -898,9 +964,13 @@ async function postOnce(server: McpServerRegistryEntry, message: JsonRpcRequest 
   const token = tokenOutcome.token;
   if (token !== null && server.auth.mode === "none") return closed("token_unexpected", `${subject}: the row declares no authentication, so no credential is sent.`);
   if (token === null && server.auth.mode !== "none") return closed("token_unavailable", `${subject}: no access token is available.`);
+  // [B20 A3 review] regressions-1: the length judged first — a token no redaction list can hold as a subject is never sent
+  if (token !== null && typeof token === "string" && token.length > MCP_REDACTION_SUBJECT_MAX_CHARS) {
+    return closed("token_malformed", `${subject}: the access token is longer than ${MCP_REDACTION_SUBJECT_MAX_CHARS} characters, more than a redaction subject may be; nothing was sent.`);
+  }
   if (token !== null && !isBearerToken(token)) return closed("token_malformed", `${subject}: the access token is not an RFC 6750 token; nothing was sent.`);
-  /** the token this request carries: a server that echoes it back never gets it into a result */
-  const redact: readonly string[] = token === null ? [] : [token];
+  /** the token this request carries: a server that echoes it back never gets it into a result; [B20 A3] with `redactAlso` */
+  const redact: readonly string[] = token === null ? [] : [token, ...boundedRedactionSubjects(options.redactAlso, MCP_REDACT_ALSO_MAX).filter((subject) => subject !== token)];
 
   if (options.signal?.aborted) return closed("aborted", `${subject}: the request was aborted before it started.`);
   if (mcpInFlight(server.id) >= server.limits.maxConcurrent) {
@@ -1172,4 +1242,26 @@ export function scrubDisplayText(raw: unknown, maxChars: number, redact: readonl
     }
   }
   return scrubVendorText(text, maxChars, secrets);
+}
+
+/**
+ * [B20 A3] A list of redaction subjects as the transport reads one: at most `max` entries — `MCP_HELD_REDACTION_SUBJECTS_MAX`
+ * unless the caller names `MCP_REDACT_ALSO_MAX` (the length judged first, so a huge array is never iterated) — each a string
+ * of at most `MCP_REDACTION_SUBJECT_MAX_CHARS` characters that is a bearer token, de-duplicated in order; anything else is
+ * skipped, never refused and never echoed. Never throws.
+ */
+export function boundedRedactionSubjects(raw: unknown, max: number = MCP_HELD_REDACTION_SUBJECTS_MAX): string[] {
+  const kept: string[] = [];
+  try {
+    if (!Array.isArray(raw)) return kept;
+    const count = Math.min(raw.length, max === MCP_REDACT_ALSO_MAX ? MCP_REDACT_ALSO_MAX : MCP_HELD_REDACTION_SUBJECTS_MAX);
+    for (let index = 0; index < count; index += 1) {
+      const entry: unknown = raw[index];
+      if (typeof entry !== "string" || entry === "" || entry.length > MCP_REDACTION_SUBJECT_MAX_CHARS || !isBearerToken(entry) || kept.includes(entry)) continue;
+      kept.push(entry);
+    }
+  } catch {
+    // a hostile list is no subject
+  }
+  return kept;
 }

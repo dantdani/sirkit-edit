@@ -7,7 +7,9 @@
  * is A2b: a server that answers the modern probe as an older revision is the typed closed outcome `legacy_server` and
  * NOTHING else is sent), never fulfils an `input_required` round trip, never retries more than once, and never obtains a
  * credential by itself (A3: the transport's injected provider answers, and `unauthorized` / `forbidden` are handed back
- * with their challenge untouched).
+ * with their challenge untouched). [B20 A3] The one post goes through `mcpPostAuthorized`: every other row passes through to
+ * `mcpPost` unchanged, and a client-credentials row under the authorization client's provider gets its token, its one
+ * refresh and its one step-up there — never here.
  *
  * What the server says is DATA, never a decision and never an instruction:
  *  - `supportedVersions` must be a bounded list (at most 16) of revision dates; entries that are not are dropped and
@@ -27,10 +29,12 @@
  * `discoverMcpServer` never throws and never rejects: whatever fails is a closed outcome with a FIXED sentence (S4).
  */
 import type { AdmissionPurpose } from "../acquisition/admission-control";
+import { createMcpRedactionCollector, mcpPostAuthorized, type McpAuthorizationClosed, type McpAuthorizationTrace } from "./authorization";
 import {
-  mcpPost, mcpRedactionSubjects, REDACTED, scrubDisplayText, skeletonCarries,
-  type McpPostAttribution, type McpPostOutcome, type McpPostResult, type McpTransportDeps,
+  mcpRedactionSubjects, REDACTED, scrubDisplayText, skeletonCarries,
+  type McpPostAttribution, type McpPostOutcome, type McpTransportDeps,
 } from "./http-transport";
+import { nextMcpRequestId } from "./request-id";
 import { MCP_PROTOCOL_VERSION_COMPATIBILITY, MCP_PROTOCOL_VERSION_CURRENT, type McpServerRegistryEntry } from "./server-registry";
 
 /** `_meta["io.modelcontextprotocol/serverInfo"]` (reference notes section 2): a result SHOULD carry it. */
@@ -110,8 +114,13 @@ export interface McpDiscoverClosed extends McpPostAttribution {
   readonly compatibilityEraListed?: boolean;
 }
 
-/** Every transport outcome that is not a `complete` answer is handed back exactly as the transport classified it. */
-export type McpPassedThroughOutcome = McpPostAttribution & Exclude<Extract<McpPostOutcome, { ok: false }>, { kind: "input_required" }>;
+/**
+ * Every transport outcome that is not a `complete` answer is handed back exactly as the transport classified it.
+ * [B20 A3] Or as the authorization client closed it; a transport outcome of a client-credentials row carries its trace.
+ */
+export type McpPassedThroughOutcome =
+  | (McpPostAttribution & Exclude<Extract<McpPostOutcome, { ok: false }>, { kind: "input_required" }> & { authorization?: McpAuthorizationTrace })
+  | McpAuthorizationClosed;
 
 export type McpDiscoverOutcome = McpNegotiatedServer | McpDiscoverClosed | McpPassedThroughOutcome;
 
@@ -139,7 +148,7 @@ function safeServerId(server: McpServerRegistryEntry): string {
   }
 }
 
-function attributionOf(serverId: string, post: McpPostResult): McpPostAttribution {
+function attributionOf(serverId: string, post: McpPostAttribution): McpPostAttribution {
   return { serverId, protocolVersion: post.protocolVersion, method: post.method, elapsedMs: post.elapsedMs, requestBytes: post.requestBytes, responseBytes: post.responseBytes };
 }
 
@@ -265,13 +274,8 @@ export function isNegotiatedMcpServer(value: unknown): value is McpNegotiatedSer
 
 // ── Request ids ───────────────────────────────────────────────────────────────
 
-let requestCounter = 0;
-
-/** A JSON-RPC id unique among this process's in-flight requests (base protocol, reference notes section 7). */
-export function nextMcpRequestId(): number {
-  requestCounter = requestCounter >= Number.MAX_SAFE_INTEGER - 1 ? 1 : requestCounter + 1;
-  return requestCounter;
-}
+/** [B20 A3] Moved unchanged to the leaf module `request-id.ts` (the authorization client mints ids too); re-exported here. */
+export { nextMcpRequestId } from "./request-id";
 
 // ── discoverMcpServer ─────────────────────────────────────────────────────────
 
@@ -302,22 +306,24 @@ async function negotiate(server: McpServerRegistryEntry, options: McpDiscoverOpt
       : closed(emptyAttribution(serverId), "no_common_version", `${subject}: the row lists no protocol revision of the current era; nothing was sent.`);
   }
   // the token this row would send, as a redaction subject only: every string this client RETAINS is compared against it
-  const redact = await mcpRedactionSubjects(server, deps);
+  // [B20 A3] one collector per call, seeded with the tokens held for the row and grown by every token the call sends; its
+  // subjects are read when a text is judged, never before
+  const collector = createMcpRedactionCollector(await mcpRedactionSubjects(server, deps));
 
   const exchanges: McpPostAttribution[] = [];
   const tried = new Set<string>();
   let version = row.current[0]!;
   for (let attempt = 1; ; attempt += 1) {
     tried.add(version);
-    const post = await mcpPost(
+    const post = await mcpPostAuthorized(
       server,
       { jsonrpc: "2.0", id: nextMcpRequestId(), method: DISCOVER_METHOD, params: {} },
-      { purpose: options.purpose, era: "current", protocolVersion: version, signal: options.signal, deps },
+      { purpose: options.purpose, era: "current", protocolVersion: version, signal: options.signal, deps, redaction: collector },
     );
     const attribution = attributionOf(serverId, post);
     exchanges.push(attribution);
 
-    if (post.kind === "complete") return interpretDiscoverResult(subject, attribution, row, post.result, exchanges, attempt, redact);
+    if (post.kind === "complete") return interpretDiscoverResult(subject, attribution, row, post.result, exchanges, attempt, collector.subjects());
     if (post.kind === "input_required") {
       return closed(attribution, "unexpected_input_required", `${subject}: ${DISCOVER_METHOD} answered an input_required result, which the specification allows only on prompts/get, resources/read and tools/call; nothing was fulfilled.`);
     }

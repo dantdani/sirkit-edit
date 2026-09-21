@@ -56,8 +56,9 @@ function csvCells(line: string): string[] {
 }
 
 describe("[B20 A0] the committed registry", () => {
-  it("is versioned 1.0.0, validates, and is EMPTY: every server is refused until a reviewed row with an owner decision id is added (OD-48)", () => {
-    expect(MCP_SERVER_REGISTRY_VERSION).toBe("1.0.0");
+  // [B20 A3] reviewed pin move: 1.0.0 -> 1.1.0, the authorization-server pin and its two CSV columns (OD-61)
+  it("is versioned 1.1.0, validates, and is EMPTY: every server is refused until a reviewed row with an owner decision id is added (OD-48)", () => {
+    expect(MCP_SERVER_REGISTRY_VERSION).toBe("1.1.0");
     expect(validateMcpServerRegistry()).toEqual([]);
     expect([...MCP_SERVER_REGISTRY]).toEqual([]);
     expect([...MCP_SERVER_IDS]).toEqual([]);
@@ -281,12 +282,14 @@ describe("[B20 A0] the validator refuses what a registry row must never contain"
   it("lets two rows share a client-id environment name (a public identifier), never a client-secret or an access-token", () => {
     // [B20 A0 review] one OAuth client registered at one authorization server may serve two resource servers; its id is
     // not a credential. The secret and the token stay one-server-only.
+    // [B20 A3] reviewed change: a client-credentials row pins its authorization server (OD-61); both rows pin the SAME issuer,
+    // so the two expectations below hold exactly as before (rows that share a client id must share the issuer)
     const credentials = (id: string, clientId: string, clientSecret: string): McpServerRegistryEntry =>
       fixtureServer({
         id,
         canonicalUri: `https://${id}.example.com/mcp`,
         endpoint: { host: `${id}.example.com`, port: null, path: "/mcp" },
-        auth: { mode: "client-credentials-env", secrets: [{ env: clientId, role: "client-id" }, { env: clientSecret, role: "client-secret" }], scopes: [] },
+        auth: { mode: "client-credentials-env", secrets: [{ env: clientId, role: "client-id" }, { env: clientSecret, role: "client-secret" }], scopes: [], authorizationServer: { issuer: "https://auth.example.com", tokenEndpoint: "https://auth.example.com/oauth/token" } },
       });
     expect(validateMcpServerRegistry([credentials("docs-a", "EXAMPLE_MCP_CLIENT_ID", "EXAMPLE_MCP_SECRET_A"), credentials("docs-b", "EXAMPLE_MCP_CLIENT_ID", "EXAMPLE_MCP_SECRET_B")])).toEqual([]);
     const shared = validateMcpServerRegistry([credentials("docs-a", "EXAMPLE_MCP_CLIENT_A", "EXAMPLE_MCP_SECRET"), credentials("docs-b", "EXAMPLE_MCP_CLIENT_B", "EXAMPLE_MCP_SECRET")]);
@@ -364,9 +367,10 @@ describe("[B20 A0] admission returns only an approved row, never without the fla
 
 describe("[B20 A0] the rendered artifact", () => {
   it("has exactly these columns in this order (a schema change is a reviewed diff in the constant, here and in mcp-server-registry.md)", () => {
+    // [B20 A3] reviewed pin move: `authorization_issuer` and `token_endpoint` after `scopes` (OD-61), 28 -> 30 columns
     expect([...MCP_SERVER_REGISTRY_CSV_COLUMNS]).toEqual([
       "registry_version", "id", "status", "owner_decision", "title", "canonical_uri", "endpoint_host", "endpoint_port", "endpoint_path", "protocol_versions", "compatibility_era",
-      "auth_mode", "secret_references", "scopes", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
+      "auth_mode", "secret_references", "scopes", "authorization_issuer", "token_endpoint", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
       "per_tool_limits", "redirects", "agent_disclosure", "documentation_url", "docs_checked_on", "retention_note", "reason",
     ]);
   });
@@ -379,8 +383,9 @@ describe("[B20 A0] the rendered artifact", () => {
     expect(rendered).toBe(renderMcpServerRegistryCsv([alpha, zeta]));
     const lines = rendered.split(NEWLINE);
     expect(lines[0]).toBe(MCP_SERVER_REGISTRY_CSV_COLUMNS.join(","));
-    expect(lines[1]!.startsWith("1.0.0,alpha-server,approved,OD-48,")).toBe(true);
-    expect(lines[2]!.startsWith("1.0.0,zeta-server,approved,OD-48,")).toBe(true);
+    // [B20 A3] reviewed pin move: the registry version 1.1.0
+    expect(lines[1]!.startsWith("1.1.0,alpha-server,approved,OD-48,")).toBe(true);
+    expect(lines[2]!.startsWith("1.1.0,zeta-server,approved,OD-48,")).toBe(true);
     expect(lines).toHaveLength(4);
     expect(lines[3]).toBe("");
     expect(lines[2]).toContain("EXAMPLE_ZETA_TOKEN|access-token");

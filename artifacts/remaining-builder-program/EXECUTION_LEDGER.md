@@ -2278,3 +2278,37 @@ _(discovery, reproduction and results appended below as they are observed)_
   until A3 lands.
 - Gates (fix round and lead, one heavy job at a time): lib MCP, net and the CI job-scope guard pass with this entry; tsc 0;
   eslint clean on the new suite; no generator input changed.
+
+### B20-A3 - the authorization client, delivered by the re-dispatch with the lead's decisions (2026-09-21 local; increment workflow + lead; this commit)
+
+- Re-dispatched on d7d2f61 with the lead's decisions LD-1..LD-6 (`scratchpad/b20/task-A3-lead-decisions.md`), after a session
+  restart interrupted the first re-dispatch (its partial files were moved to the scratchpad and the tree cleaned). Built
+  test-first: the eight new suites could not import and the A0 and live-reread suites failed their changed expectations
+  (10 files, 6 cases) before any code. `mcpPostAuthorized` authorizes only a client-credentials row under
+  `mcpAuthorizationTokenProvider` (every other row is `mcpPost`, with the LD-1 declaration for a client-credentials row):
+  one credential-free probe of the endpoint for a same-origin 401 challenge, then the well-known URIs (LD-3); RFC 9728
+  metadata with `resource` identical to the canonical URI (LD-5); RFC 8414 / OIDC metadata from the PINNED issuer; the
+  client-credentials grant with RFC 8707 `resource`, Basic unless only the body method is listed (LD-2); the first scope
+  from the challenge or `scopes_supported` within the ceiling (LD-4); an in-process cache; one refresh after a 401 and one
+  bounded step-up; a per-call collector redacting every token the call held. The registry moves to 1.1.0 with the
+  authorization-server pin (30 CSV columns). Live re-read of the two pages the decisions rest on (2026-09-21): unchanged.
+  16 named mutations each failed its case; sources restored by sha256.
+- Adversarial review (four lenses, one skeptic each): 28 findings raised, 22 confirmed and fixed test-first (13 of 144
+  cases failed on the review's tree). Among them: a pre-issued token over 8 192 characters could escape the case-folded
+  redaction (now never sent, `token_malformed`); a token endpoint with a trailing slash could equal an MCP endpoint, and a
+  client-id reference could name another row's credential (both refused by the registry now); a still-valid token evicted
+  mid-walk could surface in a later page's error (every post's `redactAlso` now carries the call's collector); the probe
+  judged the transport's normalised URL instead of what the server wrote (now the raw parameter). The independent check:
+  every confirmed fix done, all but two revert-sensitive (one page wording, one state-probe walk not pinned).
+- The check's one new issue, fixed by the lead test-first (the new prm-discovery case failed on the review's tree): the raw
+  parameter read every `resource_metadata` after `Bearer` to the end of the field, so a 401 carrying a second challenge
+  (`Bearer ..., DPoP algs="ES256", resource_metadata="..."`, which RFC 9728 section 5.1 allows) was refused as a repeated
+  parameter, and `parseBearerChallenge` could take a later challenge's `scope` as the Bearer challenge's. Both parsers now
+  read only the Bearer challenge's own parameters (`bearerChallengeParams`); the boundary page's 44 transport citations
+  after the change were re-pinned by a line map of the diff.
+- OD-61..OD-64 recorded (OD-62 and OD-64 carry LD-1..LD-5 with the owner's alternatives); D20-19 closed for the B20-A
+  credential shapes, reachable once A4's composition root injects the provider; the client side of D20-31 closed. Nothing
+  is exposed: the flag is off and the registry holds no server.
+- Gates (lead, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 721 passed;
+  app/api/mcp 75; agent, B16.1C tripwires, AST import gates and the CI job-scope guard 430; tsc 0; eslint clean on the 20
+  changed and new files; the registry generator byte-identical. The A3 suites hold 146 cases.

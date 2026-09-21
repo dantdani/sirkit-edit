@@ -22,7 +22,7 @@
 import { containsTokenAnchoredSecretShapedText } from "../agent/redaction";
 import { MCP_DISABLED_SERVERS_ENV, MCP_ENABLED_ENV, mcpFeatureState } from "./rollout";
 
-export const MCP_SERVER_REGISTRY_VERSION = "1.0.0"; // [B20 A0]
+export const MCP_SERVER_REGISTRY_VERSION = "1.1.0"; // [B20 A0]; [B20 A3] 1.1.0: the authorization-server pin and its two columns (OD-61)
 
 /** The current specification revision (the authority path, OD-41) and the compatibility-era revision (never the authority path). */
 export const MCP_PROTOCOL_VERSION_CURRENT = "2026-07-28";
@@ -35,6 +35,9 @@ export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
 /** An environment variable NAME; anything else where a reference belongs is refused as a value. */
 export const MCP_ENV_NAME_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
 export const MCP_DESCRIPTOR_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
+/** [B20 A3] The scope ceiling a row may name (OD-62), and the length of a pinned authorization-server URL (OD-61). */
+export const MCP_SCOPES_MAX = 32;
+export const MCP_AUTHORIZATION_URL_MAX_CHARS = 512;
 /**
  * Inclusive bounds every row's limits must lie within. A minute window (the server's and every tool's) starts at 4 because
  * the agent purpose gets `floor(max * 0.25)` of it (OD-40, `PURPOSE_QUOTA_SHARE`): below 4 that share is 0 and the window
@@ -73,6 +76,15 @@ export interface McpServerLimits {
   /** Tool windows inside the server window; a tool not named here is metered by the server window alone. */
   perTool?: Readonly<Record<string, McpToolLimit>>;
 }
+/**
+ * [B20 A3] The authorization server a client-credentials row PINS (OD-61): the issuer its metadata must name identically,
+ * and the token endpoint that alone receives the client secret. A URL a server supplies is compared with these, never
+ * fetched, so metadata can refuse a row but never widen where Sirkit connects.
+ */
+export interface McpAuthorizationServerPin {
+  issuer: string;
+  tokenEndpoint: string;
+}
 /** The reviewed tools/list digest. Both null: nothing is pinned and discovery is never trusted as pinned. */
 export interface McpDescriptorPin {
   toolsListDigest: string | null;
@@ -98,7 +110,8 @@ export interface McpServerRegistryEntry {
   supportedProtocolVersions: readonly string[];
   /** true only when the row also lists 2025-11-25 (OD-41: the compatibility era, never the authority path). */
   compatibilityEra: boolean;
-  auth: { mode: McpAuthMode; secrets: readonly McpSecretReference[]; scopes: readonly string[] };
+  /** [B20 A3] `authorizationServer`: required on a client-credentials row, absent or null on every other (OD-61) */
+  auth: { mode: McpAuthMode; secrets: readonly McpSecretReference[]; scopes: readonly string[]; authorizationServer?: McpAuthorizationServerPin | null };
   descriptorPin: McpDescriptorPin;
   limits: McpServerLimits;
   maxRedirects: 0;
@@ -203,6 +216,68 @@ export function mcpEndpointOfCanonicalUri(uri: string): McpCanonicalUriResult {
   return { ok: true, canonical, host, port, path: rawPath === "" ? "/" : rawPath };
 }
 
+// ── Authorization-server URLs (OD-61) ────────────────────────────────────────
+
+export type McpAuthorizationUrlResult = { ok: true; url: string; host: string; port: number | null; path: string } | { ok: false; reason: string };
+
+/**
+ * [B20 A3] A pinned authorization-server URL (the issuer or the token endpoint), or which rule it breaks: a string of at most
+ * 512 characters (the length judged first); https; a lowercase public DNS host of at least two labels, never an IP literal
+ * or a loopback, private or metadata name; no spelled-out `:443`, no userinfo, query or fragment; plain path segments
+ * (unreserved characters, never `.` or `..`), the last of which may be empty (an issuer may end in `/`); and equal to its own
+ * reconstruction, so one authorization server has one spelling. `path` is the raw path (`""` when there is none).
+ */
+export function mcpAuthorizationUrlOf(uri: unknown): McpAuthorizationUrlResult {
+  const refuse = (reason: string): McpAuthorizationUrlResult => ({ ok: false, reason });
+  if (typeof uri !== "string") return refuse("the URL is not a string");
+  if (uri.length > MCP_AUTHORIZATION_URL_MAX_CHARS) return refuse(`the URL is longer than ${MCP_AUTHORIZATION_URL_MAX_CHARS} characters`);
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return refuse("the URL is not a valid URL");
+  }
+  if (url.protocol !== "https:") return refuse("the URL must use https");
+  if (url.username !== "" || url.password !== "") return refuse("the URL must not carry userinfo");
+  if (url.search !== "" || uri.includes("?")) return refuse("the URL must not carry a query");
+  if (url.hash !== "" || uri.includes("#")) return refuse("the URL must not carry a fragment");
+  const host = url.hostname;
+  if (host.startsWith("[") || IPV4.test(host) || /^\d+$/.test(host.slice(host.lastIndexOf(".") + 1))) return refuse("the host must be a public DNS name, not an IP literal");
+  if (!host.includes(".")) return refuse("the host must be a public DNS name with at least two labels");
+  const blocked = blockedName(host);
+  if (blocked) return refuse(`the host must be a public DNS name, not a ${blocked} name`);
+  if (!HOST_LABELS.test(host)) return refuse("the host must be lowercase DNS labels");
+  const authorityEnd = uri.indexOf("/", "https://".length);
+  const authority = authorityEnd === -1 ? uri.slice("https://".length) : uri.slice("https://".length, authorityEnd);
+  if (/:443$/.test(authority)) return refuse("the default port must be omitted");
+  const port = url.port === "" ? null : Number(url.port);
+  const rawPath = authorityEnd === -1 ? "" : uri.slice(authorityEnd);
+  const segments = rawPath === "" ? [] : rawPath.slice(1).split("/");
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    if (segment === "" && index === segments.length - 1) continue; // a terminating slash
+    if (segment === "." || segment === ".." || !PATH_SEGMENT.test(segment)) return refuse("a path segment is not plain (unreserved characters only; no empty, dot or percent-encoded segments)");
+  }
+  const canonical = `https://${host}${port === null ? "" : `:${port}`}${rawPath}`;
+  if (uri !== canonical) return refuse("the URL is not in canonical form (lowercase scheme and host, no default port)");
+  return { ok: true, url: canonical, host, port, path: rawPath };
+}
+
+/**
+ * [B20 A3 review] regressions-3: whether a token endpoint lies AT or UNDER an MCP endpoint — the same host and port, and a
+ * path equal to the endpoint's or below it (`/mcp/`, `/mcp/token` for `/mcp`), which a prefix router hands to the MCP
+ * handler. The root endpoint `/` covers only the root (every other path of its host is another resource: a server that is
+ * its own authorization server stays expressible). The client secret goes to no such URL (OD-61). Pure.
+ */
+export function mcpTokenEndpointReachesEndpoint(
+  tokenEndpoint: { host: string; port: number | null; path: string },
+  endpoint: { host: string; port: number | null; path: string },
+): boolean {
+  if (tokenEndpoint.host !== endpoint.host || tokenEndpoint.port !== endpoint.port) return false;
+  if (endpoint.path === "/") return tokenEndpoint.path === "" || tokenEndpoint.path === "/";
+  return tokenEndpoint.path === endpoint.path || tokenEndpoint.path.startsWith(`${endpoint.path}/`);
+}
+
 // ── Admission ────────────────────────────────────────────────────────────────
 
 export type McpServerRefusal = "unknown_server" | "blocked" | "disabled" | "feature_disabled" | "operator_disabled";
@@ -252,7 +327,9 @@ export type McpRegistryRule =
   | "terms"
   | "state"
   | "secret-shaped"
-  | "control-characters";
+  | "control-characters"
+  /** [B20 A3] the authorization-server pin (OD-61) */
+  | "authorization-server";
 
 export interface McpRegistryViolation {
   id: string;
@@ -268,6 +345,14 @@ const SCOPE = /^[!#-[\]-~]{1,128}$/;
 const OWNER_DECISION = /^OD-\d{1,4}$/;
 /** the long token shapes the B19 source registry refuses, beside the redaction classifier's own patterns */
 const SECRET_SHAPES = /sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|ghp_[A-Za-z0-9]{36}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|hf_[A-Za-z0-9]{30,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/;
+/**
+ * [B20 A3 review] Whether a string of a row is shaped like a secret VALUE, by the rule the `secret-shaped` refusal applies to
+ * every string of a row: the long token shapes above, or the redaction classifier's token-anchored shapes. Exported so the
+ * authorization client refuses a crafted row's secret-shaped environment NAME exactly as the validator would.
+ */
+export function isMcpSecretShapedText(text: string): boolean {
+  return SECRET_SHAPES.test(text) || containsTokenAnchoredSecretShapedText(text);
+}
 const CONTROL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const STATUSES: readonly McpServerStatus[] = ["approved", "disabled", "blocked"];
 const AUTH_MODES: readonly McpAuthMode[] = ["none", "client-credentials-env", "pre-issued-token-env"];
@@ -289,7 +374,10 @@ function stringsOf(value: unknown, depth = 0, out: string[] = []): string[] {
 /**
  * Every structural rule a registry revision must satisfy. Returns the violations; empty means valid. Cross-row rules: ids,
  * canonical URIs (one server is one row, so one decision, one meter and one credential cover it) and secret references (a
- * credential is issued for one server and is never sent to two) are unique across the revision.
+ * credential is issued for one server and is never sent to two) are unique across the revision. [B20 A3] Rows that share a
+ * client-id reference pin the identical issuer (credentials are keyed by issuer), and no row's token endpoint lies at or under
+ * any row's MCP endpoint on its origin (the client secret never goes to an MCP server) — OD-61; [B20 A3 review] a client-id
+ * reference never names another row's credential.
  */
 export function validateMcpServerRegistry(entries: readonly McpServerRegistryEntry[] = MCP_SERVER_REGISTRY): McpRegistryViolation[] {
   const violations: McpRegistryViolation[] = [];
@@ -298,6 +386,29 @@ export function validateMcpServerRegistry(entries: readonly McpServerRegistryEnt
   const canonicals = new Map<string, string>();
   /** secret reference (environment variable NAME) -> the label of the row that references it */
   const references = new Map<string, string>();
+  /** [B20 A3] client-id reference -> the pinned issuer and the label of the first row that shares it */
+  const clientIssuers = new Map<string, { issuer: string; label: string }>();
+  /**
+   * [B20 A3] every row's MCP endpoint, whatever its order: a token endpoint may never lie at or under one ([B20 A3 review]
+   * regressions-3: an exact comparison with the canonical URI let a terminating slash or a sub-path through)
+   */
+  const everyEndpoint: Array<{ host: string; port: number | null; path: string }> = [];
+  /** [B20 A3 review] security-1: every credential NAME (access-token, client-secret) -> the rows that reference it, whatever their order */
+  const credentialRows = new Map<string, number[]>();
+  entries.forEach((entry, row) => {
+    const derived = mcpEndpointOfCanonicalUri(entry?.canonicalUri);
+    if (derived.ok) everyEndpoint.push({ host: derived.host, port: derived.port, path: derived.path });
+    const secrets: unknown = entry?.auth?.secrets;
+    if (!Array.isArray(secrets)) return;
+    for (const reference of secrets as Array<{ env?: unknown; role?: unknown } | null>) {
+      if ((reference?.role !== "access-token" && reference?.role !== "client-secret") || typeof reference.env !== "string") continue;
+      credentialRows.set(reference.env, [...(credentialRows.get(reference.env) ?? []), row]);
+    }
+  });
+  const labelOf = (row: number): string => {
+    const rawId: unknown = entries[row]?.id;
+    return typeof rawId === "string" && MCP_SERVER_ID_PATTERN.test(rawId) ? rawId : `(malformed id, row ${row})`;
+  };
   entries.forEach((entry, row) => {
     const rawId = typeof entry.id === "string" ? entry.id : "(no id)";
     // An id that fails its pattern is never echoed — it could be secret-shaped or carry control characters — so the row is
@@ -350,11 +461,45 @@ export function validateMcpServerRegistry(entries: readonly McpServerRegistryEnt
         if (referencedBy !== undefined && referencedBy !== id) at("shared-secret-reference", `${name} is already referenced by ${referencedBy}: a credential is issued for one server and is never sent to two`);
         else references.set(name, id);
       }
+      // [B20 A3 review] security-1: a client id is read and SENT to the row's token endpoint (as the Basic user name or
+      // `client_id`), so it may never name a credential of another row — an access token or a client secret — whatever the
+      // order of the two rows (the row's own two NAMES are the duplicate rule's)
+      if (name !== null && reference?.role === "client-id") {
+        const owner = (credentialRows.get(name) ?? []).find((other) => other !== row);
+        if (owner !== undefined) at("shared-secret-reference", `${name} is a credential of ${labelOf(owner)}: a client-id reference never names another row's access-token or client-secret reference`);
+      }
     }
     if (new Set(secrets.map((reference) => reference?.env)).size !== secrets.length) at("secret-reference", "duplicate secret reference");
     const scopes = entry.auth?.scopes ?? [];
-    for (const scope of scopes) if (typeof scope !== "string" || !SCOPE.test(scope)) at("scopes", "a scope must be a printable OAuth scope token without spaces");
-    if (new Set(scopes).size !== scopes.length) at("scopes", "duplicate scope");
+    // [B20 A3] the ceiling is bounded (OD-62): the count is judged before any entry meets the pattern
+    if (!Array.isArray(scopes) || scopes.length > MCP_SCOPES_MAX) at("scopes", `a row names at most ${MCP_SCOPES_MAX} scopes`);
+    else {
+      for (const scope of scopes) if (typeof scope !== "string" || !SCOPE.test(scope)) at("scopes", "a scope must be a printable OAuth scope token without spaces");
+      if (new Set(scopes).size !== scopes.length) at("scopes", "duplicate scope");
+    }
+
+    // [B20 A3] the authorization-server pin (OD-61): required on a client-credentials row, refused on every other mode
+    const authorizationPin: unknown = entry.auth?.authorizationServer;
+    if (mode === "client-credentials-env") {
+      const pinned = typeof authorizationPin === "object" && authorizationPin !== null && !Array.isArray(authorizationPin) ? (authorizationPin as { issuer?: unknown; tokenEndpoint?: unknown }) : null;
+      if (pinned === null) at("authorization-server", 'auth mode "client-credentials-env" requires auth.authorizationServer { issuer, tokenEndpoint }');
+      else {
+        const issuer = mcpAuthorizationUrlOf(pinned.issuer);
+        const tokenEndpoint = mcpAuthorizationUrlOf(pinned.tokenEndpoint);
+        if (!issuer.ok) at("authorization-server", `authorizationServer.issuer: ${issuer.reason}`);
+        if (!tokenEndpoint.ok) at("authorization-server", `authorizationServer.tokenEndpoint: ${tokenEndpoint.reason}`);
+        else if (tokenEndpoint.path === "" || tokenEndpoint.path === "/") at("authorization-server", "authorizationServer.tokenEndpoint needs a path (the issuer's root is not a token endpoint)");
+        else if (everyEndpoint.some((endpoint) => mcpTokenEndpointReachesEndpoint(tokenEndpoint, endpoint))) {
+          at("authorization-server", "authorizationServer.tokenEndpoint lies at or under an MCP endpoint (this row's or another's) on its origin: the client secret never goes to an MCP server");
+        }
+        const clientId = secrets.find((reference) => reference?.role === "client-id")?.env;
+        if (issuer.ok && typeof clientId === "string" && MCP_ENV_NAME_PATTERN.test(clientId)) {
+          const shared = clientIssuers.get(clientId);
+          if (shared === undefined) clientIssuers.set(clientId, { issuer: issuer.url, label: id });
+          else if (shared.issuer !== issuer.url) at("authorization-server", `${clientId} is shared with ${shared.label}, which pins another issuer: rows that share a client id pin the identical issuer`);
+        }
+      }
+    } else if (authorizationPin !== undefined && authorizationPin !== null && AUTH_MODES.includes(mode)) at("authorization-server", `auth mode "${mode}" may not pin an authorization server`);
 
     const pin = entry.descriptorPin;
     if (!pin || typeof pin !== "object") at("descriptor-pin", "descriptorPin is missing (null toolsListDigest and null pinnedAt when nothing is pinned)");
@@ -408,7 +553,7 @@ export function validateMcpServerRegistry(entries: readonly McpServerRegistryEnt
     // Identity fields (a host label, a title) may carry `sk-` inside a word, so the classifier is the token-anchored one.
     for (const text of stringsOf(entry)) {
       if (CONTROL.test(text)) at("control-characters", "a string contains control or format characters");
-      if (SECRET_SHAPES.test(text) || containsTokenAnchoredSecretShapedText(text)) at("secret-shaped", "the row contains something shaped like a secret value");
+      if (isMcpSecretShapedText(text)) at("secret-shaped", "the row contains something shaped like a secret value");
     }
   });
   return violations;
@@ -428,7 +573,7 @@ function duration(ms: number): string {
 
 export const MCP_SERVER_REGISTRY_CSV_COLUMNS = [
   "registry_version", "id", "status", "owner_decision", "title", "canonical_uri", "endpoint_host", "endpoint_port", "endpoint_path", "protocol_versions", "compatibility_era",
-  "auth_mode", "secret_references", "scopes", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
+  "auth_mode", "secret_references", "scopes", "authorization_issuer", "token_endpoint", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
   "per_tool_limits", "redirects", "agent_disclosure", "documentation_url", "docs_checked_on", "retention_note", "reason",
 ] as const;
 
@@ -452,6 +597,8 @@ export function renderMcpServerRegistryCsv(entries: readonly McpServerRegistryEn
       entry.auth.mode,
       entry.auth.secrets.map((reference) => `${reference.env}|${reference.role}`).join(";"),
       entry.auth.scopes.join(";"),
+      entry.auth.authorizationServer?.issuer ?? "", // [B20 A3]
+      entry.auth.authorizationServer?.tokenEndpoint ?? "",
       entry.descriptorPin.toolsListDigest ?? "",
       entry.descriptorPin.pinnedAt ?? "",
       String(entry.limits.requestsPerMinute),

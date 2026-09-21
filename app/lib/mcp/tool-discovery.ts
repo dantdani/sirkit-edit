@@ -21,12 +21,16 @@
  * stored acceptance depended on — the row's pin and a digest of the caller's reserved provider names — so a hit is only
  * ever a listing judged under the same pin and the same reserved set. An entry records when it was stored: a clock that
  * steps back before that, or that answers no number, is a miss and stores nothing.
+ * [B20 A3] Every page goes through `mcpPostAuthorized` with ONE redaction collector per walk: seeded with the tokens held for
+ * the row and grown by every token a page sends (a refreshed one included), it is read at each judgement — the cursor rule
+ * and the acceptance of the definitions — so a token dropped or evicted mid-walk is still a subject.
  */
 import { canonicalJson, sha256 } from "../atomic/stable";
 import type { AdmissionPurpose } from "../acquisition/admission-control";
 import { compareCodePoints } from "../stable-compare";
 import { acceptForeignTools, boundedJsonCopy, MCP_TOOLS_PER_SERVER_MAX, type McpAcceptedTool, type McpToolExclusion } from "./foreign-tools";
-import { mcpPost, mcpRedactionSubjects, skeletonCarries, type McpPostAttribution, type McpTransportDeps } from "./http-transport";
+import { createMcpRedactionCollector, mcpPostAuthorized } from "./authorization";
+import { mcpRedactionSubjects, skeletonCarries, type McpPostAttribution, type McpTransportDeps } from "./http-transport";
 import {
   isNegotiatedMcpServer, nextMcpRequestId, readCacheScope, readTtlMs,
   type McpCacheScope, type McpNegotiatedServer, type McpPassedThroughOutcome,
@@ -289,7 +293,7 @@ async function listOnce(server: McpServerRegistryEntry, serverId: string, negoti
   const cached = now === null ? null : readCache(serverId, version, principal, context, now);
   if (cached !== null) return Object.freeze({ ...cached, cached: true });
 
-  const redact = await mcpRedactionSubjects(server, deps);
+  const collector = createMcpRedactionCollector(await mcpRedactionSubjects(server, deps));
   const exchanges: McpPostAttribution[] = [];
   const definitions: unknown[] = [];
   const seenCursors = new Set<string>();
@@ -302,10 +306,10 @@ async function listOnce(server: McpServerRegistryEntry, serverId: string, negoti
 
   for (; pages < MCP_TOOL_PAGES_MAX;) {
     pages += 1;
-    const post = await mcpPost(
+    const post = await mcpPostAuthorized(
       server,
       { jsonrpc: "2.0", id: nextMcpRequestId(), method: LIST_METHOD, params: cursor === undefined ? {} : { cursor } },
-      { purpose: options.purpose, era: "current", protocolVersion: version, signal: options.signal, deps },
+      { purpose: options.purpose, era: "current", protocolVersion: version, signal: options.signal, deps, redaction: collector },
     );
     const attribution = attributionOf(serverId, post);
     exchanges.push(attribution);
@@ -328,7 +332,7 @@ async function listOnce(server: McpServerRegistryEntry, serverId: string, negoti
 
     const next: unknown = isPlainObject(result) ? result.nextCursor : undefined;
     if (next === undefined || next === null) break;
-    if (typeof next !== "string" || next.length === 0 || next.length > MCP_TOOL_CURSOR_MAX_CHARS || CONTROL_OR_FORMAT.test(next) || skeletonCarries(next, redact, true)) {
+    if (typeof next !== "string" || next.length === 0 || next.length > MCP_TOOL_CURSOR_MAX_CHARS || CONTROL_OR_FORMAT.test(next) || skeletonCarries(next, collector.subjects(), true)) {
       return closed(attribution, "cursor_invalid", `${subject}: the page cursor is not a bounded, inert string of this client's own alphabet.`);
     }
     if (seenCursors.has(next)) return closed(attribution, "cursor_loop", `${subject}: ${LIST_METHOD} repeated a page cursor; the walk would not end.`);
@@ -345,7 +349,7 @@ async function listOnce(server: McpServerRegistryEntry, serverId: string, negoti
   if (typeof pin.value === "string" && pin.value !== digest) {
     return closed(exchanges.at(-1) ?? emptyAttribution(serverId), "descriptor_pin_mismatch", `${subject}: the listing does not match the reviewed descriptor pin; no tool of this server is offered.`);
   }
-  const set = acceptForeignTools(server, definitions, { redact, reservedProviderNames: reserved });
+  const set = acceptForeignTools(server, definitions, { redact: collector.subjects(), reservedProviderNames: reserved });
   const listing: McpToolListing = Object.freeze({
     ok: true,
     kind: "tools",

@@ -45,7 +45,8 @@ export type WritableServer = {
   endpoint: { host: string; port: number | null; path: string };
   supportedProtocolVersions: string[];
   compatibilityEra: boolean;
-  auth: { mode: string; secrets: Array<{ env: string; role: string }>; scopes: string[] };
+  /** [B20 A3] `authorizationServer`: the pinned issuer and token endpoint of a client-credentials row (OD-61) */
+  auth: { mode: string; secrets: Array<{ env: string; role: string }>; scopes: string[]; authorizationServer?: { issuer: string; tokenEndpoint: string } | null };
   descriptorPin: { toolsListDigest: string | null; pinnedAt: string | null } | null;
   limits: {
     requestsPerMinute: number;

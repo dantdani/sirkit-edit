@@ -1,10 +1,12 @@
 /**
- * [B20 A3] The dated live re-read of the authorization pages (task-A3 section 0) is RECORDED, not only reported. A3 stopped
- * at that re-read before any code (the client-credentials extension asks for a declared capability that no section 4
- * decision makes), so this suite pins the record the stop rests on: `mcp-reference-notes.md` keeps sections 1-8 byte for
- * byte (discovery.md cites its lines) and ends with the A3 re-read as section 9, which states the facts the lead's
+ * [B20 A3] The dated live re-read of the authorization pages (task-A3 section 0) is RECORDED, not only reported. A3's first
+ * dispatch stopped at that re-read before any code (the client-credentials extension asks for a declared capability that no
+ * section 4 decision made), so this suite pins the record the stop rests on: `mcp-reference-notes.md` keeps sections 1-8
+ * byte for byte (discovery.md cites its lines) and ends with the A3 re-read as section 9, which states the facts the lead's
  * decisions need; the execution ledger records the stopped attempt (the lead writes it: the ledger is reserved).
- * Reading only: nothing is fetched and nothing is written.
+ * [B20 A3 re-dispatch] Section 9 now also states the lead's decisions LD-1..LD-6 AS APPLIED, and the two pages they rest on
+ * re-verified live (LD-6): pinned by the last case, and by the pins added (never moved) in the challenge and canonical-URI
+ * cases. Reading only: nothing is fetched and nothing is written.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -88,6 +90,9 @@ describe("[B20 A3] the record states what the proactive default cannot reach and
       "A server that publishes its metadata only through the challenge conforms",
       "MUST use the challenge URL when present, and otherwise MUST fall back to the well-known URIs in that order",
       "A3 cannot reach a conforming server that publishes its metadata only through the challenge; that row ends in `prm_unavailable`",
+      // [B20 A3 re-dispatch] PIN ADD, reviewed: the consequence bullet now states LD-3 as applied — the sentence above stays a
+      // true statement of the first default (D2), and this one says what replaced it
+      "Superseded by LD-3 (applied): discovery starts with ONE credential-free probe of the endpoint, so a server that publishes its metadata only through the challenge is reached",
     ]) expect(section, phrase).toContain(phrase);
   });
 
@@ -96,7 +101,37 @@ describe("[B20 A3] the record states what the proactive default cannot reach and
     for (const phrase of [
       "implementations SHOULD accept uppercase scheme and host components for robustness and interoperability",
       "follows RFC 9728 \"identical\" and departs from this SHOULD for an uppercase scheme or host",
+      // [B20 A3 re-dispatch] PIN ADD, reviewed: the departure is now DECIDED (LD-5, OD-64), not only open
+      "Decided (LD-5, applied): the comparison stays exact",
     ]) expect(section, phrase).toContain(phrase);
+  });
+});
+
+describe("[B20 A3 re-dispatch] section 9 states the lead's decisions as applied (LD-6)", () => {
+  it("names LD-1..LD-5 as applied, the stop answered, and the two pages the decisions rest on re-verified live with the date", () => {
+    const section = sectionNine();
+    for (const phrase of [
+      "Decisions applied (B20-A3 re-dispatch, 2026-09-21)",
+      "LD-1: every request of a client-credentials row declares `io.modelcontextprotocol/oauth-client-credentials`",
+      "LD-2: `client_secret_basic` when the list names it or is absent",
+      "LD-3: discovery starts with ONE credential-free probe",
+      "LD-4: the first token request asks for the challenge `scope`",
+      "LD-5: the comparison stays exact",
+      "The stop is answered by these decisions",
+      "Re-verified live 2026-09-21 (the re-dispatch, LD-6)",
+      "/extensions/auth/oauth-client-credentials (its client guide still lists \"Declare support\" first)",
+      "/specification/2026-07-28/basic/authorization/authorization-server-discovery (unchanged)",
+    ]) expect(section, phrase).toContain(phrase);
+  });
+
+  // [B20 A3 review] coverage-04: the sources bullet still said "Nothing below is in code" after the re-dispatch put the decisions
+  // in code, and its "(last bullet)" pointed at the decisions instead of the stop. PIN ADD, reviewed: the corrected sentence,
+  // and the stale one absent; and (coverage-02) the probe's raw-parameter rule the review added to LD-3
+  it("the sources bullet says what was stopped and what was applied, and LD-3 states the probe's raw-parameter rule", () => {
+    const section = sectionNine();
+    expect(section).toContain("The first dispatch stopped at this re-read before any code (the Outcome bullet); the re-dispatch applied the lead's decisions (the last bullet).");
+    expect(section).not.toContain("Nothing below is in code");
+    expect(section).toContain("On the probe the challenge's `resource_metadata` is judged as the server wrote it (the raw header parameter)");
   });
 });
 
