@@ -129,6 +129,7 @@ jobs:
           app/api/schematic/__tests__/b19-cross-verify-egress.test.ts
           app/lib/acquisition
           app/lib/mcp
+          app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts
