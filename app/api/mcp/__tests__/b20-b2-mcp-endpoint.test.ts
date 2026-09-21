@@ -28,6 +28,11 @@ import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import type { ToolRegistry } from "@/app/lib/engineering/tool-registry";
 import { encodeMcpNameHeader } from "@/app/lib/mcp/http-transport";
+import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
+import { createDurableBoardReader, readOnlyDurableWorkflow } from "@/app/lib/engineering/durable-read-bundle";
+import { MCP_DISCOVER_INSTRUCTIONS } from "@/app/lib/mcp/server/protocol";
+import { membershipReverifier, resetMcpReadStateForTests } from "@/app/lib/mcp/server/read-call";
+import { resetMcpReadDependenciesFactory, setMcpReadDependenciesFactory } from "../read-runtime";
 import { handleMcpRequest } from "@/app/lib/mcp/server/dispatch";
 import { resetMcpInboundLimitsForTests } from "@/app/lib/mcp/server/inbound-limits";
 import { MCP_SERVER_TRACE_SCHEMA, mcpServerTraceRing, resetMcpServerTraceSinkFactory, setMcpServerTraceSinkFactory, type McpServerRequestTrace } from "@/app/lib/mcp/server/request-trace";
@@ -142,8 +147,13 @@ beforeEach(() => {
   resetMcpServerTraceSinkFactory();
   repo = injectMembership([]);
   member("editor");
+  // [B20 B3] the read-dependency seam: a listed read is served from an empty in-memory durable repository (never a database)
+  resetMcpReadStateForTests();
+  setMcpReadDependenciesFactory(() => ({ boardReader: createDurableBoardReader(readOnlyDurableWorkflow(new InMemoryDurableWorkflowRepository())), componentAuthority: () => null, membership: membershipReverifier(() => repo), now: () => now, randomBytes: (size) => new Uint8Array(size) }));
 });
 afterEach(() => {
+  resetMcpReadDependenciesFactory();
+  resetMcpReadStateForTests();
   policyOverride.current = null;
   __setMcpServerClockForTests(null);
   resetMcpAccessTokenVerifierFactory();
@@ -527,7 +537,8 @@ describe("[B20 B2] E7 — methods", () => {
         resultType: "complete",
         supportedVersions: [V],
         capabilities: { tools: { listChanged: false } },
-        instructions: expect.any(String),
+        // [B20 B3] pin move: the instructions are now the exact D-13 sentence (the durable source, the pin, data not instructions)
+        instructions: MCP_DISCOVER_INSTRUCTIONS,
         ttlMs: 60_000,
         cacheScope: "public",
         _meta: { "io.modelcontextprotocol/serverInfo": { name: "sirkit", version: "0.1.0" } },
@@ -583,7 +594,9 @@ describe("[B20 B2] E7 — methods", () => {
 
   it("a listed tool on tools/call is the 200 isError refusal not_served, whatever the arguments", async () => {
     const token = await tokenFor();
-    const listed = servedFor("pcb_editor")[0]!.name;
+    // [B20 B3] pin move: B3 serves the listed READS, so the not_served answer is now a listed PROPOSAL's (B4 decides those)
+    const registry = sirkitToolRegistry();
+    const listed = servedFor("pcb_editor").find((tool) => registry.get(tool.name)!.operationClass === "propose")!.name;
     for (const args of [{}, { anything: "x" }, undefined]) {
       const { status, body } = await call(rpc("tools/call", { name: listed, ...(args === undefined ? {} : { arguments: args }) }), { token });
       expect(status).toBe(200);

@@ -83,7 +83,7 @@ const LABEL = "[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
 const META_KEY = new RegExp(`^(?:(${LABEL}(?:\\.${LABEL})*)/)?[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`);
 
 describe("[B20 B1] MCP tool definitions rendered from the canonical registry", () => {
-  it("the listing renders exactly the 16 reviewed ids, sorted by name in code-point order, with the registry digest bound in", () => {
+  it("the listing renders exactly the 14 reviewed ids, sorted by name in code-point order, with the registry digest bound in", () => {
     const listing = renderMcpToolListing(registry);
     expect(Object.keys(listing).sort()).toEqual(["excluded", "listingDigest", "registryDigest", "tools"]);
     expect(listing.tools.map((tool) => tool.name)).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS].sort(byCodePoint));
@@ -153,12 +153,13 @@ describe("[B20 B1] MCP tool definitions rendered from the canonical registry", (
   });
 
   it("annotations are derived only from Sirkit's classification; annotation-like fields on the descriptor are ignored", () => {
-    // hard-coded per exposed id (never re-derived with the implementation's own formula): 11 reads, 5 proposals, all `natural`
+    // hard-coded per exposed id (never re-derived with the implementation's own formula): 9 reads, 5 proposals, all `natural`
+    // ([B20 B3] pin move: 11 -> 9 reads, two withheld under OD-69)
     const PROPOSALS = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
     const EXPECTED: Record<string, { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean; openWorldHint: boolean }> = Object.fromEntries(
       INTENTIONAL_MCP_EXPOSED_TOOL_IDS.map((id) => [id, { readOnlyHint: !PROPOSALS.includes(id), destructiveHint: false, idempotentHint: true, openWorldHint: false }]),
     );
-    expect(Object.keys(EXPECTED)).toHaveLength(16);
+    expect(Object.keys(EXPECTED)).toHaveLength(14); // [B20 B3] pin move: 16 -> 14
     for (const item of exposed()) {
       const expected = EXPECTED[item.toolId]!;
       expect(renderMcpToolDefinition(item, DIGEST).annotations, item.toolId).toEqual(expected);
@@ -455,7 +456,7 @@ describe("[B20 B1] the byte-gated MCP tool manifest", () => {
     expect(rows).toContain("sirkit.placement.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared");
     expect(rows).toContain("sirkit.pcb.move-footprint,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,");
     expect(rows).toContain("sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,");
-    expect(rows.filter((row) => row.split(",")[5] === "yes")).toHaveLength(16);
+    expect(rows.filter((row) => row.split(",")[5] === "yes")).toHaveLength(14); // [B20 B3] pin move: 16 -> 14 (OD-69)
   });
 
   it("mcp-tool-manifest.csv and mcp-tool-manifest.json byte-match the render", () => {

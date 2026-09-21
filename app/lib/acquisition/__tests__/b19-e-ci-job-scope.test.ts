@@ -172,6 +172,16 @@ describe("[B19-E E2 review] CI job scope", () => {
       "app/api/mcp/__tests__/b20-b2-own-client-interop.test.ts",
       "app/lib/mcp/server/__tests__/b20-b2-server-protocol.test.ts",
       "app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts",
+      // [B20 B3] the eight B3 suites: none starts PGlite (the in-memory durable repository); A and F are explicit prompt-to-gerber
+      // entries, the app/lib/mcp/server suites ride the app/lib/mcp filter and H the app/api/mcp/__tests__ filter
+      "app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts",
+      "app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-arguments.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-call.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-replay-cache.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-trace.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-import-gates.test.ts",
+      "app/api/mcp/__tests__/b20-b3-mcp-tools-call-reads.test.ts",
     ]));
     expect(b20.filter(startsPostgres)).toEqual([]);
   });

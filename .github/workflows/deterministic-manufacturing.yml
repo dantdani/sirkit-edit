@@ -135,6 +135,8 @@ jobs:
           app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts
           app/lib/auth/__tests__/b20-b2-route-tree.test.ts
           app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts
+          app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts
+          app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts

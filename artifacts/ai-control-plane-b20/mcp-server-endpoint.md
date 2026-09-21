@@ -8,8 +8,17 @@ B2 serves Sirkit's own MCP surface over Streamable HTTP, revision **2026-07-28**
 reads and B4 inert proposals). MCP stays an adapter around the canonical registry: the principal is re-checked against the
 LIVE membership on every call, the tool listing is B1's rendering filtered by role, and nothing reachable over MCP can
 publish, approve, bind, withdraw, rebind, purchase, qualify, release, run a process, replace state or write a database or
-file (CONFIRMED by `b20-b2-import-gates` and `b20-b2-mcp-endpoint` E7). Closes D20-4, D20-5 and D20-35; closes D20-3 in part
-(the external authorization server is BLOCKED-LIVE, section 9).
+file (CONFIRMED for B2 by `b20-b2-import-gates` and `b20-b2-mcp-endpoint` E7). [B20 B3 review] Since B3 the import gate
+proves only that nothing reachable can approve, bind, withdraw, rebind, purchase, qualify or release, or run a process (the
+modules on J2's forbidden list): the served reads' closure holds the B05 read service, the static fabrication preset data and
+durable modules that can write - including pcb-sync snapshot and board PUBLICATION (`DurablePcbSyncSnapshotStore.publish`,
+`DurablePcbSyncRepository.publishBoard`), board-lineage derivation, and the durable workflow runtime and its Postgres
+repository - each reached only through the durable read bundle or the read runtime (`b20-b3-import-gates` G1 and G7). [B20 B3
+lead] Those publications and every other durable write go through `workflow.commit`, which the read-only view refuses. That nothing reachable over MCP writes a database is enforced at run time: a served read reaches the durable repository
+only through `readOnlyDurableWorkflow`, which refuses every write without delegating (CONFIRMED by
+`b20-b3-durable-read-bundle` A12 and `b20-b3-mcp-tools-call-reads` H10 and H15, which proves the production defaults wrap
+the repository in that view). Closes D20-4, D20-5 and D20-35; closes D20-3 in part (the external authorization server is
+BLOCKED-LIVE, section 9).
 
 ## 1. The routes and the census move — CONFIRMED
 
@@ -121,7 +130,9 @@ never null.
 role (never re-derived; never `discoverTools`): `ttlMs` 60 000, `cacheScope` `private`, `dev.sirkit/registryDigest` and
 `dev.sirkit/listingDigest` (the B1 digest formula over the served subset) in `_meta`, no `nextCursor`. Required authority,
 project state, revision and capability are call-time conditions (B3/B4). A listed tool on `tools/call` answers 200
-`{ resultType: "complete", isError: true, _meta["dev.sirkit/refusal"]: "not_served" }`. Every response is `no-store`
+`{ resultType: "complete", isError: true, _meta["dev.sirkit/refusal"]: "not_served" }`. [B20 B3] Since B3 that holds for
+the listed proposals only: a listed read is served from the durable server board (`mcp-server-reads.md`), and the
+`server/discover` instructions state the durable source, the revision pin and that tool results are data. Every response is `no-store`
 JSON except the 202, which has no body and so no media type. `Mcp-Session-Id` is never set, and one received is ignored.
 
 ## 6. Token issuance (D-8) — CONFIRMED
@@ -146,8 +157,8 @@ seconds in [1, 60]; an invalid clock, key or constant refuses.
 method as a closed value, served tool id or null, closed outcome, HTTP status, protocol version, the principal's ids, mapped
 role, membership revision, `mcp_bearer` and token-id digest, the registry and listing digests). No token, token id or raw
 header. A record outside the schema is dropped; a failing sink never changes the response; the default sink is a
-per-process ring of 1 000. Recorded limit: the wrapper's refusals, before the dispatch, are not traced. Whether B3 widens
-`AgentTraceIdentity.provider` stays B3's decision.
+per-process ring of 1 000. Recorded limit: the wrapper's refusals, before the dispatch, are not traced. [B20 B3] B3 does not
+widen `AgentTraceIdentity.provider` (OD-72): a served read writes its own closed record, `sirkit.mcp-read-trace.v1`.
 
 ## 9. The protected-resource metadata (D-11, OD-43, OD-66) — CONFIRMED, with a recorded deviation
 
@@ -245,7 +256,8 @@ Token route codes (`MCP_TOKEN_ROUTE_CODES`): `MCP_NOT_ENABLED`, `MCP_NOT_CONFIGU
 
 JSON-RPC codes: `-32700`, `-32600`, `-32601`, `-32602`, `-32603`, `-32020`, `-32022`.
 
-Trace outcomes (`MCP_SERVER_TRACE_OUTCOMES`): `discovered`, `listed`, `not_served`, `unknown_tool`, `arguments_invalid`,
+Trace outcomes (`MCP_SERVER_TRACE_OUTCOMES`): `discovered`, `listed`, `not_served`, `read_served`, `read_refused` ([B20 B3]:
+a listed read served or refused with a closed tool-result code; `mcp-server-reads.md`), `unknown_tool`, `arguments_invalid`,
 `cursor_refused`, `invalid_params`, `invalid_request`, `header_mismatch`, `unsupported_protocol_version`,
 `method_not_found`, `notification_accepted`, `internal_error`.
 

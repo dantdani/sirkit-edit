@@ -20,6 +20,11 @@ import type { McpServerRegistryEntry } from "@/app/lib/mcp/server-registry";
 import { fixtureServer } from "@/app/lib/mcp/__tests__/_fixtures";
 import { resetMcpInboundLimitsForTests } from "@/app/lib/mcp/server/inbound-limits";
 import { renderMcpToolListing } from "@/app/lib/mcp/server/tool-definitions";
+import { resolveMembershipRepository } from "@/app/lib/auth/identity-runtime";
+import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
+import { createDurableBoardReader, readOnlyDurableWorkflow } from "@/app/lib/engineering/durable-read-bundle";
+import { membershipReverifier, resetMcpReadStateForTests } from "@/app/lib/mcp/server/read-call";
+import { resetMcpReadDependenciesFactory, setMcpReadDependenciesFactory } from "../read-runtime";
 import { POST } from "../route";
 
 const ORIGIN = "https://mcp.example.com";
@@ -59,8 +64,11 @@ beforeEach(() => {
   resetMcpInboundLimitsForTests();
   resetAdmissionControl();
   resetMcpInFlight();
+  // [B20 B3] the read-dependency seam: a listed read is served from an empty in-memory durable repository (never a database)
+  resetMcpReadStateForTests();
+  setMcpReadDependenciesFactory(() => ({ boardReader: createDurableBoardReader(readOnlyDurableWorkflow(new InMemoryDurableWorkflowRepository())), componentAuthority: () => null, membership: membershipReverifier(resolveMembershipRepository), now: () => T0, randomBytes: (size) => new Uint8Array(size) }));
 });
-afterEach(() => { __setMcpServerClockForTests(null); resetInjectedIdentity(); vi.unstubAllEnvs(); });
+afterEach(() => { resetMcpReadDependenciesFactory(); resetMcpReadStateForTests(); __setMcpServerClockForTests(null); resetInjectedIdentity(); vi.unstubAllEnvs(); });
 
 describe("[B20 B2] H — Sirkit's own client against Sirkit's own endpoint", () => {
   it("1. a pre-issued-token-env row whose referenced environment name holds a run-time token negotiates 2026-07-28 and sees the tools capability", async () => {
@@ -99,7 +107,8 @@ describe("[B20 B2] H — Sirkit's own client against Sirkit's own endpoint", () 
   it("4. the client's requests never trigger -32020, -32022 or -32602; a listed tools/call answers the not_served refusal", async () => {
     const token = await mintedToken();
     const server = row("pre-issued-token-env");
-    const listed = (renderMcpToolListing(sirkitToolRegistry()).tools.find((tool) => sirkitToolRegistry().get(tool.name)!.requiredRoles.includes("pcb_editor")))!.name;
+    // [B20 B3] pin move: B3 serves the listed reads, so the not_served answer is a listed PROPOSAL's (B4 decides those)
+    const listed = (renderMcpToolListing(sirkitToolRegistry()).tools.find((tool) => sirkitToolRegistry().get(tool.name)!.requiredRoles.includes("pcb_editor") && sirkitToolRegistry().get(tool.name)!.operationClass === "propose"))!.name;
     const results = [
       await post(server, "server/discover", {}, 11, token),
       await post(server, "tools/list", {}, 12, token),

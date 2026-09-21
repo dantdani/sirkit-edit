@@ -117,13 +117,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     category: "project", operationClass: "read",
     inputSchema: obj({}), outputSchema: obj({ revision: { type: "object" } }, ["revision"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: [], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: [], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/engineering/revision.ts", symbol: "computeProjectRevision" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 2_000,
     validationStrategy: "typed canonical state input", verificationStrategy: "deterministic digest recomputation",
     sourceEvidence: ["app/lib/engineering/revision.ts", "artifacts/ai-control-plane-b02/README.md"],
-    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there). B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   {
     ...readDefaults,
@@ -319,13 +319,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     // reject maxLength/maxItems keywords).
     inputSchema: obj({ projectId: { type: "string" } }), outputSchema: obj({ snapshot: { type: "object" } }, ["snapshot"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/ai/snapshot.ts", symbol: "buildAIPcbSnapshot", notes: "B05 audit: bound to the pure snapshot builder directly; PCBToolService wraps it with session state the read layer does not need." },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 10_000,
     validationStrategy: "snapshot options schema", verificationStrategy: "snapshot pinned to the source revision; wall-clock generatedInMs normalized to 0",
     sourceEvidence: ["app/lib/pcb/ai/snapshot.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there); B18-E E10: every footprint carries `mountingHole` (OD-21: it has pads and they are ALL non-plated holes) — a classification of pads the snapshot already lists, so no new geometry and no new authority.",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there); B18-E E10: every footprint carries `mountingHole` (OD-21: it has pads and they are ALL non-plated holes) — a classification of pads the snapshot already lists, so no new geometry and no new authority. B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   {
     // [B18-E E11] The BOUNDED mechanical read. The full snapshot above is the whole board and, measured on the browser
@@ -340,13 +340,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     category: "pcb", operationClass: "read",
     inputSchema: obj({}), outputSchema: obj({ mechanical: { type: "object" } }, ["mechanical"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/ai/mechanical.ts", symbol: "buildMechanicalSnapshot", notes: "Pure builder over the verified canonical board; no session state, no timing, no authority." },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 10_000,
     validationStrategy: "empty input schema", verificationStrategy: "derived from the canonical board revision; sizes bounded by the outline vertex cap and the mounting-hole count",
     sourceEvidence: ["app/lib/pcb/ai/mechanical.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "1.0.0 (B18-E E11): first exposure, reviewed in `agent-exposure.ts`. It states nothing the full snapshot did not already state; it exists because the full snapshot does not fit in a tool result on a real board.",
+    versionNotes: "1.0.0 (B18-E E11): first exposure, reviewed in `agent-exposure.ts`. It states nothing the full snapshot did not already state; it exists because the full snapshot does not fit in a tool result on a real board. B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   {
     // [B18-E E13] The BOUNDED via read. Vias exist only on a ROUTED board, where the full snapshot exceeds the model's
@@ -362,13 +362,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     // [B09.1] length bounds live in server-side input validation (B05 DEFAULT_INPUT_LIMITS), never in wire schemas.
     inputSchema: obj({ netName: { type: "string" } }), outputSchema: obj({ vias: { type: "object" } }, ["vias"]),
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/ai/vias.ts", symbol: "buildViaSnapshot", notes: "Pure builder over the verified canonical board; no session state, no timing, no authority." },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 10_000,
     validationStrategy: "optional netName string", verificationStrategy: "derived from the canonical board revision; sizes bounded by the net, via and padstack caps, each reported beside its true count",
     sourceEvidence: ["app/lib/pcb/ai/vias.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "1.0.0 (B18-E E13): first exposure, reviewed in `agent-exposure.ts`. The vias and net names are already in the full snapshot; the padstack binding and the padstack library are NEW to the agent's view — read-only facts about the user's own board, and the only way a via proposal can be planned instead of discovered by refusal.",
+    versionNotes: "1.0.0 (B18-E E13): first exposure, reviewed in `agent-exposure.ts`. The vias and net names are already in the full snapshot; the padstack binding and the padstack library are NEW to the agent's view — read-only facts about the user's own board, and the only way a via proposal can be planned instead of discovered by refusal. B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   {
     ...readDefaults,
@@ -381,13 +381,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     inputSchema: obj(), outputSchema: obj({ report: { type: "object" }, pinned: { type: "object" } }, ["report", "pinned"]),
     sideEffects: "derived-cache",
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/drc/run-drc.ts", symbol: "runDrc" },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 30_000, budgetClass: "batch",
     validationStrategy: "board + rule-set inputs", verificationStrategy: "report interpreted against the source board revision",
     sourceEvidence: ["app/lib/pcb/drc/run-drc.ts", "app/components/pcb/DrcPanel.tsx"],
-    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there). B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   {
     ...readDefaults,
@@ -399,13 +399,13 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
     category: "validation", operationClass: "read",
     inputSchema: obj(), outputSchema: OUT_REPORT,
     requiredCapability: "read_project", requiredRoles: ["viewer", "commenter", "pcb_editor", "reviewer", "project_admin"],
-    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy"],
+    requiredProjectState: ["board-present"], requiredAuthority: ["local-working-copy", "durable-server-board"],
     binding: { status: "bound-read", module: "app/lib/pcb/connectivity-board.ts", symbol: "computeConnectivity", notes: "B05 audit: computeConnectivity is the pure board-level connectivity engine; electrical-truth composes additional netlist context this read does not require." },
     discovery: "discoverable", callability: "callable",
     timeoutMs: 10_000,
     validationStrategy: "typed board input", verificationStrategy: "not fabrication readiness by itself (explicit); nets sorted deterministically",
     sourceEvidence: ["app/lib/pcb/connectivity-board.ts", "app/lib/engineering/tool-bindings-readonly.ts"],
-    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there).",
+    versionNotes: "B04 initial registration; B09: agent-exposed (activated read binding; requires the verified canonical-state run resource — withheld per run when it is absent; pre-B10 browser chat supplies no board, so this read is withheld there). B20-B3: durable-server-board declared (served over MCP from the durable board)",
   },
   // ── Selection inspection ──────────────────────────────────────────────────
   {
@@ -494,7 +494,7 @@ export const SIRKIT_TOOL_CATALOG: readonly ToolDescriptor[] = Object.freeze([
   {
     ...readDefaults,
     toolId: "sirkit.component-authority.inspect", version: "1.0.0",
-    agentExposed: true, // B13 — statically exposed; per-run availability requires the server-owned component-authority-records resource (durable-server-board authority), so the tool is withheld whenever the durable source is unavailable
+    agentExposed: true, // B13 — statically exposed; per-run availability requires the server-owned component-authority-records resource (durable-server-board authority), so the tool is withheld whenever the durable source is unavailable; over MCP the durable canonical state is always present, so an absent authority resource refuses `missing_resource` (B20-B3)
     owningCommandId: "pcb.physical-binding",
     title: "Inspect physical-binding authority",
     description: "Read durable physical-binding aggregates and their immutable revisions for component instances.",

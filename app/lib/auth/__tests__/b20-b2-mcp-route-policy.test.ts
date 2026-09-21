@@ -181,9 +181,10 @@ describe("[B20 B2] B — no other wrapper serves an mcp-bearer row", () => {
     expect(adopters).toEqual(["app/api/mcp/route.ts"]);
   });
 
-  it("8. classification: /api/mcp and /api/mcp/token are session-identity with no durable access; the metadata row is public and static; no violation", () => {
+  it("8. classification: /api/mcp and /api/mcp/token are session-identity, /api/mcp reads durable state (B3), the token route none; the metadata row is public and static; no violation", () => {
     const rows = routeResourceClassification();
-    expect(rows.find((row) => row.path === "/api/mcp")).toMatchObject({ method: "POST", isPublic: false, durableAccess: "none", projectDataSensitivity: "session-identity", providerCredit: false, externalProcess: "", staticOrCatalog: false });
+    // [B20 B3] pin move: tools/call now serves reads from the durable board (resolveMcpReadDependencies), so durable is "read"
+    expect(rows.find((row) => row.path === "/api/mcp")).toMatchObject({ method: "POST", isPublic: false, durableAccess: "read", projectDataSensitivity: "session-identity", providerCredit: false, externalProcess: "", staticOrCatalog: false });
     expect(rows.find((row) => row.path === "/api/mcp/token")).toMatchObject({ method: "POST", isPublic: false, durableAccess: "none", projectDataSensitivity: "session-identity", staticOrCatalog: false });
     expect(rows.find((row) => row.path === METADATA_PATH)).toMatchObject({ method: "GET", isPublic: true, durableAccess: "none", projectDataSensitivity: "none", staticOrCatalog: true });
     expect(classificationViolations()).toEqual({ publicTouchesDurableData: [], publicSpawnsProcess: [], publicHasCreditOrWrite: [] });

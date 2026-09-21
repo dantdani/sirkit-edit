@@ -42,11 +42,12 @@ const MCP_READS = [
   "sirkit.pcb.revision-inspect",
   "sirkit.pcb.via-inspect",
   "sirkit.project.canonical-revision-inspect",
-  "sirkit.project.history-inspect",
-  "sirkit.schematic.inspect",
+  // [B20 B3] pin move (OD-69): sirkit.project.history-inspect and sirkit.schematic.inspect moved to MCP_WITHHELD_TOOL_IDS —
+  // each needs browser-only state (the captured timeline; the editor's SchematicState), so no durable source can serve it
   "sirkit.validation.connectivity-verify",
   "sirkit.validation.drc-run",
 ];
+const MCP_WITHHELD = ["sirkit.project.history-inspect", "sirkit.schematic.inspect"];
 const MCP_PROPOSALS = [
   "sirkit.pcb.propose-bounded-edit",
   "sirkit.placement.propose",
@@ -67,7 +68,7 @@ const EXCLUDED_BY_REASON: Record<McpExclusionReason, readonly string[]> = {
   external_read: ["sirkit.parts.evidence-read", "sirkit.parts.external-search"],
   view_state_read: ["sirkit.selection.inspect", "sirkit.view.read-state"],
   not_servable: [],
-  withheld: [],
+  withheld: MCP_WITHHELD, // [B20 B3] pin move (OD-69): the two reads that need browser-only state
   not_mcp_reviewed: [],
 };
 
@@ -102,16 +103,17 @@ const patched = (toolId: string, patch: Record<string, unknown>): ToolRegistry =
   new ToolRegistry(SIRKIT_TOOL_CATALOG.map((item) => (item.toolId === toolId ? ({ ...item, ...patch } as ToolDescriptor) : item)));
 
 // [B20 B1 review] A reviewed REMOVAL is a list move: the same modules, loaded fresh with the reviewed-decision module
-// replaced by the move B3 would make (history-inspect from the exposed list to the withheld list). Loaded while the file is
-// collected, because a cold import inside a timed test body can outrun its timeout under load.
-const HISTORY = "sirkit.project.history-inspect";
+// replaced by a further move of the same kind. Loaded while the file is collected, because a cold import inside a timed test
+// body can outrun its timeout under load. [B20 B3] pin move: B3 made the move this fixture simulated (history-inspect and
+// schematic.inspect are withheld for real), so the simulated move is now a STILL-EXPOSED read, via-inspect.
+const MOVED = "sirkit.pcb.via-inspect";
 vi.resetModules();
 vi.doMock("../mcp-exposure-review", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../mcp-exposure-review")>();
   return {
     ...actual,
-    INTENTIONAL_MCP_EXPOSED_TOOL_IDS: Object.freeze(actual.INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== HISTORY)),
-    MCP_WITHHELD_TOOL_IDS: Object.freeze([HISTORY]), // B3: bound to the captured browser timeline, not durable history
+    INTENTIONAL_MCP_EXPOSED_TOOL_IDS: Object.freeze(actual.INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== MOVED)),
+    MCP_WITHHELD_TOOL_IDS: Object.freeze([...actual.MCP_WITHHELD_TOOL_IDS, MOVED].sort()), // a simulated reviewed withholding
   };
 });
 const moved = {
@@ -125,18 +127,20 @@ vi.doUnmock("../mcp-exposure-review");
 vi.resetModules();
 
 describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, closed reasons", () => {
-  it("the structural subset equals the reviewed list in both directions: exactly 16 ids, sorted and unique, the report clean", () => {
+  it("the structural subset equals the reviewed list in both directions: exactly 14 ids, sorted and unique, the report clean", () => {
     const report = mcpExposureReport(registry);
     expect(report).toMatchObject({ ok: true, missing: [], unexpected: [], outsideAgentSet: [], duplicates: [] });
     expect(report.actual).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
-    expect(report.admitted).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
+    // [B20 B3] pin move (OD-69): the rule still admits the two withheld reads; the reviewed decision withholds them
+    expect(report.admitted).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS, ...MCP_WITHHELD].sort());
     expect(report.expected).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
-    expect(report.count).toBe(16);
-    expect(INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(16);
+    expect(report.count).toBe(14); // [B20 B3] pin move: 16 -> 14 (two reads withheld)
+    expect(INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(14);
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]).toEqual([...new Set(INTENTIONAL_MCP_EXPOSED_TOOL_IDS)].sort());
     expect(Object.isFrozen(INTENTIONAL_MCP_EXPOSED_TOOL_IDS)).toBe(true);
-    // the withheld list: frozen, sorted, unique, disjoint from the exposed list, inside the agent set; empty at B1
-    expect([...MCP_WITHHELD_TOOL_IDS]).toEqual([]);
+    // the withheld list: frozen, sorted, unique, disjoint from the exposed list, inside the agent set; [B20 B3] pin move: the
+    // two reads B3 cannot serve from durable state (it was empty at B1)
+    expect([...MCP_WITHHELD_TOOL_IDS]).toEqual(MCP_WITHHELD);
     expect(Object.isFrozen(MCP_WITHHELD_TOOL_IDS)).toBe(true);
     expect([...MCP_WITHHELD_TOOL_IDS]).toEqual([...new Set(MCP_WITHHELD_TOOL_IDS)].sort());
     for (const id of MCP_WITHHELD_TOOL_IDS) {
@@ -145,7 +149,7 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     }
   });
 
-  it("the 16 are the 11 bound reads of project or design state (Tier 0) and the 5 inert proposals (Tier 2): nothing else", () => {
+  it("the 14 are the 9 bound reads of project or design state (Tier 0) and the 5 inert proposals (Tier 2): nothing else", () => {
     expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS].sort()).toEqual([...MCP_READS, ...MCP_PROPOSALS].sort());
     for (const id of MCP_READS) {
       const item = descriptor(id);
@@ -181,12 +185,12 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     }
   });
 
-  it("the MCP set is a subset of the agent set; the 16 agent tools it leaves out are the granted executions, the external reads and the open-editor tools", () => {
+  it("the MCP set is a subset of the agent set; the 18 agent tools it leaves out are the granted executions, the external reads, the open-editor tools and the two withheld reads", () => {
     for (const id of INTENTIONAL_MCP_EXPOSED_TOOL_IDS) expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, id).toContain(id);
     const left = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !INTENTIONAL_MCP_EXPOSED_TOOL_IDS.includes(id));
-    expect(left).toHaveLength(16);
+    expect(left).toHaveLength(18); // [B20 B3] pin move: 16 -> 18 (the two withheld reads)
     const reasons = new Set(left.map((id) => mcpExclusionReason(descriptor(id))));
-    expect([...reasons].sort()).toEqual(["external_read", "granted_execution", "view_session", "view_state_read"]);
+    expect([...reasons].sort()).toEqual(["external_read", "granted_execution", "view_session", "view_state_read", "withheld"]);
     // D20-2 / D20-33: every granted execution and every grant-only tool is excluded, whatever else it is
     for (const item of registry.list().filter((entry) => entry.executionMode !== undefined || entry.grantOnly !== undefined)) {
       expect(mcpExclusionReason(item), item.toolId).toBe("granted_execution");
@@ -262,9 +266,10 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     expect(report.excludedByReason.not_mcp_reviewed).toEqual(["sirkit.pcb.extra-inspect"]);
     // and the channel never offers it, whatever the context claims
     expect(discoverTools(widened, contextFor("mcp")).included.map((item) => item.toolId).sort()).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
-    const narrowed = new ToolRegistry(SIRKIT_TOOL_CATALOG.map((item) => (item.toolId === "sirkit.project.history-inspect" ? { ...item, agentExposed: false } : item)));
+    // [B20 B3] pin move: the narrowed example is a still-exposed read (history-inspect is withheld since B3, so not "missing")
+    const narrowed = new ToolRegistry(SIRKIT_TOOL_CATALOG.map((item) => (item.toolId === "sirkit.pcb.via-inspect" ? { ...item, agentExposed: false } : item)));
     const narrowedReport = mcpExposureReport(narrowed);
-    expect(narrowedReport).toMatchObject({ ok: false, missing: ["sirkit.project.history-inspect"], unexpected: [] });
+    expect(narrowedReport).toMatchObject({ ok: false, missing: ["sirkit.pcb.via-inspect"], unexpected: [] });
     // two exposed versions of one id would be two tools under one MCP name: the report refuses it
     const twice = new ToolRegistry([...SIRKIT_TOOL_CATALOG, { ...board, version: "9.0.0" } as ToolDescriptor]);
     expect(mcpExposureReport(twice)).toMatchObject({ ok: false, duplicates: ["sirkit.pcb.board-inspect"] });
@@ -311,22 +316,23 @@ describe("[B20 B1] the MCP exposure subset — reviewed list, structural rule, c
     expect(mcpExposureReport(proposes)).toMatchObject({ ok: false, missing: ["sirkit.placement.propose"] });
   });
 
-  it("a reviewed REMOVAL is a list move: history-inspect moved to the withheld list, with no descriptor change, gives a clean report, a 15-tool listing, the channel excluding it, and an unchanged agent path", () => {
+  it("a reviewed REMOVAL is a list move: via-inspect moved to the withheld list, with no descriptor change, gives a clean report, a 13-tool listing, the channel excluding it, and an unchanged agent path", () => {
+    // [B20 B3] pin move: the simulated move is now via-inspect on top of B3's real withholding (14 -> 13, withheld 2 -> 3)
     const movedRegistry = moved.catalog.sirkitToolRegistry();
     expect(movedRegistry.digest()).toBe(registry.digest()); // the registry, and every descriptor in it, is untouched
-    expect(moved.exposure.INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(15);
-    expect([...moved.exposure.MCP_WITHHELD_TOOL_IDS]).toEqual([HISTORY]);
-    expect(moved.exposure.mcpExclusionReason(movedRegistry.get(HISTORY)!)).toBe("withheld");
+    expect(moved.exposure.INTENTIONAL_MCP_EXPOSED_TOOL_IDS).toHaveLength(13);
+    expect([...moved.exposure.MCP_WITHHELD_TOOL_IDS]).toEqual([...MCP_WITHHELD, MOVED].sort());
+    expect(moved.exposure.mcpExclusionReason(movedRegistry.get(MOVED)!)).toBe("withheld");
     const report = moved.exposure.mcpExposureReport(movedRegistry);
-    expect(report).toMatchObject({ ok: true, missing: [], unexpected: [], outsideAgentSet: [], duplicates: [], count: 15 });
-    expect(report.excludedByReason.withheld).toEqual([HISTORY]);
-    expect(report.admitted).toContain(HISTORY);
+    expect(report).toMatchObject({ ok: true, missing: [], unexpected: [], outsideAgentSet: [], duplicates: [], count: 13 });
+    expect(report.excludedByReason.withheld).toEqual([...MCP_WITHHELD, MOVED].sort());
+    expect(report.admitted).toContain(MOVED);
     const listing = moved.definitions.renderMcpToolListing(movedRegistry);
-    expect(listing.tools.map((tool) => tool.name)).toEqual(INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== HISTORY));
-    expect(listing.excluded.find((entry) => entry.toolId === HISTORY)).toEqual({ toolId: HISTORY, version: descriptor(HISTORY).version, reason: "withheld" });
+    expect(listing.tools.map((tool) => tool.name)).toEqual(INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== MOVED));
+    expect(listing.excluded.find((entry) => entry.toolId === MOVED)).toEqual({ toolId: MOVED, version: descriptor(MOVED).version, reason: "withheld" });
     const channel = moved.discovery.discoverTools(movedRegistry, contextFor("mcp"));
-    expect(channel.included.map((entry) => entry.toolId).sort()).toEqual(INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== HISTORY));
-    expect(channel.excluded.find((entry) => entry.toolId === HISTORY)?.reason).toBe("not_mcp_exposed");
+    expect(channel.included.map((entry) => entry.toolId).sort()).toEqual(INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => id !== MOVED));
+    expect(channel.excluded.find((entry) => entry.toolId === MOVED)?.reason).toBe("not_mcp_exposed");
     // the agent path is not touched by an MCP removal
     expect(moved.agent.agentExposureReport(movedRegistry).ok).toBe(true);
     expect(identityOf(moved.discovery.discoverTools(movedRegistry, contextFor("assistant-agent")))).toBe(identityOf(discoverTools(registry, contextFor("assistant-agent"))));
@@ -426,7 +432,7 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
     expect(EXCLUSION_REASONS).toHaveLength(22);
   });
 
-  it("under the most permissive context (release ceiling, every approval, a grant context, the external-observation authority claimed) the channel includes exactly the 16", () => {
+  it("under the most permissive context (release ceiling, every approval, a grant context, the external-observation authority claimed) the channel includes exactly the 14", () => {
     const result = discoverTools(registry, contextFor("mcp"));
     expect(result.included.map((item) => item.toolId).sort()).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]);
     const included = new Set(result.included.map((item) => item.toolId));
@@ -456,7 +462,9 @@ describe("[B20 B1] the deny-by-default discovery channel mcp", () => {
     expect(viewer).toContain("sirkit.pcb.board-inspect");
     const noBoard = discoverTools(registry, contextFor("mcp", { projectState: ["schematic-present"] })).included.map((item) => item.toolId);
     expect(noBoard).not.toContain("sirkit.pcb.board-inspect");
-    expect(noBoard).toContain("sirkit.schematic.inspect");
+    // [B20 B3] pin move: schematic.inspect is withheld, so the board-free read that stays is the canonical revision read
+    expect(noBoard).toContain("sirkit.project.canonical-revision-inspect");
+    expect(noBoard).not.toContain("sirkit.schematic.inspect");
     const short = discoverTools(registry, contextFor("mcp", { providerCapabilities: { supportsJsonSchema: true, toolNameMaxLength: 24, maxToolCount: 64 } }));
     expect(short.included.every((item) => item.toolId.length <= 24)).toBe(true);
     expect(short.excluded.find((entry) => entry.toolId === "sirkit.schematic.propose-component-replacement")?.reason).toBe("provider_name_length");
@@ -488,7 +496,7 @@ describe("[B20 B1] mcp-exposure.md states what the code and the suites say", () 
   const PAGE = "artifacts/ai-control-plane-b20/mcp-exposure.md";
   const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8").replaceAll(`${String.fromCharCode(13)}${String.fromCharCode(10)}`, String.fromCharCode(10));
 
-  it("the page lists the 16 exposed ids with their class and tier, every excluded id under its closed reason, and states the code's counts", () => {
+  it("the page lists the 14 exposed ids with their class and tier, every excluded id under its closed reason, and states the code's counts", () => {
     const page = read(PAGE);
     const report = mcpExposureReport(registry);
     const count = (pattern: RegExp): number[] => { const match = pattern.exec(page); expect(match, String(pattern)).not.toBeNull(); return match!.slice(1).map(Number); };
@@ -496,9 +504,10 @@ describe("[B20 B1] mcp-exposure.md states what the code and the suites say", () 
     expect(count(/admits exactly these (\d+) from the production\s+registry of (\d+) descriptors/)).toEqual([report.count, registry.list().length]);
     expect(count(/agent set's (\d+) bound reads of project or design state and its (\d+) inert proposals/)).toEqual([MCP_READS.length, MCP_PROPOSALS.length]);
     expect(count(/^## 2\. The (\d+) excluded descriptors/m)).toEqual([report.excluded.length]);
-    expect(count(/(\d+) ids = the (\d+) above \+ (\d+) granted executions \+ (\d+) external reads \+ (\d+) view-session controls \+ (\d+) open-editor reads/)).toEqual([
+    // [B20 B3] pin move: the sum gains the withheld reads (OD-69)
+    expect(count(/(\d+) ids = the (\d+) above \+ (\d+) granted executions \+ (\d+) external reads \+ (\d+) view-session controls \+ (\d+) open-editor reads \+ (\d+) withheld reads/)).toEqual([
       INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length, report.count, report.excludedByReason.granted_execution.length, report.excludedByReason.external_read.length,
-      report.excludedByReason.view_session.length, report.excludedByReason.view_state_read.length,
+      report.excludedByReason.view_session.length, report.excludedByReason.view_state_read.length, report.excludedByReason.withheld.length,
     ]);
     expect(count(/the longest exposed id is (\d+) characters/)).toEqual([Math.max(...INTENTIONAL_MCP_EXPOSED_TOOL_IDS.map((id) => id.length))]);
     expect(count(/At B1 all (\d+) exposed tools declare it/)).toEqual([INTENTIONAL_MCP_EXPOSED_TOOL_IDS.filter((id) => mcpOutputSchemaDecision(descriptor(id)).declared).length]);
