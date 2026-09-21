@@ -30,6 +30,12 @@
  *    [B20 A2 review-2] Every string kept VERBATIM (the tool name, a property name, an enum or const string, an
  *    `x-mcp-header` token) is scanned raw and with `_`, `.`, `-` and camelCase boundaries read as spaces; the display text
  *    is compared with the token before the display bound cuts it; and one listing's scrub work has ONE budget.
+ *    [B20 A2 review-3] ONE directive matcher reads every judged string — the name, the title and description, every schema
+ *    description, title, enum and const value, property name and `x-mcp-header` token — as WORDS (any run of non-letters is
+ *    one space, any case boundary another) and SQUASHED (no spaces), against ONE phrase list (`MCP_DIRECTIVE_PHRASES`), so no
+ *    separator, case run or its absence carries a directive through; each judged string is read ONCE, its skeleton bounded
+ *    to 4 x its length (`text_expansion`) and charged to the listing's budget BEFORE it is scanned; and the size bound
+ *    counts UTF-8 bytes.
  * Every bound is judged BEFORE the work it bounds (S5), every accepted descriptor is a NEW frozen object built field by
  * field (never the server's object, and no key from server data is ever created on it: S6), and `acceptForeignTools`
  * never throws (S4).
@@ -71,6 +77,20 @@ export const MCP_DIRECTIVE_SCAN_CHARS = 8_192;
  */
 export const MCP_LISTING_SCRUB_MAX_STRINGS = 16_384;
 export const MCP_LISTING_SCRUB_MAX_CHARS = 262_144;
+/**
+ * [B20 A2 review-3] The SCAN half of the same budget: the characters the directive matcher reads in one listing, each judged
+ * string charged by its skeleton length (never less than the characters read of it) BEFORE it is scanned. The scans ran
+ * outside the budget: 500 tools of U+FDFA enum values took 28.1 s (measured). 2 097 152 = 8 x the scrubbed characters; the
+ * matcher reads about 60 ns a character (measured), so a listing's scan stays near 0.2 s.
+ */
+export const MCP_LISTING_SCAN_MAX_CHARS = 2_097_152;
+/**
+ * [B20 A2 review-3] NFKD expands one code point up to 18 x (U+FDFA). The skeleton of a judged string may be at most 4 x the
+ * characters read of it (a Hangul syllable is 3, a squared unit sign 3) and never more than 4 x the scan window: past
+ * either the tool is `text_expansion`, and the skeleton is computed in chunks that stop there, never expanded whole.
+ */
+export const MCP_SKELETON_MAX_EXPANSION = 4;
+export const MCP_SKELETON_MAX_CHARS = 32_768;
 /** The Sirkit-side namespaces of a foreign tool (OD-52). */
 export const MCP_FOREIGN_TOOL_ID_PREFIX = "mcp.";
 export const MCP_FOREIGN_PROVIDER_PREFIX = "mcp_";
@@ -80,10 +100,6 @@ const REF_KEYWORDS: ReadonlySet<string> = new Set(["$ref", "$defs", "$id", "$anc
 const PROTOTYPE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
 /** [B20 A2 review] a property name: the tool-name alphabet, bounded (the length is judged first) */
 const PROPERTY_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
-/** [B20 A2 review] what an identifier's separators become before the directive scan, so `IGNORE_PREVIOUS_…` reads as words */
-const IDENTIFIER_SEPARATORS = /[_.-]+/g;
-/** [B20 A2 review-2] camelCase word boundaries: a lower-case letter or a digit before a capital, a capital run before a capitalised word */
-const CAMEL_BOUNDARY = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/g;
 /** [B20 A2 review] what an enum or const string kept verbatim may not carry: the characters the inert scrub would rewrite */
 const NOT_INERT = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
 /** [B20 A2 review] the types `validateAgainstSchema` switches on: one string each (a type array, "null", anyOf and const it cannot evaluate) */
@@ -102,11 +118,14 @@ const NON_PRINTING_SHARE_DIVISOR = 50; // more than 2 %
 const NON_PRINTING = /[\p{Cc}\p{Cf}]/gu;
 /** LRM, RLM, the four embedding/override controls and the four isolates — built by code point so the source stays ASCII. */
 const BIDI_CONTROL = new RegExp(`[${String.fromCharCode(8206)}${String.fromCharCode(8207)}${String.fromCharCode(8234)}-${String.fromCharCode(8238)}${String.fromCharCode(8294)}-${String.fromCharCode(8297)}]`, "u");
+/** [B20 A2 review-3] what a skeleton is computed in (the transport's own chunk), and what has none but itself */
+const SKELETON_CHUNK_CHARS = 4_096;
+const NON_ASCII = /\P{ASCII}/u;
 
 /**
- * The directive markers, as ONE alternation of literals over the bounded, skeleton-folded, lowercased copy of a text:
- * instruction overrides, role and system-prompt markers, tool-call markup, imperatives aimed at a model, and
- * exfiltration phrasing (a URL with credentials among them).
+ * The raw directive MARKERS — role and system-prompt markers, tool-call markup, a `.env` path and a URL with credentials — as
+ * ONE alternation of literals over the bounded, skeleton-folded, lowercased copy of a text. [B20 A2 review-3] The phrases
+ * aimed at a model left this alternation for `MCP_DIRECTIVE_PHRASES`: every marker here is kept as it was.
  * [B20 A2 review] Linear in the scanned text: no two adjacent quantifiers can split one run between them, and a
  * quantified run is entered only at its FIRST character. The comment used to claim this while four alternatives broke it:
  * the URL-credential marker started at every letter of a scheme run and split a colon run between two classes (cubic —
@@ -114,12 +133,7 @@ const BIDI_CONTROL = new RegExp(`[${String.fromCharCode(8206)}${String.fromCharC
  * spaces between two `\s*`, and a line start's `\s*` ran over the newlines that are line starts themselves. Each rewrite
  * matches exactly the texts the old alternative matched (pinned).
  */
-const DIRECTIVE_PATTERN = new RegExp([
-  String.raw`(?:ignore|disregard|bypass)\s+(?:all\s+|any\s+|the\s+)*(?:previous|prior|preceding|above|earlier|system|these)`,
-  String.raw`forget\s+(?:everything|all\s|your\s+(?:previous|prior|system))`,
-  String.raw`(?:new|updated|revised|additional)\s+(?:system\s+)?instructions`,
-  String.raw`override\s+(?:the\s+)?(?:system|previous|safety|policy)`,
-  String.raw`system\s+prompt`,
+const DIRECTIVE_MARKERS = new RegExp([
   String.raw`(?:^|[\n\r>\]])[^\S\n\r]*(?:system|assistant|developer)\s*:`,
   String.raw`<\|im_(?:start|end)\|>`,
   String.raw`\[\s*(?:\/\s*)?(?:system|inst)\s*\]`,
@@ -127,23 +141,138 @@ const DIRECTIVE_PATTERN = new RegExp([
   String.raw`<\/?(?:system|instructions|tool_call|tool_use|function_call|function_calls|invoke|antml)`,
   "[`]{3}\\s*(?:tool|function|json_tool)",
   String.raw`"function_call"\s*:`,
-  String.raw`you\s+must\b`,
-  String.raw`always\s+(?:call|invoke|run|use)\b`,
-  String.raw`(?:do\s+not|don't|never)\s+(?:tell|mention|reveal|inform|disclose|show|log)`,
-  String.raw`without\s+(?:telling|informing|asking|notifying)`,
-  String.raw`(?:exfiltrat|jailbreak)`,
-  String.raw`\bapi[_ -]?key\b`,
-  String.raw`\baccess[_ -]?token\b`,
-  String.raw`\b(?:secret|private)\s+key\b`,
-  String.raw`\bpassword\b`,
-  String.raw`\bcredentials?\b`,
   String.raw`\.env\b`,
-  String.raw`authorization\s+header`,
-  String.raw`(?:send|post|upload|email|forward)\s+(?:it|them|this|these|the)\s*(?:user'?s?\s+)?(?:result|results|output|content|contents|data|file|files|conversation|transcript|history|message|messages|token|key)?`,
   // the scan starts only at the FIRST letter of a scheme run (the lookbehind, as `redaction.ts` does), and ':' is not in the
   // user class, so the first ':' after "//" is the one the class stops at
   String.raw`[a-z](?<=(?<![a-z0-9+.-])[0-9+.-]*[a-z])[a-z0-9+.-]*:\/\/[^\s/@:]*:[^\s/@]*@`,
 ].join("|"), "u");
+
+/**
+ * [B20 A2 review-3] THE directive vocabulary: the phrases that read as an instruction aimed at a model, as WORDS. It is the
+ * single source of truth of both readings below, derived from the round-2 alternation — every phrase that held is here —
+ * with four additions: `forget` among the override verbs, `your` among their fillers, `instructions` among their objects,
+ * and `dont`. A phrase is slots separated by one space; a slot is its alternatives separated by '|'; '+' joins the words
+ * of one alternative (`do+not`); a slot in braces is zero or more filler words; a trailing '~' lets that LAST word run on,
+ * as the round-2 alternation did (`log~`: logs, logged); a phrase opening with '*' is a stem, found anywhere.
+ */
+export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
+  "ignore|disregard|bypass|forget {all|any|the|your} previous~|prior~|preceding~|above~|earlier~|system~|these~|instructions~",
+  "forget everything~|all",
+  "new|updated|revised|additional {system} instructions~",
+  "override {the} system~|previous~|safety~|policy~",
+  "system prompt~",
+  "you must",
+  "always call|invoke|run|use",
+  "do+not|don+t|dont|never tell~|mention~|reveal~|inform~|disclose~|show~|log~",
+  "without telling~|informing~|asking~|notifying~",
+  "*exfiltrat",
+  "*jailbreak",
+  "api key",
+  "apikey",
+  "access token",
+  "accesstoken",
+  "secret|private key",
+  "password",
+  "credential|credentials",
+  "authorization header~",
+  "send|post|upload|email|forward it~|them~|this~|these~|the~",
+]);
+
+/**
+ * [B20 A2 review-3] The phrase list compiled ONCE into the two readings of the one matcher. WORDS: each phrase as whole words
+ * at a word start, over a stream of lower-case letters and single spaces (a '~' word runs on to its word's end). SQUASHED:
+ * every phrase of three or more words or twelve or more letters, and every stem, as a plain substring of the stream without
+ * its spaces — what finds a directive spelled with no separator at all or across a case run no split reads; a shorter
+ * phrase is read as words only, so a benign identifier that merely contains it (`musty`, `systemic`) is not refused. Both
+ * are alternations of literals entered at a word start or a letter, linear in the stream (measured: about 60 ns a character).
+ */
+function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; squashed: RegExp } {
+  const words: string[] = [];
+  const squashed: string[] = [];
+  const letters = (alternative: string): string => alternative.replace(/~$/, "").replace(/\+/g, "");
+  for (const phrase of phrases) {
+    if (phrase.startsWith("*")) {
+      squashed.push(phrase.slice(1));
+      continue;
+    }
+    const slots = phrase.split(" ").map((slot) => ({ filler: slot.startsWith("{"), alternatives: slot.replace(/[{}]/g, "").split("|") }));
+    words.push(slots.map((slot, index) => {
+      if (slot.filler) return `(?:(?:${slot.alternatives.join("|")}) )*`;
+      const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, " ").replace(/~$/, "[a-z]*"));
+      return `(?:${alternatives.join("|")})${index < slots.length - 1 ? " " : ""}`;
+    }).join(""));
+    let expansions: string[][] = [[]];
+    for (const slot of slots.filter((entry) => !entry.filler)) {
+      expansions = expansions.flatMap((prefix) => slot.alternatives.map((alternative) => [...prefix, ...alternative.replace(/~$/, "").split("+")]));
+    }
+    for (const expansion of expansions) if (expansion.length >= 3 || expansion.join("").length >= 12) squashed.push(expansion.join(""));
+    // with a filler word a phrase has three words at least: squashed with one or more fillers
+    if (slots.some((slot) => slot.filler)) squashed.push(slots.map((slot) => `(?:${slot.alternatives.map(letters).join("|")})${slot.filler ? "+" : ""}`).join(""));
+  }
+  return { words: new RegExp(` (?:${words.join("|")})(?= )`), squashed: new RegExp(squashed.join("|")) };
+}
+const DIRECTIVE_VOCABULARY = compileDirectivePhrases(MCP_DIRECTIVE_PHRASES);
+
+/**
+ * [B20 A2 review-3] Letters NFKD leaves alone that ARE a basic Latin letter in form — Cyrillic and Greek ones, and four Latin
+ * ones — folded to it (case kept) before the word streams are built: `іgnore` (U+0456) reads as `ignore`. A partial fold
+ * (not the UTS #39 confusables table): a stated limit.
+ */
+const LATIN_LOOKALIKES: ReadonlyMap<number, number> = new Map(([
+  [0x430, "a"], [0x435, "e"], [0x43a, "k"], [0x43e, "o"], [0x440, "p"], [0x441, "c"], [0x443, "y"], [0x445, "x"], [0x455, "s"], [0x456, "i"],
+  [0x458, "j"], [0x4bb, "h"], [0x4cf, "l"], [0x501, "d"], [0x51b, "q"], [0x51d, "w"],
+  [0x405, "S"], [0x406, "I"], [0x408, "J"], [0x410, "A"], [0x412, "B"], [0x415, "E"], [0x41a, "K"], [0x41c, "M"], [0x41d, "H"], [0x41e, "O"],
+  [0x420, "P"], [0x421, "C"], [0x422, "T"], [0x425, "X"], [0x4ae, "Y"], [0x4c0, "I"], [0x51a, "Q"], [0x51c, "W"],
+  [0x3b1, "a"], [0x3b9, "i"], [0x3ba, "k"], [0x3bd, "v"], [0x3bf, "o"], [0x3c1, "p"], [0x3c5, "u"],
+  [0x391, "A"], [0x392, "B"], [0x395, "E"], [0x396, "Z"], [0x397, "H"], [0x399, "I"], [0x39a, "K"], [0x39c, "M"], [0x39d, "N"], [0x39f, "O"],
+  [0x3a1, "P"], [0x3a4, "T"], [0x3a5, "Y"], [0x3a7, "X"],
+  [0x131, "i"], [0x237, "j"], [0x251, "a"], [0x261, "g"],
+] as const).map(([code, letter]): [number, number] => [code, letter.charCodeAt(0)]));
+
+/**
+ * [B20 A2 review-3] The WORD stream of a skeleton — every maximal run of characters that is not a letter (a digit, a space,
+ * any punctuation or symbol, any other script) is ONE space, and every case boundary is a space: lower to upper (`fooBar`),
+ * and a run of capitals into lower case KEPT WHOLE (`IGNOREprevious`, `ignorePREVIOUSinstructions`) — lower-cased, between
+ * single spaces. The safer reading adds the ACRONYM stream, where such a run gives its last capital to the next word
+ * (`APIKey` reads `api key`, as round 2 read it), and the SQUASHED stream: the letters without any space. One pass.
+ */
+function wordStreams(skeleton: string): { words: string; acronym: string; squashed: string } {
+  const words: string[] = [" "];
+  const acronym: string[] = [" "];
+  const squashed: string[] = [];
+  let previous: "other" | "lower" | "upper" = "other";
+  let capitals = 0;
+  for (let index = 0; index < skeleton.length; index += 1) {
+    let code = skeleton.charCodeAt(index);
+    if (code >= 0x80) code = LATIN_LOOKALIKES.get(code) ?? code;
+    const kind = code >= 97 && code <= 122 ? "lower" : code >= 65 && code <= 90 ? "upper" : "other";
+    if (kind === "other") {
+      if (words[words.length - 1] !== " ") words.push(" ");
+      if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
+      previous = "other";
+      capitals = 0;
+      continue;
+    }
+    if (kind === "lower" && previous === "upper" && capitals >= 2) {
+      words.push(" ");
+      const last = acronym.pop()!;
+      acronym.push(" ", last);
+    }
+    if (kind === "upper" && previous === "lower") {
+      words.push(" ");
+      acronym.push(" ");
+    }
+    capitals = kind === "upper" ? capitals + 1 : 0;
+    const letter = String.fromCharCode(kind === "upper" ? code + 32 : code);
+    words.push(letter);
+    acronym.push(letter);
+    squashed.push(letter);
+    previous = kind;
+  }
+  if (words[words.length - 1] !== " ") words.push(" ");
+  if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
+  return { words: words.join(""), acronym: acronym.join(""), squashed: squashed.join("") };
+}
 
 export type McpToolExclusionReason =
   | "not_an_object"
@@ -166,7 +295,9 @@ export type McpToolExclusionReason =
   /** [B20 A2 review] the name, a property name, an enum / const string or an `x-mcp-header` token carries the sent token */
   | "credential_echo"
   /** [B20 A2 review-2] the tool's text would take the listing past its one scrub budget: excluded whole, never partly scrubbed */
-  | "schema_text_budget";
+  | "schema_text_budget"
+  /** [B20 A2 review-3] a judged string whose skeleton would pass 4 x its length: excluded before it is expanded */
+  | "text_expansion";
 
 /** One `x-mcp-header` property, as `tool-call.ts` mirrors it into a request header. */
 export interface McpHeaderParameter {
@@ -252,31 +383,111 @@ function define(target: Record<string, unknown>, key: string, value: unknown): v
   Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
 }
 
-/**
- * Whether a title or description reads as an instruction to a model. ONE pass over a BOUNDED, skeleton-folded (NFKD
- * without marks and format characters — a zero-width or fullwidth spelling folds back), lowercased copy, plus the
- * non-printing and bidirectional share of the same bounded text. A text past the scan window is never read: what this
- * client keeps of it is shorter than the window (a stated limit).
- */
-export function carriesDirective(raw: unknown): boolean {
-  if (typeof raw !== "string" || raw === "") return false;
-  const bounded = raw.length > MCP_DIRECTIVE_SCAN_CHARS ? raw.slice(0, MCP_DIRECTIVE_SCAN_CHARS) : raw;
-  if (BIDI_CONTROL.test(bounded)) return true;
-  const nonPrinting = (bounded.match(NON_PRINTING) ?? []).length;
-  if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > bounded.length) return true;
-  return DIRECTIVE_PATTERN.test(skeletonOf(bounded).toLowerCase());
+/** [B20 A2 review-3] One judged string as the matcher reads it: what is read of it (bounded) and its skeleton, computed ONCE. */
+interface ReadText {
+  read: string;
+  skeleton: string;
 }
 
 /**
- * [B20 A2 review-2] Whether a string kept VERBATIM — the tool name, a property name, an enum or const string, an
- * `x-mcp-header` token — reads as a directive: scanned raw AND with `_`, `.`, `-` and camelCase boundaries read as spaces.
- * Every directive marker needs a space, so an enum value was scanned raw and `IGNORE_PREVIOUS_INSTRUCTIONS_…` or
- * `ignorePreviousInstructions…` passed. Bounded: such a string is at most 256 characters (a tool name 128).
+ * [B20 A2 review-3] The skeleton of `text` (the transport's `skeletonOf`: NFKD without marks and format characters), or null
+ * once it passes `limit` characters: computed in chunks that never end inside a surrogate pair (the skeleton of a text is
+ * the skeletons of such chunks, as `skeletonCarries` relies on), so no more than one chunk's expansion past `limit` is ever
+ * built. An ASCII text is its own skeleton.
  */
-function readsAsDirective(text: string): boolean {
-  if (carriesDirective(text)) return true;
-  const words = text.replace(IDENTIFIER_SEPARATORS, " ").replace(CAMEL_BOUNDARY, " ");
-  return words !== text && carriesDirective(words);
+function boundedSkeleton(text: string, limit: number): string | null {
+  if (!NON_ASCII.test(text)) return text.length > limit ? null : text;
+  const pieces: string[] = [];
+  let length = 0;
+  for (let start = 0; start < text.length;) {
+    let end = Math.min(text.length, start + SKELETON_CHUNK_CHARS);
+    const last = text.charCodeAt(end - 1);
+    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+    const piece = skeletonOf(text.slice(start, end));
+    length += piece.length;
+    if (length > limit) return null;
+    pieces.push(piece);
+    start = end;
+  }
+  return pieces.join("");
+}
+
+/** [B20 A2 review-3] What the matcher reads of a string: its first `MCP_DIRECTIVE_SCAN_CHARS` characters. */
+const readOf = (text: string): string => (text.length > MCP_DIRECTIVE_SCAN_CHARS ? text.slice(0, MCP_DIRECTIVE_SCAN_CHARS) : text);
+/** [B20 A2 review-3] The most a read text's skeleton may hold: 4 x its length, and never more than 4 x the scan window. */
+const skeletonCap = (read: string): number => Math.min(read.length * MCP_SKELETON_MAX_EXPANSION, MCP_SKELETON_MAX_CHARS);
+
+/**
+ * [B20 A2 review-3] THE directive matcher of every judged string. Raw: any bidirectional control, more than a bounded share
+ * of non-printing characters, and the markers (`DIRECTIVE_MARKERS`) over the lowercased skeleton, as before. Then the
+ * phrases (`MCP_DIRECTIVE_PHRASES`) over the WORD and ACRONYM streams of the skeleton, and the long phrases over its
+ * SQUASHED stream: `IGNORE/PREVIOUS/INSTRUCTIONS`, `ignorePREVIOUSinstructions` and `IGNOREPREVIOUSINSTRUCTIONS` read alike.
+ * Linear in the read text and its skeleton, both of which the caller has charged.
+ */
+function directiveIn({ read, skeleton }: ReadText): boolean {
+  if (BIDI_CONTROL.test(read)) return true;
+  const nonPrinting = (read.match(NON_PRINTING) ?? []).length;
+  if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > read.length) return true;
+  if (DIRECTIVE_MARKERS.test(skeleton.toLowerCase())) return true;
+  const streams = wordStreams(skeleton);
+  return DIRECTIVE_VOCABULARY.words.test(streams.words)
+    || (streams.acronym !== streams.words && DIRECTIVE_VOCABULARY.words.test(streams.acronym))
+    || DIRECTIVE_VOCABULARY.squashed.test(streams.squashed);
+}
+
+/**
+ * Whether a string reads as an instruction to a model: the one matcher (`directiveIn`) over its first
+ * `MCP_DIRECTIVE_SCAN_CHARS` characters. A text past the scan window is never read: what this client keeps of it is
+ * shorter than the window (a stated limit). [B20 A2 review-3] A string whose skeleton would pass its bound fails closed.
+ * `acceptOne` reads the tool NAME with it (128 ASCII characters at most); every other judged string is read once, and
+ * charged, by `readJudged`.
+ */
+export function carriesDirective(raw: unknown): boolean {
+  if (typeof raw !== "string" || raw === "") return false;
+  const read = readOf(raw);
+  const skeleton = boundedSkeleton(read, skeletonCap(read));
+  return skeleton === null || directiveIn({ read, skeleton });
+}
+
+/**
+ * [B20 A2 review-3] Read the judged strings of one tool ONCE, each charged to the listing's scan budget (`left` is what remains
+ * of it) by its skeleton length — never less than the characters read of it — BEFORE any of them is scanned. A string whose
+ * skeleton would pass its bound is `text_expansion`, one that would pass what remains `schema_text_budget`; either way the
+ * skeleton stops being built there. The finding's U+FDFA values were scanned outside the budget: 28.1 s for 500 tools.
+ */
+function readJudged(texts: readonly string[], left: number): { ok: true; reads: ReadText[]; charge: number } | { ok: false; reason: "text_expansion" | "schema_text_budget" } {
+  const reads: ReadText[] = [];
+  let charge = 0;
+  for (const text of texts) {
+    const read = readOf(text);
+    const room = left - charge;
+    if (read.length > room) return { ok: false, reason: "schema_text_budget" };
+    const cap = skeletonCap(read);
+    const skeleton = boundedSkeleton(read, Math.min(cap, room));
+    if (skeleton === null) return { ok: false, reason: cap <= room ? "text_expansion" : "schema_text_budget" };
+    charge += Math.max(read.length, skeleton.length);
+    reads.push({ read, skeleton });
+  }
+  return { ok: true, reads, charge };
+}
+
+/**
+ * [B20 A2 review-3] Whether `text` takes more than `max` bytes in UTF-8, counted in one pass over its UTF-16 units without a
+ * copy and stopped at `max + 1` (a unit is at least one byte, so a longer text is over at once; a surrogate pair is 4 bytes).
+ */
+function utf8Exceeds(text: string, max: number): boolean {
+  if (text.length > max) return true;
+  let bytes = 0;
+  for (let index = 0; index < text.length && bytes <= max; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < text.length && (text.charCodeAt(index + 1) & 0xfc00) === 0xdc00) {
+      bytes += 4;
+      index += 1;
+    } else bytes += 3;
+  }
+  return bytes > max;
 }
 
 /** The four hints, each only when it IS a boolean own property; everything else the server wrote is ignored. */
@@ -373,20 +584,25 @@ function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
  * sent token (case-folded skeleton) is `credential_echo`; any of them reading as a directive is `description_directive`;
  * a description or title that passes is replaced by its scrubbed, bounded text — whole by the marker when it still carries
  * the token — or removed when nothing of it is left.
- * [B20 A2 review-2] A string kept verbatim (a name, an enum or const value, an `x-mcp-header` token) is read raw AND as words
- * (`readsAsDirective`): an enum or const value used to be read raw only, a name split on `_`, `.` and `-` only.
+ * [B20 A2 review-2] A string kept verbatim (a name, an enum or const value, an `x-mcp-header` token) is read raw AND as words:
+ * an enum or const value used to be read raw only, a name split on `_`, `.` and `-` only.
+ * [B20 A2 review-3] Every one of them, a description or title too, is read by the ONE matcher (`directiveIn`) from the read
+ * `readJudged` made and charged: `reads[i]` is the read of `texts[i]`.
  */
-function judgeRetainedTexts(texts: readonly RetainedText[], redact: readonly string[]): SchemaFailure | null {
-  for (const entry of texts) {
+function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly ReadText[], redact: readonly string[]): SchemaFailure | null {
+  for (let index = 0; index < texts.length; index += 1) {
+    const entry = texts[index]!;
+    const read = reads[index];
+    if (read === undefined) return "description_directive"; // never: every retained string was read before it is judged
     if (entry.kind === "annotation") {
-      if (carriesDirective(entry.text)) return "description_directive";
+      if (directiveIn(read)) return "description_directive";
       const kept = displayText(entry.text, entry.maxChars, redact);
       if (kept === null) delete entry.target[entry.key];
       else entry.target[entry.key] = kept;
       continue;
     }
     if (skeletonCarries(entry.text, redact, true)) return "credential_echo";
-    if (readsAsDirective(entry.text)) return "description_directive";
+    if (directiveIn(read)) return "description_directive";
   }
   return null;
 }
@@ -408,7 +624,8 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
   } catch {
     return { ok: false, reason: "input_schema_too_large" };
   }
-  if (serialized.length > MCP_SCHEMA_MAX_BYTES) return { ok: false, reason: "input_schema_too_large" };
+  // [B20 A2 review-3] BYTES, as the page and the specification say: the UTF-16 length let 20 000 e-acute (40 080 bytes) through
+  if (utf8Exceeds(serialized, MCP_SCHEMA_MAX_BYTES)) return { ok: false, reason: "input_schema_too_large" };
 
   const schema: Record<string, unknown> = {};
   const headers: McpHeaderParameter[] = [];
@@ -520,11 +737,12 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
 
 /**
  * The judgement of a walked schema: [B20 A2 review] every retained string was counted by the walk, and only now is any of
- * them scanned (`judgeRetainedTexts`); then the two repository validators over the copy, and an INPUT schema (`input`) must
- * also be one the call-time validator evaluates (`callValidatorEvaluates`).
+ * them scanned (`judgeRetainedTexts`, [B20 A2 review-3] from the reads `readJudged` charged); then the two repository
+ * validators over the copy, and an INPUT schema (`input`) must also be one the call-time validator evaluates
+ * (`callValidatorEvaluates`).
  */
-function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, input: boolean, redact: readonly string[]): SchemaResult {
-  const judged = judgeRetainedTexts(walked.texts, redact);
+function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, reads: readonly ReadText[], input: boolean, redact: readonly string[]): SchemaResult {
+  const judged = judgeRetainedTexts(walked.texts, reads, redact);
   if (judged !== null) return { ok: false, reason: judged };
   const schema = walked.schema;
   // a tool's arguments are an object: a string, array or enum root can never describe them (as `toStrictSchema` requires)
@@ -536,6 +754,8 @@ function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, input: bo
 
 /** [B20 A2 review-2] What one `acceptForeignTools` call has spent of its one scrub budget. */
 interface ScrubBudget { strings: number; chars: number }
+/** [B20 A2 review-3] ... and of the scan half of that budget: the characters of every judged string, by its skeleton (`readJudged`). */
+interface ListingBudget extends ScrubBudget { judged: number }
 
 /**
  * [B20 A2 review-2] What the display scrub of one tool would read, counted before any of it runs: one string per text and
@@ -571,6 +791,8 @@ function deepFreeze<T>(value: T): T {
  * Turn one server's tool definitions into accepted descriptors and exclusions. Never throws: a definition that cannot
  * even be read is excluded like any other. [B20 A2 review-2] The call has ONE scrub budget (`MCP_LISTING_SCRUB_MAX_STRINGS`,
  * `MCP_LISTING_SCRUB_MAX_CHARS`), spent in listing order: a tool whose text would pass what remains is `schema_text_budget`.
+ * [B20 A2 review-3] The same budget holds the scan (`MCP_LISTING_SCAN_MAX_CHARS`): every judged string is charged by its
+ * skeleton before the matcher reads it.
  */
 export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unknown, context: McpForeignToolContext = {}): McpForeignToolSet {
   const acceptedTools: McpAcceptedTool[] = [];
@@ -604,7 +826,8 @@ export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unk
   const names = new Set<string>();
   const providerNames = new Set<string>(reserved);
   // [B20 A2 review-2] ONE scrub budget for the whole call: every tool is charged against what the tools before it spent
-  const budget: ScrubBudget = { strings: 0, chars: 0 };
+  // [B20 A2 review-3] and its scan half, charged the same way
+  const budget: ListingBudget = { strings: 0, chars: 0, judged: 0 };
   for (let index = 0; index < rawTools.length && index < MCP_TOOLS_PER_SERVER_MAX; index += 1) {
     considered += 1;
     const position = index + 1;
@@ -626,7 +849,7 @@ export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unk
 
 type AcceptOne = { ok: true; tool: McpAcceptedTool } | { ok: false; reason: McpToolExclusionReason; label?: string };
 
-function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, providerNames: ReadonlySet<string>, redact: readonly string[], budget: ScrubBudget): AcceptOne {
+function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, providerNames: ReadonlySet<string>, redact: readonly string[], budget: ListingBudget): AcceptOne {
   if (!isPlainObject(raw)) return { ok: false, reason: "not_an_object" };
   const name: unknown = raw.name;
   // the length is judged before the pattern: a megabyte-long name meets no regex (S5)
@@ -636,7 +859,9 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   if (skeletonCarries(name, redact, true)) return { ok: false, reason: "credential_echo" };
   // [B20 A2 review-2] the name is kept verbatim and becomes the provider name a model reads: one that reads as a directive
   // (`ignore.previous.instructions`, `ignorePreviousInstructions`) is excluded, and reported by position only
-  if (readsAsDirective(name)) return { ok: false, reason: "description_directive" };
+  // [B20 A2 review-3] read by the one matcher BEFORE any exclusion could echo it (128 ASCII characters at most: it is charged
+  // with the tool's own text below, and every other judged string is charged before it is read)
+  if (carriesDirective(name)) return { ok: false, reason: "description_directive" };
   const lower = name.toLowerCase();
   if (RESERVED_NAME_PREFIXES.some((prefix) => lower.startsWith(prefix))) return { ok: false, reason: "reserved_namespace", label: name };
   if (names.has(name)) return { ok: false, reason: "duplicate_name", label: name };
@@ -650,16 +875,24 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   }
   if (providerNames.has(providerName)) return { ok: false, reason: "name_collision", label: name };
 
+  // [B20 A2 review-3] the tool's own name, title and description, read ONCE and charged to the listing's scan budget BEFORE the
+  // title and description are scanned: past the budget, or past its skeleton bound, a tool is excluded unread
+  const own = readJudged([name, raw.title, raw.description].filter((text): text is string => typeof text === "string"), MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
+  if (!own.ok) return { ok: false, reason: own.reason, label: name };
+  budget.judged += own.charge;
   // the raw text is judged for a directive BEFORE it is scrubbed: a scrub would hide the marker, not the intent
-  if (carriesDirective(raw.title) || carriesDirective(raw.description)) return { ok: false, reason: "description_directive", label: name };
+  if (own.reads.slice(1).some(directiveIn)) return { ok: false, reason: "description_directive", label: name };
 
   const annotations = readAnnotations(raw.annotations);
   if (annotations.readOnlyHint === false || annotations.destructiveHint === true) return { ok: false, reason: "declared_write", label: name };
 
   const inputWalk = walkForeignSchema(raw.inputSchema, true, redact);
   if (!inputWalk.ok) return { ok: false, reason: inputWalk.reason, label: name };
-  // [B20 A2 review-2] an output schema the WALK refuses (a `$…` keyword, an `x-mcp-header`, a bound) is dropped unjudged: its
-  // strings are never scanned or scrubbed, nothing of it is kept, and it is charged nothing
+  // [B20 A2 review-2] an output schema the WALK refuses is dropped unjudged: its strings are never scanned or scrubbed, nothing
+  // of it is kept, and it is charged nothing. [B20 A2 review-3] Every refusal of the walk: not an object, not serialisable,
+  // over 32 768 UTF-8 bytes, a `$…` keyword, a `$schema` off the root or not 2020-12, an `x-mcp-header`, a bound on depth,
+  // subschemas, properties or retained strings, a property name outside its closed pattern, an enum or const string over
+  // 256 characters or not inert, or a non-schema value past the copy's own budget
   const outputWalk = raw.outputSchema === undefined ? null : walkForeignSchema(raw.outputSchema, false, redact);
   let outputSchemaDropped = outputWalk !== null && !outputWalk.ok;
 
@@ -675,15 +908,21 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   if (budget.strings + charge.strings > MCP_LISTING_SCRUB_MAX_STRINGS || budget.chars + charge.chars > MCP_LISTING_SCRUB_MAX_CHARS) {
     return { ok: false, reason: "schema_text_budget", label: name };
   }
+  // [B20 A2 review-3] every retained string of both schemas — property names, enum and const values, `x-mcp-header` tokens,
+  // descriptions and titles — read ONCE and charged to the scan budget by its skeleton BEFORE any of it is scanned
+  const retained = outputWalk !== null && outputWalk.ok ? [...inputWalk.texts, ...outputWalk.texts] : inputWalk.texts;
+  const schemaReads = readJudged(retained.map((entry) => entry.text), MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
+  if (!schemaReads.ok) return { ok: false, reason: schemaReads.reason, label: name };
   budget.strings += charge.strings;
   budget.chars += charge.chars;
+  budget.judged += schemaReads.charge;
 
-  const input = judgeForeignSchema(inputWalk, true, redact);
+  const input = judgeForeignSchema(inputWalk, schemaReads.reads.slice(0, inputWalk.texts.length), true, redact);
   if (!input.ok) return { ok: false, reason: input.reason, label: name };
 
   let outputSchema: Record<string, unknown> | null = null;
   if (outputWalk !== null && outputWalk.ok) {
-    const output = judgeForeignSchema(outputWalk, false, redact);
+    const output = judgeForeignSchema(outputWalk, schemaReads.reads.slice(inputWalk.texts.length), false, redact);
     if (output.ok) outputSchema = output.schema;
     // [B20 A2 review] a directive or the sent token in the output schema is the SERVER's intent, not a malformed schema:
     // the tool is excluded, as for the input schema, rather than kept without its output schema

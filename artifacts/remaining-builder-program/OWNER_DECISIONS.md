@@ -345,10 +345,17 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   description and title scanned for a directive and scrubbed, all counted (at most 1 024) before any is scanned, and a
   directive or the sent token in the OUTPUT schema excludes the tool rather than dropping the schema.
 - Review-2 (2026-09-21), stated exactly: (3) holds when the walk of the output schema FINISHES and its retained strings
-  are judged; a structural refusal the walk meets first (a `$` keyword, an `x-mcp-header`, a bound) drops the output schema
-  unjudged, and nothing of it is kept either way. Every string kept verbatim, the tool name included, is read for a
+  are judged; a structural refusal the walk meets first (a `$` keyword, an `x-mcp-header`, a bound — review-3: and every
+  other refusal of the walk, listed below) drops the output schema unjudged, and nothing of it is kept either way. Every string kept verbatim, the tool name included, is read for a
   directive raw and with `_`, `.`, `-` and camelCase boundaries as spaces, and one listing's scrub work has one budget
   (16 384 strings, 262 144 characters; beyond it a tool is `schema_text_budget`). No decision changed.
+- Review-3 (2026-09-21), stated exactly: EVERY refusal of the walk drops an output schema unjudged — not an object or not
+  serialisable, over 32 768 UTF-8 bytes, a `$` keyword, a `$schema` off the root or not 2020-12, an `x-mcp-header`, more
+  than 8 levels, 256 subschemas, 64 properties on one object or 1 024 retained strings, a property name outside its closed
+  pattern, an enum or const string over 256 characters or not inert, or a non-schema value past the copy's own budget.
+  The size bound counts UTF-8 bytes (it counted UTF-16 units). Every judged string is read by ONE directive matcher over
+  the word and squashed streams of its skeleton, the skeleton bounded to 4 x its length (`text_expansion`, in either
+  schema) and charged to a scan half of the listing budget (2 097 152 characters) before it is read. No decision changed.
 - The owner may choose otherwise: a vetted JSON Schema 2020-12 validator dependency, with the supply-chain review and
   the bounded-work qualification that would need.
 

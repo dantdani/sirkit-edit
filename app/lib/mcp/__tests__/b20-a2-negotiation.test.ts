@@ -11,9 +11,9 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordMcpOutcome, resetAdmissionControl } from "../../acquisition/admission-control";
 import {
-  MCP_DIRECTIVE_SCAN_CHARS, MCP_LISTING_SCRUB_MAX_CHARS, MCP_LISTING_SCRUB_MAX_STRINGS, MCP_SCHEMA_MAX_BYTES, MCP_SCHEMA_MAX_DEPTH, MCP_SCHEMA_MAX_PROPERTIES,
-  MCP_SCHEMA_MAX_STRINGS, MCP_SCHEMA_MAX_SUBSCHEMAS, MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS, MCP_SCHEMA_VALUE_MAX_CHARS, MCP_TOOL_DESCRIPTION_MAX_CHARS,
-  MCP_TOOL_TITLE_MAX_CHARS, MCP_TOOLS_PER_SERVER_MAX,
+  MCP_DIRECTIVE_SCAN_CHARS, MCP_LISTING_SCAN_MAX_CHARS, MCP_LISTING_SCRUB_MAX_CHARS, MCP_LISTING_SCRUB_MAX_STRINGS, MCP_SCHEMA_MAX_BYTES, MCP_SCHEMA_MAX_DEPTH,
+  MCP_SCHEMA_MAX_PROPERTIES, MCP_SCHEMA_MAX_STRINGS, MCP_SCHEMA_MAX_SUBSCHEMAS, MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS, MCP_SCHEMA_VALUE_MAX_CHARS,
+  MCP_SKELETON_MAX_EXPANSION, MCP_TOOL_DESCRIPTION_MAX_CHARS, MCP_TOOL_TITLE_MAX_CHARS, MCP_TOOLS_PER_SERVER_MAX,
 } from "../foreign-tools";
 import { MCP_PARAM_HEADER_MAX, MCP_PARAM_HEADER_VALUE_MAX_CHARS, resetMcpInFlight } from "../http-transport";
 import {
@@ -25,7 +25,7 @@ import { MCP_TOOL_CACHE_MAX, MCP_TOOL_CURSOR_MAX_CHARS, MCP_TOOL_PAGES_MAX } fro
 import type { McpServerRegistryEntry } from "../server-registry";
 import { T0 } from "./_fixtures";
 import {
-  BIDI_OVERRIDE, byMethod, COMBINING_ACUTE, compatServer, depsOf, discoverResult, ESC, fakeMcpServer, futureServer, json, KELVIN_SIGN, nonInert, rpcError, rpcRaw, rpcResult,
+  BIDI_OVERRIDE, byMethod, COMBINING_ACUTE, compatServer, depsOf, discoverResult, ESC, fakeMcpServer, fullwidth, futureServer, json, KELVIN_SIGN, nonInert, rpcError, rpcRaw, rpcResult,
   server, SERVER_INFO_META, survivor, text, TOKENS, tokenServer, wideServer, ZERO_WIDTH_JOINER, type FakeCall, type FakeScript,
 } from "./_fake-mcp-server";
 
@@ -269,6 +269,34 @@ describe("[B20 A2] legacy_server: the handshake era is A2b and nothing else is s
       resetAdmissionControl();
     }
   });
+
+  // [B20 A2 review-3] finding 5: the page said EVERY answer to the retry passes through as A1 classified it. A2 interprets four
+  // kinds of answer on the retry, as the page's own closed-outcome rows say — a second -32022, a result, an input_required and
+  // an accepted answer — and passes every other one through (the review-2 rows above; here a 202, which A1 answers for a
+  // REQUEST as unexpected_status, so A2's own `accepted` branch is never reached by it, and a 401).
+  it("after a -32022 A2 interprets the retry's answer exactly where the page says, and passes every other answer through, each after exactly two requests", async () => {
+    const compatible = wideServer("docs-compat-future", { supportedProtocolVersions: ["2027-01-15", "2026-07-28", "2025-11-25"], compatibilityEra: true });
+    const refuse = (call: FakeCall, supported: readonly string[]): Response => rpcError(call, -32022, "unsupported", { supported });
+    const retry = (answer: (call: FakeCall) => Response, offered: readonly string[] = ["2026-07-28"]): FakeScript => (call, index) => (index === 0 ? refuse(call, offered) : answer(call));
+    const rows: ReadonlyArray<readonly [string, McpServerRegistryEntry, FakeScript, Record<string, unknown>]> = [
+      ["a second -32022", futureServer, retry((call) => refuse(call, ["2026-07-28"])), { ok: false, kind: "closed", code: "no_common_version" }],
+      ["a second -32022 offering only the compatibility revision, on a compatibility-era row", compatible, retry((call) => refuse(call, ["2025-11-25"]), ["2026-07-28", "2025-11-25"]), { ok: false, kind: "closed", code: "legacy_server", compatibilityEraListed: true }],
+      ["a DiscoverResult", futureServer, retry((call) => rpcResult(call, discoverResult())), { ok: true, kind: "negotiated", negotiatedVersion: "2026-07-28", attempts: 2 }],
+      ["a result that is not a DiscoverResult", futureServer, retry((call) => rpcResult(call, { supportedVersions: "2026-07-28", capabilities: {} })), { ok: false, kind: "closed", code: "discover_invalid" }],
+      ["a result listing only the compatibility revision, on a compatibility-era row", compatible, retry((call) => rpcResult(call, discoverResult({ supportedVersions: ["2025-11-25"] })), ["2026-07-28", "2025-11-25"]), { ok: false, kind: "closed", code: "legacy_server", compatibilityEraListed: true }],
+      ["a result sharing no revision", futureServer, retry((call) => rpcResult(call, discoverResult({ supportedVersions: ["2025-06-18"] }))), { ok: false, kind: "closed", code: "no_common_version" }],
+      ["a result without the tools capability", futureServer, retry((call) => rpcResult(call, discoverResult({ capabilities: {} }))), { ok: false, kind: "closed", code: "no_tools_capability" }],
+      ["an input_required result", futureServer, retry((call) => rpcRaw(call, { resultType: "input_required", inputRequests: { a: { method: "elicitation/create", params: { message: "x" } } }, requestState: "s" })), { ok: false, kind: "closed", code: "unexpected_input_required" }],
+      ["a 202, passed through", futureServer, retry(() => text(null, 202)), { ok: false, kind: "closed", code: "unexpected_status" }],
+      ["a 401, passed through", futureServer, retry(() => text(null, 401, { "www-authenticate": 'Bearer scope="parts.read"' })), { ok: false, kind: "unauthorized" }],
+    ];
+    for (const [label, row, script, expected] of rows) {
+      const { fake, outcome } = discover(script, row);
+      expect(await outcome, label).toMatchObject(expected);
+      expect(fake.calls, label).toHaveLength(2);
+      resetAdmissionControl();
+    }
+  });
 });
 
 describe("[B20 A2] the DiscoverResult is validated strictly", () => {
@@ -465,6 +493,29 @@ describe("[B20 A2] the sent token never reaches a negotiation outcome (S2)", () 
     }
     expect(problems).toEqual([]);
   });
+
+  // [B20 A2 review-3] finding 3 on the negotiation path: a KELVIN SIGN or fullwidth echo whose first 20 characters end the cut
+  // scrub window of the instructions (4 x 2 000 + 256) or of the serverInfo name and version (4 x 128 + 256) — a prefix only
+  // the SKELETON shows, which the branch of scrubDisplayText this pins replaces whole (deleting it lets the prefix through)
+  it("a token prefix only the skeleton shows at the end of a cut scrub window of the instructions or the serverInfo replaces the text whole", async () => {
+    const token = TOKENS[0]!;
+    const problems: string[] = [];
+    const spellings: ReadonlyArray<readonly [string, string]> = [
+      ["upper-cased with KELVIN SIGN for K", token.toUpperCase().replace(/K/g, KELVIN_SIGN)],
+      ["lower-cased with KELVIN SIGN for k", token.replace(/k/g, KELVIN_SIGN)],
+      ["upper-cased and fullwidth", fullwidth(token.toUpperCase())],
+    ];
+    for (const [spelling, echo] of spellings) {
+      const cutAt = (window: number): string => `sk-${"a".repeat(window - 24)} ${echo} tail`;
+      const result = discoverResult({ instructions: cutAt(4 * 2_000 + 256), _meta: { [SERVER_INFO_META]: { name: cutAt(4 * 128 + 256), version: cutAt(4 * 128 + 256) } } });
+      const settled = await discover(answering(result), tokenServer, token).outcome;
+      if (!settled.ok) problems.push(`${spelling}: ${settled.kind}`);
+      const window = survivor(settled, token);
+      if (window !== null) problems.push(`${spelling}: ${window}`);
+      resetAdmissionControl();
+    }
+    expect(problems).toEqual([]);
+  });
 });
 
 describe("[B20 A2] every other transport outcome is passed through as the closed outcome it is", () => {
@@ -548,7 +599,7 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     for (const code of ["no_common_version", "legacy_server", "no_tools_capability", "discover_invalid", "unexpected_input_required", "discover_failed", "not_negotiated", "list_invalid", "cursor_invalid", "cursor_loop", "descriptor_pin_mismatch", "not_accepted", "arguments_invalid", "arguments_too_large", "input_required_unsupported", "call_failed", "list_failed"]) {
       expect(section, code).toContain(`\`${code}\``);
     }
-    for (const reason of ["not_an_object", "name_invalid", "credential_echo", "reserved_namespace", "duplicate_name", "name_unrepresentable", "name_collision", "description_directive", "declared_write", "input_schema_missing", "input_schema_too_large", "input_schema_too_deep", "input_schema_too_many_subschemas", "input_schema_too_many_properties", "input_schema_ref_keyword", "input_schema_dialect", "input_schema_unsupported", "x_mcp_header_invalid", "schema_text_budget"]) {
+    for (const reason of ["not_an_object", "name_invalid", "credential_echo", "reserved_namespace", "duplicate_name", "name_unrepresentable", "name_collision", "description_directive", "declared_write", "input_schema_missing", "input_schema_too_large", "input_schema_too_deep", "input_schema_too_many_subschemas", "input_schema_too_many_properties", "input_schema_ref_keyword", "input_schema_dialect", "input_schema_unsupported", "x_mcp_header_invalid", "schema_text_budget", "text_expansion"]) {
       expect(section, reason).toContain(`\`${reason}\``);
     }
     for (const file of ["negotiation.ts", "foreign-tools.ts", "tool-discovery.ts", "tool-call.ts"]) expect(section, file).toContain(file);
@@ -576,6 +627,10 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
       `header value of at most ${spaced(MCP_PARAM_HEADER_VALUE_MAX_CHARS)} characters`,
       // [B20 A2 review-2] the one scrub budget of a listing
       `at most ${spaced(MCP_LISTING_SCRUB_MAX_STRINGS)} scrubbed strings and ${spaced(MCP_LISTING_SCRUB_MAX_CHARS)} scrubbed characters per listing`,
+      // [B20 A2 review-3] the scan half of that budget, the skeleton bound and the unit of the size bound
+      `at most ${spaced(MCP_LISTING_SCAN_MAX_CHARS)} judged characters per listing`,
+      `at most ${MCP_SKELETON_MAX_EXPANSION} x the characters read of it`,
+      `serialised size (${spaced(MCP_SCHEMA_MAX_BYTES)} bytes), counted in UTF-8`,
     ];
     for (const phrase of phrases) expect(section, phrase).toContain(phrase);
   });

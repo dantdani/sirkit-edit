@@ -2096,3 +2096,29 @@ _(discovery, reproduction and results appended below as they are observed)_
   engineering 96 / 1 078; agent, B16.1C tripwires and AST import gates 36 / 423 (ratchet unchanged at 162 = 159 + 3 + 0:
   B1 adds no route); tsc 0; eslint clean on the 7 changed .ts files; the B04 and B09 generators and the new manifest
   generator with zero drift. 42 cases in two suites.
+
+### B20-A2 review round 3 - one directive matcher for every judged string, a scan budget, UTF-8 size bounds (2026-09-21 local; fix workflow + lead; this commit)
+
+- The round-2 check found directives still readable through other separators, ALL-CAPS runs and no separator at all, so
+  round 3 replaced the per-separator patches with one matcher (`wf_5d177b3f-c40`; 9 of 123 cases failed on the unchanged
+  source; every named mutation caught, sources restored by sha256): one phrase list (`MCP_DIRECTIVE_PHRASES`) compiled
+  once into a whole-word pattern and a squashed pattern, read over word streams of the skeleton (every run of non-letters
+  one space, every case boundary a space, a capital run kept whole, an acronym reading), a partial homoglyph fold
+  (Cyrillic, Greek, four Latin letters), and the existing raw markers. The payload table (118 spellings x 8 places) is
+  excluded everywhere (547 of 944 rows were wrong before); a benign table of 83 identifiers, values and descriptions is
+  accepted. Every judged string is charged to a per-listing scan budget (2 097 152 characters) by its skeleton length
+  before it is scanned, and a skeleton over 4x the characters read (or 32 768) excludes the tool as `text_expansion`
+  (500 tools of the finding's worst text: 28 051 ms before, 33 ms after). The serialised schema bound now counts UTF-8
+  bytes in one pass without a copy. The skeleton-only prefix branch of `scrubDisplayText` is pinned. The retry and
+  output-schema page statements corrected.
+- Checked by two independent checkers: 6 of 6 fixed (two page-only, not pinned by a page test). They found 13 further
+  issues, among them TWO REGRESSIONS against the previous commit: a short phrase in inverted or mixed case (`yOU mUST`)
+  that the previous lowercased pass excluded is now accepted, because a case boundary always splits; and a format
+  character between the words of a short phrase is deleted by the matcher's skeleton (joining the words) while the kept
+  display text turns it into a space, so a clean directive is accepted and kept. Both are taken in round 4 together with
+  an uncharged failing read (scan work outside the budget), the skeleton-length charge being unpinned, the argument bound
+  of `tool-call.ts` still counting UTF-16 units, directives split across adjacent strings, new false positives from the
+  squashed stream crossing word boundaries (`new instruction set`, `complex filtration`), Latin small capitals, and five
+  page statements. Nothing is exposed meanwhile: the flag is off, the registry is empty and no agent path reads A2 yet.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 488 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean. The four A2 suites hold 123 cases.
