@@ -9,30 +9,21 @@
  * silently drift back to "none".
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   KNOWN_DURABLE_SOURCE_SYMBOLS,
   routeResourceClassification,
 } from "../route-resource-classification";
 import { reachableImportedCalls } from "./_boundary-analysis";
+import { listRouteFiles, routePathOf } from "../route-tree";
 
 const ROOT = process.cwd();
 
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
-
+// [B20 B2] app/api AND app/.well-known, through the one route-tree helper (OD-66)
 function pathFor(file: string): string {
-  const rel = relative(ROOT, file).replaceAll("\\", "/");
-  return "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+  return routePathOf(ROOT, file);
 }
 
 describe("B16.0.3 §C — replacement-authority is classified truthfully", () => {
@@ -56,7 +47,7 @@ describe("B16.0.3 §C — a handler that reads a durable source carries a durabl
     for (const row of routeResourceClassification()) byPath.set(row.path, row);
 
     const offenders: string[] = [];
-    for (const file of routeFiles(join(ROOT, "app", "api"))) {
+    for (const file of listRouteFiles(ROOT)) {
       const source = readFileSync(file, "utf8");
       const calls = reachableImportedCalls(source, file).map((c) => c.name);
       const touchesDurable = calls.some((name) => KNOWN_DURABLE_SOURCE_SYMBOLS.includes(name));
@@ -78,7 +69,7 @@ describe("B16.0.3 §C — a handler that reads a durable source carries a durabl
     // Prove the connective logic: an unannotated durable-reading path (durable
     // === "none") is an offender.
     const durableCallers = new Set<string>();
-    for (const file of routeFiles(join(ROOT, "app", "api"))) {
+    for (const file of listRouteFiles(ROOT)) {
       const calls = reachableImportedCalls(readFileSync(file, "utf8"), file).map((c) => c.name);
       if (calls.some((n) => KNOWN_DURABLE_SOURCE_SYMBOLS.includes(n))) durableCallers.add(pathFor(file));
     }

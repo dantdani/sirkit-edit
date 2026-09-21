@@ -1,4 +1,5 @@
 method,route,policy_class,current_form,wrapper_or_factory,target_wrapper,migration_status
+GET,/.well-known/oauth-protected-resource/api/mcp,public,canonical-wrapper,publicRoute,(adopted),adopted
 GET,/api/agent/autonomy,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
 POST,/api/agent/autonomy,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 GET,/api/agent/execution-grant,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
@@ -86,6 +87,8 @@ GET,/api/kicad/v1/parts/category/[id],public,canonical-wrapper,kicadLibraryRoute
 GET,/api/kicad/v1,public,canonical-wrapper,kicadLibraryRoute,(adopted),adopted
 GET,/api/mapping-verification,auth,canonical-wrapper,authenticatedRoute,(adopted),adopted
 POST,/api/mapping-verification,auth+csrf,factory,createMappingPostHandler (./handler),authenticatedJsonRoute,PENDING_MIGRATION
+POST,/api/mcp,auth,canonical-wrapper,mcpBearerJsonRoute,(adopted),adopted
+POST,/api/mcp/token,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/model-simulation/denominator,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/model-simulation/execute,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted
 POST,/api/model-simulation/measure,auth+csrf,canonical-wrapper,authenticatedJsonRoute,(adopted),adopted

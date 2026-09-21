@@ -45,7 +45,7 @@ export type OriginHeaderParse =
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
-function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   return LOOPBACK_HOSTS.has(lower) || lower.endsWith(".localhost");
 }

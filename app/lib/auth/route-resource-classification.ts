@@ -89,6 +89,11 @@ const ANNOTATIONS: Record<string, ResourceAnnotation> = {
   // [B19-E E5] the atomic catalog's append-only status events, read for the ids a member names: durable, but catalog data shared
   // by every tenant, never a project's own data
   "/api/components/revision-status": { durable: "read", sensitivity: "none" },
+  // [B20 B2] the MCP endpoint's answers are bound to the bearer principal (its tools/list varies by the member's role) and it
+  // reads no durable store in B2 (every tools/call is refused); B3 moves `durable` to "read" when tools/call serves reads
+  "/api/mcp": { durable: "none", sensitivity: "session-identity" },
+  // [B20 B2] the token route returns a credential bound to the caller's own identity and live membership; nothing is stored
+  "/api/mcp/token": { durable: "none", sensitivity: "session-identity" },
 };
 
 /**

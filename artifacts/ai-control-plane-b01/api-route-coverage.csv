@@ -1,4 +1,5 @@
 path,methods,record_id,class
+/.well-known/oauth-protected-resource/api/mcp,GET,mcp.server,read
 /api/agent/autonomy,GET;POST,agent.autonomy-setting,mutate
 /api/agent/execution-grant,GET;POST,agent.execution-grant,mutate
 /api/agent/execution-grant/settle,POST,agent.execution-grant,mutate
@@ -77,6 +78,8 @@ path,methods,record_id,class
 /api/kicad/v1/parts/[id],GET,parts.catalog-read,read
 /api/kicad/v1/parts/category/[id],GET,parts.catalog-read,read
 /api/mapping-verification,GET;POST,pcb.footprint-resolution,mutate
+/api/mcp,POST,mcp.server,read
+/api/mcp/token,POST,mcp.server,read
 /api/model-simulation/denominator,POST,cd.model-simulation.workbench,propose
 /api/model-simulation/execute,POST,cd.model-simulation.workbench,propose
 /api/model-simulation/measure,POST,cd.model-simulation.workbench,propose

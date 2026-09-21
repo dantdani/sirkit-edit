@@ -1,4 +1,5 @@
 method,route,policy_class,access,handler_symbol,media_type,max_wire_bytes,deadline_ms,authorization_ordering,parser,downstream,evidence_test
+GET,/.well-known/oauth-protected-resource/api/mcp,public,public,publicRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/agent/autonomy,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/agent/autonomy,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,4096,5000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 GET,/api/agent/execution-grant,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
@@ -86,6 +87,8 @@ GET,/api/kicad/v1/parts/category/[id],public,public,kicadLibraryRoute(…),-,-,-
 GET,/api/kicad/v1,public,public,kicadLibraryRoute(…),-,-,-,no-body,-,compute,b16-0-2-gates §C + b16-0-4-bounded-body-behavior
 GET,/api/mapping-verification,auth,authenticated,authenticatedRoute(…),-,-,-,no-body,-,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/mapping-verification,auth+csrf,authenticated,createMappingPostHandler(…),application/json,4000000,30000(default),authorize-then-body,scopedTrustedJson(bounded) via _scope.ts via handler.ts,durable,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/mcp,auth,authenticated,mcpBearerJsonRoute(…),application/json,65536,10000,authorize-then-body,canonical-wrapper:mcpBearerJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
+POST,/api/mcp/token,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,256,5000,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/model-simulation/denominator,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,MODEL_SIMULATION_API_MAX_BYTES,MODEL_SIMULATION_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/model-simulation/execute,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,MODEL_SIMULATION_API_MAX_BYTES,MODEL_SIMULATION_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior
 POST,/api/model-simulation/measure,auth+csrf,authenticated,authenticatedJsonRoute(…),application/json,MODEL_SIMULATION_API_MAX_BYTES,MODEL_SIMULATION_API_DEADLINE_MS,authorize-then-body,canonical-wrapper:authenticatedJsonRoute,compute,b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior

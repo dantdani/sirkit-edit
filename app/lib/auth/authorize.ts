@@ -53,6 +53,11 @@ export async function authorizeRequest(request: Request, options: AuthorizeReque
     // A route/method with no exact policy is a coding error — fail closed.
     return { ok: false, response: jsonError(500, "AUTH_POLICY_MISSING", "This route has no authorization policy.") };
   }
+  // [B20 B2] an mcp-bearer row is served ONLY by mcpBearerJsonRoute: resolving it here would authenticate an ambient cookie on
+  // the bearer-only endpoint (with CSRF off). Refused before any identity, CSRF or body work (D-5).
+  if (policy.identitySource === "mcp-bearer") {
+    return { ok: false, response: jsonError(500, "AUTH_POLICY_WRAPPER_MISMATCH", "This route's policy is served by another wrapper; the request is refused.") };
+  }
 
   // Worker/service boundary — a distinct machine identity, never a human.
   if (policy.identitySource === "worker-secret") {

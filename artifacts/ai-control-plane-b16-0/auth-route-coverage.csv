@@ -1,4 +1,5 @@
 path,methods,auth_class,identity_source,migrated
+/.well-known/oauth-protected-resource/api/mcp,GET,public,none,no
 /api/agent/autonomy,GET;POST,authenticated-mutation,trusted-context,yes
 /api/agent/execution-grant,GET;POST,authenticated-mutation,trusted-context,yes
 /api/agent/execution-grant/settle,POST,authenticated-mutation,trusted-context,yes
@@ -77,6 +78,8 @@ path,methods,auth_class,identity_source,migrated
 /api/kicad/v1/parts/[id],GET,public,none,no
 /api/kicad/v1/parts/category/[id],GET,public,none,no
 /api/mapping-verification,GET;POST,authenticated-mutation,trusted-context,yes
+/api/mcp,POST,authenticated-mcp,mcp-bearer,yes
+/api/mcp/token,POST,authenticated-read,trusted-context,yes
 /api/model-simulation/denominator,POST,authenticated-propose,trusted-context,yes
 /api/model-simulation/execute,POST,authenticated-propose,trusted-context,yes
 /api/model-simulation/measure,POST,authenticated-propose,trusted-context,yes

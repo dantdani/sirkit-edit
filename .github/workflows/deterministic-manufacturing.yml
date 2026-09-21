@@ -130,6 +130,11 @@ jobs:
           app/lib/acquisition
           app/lib/mcp
           app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts
+          app/api/mcp/__tests__
+          app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts
+          app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts
+          app/lib/auth/__tests__/b20-b2-route-tree.test.ts
+          app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts

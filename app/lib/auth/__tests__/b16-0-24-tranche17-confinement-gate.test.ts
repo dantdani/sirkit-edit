@@ -6,9 +6,10 @@
  * process boundary, or exposing a new agent tool fails CI here.
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm, APPROVED_ROUTE_WRAPPERS } from "./_boundary-analysis";
+import { listRouteFiles } from "../route-tree"; // [B20 B2] app/api AND app/.well-known (OD-66); the sole-adopter paths below stay split on /app/api/
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
@@ -30,15 +31,6 @@ function code(rel: string): string {
     .replace(/`(?:\\.|[^`\\])*`/g, "``")
     .replace(/"(?:\\.|[^"\\])*"/g, '""')
     .replace(/'(?:\\.|[^'\\])*'/g, "''");
-}
-function allRouteFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) allRouteFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
 }
 
 describe("B16.0.24 §I — canonical adoption (provenance-checked)", () => {
@@ -101,7 +93,7 @@ describe("B16.0.24 §I — auth boundary confinement", () => {
 
 describe("B16.0.24 §I — chat registry/tool/policy confinement", () => {
   it("chat is the SOLE adopter of agentStreamRoute (repo-wide) and keeps its tool discovery registry-derived", () => {
-    const adopters = allRouteFiles(join(ROOT, "app", "api"))
+    const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("agentStreamRoute"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!);
     expect(adopters).toEqual(["chat/route.ts"]);
@@ -116,7 +108,7 @@ describe("B16.0.24 §I — chat registry/tool/policy confinement", () => {
     expect(src).toMatch(/local-working-copy/);
   });
   it("requestOrigin is declared ONLY by the auth callback (sole adopter, repo-wide)", () => {
-    const adopters = allRouteFiles(join(ROOT, "app", "api"))
+    const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("requestOrigin:"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!);
     expect(adopters).toEqual(["auth/callback/route.ts"]);
@@ -164,7 +156,7 @@ describe("B16.0.24 §I — no new agent tool exposure; sole-adopter of the two c
   it("agentStreamRoute is an approved canonical wrapper name and auth-signin-v1 is closed", () => {
     expect((APPROVED_ROUTE_WRAPPERS as readonly string[]).includes("agentStreamRoute")).toBe(true);
     // only the sign-in route declares the auth-signin-v1 profile (repo-wide)
-    const adopters = allRouteFiles(join(ROOT, "app", "api"))
+    const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("auth-signin-v1"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!);
     expect(adopters).toEqual(["auth/signin/route.ts"]);

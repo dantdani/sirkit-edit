@@ -40,7 +40,7 @@ function selectorFromHeaders(request: Request): ProjectSelector {
   };
 }
 
-const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 export interface ResolveTrustedContextOptions {
   /** An explicit project/branch selector (e.g. from a request body). When
