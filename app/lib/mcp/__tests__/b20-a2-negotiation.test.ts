@@ -716,6 +716,51 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     expect(od58, "OD-58 names the walk's refusals as the code has them").toContain(`a key of \`REF_KEYWORDS\` (${keywords.map((keyword) => `\`${keyword}\``).join(", ")})`);
   });
 
+  // [B20 A2 follow-up] item 4: the scan-budget row said both charges are spent only when both fit and the text_expansion row
+  // counted a skeleton without format characters — neither pinned, so neither failed anything. The corrected statements, the
+  // readings items 1-3 added and the end-side limits item 2 states are pinned here by phrase (the foreign-tools suite pins the
+  // code to them), the refuted wordings must be GONE from the A2 section, and OD-81, the README and D20-15 say the same.
+  it("the follow-up statements are exact and pinned: the order of the budget's two halves, the skeleton the 4 x bound counts, the two new readings, the node's one text, the stated limits, and the refuted wordings absent", () => {
+    const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8");
+    const flat = (text: string): string => text.replace(/\s+/g, " ");
+    const page = read("artifacts/ai-control-plane-b20/mcp-client-boundary.md");
+    const section = flat(page.slice(page.indexOf("## Negotiation, discovery and foreign descriptor gates (A2)")));
+    const phrases = [
+      "Line numbers are of the follow-up tree",
+      // item 4: the order the two halves are spent in, and what the 4 x bound counts
+      "the tool's own text is charged to the scan half BEFORE its scrub charge is checked, and stays spent when that check fails",
+      "the scrub charge is added only once the schemas' reads and the enums' separators both fit",
+      "whose skeleton — the matcher's: NFKD without combining marks, its format characters KEPT — would hold more than 4 x the characters read of it",
+      // items 1-3: the readings added
+      "with the format characters as separators and with them DELETED",
+      "runs on from inside the word that holds its LAST TWO letters",
+      "GLUED to `always` — no separator and no case boundary between them",
+      "each schema node's texts — its property's name, then its kept title and description in the node's key order",
+      // item 2: the end-side limits, each beside the benign spelling it has the shape of, and the stated false positives
+      "(`ALWAYS_INVOKESIRKIT_PCB_EXPORT`, `alwaysINVOKESIRKIT_PCB_EXPORT` — the shape of `always invokes`)",
+      "(`ignore_previou_sly`, `ignorepreviouSly` — the shape of `instruction set`)",
+      "(`dataex-filtration` — the shape of `regex filtration`)",
+      "(`APIKEYVALUE`, which review-3 did not read either)",
+      "so `ALWAYSUSED` and `alwaysrunning` are refused while `alwaysUsed` and `always used` are not",
+      "so `complex<U+200B>filtration` reads as `complexfiltration` and is refused as that spelling is",
+    ];
+    for (const phrase of phrases) expect(section, phrase).toContain(phrase);
+    const refuted = [
+      "and both are spent only when both fit",
+      "whose skeleton (NFKD without marks and format characters) would hold",
+      "a `~` word running on only when its own letters are contiguous",
+      "Line numbers are of the review-4 tree",
+    ];
+    for (const wording of refuted) expect(section, wording).not.toContain(wording);
+    const decisions = flat(read("artifacts/remaining-builder-program/OWNER_DECISIONS.md"));
+    const od81 = decisions.slice(decisions.indexOf("## OD-81"), decisions.indexOf("## OD-43"));
+    for (const spelling of ["`ALWAYS_INVOKESIRKIT_PCB_EXPORT`", "`ignore_previou_sly`", "`dataex-filtration`", "`APIKEYVALUE`"]) expect(od81, `OD-81 states ${spelling}`).toContain(spelling);
+    expect(flat(read("artifacts/ai-control-plane-b20/README.md"))).toContain("follow-up fixes applied test-first (four issues");
+    const discovery = flat(read("artifacts/ai-control-plane-b20/discovery.md"));
+    const d2015 = discovery.slice(discovery.indexOf("**D20-15"), discovery.indexOf("**D20-16"));
+    expect(d2015, "the D20-15 clause records the follow-up").toContain("Follow-up (2026-09-21)");
+  });
+
   // [B20 A2 review] S7's line-reference half: every `file.ts:N-M` citation of the boundary page is resolved against the tree.
   // The file must exist, the range must lie inside it, and a citation that names its anchor (`file.ts:N-M` (`symbol`)) must
   // hold that symbol inside the range; in the A2 section EVERY citation names one. A bare `:N-M` continues the last file

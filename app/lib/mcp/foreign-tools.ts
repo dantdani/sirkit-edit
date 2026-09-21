@@ -43,6 +43,10 @@
  *    cost. The filter is DEFENSE-IN-DEPTH (OD-81): it fails closed on what it recognises and cannot recognise every
  *    paraphrase; that a foreign description never directs the agent rests on the reviewed descriptor pin, the untrusted-data
  *    label and the absence of any authority (the boundary page states the limits).
+ *    [B20 A2 follow-up] The phrases are read over the skeleton with its format characters as separators AND deleted (a
+ *    format character inside a word); the aligned reading lets a '~' word run on from inside the word that holds its last two
+ *    letters, and an always-verb glued to `always` run on into its object; and a schema node's name, title and description are
+ *    read as one text.
  * Every bound is judged BEFORE the work it bounds (S5), every accepted descriptor is a NEW frozen object built field by
  * field (never the server's object, and no key from server data is ever created on it: S6), and `acceptForeignTools`
  * never throws (S4).
@@ -130,7 +134,10 @@ const SKELETON_CHUNK_CHARS = 4_096;
 const NON_ASCII = /\P{ASCII}/u;
 /** [B20 A2 review-4] the most NFKD expands one UTF-16 unit (U+FDFA: 18): a skeleton step never reads more than fits */
 const NFKD_MAX_EXPANSION = 18;
-/** [B20 A2 review-4] what the matcher's skeleton drops (combining marks) and what the markers read without (format characters) */
+/**
+ * [B20 A2 review-4] what the matcher's skeleton drops (combining marks) and what the markers read without (format characters)
+ * [B20 A2 follow-up] ... and what the phrases' second reading deletes (`directiveIn`)
+ */
 const MARKS = /\p{M}/gu;
 const FORMAT = /\p{Cf}/gu;
 /** [B20 A2 review-4] what joins texts a model reads together into one judged text: a line start, where a role marker is read */
@@ -173,6 +180,9 @@ const DIRECTIVE_MARKERS = new RegExp([
  * `snake_case`, while spelled as one identifier (`ignoreAboveThreshold`) it is benign vocabulary of data filtering and needs
  * an instruction-like object after it (the phrase that follows it). `prior` no longer runs on (`ignorePriority`), `must` does
  * (`YOUMUSTCALL`), and a stem is found inside one word or from a word start (never across one: `complex filtration`).
+ * [B20 A2 follow-up] A trailing '^' marks a LAST word that runs on only when it is GLUED to the word before it — no separator
+ * and no case boundary between them — as a verb glued to its object is still read as the instruction
+ * (`ALWAYSINVOKESIRKIT_PCB_EXPORT`), while after a boundary it must end its word (`always calls`, `alwaysUsed` are prose).
  */
 export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
   "ignore|disregard|bypass|forget {all|any|the|your} previous~|preceding~|earlier~|system~|these~|instructions~",
@@ -183,7 +193,7 @@ export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
   "override {the} system~|previous~|safety~|policy~",
   "system prompt~",
   "you must~",
-  "always call|invoke|run|use",
+  "always call^|invoke^|run^|use^",
   "do+not|don+t|dont|never tell~|mention~|reveal~|inform~|disclose~|show~|log~",
   "without telling~|informing~|asking~|notifying~",
   "*exfiltrat",
@@ -215,6 +225,13 @@ export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
  * ends in. Each is an alternation entered only at a word start (a space) whose every optional space is followed by a
  * letter (a space is taken or not, never both), and the filler words are prefix-free, so what is tried at a word start is
  * bounded by the list and the run it spells: linear in the stream.
+ * [B20 A2 follow-up] Where an ALIGNED match may end inside a word (item 2, a regression of review-4: the substring squashing
+ * of review-3 read `ALWAYSINVOKESIRKIT_PCB_EXPORT` and `iGNOREpREVIOUSLYgIVENiNSTRUCTIONS`). A match still starts at a word
+ * start and ends at a word end, except: a '~' word runs on from inside the word that holds its LAST TWO letters — the rest of
+ * it may be split by any boundary (`i gnore p reviously`), but never runs on from a word its last letter merely starts
+ * (`new instruction set`, whose `s` starts `set`); and a '^' word glued to the word before it (no space in the stream between
+ * them, its letters contiguous) runs on into whatever follows in its word. Each new form is still entered only after a letter
+ * or a space the alternation already read, and every optional space in it is followed by a letter: linear as before.
  */
 function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; stems: RegExp; aligned: RegExp } {
   const words: string[] = [];
@@ -232,16 +249,25 @@ function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; s
     const last = slots.length - 1;
     words.push(slots.map((slot, index) => {
       if (slot.filler) return `(?:(?:${slot.alternatives.join("|")}) )*`;
-      const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, " ").replace(/~$/, "[a-z]*"));
+      // [B20 A2 follow-up] a '^' word is read as words like any other: after a separator it must end its word
+      const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, " ").replace(/\^$/, "").replace(/~$/, "[a-z]*"));
       return `(?:${alternatives.join("|")})${index < last ? " " : ""}`;
     }).join(""));
     if (separated) continue;
     aligned.push(slots.map((slot, index) => {
-      const letters = slot.alternatives.map((alternative) => alternative.replace(/~$/, "").replace(/\+/g, ""));
+      const letters = slot.alternatives.map((alternative) => alternative.replace(/[~^]$/, "").replace(/\+/g, ""));
       if (slot.filler) return `(?: ?(?:${letters.map(spaced).join("|")}))*`;
-      // a '~' word of the LAST slot: its letters contiguous and running on within that word, or spaced and ending the word
-      const forms = slot.alternatives.map((alternative, at) => (index === last && alternative.endsWith("~") ? `${letters[at]}[a-z]*|${spaced(letters[at]!)}` : spaced(letters[at]!)));
-      return `${index === 0 ? "" : " ?"}(?:${forms.join("|")})`;
+      const lead = index === 0 ? "" : " ?";
+      if (index !== last) return `${lead}(?:${letters.map(spaced).join("|")})`;
+      // a '~' word of the LAST slot: spaced and ending the word, or — [B20 A2 follow-up] — running on from inside the word that
+      // holds its last two letters (review-4 required all of its letters contiguous for that)
+      const forms = slot.alternatives.map((alternative, at) => {
+        const word = letters[at]!;
+        return alternative.endsWith("~") ? `${spaced(word.slice(0, -1))}${word.slice(-1)}[a-z]*|${spaced(word)}` : spaced(word);
+      });
+      // [B20 A2 follow-up] a '^' word of the LAST slot, glued to the word before it: no space before it, running on in its word
+      const glued = index === 0 ? [] : slot.alternatives.flatMap((alternative, at) => (alternative.endsWith("^") ? [`${letters[at]}[a-z]*`] : []));
+      return glued.length === 0 ? `${lead}(?:${forms.join("|")})` : `(?:${lead}(?:${forms.join("|")})|${glued.join("|")})`;
     }).join(""));
   }
   return { words: new RegExp(` (?:${words.join("|")})(?= )`), stems: new RegExp(stems.join("|")), aligned: new RegExp(` (?:${aligned.join("|")})(?= )`) };
@@ -504,12 +530,23 @@ const skeletonCap = (read: string): number => Math.min(read.length * MCP_SKELETO
  * [B20 A2 review-4] The markers read the skeleton without its format characters (a zero-width character inside a marker
  * still folds back); the phrases are read ALIGNED over the word and acronym streams, and as WORDS and STEMS over the
  * CASE-FREE stream.
+ * [B20 A2 follow-up] ... over BOTH skeletons (item 1, a regression of review-4): with its format characters as separators, and
+ * — when it holds one — with them DELETED, the reading review-3 had and review-4 dropped, so a format character INSIDE a word
+ * (`Ig<U+200B>nore the above`, `previou<U+200B>sly`) no longer splits it into fragments no reading joins. A union of readings
+ * only adds detections. The deleted skeleton is the one the markers already read: no longer than the charged skeleton, and
+ * built only when the skeleton is not ASCII (a verbatim string admits no format character, a display text holds none).
  */
 function directiveIn({ read, skeleton }: ReadText): boolean {
   if (BIDI_CONTROL.test(read)) return true;
   const nonPrinting = (read.match(NON_PRINTING) ?? []).length;
   if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > read.length) return true;
-  if (DIRECTIVE_MARKERS.test((NON_ASCII.test(skeleton) ? skeleton.replace(FORMAT, "") : skeleton).toLowerCase())) return true;
+  const joined = NON_ASCII.test(skeleton) ? skeleton.replace(FORMAT, "") : skeleton;
+  if (DIRECTIVE_MARKERS.test(joined.toLowerCase())) return true;
+  return phrasesIn(skeleton) || (joined !== skeleton && phrasesIn(joined));
+}
+
+/** [B20 A2 follow-up] The four phrase readings of one skeleton (review-4's): aligned over the word and acronym streams, words and stems over the case-free one. */
+function phrasesIn(skeleton: string): boolean {
   const streams = wordStreams(skeleton);
   return DIRECTIVE_VOCABULARY.aligned.test(streams.words)
     || (streams.acronym !== streams.words && DIRECTIVE_VOCABULARY.aligned.test(streams.acronym))
@@ -693,23 +730,41 @@ function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
  * then `previous instructions`); and an enum of two or more string members is judged as ONE text, its members in order on
  * one line each (`joins[k]` is the read of `enums[k]`, already charged), in place of each member alone — each member is still
  * compared with the sent token.
+ * [B20 A2 follow-up] ... and each schema NODE's texts as ONE text once its last description or title is judged (item 3, the
+ * class review-4 claimed: the tool's title then its description were one text, a property's own title and description two):
+ * its property's name, then its kept title and description in the node's key order — the order its declaration renders them —
+ * one line each, charged to the listing's scan budget before it is judged (`judgeShown`). It is judged in ADDITION to each
+ * display text (a union only adds detections), and skipped when it is one of those: a lone description after its name, or a
+ * lone title of a node that is no property.
  */
 function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly ReadText[], enums: readonly EnumSpan[], joins: readonly ReadText[], redact: readonly string[], budget: ListingBudget): SchemaFailure | null {
   let next = 0;
+  // [B20 A2 follow-up] where each node's last description or title sits in `texts`, and what of that node is kept so far
+  const nodes = new Map<Record<string, unknown>, { last: number; shown: Array<{ key: string; text: string }> }>();
+  texts.forEach((entry, index) => {
+    if (entry.kind === "annotation") nodes.set(entry.target, { last: index, shown: [] });
+  });
   for (let index = 0; index < texts.length; index += 1) {
     const entry = texts[index]!;
     const read = reads[index];
     if (read === undefined) return "description_directive"; // never: every retained string was read before it is judged
     if (entry.kind === "annotation") {
       if (directiveIn(read)) return "description_directive";
+      const node = nodes.get(entry.target)!;
       const kept = displayText(entry.text, entry.maxChars, redact);
       if (kept === null) {
         delete entry.target[entry.key];
-        continue;
+      } else {
+        entry.target[entry.key] = kept;
+        const shown = judgeShown(entry.owner !== null && entry.key === "description" ? `${entry.owner}${LINE_BREAK}${kept}` : kept, budget);
+        if (shown !== null) return shown;
+        node.shown.push({ key: entry.key, text: kept });
       }
-      entry.target[entry.key] = kept;
-      const shown = judgeShown(entry.owner !== null && entry.key === "description" ? `${entry.owner}${LINE_BREAK}${kept}` : kept, budget);
-      if (shown !== null) return shown;
+      const whole = node.last === index ? nodeText(entry.owner, node.shown) : null;
+      if (whole !== null) {
+        const shown = judgeShown(whole, budget);
+        if (shown !== null) return shown;
+      }
       continue;
     }
     if (skeletonCarries(entry.text, redact, true)) return "credential_echo";
@@ -733,6 +788,16 @@ function judgeShown(text: string, budget: ListingBudget): SchemaFailure | null {
   budget.judged += shown.charge;
   if (!shown.ok) return shown.reason;
   return directiveIn(shown.reads[0]!) ? "description_directive" : null;
+}
+
+/**
+ * [B20 A2 follow-up] The one text of a schema node a model reads together: its property's name (`owner`, when it is one), then
+ * its kept title and description in key order, one line each — or null when it is a text already judged alone (nothing kept, a
+ * lone description after its name, a lone title of a node that is no property).
+ */
+function nodeText(owner: string | null, shown: ReadonlyArray<{ key: string; text: string }>): string | null {
+  if (shown.length === 0 || (shown.length === 1 && (owner === null || shown[0]!.key === "description"))) return null;
+  return [...(owner === null ? [] : [owner]), ...shown.map((entry) => entry.text)].join(LINE_BREAK);
 }
 
 /**

@@ -399,7 +399,11 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   It does not and cannot recognise every paraphrase or obfuscation — a list of directives is never complete. Stated
   limits: a paraphrase the list lacks; digits used as letters (`1GNORE`); confusables outside the fixed fold (Armenian,
   Cherokee, the regional indicators, mathematical alphanumerics beyond NFKD); a phrase that starts inside a longer run
-  (`pleaseyoumust`); a directive split across two tools or two pages of a listing; and the `instructions` and serverInfo
+  (`pleaseyoumust`); on the end side (the follow-up, 2026-09-21), an always-verb after a boundary that runs on into its
+  object (`ALWAYS_INVOKESIRKIT_PCB_EXPORT`), a `~` word split between its last two letters that runs on
+  (`ignore_previou_sly`), a stem split by a separator after a glued prefix (`dataex-filtration`) and any other phrase whose
+  last word is glued to what follows (`APIKEYVALUE`) — each the shape of a benign spelling (`always invokes`,
+  `instruction set`, `regex filtration`); a directive split across two tools or two pages of a listing; and the `instructions` and serverInfo
   of a DiscoverResult, which are display-only and never judged by the matcher (they reach no model in A2; A4 decides how
   they are shown).
 - The guarantee that a foreign description cannot direct the agent comes from three controls OUTSIDE the filter: (1) the
