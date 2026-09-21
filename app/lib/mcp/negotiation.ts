@@ -325,7 +325,9 @@ async function negotiate(server: McpServerRegistryEntry, options: McpDiscoverOpt
     // [B20 A2 review] the probe rule of the notes (section 3): only a RECOGNISED modern JSON-RPC error means modern — the
     // 2025-11-25 SDK answers the probe 400 + -32000, a stateless handshake-era server 200 + -32601
     // [B20 A2 review-2] it reads the PROBE only: a retry follows a -32022, which only the current revision defines, so the
-    // server has proved it modern and the retry's answer is passed through as it is, never read as the handshake era
+    // server has proved it modern — an unrecognised error, a `legacy_or_unknown` or a `method_not_found` answering the retry is
+    // passed through as A1 classified it. [B20 A2 review-4] Exactly that: the retry's own -32022, result, input_required and
+    // accepted answer are still interpreted (below and above), and its -32022 may be `legacy_server` by the rule below
     const probe = attempt === 1;
     if (probe && post.kind === "error" && !isModernProbeError(post.code)) {
       return closed(attribution, "legacy_server", `${subject}: the server answered ${DISCOVER_METHOD} with a JSON-RPC error no current-revision server sends; the handshake era is not implemented in this increment.`, { compatibilityEraListed: row.compatibilityEraListed });
@@ -343,8 +345,11 @@ async function negotiate(server: McpServerRegistryEntry, options: McpDiscoverOpt
       version = next;
       continue;
     }
+    // [B20 A2 review-4] no retry follows — on the probe the list names no current-era revision of the row not yet tried, and
+    // the retry is never retried — so the list decides: it INCLUDES the compatibility revision (whatever else it lists) on a
+    // row that declares that era, or the two sides have nothing this client can speak
     if (row.compatibilityEraListed && offered.includes(MCP_PROTOCOL_VERSION_COMPATIBILITY)) {
-      return closed(attribution, "legacy_server", `${subject}: the server offers only the compatibility revision; the handshake era is not implemented in this increment.`, { compatibilityEraListed: true });
+      return closed(attribution, "legacy_server", `${subject}: the server's refusal lists the compatibility revision and no current revision this client can still try; the handshake era is not implemented in this increment.`, { compatibilityEraListed: true });
     }
     return closed(attribution, "no_common_version", `${subject}: the server and the row list no protocol revision in common.`);
   }

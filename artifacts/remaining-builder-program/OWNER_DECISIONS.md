@@ -356,6 +356,11 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   The size bound counts UTF-8 bytes (it counted UTF-16 units). Every judged string is read by ONE directive matcher over
   the word and squashed streams of its skeleton, the skeleton bounded to 4 x its length (`text_expansion`, in either
   schema) and charged to a scan half of the listing budget (2 097 152 characters) before it is read. No decision changed.
+- Review-4 (2026-09-21), stated exactly: the walk refuses a key of `REF_KEYWORDS` (`$ref`, `$defs`, `$id`, `$anchor`, `$dynamicRef`, `$dynamicAnchor`, `$recursiveRef`, `$recursiveAnchor`, `$vocabulary`, `definitions`)
+  anywhere — review-3's `a $ keyword` named neither `definitions` nor that `$comment` and every other `$` key are COPIED:
+  such an output schema finishes its walk, is judged (a directive in it excludes the tool), and is then dropped by the
+  wire-subset validators, which know no such key. A call's arguments are bounded in UTF-8 bytes like the schema (65 536).
+  What the directive filter guarantees is OD-81. No decision changed.
 - The owner may choose otherwise: a vetted JSON Schema 2020-12 validator dependency, with the supply-chain review and
   the bounded-work qualification that would need.
 
@@ -383,3 +388,27 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 
 - Default applied: Sirkit's identity on each rendered tool lives under `dev.sirkit/`: `dev.sirkit/toolId`, `dev.sirkit/toolVersion`, `dev.sirkit/registryDigest`, `dev.sirkit/operationClass`, `dev.sirkit/permissionTier`. The prefix's second label is neither `modelcontextprotocol` nor `mcp` (the reserved prefixes, reference notes §7), and every key satisfies the specification's key syntax (proven by test). It only keeps Sirkit's keys out of reserved and other vendors' namespaces; no domain ownership is asserted.
 - The owner may choose otherwise: a reverse-DNS prefix of a domain Sirkit controls (change `MCP_META_PREFIX`, `MCP_META_KEYS` and `McpToolMeta` in `app/lib/mcp/server/tool-definitions.ts`, then regenerate the manifest).
+
+## OD-81 — What the directive filter on foreign tool text guarantees (B20-A2, 2026-09-21)
+
+- Default applied: the filter is DEFENSE-IN-DEPTH. It fails closed on what it recognises — the phrase list
+  (`MCP_DIRECTIVE_PHRASES`) read as whole words over a case-free stream, as stems, and squashed and word-aligned over the
+  case-split streams; the display text each description and title is kept as; the one text of adjacent strings (an enum's
+  members, the title and the description, a property's name and its description); and the fixed homoglyph fold (NFKD, the
+  Cyrillic and Greek letters that are a Latin letter in form, the Latin small capitals, the enclosed negative letters).
+  It does not and cannot recognise every paraphrase or obfuscation — a list of directives is never complete. Stated
+  limits: a paraphrase the list lacks; digits used as letters (`1GNORE`); confusables outside the fixed fold (Armenian,
+  Cherokee, the regional indicators, mathematical alphanumerics beyond NFKD); a phrase that starts inside a longer run
+  (`pleaseyoumust`); a directive split across two tools or two pages of a listing; and the `instructions` and serverInfo
+  of a DiscoverResult, which are display-only and never judged by the matcher (they reach no model in A2; A4 decides how
+  they are shown).
+- The guarantee that a foreign description cannot direct the agent comes from three controls OUTSIDE the filter: (1) the
+  operator-reviewed descriptor pin — A4 refuses any tool whose listing digest is not pinned (`descriptorPin`), so an
+  operator has read every description and schema string before the agent can see it, and any change breaks the pin; (2)
+  untrusted-data labelling — A4 presents foreign tool text to the model as data from an external server, never as
+  instructions (the DATA rule of `app/lib/prompts.ts`); (3) no authority — a foreign tool is only ever an external read
+  whose result is an observation (`observation: "external-read"`); it can never grant, approve, mutate or reach a Sirkit
+  tool. Recorded on `artifacts/ai-control-plane-b20/mcp-client-boundary.md` (A2, Limits); the filter itself:
+  `app/lib/mcp/foreign-tools.ts`, pinned by `b20-a2-foreign-tools.test.ts`.
+- The owner may choose otherwise: a stricter filter — for example an allowlist of description vocabulary — at the cost of
+  refusing more legitimate servers.

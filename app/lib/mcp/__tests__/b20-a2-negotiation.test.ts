@@ -297,6 +297,34 @@ describe("[B20 A2] legacy_server: the handshake era is A2b and nothing else is s
       resetAdmissionControl();
     }
   });
+
+  // [B20 A2 review-4] issues 9 and 10: the page said a -32022 is legacy_server only when it "offers only" the compatibility
+  // revision, and in two places that the retry's answer is never legacy_server. The code answers legacy_server for a -32022
+  // after which NO retry follows — on the probe, one whose list names no untried revision of the row; on the retry, every one —
+  // whenever the row declares the compatibility era and the list INCLUDES the compatibility revision, whatever else it lists.
+  it("a -32022 after which no retry follows is legacy_server whenever its list includes the compatibility revision, whatever else it lists, on the probe and on the retry", async () => {
+    const refuse = (call: FakeCall, supported: readonly string[]): Response => rpcError(call, -32022, "unsupported", { supported });
+    const compatible = wideServer("docs-compat-future", { supportedProtocolVersions: ["2027-01-15", "2026-07-28", "2025-11-25"], compatibilityEra: true });
+    const fourth = wideServer("docs-compat-four", { supportedProtocolVersions: ["2028-01-01", "2027-01-15", "2026-07-28", "2025-11-25"], compatibilityEra: true });
+    const sequence = (...lists: ReadonlyArray<readonly string[]>): FakeScript => (call, index) => refuse(call, lists[Math.min(index, lists.length - 1)]!);
+    const rows: ReadonlyArray<readonly [string, McpServerRegistryEntry, FakeScript, string, readonly string[]]> = [
+      // the finding: the retry's refusal lists a revision the row lists (already tried) beside the compatibility one
+      ["the retry refused with a tried row revision and the compatibility one", compatible, sequence(["2026-07-28"], ["2027-01-15", "2025-11-25"]), "legacy_server", ["2027-01-15", "2026-07-28"]],
+      // an UNTRIED row revision on the retry's list changes nothing: there is one retry
+      ["the retry refused with an untried row revision and the compatibility one", fourth, sequence(["2027-01-15"], ["2026-07-28", "2025-11-25"]), "legacy_server", ["2028-01-01", "2027-01-15"]],
+      ["the retry refused with an untried row revision only", fourth, sequence(["2027-01-15"], ["2026-07-28"]), "no_common_version", ["2028-01-01", "2027-01-15"]],
+      // the probe: no untried row revision on the list, the compatibility one on it beside another
+      ["the probe refused with the revision just tried and the compatibility one", compatServer, sequence(["2026-07-28", "2025-11-25"]), "legacy_server", ["2026-07-28"]],
+      ["the probe refused with a revision the row does not list and the compatibility one", compatServer, sequence(["2027-01-15", "2025-11-25"]), "legacy_server", ["2026-07-28"]],
+      ["the probe refused with the compatibility one, on a row without the era", server, sequence(["2027-01-15", "2025-11-25"]), "no_common_version", ["2026-07-28"]],
+    ];
+    for (const [label, row, script, code, sent] of rows) {
+      const { fake, outcome } = discover(script, row);
+      expect(await outcome, label).toMatchObject({ ok: false, kind: "closed", code, ...(code === "legacy_server" ? { compatibilityEraListed: true } : {}) });
+      expect(fake.calls.map((call) => call.headers["MCP-Protocol-Version"]), label).toEqual(sent);
+      resetAdmissionControl();
+    }
+  });
 });
 
 describe("[B20 A2] the DiscoverResult is validated strictly", () => {
@@ -633,6 +661,59 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
       `serialised size (${spaced(MCP_SCHEMA_MAX_BYTES)} bytes), counted in UTF-8`,
     ];
     for (const phrase of phrases) expect(section, phrase).toContain(phrase);
+  });
+
+  // [B20 A2 review-4] issues 9, 10, 12, 13 and the two unclean checks of review-3: the corrected statements were page-only, so
+  // reverting any of them failed nothing. Each is pinned here by its phrase, the refuted wordings must be GONE from the A2
+  // section, the output-schema drop list is compared with the code's own REF_KEYWORDS, and OD-81 and OD-58 say the same.
+  it("the review-4 statements are exact and pinned: the -32022 rule, the retry's answers, the drop list read from the code, the budget and bound phrases, the stated limits and OD-81", () => {
+    const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8");
+    const page = read("artifacts/ai-control-plane-b20/mcp-client-boundary.md");
+    // a paragraph wraps where it will: every phrase is read with its whitespace collapsed
+    const flat = (text: string): string => text.replace(/\s+/g, " ");
+    const section = flat(page.slice(page.indexOf("## Negotiation, discovery and foreign descriptor gates (A2)")));
+    const source = read("app/lib/mcp/foreign-tools.ts");
+    const declared = /const REF_KEYWORDS: ReadonlySet<string> = new Set\(\[([^\]]*)\]\)/.exec(source);
+    expect(declared, "REF_KEYWORDS is declared as a literal set").not.toBeNull();
+    const keywords = [...declared![1]!.matchAll(/"([^"]+)"/g)].map((match) => match[1]!);
+    expect(keywords).toContain("definitions");
+    const spaced = (value: number): string => String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    const phrases = [
+      // the -32022 rule as negotiation.ts has it (issue 10), on the probe and on the retry (issue 9, R3-5)
+      "after which no retry follows — on the probe, one whose list names no current-era revision of the row not yet tried; on the retry, every one",
+      "`legacy_server` when the row declares the compatibility era and the refusal's list INCLUDES the compatibility revision, whatever else it lists",
+      "A2 interprets four kinds of answer to the retry after a -32022",
+      "the probe rule reads the FIRST answer only",
+      // the output-schema drop list as the walk has it (issue 12, R3-6)
+      `a key of \`REF_KEYWORDS\` (${keywords.map((keyword) => `\`${keyword}\``).join(", ")})`,
+      "`$comment` and every other `$` key are COPIED, not refused",
+      // the budget and bound phrases (issues 7, 8, 11) and the new readings (A1, A2, C1-C3)
+      "a read that fails still charges what it cost",
+      "built in steps whose worst expansion (18 x a unit) fits what remains",
+      "an enum's string members are read as ONE text, in order, one line each",
+      `serialised bound of ${spaced(MCP_TOOL_ARGUMENTS_MAX_BYTES)} bytes, counted in UTF-8`,
+      "the CASE-FREE stream",
+      "the DISPLAY text",
+      "word-aligned",
+      "56 identifiers, 15 values and 21 descriptions",
+      // what the filter is, and where the guarantee comes from (OD-81)
+      "DEFENSE-IN-DEPTH",
+      "OD-81",
+    ];
+    for (const phrase of phrases) expect(section, phrase).toContain(phrase);
+    // the refuted wordings are gone from the A2 section
+    const refuted = [
+      "offers only the compatibility revision",
+      "passed through, never `legacy_server`",
+      "is passed through as it is",
+      `a \`$${String.fromCharCode(0x2026)}\` keyword`,
+      "(no false positive)",
+    ];
+    for (const wording of refuted) expect(section, wording).not.toContain(wording);
+    const decisions = flat(read("artifacts/remaining-builder-program/OWNER_DECISIONS.md"));
+    expect(decisions).toContain("## OD-81 — What the directive filter on foreign tool text guarantees (B20-A2, 2026-09-21)");
+    const od58 = decisions.slice(decisions.indexOf("## OD-58"), decisions.indexOf("## OD-49"));
+    expect(od58, "OD-58 names the walk's refusals as the code has them").toContain(`a key of \`REF_KEYWORDS\` (${keywords.map((keyword) => `\`${keyword}\``).join(", ")})`);
   });
 
   // [B20 A2 review] S7's line-reference half: every `file.ts:N-M` citation of the boundary page is resolved against the tree.

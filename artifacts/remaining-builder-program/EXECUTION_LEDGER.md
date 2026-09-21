@@ -2122,3 +2122,36 @@ _(discovery, reproduction and results appended below as they are observed)_
   page statements. Nothing is exposed meanwhile: the flag is off, the registry is empty and no agent path reads A2 yet.
 - Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 488 passed;
   agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean. The four A2 suites hold 123 cases.
+
+### B20-A2 review round 4 - the matcher regressions, bounded failing reads, word-aligned squashing, OD-81 (2026-09-21 local; fix workflow + lead; this commit)
+
+- Declared the last A2 round (`wf_61ec4859-3da`): a blocklist of directives can never be complete, so the round fixed every
+  regression and every bounded-work defect, closed the cheap and precise classes, made each page statement exact and
+  pinned, and recorded the filter as defense-in-depth (OD-81). 13 of 134 cases failed on the previous commit's tree;
+  23 named code mutations and 8 page / owner-decision mutations each caught; sources restored by sha256.
+  - Round 3's two regressions fixed: a case-free reading of the lowercased skeleton restores mixed and inverted case
+    (`yOU mUST`); the matcher's skeleton keeps format characters as word separators and the kept display text is judged
+    too, so a zero-width character between two words no longer hides a directive.
+  - A read that fails is charged what it cost before its outcome is judged, and the skeleton is built in steps that stop
+    within one code point of its bound: 500 tools of the worst uncharged text 839 ms -> 54 ms and 2 083 ms -> 119 ms.
+  - `tool-call.ts` counts its argument bound in UTF-8 bytes like the schema bound.
+  - Strings a model reads together are judged as one text (an enum's members, a property name before its description,
+    the tool's title then its description); squashed matching is word-aligned and covers every phrase, which catches
+    glued spellings (`IGNOREPRIORINSTRUCTIONS`) while accepting `new instruction set`, `complex filtration`,
+    `ignorePriority` and `ignoreAboveThreshold`; Latin small capitals and the enclosed negative letters are folded.
+    The benign table holds 92 entries, every one accepted; three false positives are stated on the page.
+  - OD-81 recorded: the filter fails closed on what it recognises, and cannot recognise every paraphrase or obfuscation;
+    the guarantee that foreign text cannot direct the agent comes from the operator-reviewed descriptor pin, untrusted-data
+    labelling and the absence of authority (A4).
+- Checked by an independent checker scoped to regressions, claimed classes, bounded work, leaks and page statements: 9 of 9
+  fixed and revert-sensitive. It found 4 further issues, taken in a short follow-up round: a format character INSIDE a word
+  of an exact phrase (`Ig<ZWSP>nore the above`) now passes, because the previous commit's reading that deleted format
+  characters was dropped (medium, a regression); word-aligned squashing drops two glued spellings the previous substring
+  squashing caught, beyond the one stated limit; a schema property's own title is not joined with its description, as the
+  page claims; and two statements of the scan-budget and `text_expansion` rows no longer match the code. Nothing is
+  exposed: the flag is off, the registry is empty and no agent path reads A2 yet.
+- One incident, recorded: the fixer's mutation harness called `bash` from Python, which Windows resolved to WSL's
+  `bash.exe` and booted the WSL VM; nothing ran in it, the fixer shut it down (`wsl --shutdown`), and WSL reports no
+  running distribution. Harnesses must name Git Bash explicitly.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 499 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean. The A2 suites hold 134 cases.

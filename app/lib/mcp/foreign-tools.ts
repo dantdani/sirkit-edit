@@ -33,16 +33,23 @@
  *    [B20 A2 review-3] ONE directive matcher reads every judged string — the name, the title and description, every schema
  *    description, title, enum and const value, property name and `x-mcp-header` token — as WORDS (any run of non-letters is
  *    one space, any case boundary another) and SQUASHED (no spaces), against ONE phrase list (`MCP_DIRECTIVE_PHRASES`), so no
- *    separator, case run or its absence carries a directive through; each judged string is read ONCE, its skeleton bounded
- *    to 4 x its length (`text_expansion`) and charged to the listing's budget BEFORE it is scanned; and the size bound
- *    counts UTF-8 bytes.
+ *    separator, case run or its absence carries one of ITS phrases through (not every paraphrase: review-4, OD-81); each
+ *    judged string is read ONCE, its skeleton bounded to 4 x its length (`text_expansion`) and charged to the listing's
+ *    budget BEFORE it is scanned; and the size bound counts UTF-8 bytes.
+ *    [B20 A2 review-4] The matcher also reads a CASE-FREE stream, every format character as a separator, and the DISPLAY
+ *    text each description and title is kept as; it reads an enum's members, the title then the description, and a
+ *    property's name then its description as ONE text; its squashed reading is WORD-ALIGNED and covers every phrase; the
+ *    fold covers the Latin small capitals and the enclosed negative letters; and a read that fails still charges what it
+ *    cost. The filter is DEFENSE-IN-DEPTH (OD-81): it fails closed on what it recognises and cannot recognise every
+ *    paraphrase; that a foreign description never directs the agent rests on the reviewed descriptor pin, the untrusted-data
+ *    label and the absence of any authority (the boundary page states the limits).
  * Every bound is judged BEFORE the work it bounds (S5), every accepted descriptor is a NEW frozen object built field by
  * field (never the server's object, and no key from server data is ever created on it: S6), and `acceptForeignTools`
  * never throws (S4).
  */
 import { agentProviderName } from "../agent/provider-tools";
 import { validateSchemaStructure, validateWireSubset } from "../agent/provider-tools";
-import { MCP_PARAM_HEADER_MAX, scrubWindow, skeletonCarries, skeletonOf } from "./http-transport";
+import { MCP_PARAM_HEADER_MAX, scrubWindow, skeletonCarries } from "./http-transport";
 import { displayText } from "./negotiation";
 import { MCP_SERVER_ID_PATTERN, MCP_TOOL_NAME_PATTERN, type McpServerRegistryEntry } from "./server-registry";
 
@@ -121,6 +128,13 @@ const BIDI_CONTROL = new RegExp(`[${String.fromCharCode(8206)}${String.fromCharC
 /** [B20 A2 review-3] what a skeleton is computed in (the transport's own chunk), and what has none but itself */
 const SKELETON_CHUNK_CHARS = 4_096;
 const NON_ASCII = /\P{ASCII}/u;
+/** [B20 A2 review-4] the most NFKD expands one UTF-16 unit (U+FDFA: 18): a skeleton step never reads more than fits */
+const NFKD_MAX_EXPANSION = 18;
+/** [B20 A2 review-4] what the matcher's skeleton drops (combining marks) and what the markers read without (format characters) */
+const MARKS = /\p{M}/gu;
+const FORMAT = /\p{Cf}/gu;
+/** [B20 A2 review-4] what joins texts a model reads together into one judged text: a line start, where a role marker is read */
+const LINE_BREAK = "\n";
 
 /**
  * The raw directive MARKERS — role and system-prompt markers, tool-call markup, a `.env` path and a URL with credentials — as
@@ -154,14 +168,21 @@ const DIRECTIVE_MARKERS = new RegExp([
  * and `dont`. A phrase is slots separated by one space; a slot is its alternatives separated by '|'; '+' joins the words
  * of one alternative (`do+not`); a slot in braces is zero or more filler words; a trailing '~' lets that LAST word run on,
  * as the round-2 alternation did (`log~`: logs, logged); a phrase opening with '*' is a stem, found anywhere.
+ * [B20 A2 review-4] A phrase opening with '=' is read only with a SEPARATOR character (a non-letter) between its words —
+ * never across a case boundary and never squashed: a bare `ignore above` / `ignore prior` is a directive in prose and in
+ * `snake_case`, while spelled as one identifier (`ignoreAboveThreshold`) it is benign vocabulary of data filtering and needs
+ * an instruction-like object after it (the phrase that follows it). `prior` no longer runs on (`ignorePriority`), `must` does
+ * (`YOUMUSTCALL`), and a stem is found inside one word or from a word start (never across one: `complex filtration`).
  */
 export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
-  "ignore|disregard|bypass|forget {all|any|the|your} previous~|prior~|preceding~|above~|earlier~|system~|these~|instructions~",
+  "ignore|disregard|bypass|forget {all|any|the|your} previous~|preceding~|earlier~|system~|these~|instructions~",
+  "=ignore|disregard|bypass|forget {all|any|the|your} above~|prior",
+  "ignore|disregard|bypass|forget {all|any|the|your} above|prior {all|any|the|your|system} instructions~|instruction~|rules~|rule~|prompts~|prompt~|directives~|directive~|guidelines~|guideline~",
   "forget everything~|all",
   "new|updated|revised|additional {system} instructions~",
   "override {the} system~|previous~|safety~|policy~",
   "system prompt~",
-  "you must",
+  "you must~",
   "always call|invoke|run|use",
   "do+not|don+t|dont|never tell~|mention~|reveal~|inform~|disclose~|show~|log~",
   "without telling~|informing~|asking~|notifying~",
@@ -185,31 +206,45 @@ export const MCP_DIRECTIVE_PHRASES: readonly string[] = Object.freeze([
  * its spaces — what finds a directive spelled with no separator at all or across a case run no split reads; a shorter
  * phrase is read as words only, so a benign identifier that merely contains it (`musty`, `systemic`) is not refused. Both
  * are alternations of literals entered at a word start or a letter, linear in the stream (measured: about 60 ns a character).
+ * [B20 A2 review-4] Three readings now. WORDS (as above) reads the CASE-FREE stream, the '=' phrases included. STEMS: each
+ * stem as a plain substring of that stream, so inside one word (`dataexfiltration`) and never across a separator. ALIGNED,
+ * the squashed reading made WORD-ALIGNED: EVERY phrase but the '=' ones, over the case-split streams, with an optional
+ * space between any two of its letters, so it must START at a word start and END at a word end (`IGNOREPRIORINSTRUCTIONS`,
+ * `y ou m ust`), and a '~' word may run on only when its own letters are contiguous, within that word (`youmustcall`) —
+ * `new instruction set` spells `newinstructions` across a word end and is not read; a stem runs on to the end of the word it
+ * ends in. Each is an alternation entered only at a word start (a space) whose every optional space is followed by a
+ * letter (a space is taken or not, never both), and the filler words are prefix-free, so what is tried at a word start is
+ * bounded by the list and the run it spells: linear in the stream.
  */
-function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; squashed: RegExp } {
+function compileDirectivePhrases(phrases: readonly string[]): { words: RegExp; stems: RegExp; aligned: RegExp } {
   const words: string[] = [];
-  const squashed: string[] = [];
-  const letters = (alternative: string): string => alternative.replace(/~$/, "").replace(/\+/g, "");
-  for (const phrase of phrases) {
-    if (phrase.startsWith("*")) {
-      squashed.push(phrase.slice(1));
+  const stems: string[] = [];
+  const aligned: string[] = [];
+  const spaced = (letters: string): string => letters.split("").join(" ?");
+  for (const entry of phrases) {
+    if (entry.startsWith("*")) {
+      stems.push(entry.slice(1));
+      aligned.push(`${spaced(entry.slice(1))}[a-z]*`);
       continue;
     }
-    const slots = phrase.split(" ").map((slot) => ({ filler: slot.startsWith("{"), alternatives: slot.replace(/[{}]/g, "").split("|") }));
+    const separated = entry.startsWith("=");
+    const slots = (separated ? entry.slice(1) : entry).split(" ").map((slot) => ({ filler: slot.startsWith("{"), alternatives: slot.replace(/[{}]/g, "").split("|") }));
+    const last = slots.length - 1;
     words.push(slots.map((slot, index) => {
       if (slot.filler) return `(?:(?:${slot.alternatives.join("|")}) )*`;
       const alternatives = slot.alternatives.map((alternative) => alternative.replace(/\+/g, " ").replace(/~$/, "[a-z]*"));
-      return `(?:${alternatives.join("|")})${index < slots.length - 1 ? " " : ""}`;
+      return `(?:${alternatives.join("|")})${index < last ? " " : ""}`;
     }).join(""));
-    let expansions: string[][] = [[]];
-    for (const slot of slots.filter((entry) => !entry.filler)) {
-      expansions = expansions.flatMap((prefix) => slot.alternatives.map((alternative) => [...prefix, ...alternative.replace(/~$/, "").split("+")]));
-    }
-    for (const expansion of expansions) if (expansion.length >= 3 || expansion.join("").length >= 12) squashed.push(expansion.join(""));
-    // with a filler word a phrase has three words at least: squashed with one or more fillers
-    if (slots.some((slot) => slot.filler)) squashed.push(slots.map((slot) => `(?:${slot.alternatives.map(letters).join("|")})${slot.filler ? "+" : ""}`).join(""));
+    if (separated) continue;
+    aligned.push(slots.map((slot, index) => {
+      const letters = slot.alternatives.map((alternative) => alternative.replace(/~$/, "").replace(/\+/g, ""));
+      if (slot.filler) return `(?: ?(?:${letters.map(spaced).join("|")}))*`;
+      // a '~' word of the LAST slot: its letters contiguous and running on within that word, or spaced and ending the word
+      const forms = slot.alternatives.map((alternative, at) => (index === last && alternative.endsWith("~") ? `${letters[at]}[a-z]*|${spaced(letters[at]!)}` : spaced(letters[at]!)));
+      return `${index === 0 ? "" : " ?"}(?:${forms.join("|")})`;
+    }).join(""));
   }
-  return { words: new RegExp(` (?:${words.join("|")})(?= )`), squashed: new RegExp(squashed.join("|")) };
+  return { words: new RegExp(` (?:${words.join("|")})(?= )`), stems: new RegExp(stems.join("|")), aligned: new RegExp(` (?:${aligned.join("|")})(?= )`) };
 }
 const DIRECTIVE_VOCABULARY = compileDirectivePhrases(MCP_DIRECTIVE_PHRASES);
 
@@ -217,6 +252,10 @@ const DIRECTIVE_VOCABULARY = compileDirectivePhrases(MCP_DIRECTIVE_PHRASES);
  * [B20 A2 review-3] Letters NFKD leaves alone that ARE a basic Latin letter in form — Cyrillic and Greek ones, and four Latin
  * ones — folded to it (case kept) before the word streams are built: `іgnore` (U+0456) reads as `ignore`. A partial fold
  * (not the UTS #39 confusables table): a stated limit.
+ * [B20 A2 review-4] The same ONE fixed table folds the Latin small capitals (NFKD leaves them alone, and a model reads them
+ * fluently: `ignore` spelled U+026A U+0262 U+0274 U+1D0F U+0280 U+1D07) to lower-case letters, and the enclosed NEGATIVE
+ * letters — circled U+1F150-U+1F169 and squared U+1F170-U+1F189, A to Z, which NFKD leaves alone too — to capitals. Nothing
+ * else is folded: a stated limit.
  */
 const LATIN_LOOKALIKES: ReadonlyMap<number, number> = new Map(([
   [0x430, "a"], [0x435, "e"], [0x43a, "k"], [0x43e, "o"], [0x440, "p"], [0x441, "c"], [0x443, "y"], [0x445, "x"], [0x455, "s"], [0x456, "i"],
@@ -227,28 +266,48 @@ const LATIN_LOOKALIKES: ReadonlyMap<number, number> = new Map(([
   [0x391, "A"], [0x392, "B"], [0x395, "E"], [0x396, "Z"], [0x397, "H"], [0x399, "I"], [0x39a, "K"], [0x39c, "M"], [0x39d, "N"], [0x39f, "O"],
   [0x3a1, "P"], [0x3a4, "T"], [0x3a5, "Y"], [0x3a7, "X"],
   [0x131, "i"], [0x237, "j"], [0x251, "a"], [0x261, "g"],
-] as const).map(([code, letter]): [number, number] => [code, letter.charCodeAt(0)]));
+  // [B20 A2 review-4] the Latin small capitals of A to Z (there is none of X)
+  [0x1d00, "a"], [0x299, "b"], [0x1d04, "c"], [0x1d05, "d"], [0x1d07, "e"], [0xa730, "f"], [0x262, "g"], [0x29c, "h"], [0x26a, "i"], [0x1d0a, "j"],
+  [0x1d0b, "k"], [0x29f, "l"], [0x1d0d, "m"], [0x274, "n"], [0x1d0f, "o"], [0x1d18, "p"], [0xa7af, "q"], [0x280, "r"], [0xa731, "s"], [0x1d1b, "t"],
+  [0x1d1c, "u"], [0x1d20, "v"], [0x1d21, "w"], [0x28f, "y"], [0x1d22, "z"],
+  // [B20 A2 review-4] the negative circled and negative squared capitals A to Z
+  ...Array.from({ length: 26 }, (_unused, index): readonly [number, string] => [0x1f150 + index, String.fromCharCode(65 + index)]),
+  ...Array.from({ length: 26 }, (_unused, index): readonly [number, string] => [0x1f170 + index, String.fromCharCode(65 + index)]),
+] as ReadonlyArray<readonly [number, string]>).map(([code, letter]): [number, number] => [code, letter.charCodeAt(0)]));
 
 /**
  * [B20 A2 review-3] The WORD stream of a skeleton — every maximal run of characters that is not a letter (a digit, a space,
  * any punctuation or symbol, any other script) is ONE space, and every case boundary is a space: lower to upper (`fooBar`),
  * and a run of capitals into lower case KEPT WHOLE (`IGNOREprevious`, `ignorePREVIOUSinstructions`) — lower-cased, between
  * single spaces. The safer reading adds the ACRONYM stream, where such a run gives its last capital to the next word
- * (`APIKey` reads `api key`, as round 2 read it), and the SQUASHED stream: the letters without any space. One pass.
+ * (`APIKey` reads `api key`, as round 2 read it). One pass.
+ * [B20 A2 review-4] ... and the CASE-FREE stream (issue 1, a regression of review-3): the same letters lower-cased with ONLY
+ * the runs of non-letters as spaces, the reading round 2 had, so `yOU mUST` reads `you must` again. A format character left
+ * in the skeleton is a non-letter, so it separates words exactly as the display text's space does (issue 2). The squashed
+ * stream is gone: the aligned reading squashes the word streams themselves. Read by code point (the enclosed letters are
+ * astral).
  */
-function wordStreams(skeleton: string): { words: string; acronym: string; squashed: string } {
+function wordStreams(skeleton: string): { words: string; acronym: string; caseless: string } {
   const words: string[] = [" "];
   const acronym: string[] = [" "];
-  const squashed: string[] = [];
+  const caseless: string[] = [" "];
   let previous: "other" | "lower" | "upper" = "other";
   let capitals = 0;
   for (let index = 0; index < skeleton.length; index += 1) {
     let code = skeleton.charCodeAt(index);
+    if (code >= 0xd800 && code <= 0xdbff && index + 1 < skeleton.length) {
+      const low = skeleton.charCodeAt(index + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        code = (code - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000;
+        index += 1;
+      }
+    }
     if (code >= 0x80) code = LATIN_LOOKALIKES.get(code) ?? code;
     const kind = code >= 97 && code <= 122 ? "lower" : code >= 65 && code <= 90 ? "upper" : "other";
     if (kind === "other") {
       if (words[words.length - 1] !== " ") words.push(" ");
       if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
+      if (caseless[caseless.length - 1] !== " ") caseless.push(" ");
       previous = "other";
       capitals = 0;
       continue;
@@ -266,12 +325,13 @@ function wordStreams(skeleton: string): { words: string; acronym: string; squash
     const letter = String.fromCharCode(kind === "upper" ? code + 32 : code);
     words.push(letter);
     acronym.push(letter);
-    squashed.push(letter);
+    caseless.push(letter);
     previous = kind;
   }
   if (words[words.length - 1] !== " ") words.push(" ");
   if (acronym[acronym.length - 1] !== " ") acronym.push(" ");
-  return { words: words.join(""), acronym: acronym.join(""), squashed: squashed.join("") };
+  if (caseless[caseless.length - 1] !== " ") caseless.push(" ");
+  return { words: words.join(""), acronym: acronym.join(""), caseless: caseless.join("") };
 }
 
 export type McpToolExclusionReason =
@@ -394,22 +454,40 @@ interface ReadText {
  * once it passes `limit` characters: computed in chunks that never end inside a surrogate pair (the skeleton of a text is
  * the skeletons of such chunks, as `skeletonCarries` relies on), so no more than one chunk's expansion past `limit` is ever
  * built. An ASCII text is its own skeleton.
+ * [B20 A2 review-4] The MATCHER's skeleton: NFKD without combining marks, its format characters KEPT (`matcherSkeletonOf`),
+ * so a zero-width character separates words as the display's space does (issue 2); the markers read it without them. And it
+ * is built in STEPS whose worst expansion (18 x a unit) fits what remains below `limit` — one unit at a time within 18 of it —
+ * so it stops within one code point of `limit` and never expands a whole 4 096-unit chunk past it first (issue 7: 73 728
+ * characters built for a bound of 16 384). `produced` is the skeleton built, the step that passed `limit` included: what a
+ * failed read is charged.
  */
-function boundedSkeleton(text: string, limit: number): string | null {
-  if (!NON_ASCII.test(text)) return text.length > limit ? null : text;
+function boundedSkeleton(text: string, limit: number): { skeleton: string | null; produced: number } {
+  if (!NON_ASCII.test(text)) return text.length > limit ? { skeleton: null, produced: 0 } : { skeleton: text, produced: text.length };
   const pieces: string[] = [];
   let length = 0;
   for (let start = 0; start < text.length;) {
-    let end = Math.min(text.length, start + SKELETON_CHUNK_CHARS);
+    const step = Math.max(1, Math.min(SKELETON_CHUNK_CHARS, Math.floor((limit - length) / NFKD_MAX_EXPANSION)));
+    let end = Math.min(text.length, start + step);
     const last = text.charCodeAt(end - 1);
-    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
-    const piece = skeletonOf(text.slice(start, end));
+    // a step never ends inside a surrogate pair: one of a single unit takes the whole pair
+    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end = end - start > 1 ? end - 1 : end + 1;
+    const piece = matcherSkeletonOf(text.slice(start, end));
     length += piece.length;
-    if (length > limit) return null;
+    if (length > limit) return { skeleton: null, produced: length };
     pieces.push(piece);
     start = end;
   }
-  return pieces.join("");
+  return { skeleton: pieces.join(""), produced: length };
+}
+
+/**
+ * [B20 A2 review-4] The skeleton the MATCHER reads: the transport's `skeletonOf` (NFKD without combining marks, the marks
+ * dropped FIRST so NFKD has none to reorder) but with every format character KEPT, where the transport's drops it: a
+ * zero-width character is a word separator here, as it is a space in the kept display text. The token comparison keeps the
+ * transport's skeleton, where it folds a disguised token back.
+ */
+function matcherSkeletonOf(text: string): string {
+  return text.replace(MARKS, "").normalize("NFKD").replace(MARKS, "");
 }
 
 /** [B20 A2 review-3] What the matcher reads of a string: its first `MCP_DIRECTIVE_SCAN_CHARS` characters. */
@@ -423,16 +501,20 @@ const skeletonCap = (read: string): number => Math.min(read.length * MCP_SKELETO
  * phrases (`MCP_DIRECTIVE_PHRASES`) over the WORD and ACRONYM streams of the skeleton, and the long phrases over its
  * SQUASHED stream: `IGNORE/PREVIOUS/INSTRUCTIONS`, `ignorePREVIOUSinstructions` and `IGNOREPREVIOUSINSTRUCTIONS` read alike.
  * Linear in the read text and its skeleton, both of which the caller has charged.
+ * [B20 A2 review-4] The markers read the skeleton without its format characters (a zero-width character inside a marker
+ * still folds back); the phrases are read ALIGNED over the word and acronym streams, and as WORDS and STEMS over the
+ * CASE-FREE stream.
  */
 function directiveIn({ read, skeleton }: ReadText): boolean {
   if (BIDI_CONTROL.test(read)) return true;
   const nonPrinting = (read.match(NON_PRINTING) ?? []).length;
   if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > read.length) return true;
-  if (DIRECTIVE_MARKERS.test(skeleton.toLowerCase())) return true;
+  if (DIRECTIVE_MARKERS.test((NON_ASCII.test(skeleton) ? skeleton.replace(FORMAT, "") : skeleton).toLowerCase())) return true;
   const streams = wordStreams(skeleton);
-  return DIRECTIVE_VOCABULARY.words.test(streams.words)
-    || (streams.acronym !== streams.words && DIRECTIVE_VOCABULARY.words.test(streams.acronym))
-    || DIRECTIVE_VOCABULARY.squashed.test(streams.squashed);
+  return DIRECTIVE_VOCABULARY.aligned.test(streams.words)
+    || (streams.acronym !== streams.words && DIRECTIVE_VOCABULARY.aligned.test(streams.acronym))
+    || DIRECTIVE_VOCABULARY.words.test(streams.caseless)
+    || DIRECTIVE_VOCABULARY.stems.test(streams.caseless);
 }
 
 /**
@@ -445,28 +527,35 @@ function directiveIn({ read, skeleton }: ReadText): boolean {
 export function carriesDirective(raw: unknown): boolean {
   if (typeof raw !== "string" || raw === "") return false;
   const read = readOf(raw);
-  const skeleton = boundedSkeleton(read, skeletonCap(read));
+  const { skeleton } = boundedSkeleton(read, skeletonCap(read));
   return skeleton === null || directiveIn({ read, skeleton });
 }
+
+/** [B20 A2 review-4] What a read of judged strings answers: the reads, or why it stopped — and what it cost EITHER way. */
+type Judged = { ok: true; reads: ReadText[]; charge: number } | { ok: false; reason: "text_expansion" | "schema_text_budget"; charge: number };
 
 /**
  * [B20 A2 review-3] Read the judged strings of one tool ONCE, each charged to the listing's scan budget (`left` is what remains
  * of it) by its skeleton length — never less than the characters read of it — BEFORE any of them is scanned. A string whose
  * skeleton would pass its bound is `text_expansion`, one that would pass what remains `schema_text_budget`; either way the
  * skeleton stops being built there. The finding's U+FDFA values were scanned outside the budget: 28.1 s for 500 tools.
+ * [B20 A2 review-4] A read that FAILS still charges what it cost (issue 7): the strings read before it, and the failing one
+ * by its characters read or the skeleton built before the stop, whichever is more — the caller adds `charge` either way, so
+ * no later tool repeats uncharged work. A string longer than what remains is refused before anything of it is read: it adds
+ * nothing.
  */
-function readJudged(texts: readonly string[], left: number): { ok: true; reads: ReadText[]; charge: number } | { ok: false; reason: "text_expansion" | "schema_text_budget" } {
+function readJudged(texts: readonly string[], left: number): Judged {
   const reads: ReadText[] = [];
   let charge = 0;
   for (const text of texts) {
     const read = readOf(text);
     const room = left - charge;
-    if (read.length > room) return { ok: false, reason: "schema_text_budget" };
+    if (read.length > room) return { ok: false, reason: "schema_text_budget", charge };
     const cap = skeletonCap(read);
-    const skeleton = boundedSkeleton(read, Math.min(cap, room));
-    if (skeleton === null) return { ok: false, reason: cap <= room ? "text_expansion" : "schema_text_budget" };
-    charge += Math.max(read.length, skeleton.length);
-    reads.push({ read, skeleton });
+    const built = boundedSkeleton(read, Math.min(cap, room));
+    if (built.skeleton === null) return { ok: false, reason: cap <= room ? "text_expansion" : "schema_text_budget", charge: charge + Math.max(read.length, built.produced) };
+    charge += Math.max(read.length, built.skeleton.length);
+    reads.push({ read, skeleton: built.skeleton });
   }
   return { ok: true, reads, charge };
 }
@@ -474,8 +563,9 @@ function readJudged(texts: readonly string[], left: number): { ok: true; reads: 
 /**
  * [B20 A2 review-3] Whether `text` takes more than `max` bytes in UTF-8, counted in one pass over its UTF-16 units without a
  * copy and stopped at `max + 1` (a unit is at least one byte, so a longer text is over at once; a surrogate pair is 4 bytes).
+ * [B20 A2 review-4] Exported: `tool-call.ts` bounds a call's arguments with it (issue 11: it counted UTF-16 units).
  */
-function utf8Exceeds(text: string, max: number): boolean {
+export function utf8Exceeds(text: string, max: number): boolean {
   if (text.length > max) return true;
   let bytes = 0;
   for (let index = 0; index < text.length && bytes <= max; index += 1) {
@@ -502,10 +592,15 @@ function readAnnotations(raw: unknown): McpToolAnnotations {
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
-type SchemaFailure = Extract<McpToolExclusionReason, `input_schema_${string}` | "x_mcp_header_invalid" | "description_directive" | "credential_echo">;
+/** [B20 A2 review-4] a schema's display texts are charged as they are judged: past the budget or the 4 x bound, the tool is excluded */
+type SchemaFailure = Extract<McpToolExclusionReason, `input_schema_${string}` | "x_mcp_header_invalid" | "description_directive" | "credential_echo" | "schema_text_budget" | "text_expansion">;
 type SchemaResult = { ok: true; schema: Record<string, unknown>; headers: McpHeaderParameter[] } | { ok: false; reason: SchemaFailure };
-/** [B20 A2 review-2] A schema the walk has read and COUNTED, its retained strings not judged yet: what the budget is charged by */
-type SchemaWalk = { ok: true; schema: Record<string, unknown>; headers: McpHeaderParameter[]; texts: RetainedText[] } | { ok: false; reason: SchemaFailure };
+/**
+ * [B20 A2 review-2] A schema the walk has read and COUNTED, its retained strings not judged yet: what the budget is charged by.
+ * [B20 A2 review-4] `enums`: where each enum of two or more string members sits in `texts` ([start, end)), read as one text.
+ */
+type SchemaWalk = { ok: true; schema: Record<string, unknown>; headers: McpHeaderParameter[]; texts: RetainedText[]; enums: EnumSpan[] } | { ok: false; reason: SchemaFailure };
+interface EnumSpan { start: number; end: number }
 
 interface Frame {
   source: Record<string, unknown>;
@@ -513,16 +608,21 @@ interface Frame {
   depth: number;
   /** [B20 A2 review] the property names from the root when every step was a `properties` step (the only place `x-mcp-header` may sit), else null */
   path: readonly string[] | null;
+  /** [B20 A2 review-4] the property name this node is the schema of (a `properties` step), else null: its description is read after it */
+  owner: string | null;
 }
 
 /**
  * [B20 A2 review] One retained schema string, recorded by the walk and judged only once the walk has COUNTED them all (S5):
  * a property name or an enum / const string kept verbatim, or a description / title (`annotation`) kept scrubbed — the
  * walk defines it raw at its place, so key order is kept, and the judgement replaces or removes it.
+ * [B20 A2 review-4] A value in an enum of two or more string members is `joined`: the matcher reads it in that enum's one
+ * text, not alone; an annotation carries the property name it describes (`owner`), read before its display text.
  */
 type RetainedText =
-  | { kind: "identifier" | "value"; text: string }
-  | { kind: "annotation"; text: string; target: Record<string, unknown>; key: string; maxChars: number };
+  | { kind: "identifier"; text: string }
+  | { kind: "value"; text: string; joined: boolean }
+  | { kind: "annotation"; text: string; target: Record<string, unknown>; key: string; maxChars: number; owner: string | null };
 
 /**
  * A plain JSON value copied ITERATIVELY (a deeply nested body can never exhaust the stack), with every key defined as
@@ -588,8 +688,14 @@ function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
  * an enum or const value used to be read raw only, a name split on `_`, `.` and `-` only.
  * [B20 A2 review-3] Every one of them, a description or title too, is read by the ONE matcher (`directiveIn`) from the read
  * `readJudged` made and charged: `reads[i]` is the read of `texts[i]`.
+ * [B20 A2 review-4] Two more readings, each charged to the listing's scan budget before it is scanned. The DISPLAY text a
+ * description or title is kept as — what a model reads — is judged too, after the property name it describes (C1: `ignore_all`
+ * then `previous instructions`); and an enum of two or more string members is judged as ONE text, its members in order on
+ * one line each (`joins[k]` is the read of `enums[k]`, already charged), in place of each member alone — each member is still
+ * compared with the sent token.
  */
-function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly ReadText[], redact: readonly string[]): SchemaFailure | null {
+function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly ReadText[], enums: readonly EnumSpan[], joins: readonly ReadText[], redact: readonly string[], budget: ListingBudget): SchemaFailure | null {
+  let next = 0;
   for (let index = 0; index < texts.length; index += 1) {
     const entry = texts[index]!;
     const read = reads[index];
@@ -597,24 +703,68 @@ function judgeRetainedTexts(texts: readonly RetainedText[], reads: readonly Read
     if (entry.kind === "annotation") {
       if (directiveIn(read)) return "description_directive";
       const kept = displayText(entry.text, entry.maxChars, redact);
-      if (kept === null) delete entry.target[entry.key];
-      else entry.target[entry.key] = kept;
+      if (kept === null) {
+        delete entry.target[entry.key];
+        continue;
+      }
+      entry.target[entry.key] = kept;
+      const shown = judgeShown(entry.owner !== null && entry.key === "description" ? `${entry.owner}${LINE_BREAK}${kept}` : kept, budget);
+      if (shown !== null) return shown;
       continue;
     }
     if (skeletonCarries(entry.text, redact, true)) return "credential_echo";
-    if (directiveIn(read)) return "description_directive";
+    if (!(entry.kind === "value" && entry.joined) && directiveIn(read)) return "description_directive";
+    // an enum's one text is judged where its last member is, so the order of the judgements is the order of the schema
+    if (next < enums.length && enums[next]!.end === index + 1) {
+      if (directiveIn(joins[next]!)) return "description_directive";
+      next += 1;
+    }
   }
   return null;
 }
 
 /**
+ * [B20 A2 review-4] A text as it is KEPT — a display text, or two kept texts a model reads together — read, charged to the
+ * listing's scan budget by its skeleton (never less than its length) and judged by the one matcher: null when it passes, else
+ * the reason. Its skeleton is held to 4 x its length like every judged string (`text_expansion`); a failure is charged too.
+ */
+function judgeShown(text: string, budget: ListingBudget): SchemaFailure | null {
+  const shown = readJudged([text], MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
+  budget.judged += shown.charge;
+  if (!shown.ok) return shown.reason;
+  return directiveIn(shown.reads[0]!) ? "description_directive" : null;
+}
+
+/**
+ * [B20 A2 review-4] The one text of each enum of two or more string members, from its members' reads (already charged): their
+ * skeletons one line each — a skeleton is built character by character, so the skeleton of the joined members IS the joined
+ * skeletons, and nothing is expanded again; a line start is where a role marker is read, as for a member alone. The raw
+ * checks read the members joined by spaces (each member is inert already: a line break would count as non-printing).
+ * Charged by its separators, one fewer than its members; each member's own charge pays for its part of the scan (it is no
+ * longer scanned alone).
+ */
+function enumTexts(enums: readonly EnumSpan[], reads: readonly ReadText[], offset: number): { joins: ReadText[]; separators: number } {
+  const joins: ReadText[] = [];
+  let separators = 0;
+  for (const { start, end } of enums) {
+    const members = reads.slice(offset + start, offset + end);
+    joins.push({ read: members.map((member) => member.read).join(" "), skeleton: members.map((member) => member.skeleton).join(LINE_BREAK) });
+    separators += members.length - 1;
+  }
+  return { joins, separators };
+}
+
+/**
  * One foreign schema, read once: the size, then ONE iterative walk that enforces the depth, subschema and property
- * bounds, refuses every `$…` keyword and a foreign dialect, collects the `x-mcp-header` annotations with their path,
+ * bounds, refuses the reference keywords and a foreign dialect, collects the `x-mcp-header` annotations with their path,
  * and builds a fresh copy without them.
  * [B20 A2 review] The walk also COUNTS every string it retains (at most `MCP_SCHEMA_MAX_STRINGS`, else too large) and holds
  * the two verbatim kinds to their closed shapes; none of them is scanned here.
  * [B20 A2 review-2] The judgement is a second step (`judgeForeignSchema`), so the listing's scrub budget is charged for both
  * schemas of a tool before any of its text is scanned. A structural refusal ends the walk: its strings are never judged.
+ * [B20 A2 review-4] The walk refuses exactly `REF_KEYWORDS` (`definitions` included, and no other `$` key: `$comment` is
+ * copied, judged, and then refused by the wire-subset validators); it records the property name each description belongs to
+ * and where each enum of two or more string members sits, so the judgement reads them together.
  */
 function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string[]): SchemaWalk {
   if (!isPlainObject(raw)) return { ok: false, reason: "input_schema_missing" };
@@ -631,14 +781,15 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
   const headers: McpHeaderParameter[] = [];
   const tokens = new Set<string>();
   const texts: RetainedText[] = [];
+  const enums: EnumSpan[] = [];
   /** [B20 A2 review] one more retained string: false when that is one too many */
   const retain = (entry: RetainedText): boolean => texts.push(entry) <= MCP_SCHEMA_MAX_STRINGS;
   /** [B20 A2 review] an enum or const string kept verbatim: bounded (the length first) and inert, then retained */
   const verbatimValue = (text: string): SchemaFailure | null => {
     if (text.length > MCP_SCHEMA_VALUE_MAX_CHARS || NOT_INERT.test(text)) return "input_schema_unsupported";
-    return retain({ kind: "value", text }) ? null : "input_schema_too_large";
+    return retain({ kind: "value", text, joined: false }) ? null : "input_schema_too_large";
   };
-  const stack: Frame[] = [{ source: raw, target: schema, depth: 1, path: [] }];
+  const stack: Frame[] = [{ source: raw, target: schema, depth: 1, path: [], owner: null }];
   let subschemas = 0;
   while (stack.length > 0) {
     const frame = stack.pop()!;
@@ -679,7 +830,7 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
           if (isPlainObject(child)) {
             const next: Record<string, unknown> = {};
             define(properties, name, next);
-            stack.push({ source: child, target: next, depth: frame.depth + 1, path: frame.path === null ? null : [...frame.path, name] });
+            stack.push({ source: child, target: next, depth: frame.depth + 1, path: frame.path === null ? null : [...frame.path, name], owner: name });
           } else {
             const copied = boundedJsonCopy(child, MCP_SCHEMA_MAX_DEPTH * 2, SCHEMA_COPY_NODES);
             if (!copied.ok) return { ok: false, reason: "input_schema_too_deep" };
@@ -691,7 +842,7 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
       if (key === "items" && isPlainObject(value)) {
         const next: Record<string, unknown> = {};
         define(frame.target, key, next);
-        stack.push({ source: value, target: next, depth: frame.depth + 1, path: null });
+        stack.push({ source: value, target: next, depth: frame.depth + 1, path: null, owner: null });
         continue;
       }
       if (key === "anyOf" && Array.isArray(value)) {
@@ -701,7 +852,7 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
           if (isPlainObject(member)) {
             const next: Record<string, unknown> = {};
             members.push(next);
-            stack.push({ source: member, target: next, depth: frame.depth + 1, path: null });
+            stack.push({ source: member, target: next, depth: frame.depth + 1, path: null, owner: null });
           } else {
             const copied = boundedJsonCopy(member, MCP_SCHEMA_MAX_DEPTH * 2, SCHEMA_COPY_NODES);
             if (!copied.ok) return { ok: false, reason: "input_schema_too_deep" };
@@ -713,14 +864,20 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
       // [B20 A2 review] the retained strings of a schema node: a description or title is kept scrubbed (defined raw HERE so
       // key order is kept, then judged), an enum member or a const that is a string is kept verbatim in its closed shape
       if ((key === "description" || key === "title") && typeof value === "string") {
-        if (!retain({ kind: "annotation", text: value, target: frame.target, key, maxChars: key === "title" ? MCP_TOOL_TITLE_MAX_CHARS : MCP_TOOL_DESCRIPTION_MAX_CHARS })) return { ok: false, reason: "input_schema_too_large" };
+        if (!retain({ kind: "annotation", text: value, target: frame.target, key, maxChars: key === "title" ? MCP_TOOL_TITLE_MAX_CHARS : MCP_TOOL_DESCRIPTION_MAX_CHARS, owner: frame.owner })) return { ok: false, reason: "input_schema_too_large" };
         define(frame.target, key, value);
         continue;
       }
       if (key === "enum" && Array.isArray(value)) {
+        const start = texts.length;
         for (const member of value) {
           const refused = typeof member === "string" ? verbatimValue(member) : null;
           if (refused !== null) return { ok: false, reason: refused };
+        }
+        // [B20 A2 review-4] two or more string members are read as ONE text (C1): a directive split across them is one
+        if (texts.length - start >= 2) {
+          for (let index = start; index < texts.length; index += 1) (texts[index] as Extract<RetainedText, { kind: "value" }>).joined = true;
+          enums.push({ start, end: texts.length });
         }
       }
       if (key === "const" && typeof value === "string") {
@@ -732,17 +889,18 @@ function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string
       define(frame.target, key, copied.value);
     }
   }
-  return { ok: true, schema, headers, texts };
+  return { ok: true, schema, headers, texts, enums };
 }
 
 /**
  * The judgement of a walked schema: [B20 A2 review] every retained string was counted by the walk, and only now is any of
  * them scanned (`judgeRetainedTexts`, [B20 A2 review-3] from the reads `readJudged` charged); then the two repository
  * validators over the copy, and an INPUT schema (`input`) must also be one the call-time validator evaluates
- * (`callValidatorEvaluates`).
+ * (`callValidatorEvaluates`). [B20 A2 review-4] `joins`: the one text of each of its enums (`enumTexts`); its display texts are
+ * charged to `budget` as they are judged.
  */
-function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, reads: readonly ReadText[], input: boolean, redact: readonly string[]): SchemaResult {
-  const judged = judgeRetainedTexts(walked.texts, reads, redact);
+function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, reads: readonly ReadText[], joins: readonly ReadText[], input: boolean, redact: readonly string[], budget: ListingBudget): SchemaResult {
+  const judged = judgeRetainedTexts(walked.texts, reads, walked.enums, joins, redact, budget);
   if (judged !== null) return { ok: false, reason: judged };
   const schema = walked.schema;
   // a tool's arguments are an object: a string, array or enum root can never describe them (as `toStrictSchema` requires)
@@ -877,9 +1035,10 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
 
   // [B20 A2 review-3] the tool's own name, title and description, read ONCE and charged to the listing's scan budget BEFORE the
   // title and description are scanned: past the budget, or past its skeleton bound, a tool is excluded unread
+  // [B20 A2 review-4] ... and what a failing read cost is charged too (issue 7)
   const own = readJudged([name, raw.title, raw.description].filter((text): text is string => typeof text === "string"), MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
-  if (!own.ok) return { ok: false, reason: own.reason, label: name };
   budget.judged += own.charge;
+  if (!own.ok) return { ok: false, reason: own.reason, label: name };
   // the raw text is judged for a directive BEFORE it is scrubbed: a scrub would hide the marker, not the intent
   if (own.reads.slice(1).some(directiveIn)) return { ok: false, reason: "description_directive", label: name };
 
@@ -890,7 +1049,8 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   if (!inputWalk.ok) return { ok: false, reason: inputWalk.reason, label: name };
   // [B20 A2 review-2] an output schema the WALK refuses is dropped unjudged: its strings are never scanned or scrubbed, nothing
   // of it is kept, and it is charged nothing. [B20 A2 review-3] Every refusal of the walk: not an object, not serialisable,
-  // over 32 768 UTF-8 bytes, a `$…` keyword, a `$schema` off the root or not 2020-12, an `x-mcp-header`, a bound on depth,
+  // over 32 768 UTF-8 bytes, [B20 A2 review-4] a key of `REF_KEYWORDS` (`definitions` included; `$comment` and every other `$`
+  // key are copied, so that schema is judged), a `$schema` off the root or not 2020-12, an `x-mcp-header`, a bound on depth,
   // subschemas, properties or retained strings, a property name outside its closed pattern, an enum or const string over
   // 256 characters or not inert, or a non-schema value past the copy's own budget
   const outputWalk = raw.outputSchema === undefined ? null : walkForeignSchema(raw.outputSchema, false, redact);
@@ -911,23 +1071,42 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   // [B20 A2 review-3] every retained string of both schemas — property names, enum and const values, `x-mcp-header` tokens,
   // descriptions and titles — read ONCE and charged to the scan budget by its skeleton BEFORE any of it is scanned
   const retained = outputWalk !== null && outputWalk.ok ? [...inputWalk.texts, ...outputWalk.texts] : inputWalk.texts;
+  // [B20 A2 review-4] ... and what a failing read cost is charged too (issue 7)
   const schemaReads = readJudged(retained.map((entry) => entry.text), MCP_LISTING_SCAN_MAX_CHARS - budget.judged);
+  budget.judged += schemaReads.charge;
   if (!schemaReads.ok) return { ok: false, reason: schemaReads.reason, label: name };
+  // [B20 A2 review-4] each enum of two or more string members is read as ONE text (C1), built from its members' reads and
+  // charged by its separators before either schema is judged
+  const inputEnums = enumTexts(inputWalk.enums, schemaReads.reads, 0);
+  const outputEnums = outputWalk !== null && outputWalk.ok ? enumTexts(outputWalk.enums, schemaReads.reads, inputWalk.texts.length) : { joins: [], separators: 0 };
+  if (inputEnums.separators + outputEnums.separators > MCP_LISTING_SCAN_MAX_CHARS - budget.judged) return { ok: false, reason: "schema_text_budget", label: name };
+  budget.judged += inputEnums.separators + outputEnums.separators;
   budget.strings += charge.strings;
   budget.chars += charge.chars;
-  budget.judged += schemaReads.charge;
 
-  const input = judgeForeignSchema(inputWalk, schemaReads.reads.slice(0, inputWalk.texts.length), true, redact);
+  // [B20 A2 review-4] the title and description as they are KEPT, read as ONE text — the title's display text, a line break,
+  // the description's (C1: `Ignore all` then `previous instructions`; A2: the display is what a model reads) — charged, then
+  // judged. Their scrub was charged above.
+  const title = displayText(raw.title, MCP_TOOL_TITLE_MAX_CHARS, redact);
+  const description = displayText(raw.description, MCP_TOOL_DESCRIPTION_MAX_CHARS, redact);
+  const shown = [title, description].filter((text): text is string => text !== null).join(LINE_BREAK);
+  if (shown !== "") {
+    const judged = judgeShown(shown, budget);
+    if (judged !== null) return { ok: false, reason: judged, label: name };
+  }
+
+  const input = judgeForeignSchema(inputWalk, schemaReads.reads.slice(0, inputWalk.texts.length), inputEnums.joins, true, redact, budget);
   if (!input.ok) return { ok: false, reason: input.reason, label: name };
 
   let outputSchema: Record<string, unknown> | null = null;
   if (outputWalk !== null && outputWalk.ok) {
-    const output = judgeForeignSchema(outputWalk, schemaReads.reads.slice(inputWalk.texts.length), false, redact);
+    const output = judgeForeignSchema(outputWalk, schemaReads.reads.slice(inputWalk.texts.length), outputEnums.joins, false, redact, budget);
     if (output.ok) outputSchema = output.schema;
     // [B20 A2 review] a directive or the sent token in the output schema is the SERVER's intent, not a malformed schema:
     // the tool is excluded, as for the input schema, rather than kept without its output schema
     // [B20 A2 review-2] — when the walk FINISHED: a structural refusal met first dropped the schema above, unjudged
-    else if (output.reason === "description_directive" || output.reason === "credential_echo") return { ok: false, reason: output.reason, label: name };
+    // [B20 A2 review-4] — and so is a display text of it past the scan budget or its 4 x bound, as for the input schema
+    else if (output.reason === "description_directive" || output.reason === "credential_echo" || output.reason === "schema_text_budget" || output.reason === "text_expansion") return { ok: false, reason: output.reason, label: name };
     else outputSchemaDropped = true;
   }
 
@@ -936,8 +1115,8 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
     name,
     toolId,
     providerName,
-    title: displayText(raw.title, MCP_TOOL_TITLE_MAX_CHARS, redact),
-    description: displayText(raw.description, MCP_TOOL_DESCRIPTION_MAX_CHARS, redact),
+    title,
+    description,
     untrusted: true,
     inputSchema: deepFreeze(input.schema),
     outputSchema: outputSchema === null ? null : deepFreeze(outputSchema),

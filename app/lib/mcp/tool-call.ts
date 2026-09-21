@@ -16,7 +16,7 @@
  */
 import type { AdmissionPurpose } from "../acquisition/admission-control";
 import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, validateAgainstSchema } from "../engineering/tool-io-validation";
-import { isAcceptedMcpTool, type McpAcceptedTool, type McpHeaderParameter } from "./foreign-tools";
+import { isAcceptedMcpTool, utf8Exceeds, type McpAcceptedTool, type McpHeaderParameter } from "./foreign-tools";
 import {
   encodeMcpNameHeader, MCP_PARAM_HEADER_VALUE_MAX_CHARS, mcpPost, mcpRedactionSubjects,
   type McpPostAttribution, type McpPostResult, type McpTransportDeps,
@@ -25,7 +25,11 @@ import { displayText, isNegotiatedMcpServer, nextMcpRequestId, type McpNegotiate
 import type { McpServerRegistryEntry } from "./server-registry";
 import { invalidateMcpToolListing } from "./tool-discovery";
 
-/** The serialised bound on one call's arguments; the transport's own 1 MB request bound is the second one. */
+/**
+ * The serialised bound on one call's arguments; the transport's own 1 MB request bound is the second one. [B20 A2 review-4]
+ * In UTF-8 BYTES, as the schema bound counts them (`utf8Exceeds`): it compared UTF-16 units, so four strings of 9 000 e-acute
+ * (about 72 030 bytes) were prepared and sent.
+ */
 export const MCP_TOOL_ARGUMENTS_MAX_BYTES = 65_536;
 const ISSUES_MAX = 5;
 const ISSUE_MAX_CHARS = 200;
@@ -146,7 +150,7 @@ export function prepareMcpToolCall(accepted: McpAcceptedTool, args: unknown, red
     } catch {
       return refused("arguments_invalid", `MCP tool "${accepted.toolId}": the arguments cannot be serialised as JSON.`);
     }
-    if (serialized.length > MCP_TOOL_ARGUMENTS_MAX_BYTES) {
+    if (utf8Exceeds(serialized, MCP_TOOL_ARGUMENTS_MAX_BYTES)) {
       return refused("arguments_too_large", `MCP tool "${accepted.toolId}": the arguments exceed ${MCP_TOOL_ARGUMENTS_MAX_BYTES} bytes.`);
     }
     const unsafe = assertSafeJsonValue(args, DEFAULT_INPUT_LIMITS);

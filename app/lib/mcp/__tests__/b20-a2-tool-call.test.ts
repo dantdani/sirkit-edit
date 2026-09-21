@@ -128,6 +128,41 @@ describe("[B20 A2] the arguments are validated against the ACCEPTED schema", () 
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
+  // [B20 A2 review-4] issue 11: the argument bound compared JSON.stringify's LENGTH (UTF-16 units) while the page, the pinned
+  // phrase and the refusal sentence say bytes, so four strings of 9 000 e-acute (about 72 030 bytes) were prepared and sent. It
+  // counts UTF-8 bytes now, as the schema bound does (the same `utf8Exceeds`): 2-, 3- and 4-byte characters on both sides of
+  // 65 536 bytes, each fixture under 65 536 in UTF-16 units, so a length check passes both sides.
+  it("the argument bound counts UTF-8 bytes: 2-, 3- and 4-byte characters on both sides of 65 536 bytes, and the finding's four strings of 9 000 e-acute", () => {
+    const descriptor = headerTool({ a: { type: "string" }, b: { type: "string" }, c: { type: "string" }, d: { type: "string" } });
+    const utf8 = (value: unknown): number => new TextEncoder().encode(JSON.stringify(value)).length;
+    const shell = utf8({ a: "", b: "", c: "", d: "" });
+    const sized = (bytes: number, char: string, width: number): Record<string, string> => {
+      const count = Math.floor((bytes - shell) / width) - 8;
+      const quarter = Math.floor(count / 4);
+      const args = { a: char.repeat(quarter), b: char.repeat(quarter), c: char.repeat(quarter), d: char.repeat(count - 3 * quarter) + "x".repeat(bytes - shell - count * width) };
+      expect(utf8(args)).toBe(bytes);
+      expect(JSON.stringify(args).length).toBeLessThan(65_536);
+      return args;
+    };
+    const characters: ReadonlyArray<readonly [string, string, number]> = [
+      ["e-acute (2 bytes)", String.fromCharCode(0xe9), 2],
+      ["the euro sign (3 bytes)", String.fromCharCode(0x20ac), 3],
+      ["an astral character (4 bytes, a surrogate pair)", String.fromCodePoint(0x1f50c), 4],
+    ];
+    const problems: string[] = [];
+    for (const [label, char, width] of characters) {
+      const at = prepareMcpToolCall(descriptor, sized(65_536, char, width));
+      if (!at.ok) problems.push(`${label}, exactly 65 536 bytes: ${at.code}`);
+      const over = prepareMcpToolCall(descriptor, sized(65_537, char, width));
+      if (over.ok || over.code !== "arguments_too_large") problems.push(`${label}, 65 537 bytes: ${over.ok ? "prepared" : over.code}`);
+    }
+    const acute = String.fromCharCode(0xe9).repeat(9_000);
+    const finding = prepareMcpToolCall(descriptor, { a: acute, b: acute, c: acute, d: acute });
+    if (finding.ok || finding.code !== "arguments_too_large") problems.push(`the finding's 72 030 bytes: ${finding.ok ? "prepared" : finding.code}`);
+    expect(problems).toEqual([]);
+    expect(MCP_TOOL_ARGUMENTS_MAX_BYTES).toBe(65_536);
+  });
+
   it("a refused preparation sends nothing", async () => {
     const negotiated = await negotiate();
     const fake = fakeMcpServer(byMethod({}));
