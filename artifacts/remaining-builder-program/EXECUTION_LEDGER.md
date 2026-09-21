@@ -2248,3 +2248,33 @@ _(discovery, reproduction and results appended below as they are observed)_
   auth, API MCP, lib MCP, net and http 67 files / 1 107 (+9 env-gated skips); app/api 27 / 1 059; engineering, agent,
   acquisition, AST gates and the acceptance pipeline 147 / 1 728 (+2 env-gated skips); tsc 0; 16 generators with zero
   drift.
+
+### B20-A3 - first dispatch stopped at the live re-read of the authorization pages, before any code; the lead's decisions (2026-09-21 local; workflow, review-fix round + lead; this commit)
+
+- Dispatched on 4299067 to build the MCP client's authorization (RFC 9728 discovery, RFC 8414 / OIDC metadata from a pinned
+  issuer, the client-credentials grant with RFC 8707 `resource`, an in-process token cache, one refresh and one bounded
+  step-up). The task's section 0 re-read (fetched live 2026-09-21) found that the client-credentials extension
+  (`io.modelcontextprotocol/oauth-client-credentials`) lists "Declare support" first for a client: the extension goes in
+  every request's `_meta["io.modelcontextprotocol/clientCapabilities"].extensions`, and a server that requires it can reject
+  a client that does not declare it. No section 4 decision declared a capability - the task's stop condition - so A3
+  stopped before code and no source file changed.
+- The same re-read found three more departures of the task's defaults: the ext-auth draft sends a client secret in the
+  request content (OAuth 2.1 section 2.4.1: the body MUST, HTTP Basic MAY), the reverse of the task's Basic preference; an
+  MCP server MUST implement only ONE of the challenge `resource_metadata` and the well-known URIs, so the proactive default
+  (no token-less request) could not reach a conforming server that publishes its metadata only through the challenge; and
+  implementations SHOULD accept an uppercase scheme and host in the canonical URI, from which the exact `resource`
+  comparison departs.
+- Review of the stop report (four lenses): 4 coverage findings confirmed and fixed test-first. The dated re-read is
+  `mcp-reference-notes.md` section 9, appended (sections 1-8 byte-identical, pinned by sha256, so discovery.md's line
+  citations do not move); `app/lib/mcp/__tests__/b20-a3-live-reread.test.ts` (7 cases) pins the record and this entry; 4
+  mutations caught, the notes restored by sha256 each time.
+- The lead's decisions (`scratchpad/b20/task-A3-lead-decisions.md`, each with the owner's alternative, recorded in OD-62
+  and OD-64 when A3 lands): declare the extension on every request of a client-credentials row only (LD-1); keep HTTP Basic
+  when listed or when the method list is absent, the body method only when it alone is listed, and refuse a list naming
+  neither (LD-2); follow the specification's discovery order - one credential-free probe to read a same-origin 401
+  challenge, then the well-known URIs; a cross-origin challenge URL stays refused, the one recorded departure (LD-3); the
+  first token request asks for the challenge scope, else `scopes_supported`, each intersected with the row ceiling (LD-4);
+  keep the exact `resource` comparison, a recorded departure from the uppercase SHOULD (LD-5). D20-19 and D20-31 stay open
+  until A3 lands.
+- Gates (fix round and lead, one heavy job at a time): lib MCP, net and the CI job-scope guard pass with this entry; tsc 0;
+  eslint clean on the new suite; no generator input changed.
