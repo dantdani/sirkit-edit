@@ -68,7 +68,7 @@ export const MCP_NOTIFICATION_TEXT_MAX_CHARS = 1_000;
 export const MCP_NOTIFICATION_KEY_MAX_CHARS = 128;
 const EMPTY_KEY = "(key)";
 /** what every redaction writes in place of what it removed */
-const REDACTED = "[redacted]";
+export const REDACTED = "[redacted]";
 /** [B20 A1 review-3] what a skeleton drops — combining marks and format (default-ignorable) characters — and how much text it normalises at once */
 const SKELETON_DROPPED = /[\p{M}\p{Cf}]/gu;
 const SKELETON_CHUNK_CHARS = 4_096;
@@ -115,6 +115,14 @@ const MEDIA_TYPE_PATTERN = /^[a-z0-9!#$&^_.+-]{1,64}\/[a-z0-9!#$&^_.+-]{1,64}$/;
 const CHALLENGE_PARAM = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s,"]+))/g;
 const BEARER_CHALLENGE = /(?:^|,)\s*bearer(?![A-Za-z0-9_-])([\s\S]*)$/i;
 const METHODS_WITH_NAME: Readonly<Record<string, "name" | "uri">> = Object.freeze({ "tools/call": "name", "prompts/get": "name", "resources/read": "uri" });
+/**
+ * [B20 A2] `x-mcp-header` mirroring (section 3): the ONE header family a caller may add, and only on the three methods
+ * whose input schema may carry the annotation. The name is `Mcp-Param-` + an RFC 7230 tchar token of at most 64
+ * characters; the value must already be a header field value (the `=?base64?…?=` sentinel included — A2 encodes it).
+ */
+export const MCP_PARAM_HEADER_PATTERN = /^Mcp-Param-[!#$%&'*+.^_`|~0-9A-Za-z-]{1,64}$/;
+export const MCP_PARAM_HEADER_MAX = 16;
+export const MCP_PARAM_HEADER_VALUE_MAX_CHARS = 2_048;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -154,6 +162,13 @@ export interface McpPostOptions {
   protocolVersion?: string;
   /** `_meta["io.modelcontextprotocol/clientCapabilities"]`; `{}` unless A2 declares more. */
   clientCapabilities?: Readonly<Record<string, unknown>>;
+  /**
+   * [B20 A2] `Mcp-Param-{Name}` headers mirroring the `x-mcp-header` properties of the call's arguments. Every name must
+   * match `MCP_PARAM_HEADER_PATTERN` and every value must be a header field value of at most 2 048 characters, at most
+   * 16 of them, on `tools/call`, `prompts/get` or `resources/read` only — otherwise the request is `invalid_request`
+   * and NOTHING is sent. The transport adds no such header by itself and never derives one from the body.
+   */
+  paramHeaders?: Readonly<Record<string, string>>;
   signal?: AbortSignal;
   deps?: McpTransportDeps;
 }
@@ -274,7 +289,7 @@ function isHighSurrogate(code: number): boolean {
  * FIRST: NFKD reorders a run of marks quadratically (100 000 of them take seconds), and without them nothing is left to reorder;
  * the skeleton is the same for every code point either way (checked exhaustively).
  */
-function skeletonOf(text: string): string {
+export function skeletonOf(text: string): string {
   return text.replace(SKELETON_DROPPED, "").normalize("NFKD").replace(SKELETON_DROPPED, "");
 }
 
@@ -285,7 +300,7 @@ function skeletonOf(text: string): string {
  * host). Linear in a text of ANY length, and NFKD (which expands up to 18 x) never sees it whole: chunks of 4 096 characters,
  * never ending inside a surrogate pair, with the tail of each skeleton carried into the next.
  */
-function skeletonCarries(text: string, redact: readonly string[], foldCase = false): boolean {
+export function skeletonCarries(text: string, redact: readonly string[], foldCase = false): boolean {
   const fold = (piece: string): string => (foldCase ? piece.toLowerCase() : piece);
   const secrets = redact.filter((secret) => secret !== "").map(fold);
   if (secrets.length === 0) return false;
@@ -513,8 +528,12 @@ function base64(bytes: Uint8Array): string {
   return out;
 }
 
-function isHeaderSafe(value: string): boolean {
-  if (value === "" || SENTINEL_PATTERN.test(value)) return false;
+/**
+ * [B20 A2] A header field value the transport will put on the wire: non-empty, visible ASCII with space and tab inside
+ * only, and no leading or trailing whitespace. A `=?base64?…?=` sentinel IS one (it is what an unsafe value becomes).
+ */
+export function isHeaderFieldValue(value: string): boolean {
+  if (value === "") return false;
   for (let i = 0; i < value.length; i += 1) {
     const code = value.charCodeAt(i);
     if (!((code >= 0x21 && code <= 0x7e) || code === 0x20 || code === 0x09)) return false;
@@ -522,6 +541,10 @@ function isHeaderSafe(value: string): boolean {
   const first = value.charCodeAt(0);
   const last = value.charCodeAt(value.length - 1);
   return first !== 0x20 && first !== 0x09 && last !== 0x20 && last !== 0x09;
+}
+
+function isHeaderSafe(value: string): boolean {
+  return !SENTINEL_PATTERN.test(value) && isHeaderFieldValue(value);
 }
 
 /** `Mcp-Name` Value Encoding (section 3): the value itself when header-safe, else the `=?base64?…?=` sentinel over its UTF-8. */
@@ -641,6 +664,26 @@ export const defaultTokenProvider: McpTokenProvider = (server, environment) => {
   }
 };
 
+/**
+ * [B20 A2] The redaction subjects of a call to this row: the token `mcpPost` would send for it, or nothing. The client
+ * layers (negotiation, discovery, tool calls) retain server text of their own — instructions, a title, a description, a
+ * cursor — which `mcpPost` redacts only as it redacts a result (the raw text and its skeleton, case-sensitively, since a
+ * result is data). They pass this list to `scrubVendorText` and to `skeletonCarries` so a text that carries the token in
+ * ANY spelling, case-folded included, is replaced whole. It resolves the token through the same provider seam and never
+ * throws: an unavailable, malformed or unexpected credential is simply no subject.
+ */
+export async function mcpRedactionSubjects(server: McpServerRegistryEntry, deps: McpTransportDeps = {}): Promise<readonly string[]> {
+  try {
+    const provider = deps.tokenProvider ?? defaultTokenProvider;
+    const outcome = await provider(server, deps.environment ?? process.env);
+    if (!isPlainObject(outcome) || outcome.ok !== true) return Object.freeze([]);
+    const token = (outcome as { token?: unknown }).token;
+    return typeof token === "string" && token !== "" && isBearerToken(token) ? Object.freeze([token]) : Object.freeze([]);
+  } catch {
+    return Object.freeze([]);
+  }
+}
+
 // ── The in-flight bound ───────────────────────────────────────────────────────
 
 const inFlight = new Map<string, number>();
@@ -658,8 +701,34 @@ export function resetMcpInFlight(): void {
 // ── The request ───────────────────────────────────────────────────────────────
 
 type Prepared =
-  | { ok: true; body: string; requestBytes: number; id: JsonRpcId | null; name: string | null; tool: string | undefined }
+  | { ok: true; body: string; requestBytes: number; id: JsonRpcId | null; name: string | null; tool: string | undefined; paramHeaders: Readonly<Record<string, string>> }
   | { ok: false; code: "invalid_request" | "reserved_meta" | "protocol_version_unsupported"; message: string };
+
+/**
+ * [B20 A2] The `Mcp-Param-*` headers of a request, or a sentence naming the rule that refused them — judged before
+ * anything is sent and never echoing a name or a value. Own keys only, so no inherited name can reach the wire.
+ */
+function paramHeadersOf(method: string, raw: unknown): { ok: true; headers: Record<string, string> } | { ok: false; reason: string } {
+  if (raw === undefined) return { ok: true, headers: {} };
+  if (!isPlainObject(raw)) return { ok: false, reason: "paramHeaders must be an object." };
+  const keys = Object.keys(raw);
+  if (keys.length === 0) return { ok: true, headers: {} };
+  if (METHODS_WITH_NAME[method] === undefined) return { ok: false, reason: `${method} carries no x-mcp-header parameters.` };
+  if (keys.length > MCP_PARAM_HEADER_MAX) return { ok: false, reason: `at most ${MCP_PARAM_HEADER_MAX} Mcp-Param headers may be sent.` };
+  const headers: Record<string, string> = Object.create(null) as Record<string, string>;
+  const seen = new Set<string>();
+  for (const key of keys) {
+    if (!MCP_PARAM_HEADER_PATTERN.test(key)) return { ok: false, reason: "an Mcp-Param header name is not Mcp-Param- followed by a token." };
+    if (seen.has(key.toLowerCase())) return { ok: false, reason: "two Mcp-Param header names differ only in case." };
+    seen.add(key.toLowerCase());
+    const value = raw[key];
+    if (typeof value !== "string" || value.length > MCP_PARAM_HEADER_VALUE_MAX_CHARS || !isHeaderFieldValue(value)) {
+      return { ok: false, reason: "an Mcp-Param header value is not a bounded header field value." };
+    }
+    headers[key] = value;
+  }
+  return { ok: true, headers };
+}
 
 function prepare(server: McpServerRegistryEntry, message: JsonRpcRequest | JsonRpcNotification, options: McpPostOptions, protocolVersion: string): Prepared {
   const invalid = (sentence: string): Prepared => ({ ok: false, code: "invalid_request", message: `MCP server "${server.id}": ${sentence}` });
@@ -706,7 +775,9 @@ function prepare(server: McpServerRegistryEntry, message: JsonRpcRequest | JsonR
   }
   const requestBytes = new TextEncoder().encode(body).byteLength;
   if (requestBytes > MCP_REQUEST_MAX_BYTES) return invalid(`the message exceeds ${MCP_REQUEST_MAX_BYTES} bytes.`);
-  return { ok: true, body, requestBytes, id, name, tool: method === "tools/call" ? name ?? undefined : undefined };
+  const mirrored = paramHeadersOf(method, options.paramHeaders);
+  if (!mirrored.ok) return invalid(mirrored.reason);
+  return { ok: true, body, requestBytes, id, name, tool: method === "tools/call" ? name ?? undefined : undefined, paramHeaders: mirrored.headers };
 }
 
 /** The wire half of D20-20: the request URL's origin and exact path must be the row's endpoint. */
@@ -849,6 +920,8 @@ async function postOnce(server: McpServerRegistryEntry, message: JsonRpcRequest 
       "MCP-Protocol-Version": protocolVersion,
       "Mcp-Method": method,
       ...(sent.name === null ? {} : { "Mcp-Name": encodeMcpNameHeader(sent.name) }),
+      // [B20 A2] the validated `x-mcp-header` mirror; it can never overwrite a header above (the `Mcp-Param-` prefix)
+      ...sent.paramHeaders,
       ...(token === null ? {} : { Authorization: `Bearer ${token}` }),
     };
     const policy: OutboundPolicy = {

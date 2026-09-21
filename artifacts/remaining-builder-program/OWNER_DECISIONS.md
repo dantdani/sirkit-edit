@@ -307,3 +307,42 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   `app/api/mcp/__tests__` is added as a filter by the increment that creates the endpoint (B20-B2). The guard failed
   before the workflow edit and passes after it.
 - The owner may choose otherwise: a separate B20 guard file, or per-suite explicit admission.
+
+## OD-52 — How a FOREIGN MCP tool is named inside Sirkit (B20-A2, 2026-09-20)
+
+- Default applied: a foreign tool's Sirkit-side identity is namespaced and reversible, and is never a Sirkit id. The
+  internal id is `mcp.<serverId>.<name>` and the provider-facing name is `mcp_<serverId>__<name>` mapped by the existing
+  `agentProviderName` function (`app/lib/agent/provider-tools.ts`, unchanged), so both carry the server the tool came
+  from and both map back to exactly one `(serverId, name)`. The server's own `name` still travels on the wire and in
+  `Mcp-Name`; nothing is renamed for the server. A name that spells a `sirkit.` or `mcp.` id (at any case) is refused
+  outright, and one that does not fit the provider alphabet and 64 characters after the mapping, or that collides with a
+  name another accepted tool or another source already holds, is EXCLUDED with a closed reason — never truncated, never
+  renamed, never resolved by guessing. A foreign tool therefore can neither take nor shadow a first-party id
+  (`app/lib/mcp/foreign-tools.ts`; `b20-a2-foreign-tools.test.ts`).
+- This decides the FOREIGN spelling only. How Sirkit names its OWN tools when it exposes them over MCP (the raw registry
+  id `sirkit.pcb.board-inspect` or the provider spelling) is decided in B20-B1, where the exposure subset is built.
+- The owner may choose otherwise: a per-server alias table, or a flat namespace with a collision map.
+
+## OD-58 — How a FOREIGN JSON Schema is validated (B20-A2, 2026-09-20)
+
+- Default applied: in-house, no JSON Schema library and no new runtime dependency (with OD-42). A foreign `inputSchema`
+  or `outputSchema` is accepted only within the PROVEN provider wire subset — the repository's existing
+  `validateSchemaStructure` and `validateWireSubset` (`app/lib/agent/provider-tools.ts`), reused unchanged so the B04 and
+  B09 byte-pinned artifacts cannot drift — plus explicit refusal of `$ref`, `$defs`, `$id`, `$anchor`, `$dynamicRef` and
+  the other identifier keywords anywhere, of a `$schema` that is not 2020-12 or that sits anywhere but the root, of a
+  property named `__proto__` / `constructor` / `prototype`, and of the bounds 32 768 serialised bytes, 8 schema levels,
+  256 subschemas and 64 properties per object, each judged before the work it protects. `x-mcp-header` is the one
+  extension keyword admitted, validated as the specification defines it and narrowed to string, integer and boolean
+  properties. Everything else EXCLUDES the tool with a closed reason; an invalid OUTPUT schema instead keeps the tool
+  without one and records the fact. Nothing is weakened, repaired or guessed, and no network `$ref` is ever
+  dereferenced (the specification forbids it).
+- Review (2026-09-20), the safest reading of three findings that named a decision rather than a defect: (1) an INPUT
+  schema is further narrowed to what the call-time validator (`validateAgainstSchema`, unchanged) evaluates — `anyOf`,
+  type arrays, `null` and `const` are refused there rather than accepted and never callable, or never enforced; (2)
+  `x-mcp-header` stays off `number` and nullable properties (the Value Encoding table's null row is then unreachable,
+  recorded as a limit) instead of widening the encoder; (3) a schema's own text is gated like the tool's — property
+  names in a closed pattern (never a member of `Object.prototype`), enum and const strings bounded and inert, every
+  description and title scanned for a directive and scrubbed, all counted (at most 1 024) before any is scanned, and a
+  directive or the sent token in the OUTPUT schema excludes the tool rather than dropping the schema.
+- The owner may choose otherwise: a vetted JSON Schema 2020-12 validator dependency, with the supply-chain review and
+  the bounded-work qualification that would need.

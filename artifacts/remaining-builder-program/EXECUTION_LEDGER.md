@@ -1999,3 +1999,43 @@ _(discovery, reproduction and results appended below as they are observed)_
   is still quadratic on many `scheme://` runs without `@` (bounded to about 210 ms per call by the scrub budget) and
   `sanitizeModelBoundText` is slow on 100,000 spaces (B19 owner follow-ups); the SSE reader's own count of notifications
   beyond its cap of 64 is not surfaced.
+
+### B20-A2 - negotiation, tool discovery and foreign-descriptor gates of the MCP client (2026-09-20 local; workflow, review workflow, lead; this commit)
+
+- Implemented test-first against the current revision (2026-07-28). The first attempt (`wf_2c08f734-596`) stopped on a usage
+  limit after writing the fake MCP server harness and the 20-case negotiation suite against a module that did not exist yet;
+  both were kept, and the relaunch (`wf_b7c30da6-dd6`) wrote the rest before a restart cut it off ahead of its review, so the
+  review ran as its own workflow (`wf_14729c0f-bc0`) over the finished tree. Four modules: `app/lib/mcp/negotiation.ts`
+  (`discoverMcpServer`: one `server/discover` through `mcpPost`, the newest revision both the row and the server list, exactly
+  one retry on -32022, `legacy_server` for the handshake era with nothing else sent, a strict DiscoverResult, `instructions`
+  and serverInfo display-only and labelled untrusted), `foreign-tools.ts` (`acceptForeignTools`: namespaced reversible ids
+  that can never take or shadow a `sirkit.` id, name / directive / annotation / schema gates with one closed reason each,
+  `x-mcp-header` as the one extension keyword, every accepted descriptor a new frozen object), `tool-discovery.ts`
+  (`listMcpTools`: bounded paging and cursor rules, the listing digest compared against the row's `descriptorPin` - the pin
+  half of D20-20 - and a 64-entry per-process cache honouring `ttlMs` / `cacheScope`), `tool-call.ts` (`callMcpTool`:
+  arguments validated against the accepted schema, the Value Encoding table for `Mcp-Param-{Name}`, `input_required`
+  refused, a `header_mismatch` invalidating the listing); five additive changes to `http-transport.ts` (the `paramHeaders`
+  option and the exports A2 needs); no new dependency. Closes D20-18, the foreign halves of D20-15 and D20-13, and the
+  D20-20 pin comparison. OD-52 (foreign naming) and OD-58 (foreign schemas within the proven wire subset, in-house) recorded.
+- Adversarial review (four lenses, one skeptic each): 35 findings, 33 confirmed (20 distinct), fixed test-first (18 cases
+  failed first; test-strength findings proven against named mutations) and checked by two independent checkers: 33 of 33
+  fixed, 30 revert-sensitive and 3 documentation-only by construction (a null `x-mcp-header` value is refused by the schema
+  validator before the header code runs, so the unreachable branch was removed and the limit stated). The worst: schema
+  descriptions, titles, enum values and property NAMES were copied into the accepted descriptor with no directive scan, no
+  scrub and no token comparison (a directive or the sent token hidden inside `inputSchema` reached the object A4 renders to
+  the model); the sent token, case-flipped, was accepted as a tool NAME and echoed in the internal id and the provider name;
+  a principal scope key of "public" made a private listing's cache key equal the shared one, so a private listing crossed
+  principals; the cache key omitted the reserved provider names, so a cache hit skipped the collision gate; the directive
+  pattern backtracked cubically on server text; a nested `x-mcp-header` parameter was read from the top-level argument of
+  the same leaf name; accepted foreign schemas used constructs the call-time validator rejects; a backwards clock let a
+  cached listing outlive its ttl; the page's line references were unpinned.
+- Gates (lead re-run on the combined tree, one heavy job at a time under the global lock): mcp, net, http 13 files / 422;
+  acquisition, distributor egress and quota, schgen, cross-verify 17 / 242 (+2 env-gated skips); agent, B04 registry, B17-F
+  exposure, no-purchase, build-loop injection 38 / 463; AST import gates and B16.1C tripwires 2 / 29 (ratchet unchanged,
+  162 = 159 + 3 + 0: A2 adds no route); tsc 0; eslint clean on the 10 changed .ts files; the B20 registry, B04 tool-registry
+  and B09 agent generators with zero drift; no CRLF, control characters, console calls or mutation markers. The four A2
+  suites hold 99 cases (32 + 26 + 15 + 26).
+- Open, and taken in the next commit (review round 2): the checkers found 8 further issues - a whole upper-cased token that
+  straddles the display bound surviving as a prefix; enum and const values scanned without treating `_` and `-` as
+  separators, so an underscore-joined directive and a camelCase property name pass; unbudgeted scrub work over schema text;
+  the probe rule classifying the RETRY as `legacy_server`; and four statements on the page that the tests do not back.

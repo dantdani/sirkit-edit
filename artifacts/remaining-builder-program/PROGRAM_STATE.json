@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20-A1 complete (Streamable HTTP transport; three review-fix rounds, independently checked)",
+  "currentCheckpoint": "B20-A2 committed (review round 1 fixed and checked); A2 review round 2 next; B1 complete in the server-track worktree",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "c79b723",
+  "lastGreenSha": "0ae9b57",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B20-A2 test-first: server/discover probe with modern/legacy era detection (OD-41), tools/list with cursor paging, ttlMs/cacheScope cache, descriptor-digest pin comparison, foreign tool gates (name regex + Sirkit namespace prefix, inert bounded title/description with directive refusal, annotations never trusted, x-mcp-header constraints, inputSchema only within the wire subset with $ref rejected and depth/subschema bounds), reserved _meta prefix rejection.",
-  "updatedAt": "2026-09-20T09:12:06-04:00",
+  "nextAction": "A2 review round 2 (8 residual issues) on the main tree; commit B1 in the server-track worktree and launch B2 there; after round 2, merge chapter/b20-mcp-server into chapter/b20-mcp-adapter and launch A3 (task: scratchpad/b20/task-A3.md).",
+  "updatedAt": "2026-09-20T23:32:59-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }
