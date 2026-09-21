@@ -14,9 +14,10 @@
  *   npx tsx scripts/generate-b16-0-8-baseline.ts
  */
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { classifyRouteMethodForm, exportedHttpMethods } from "../app/lib/auth/__tests__/_boundary-analysis";
+import { listRouteFiles, routePathOf } from "../app/lib/auth/route-tree";
 
 /** Test-pinned migration exceptions. MUST stay empty unless an explicit,
  *  reviewed exception is approved — the ratchet test pins this to []. */
@@ -27,21 +28,11 @@ const BASELINE_PATH = join(ROOT, "app", "lib", "auth", "__tests__", "_raw-route-
 
 interface BaselineEntry { method: string; route: string; sha1: string }
 
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out.sort();
-}
-
 export function currentRawMethods(rootDir: string): BaselineEntry[] {
   const entries: BaselineEntry[] = [];
-  for (const file of routeFiles(join(rootDir, "app", "api"))) {
-    const rel = relative(rootDir, file).replaceAll("\\", "/");
-    const route = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+  // [B20 B2] app/api AND app/.well-known, through the one route-tree helper (OD-66)
+  for (const file of listRouteFiles(rootDir)) {
+    const route = routePathOf(rootDir, file);
     const src = readFileSync(file, "utf8");
     for (const method of exportedHttpMethods(src, file)) {
       const c = classifyRouteMethodForm(src, method, file, rootDir);

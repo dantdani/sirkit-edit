@@ -406,6 +406,9 @@ export const APPROVED_ROUTE_WRAPPERS = [
   // [B16.0.24 §E/§F] the body-scope STREAMING agent boundary (sole adopter:
   // /api/chat — gated in b16-0-24-tranche17-confinement).
   "agentStreamRoute",
+  // [B20 B2] the bearer-authenticated MCP endpoint (sole adopter: /api/mcp; tied to the mcp-bearer row both ways in
+  // b20-b2-mcp-route-policy).
+  "mcpBearerJsonRoute",
 ] as const;
 
 export type MethodBoundaryVerdict =
@@ -1315,7 +1318,7 @@ const CANONICAL_REQUEST_SINKS: ReadonlyArray<{ moduleSuffix: string; symbols: re
   { moduleSuffix: "app/lib/auth/authorize.ts", symbols: ["authorizeRequest", "scopedTrustedJson"] },
   { moduleSuffix: "app/lib/auth/request-security.ts", symbols: ["requireSameOrigin", "requireJsonContentType"] },
   { moduleSuffix: "app/lib/auth/trusted-request-context.ts", symbols: ["resolveTrustedRequestContext"] },
-  { moduleSuffix: "app/lib/auth/route-handlers.ts", symbols: ["authenticatedJsonRoute", "authenticatedRoute", "workerJsonRoute", "publicJsonRoute", "publicRoute", "workerRoute", "kicadLibraryRoute", "selectorEnvelopeJsonRoute", "agentStreamRoute"] },
+  { moduleSuffix: "app/lib/auth/route-handlers.ts", symbols: ["authenticatedJsonRoute", "authenticatedRoute", "workerJsonRoute", "publicJsonRoute", "publicRoute", "workerRoute", "kicadLibraryRoute", "selectorEnvelopeJsonRoute", "agentStreamRoute", "mcpBearerJsonRoute"] },
 ];
 function resolvesToCanonicalSink(callee: string, detailed: Map<string, ImportBinding>, fromFile: string, rootDir: string): boolean {
   const b = detailed.get(callee);

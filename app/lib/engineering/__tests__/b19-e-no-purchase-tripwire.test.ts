@@ -20,6 +20,7 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { listControlSurfaceFiles, scanControlSites } from "../control-surface";
 import { DISTRIBUTOR_UPLOAD_URLS } from "@/app/lib/distributor-links";
+import { listRouteFiles } from "@/app/lib/auth/route-tree";
 
 const cwd = process.cwd();
 const PURCHASE_WORDING = /add to cart|checkout|\bbuy\b|place (an )?order|purchase order|order now|project cart|populate your cart/i;
@@ -166,10 +167,9 @@ export function uploadNavigations(name: string, text: string): string[] {
 
 const ORDER_OPERATIONS = /placeOrder|checkout|addToCart|purchaseOrder/;
 
+/** [B20 B2] every route file under app/api AND app/.well-known, through the one route-tree helper (OD-66) */
 function apiRoutes(): string[] {
-  const files: string[] = [];
-  walk(join(cwd, "app/api"), files);
-  return files.map((file) => relative(cwd, file).split(sep).join("/")).filter((file) => /\/route\.ts$/.test(file)).sort();
+  return listRouteFiles(cwd).map((file) => relative(cwd, file).split(sep).join("/")).sort();
 }
 
 /** [B19-E E2 review] the shared admitted clients and the external candidate search reach vendors as surely as a connector does */

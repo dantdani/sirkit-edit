@@ -249,7 +249,8 @@ describe("B11 §D — evaluation matrix and provider parity", () => {
 });
 
 describe("B11 §E — exposure invariants unchanged", () => {
-  it("static exposure is exactly ELEVEN tool ids; no mutation, release, MCP, or multi-agent surface exists", () => {
+  // [B20 B2] retitled (D-13): the count and the "no mutation, release, MCP" clauses were never asserted and are false since B18-C and B20-B2
+  it("static exposure is exactly the reviewed intentional list and every exposed tool is agent-exposable; the trace/replay/evaluation files carry no MCP or multi-agent identifier", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
     for (const descriptor of exposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);

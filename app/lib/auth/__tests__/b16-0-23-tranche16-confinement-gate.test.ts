@@ -7,9 +7,10 @@
  * fails CI here.
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm } from "./_boundary-analysis";
+import { listRouteFiles } from "../route-tree"; // [B20 B2] app/api AND app/.well-known (OD-66); the sole-adopter paths below stay split on /app/api/
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
@@ -42,15 +43,6 @@ function code(rel: string): string {
     .replace(/'(?:\\.|[^'\\])*'/g, "''");
 }
 function raw(rel: string): string { return readFileSync(join(ROOT, rel), "utf8"); }
-function allRouteFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) allRouteFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
 
 describe("B16.0.23 §J — canonical adoption (provenance-checked)", () => {
   it("all thirteen tranche-16 methods classify canonical-wrapper", () => {
@@ -109,7 +101,7 @@ describe("B16.0.23 §J — execution boundary (models/smoke-test + worker + stor
 
 describe("B16.0.23 §J — header-less query-selector confinement", () => {
   it("querySelector is declared ONLY by the five run-family GET readers (repo-wide)", () => {
-    const adopters = allRouteFiles(join(ROOT, "app", "api"))
+    const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("querySelector"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!)
       .sort();

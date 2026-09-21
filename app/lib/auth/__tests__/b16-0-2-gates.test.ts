@@ -20,26 +20,17 @@
  *    approval authority.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allRoutePolicies, policyFor } from "../route-policy";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { collectProductionFiles, moduleImportOffenders } from "../../project/__tests__/_import-gate-helpers";
 import { analyzeMethodBoundary, directBodyReads } from "./_boundary-analysis";
+import { listRouteFiles, routePathOf } from "../route-tree";
 
 const ROOT = process.cwd();
 const METHOD_NAMES = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
-
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
 
 function exportedMethods(source: string): string[] {
   const found = new Set<string>();
@@ -54,10 +45,11 @@ interface RouteFile { path: string; file: string; rel: string; source: string; m
 
 function inventory(): RouteFile[] {
   const results: RouteFile[] = [];
-  for (const file of routeFiles(join(ROOT, "app", "api"))) {
+  // [B20 B2] app/api AND app/.well-known, through the one route-tree helper (OD-66)
+  for (const file of listRouteFiles(ROOT)) {
     const rel = relative(ROOT, file).replaceAll("\\", "/");
     const source = readFileSync(file, "utf8");
-    results.push({ path: "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, ""), file, rel, source, methods: exportedMethods(source) });
+    results.push({ path: routePathOf(ROOT, file), file, rel, source, methods: exportedMethods(source) });
   }
   return results;
 }
@@ -171,7 +163,7 @@ describe("B16.0.4 §C — no production API route directly consumes the request 
   });
 
   it("EVERY body-consuming route uses a recognized bounded authority (readBoundedJson*/scoped*/route-handlers wrapper)", () => {
-    const BOUNDED = /readBoundedJson(Body|Object)|readBoundedStream|scopedTrustedJson|scopedPcbSyncJson|scopedJson|authenticatedJsonRoute|publicJsonRoute|workerJsonRoute|selectorEnvelopeJsonRoute|agentStreamRoute|spiceRunScope|bomScope|pcbSyncScope|scopedCd\d+Json|scopedAssignmentJson|scopedBindingJson|scoped\w*Json/;
+    const BOUNDED = /readBoundedJson(Body|Object)|readBoundedStream|scopedTrustedJson|scopedPcbSyncJson|scopedJson|authenticatedJsonRoute|publicJsonRoute|workerJsonRoute|selectorEnvelopeJsonRoute|agentStreamRoute|mcpBearerJsonRoute|spiceRunScope|bomScope|pcbSyncScope|scopedCd\d+Json|scopedAssignmentJson|scopedBindingJson|scoped\w*Json/;
     // a route with no body read is fine; a route that reads bounded must name an authority
     for (const route of ROUTES) {
       const hasBoundedAuthority = BOUNDED.test(route.source);

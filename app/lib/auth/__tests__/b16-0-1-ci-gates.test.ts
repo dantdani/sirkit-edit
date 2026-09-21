@@ -25,10 +25,11 @@
  *     apply-time reauthorization or approval authority.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allRoutePolicies, policyFor, renderExactRoutePolicyCsv } from "../route-policy";
+import { isRouteTreePath, listRouteFiles, routePathOf } from "../route-tree";
 import { authorizeRequest } from "../authorize";
 import { buildAuthRouteCoverage, LEGACY_HEADER_SCOPE_PATH_PREFIXES } from "../route-coverage";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
@@ -46,17 +47,6 @@ interface RouteMethod { path: string; method: string; file: string }
 
 const METHOD_NAMES = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] as const;
 
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    // Hidden directories (.git, .next, .claude — which hosts agent worktrees with full copies of the tree) are not source.
-    if (entry === "__tests__" || entry === "node_modules" || entry.startsWith(".")) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
-
 function exportedMethods(source: string): string[] {
   const found = new Set<string>();
   for (const name of METHOD_NAMES) {
@@ -67,11 +57,13 @@ function exportedMethods(source: string): string[] {
   return [...found];
 }
 
+// [B20 B2] every route inventory walks app/api AND app/.well-known through the one route-tree helper (OD-66); it skips
+// only __tests__ and node_modules, and it WALKS dot-directories below each root, because Next serves routes there.
 function inventory(): RouteMethod[] {
   const results: RouteMethod[] = [];
-  for (const file of routeFiles(join(ROOT, "app", "api"))) {
-    const rel = relative(ROOT, file).replaceAll("\\", "/");
-    const path = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+  for (const file of listRouteFiles(ROOT)) {
+    const rel = file.slice(ROOT.length + 1).replaceAll("\\", "/");
+    const path = routePathOf(ROOT, file);
     for (const method of exportedMethods(readFileSync(file, "utf8"))) {
       results.push({ path, method, file: rel });
     }
@@ -135,7 +127,7 @@ function identityHeaderReads(files: Map<string, string>): Array<{ file: string; 
 
 describe("B16.0.1 §I — zero caller-identity header reads in production app/api", () => {
   const production = collectProductionFiles(ROOT);
-  const apiFiles = new Map([...production].filter(([path]) => path.startsWith("app/api/")));
+  const apiFiles = new Map([...production].filter(([path]) => isRouteTreePath(path)));
 
   it("the production app/api tree references NO identity header (pinned at ZERO)", () => {
     expect(identityHeaderReads(apiFiles)).toEqual([]);
@@ -166,11 +158,22 @@ describe("B16.0.1 §I — policy invariants", () => {
   });
 
   it("every authenticated non-GET/HEAD human route requires same-origin CSRF", () => {
+    // [B20 B2] OD-44: the bearer-only MCP endpoint (identity source mcp-bearer) is the one non-worker exemption; it never reads a
+    // cookie, and validates a present Origin itself
     const offending = policies.filter(
-      (policy) => policy.requiresAuth && policy.identitySource !== "worker-secret"
+      (policy) => policy.requiresAuth && policy.identitySource !== "worker-secret" && policy.identitySource !== "mcp-bearer"
         && policy.method !== "GET" && policy.method !== "HEAD" && !policy.requiresCsrf,
     );
     expect(offending.map((policy) => `${policy.method} ${policy.path}`)).toEqual([]);
+  });
+
+  it("[B20 B2] the CSRF exemption outside the worker rows is exactly POST /api/mcp (OD-44)", () => {
+    const exempt = policies.filter(
+      (policy) => policy.requiresAuth && policy.identitySource !== "worker-secret"
+        && policy.method !== "GET" && policy.method !== "HEAD" && !policy.requiresCsrf,
+    );
+    expect(exempt.map((policy) => `${policy.method} ${policy.path}`)).toEqual(["POST /api/mcp"]);
+    expect(policies.filter((policy) => policy.identitySource === "mcp-bearer").map((policy) => `${policy.method} ${policy.path}`)).toEqual(["POST /api/mcp"]);
   });
 
   it("public rows carry no credit, no authoritative write, no release", () => {

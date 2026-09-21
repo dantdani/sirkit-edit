@@ -154,11 +154,24 @@ describe("[B19-E E2 review] CI job scope", () => {
 
   it("[B20 A0] the B20 suites: app/lib/mcp is a prompt-to-gerber directory filter; no A0 suite starts PGlite", () => {
     expect(jobFilters("prompt-to-gerber")).toContain("app/lib/mcp");
+    // [B20 B2] the endpoint suites (E-H) run through the app/api/mcp/__tests__ directory filter (OD-59)
+    expect(jobFilters("prompt-to-gerber")).toContain("app/api/mcp/__tests__");
     const b20 = chapterFiles("b20-");
     expect(b20).toEqual(expect.arrayContaining([
       "app/lib/mcp/__tests__/b20-a0-server-registry.test.ts",
       "app/lib/mcp/__tests__/b20-a0-admission-by-server-and-tool.test.ts",
       "app/lib/mcp/__tests__/b20-a0-feature-flag.test.ts",
+      // [B20 B2] the ten B2 suites: none starts PGlite; the app/lib/mcp/server suites ride the app/lib/mcp filter
+      "app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts",
+      "app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts",
+      "app/lib/auth/__tests__/b20-b2-route-tree.test.ts",
+      "app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts",
+      "app/api/mcp/__tests__/b20-b2-mcp-endpoint.test.ts",
+      "app/api/mcp/__tests__/b20-b2-mcp-token-route.test.ts",
+      "app/api/mcp/__tests__/b20-b2-protected-resource-metadata.test.ts",
+      "app/api/mcp/__tests__/b20-b2-own-client-interop.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b2-server-protocol.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts",
     ]));
     expect(b20.filter(startsPostgres)).toEqual([]);
   });
