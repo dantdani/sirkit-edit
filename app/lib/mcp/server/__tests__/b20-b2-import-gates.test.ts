@@ -2,22 +2,22 @@
  * [B20 B2] What the MCP server side may import (AST-resolved over the production tree): the bearer principal module is
  * reachable only from the canonical wrapper module and the MCP server modules; the server modules, the MCP routes and the
  * well-known route REACH — through their whole runtime import closure, not only directly — no grant, execution,
- * reauthorization, invocation, fabrication, egress or client-transport module, import no server auth module directly, and
- * load no module opaquely; the B11 trace files stay free of MCP identifiers.
+ * reauthorization, egress or client-transport module and nothing under pcb/fab but its static preset data, import no server
+ * auth module directly, and load no module opaquely; the B11 trace files stay free of MCP identifiers.
+ *
+ * [B20 B3 review] What this gate no longer proves since B3: the closure now holds the B05 read service (reached from the MCP
+ * tree only through read-call.ts, b20-b3-import-gates G1), the static fabrication preset data, and durable modules that CAN
+ * write — the pcb-sync board repository and lineage store (reached only through the durable read bundle) and the durable
+ * workflow runtime with its Postgres repository (reached only through the read runtime), both pinned by G7. That nothing
+ * reachable over MCP writes a database is enforced at run time: a served read reaches the durable repository only through
+ * `readOnlyDurableWorkflow`, which refuses every write without delegating (b20-b3-durable-read-bundle A12,
+ * b20-b3-mcp-tools-call-reads H10 and H15).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import {
-  PRODUCTION_SOURCE_EXTENSIONS,
-  collectProductionFiles,
-  moduleImportOffenders,
-  moduleReferences,
-  opaqueModuleLoads,
-  resolveSpecifier,
-  type FileMap,
-} from "@/app/lib/project/__tests__/_import-gate-helpers";
+import { collectProductionFiles, moduleImportOffenders, opaqueModuleLoads } from "@/app/lib/project/__tests__/_import-gate-helpers";
+import { importClosure } from "./_import-closure";
 
 const ROOT = process.cwd();
 const production = collectProductionFiles(ROOT);
@@ -34,7 +34,9 @@ const FORBIDDEN = [
   "app/lib/execution-grant/store",
   "app/lib/execution-grant/route-contract",
   "app/lib/project/membership-reauthorization",
-  "app/lib/engineering/tool-invocation", // B3 moves this line deliberately, when tools/call serves reads
+  // [B20 B3] pin move, deliberate: "app/lib/engineering/tool-invocation" left this list when tools/call began serving reads
+  // through the B05 service; b20-b3-import-gates G1 pins that every runtime chain from the MCP tree to it passes through
+  // app/lib/mcp/server/read-call.ts
   "app/lib/mcp/http-transport",
   "app/lib/net/outbound-fetch",
   "app/lib/engineering/pcb-commit-gateway",
@@ -53,84 +55,19 @@ const DIRECT_ONLY = [
   "app/lib/auth/identity-provider",
 ] as const;
 const FAB_PREFIX = "app/lib/pcb/fab/";
+// [B20 B3] pin move: the static fabrication presets are data (JSON in the repository), and every served read reaches them —
+// the readiness read consumes a fab preset, and the B05 bindings' board snapshot (pcb/ai/snapshot.ts) imports them. Every
+// other pcb/fab module (qualification, release, export, the kicad-cli runner) stays forbidden.
+const FAB_DATA = new Set(["app/lib/pcb/fab/presets/index.ts"]);
 const B11_FILES = ["trace.ts", "trace-recorder.ts", "replay-capsule.ts", "replay-context.ts", "evaluation.ts", "evaluation-cases.ts", "pcb-shape-projection.ts", "pcb-shape-types.ts", "generated/pcb-shape-descriptor.ts"];
 
-/** The specifiers a file imports or re-exports for their VALUES (a declaration whose every binding is type-only is erased). */
-function runtimeDeclarationSpecifiers(path: string, source: string): Set<string> {
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, false, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-  const specifiers = new Set<string>();
-  for (const statement of file.statements) {
-    if (ts.isImportDeclaration(statement) && ts.isStringLiteralLike(statement.moduleSpecifier)) {
-      const clause = statement.importClause;
-      const bindings = clause?.namedBindings;
-      const allTypes = bindings !== undefined && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly);
-      const typeOnly = clause !== undefined && (clause.isTypeOnly || (clause.name === undefined && allTypes));
-      if (!typeOnly) specifiers.add(statement.moduleSpecifier.text);
-    } else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier !== undefined && ts.isStringLiteralLike(statement.moduleSpecifier)) {
-      const clause = statement.exportClause;
-      const allTypes = clause !== undefined && ts.isNamedExports(clause) && clause.elements.length > 0 && clause.elements.every((element) => element.isTypeOnly);
-      if (!statement.isTypeOnly && !allTypes) specifiers.add(statement.moduleSpecifier.text);
-    }
-  }
-  return specifiers;
-}
-
-// [B20 B2 lead] Sirkit's filesystems are case-insensitive, like the direct-import helper this closure replaced
-// (_import-gate-helpers.ts referencesModule): a case-variant specifier reaches the same file, so it is resolved by folded path.
-const FOLDED_INDEX = new WeakMap<FileMap, ReadonlyMap<string, string>>();
-function foldedIndex(files: FileMap): ReadonlyMap<string, string> {
-  let index = FOLDED_INDEX.get(files);
-  if (index === undefined) {
-    const built = new Map<string, string>();
-    for (const file of files.keys()) if (!built.has(file.toLowerCase())) built.set(file.toLowerCase(), file);
-    index = built;
-    FOLDED_INDEX.set(files, index);
-  }
-  return index;
-}
-function fileOf(files: FileMap, module: string): string | null {
-  for (const candidate of [module, `${module}/index`]) {
-    for (const extension of PRODUCTION_SOURCE_EXTENSIONS) {
-      const exact = `${candidate}${extension}`;
-      if (files.has(exact)) return exact;
-      const folded = foldedIndex(files).get(exact.toLowerCase());
-      if (folded !== undefined) return folded;
-    }
-  }
-  return null;
-}
-
-/**
- * The runtime import closure of `entries` over `files`, each reached file with the chain that first reaches it: every static
- * import, re-export, import-equals, dynamic import and require whose specifier resolves to a production file is followed,
- * except a declaration whose bindings are all type-only (erased at run time) and an `import("…")` type.
- */
-function importClosure(files: FileMap, entries: readonly string[]): Map<string, readonly string[]> {
-  const chains = new Map<string, readonly string[]>(entries.map((entry) => [entry, [entry]]));
-  const queue = [...entries];
-  while (queue.length > 0) {
-    const file = queue.shift()!;
-    const source = files.get(file)!;
-    const runtime = runtimeDeclarationSpecifiers(file, source);
-    for (const reference of moduleReferences(file, source)) {
-      if (reference.kind === "import-type") continue;
-      if ((reference.kind === "static-import" || reference.kind === "re-export") && !runtime.has(reference.specifier)) continue;
-      const resolution = resolveSpecifier(file, reference.specifier);
-      if (resolution.kind !== "module") continue;
-      const target = fileOf(files, resolution.module);
-      if (target === null || chains.has(target)) continue;
-      chains.set(target, [...chains.get(file)!, target]);
-      queue.push(target);
-    }
-  }
-  return chains;
-}
+// [B20 B3 review] runtimeDeclarationSpecifiers, the case-folded resolution and importClosure moved unchanged to _import-closure.ts
 
 const EXTENSION = /\.[cm]?[jt]sx?$/;
 /** The closure members that are a forbidden module or lie under pcb/fab, each as the chain that reaches it. */
 function forbiddenReached(closure: ReadonlyMap<string, readonly string[]>): string[] {
   const forbidden = new Set<string>(FORBIDDEN);
-  return [...closure].filter(([file]) => forbidden.has(file.replace(EXTENSION, "")) || file.startsWith(FAB_PREFIX)).map(([, chain]) => chain.join(" -> "));
+  return [...closure].filter(([file]) => forbidden.has(file.replace(EXTENSION, "")) || (file.startsWith(FAB_PREFIX) && !FAB_DATA.has(file))).map(([, chain]) => chain.join(" -> "));
 }
 
 describe("[B20 B2] J — the MCP server side's import boundary", () => {
@@ -141,7 +78,7 @@ describe("[B20 B2] J — the MCP server side's import boundary", () => {
     expect(importers).toContain("app/lib/auth/route-handlers.ts");
   });
 
-  it("2. the server modules, /api/mcp and app/.well-known reach no forbidden module and nothing under pcb/fab through their whole runtime import closure, and import no server auth module directly", { timeout: 120_000 }, () => {
+  it("2. the server modules, /api/mcp and app/.well-known reach no forbidden module and nothing under pcb/fab but its static preset data through their whole runtime import closure, and import no server auth module directly", { timeout: 120_000 }, () => {
     expect(serverSide).toEqual(expect.arrayContaining(["app/api/mcp/route.ts", "app/api/mcp/token/route.ts", "app/.well-known/oauth-protected-resource/api/mcp/route.ts", "app/lib/mcp/server/dispatch.ts", "app/lib/mcp/server/protocol.ts"]));
     const closure = importClosure(production, serverSide);
     expect(closure.size).toBeGreaterThan(serverSide.length);
@@ -155,20 +92,21 @@ describe("[B20 B2] J — the MCP server side's import boundary", () => {
     const injected = new Map(production);
     injected.set("app/lib/mcp/server/evil-direct.ts", 'import { createExecutionGrantMinter } from "../../execution-grant/mint";\nexport const x = createExecutionGrantMinter;');
     injected.set("app/lib/mcp/server/evil-hop.ts", 'import { bridge } from "../call-bridge-b2-fixture";\nexport const x = bridge;');
-    injected.set("app/lib/mcp/call-bridge-b2-fixture.ts", 'export { invokeTool as bridge } from "../engineering/tool-invocation";');
-    injected.set("app/lib/mcp/server/evil-dynamic.ts", 'export const load = () => import("../../pcb/fab/presets");');
-    injected.set("app/lib/mcp/server/evil-side-effect.ts", 'import "@/app/lib/pcb/fab/presets";');
+    // [B20 B3] the tripwires retarget from tool-invocation and the fab presets (now reachable by design) to still-forbidden modules
+    injected.set("app/lib/mcp/call-bridge-b2-fixture.ts", 'export { createAgentToolGateway as bridge } from "../agent/gateway";');
+    injected.set("app/lib/mcp/server/evil-dynamic.ts", 'export const load = () => import("../../pcb/fab/release-gate");');
+    injected.set("app/lib/mcp/server/evil-side-effect.ts", 'import "@/app/lib/pcb/fab/release-gate";');
     // [B20 B2 lead] Sirkit's filesystems are case-insensitive: a case-variant specifier reaches the same module and must be followed
-    injected.set("app/lib/mcp/server/evil-case.ts", 'import { invokeTool } from "../../engineering/Tool-Invocation";\nexport const x = invokeTool;');
-    injected.set("app/lib/mcp/server/evil-case-fab.ts", 'import "@/app/lib/pcb/FAB/presets";');
-    injected.set("app/lib/mcp/server/types-only.ts", 'import type { ToolInvocationResult } from "../../engineering/tool-invocation";\nexport type T = ToolInvocationResult;');
+    injected.set("app/lib/mcp/server/evil-case.ts", 'import { createAgentToolGateway } from "../../agent/Gateway";\nexport const x = createAgentToolGateway;');
+    injected.set("app/lib/mcp/server/evil-case-fab.ts", 'import "@/app/lib/pcb/FAB/release-gate";');
+    injected.set("app/lib/mcp/server/types-only.ts", 'import type { AgentGatewayOptions } from "../../agent/gateway";\nexport type T = AgentGatewayOptions;');
     const reached = (entry: string): string[] => forbiddenReached(importClosure(injected, [entry]));
     expect(reached("app/lib/mcp/server/evil-direct.ts")[0]).toBe("app/lib/mcp/server/evil-direct.ts -> app/lib/execution-grant/mint.ts");
-    expect(reached("app/lib/mcp/server/evil-hop.ts")[0]).toBe("app/lib/mcp/server/evil-hop.ts -> app/lib/mcp/call-bridge-b2-fixture.ts -> app/lib/engineering/tool-invocation.ts");
-    expect(reached("app/lib/mcp/server/evil-dynamic.ts")[0]).toBe("app/lib/mcp/server/evil-dynamic.ts -> app/lib/pcb/fab/presets/index.ts");
-    expect(reached("app/lib/mcp/server/evil-side-effect.ts")[0]).toBe("app/lib/mcp/server/evil-side-effect.ts -> app/lib/pcb/fab/presets/index.ts");
-    expect(reached("app/lib/mcp/server/evil-case.ts")[0]).toBe("app/lib/mcp/server/evil-case.ts -> app/lib/engineering/tool-invocation.ts");
-    expect(reached("app/lib/mcp/server/evil-case-fab.ts")[0]).toBe("app/lib/mcp/server/evil-case-fab.ts -> app/lib/pcb/fab/presets/index.ts");
+    expect(reached("app/lib/mcp/server/evil-hop.ts")[0]).toBe("app/lib/mcp/server/evil-hop.ts -> app/lib/mcp/call-bridge-b2-fixture.ts -> app/lib/agent/gateway.ts");
+    expect(reached("app/lib/mcp/server/evil-dynamic.ts")[0]).toBe("app/lib/mcp/server/evil-dynamic.ts -> app/lib/pcb/fab/release-gate.ts");
+    expect(reached("app/lib/mcp/server/evil-side-effect.ts")[0]).toBe("app/lib/mcp/server/evil-side-effect.ts -> app/lib/pcb/fab/release-gate.ts");
+    expect(reached("app/lib/mcp/server/evil-case.ts")[0]).toBe("app/lib/mcp/server/evil-case.ts -> app/lib/agent/gateway.ts");
+    expect(reached("app/lib/mcp/server/evil-case-fab.ts")[0]).toBe("app/lib/mcp/server/evil-case-fab.ts -> app/lib/pcb/fab/release-gate.ts");
     expect(reached("app/lib/mcp/server/types-only.ts")).toEqual([]);
     // the direct-only gate still catches a direct import of a server auth module
     const direct = new Map(scoped);

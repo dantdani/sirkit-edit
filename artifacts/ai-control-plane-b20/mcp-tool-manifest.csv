@@ -24,10 +24,10 @@ sirkit.pcb.via-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.pcb.zone-edit,1.1.0,mutate,2,unbound,no,never_exposed,,,
 sirkit.placement.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
 sirkit.project.canonical-revision-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
-sirkit.project.history-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
+sirkit.project.history-inspect,1.0.0,read,0,bound-read,no,withheld,,,
 sirkit.routing.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
 sirkit.schematic.add-component,1.0.0,mutate,2,unbound,no,not_agent_exposed,,,
-sirkit.schematic.inspect,1.1.0,read,0,bound-read,yes,,true,true,declared
+sirkit.schematic.inspect,1.1.0,read,0,bound-read,no,withheld,,,
 sirkit.schematic.propose-component-replacement,1.0.0,propose,2,bound-proposal,yes,,false,true,declared
 sirkit.schematic.propose-tier1-edit,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
 sirkit.selection.control,1.0.0,view-session,0,bound-view-session,no,view_session,,,

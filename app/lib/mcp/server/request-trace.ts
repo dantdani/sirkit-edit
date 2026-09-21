@@ -2,7 +2,8 @@
  * [B20 B2] The MCP server's request trace `sirkit.mcp-server-request.v1` (D-10; OD-65): one closed record per request the
  * dispatch handled, per process. It names the principal by ids, role, live membership revision and a digest of the token
  * id — never the token, the token id, a header, a method or tool name the server does not serve, or anything else a peer
- * wrote. `AgentTraceIdentity` is untouched: whether B3 widens its provider is B3's decision.
+ * wrote. `AgentTraceIdentity` is untouched: [B20 B3] B3 does not widen its provider (OD-72) — a served read keeps its own closed
+ * record, `sirkit.mcp-read-trace.v1` (read-trace.ts).
  *
  * Refusals of the wrapper, before the dispatch runs, are not traced (a recorded limit). A record outside the closed schema is
  * dropped; a sink that fails never changes the response. The default sink is a per-process ring of 1 000 records.
@@ -18,6 +19,9 @@ export const MCP_SERVER_TRACE_OUTCOMES = Object.freeze([
   "discovered",
   "listed",
   "not_served",
+  // [B20 B3] a listed read served (a success or a replay) or refused with a closed tool-result code (the read trace has the code)
+  "read_served",
+  "read_refused",
   "unknown_tool",
   "arguments_invalid",
   "cursor_refused",

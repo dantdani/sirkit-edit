@@ -10,7 +10,7 @@
  * the agent path stay untouched.
  */
 
-/** The 11 bound reads of project or design state and the 5 inert proposals (the agent set minus the 16 excluded). */
+/** The 9 bound reads B3 serves from durable server state and the 5 inert proposals (the agent set minus the 18 left out). */
 export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS: readonly string[] = Object.freeze([
   "sirkit.component-authority.inspect",           // read: the server-owned component authority records (B13); inspection, never a binding
   "sirkit.manufacturing.readiness-inspect",       // read: a fabrication readiness REPORT (Tier 0); never qualifies, never authorizes a release
@@ -21,14 +21,19 @@ export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS: readonly string[] = Object.freeze
   "sirkit.pcb.via-inspect",                       // read: one net's vias with their padstack binding (B18-E E13)
   "sirkit.placement.propose",                     // propose: a revision-bound layout candidate a human applies (B17-F)
   "sirkit.project.canonical-revision-inspect",    // read: the canonical ProjectRevision digest set
-  "sirkit.project.history-inspect",               // read: the project operation timeline; today bound to the captured timeline snapshot, so B3 serves it from durable history or withholds it (reviewed ratchet move)
   "sirkit.routing.propose",                       // propose: a revision-bound routing candidate a human applies (B17-F)
-  "sirkit.schematic.inspect",                     // read: the schematic component list, counts and digest
   "sirkit.schematic.propose-component-replacement", // propose: a sealed exact-replacement proposal; apply stays human-only (B14)
   "sirkit.schematic.propose-tier1-edit",          // propose: a sealed tier-1 schematic proposal; apply stays human-only (B09)
   "sirkit.validation.connectivity-verify",        // read: board connectivity, a validation read (not fabrication readiness by itself)
   "sirkit.validation.drc-run",                    // read: a DRC run over the canonical board, a validation read (derived cache only)
 ].sort());
 
-/** Admissible ids withheld from MCP by a reviewed decision, one reason comment per id (sorted). Empty at B1. */
-export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([] as string[]);
+/**
+ * Admissible ids withheld from MCP by a reviewed decision, one reason comment per id (sorted). [B20 B3] OD-69: the two reads
+ * whose only input is browser-only state, so no durable server source can serve them (each descriptor is unchanged; restoring
+ * one needs an owner decision and a durable source for its state).
+ */
+export const MCP_WITHHELD_TOOL_IDS: readonly string[] = Object.freeze([
+  "sirkit.project.history-inspect",               // B3 (OD-69): bound to the browser's captured project timeline; no durable history source serves it
+  "sirkit.schematic.inspect",                     // B3 (OD-69): the editor's SchematicState lives in browser storage; no durable table holds it (F4)
+].sort());

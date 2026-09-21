@@ -79,5 +79,7 @@ describe("B16.0.3 §C — a handler that reads a durable source carries a durabl
     // meaningful (proves the check is not vacuous).
     expect(durableCallers.size).toBeGreaterThan(0);
     expect(durableCallers.has("/api/replacement-authority")).toBe(true);
+    // [B20 B3] the MCP endpoint resolves its durable read dependencies inside the wrapper callback
+    expect(durableCallers.has("/api/mcp")).toBe(true);
   });
 });

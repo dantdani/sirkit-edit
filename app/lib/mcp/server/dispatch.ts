@@ -6,12 +6,19 @@
  *  - tools/list: B1's rendering of the MCP subset (`renderMcpToolListing`), filtered to the tools whose `requiredRoles`
  *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private, the registry
  *    and listing digests in `_meta`, no pagination (a cursor is -32602);
- *  - tools/call: a listed tool answers a closed refusal (`not_served`: B3 serves reads, B4 proposals); any other name —
- *    role-filtered, never exposed or nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
+ *  - tools/call: [B20 B3] a listed READ is served by the read pipeline (`read-call.ts`) from the project's durable server
+ *    board; a listed proposal answers a closed refusal (`not_served`: B4 decides each one); any other name — role-filtered,
+ *    never exposed or nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
  *
- * MCP is an adapter here: nothing this module reaches can publish, approve, bind, withdraw, rebind, purchase, qualify or
- * release, run a process, replace state or write a database or file (b20-b2-import-gates). One closed trace record is kept
- * per handled request; anything thrown is the JSON-RPC internal error.
+ * MCP is an adapter here: nothing this module reaches can approve, bind, withdraw, rebind, purchase, qualify or release,
+ * or run a process (b20-b2-import-gates J2). [B20 B3 review] Since B3 its import closure also holds the B05 read service
+ * (through read-call.ts alone, b20-b3-import-gates G1), the static fabrication preset data, and durable modules that CAN
+ * write - pcb-sync snapshot and board PUBLICATION and board-lineage derivation, reached only through the durable read bundle,
+ * and the durable workflow runtime, reached only through the read runtime (G7). [B20 B3 lead] Every one of those writes goes
+ * through `workflow.commit`. That a served read writes no database is enforced at run
+ * time, not by the import gate: the read reaches the durable repository only through `readOnlyDurableWorkflow`, which refuses
+ * every write without delegating (b20-b3-durable-read-bundle A12, b20-b3-mcp-tools-call-reads H10 and H15). One closed trace
+ * record is kept per handled request; anything thrown is the JSON-RPC internal error.
  */
 import type { McpBearerJsonInput } from "../../auth/route-handlers";
 import { mcpServerNowMs } from "../../auth/mcp-bearer";
@@ -33,15 +40,19 @@ import {
   validateMcpRequest,
   type JsonRpcId,
 } from "./protocol";
+import { serveMcpReadCall, type McpReadDependencies } from "./read-call";
 import { MCP_SERVER_TRACE_SCHEMA, recordMcpServerRequest, type McpServerTraceMethod, type McpServerTraceOutcome } from "./request-trace";
 import { MCP_TOOL_LISTING_SCHEMA, renderMcpToolListing, type McpToolDefinition, type McpToolListing } from "./tool-definitions";
 
-/** The text of the closed refusal a listed tool answers until B3/B4 serve it. */
+/** The text of the closed refusal a listed proposal answers until B4 decides it ([B20 B3] listed reads are served). */
 export const MCP_NOT_SERVED_TEXT = "This tool is listed but not yet served; nothing was done." as const;
 
 export interface McpDispatchDeps {
   /** the canonical registry (tests may inject another) */
   readonly registry?: ToolRegistry;
+  /** [B20 B3] the served reads' dependencies, resolved by the route inside the authenticated callback; absent or null, a
+   *  listed read refuses durable_board_unavailable after its call-level checks */
+  readonly reads?: McpReadDependencies | null;
 }
 
 interface ServedListing {
@@ -94,7 +105,7 @@ interface Handled {
   listingDigest: string | null;
 }
 
-function handle(input: McpBearerJsonInput, registry: ToolRegistry): Handled {
+async function handle(input: McpBearerJsonInput, registry: ToolRegistry, reads: McpReadDependencies | null): Promise<Handled> {
   const C = MCP_JSON_RPC_ERROR_CODES;
   const M = MCP_JSON_RPC_MESSAGES;
   const verdict = validateMcpRequest(input.message, input.mcp);
@@ -129,7 +140,16 @@ function handle(input: McpBearerJsonInput, registry: ToolRegistry): Handled {
   if (Object.hasOwn(params, "arguments") && !isPlainObject(params.arguments)) return unknown("arguments_invalid", null);
   const served = servedListing(registry, input.principal.role);
   const name = verdict.name!;
-  if (!served.tools.some((tool) => tool.name === name)) return unknown("unknown_tool", served.listingDigest);
+  const listed = served.tools.find((tool) => tool.name === name);
+  if (!listed) return unknown("unknown_tool", served.listingDigest);
+  // [B20 B3] a listed read is served from the durable server board; a malformed _meta binding is -32602 with HTTP 400
+  const toolVersion = listed._meta["dev.sirkit/toolVersion"];
+  if (registry.get(name, toolVersion)?.operationClass === "read") {
+    const answer = await serveMcpReadCall({ principal: input.principal, toolId: name, toolVersion, params, registry, registryDigest: served.registryDigest, listingDigest: served.listingDigest, signal: input.signal }, reads);
+    if (answer.kind === "invalid_params") return done(mcpErrorResponse(400, id, C.INVALID_PARAMS, M.INVALID_META), "invalid_params", 400, { toolId: name, listingDigest: served.listingDigest });
+    const outcome: McpServerTraceOutcome = answer.outcome === "succeeded" || answer.outcome === "replayed" ? "read_served" : "read_refused";
+    return done(mcpResultResponse(id, answer.result), outcome, 200, { toolId: name, listingDigest: served.listingDigest });
+  }
   const refusal = {
     resultType: "complete",
     content: [{ type: "text", text: MCP_NOT_SERVED_TEXT }],
@@ -157,7 +177,7 @@ export async function handleMcpRequest(input: McpBearerJsonInput, deps: McpDispa
   let handled: Handled;
   try {
     registry = deps.registry ?? sirkitToolRegistry();
-    handled = handle(input, registry);
+    handled = await handle(input, registry, deps.reads ?? null);
   } catch {
     const response = mcpErrorResponse(500, readableMcpRequestId(input?.message), MCP_JSON_RPC_ERROR_CODES.INTERNAL_ERROR, MCP_JSON_RPC_MESSAGES.INTERNAL_ERROR);
     handled = { response, method: traceMethodOf(input?.message), outcome: "internal_error", httpStatus: 500, toolId: null, protocolVersion: "", listingDigest: null };

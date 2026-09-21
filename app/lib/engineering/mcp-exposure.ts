@@ -1,8 +1,8 @@
 /**
  * [B20 B1] THE MCP exposure subset: which of Sirkit's own registry tools an MCP principal may ever be offered (runbook
  * B20-B). Exposure needs BOTH the structural rule here AND the reviewed decision (`mcp-exposure-review.ts`: listed as
- * exposed, not withheld), and the report checks the two against each other in both directions. B1 serves nothing: no
- * endpoint, principal or route (B2), no server-side read (B3), no proposal delivery (B4).
+ * exposed, not withheld), and the report checks the two against each other in both directions. B1 serves nothing:
+ * serving is B2 (endpoint), B3 (reads), B4 (proposals).
  *
  * The MCP set is a SUBSET of the agent set (`agent-exposure.ts`). The agent set is the one reviewed list every model-reach
  * gate derives from; MCP is an adapter around the canonical registry and command bus, so it may narrow that reach and never
@@ -28,7 +28,7 @@ export { INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS };
  * The closed exclusion reasons, in precedence order (the first that applies is THE reason): the never-lists first, then the
  * agent set, then the classes, side effects and bindings MCP cannot serve, then the reviewed decision. The first ten are the
  * structural rule; `withheld` and `not_mcp_reviewed` apply only to a descriptor the structural rule admits.
- * `not_read_or_propose`, `side_effects`, `not_servable`, `withheld` and `not_mcp_reviewed` carry no production id at B1.
+ * `not_read_or_propose`, `side_effects`, `not_servable` and `not_mcp_reviewed` carry no production id ([B20 B3] `withheld` two).
  */
 export const MCP_EXCLUSION_REASONS = Object.freeze([
   "tier3",
