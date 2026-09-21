@@ -351,3 +351,28 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   (16 384 strings, 262 144 characters; beyond it a tool is `schema_text_budget`). No decision changed.
 - The owner may choose otherwise: a vetted JSON Schema 2020-12 validator dependency, with the supply-chain review and
   the bounded-work qualification that would need.
+
+## OD-49 — Selection and view-session controls over MCP (B20-B1, 2026-09-20)
+
+- Default applied: not in the initial MCP subset. The six view-session controls (`sirkit.selection.control`, `sirkit.view.canvas-navigation`, `sirkit.view.layers`, `sirkit.view.measure`, `sirkit.view.pcb3d`, `sirkit.view.reveal-finding`) are excluded with the closed reason `view_session`, and the two reads of an open editor's selection or view state (`sirkit.selection.inspect`, `sirkit.view.read-state`) with `view_state_read`: a view-session command is executed only by the open editor in the user's browser (`view_command_ready` → `ViewSessionBridge`), and an MCP principal has no open editor (D20-7). The rule is structural (`app/lib/engineering/mcp-exposure.ts`: class `view-session`; category `view` or `selection`, or any `*-surface` project state), so a future open-editor tool is excluded without a list edit. B20-B5 stays deferred.
+- The owner may choose otherwise: a server-to-browser delivery path keyed by the captured editor session (B20-B5), after which the view-session tools could be admitted by a reviewed ratchet move.
+
+## OD-52 (first-party part) — MCP names of Sirkit's own tools (B20-B1, 2026-09-20)
+
+- Default applied: a tool Sirkit exposes over MCP is named by its raw registry id (e.g. `sirkit.pcb.board-inspect`): MCP-legal (`^[A-Za-z0-9_.-]{1,128}$`; every registry id matches `^sirkit(\.[a-z0-9][a-z0-9-]*)+$`; the longest exposed id has 46 characters), reversible without a map, and collision-free because registry ids are unique (two exposed versions of one id are refused as exposure drift). A name outside the rule is refused by a typed error, never mapped. The provider adapters keep their `.`→`_` spelling (≤ 64); C1's parity report records the mapping as a documented difference. Foreign (consumed) tool names stay with OD-52's A2 decision.
+- The owner may choose otherwise: the provider spelling on MCP as well (one name everywhere), at the cost of a reverse map on the server.
+
+## OD-55 — External reads over MCP (B20-B1, 2026-09-20)
+
+- Default applied: no. `sirkit.parts.external-search` and `sirkit.parts.evidence-read` are excluded with the closed reason `external_read` (binding `bound-external-read` or the `external-observation` authority): they spend live vendor quota under the agent's 25% share (OD-40), disclose labels only while `agentDisclosure` is unknown (OD-36), and OD-31 (only project members spend live quota) needs the B2 principal and membership binding first. The discovery channel `mcp` never counts the external-observation authority; exposed tools carry `openWorldHint: false`.
+- The owner may choose otherwise: admit them after B2/B3 bind a member principal and OD-36/OD-39 permit the disclosure, by a reviewed ratchet move.
+
+## OD-56 — Output schemas declared to MCP (B20-B1, 2026-09-20)
+
+- Default applied: `outputSchema` is declared only when the registry's output schema passes `validateWireSubset` and `validateSchemaStructure`, has an explicit object root, and contains no cycle and no key named `__proto__`, `constructor` or `prototype`; otherwise it is omitted and the manifest records `omitted (<closed reason>)`. The object-root condition is INFERRED from `structuredContent` being a JSON object that must conform (reference notes §6); it only ever omits more. The declared schema is the registry's own, copied and frozen, not strict-normalized (strict normalization would make optional output fields required-nullable). At B1 all 16 exposed tools declare it; `structuredContent` is emitted only when declared (B3/B4).
+- The owner may choose otherwise: declare nothing until C1 tightens the shallow registry output schemas, or declare the strict-normalized form.
+
+## OD-60 — The `_meta` prefix of Sirkit's MCP tool definitions (B20-B1, 2026-09-20)
+
+- Default applied: Sirkit's identity on each rendered tool lives under `dev.sirkit/`: `dev.sirkit/toolId`, `dev.sirkit/toolVersion`, `dev.sirkit/registryDigest`, `dev.sirkit/operationClass`, `dev.sirkit/permissionTier`. The prefix's second label is neither `modelcontextprotocol` nor `mcp` (the reserved prefixes, reference notes §7), and every key satisfies the specification's key syntax (proven by test). It only keeps Sirkit's keys out of reserved and other vendors' namespaces; no domain ownership is asserted.
+- The owner may choose otherwise: a reverse-DNS prefix of a domain Sirkit controls (change `MCP_META_PREFIX`, `MCP_META_KEYS` and `McpToolMeta` in `app/lib/mcp/server/tool-definitions.ts`, then regenerate the manifest).

@@ -2070,3 +2070,29 @@ _(discovery, reproduction and results appended below as they are observed)_
   and NFKD expands characters up to 18 times, so the scan cost is outside the budget; and three page statements that
   over-state what holds (the retry pass-through, the list of structural refusals that drop an output schema, and
   'bytes' where the code counts UTF-16 characters).
+
+### B20-B1 - the MCP exposure subset and the tool definitions rendered from the registry (2026-09-20/21 local; server-track workflow + lead; 77125bd, merged in 5121891)
+
+- The first increment of the SERVER track, run in parallel with the client track in a separate git worktree
+  (`chapter/b20-mcp-server`, one global heavy-job lock across both trees), then merged into this branch with a normal
+  merge (no file overlapped the client track). Implemented test-first (`wf_28e3e062-cf8`: both suites failed to import
+  and the CI job-scope guard failed 1 of 7 on the unchanged tree): `app/lib/engineering/mcp-exposure.ts` and
+  `mcp-exposure-review.ts` (a tool is MCP-exposed only when the structural rule over its own classification admits it AND
+  the reviewed decision lists it; 16 of the 32 agent-set tools; 25 excluded with one of 12 closed reasons; a removal is a
+  reviewed move to `MCP_WITHHELD_TOOL_IDS`), a deny-by-default discovery channel `mcp` in `tool-discovery.ts` (the four
+  existing channels pinned byte-identical against pre-B1 digests), `app/lib/mcp/server/tool-definitions.ts` (definitions
+  rendered from the registry: raw-id names, the providers' strict input schema, output schemas only within the wire
+  subset, annotations derived only from Sirkit's classification, `_meta` under `dev.sirkit/`; a listing digest bound to
+  the registry digest, never partial), the generator `scripts/generate-b20-mcp-tool-manifest.ts` with the byte-gated
+  `mcp-tool-manifest.csv` / `.json`, and `mcp-exposure.md`. Closes D20-1, D20-2, the exclusion half of D20-33 and the
+  order-and-identity half of D20-14. OD-49, OD-52 (first-party part), OD-55, OD-56 and OD-60 recorded.
+- Adversarial review (four lenses, one skeptic each): 15 findings, 9 confirmed, fixed test-first (13 cases failed first;
+  12 mutations each caught and restored by hash) and checked (9 of 9): a read or proposal that declares a state-writing
+  side effect was admitted (now `side_effects`); the structural rule alone admitted a new agent-set read at runtime, so
+  exposure now also requires the reviewed decision; the B04 import gate could not see B1's import; a registry whose second
+  read answered differently got a partial listing (now `exposure_drift`); four test-strength gaps. The lead corrected one
+  page sentence the checker found (which refusal code each runtime gate uses).
+- Gates (lead re-run in the worktree, under the lock): the B1 suites, mcp and the CI scope guard 8 files / 291;
+  engineering 96 / 1 078; agent, B16.1C tripwires and AST import gates 36 / 423 (ratchet unchanged at 162 = 159 + 3 + 0:
+  B1 adds no route); tsc 0; eslint clean on the 7 changed .ts files; the B04 and B09 generators and the new manifest
+  generator with zero drift. 42 cases in two suites.
