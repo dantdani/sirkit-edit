@@ -4,8 +4,10 @@
  * comparison against the registry's `descriptorPin` (the pin half of D20-20), and a bounded per-process cache that
  * honours `ttlMs` / `cacheScope` under an injected clock and never serves a private listing to another principal.
  */
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetAdmissionControl } from "../../acquisition/admission-control";
+import { canonicalJson } from "../../atomic/stable";
 import { resetMcpInFlight } from "../http-transport";
 import { discoverMcpServer, type McpNegotiatedServer } from "../negotiation";
 import {
@@ -221,6 +223,42 @@ describe("[B20 A2] the listing digest", () => {
     expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(Date.now() - started).toBeLessThan(3_000);
   });
+
+  // [B20 A2 review-2] finding 8: the digest was documented as "sorted by name" but sorted each entry's canonical JSON, which
+  // starts with {"annotations": when a tool has annotations — so an operator recomputing `descriptorPin.toolsListDigest` from
+  // the documented rule got another digest, and Sirkit refused the listing as descriptor_pin_mismatch. The code now sorts by
+  // name. No test pinned a literal digest value, so no pinned value moved: this case pins the RULE, recomputed independently.
+  it("is recomputable from its documented rule: the reduced entries ordered by name, ties by their canonical JSON, nameless entries last", () => {
+    const reduce = (definition: unknown): Record<string, unknown> => {
+      if (typeof definition !== "object" || definition === null || Array.isArray(definition)) return { name: null, definition };
+      const source = definition as Record<string, unknown>;
+      return { name: typeof source.name === "string" ? source.name : null, title: source.title, description: source.description, inputSchema: source.inputSchema, outputSchema: source.outputSchema, annotations: source.annotations };
+    };
+    /** the documented rule: sha256 over the canonical JSON of the list of per-tool canonical strings, in name order */
+    const documented = (definitions: readonly unknown[]): string => {
+      const entries = definitions.map(reduce).map((entry) => ({ name: entry.name as string | null, canonical: canonicalJson(entry) }));
+      const order = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
+      entries.sort((left, right) => {
+        if (left.name !== right.name) {
+          if (left.name === null) return 1;
+          if (right.name === null) return -1;
+          return order(left.name, right.name);
+        }
+        return order(left.canonical, right.canonical);
+      });
+      return `sha256:${createHash("sha256").update(canonicalJson(entries.map((entry) => entry.canonical))).digest("hex")}`;
+    };
+    // the finding's example: name order is a, b, while b's canonical string sorts first — it opens with {"annotations":
+    const a = tool("a");
+    const b = tool("b", { annotations: { readOnlyHint: true } });
+    expect(canonicalJson(reduce(b)) < canonicalJson(reduce(a)), "the example separates the two orders").toBe(true);
+    expect(mcpToolsListDigest([b, a])).toBe(documented([a, b]));
+    expect(mcpToolsListDigest([a, b])).toBe(documented([b, a]));
+    // equal names are ordered by their canonical JSON, and a definition that is not an object (no name) comes last
+    const mixed = ["not a tool", tool("same", { description: "z" }), tool("b"), tool("same", { description: "a" }), 5];
+    expect(mcpToolsListDigest(mixed)).toBe(documented(mixed));
+    expect(mcpToolsListDigest([...mixed].reverse())).toBe(documented(mixed));
+  });
 });
 
 describe("[B20 A2] the descriptor pin (D20-20)", () => {
@@ -414,6 +452,25 @@ describe("[B20 A2] the bounded per-process cache", () => {
       expect(survivor(result, TOKENS[0]!), echo.slice(0, 4)).toBeNull();
       resetAdmissionControl();
     }
+  });
+
+  // [B20 A2 review-2] finding 1 on the listing path: the transport redacts a result case-sensitively, and the case-folded
+  // comparison ran after the display bound, so an upper-cased token ending one past a bound survived as its prefix
+  it("an upper-cased token straddling a display bound inside a listed definition never reaches the listing", async () => {
+    const negotiated = await negotiate(tokenServer);
+    const echo = TOKENS[0]!.toUpperCase();
+    const object = (properties: Record<string, unknown>) => ({ type: "object", properties, required: [], additionalProperties: false });
+    const straddling = [
+      tool("a", { title: `${"t".repeat(120 - echo.length + 1)}${echo}` }),
+      tool("b", { description: `${"d".repeat(1_000 - echo.length + 1)}${echo}` }),
+      tool("c", { inputSchema: object({ q: { type: "string", description: `${"d".repeat(1_000 - echo.length + 1)}${echo}` } }) }),
+      tool("d", { outputSchema: object({ hits: { type: "integer", title: `${"t".repeat(120 - echo.length + 1)}${echo}` } }) }),
+    ];
+    const fake = fakeMcpServer(listing(straddling));
+    const result = await listMcpTools(tokenServer, negotiated, { purpose: "interactive", deps: depsOf(fake, TOKENS[0]!, { clock: () => clock }) });
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expect(result.tools.map((entry) => entry.name)).toEqual(["a", "b", "c", "d"]);
+    expect(survivor(result, TOKENS[0]!)).toBeNull();
   });
 
   it("the cache holds the accepted descriptors and the digest, never the raw definitions or a credential", async () => {

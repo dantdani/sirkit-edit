@@ -11,8 +11,9 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { recordMcpOutcome, resetAdmissionControl } from "../../acquisition/admission-control";
 import {
-  MCP_DIRECTIVE_SCAN_CHARS, MCP_SCHEMA_MAX_BYTES, MCP_SCHEMA_MAX_DEPTH, MCP_SCHEMA_MAX_PROPERTIES, MCP_SCHEMA_MAX_STRINGS, MCP_SCHEMA_MAX_SUBSCHEMAS,
-  MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS, MCP_SCHEMA_VALUE_MAX_CHARS, MCP_TOOL_DESCRIPTION_MAX_CHARS, MCP_TOOL_TITLE_MAX_CHARS, MCP_TOOLS_PER_SERVER_MAX,
+  MCP_DIRECTIVE_SCAN_CHARS, MCP_LISTING_SCRUB_MAX_CHARS, MCP_LISTING_SCRUB_MAX_STRINGS, MCP_SCHEMA_MAX_BYTES, MCP_SCHEMA_MAX_DEPTH, MCP_SCHEMA_MAX_PROPERTIES,
+  MCP_SCHEMA_MAX_STRINGS, MCP_SCHEMA_MAX_SUBSCHEMAS, MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS, MCP_SCHEMA_VALUE_MAX_CHARS, MCP_TOOL_DESCRIPTION_MAX_CHARS,
+  MCP_TOOL_TITLE_MAX_CHARS, MCP_TOOLS_PER_SERVER_MAX,
 } from "../foreign-tools";
 import { MCP_PARAM_HEADER_MAX, MCP_PARAM_HEADER_VALUE_MAX_CHARS, resetMcpInFlight } from "../http-transport";
 import {
@@ -25,7 +26,7 @@ import type { McpServerRegistryEntry } from "../server-registry";
 import { T0 } from "./_fixtures";
 import {
   BIDI_OVERRIDE, byMethod, COMBINING_ACUTE, compatServer, depsOf, discoverResult, ESC, fakeMcpServer, futureServer, json, KELVIN_SIGN, nonInert, rpcError, rpcRaw, rpcResult,
-  server, SERVER_INFO_META, survivor, text, TOKENS, tokenServer, wideServer, ZERO_WIDTH_JOINER, type FakeScript,
+  server, SERVER_INFO_META, survivor, text, TOKENS, tokenServer, wideServer, ZERO_WIDTH_JOINER, type FakeCall, type FakeScript,
 } from "./_fake-mcp-server";
 
 function discover(script: FakeScript, entry: McpServerRegistryEntry = server, token: string = TOKENS[0]!) {
@@ -247,6 +248,27 @@ describe("[B20 A2] legacy_server: the handshake era is A2b and nothing else is s
       resetAdmissionControl();
     }
   });
+
+  // [B20 A2 review-2] finding 4: the probe rule ran inside the attempt loop, so it classified the RETRY as well — a server that
+  // had just answered -32022 (a code only the current revision defines) and then an unrecognised error was `legacy_server`,
+  // A2b's trigger for the handshake era. The rule reads the PROBE only; the retry's answer is passed through as it is.
+  it("after a -32022 refusal the retry's unrecognised answer is passed through as it is, never legacy_server", async () => {
+    const refusal = (call: FakeCall): Response => rpcError(call, -32022, "unsupported", { supported: ["2026-07-28"] });
+    const retries: ReadonlyArray<readonly [string, FakeScript, Record<string, unknown>]> = [
+      ["-32603 on a 200 (the finding's scenario)", (call) => rpcError(call, -32603, "Internal error", undefined, 200), { ok: false, kind: "error", code: -32603, httpStatus: 200 }],
+      ["-32000 on a 400", (call) => rpcError(call, -32000, "legacy range"), { ok: false, kind: "error", code: -32000, httpStatus: 400 }],
+      ["an application code on a 400", (call) => rpcError(call, 1_000, "application error"), { ok: false, kind: "error", code: 1_000, httpStatus: 400 }],
+      ["405", () => text(null, 405), { ok: false, kind: "closed", code: "legacy_or_unknown" }],
+      ["404 with -32601", (call) => rpcError(call, -32601, "method not found", undefined, 404), { ok: false, kind: "closed", code: "method_not_found" }],
+    ];
+    for (const [label, retry, expected] of retries) {
+      const { fake, outcome } = discover((call, index) => (index === 0 ? refusal(call) : retry(call, index)), futureServer);
+      const result = await outcome;
+      expect(result, label).toMatchObject({ ...expected, serverId: "docs-future", protocolVersion: "2026-07-28" });
+      expect(fake.calls.map((call) => call.headers["MCP-Protocol-Version"]), label).toEqual(["2027-01-15", "2026-07-28"]);
+      resetAdmissionControl();
+    }
+  });
 });
 
 describe("[B20 A2] the DiscoverResult is validated strictly", () => {
@@ -419,6 +441,30 @@ describe("[B20 A2] the sent token never reaches a negotiation outcome (S2)", () 
     }
     expect(problems).toEqual([]);
   });
+
+  // [B20 A2 review-2] finding 1 on the negotiation path: the case-folded comparison ran after the display bound, so a whole
+  // upper-cased token ending just past 2 000 (instructions) or 128 (the serverInfo name and version) survived as its prefix
+  it("a whole token straddling the display bound of the instructions or the serverInfo never survives as a prefix, nor what the end of the scrub window keeps", async () => {
+    const token = TOKENS[0]!;
+    const problems: string[] = [];
+    for (const echo of [token.toUpperCase(), token.toLowerCase()]) {
+      for (const shift of [-1, 0, 1]) {
+        const ending = (filler: string, bound: number): string => filler.repeat(bound - echo.length + shift) + echo;
+        const result = discoverResult({ instructions: ending("i", 2_000), _meta: { [SERVER_INFO_META]: { name: ending("n", 128), version: ending("v", 128) } } });
+        const settled = await discover(answering(result), tokenServer, token).outcome;
+        if (!settled.ok) problems.push(`${echo.slice(0, 4)} ${shift}: ${settled.kind}`);
+        const window = survivor(settled, token);
+        if (window !== null) problems.push(`${echo.slice(0, 4)} ending at the bound ${shift}: ${window}`);
+        resetAdmissionControl();
+      }
+      // 4 x 2 000 + 256 characters are read; a redacted secret shape shortens the text and pulls what the window's end kept of
+      // a later token inside the bound
+      const cut = await discover(answering(discoverResult({ instructions: `sk-${"a".repeat(8_256 - 24)} ${echo} tail` })), tokenServer, token).outcome;
+      if (survivor(cut, token) !== null) problems.push(`${echo.slice(0, 4)} cut by the end of the scrub window: ${survivor(cut, token)}`);
+      resetAdmissionControl();
+    }
+    expect(problems).toEqual([]);
+  });
 });
 
 describe("[B20 A2] every other transport outcome is passed through as the closed outcome it is", () => {
@@ -502,7 +548,7 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
     for (const code of ["no_common_version", "legacy_server", "no_tools_capability", "discover_invalid", "unexpected_input_required", "discover_failed", "not_negotiated", "list_invalid", "cursor_invalid", "cursor_loop", "descriptor_pin_mismatch", "not_accepted", "arguments_invalid", "arguments_too_large", "input_required_unsupported", "call_failed", "list_failed"]) {
       expect(section, code).toContain(`\`${code}\``);
     }
-    for (const reason of ["not_an_object", "name_invalid", "credential_echo", "reserved_namespace", "duplicate_name", "name_unrepresentable", "name_collision", "description_directive", "declared_write", "input_schema_missing", "input_schema_too_large", "input_schema_too_deep", "input_schema_too_many_subschemas", "input_schema_too_many_properties", "input_schema_ref_keyword", "input_schema_dialect", "input_schema_unsupported", "x_mcp_header_invalid"]) {
+    for (const reason of ["not_an_object", "name_invalid", "credential_echo", "reserved_namespace", "duplicate_name", "name_unrepresentable", "name_collision", "description_directive", "declared_write", "input_schema_missing", "input_schema_too_large", "input_schema_too_deep", "input_schema_too_many_subschemas", "input_schema_too_many_properties", "input_schema_ref_keyword", "input_schema_dialect", "input_schema_unsupported", "x_mcp_header_invalid", "schema_text_budget"]) {
       expect(section, reason).toContain(`\`${reason}\``);
     }
     for (const file of ["negotiation.ts", "foreign-tools.ts", "tool-discovery.ts", "tool-call.ts"]) expect(section, file).toContain(file);
@@ -528,6 +574,8 @@ describe("[B20 A2] the pages state what this increment delivered (S7)", () => {
       `an integer 0..${spaced(MCP_TTL_MAX_MS)}`,
       `at most ${MCP_PARAM_HEADER_MAX} per tool`,
       `header value of at most ${spaced(MCP_PARAM_HEADER_VALUE_MAX_CHARS)} characters`,
+      // [B20 A2 review-2] the one scrub budget of a listing
+      `at most ${spaced(MCP_LISTING_SCRUB_MAX_STRINGS)} scrubbed strings and ${spaced(MCP_LISTING_SCRUB_MAX_CHARS)} scrubbed characters per listing`,
     ];
     for (const phrase of phrases) expect(section, phrase).toContain(phrase);
   });

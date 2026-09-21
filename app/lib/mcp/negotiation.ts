@@ -21,13 +21,14 @@
  *    at the observation boundary).
  *  - `ttlMs` and `cacheScope` are the caching hints discovery (A2, `tool-discovery.ts`) may honour, each validated to a
  *    closed range and otherwise 0 / "private".
- * Every retained string passes the transport's scrub with the token this row would send as a redaction subject, and then
- * its case-folded skeleton comparison: a text that carries the credential in ANY spelling is replaced whole (S1, S2).
+ * Every retained string passes the transport's scrub with the token this row would send as a redaction subject, and its
+ * case-folded skeleton comparison: a text that carries the credential in ANY spelling is replaced whole (S1, S2).
+ * [B20 A2 review-2] That comparison runs BEFORE the display bound cuts (`scrubDisplayText`), over the scrub's own window.
  * `discoverMcpServer` never throws and never rejects: whatever fails is a closed outcome with a FIXED sentence (S4).
  */
 import type { AdmissionPurpose } from "../acquisition/admission-control";
 import {
-  mcpPost, mcpRedactionSubjects, REDACTED, scrubVendorText, skeletonCarries,
+  mcpPost, mcpRedactionSubjects, REDACTED, scrubDisplayText, skeletonCarries,
   type McpPostAttribution, type McpPostOutcome, type McpPostResult, type McpTransportDeps,
 } from "./http-transport";
 import { MCP_PROTOCOL_VERSION_COMPATIBILITY, MCP_PROTOCOL_VERSION_CURRENT, type McpServerRegistryEntry } from "./server-registry";
@@ -221,12 +222,15 @@ export function readCacheScope(raw: unknown): McpCacheScope {
 
 /**
  * Server text as this client keeps it: scrubbed by the transport's own scrub (inert, bounded, secret shapes and the sent
- * token redacted) and then compared CASE-FOLDED against the token by the transport's skeleton predicate — a text that
- * still carries the credential in any spelling is replaced whole (S2). Null when it is not a string or says nothing.
+ * token redacted) and compared CASE-FOLDED against the token by the transport's skeleton predicate — a text that carries the
+ * credential in any spelling is replaced whole (S2). Null when it is not a string or says nothing.
+ * [B20 A2 review-2] The comparison ran on what the display bound had KEPT, so a whole upper-cased token straddling the bound
+ * survived as its prefix. `scrubDisplayText` compares over the scrub's own window before any cut; what it keeps is compared
+ * once more (bounded, and cheap).
  */
 export function displayText(raw: unknown, maxChars: number, redact: readonly string[]): string | null {
   if (typeof raw !== "string") return null;
-  const text = scrubVendorText(raw, maxChars, redact);
+  const text = scrubDisplayText(raw, maxChars, redact);
   if (text === "") return null;
   return skeletonCarries(text, redact, true) ? REDACTED : text;
 }
@@ -320,11 +324,14 @@ async function negotiate(server: McpServerRegistryEntry, options: McpDiscoverOpt
     if (post.kind === "accepted") return closed(attribution, "discover_invalid", `${subject}: ${DISCOVER_METHOD} was answered as a notification would be.`);
     // [B20 A2 review] the probe rule of the notes (section 3): only a RECOGNISED modern JSON-RPC error means modern — the
     // 2025-11-25 SDK answers the probe 400 + -32000, a stateless handshake-era server 200 + -32601
-    if (post.kind === "error" && !isModernProbeError(post.code)) {
+    // [B20 A2 review-2] it reads the PROBE only: a retry follows a -32022, which only the current revision defines, so the
+    // server has proved it modern and the retry's answer is passed through as it is, never read as the handshake era
+    const probe = attempt === 1;
+    if (probe && post.kind === "error" && !isModernProbeError(post.code)) {
       return closed(attribution, "legacy_server", `${subject}: the server answered ${DISCOVER_METHOD} with a JSON-RPC error no current-revision server sends; the handshake era is not implemented in this increment.`, { compatibilityEraListed: row.compatibilityEraListed });
     }
     if (post.kind !== "closed") return post as McpPassedThroughOutcome;
-    if (post.code === "legacy_or_unknown" || post.code === "method_not_found") {
+    if (probe && (post.code === "legacy_or_unknown" || post.code === "method_not_found")) {
       return closed(attribution, "legacy_server", `${subject}: the server did not answer ${DISCOVER_METHOD} as the current revision defines it; the handshake era is not implemented in this increment.`, { compatibilityEraListed: row.compatibilityEraListed });
     }
     if (post.code !== "unsupported_protocol_version") return post as McpPassedThroughOutcome;

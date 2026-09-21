@@ -24,6 +24,7 @@
  */
 import { canonicalJson, sha256 } from "../atomic/stable";
 import type { AdmissionPurpose } from "../acquisition/admission-control";
+import { compareCodePoints } from "../stable-compare";
 import { acceptForeignTools, boundedJsonCopy, MCP_TOOLS_PER_SERVER_MAX, type McpAcceptedTool, type McpToolExclusion } from "./foreign-tools";
 import { mcpPost, mcpRedactionSubjects, skeletonCarries, type McpPostAttribution, type McpTransportDeps } from "./http-transport";
 import {
@@ -72,7 +73,7 @@ export interface McpToolListing {
   readonly negotiatedVersion: string;
   readonly tools: readonly McpAcceptedTool[];
   readonly excluded: readonly McpToolExclusion[];
-  /** `sha256:<64 hex>` over the server's own definitions, reduced and sorted by name */
+  /** `sha256:<64 hex>` over the server's own definitions, reduced and ordered by name (`mcpToolsListDigest` states the rule) */
   readonly digest: string;
   /** the row's `descriptorPin.toolsListDigest` matched; false when the row carries no pin */
   readonly pinned: boolean;
@@ -110,9 +111,14 @@ function digestValue(value: unknown): unknown {
 
 /**
  * The listing digest: sha256 over the canonical JSON (the repository's helper: sorted keys, stable numbers) of the
- * server's definitions REDUCED to `{name, title, description, inputSchema, outputSchema, annotations}` and sorted by
- * name. It is computed over the RAW values (bounded), so a server cannot change a tool without changing the digest —
- * and it is a hash: no server text is ever echoed by it. `icons`, `_meta` and every unknown field are not covered.
+ * server's definitions REDUCED to `{name, title, description, inputSchema, outputSchema, annotations}`. It is computed over
+ * the RAW values (bounded), so a server cannot change a tool without changing the digest — and it is a hash: no server
+ * text is ever echoed by it. `icons`, `_meta` and every unknown field are not covered.
+ * [B20 A2 review-2] The rule an operator recomputes `descriptorPin.toolsListDigest` by: each reduced definition as its
+ * canonical JSON string; the strings ordered by the definition's `name` (`compareCodePoints`), equal names by the strings
+ * themselves, and a definition without a string name (null) after every named one; then `sha256:` + the hex sha256 of the
+ * canonical JSON of that array of strings. It used to order the strings THEMSELVES, which open with `{"annotations":` when a
+ * tool has annotations: stable, but not the documented name order, so a recomputed pin did not match.
  */
 export function mcpToolsListDigest(definitions: readonly unknown[]): string {
   const reduced = definitions.slice(0, MCP_TOOLS_PER_SERVER_MAX).map((definition) => {
@@ -126,9 +132,16 @@ export function mcpToolsListDigest(definitions: readonly unknown[]): string {
       annotations: digestValue(definition.annotations),
     };
   });
-  const canonical = reduced.map((entry) => canonicalJson(entry));
-  canonical.sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
-  return `sha256:${sha256(canonicalJson(canonical))}`;
+  const entries = reduced.map((entry) => ({ name: entry.name, canonical: canonicalJson(entry) }));
+  entries.sort((left, right) => {
+    if (left.name !== right.name) {
+      if (left.name === null) return 1;
+      if (right.name === null) return -1;
+      return compareCodePoints(left.name, right.name);
+    }
+    return compareCodePoints(left.canonical, right.canonical);
+  });
+  return `sha256:${sha256(canonicalJson(entries.map((entry) => entry.canonical)))}`;
 }
 
 // ── The cache ─────────────────────────────────────────────────────────────────

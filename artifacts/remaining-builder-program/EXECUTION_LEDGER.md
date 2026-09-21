@@ -2039,3 +2039,34 @@ _(discovery, reproduction and results appended below as they are observed)_
   straddles the display bound surviving as a prefix; enum and const values scanned without treating `_` and `-` as
   separators, so an underscore-joined directive and a camelCase property name pass; unbudgeted scrub work over schema text;
   the probe rule classifying the RETRY as `legacy_server`; and four statements on the page that the tests do not back.
+
+### B20-A2 review round 2 - the eight residual issues of the independent check (2026-09-21 local; fix workflow + lead; this commit)
+
+- Fixed test-first by a single-writer fixer (`wf_f5324e1b-350`; 10 of 111 cases failed on the unchanged source; the
+  test-strength items proven against their named mutations, every source restored by sha256) and checked by two
+  independent checkers: 8 of 8 fixed and revert-sensitive.
+  - A whole upper-cased token straddling the display bound survived as a prefix: `scrubDisplayText` in `http-transport.ts`
+    compares case-folded over the same extended window the scrub reads, before any cut, and removes a case-folded prefix
+    at the end of a cut window (a prefix only the skeleton shows replaces the text whole). Used for titles, descriptions,
+    schema text, instructions, serverInfo and tool-call issues through one `displayText`.
+  - Enum and const values and property names read `_`, `-` and camelCase as letters, so the review's own payload was
+    accepted: `readsAsDirective` scans raw and again with those boundaries read as spaces; the tool NAME and an
+    `x-mcp-header` token are judged the same way.
+  - Scrub work over schema text had no per-listing budget: one budget per `acceptForeignTools` call (16 384 strings,
+    262 144 characters - the transport's per-call scrub figure), charged before anything is scrubbed, including a tool's
+    own title and description; a tool over the remaining budget is excluded whole as `schema_text_budget`. 500 worst-case
+    tools: 65 891 ms before, 576 ms after.
+  - The legacy probe rule classified the RETRY: it now applies to the first attempt only.
+  - Four page statements the tests did not back are now pinned or restated (the non-object `paramHeaders` refusal, both
+    sides of the size / property / depth bounds with literal counts, the output-schema drop-versus-exclude branches, and
+    the pin digest now ordered by NAME as documented - recomputed independently by a test).
+- Gates (lead re-run, one heavy job at a time under the global lock): mcp, net, http, acquisition, distributor egress and
+  quota 28 files / 650 (+2 env-gated skips); agent, build-loop injection, B16.1C tripwires, AST import gates 37 / 440;
+  tsc 0; eslint clean. The four A2 suites hold 111 cases.
+- Open, and taken in review round 3: the checkers found 7 further issues - a directive written with other separators
+  (`/`, `+`, `:`, `,`, `|`, `~`, middle dot, em dash) in an enum or const value still passes (medium: it reaches the
+  declaration a model reads); the camelCase rule mis-splits an ALL-CAPS run and never splits a directive with no
+  separators; the skeleton-only prefix branch of `scrubDisplayText` is unpinned; enum and const values are uncharged,
+  and NFKD expands characters up to 18 times, so the scan cost is outside the budget; and three page statements that
+  over-state what holds (the retry pass-through, the list of structural refusals that drop an output schema, and
+  'bytes' where the code counts UTF-16 characters).

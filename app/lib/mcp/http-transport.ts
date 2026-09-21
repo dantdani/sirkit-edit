@@ -257,7 +257,7 @@ function isMethodName(value: unknown): value is string {
 }
 
 /** The characters of a text the scrub reads: 4 x its bound, extended by the longest redaction subject (the sent token; 256 for a secret shape). */
-function scrubWindow(maxChars: number, redact: readonly string[]): number {
+export function scrubWindow(maxChars: number, redact: readonly string[]): number {
   return maxChars * 4 + redact.reduce((longest, secret) => Math.max(longest, secret.length), SECRET_SHAPE_WINDOW_CHARS);
 }
 
@@ -1120,4 +1120,56 @@ function breakerOutcome(result: McpPostResult): McpRequestOutcome {
           return "failure";
       }
   }
+}
+
+// ── Display text of the client layers ─────────────────────────────────────────
+
+/** [B20 A2 review-2] Whether `text` ends with `prefix`, compared ASCII-case-folded: a token is ASCII, and a non-ASCII disguise is the skeleton's to judge. */
+function endsWithFolded(text: string, prefix: string): boolean {
+  if (prefix.length > text.length) return false;
+  const start = text.length - prefix.length;
+  for (let i = 0; i < prefix.length; i += 1) {
+    const left = text.charCodeAt(start + i);
+    const right = prefix.charCodeAt(i);
+    if ((left >= 65 && left <= 90 ? left + 32 : left) !== (right >= 65 && right <= 90 ? right + 32 : right)) return false;
+  }
+  return true;
+}
+
+/** [B20 A2 review-2] `properPrefixLengthAtEnd`, compared case-folded: the longest PROPER prefix of `secret` that `text` ends with. */
+function foldedPrefixLengthAtEnd(text: string, secret: string): number {
+  for (let length = Math.min(secret.length - 1, text.length); length >= 1; length -= 1) if (endsWithFolded(text, secret.slice(0, length))) return length;
+  return 0;
+}
+
+/**
+ * [B20 A2 review-2] Server text a CLIENT layer keeps for display (a negotiation's instructions and serverInfo, a tool's title
+ * and description, a schema's descriptions and titles): `scrubVendorText`, with the sent token compared CASE-FOLDED before
+ * anything is cut. The client layers compared only what the display bound had kept, and for the WHOLE token, so a whole
+ * upper-cased token straddling the bound survived as its prefix — the class A1 review-2 closed for the scrub's own cut. Now
+ * the comparison reads the SAME window the scrub reads (4 x the bound, extended by the longest redaction subject) after the
+ * literal pass: a window whose skeleton still carries the token in any case is replaced WHOLE. At the end of a CUT window a
+ * proper prefix of the token is removed case-folded, and one only the skeleton shows replaces the text whole. The scrub then
+ * reads what is left, so no later cut can turn a token the window held whole into a prefix. Linear: one skeleton pass over
+ * the bounded window; the prefix comparisons are bounded by the token's length.
+ */
+export function scrubDisplayText(raw: unknown, maxChars: number, redact: readonly string[] = []): string {
+  if (typeof raw !== "string") return "";
+  const secrets = redact.filter((secret) => typeof secret === "string" && secret !== "");
+  const size = scrubWindow(maxChars, secrets);
+  const cut = raw.length > size;
+  let text = redactAll(raw.slice(0, cut && isHighSurrogate(raw.charCodeAt(size - 1)) ? size - 1 : size), secrets);
+  if (skeletonCarries(text, secrets, true)) return REDACTED;
+  if (cut) {
+    for (const secret of secrets) text = text.slice(0, text.length - foldedPrefixLengthAtEnd(text, secret));
+    if (NON_ASCII.test(text)) {
+      const skeleton = skeletonOf(text).toLowerCase();
+      const disguised = secrets.some((secret) => {
+        const left = properPrefixLengthAtEnd(skeleton, secret.toLowerCase());
+        return left > 0 && !endsWithFolded(text, secret.slice(0, left));
+      });
+      if (disguised) return REDACTED;
+    }
+  }
+  return scrubVendorText(text, maxChars, secrets);
 }

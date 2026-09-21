@@ -344,5 +344,10 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   names in a closed pattern (never a member of `Object.prototype`), enum and const strings bounded and inert, every
   description and title scanned for a directive and scrubbed, all counted (at most 1 024) before any is scanned, and a
   directive or the sent token in the OUTPUT schema excludes the tool rather than dropping the schema.
+- Review-2 (2026-09-21), stated exactly: (3) holds when the walk of the output schema FINISHES and its retained strings
+  are judged; a structural refusal the walk meets first (a `$` keyword, an `x-mcp-header`, a bound) drops the output schema
+  unjudged, and nothing of it is kept either way. Every string kept verbatim, the tool name included, is read for a
+  directive raw and with `_`, `.`, `-` and camelCase boundaries as spaces, and one listing's scrub work has one budget
+  (16 384 strings, 262 144 characters; beyond it a tool is `schema_text_budget`). No decision changed.
 - The owner may choose otherwise: a vetted JSON Schema 2020-12 validator dependency, with the supply-chain review and
   the bounded-work qualification that would need.

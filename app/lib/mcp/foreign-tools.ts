@@ -27,13 +27,17 @@
  *    and const strings are inert and bounded, every description and title is scanned for a directive and then scrubbed,
  *    and every one of them is compared case-folded with the sent token — a directive or an echo in either schema
  *    excludes the tool. An INPUT schema is accepted only within what the call-time validator evaluates.
+ *    [B20 A2 review-2] Every string kept VERBATIM (the tool name, a property name, an enum or const string, an
+ *    `x-mcp-header` token) is scanned raw and with `_`, `.`, `-` and camelCase boundaries read as spaces; the display text
+ *    is compared with the token before the display bound cuts it; and one listing's scrub work has ONE budget.
  * Every bound is judged BEFORE the work it bounds (S5), every accepted descriptor is a NEW frozen object built field by
  * field (never the server's object, and no key from server data is ever created on it: S6), and `acceptForeignTools`
  * never throws (S4).
  */
 import { agentProviderName } from "../agent/provider-tools";
 import { validateSchemaStructure, validateWireSubset } from "../agent/provider-tools";
-import { MCP_PARAM_HEADER_MAX, REDACTED, scrubVendorText, skeletonCarries, skeletonOf } from "./http-transport";
+import { MCP_PARAM_HEADER_MAX, scrubWindow, skeletonCarries, skeletonOf } from "./http-transport";
+import { displayText } from "./negotiation";
 import { MCP_SERVER_ID_PATTERN, MCP_TOOL_NAME_PATTERN, type McpServerRegistryEntry } from "./server-registry";
 
 /** How many definitions of one server are read at all; the rest are counted (reference notes section 6: paging). */
@@ -55,6 +59,18 @@ export const MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS = 64;
 export const MCP_SCHEMA_VALUE_MAX_CHARS = 256;
 /** How much of a title or description the directive scan reads: more than the scrub's own window, so nothing kept is unread. */
 export const MCP_DIRECTIVE_SCAN_CHARS = 8_192;
+/**
+ * [B20 A2 review-2] The ONE scrub budget of an `acceptForeignTools` call (one listing): how many texts the display scrub reads
+ * and how many characters, each text charged up to its scrub window BEFORE any of the tool's text is scanned or scrubbed (S5).
+ * The scrub runs NFC twice, quadratic in ICU on a run of ill-ordered combining marks, and it was bounded per SCHEMA only: 500
+ * tools could make it read about 7 000 full windows (65.9 s, measured). The characters are the transport's per-call scrub
+ * budget (`MCP_SCRUB_MAX_CHARS_PER_CALL`): one listing scrubs no more than one `mcpPost` may: 0.6 s at that worst case, measured.
+ * The strings bound the fixed cost of one scrub call (about 2.6 microseconds, measured, even for one character): 500 tools
+ * x 32 texts, rounded to a power of two. The safer reading charges the tool's own title and description too: they are the
+ * same work, and 500 of them alone took 5.0 s at the worst case.
+ */
+export const MCP_LISTING_SCRUB_MAX_STRINGS = 16_384;
+export const MCP_LISTING_SCRUB_MAX_CHARS = 262_144;
 /** The Sirkit-side namespaces of a foreign tool (OD-52). */
 export const MCP_FOREIGN_TOOL_ID_PREFIX = "mcp.";
 export const MCP_FOREIGN_PROVIDER_PREFIX = "mcp_";
@@ -66,6 +82,8 @@ const PROTOTYPE_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor",
 const PROPERTY_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 /** [B20 A2 review] what an identifier's separators become before the directive scan, so `IGNORE_PREVIOUS_…` reads as words */
 const IDENTIFIER_SEPARATORS = /[_.-]+/g;
+/** [B20 A2 review-2] camelCase word boundaries: a lower-case letter or a digit before a capital, a capital run before a capitalised word */
+const CAMEL_BOUNDARY = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/g;
 /** [B20 A2 review] what an enum or const string kept verbatim may not carry: the characters the inert scrub would rewrite */
 const NOT_INERT = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u;
 /** [B20 A2 review] the types `validateAgainstSchema` switches on: one string each (a type array, "null", anyOf and const it cannot evaluate) */
@@ -146,7 +164,9 @@ export type McpToolExclusionReason =
   | "input_schema_unsupported"
   | "x_mcp_header_invalid"
   /** [B20 A2 review] the name, a property name, an enum / const string or an `x-mcp-header` token carries the sent token */
-  | "credential_echo";
+  | "credential_echo"
+  /** [B20 A2 review-2] the tool's text would take the listing past its one scrub budget: excluded whole, never partly scrubbed */
+  | "schema_text_budget";
 
 /** One `x-mcp-header` property, as `tool-call.ts` mirrors it into a request header. */
 export interface McpHeaderParameter {
@@ -233,17 +253,6 @@ function define(target: Record<string, unknown>, key: string, value: unknown): v
 }
 
 /**
- * Display text as this client keeps it: the transport's scrub (inert, bounded, the sent token and secret shapes
- * redacted) and then its case-folded skeleton comparison — a text that still carries the credential is replaced whole.
- */
-function displayText(raw: unknown, maxChars: number, redact: readonly string[]): string | null {
-  if (typeof raw !== "string") return null;
-  const text = scrubVendorText(raw, maxChars, redact);
-  if (text === "") return null;
-  return skeletonCarries(text, redact, true) ? REDACTED : text;
-}
-
-/**
  * Whether a title or description reads as an instruction to a model. ONE pass over a BOUNDED, skeleton-folded (NFKD
  * without marks and format characters — a zero-width or fullwidth spelling folds back), lowercased copy, plus the
  * non-printing and bidirectional share of the same bounded text. A text past the scan window is never read: what this
@@ -256,6 +265,18 @@ export function carriesDirective(raw: unknown): boolean {
   const nonPrinting = (bounded.match(NON_PRINTING) ?? []).length;
   if (nonPrinting > NON_PRINTING_MIN && nonPrinting * NON_PRINTING_SHARE_DIVISOR > bounded.length) return true;
   return DIRECTIVE_PATTERN.test(skeletonOf(bounded).toLowerCase());
+}
+
+/**
+ * [B20 A2 review-2] Whether a string kept VERBATIM — the tool name, a property name, an enum or const string, an
+ * `x-mcp-header` token — reads as a directive: scanned raw AND with `_`, `.`, `-` and camelCase boundaries read as spaces.
+ * Every directive marker needs a space, so an enum value was scanned raw and `IGNORE_PREVIOUS_INSTRUCTIONS_…` or
+ * `ignorePreviousInstructions…` passed. Bounded: such a string is at most 256 characters (a tool name 128).
+ */
+function readsAsDirective(text: string): boolean {
+  if (carriesDirective(text)) return true;
+  const words = text.replace(IDENTIFIER_SEPARATORS, " ").replace(CAMEL_BOUNDARY, " ");
+  return words !== text && carriesDirective(words);
 }
 
 /** The four hints, each only when it IS a boolean own property; everything else the server wrote is ignored. */
@@ -272,6 +293,8 @@ function readAnnotations(raw: unknown): McpToolAnnotations {
 
 type SchemaFailure = Extract<McpToolExclusionReason, `input_schema_${string}` | "x_mcp_header_invalid" | "description_directive" | "credential_echo">;
 type SchemaResult = { ok: true; schema: Record<string, unknown>; headers: McpHeaderParameter[] } | { ok: false; reason: SchemaFailure };
+/** [B20 A2 review-2] A schema the walk has read and COUNTED, its retained strings not judged yet: what the budget is charged by */
+type SchemaWalk = { ok: true; schema: Record<string, unknown>; headers: McpHeaderParameter[]; texts: RetainedText[] } | { ok: false; reason: SchemaFailure };
 
 interface Frame {
   source: Record<string, unknown>;
@@ -347,9 +370,11 @@ function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
 
 /**
  * [B20 A2 review] The retained strings of one schema, judged once the walk has counted them: a name or a value carrying the
- * sent token (case-folded skeleton) is `credential_echo`; any of them reading as a directive is `description_directive`
- * (an identifier's separators read as spaces); a description or title that passes is replaced by its scrubbed, bounded
- * text — whole by the marker when it still carries the token — or removed when nothing of it is left.
+ * sent token (case-folded skeleton) is `credential_echo`; any of them reading as a directive is `description_directive`;
+ * a description or title that passes is replaced by its scrubbed, bounded text — whole by the marker when it still carries
+ * the token — or removed when nothing of it is left.
+ * [B20 A2 review-2] A string kept verbatim (a name, an enum or const value, an `x-mcp-header` token) is read raw AND as words
+ * (`readsAsDirective`): an enum or const value used to be read raw only, a name split on `_`, `.` and `-` only.
  */
 function judgeRetainedTexts(texts: readonly RetainedText[], redact: readonly string[]): SchemaFailure | null {
   for (const entry of texts) {
@@ -361,7 +386,7 @@ function judgeRetainedTexts(texts: readonly RetainedText[], redact: readonly str
       continue;
     }
     if (skeletonCarries(entry.text, redact, true)) return "credential_echo";
-    if (carriesDirective(entry.kind === "identifier" ? entry.text.replace(IDENTIFIER_SEPARATORS, " ") : entry.text)) return "description_directive";
+    if (readsAsDirective(entry.text)) return "description_directive";
   }
   return null;
 }
@@ -369,12 +394,13 @@ function judgeRetainedTexts(texts: readonly RetainedText[], redact: readonly str
 /**
  * One foreign schema, read once: the size, then ONE iterative walk that enforces the depth, subschema and property
  * bounds, refuses every `$…` keyword and a foreign dialect, collects the `x-mcp-header` annotations with their path,
- * and builds a fresh copy without them — then the two repository validators over that copy.
+ * and builds a fresh copy without them.
  * [B20 A2 review] The walk also COUNTS every string it retains (at most `MCP_SCHEMA_MAX_STRINGS`, else too large) and holds
- * the two verbatim kinds to their closed shapes; only then are the retained strings scanned (`judgeRetainedTexts`). An
- * INPUT schema (`input`) must also be one the call-time validator evaluates (`callValidatorEvaluates`).
+ * the two verbatim kinds to their closed shapes; none of them is scanned here.
+ * [B20 A2 review-2] The judgement is a second step (`judgeForeignSchema`), so the listing's scrub budget is charged for both
+ * schemas of a tool before any of its text is scanned. A structural refusal ends the walk: its strings are never judged.
  */
-function readForeignSchema(raw: unknown, input: boolean, redact: readonly string[]): SchemaResult {
+function walkForeignSchema(raw: unknown, input: boolean, redact: readonly string[]): SchemaWalk {
   if (!isPlainObject(raw)) return { ok: false, reason: "input_schema_missing" };
   let serialized: string;
   try {
@@ -418,6 +444,8 @@ function readForeignSchema(raw: unknown, input: boolean, redact: readonly string
         // [B20 A2 review] a tchar token can spell a b64token: the sent token, in any case, is never a header name
         if (skeletonCarries(token, redact, true)) return { ok: false, reason: "credential_echo" };
         tokens.add(token.toLowerCase());
+        // [B20 A2 review-2] the token is kept verbatim (a header name): judged with the other retained strings, as a name is
+        if (!retain({ kind: "identifier", text: token })) return { ok: false, reason: "input_schema_too_large" };
         headers.push(Object.freeze({ property: path[path.length - 1]!, path: Object.freeze([...path]), token, header: `Mcp-Param-${token}`, type: type as "string" | "integer" | "boolean" }));
         continue; // the extension keyword never reaches the accepted schema
       }
@@ -487,14 +515,46 @@ function readForeignSchema(raw: unknown, input: boolean, redact: readonly string
       define(frame.target, key, copied.value);
     }
   }
-  // [B20 A2 review] every retained string was counted by the walk: only now is any of them scanned
-  const judged = judgeRetainedTexts(texts, redact);
+  return { ok: true, schema, headers, texts };
+}
+
+/**
+ * The judgement of a walked schema: [B20 A2 review] every retained string was counted by the walk, and only now is any of
+ * them scanned (`judgeRetainedTexts`); then the two repository validators over the copy, and an INPUT schema (`input`) must
+ * also be one the call-time validator evaluates (`callValidatorEvaluates`).
+ */
+function judgeForeignSchema(walked: Extract<SchemaWalk, { ok: true }>, input: boolean, redact: readonly string[]): SchemaResult {
+  const judged = judgeRetainedTexts(walked.texts, redact);
   if (judged !== null) return { ok: false, reason: judged };
+  const schema = walked.schema;
   // a tool's arguments are an object: a string, array or enum root can never describe them (as `toStrictSchema` requires)
   if (schema.type !== "object") return { ok: false, reason: "input_schema_unsupported" };
   if (validateSchemaStructure(schema).length > 0 || validateWireSubset(schema).length > 0) return { ok: false, reason: "input_schema_unsupported" };
   if (input && !callValidatorEvaluates(schema)) return { ok: false, reason: "input_schema_unsupported" };
-  return { ok: true, schema, headers };
+  return { ok: true, schema, headers: walked.headers };
+}
+
+/** [B20 A2 review-2] What one `acceptForeignTools` call has spent of its one scrub budget. */
+interface ScrubBudget { strings: number; chars: number }
+
+/**
+ * [B20 A2 review-2] What the display scrub of one tool would read, counted before any of it runs: one string per text and
+ * each text's characters up to its scrub window (4 x its bound, extended by the longest redaction subject). Nothing is read
+ * but the lengths.
+ */
+function scrubCharge(texts: ReadonlyArray<{ text: unknown; maxChars: number }>, redact: readonly string[]): ScrubBudget {
+  const charge: ScrubBudget = { strings: 0, chars: 0 };
+  for (const { text, maxChars } of texts) {
+    if (typeof text !== "string") continue;
+    charge.strings += 1;
+    charge.chars += Math.min(text.length, scrubWindow(maxChars, redact));
+  }
+  return charge;
+}
+
+/** [B20 A2 review-2] The descriptions and titles of a walked schema: the texts its judgement scrubs. */
+function annotationsOf(walked: SchemaWalk | null): Array<{ text: unknown; maxChars: number }> {
+  return walked !== null && walked.ok ? walked.texts.filter((entry) => entry.kind === "annotation") : [];
 }
 
 function deepFreeze<T>(value: T): T {
@@ -509,7 +569,8 @@ function deepFreeze<T>(value: T): T {
 
 /**
  * Turn one server's tool definitions into accepted descriptors and exclusions. Never throws: a definition that cannot
- * even be read is excluded like any other.
+ * even be read is excluded like any other. [B20 A2 review-2] The call has ONE scrub budget (`MCP_LISTING_SCRUB_MAX_STRINGS`,
+ * `MCP_LISTING_SCRUB_MAX_CHARS`), spent in listing order: a tool whose text would pass what remains is `schema_text_budget`.
  */
 export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unknown, context: McpForeignToolContext = {}): McpForeignToolSet {
   const acceptedTools: McpAcceptedTool[] = [];
@@ -542,11 +603,13 @@ export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unk
   notRead = Math.max(0, rawTools.length - MCP_TOOLS_PER_SERVER_MAX);
   const names = new Set<string>();
   const providerNames = new Set<string>(reserved);
+  // [B20 A2 review-2] ONE scrub budget for the whole call: every tool is charged against what the tools before it spent
+  const budget: ScrubBudget = { strings: 0, chars: 0 };
   for (let index = 0; index < rawTools.length && index < MCP_TOOLS_PER_SERVER_MAX; index += 1) {
     considered += 1;
     const position = index + 1;
     try {
-      const outcome = acceptOne(serverId, rawTools[index], names, providerNames, redact);
+      const outcome = acceptOne(serverId, rawTools[index], names, providerNames, redact, budget);
       if (outcome.ok) {
         names.add(outcome.tool.name);
         providerNames.add(outcome.tool.providerName);
@@ -563,7 +626,7 @@ export function acceptForeignTools(server: McpServerRegistryEntry, rawTools: unk
 
 type AcceptOne = { ok: true; tool: McpAcceptedTool } | { ok: false; reason: McpToolExclusionReason; label?: string };
 
-function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, providerNames: ReadonlySet<string>, redact: readonly string[]): AcceptOne {
+function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, providerNames: ReadonlySet<string>, redact: readonly string[], budget: ScrubBudget): AcceptOne {
   if (!isPlainObject(raw)) return { ok: false, reason: "not_an_object" };
   const name: unknown = raw.name;
   // the length is judged before the pattern: a megabyte-long name meets no regex (S5)
@@ -571,6 +634,9 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   // [B20 A2 review] the alphabet admits a b64token without '+', '/' or '=': a name that IS the sent token, in any case, is
   // refused before any exclusion could echo it, and reported by position only (S2)
   if (skeletonCarries(name, redact, true)) return { ok: false, reason: "credential_echo" };
+  // [B20 A2 review-2] the name is kept verbatim and becomes the provider name a model reads: one that reads as a directive
+  // (`ignore.previous.instructions`, `ignorePreviousInstructions`) is excluded, and reported by position only
+  if (readsAsDirective(name)) return { ok: false, reason: "description_directive" };
   const lower = name.toLowerCase();
   if (RESERVED_NAME_PREFIXES.some((prefix) => lower.startsWith(prefix))) return { ok: false, reason: "reserved_namespace", label: name };
   if (names.has(name)) return { ok: false, reason: "duplicate_name", label: name };
@@ -590,16 +656,38 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   const annotations = readAnnotations(raw.annotations);
   if (annotations.readOnlyHint === false || annotations.destructiveHint === true) return { ok: false, reason: "declared_write", label: name };
 
-  const input = readForeignSchema(raw.inputSchema, true, redact);
+  const inputWalk = walkForeignSchema(raw.inputSchema, true, redact);
+  if (!inputWalk.ok) return { ok: false, reason: inputWalk.reason, label: name };
+  // [B20 A2 review-2] an output schema the WALK refuses (a `$…` keyword, an `x-mcp-header`, a bound) is dropped unjudged: its
+  // strings are never scanned or scrubbed, nothing of it is kept, and it is charged nothing
+  const outputWalk = raw.outputSchema === undefined ? null : walkForeignSchema(raw.outputSchema, false, redact);
+  let outputSchemaDropped = outputWalk !== null && !outputWalk.ok;
+
+  // [B20 A2 review-2] the listing's one scrub budget, charged for everything this tool would scrub — its own title and
+  // description and the descriptions and titles of both schemas — BEFORE any of it is scanned or scrubbed: a tool that would
+  // pass the budget is excluded whole, never partly scrubbed and never accepted unscrubbed
+  const charge = scrubCharge([
+    { text: raw.title, maxChars: MCP_TOOL_TITLE_MAX_CHARS },
+    { text: raw.description, maxChars: MCP_TOOL_DESCRIPTION_MAX_CHARS },
+    ...annotationsOf(inputWalk),
+    ...annotationsOf(outputWalk),
+  ], redact);
+  if (budget.strings + charge.strings > MCP_LISTING_SCRUB_MAX_STRINGS || budget.chars + charge.chars > MCP_LISTING_SCRUB_MAX_CHARS) {
+    return { ok: false, reason: "schema_text_budget", label: name };
+  }
+  budget.strings += charge.strings;
+  budget.chars += charge.chars;
+
+  const input = judgeForeignSchema(inputWalk, true, redact);
   if (!input.ok) return { ok: false, reason: input.reason, label: name };
 
   let outputSchema: Record<string, unknown> | null = null;
-  let outputSchemaDropped = false;
-  if (raw.outputSchema !== undefined) {
-    const output = readForeignSchema(raw.outputSchema, false, redact);
+  if (outputWalk !== null && outputWalk.ok) {
+    const output = judgeForeignSchema(outputWalk, false, redact);
     if (output.ok) outputSchema = output.schema;
     // [B20 A2 review] a directive or the sent token in the output schema is the SERVER's intent, not a malformed schema:
     // the tool is excluded, as for the input schema, rather than kept without its output schema
+    // [B20 A2 review-2] — when the walk FINISHED: a structural refusal met first dropped the schema above, unjudged
     else if (output.reason === "description_directive" || output.reason === "credential_echo") return { ok: false, reason: output.reason, label: name };
     else outputSchemaDropped = true;
   }

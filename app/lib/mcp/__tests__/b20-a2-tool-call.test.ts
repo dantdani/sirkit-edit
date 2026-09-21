@@ -309,6 +309,23 @@ describe("[B20 A2] the transport's additive paramHeaders option", () => {
     expect(problems).toEqual([]);
   });
 
+  // [B20 A2 review-2] finding 5: the string and the array option above are refused by LATER guards too (a string's index keys
+  // pass the 16-header cap, an array's key '0' is no header name), so deleting the non-object refusal passed every row. An
+  // option with no own keys at all is stopped by that refusal alone.
+  it("a paramHeaders option that is not an object and has no own keys is refused by the non-object guard alone: nothing is sent", async () => {
+    const rows: ReadonlyArray<readonly [string, unknown]> = [["5", 5], ["true", true], ["the empty string", ""], ["an empty array", []], ["null", null]];
+    const problems: string[] = [];
+    for (const [label, paramHeaders] of rows) {
+      const fake = fakeMcpServer(() => json({ jsonrpc: "2.0", id: 1, result: { resultType: "complete" } }));
+      const result = await mcpPost(server, message, { purpose: "agent", paramHeaders: paramHeaders as Record<string, string>, deps: depsOf(fake) });
+      if (result.kind !== "closed" || result.code !== "invalid_request") problems.push(`${label}: ${result.kind}/${"code" in result ? result.code : ""}`);
+      if (fake.calls.length !== 0) problems.push(`${label}: ${fake.calls.length} request(s) were sent`);
+      resetAdmissionControl();
+      resetMcpInFlight();
+    }
+    expect(problems).toEqual([]);
+  });
+
   it("sixteen valid headers, the sentinel form and a tab inside a value are sent verbatim", async () => {
     // [B20 A2 review] a value of exactly 2 048 characters, the bound itself, is sent too
     const paramHeaders = {
