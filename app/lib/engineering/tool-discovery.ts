@@ -23,10 +23,13 @@ import {
 } from "./tool-registry";
 import type { ApprovalTier } from "./action-registry";
 import type { EngineeringCapability, ProjectRole } from "./types";
+// [B20 B1] (tag on its own line: the B04 import gate matches only an import line that ends at its semicolon)
+import { mcpExclusionReason } from "./mcp-exposure";
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
-export const DISCOVERY_CHANNELS = ["interactive-ui", "assistant-agent", "automation", "api"] as const;
+/** [B20 B1] `mcp`: the MCP server surface — deny-by-default, only the reviewed MCP subset (mcp-exposure.ts). */
+export const DISCOVERY_CHANNELS = ["interactive-ui", "assistant-agent", "automation", "api", "mcp"] as const;
 export type DiscoveryChannel = (typeof DISCOVERY_CHANNELS)[number];
 
 export const RISK_CEILINGS = ["read", "propose", "mutate", "destructive", "release"] as const;
@@ -104,6 +107,7 @@ export const EXCLUSION_REASONS = [
   "feature_flag_disabled",
   "category_not_requested",
   "budget_exceeded",
+  "not_mcp_exposed", // [B20 B1] agent-exposed, but outside the MCP subset (mcpExclusionReason names the closed reason)
 ] as const;
 export type ExclusionReason = (typeof EXCLUSION_REASONS)[number];
 
@@ -163,6 +167,12 @@ export function discoverTools(registry: ToolRegistry, context: DiscoveryContext)
       // 1-2. Lifecycle + internal-only.
       if (descriptor.lifecycle !== "active") return exclude(descriptor, "lifecycle");
       if (descriptor.discovery === "internal-only") return exclude(descriptor, "internal_only");
+      // [B20 B1] the mcp channel sees ONLY the MCP subset — structurally admissible AND reviewed (listed, not withheld): never
+      // a granted execution, a grant-only tool, an external read, a view-session control, an open-editor read, a state-writing
+      // read or proposal, or an unreviewed tool, whatever the context claims (grants, approvals, authority, ceiling).
+      if (context.channel === "mcp" && mcpExclusionReason(descriptor) !== null) {
+        return exclude(descriptor, descriptor.agentExposed ? "not_mcp_exposed" : "not_agent_exposed");
+      }
       // Channel: agents see only agent-exposed tools (B04 exposes none of the mutation classes; B18-C exposes reviewed
       // granted executions to the assistant-agent channel only).
       if ((context.channel === "assistant-agent" || context.channel === "automation") && !descriptor.agentExposed) {
