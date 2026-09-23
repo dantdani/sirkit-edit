@@ -4,8 +4,10 @@
  *
  *  - server/discover: the DiscoverResult (the same for every caller);
  *  - tools/list: B1's rendering of the MCP subset (`renderMcpToolListing`), filtered to the tools whose `requiredRoles`
- *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private, the registry
- *    and listing digests in `_meta`, no pagination (a cursor is -32602);
+ *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private and the registry
+ *    and listing digests of the caller's WHOLE served listing on every page; [B20 C2] pages of 32 in the listing's own order
+ *    with a secretless recomputed cursor (`tool-pages.ts`, OD-97/OD-98) — a cursor this server would not mint, malformed or
+ *    not, is one identical 200 -32602 that echoes nothing, and the last page carries no `nextCursor`;
  *  - tools/call: [B20 B3] a listed READ is served by the read pipeline (`read-call.ts`) from the project's durable server
  *    board; [B20 B4] no proposal is listed (OD-82, OD-87); any other name — withheld, role-filtered, never exposed or
  *    nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
@@ -46,6 +48,7 @@ import {
 import { serveMcpReadCall, type McpReadDependencies } from "./read-call";
 import { MCP_SERVER_TRACE_SCHEMA, recordMcpServerRequest, type McpServerTraceMethod, type McpServerTraceOutcome } from "./request-trace";
 import { MCP_TOOL_LISTING_SCHEMA, renderMcpToolListing, type McpToolDefinition, type McpToolListing } from "./tool-definitions";
+import { mcpToolsListCursorWellFormed, mcpToolsListPage, mcpToolsListPageSize, type McpToolsListCursorInput } from "./tool-pages"; // [B20 C2] OD-97
 
 /** [B20 B4] The closed refusal of a listed tool with no serving path: none since B4 (every listed tool is a served read), kept as defence. */
 export const MCP_NOT_SERVED_TEXT = "This tool is listed but not yet served; nothing was done." as const;
@@ -125,14 +128,28 @@ async function handle(input: McpBearerJsonInput, registry: ToolRegistry, reads: 
   if (verdict.method === "server/discover") return done(mcpResultResponse(id, renderMcpDiscoverResult()), "discovered", 200);
 
   if (verdict.method === "tools/list") {
-    // no pagination in B2: every cursor (the empty string included) is invalid
-    if (Object.hasOwn(params, "cursor")) return done(mcpErrorResponse(200, id, C.INVALID_PARAMS, M.INVALID_CURSOR), "cursor_refused", 200);
+    // [B20 C2] the SHAPE of a present cursor is judged before the listing is computed: a malformed one (the empty string
+    // included) costs nothing and answers identically whatever the registry does — B2's byte-for-byte answer (OD-97)
+    const cursor: McpToolsListCursorInput = Object.hasOwn(params, "cursor") ? { present: true, value: params.cursor } : { present: false };
+    const cursorRefused = (): Handled => done(mcpErrorResponse(200, id, C.INVALID_PARAMS, M.INVALID_CURSOR), "cursor_refused", 200);
+    if (cursor.present && !mcpToolsListCursorWellFormed(cursor.value)) return cursorRefused();
     const served = servedListing(registry, input.principal.role);
+    const size = mcpToolsListPageSize();
+    const page = mcpToolsListPage(served, cursor, size);
+    if (page.kind === "invalid_cursor") return cursorRefused();
+    // DEFENCE, unreachable from here: `served.tools` is always an array, its digest always the helper's non-empty string
+    // and `size` always inside the reviewed bounds (b20-c2 G9 pins all three). A throw is the same 500 -32603 a refusing
+    // listing answers — which is what a broken listing actually answers, before this line (G12).
+    if (page.kind === "internal") throw new Error("MCP_TOOLS_LIST_PAGE_INTERNAL");
+    // [B20 C2] OD-98: every page carries the same identity — `ttlMs`, `cacheScope` and the digest of the caller's WHOLE
+    // served listing. The key order is B2's, and a single page carries no `nextCursor` key, so a one-page body is
+    // byte-identical to the pre-C2 answer.
     const result = {
       resultType: "complete",
-      tools: served.tools,
+      tools: page.tools,
       ttlMs: MCP_CACHE_TTL_MS,
       cacheScope: "private",
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       _meta: { ...SERVER_INFO_META, "dev.sirkit/registryDigest": served.registryDigest, "dev.sirkit/listingDigest": served.listingDigest },
     };
     return done(mcpResultResponse(id, result), "listed", 200, { listingDigest: served.listingDigest });

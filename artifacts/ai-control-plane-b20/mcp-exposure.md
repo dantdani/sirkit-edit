@@ -139,53 +139,65 @@ B10, B17-F and B18-C discovery suites pass unchanged.
 `renderMcpToolDefinition(descriptor, registryDigest)` returns a new object frozen at every depth, sharing nothing with the
 registry, per the Tool contract of revision 2026-07-28 (`mcp-reference-notes.md` sections 6 and 7):
 
-- `name`: the raw registry id, checked against `app/lib/mcp/server/tool-definitions.ts:27` (`export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;`)
-  before anything else (`app/lib/mcp/server/tool-definitions.ts:237` (`if (!MCP_TOOL_NAME_PATTERN.test(facts.toolId)) throw new McpToolRenderError("name_invalid");`))
+- `name`: the raw registry id, checked against `app/lib/mcp/server/tool-definitions.ts:31` (`export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;`)
+  before anything else (`app/lib/mcp/server/tool-definitions.ts:249` (`if (!MCP_TOOL_NAME_PATTERN.test(facts.toolId)) throw new McpToolRenderError("name_invalid");`))
+  and then, [B20 C3], against the first-party text gate over the id itself
+  (`app/lib/mcp/server/tool-definitions.ts:250` (`if (firstPartyIdIssues(facts.toolId).length > 0) throw new McpToolRenderError("name_invalid");`)),
+  before the exposure decision and carrying nothing back
   (first-party naming, the OD-52 amendment; the longest exposed id is 41 characters, 46 before B4 withheld the proposals); `title` and `description` verbatim.
-- `inputSchema`: `app/lib/mcp/server/tool-definitions.ts:246` (`const strict = strictCompatibility(`) — the SAME conversion
+- `inputSchema`: `app/lib/mcp/server/tool-definitions.ts:259` (`const strict = strictCompatibility(`) — the SAME conversion
   the OpenAI and Anthropic adapters use (`app/lib/agent/provider-tools.ts:289` (`export function strictCompatibility(`)), so for
   every exposed tool the MCP input schema deep-equals the declaration both adapters render (C1's three-way parity starts
   true). A no-argument tool renders `{type: "object", additionalProperties: false, properties: {}, required: []}`. A
   schema outside the proven wire subset, a non-object root, a cycle, a nesting deeper than the scan bound or a key named
   `__proto__`, `constructor` or `prototype` is refused, never weakened.
-- `outputSchema` (OD-56): declared only when the registry's output schema passes the wire-subset and structure checks with
-  an explicit object root and no reserved key (`app/lib/mcp/server/tool-definitions.ts:153` (`function outputDecisionOf(`));
-  otherwise omitted, and the manifest records `omitted (<closed reason>)`. It is the registry's declared schema, copied —
-  not strict-normalized, because strict normalization turns optional fields into required nullable ones, which a
-  conforming output that omits the field would then violate. At B1 all 9 exposed tools declare it (the count since B4's
-move; the seven withheld tools declare one too).
+- `outputSchema` (OD-56, amended by OD-96): declared only when the registry's output schema passes the wire-subset and
+  structure checks with an explicit object root and no reserved key
+  (`app/lib/mcp/server/tool-definitions.ts:158` (`function outputDecisionOf(`)) and — [B20 C1] — Sirkit's own
+  deterministic output validator can EVALUATE it: no `anyOf`, no `const`, no type array, no untyped non-enum node, and no
+  property or `required` name that is an `Object.prototype` member or a reserved key
+  (`app/lib/mcp/server/structured-content.ts:52` (`export function mcpOutputSchemaEvaluable(`)); otherwise omitted with the
+  closed reason `not evaluable by the output validator`, and the manifest records `omitted (<closed reason>)`. It is the
+  registry's declared schema, copied — not strict-normalized, because strict normalization turns optional fields into
+  required nullable ones, which a conforming output that omits the field would then violate.
+  At B1 all 9 exposed tools declare it (the count since B4's move; the seven withheld tools declare one too).
+  [B20 C1] A declared schema BINDS the
+  served success: it carries a `structuredContent` that conforms after the model-safe walk, or the read is refused with
+  B05's closed `invalid_output` (MCP 2026-07-28 server/tools, "Output Schema": servers MUST provide structured results that
+  conform to it); a tool that declares none never carries `structuredContent` (`mcp-server-reads.md` D-9,
+  `app/lib/mcp/server/__tests__/b20-c1-structured-content.test.ts`).
 - `annotations`, derived only from Sirkit's classification: `readOnlyHint` = class `read`
-  (`app/lib/mcp/server/tool-definitions.ts:250` (`readOnlyHint: facts.operationClass === "read",`)), which the rule admits
+  (`app/lib/mcp/server/tool-definitions.ts:274` (`readOnlyHint: facts.operationClass === "read",`)), which the rule admits
   only with no side effect or a derived cache; `destructiveHint` = false (nothing destructive passes the rule);
   `idempotentHint` = the registry idempotency is `natural`, false for `required-key`, `not-applicable` or anything else
-  (`app/lib/mcp/server/tool-definitions.ts:252` (`idempotentHint: facts.idempotency === "natural",`)); `openWorldHint` =
+  (`app/lib/mcp/server/tool-definitions.ts:276` (`idempotentHint: facts.idempotency === "natural",`)); `openWorldHint` =
   false (the external reads are excluded). Fields on the descriptor that look like annotations are ignored.
-- `_meta` under Sirkit's own prefix (OD-60, `app/lib/mcp/server/tool-definitions.ts:30` (`export const MCP_META_PREFIX = "dev.sirkit/"`)),
+- `_meta` under Sirkit's own prefix (OD-60, `app/lib/mcp/server/tool-definitions.ts:34` (`export const MCP_META_PREFIX = "dev.sirkit/"`)),
   whose second label is neither `modelcontextprotocol` nor `mcp` (the reserved ones): `dev.sirkit/toolId`,
   `dev.sirkit/toolVersion`, `dev.sirkit/registryDigest`, `dev.sirkit/operationClass`, `dev.sirkit/permissionTier`.
 
 The one thing these functions throw is `McpToolRenderError`
-(`app/lib/mcp/server/tool-definitions.ts:54` (`export class McpToolRenderError extends Error {`)) with a closed code —
+(`app/lib/mcp/server/tool-definitions.ts:58` (`export class McpToolRenderError extends Error {`)) with a closed code —
 `exposure_drift`, `not_exposable`, `descriptor_invalid`, `name_invalid`, `reserved_key`, `input_schema_not_strict`,
 `registry_digest_invalid` — and a `toolId` only when that id passes the MCP name rule: the constructor itself drops any
-other value (`app/lib/mcp/server/tool-definitions.ts:60` (`const named = typeof toolId === "string" && MCP_TOOL_NAME_PATTERN.test(toolId) ? toolId : null;`)),
+other value (`app/lib/mcp/server/tool-definitions.ts:64` (`const named = typeof toolId === "string" && MCP_TOOL_NAME_PATTERN.test(toolId) ? toolId : null;`)),
 so a refused name is never echoed, whatever a call site hands it. Any other error inside the render, the listing or the
 manifest (a throwing getter, a schema whose key listing throws, a registry whose `digest()` throws) becomes
 `descriptor_invalid`; a registry whose `list()` throws is `exposure_drift` (the report reads it as empty).
 
 ## 6. The listing and its identity (D20-14, order and identity half) — CONFIRMED
 
-`renderMcpToolListing(registry)` (`app/lib/mcp/server/tool-definitions.ts:295` (`export function renderMcpToolListing(`))
+`renderMcpToolListing(registry)` (`app/lib/mcp/server/tool-definitions.ts:319` (`export function renderMcpToolListing(`))
 returns `{tools, listingDigest, registryDigest, excluded}`. It refuses the whole listing when the report is not ok
-(`app/lib/mcp/server/tool-definitions.ts:298` (`if (!report.ok) throw new McpToolRenderError("exposure_drift"`)),
+(`app/lib/mcp/server/tool-definitions.ts:322` (`if (!report.ok) throw new McpToolRenderError("exposure_drift"`)),
 when any exposed descriptor cannot be rendered, or when what it rendered differs from what the report checked (a registry
-whose second read answers differently: `app/lib/mcp/server/tool-definitions.ts:303` (`if (tools.length !== report.count`))
+whose second read answers differently: `app/lib/mcp/server/tool-definitions.ts:327` (`if (tools.length !== report.count`))
 — never a partial list. Tools are sorted by name in code-point order
-(`app/lib/mcp/server/tool-definitions.ts:301` (`tools.sort((a, b) => byCodePoint(a.name, b.name));`)); `excluded` lists
+(`app/lib/mcp/server/tool-definitions.ts:325` (`tools.sort((a, b) => byCodePoint(a.name, b.name));`)); `excluded` lists
 every other descriptor once with its closed reason, sorted by id. The listing digest is the repository's digest helper over
 the schema, the registry digest and the rendered tools
-(`app/lib/mcp/server/tool-definitions.ts:307` (`const listingDigest = engineeringDigest({ schema: MCP_TOOL_LISTING_SCHEMA, registryDigest, tools });`)),
-where the registry digest is `ToolRegistry.digest()` (`app/lib/engineering/tool-registry.ts:391` (`digest(): string {`)). It
+(`app/lib/mcp/server/tool-definitions.ts:331` (`const listingDigest = engineeringDigest({ schema: MCP_TOOL_LISTING_SCHEMA, registryDigest, tools });`)),
+where the registry digest is `ToolRegistry.digest()` (`app/lib/engineering/tool-registry.ts:395` (`digest(): string {`)). It
 is stable under the registry's input order, and changes when any rendered definition changes or the registry digest alone
 changes (so any registry change, even to an excluded descriptor's text, moves it: the registry version is bound in).
 
@@ -203,9 +215,16 @@ The manifest is `mcp-tool-manifest.csv` (one row per registry descriptor: `tool_
   each call (`mcp-server-reads.md`, D20-6/9/10).
 - No proposal delivery: [B20 B4] none in B20 — every proposal is withheld (OD-82, OD-87; the discovery default of OD-50 is
   superseded; `mcp-server-proposals.md`).
-- No pagination, `ttlMs` or `cacheScope` (the C2 half of D20-14, OD-57); no three-way parity report, no title/description
-  lexical gate (C1, C3).
-- Nothing on the client side (A2..A5), and no new dependency (OD-42).
+- [B20 C1] The three-way parity report now exists: `app/lib/mcp/server/tool-parity.ts` and the byte-gated
+  `mcp-parity.{json,md}` (OD-95). [B20 C2] `tools/list` is paged, with `ttlMs` and `cacheScope` on every page (OD-97,
+  OD-98; `app/lib/mcp/server/tool-pages.ts`), closing the C2 half of D20-14; contextual narrowing beyond the caller's role
+  stays out (OD-101). [B20 C3] The first-party tool id, title, description and schema-text gate now exists
+  (`app/lib/engineering/descriptor-text.ts`, OD-99): a closed character set, bounds, a secret shape, markers and closed
+  directive phrases, applied in `validateToolDescriptor` and re-applied by the MCP renderer after the strict conversion;
+  the id is judged by the renderer right after the structural name rule and before the exposure decision, and refused as
+  `name_invalid` carrying nothing, because it is the one descriptor field a model reads verbatim (MCP's tool `name`, and
+  the source of `agentProviderName(toolId)` on both provider paths); annotation-shaped descriptor keys are refused
+  (OD-100). What B1 still does NOT do: nothing on the client side (A2..A5), and no new dependency (OD-42).
 
 ## 8. Stated limits — RECORDED / INFERRED
 
@@ -217,7 +236,10 @@ The manifest is `mcp-tool-manifest.csv` (one row per registry descriptor: `tool_
    `mcp-server-reads.md`). [B20 B4] The five proposals are withheld (OD-82, OD-87), so a `tools/call` naming one is B2's
    identical `-32602` (`mcp-server-proposals.md`).
 3. **RECORDED** — the declared output schemas are the registry's own, which are shallow (`report: {type: "object"}` and
-   similar): an MCP client can check the top level of `structuredContent`, not its contents. Tightening them is C1's.
+   similar): an MCP client can check the top level of `structuredContent`, not its contents. [B20 C1] OD-96 decided NOT to
+   tighten them in B20 (that would change B05's runtime output validation on the agent path and every registry artifact);
+   instead every declared schema must be evaluable, every served success must conform to it, and `mcp-parity.md` lists each
+   tool's opaque output members. Tightening them tool by tool stays an owner option.
 4. **RECORDED** — `idempotentHint` follows the registry's `natural` idempotency, so the five proposals would render it true
    ([B20 B4] none is listed since B4): a repeated call has no additional effect on project state (the result is inert), though
    a routing or placement candidate need not be byte-identical between calls.

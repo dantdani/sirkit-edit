@@ -122,7 +122,7 @@ decoded and equal to a string `params.name` on `tools/call`, absent otherwise (`
 |---|---|
 | `-32700`, `-32600`, `-32022`, `-32020`, `-32602` for missing or invalid `_meta` | 400 |
 | `-32601` | 404 |
-| `-32602` for an unknown tool, a cursor or non-object arguments (one identical body, nothing echoed) | 200 |
+| `-32602` for an unknown tool, a cursor the server did not mint or non-object arguments (one identical body, nothing echoed) | 200 |
 | `-32603` | 500 |
 
 Every JSON-RPC error carries the request's id when it can be read (a valid string or safe-integer id), including the
@@ -132,7 +132,12 @@ never null.
 
 `tools/list` is B1's `renderMcpToolListing` filtered to the tools whose `requiredRoles` include the caller's mapped project
 role (never re-derived; never `discoverTools`): `ttlMs` 60 000, `cacheScope` `private`, `dev.sirkit/registryDigest` and
-`dev.sirkit/listingDigest` (the B1 digest formula over the served subset) in `_meta`, no `nextCursor`. Required authority,
+`dev.sirkit/listingDigest` (the B1 digest formula over the served subset) in `_meta`. [B20 C2] It is PAGED (OD-97, OD-98,
+`app/lib/mcp/server/tool-pages.ts`): pages of 32 cut from that served listing in its own order, a secretless recomputed
+cursor of 20 characters bound to the listing digest, the page size and the offset, `nextCursor` only when a further page
+exists, and the same `ttlMs`, `cacheScope` and whole-listing digests on every page. A cursor the server did not mint —
+malformed or well-formed — is one identical 200 `-32602` that echoes nothing; a malformed one is decided on its shape
+before the listing is computed. Today every role's listing is one page (`mcp-parity.md` section 6). Required authority,
 project state, revision and capability are call-time conditions (B3/B4). A listed tool on `tools/call` answers 200
 `{ resultType: "complete", isError: true, _meta["dev.sirkit/refusal"]: "not_served" }`. [B20 B3] Since B3 that holds for
 the listed proposals only: a listed read is served from the durable server board (`mcp-server-reads.md`). [B20 B4] Since B4
@@ -230,13 +235,40 @@ developers.openai.com/api/docs/guides/tools-connectors-mcp.
    requires no `data`, so the `data.supported` of a missing version header is allowed. The endpoint now sends `requested` and
    leaves an unreadable id out (E5, E6, E15; I3).
 
+7. **[B20 C] The re-read of 2026-09-22 (section 0 of task-C)** — CONFIRMED (fetched live). Sources:
+   modelcontextprotocol.io/specification/2026-07-28/{server/utilities/pagination, server/tools,
+   server/utilities/caching}; the 2026-07-28 schema (raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol,
+   schema/2026-07-28/schema.ts); platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use and
+   platform.claude.com/docs/en/build-with-claude/structured-outputs; developers.openai.com/api/docs/guides/structured-outputs.
+   - Pagination: "The cursor is an opaque string token"; clients "MUST NOT assume a fixed page size" and MUST treat cursors
+     as opaque, an empty string included; the response carries "an optional `nextCursor` field if more results exist";
+     servers SHOULD "provide stable cursors" and "handle invalid cursors gracefully"; "Invalid cursors **SHOULD** result in
+     an error with code -32602 (Invalid params)", with no HTTP status stated (U3 stands: 200). All four of C2's stop
+     conditions hold.
+   - Caching: servers "MUST include caching hints on results with `resultType: "complete"`" for `tools/list` among others;
+     `CacheableResult` declares `ttlMs: number` and `cacheScope: "public" | "private"` as REQUIRED, `PaginatedResult`
+     declares `nextCursor?` as optional; "Each page response carries its own `ttlMs`"; and "Servers **MUST** apply the same
+     `cacheScope` to all response pages for a given list request" — which OD-98's one identity per listing satisfies.
+   - Tools: `Tool.outputSchema` is optional and `CallToolResult.structuredContent` is optional in the schema, but the page's
+     Output Schema rule is normative: "If an output schema is provided: Servers **MUST** provide structured results that
+     conform to this schema." That upgrades C1's D2 from INFERRED to CONFIRMED on this revision (OD-96). `tools/list`
+     "**MUST NOT** vary per-connection or as a side effect of other requests", though it "**MAY** vary by the authorization
+     presented on the request" — the ground for OD-101's role-only variation.
+   - Provider strict modes (runbook §"where each protocol permits"): every keyword of `WIRE_SUBSET_KEYWORDS` is still
+     accepted. Anthropic's structured-outputs limitations list `anyOf`, `const`, `enum`, `items`, `additionalProperties`
+     (which "must be set to `false` for objects") and `description` as supported, and reject numeric, string and array
+     constraints — exactly the keywords B09 already refuses. RECORDED, not a stop: `title` is not named in that supported
+     list, and no exposed Sirkit schema uses `title` as a schema keyword; whether to drop it from the wire subset is a
+     follow-up for the owner, not C's to decide. OpenAI's structured-outputs guide states the subset without enumerating
+     it; its examples use `type`, `properties`, `required`, `additionalProperties`, `items`, `enum` and `description`.
+
 ## 12. UNKNOWNs settled
 
 | # | item | settlement |
 |---|---|---|
 | U1 | Next serves `app/.well-known` route handlers | INFERRED (route discovery ignores only `_`-prefixed parts); the wire proof is B20-D3 |
 | U2 | 405 for the unexported GET and DELETE on `/api/mcp` | UNKNOWN until B20-D3; no policy row exists for either (E12) |
-| U3 | HTTP status of a request-level `-32602` | unknown tool, cursor, arguments 200; missing `_meta` 400 (re-read item 1) |
+| U3 | HTTP status of a request-level `-32602` | unknown tool, a cursor the server did not mint, arguments 200; missing `_meta` 400 (re-read item 1) |
 | U4 | RFC field names, credential syntax; the `authorization_servers` MUST | as designed; the MUST CONFIRMED (section 9) |
 | U5 | B1's API and `x-mcp-header` | `renderMcpToolListing` used as landed; no exposed tool declares `x-mcp-header`, so every `Mcp-Param-*` is refused |
 | U6 | the b16-0-4 / b16-0-7 matrices current on the base tree | CONFIRMED current (both generators on `77125bd`: zero diff) |

@@ -20,6 +20,7 @@
  */
 
 import { ACTION_COVERAGE_REGISTRY, type ApprovalTier } from "./action-registry";
+import { annotationFieldIssues, firstPartyTextIssues } from "./descriptor-text"; // [B20 C3] OD-99, OD-100
 import { GRANTED_EXECUTION_TOOLS, grantedExecutionViolations, type GrantedExecutionTool } from "./granted-execution-families"; // [B18-C]
 import { canonicalJson, engineeringDigest } from "./stable";
 import type { EngineeringCapability, ProjectRole } from "./types";
@@ -192,6 +193,9 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
   if (!oneOf(descriptor.lifecycle, TOOL_LIFECYCLES)) err("invalid or missing lifecycle");
   if (!descriptor.owningCommandId || !knownCommandIds.has(descriptor.owningCommandId)) err(`unknown B01 command reference ${descriptor.owningCommandId ?? "(missing)"}`);
   if (!descriptor.title?.trim() || !descriptor.description?.trim()) err("title and description are required");
+  // [B20 C3] the first-party text gate (OD-99) and the annotation-field rule (OD-100): every registry and every adapter
+  // inherits them here. The issues are fixed sentences that never echo the judged text.
+  for (const issue of [...firstPartyTextIssues(descriptor), ...annotationFieldIssues(descriptor)]) err(issue);
   if (!oneOf(descriptor.category, TOOL_CATEGORIES)) err("invalid or missing category");
   if (!oneOf(descriptor.operationClass, TOOL_OPERATION_CLASSES)) err("invalid or missing operation class");
   if (!descriptor.inputSchema || typeof descriptor.inputSchema !== "object") err("input schema is required");

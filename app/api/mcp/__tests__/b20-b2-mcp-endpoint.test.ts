@@ -585,7 +585,9 @@ describe("[B20 B2] E7 — methods", () => {
     expect(new Set(Object.values(seen)).size).toBeGreaterThan(1);
   });
 
-  it("a cursor is 200 -32602 (no pagination in B2)", async () => {
+  // [B20 C2] retitle only (the assertions and the case count are unchanged): C2 pages the listing, so these three values
+  // are no longer "any cursor" but three the server would never mint — the answer they get is the same one, byte for byte
+  it("a cursor that is not one the server minted is 200 -32602 (B20-C2 pages the listing)", async () => {
     const token = await tokenFor();
     for (const cursor of ["", "next", 5]) {
       const { status, body } = await call(rpc("tools/list", { cursor }), { token });
