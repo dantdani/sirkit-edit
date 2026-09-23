@@ -2443,3 +2443,46 @@ _(discovery, reproduction and results appended below as they are observed)_
   env-gated skips); app/api 27 / 1 059; engineering, agent, acquisition, AST gates and the acceptance pipeline 147 / 1 728
   (+2 skips); on the merged tree 142 / 1 932, 122 / 1 635 (+11 skips) and 91 / 1 618 (+5 skips); tsc 0; eslint clean;
   17 generators with zero drift; census 165/162/3/0.
+
+### B20-A5 - the provider-native MCP connector policy, refused (2026-09-23 local; increment workflow + lead; this commit)
+
+- Designed read-only first (`scratchpad/b20/task-A5.md`), delivered as policy and tripwires: Sirkit renders NO
+  provider-native MCP connector, for any server, row, role, provider or flag state (OD-90). A connector makes the PROVIDER
+  list and call the MCP server, so its listing and results never pass A2's descriptor gates and pin, A4's normalisation,
+  withholding, disclosure projection, quarantine and budget, A0/A1 admission, quotas, breaker and egress checks, the OD-75
+  argument screen, the loop's sanitiser or the trace: the runbook's "behind the same policy" cannot be met, because those
+  controls live in Sirkit's own request path. An external MCP server reaches a model only through A4's
+  `sirkit.mcp.observation-read`.
+- OD-45 is recorded as delivered: no credential Sirkit holds or can obtain for an MCP server ever reaches a provider
+  request, in any field, header or URL. It is enforced structurally, not by intention: no production file carries the
+  connector wire vocabulary; exactly five modules import a provider SDK and none of them reaches `app/lib/mcp/**` or the
+  MCP bearer module through its runtime import closure; every provider client is constructed with `apiKey`, `maxRetries`
+  and `timeout` alone; and both agent adapters' request key sets and string provenance are pinned at run time.
+- OD-91: a provider response carrying output the adapters did not request stops the run closed
+  (`provider_unrequested_output`); a malformed one is `provider_unknown`. The two halves read apart, and the page says so:
+  a malformed LIST failed before A5 too, but a malformed ITEM used to be skipped and round-tripped into the continuation,
+  and now fails - a deliberate fail-closed change, not parity. Nothing of a refused response reaches the continuation, a
+  tool, the trace or the user, and Sirkit never answers a provider's approval request.
+- OD-92 records what any future connector would have to meet, so a reversal is a reviewed increment and not a
+  configuration change: its own flag, an approved row with no credential and a NON-EMPTY `agentTools` allowlist (A4L),
+  OpenAI only until Anthropic documents a per-call approval control, the server URL byte-equal to the row's canonical URI,
+  the allowed-tool list exactly the intersection of the row's allowlist with a pinned, untruncated listing taken in the
+  same run, approval on every call answered only by a human, no header, authorization, `tunnel_id` or `connector_id`
+  field, a deep-frozen byte-deterministic object whose digest is traced, withdrawal on any pin, listing, allowlist or flag
+  change, and live qualification first.
+- The live re-read of both provider pages (2026-09-23) did not fire the stop condition: Anthropic's newer beta header lets
+  the API consumer pin the tool list, but the provider still opens the connection and runs every call; OpenAI documents
+  `tunnel_id`, a second credential-bearing field, and no longer documents `headers`. Both stay handshake-era, so neither
+  can call Sirkit's own modern-only server.
+- Adversarial review: 13 findings confirmed and fixed test-first. Two mattered: the guard's 32-character type bound
+  misclassified two real Anthropic provider-run block types (38 and 44 characters) as shape faults - exactly the items the
+  decision exists to detect - so the bound is 64; and the page claimed the malformed-item change was parity with the
+  behaviour before A5, which it is not.
+- Lead follow-ups on the check's residuals: the one citation the increment could not fix (`discovery.md:105`,
+  `adapters.ts:42-43` -> `:58-59`); the suite docstring that still carried the false parity claim its own case disproves;
+  the page's "44 characters" (the longest type either SDK declares is 45, nested where the guard never sees it) and its
+  stale "two page checks"; and a tenth policy case pinning that the policy's own copy of A4L's `agentTools` rule agrees
+  with `mcpAgentToolAllowlist` over fourteen shapes a row can hold (dropping the count bound from either copy fails it).
+  The A5 suites hold 34 cases.
+- Gates (lead, one heavy job at a time): mcp and agent 77 files / 1 195 passed; engineering, acquisition, auth and app/api
+  245 / 3 412 (+16 env-gated skips); tsc 0; eslint clean on the 8 changed and new files; 17 generators with zero drift.

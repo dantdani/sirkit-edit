@@ -217,3 +217,62 @@ allowlist, private-range rejection, timeouts, size limits, logging); unresolved 
   - `mcp_tool_result` has `tool_use_id`, `is_error` and `content`; `structuredContent` is not mentioned.
 - Both connectors are handshake-era clients that cannot call this modern-only server (OD-41, OD-70).
 - RFC 6749 section 3.3, RFC 6750 section 3.1 and RFC 9728 section 2 were re-read for the scope design, which B4 does not build.
+
+## 12. Re-read of 2026-09-23 (B20-A5: provider-native connectors)
+
+Both provider pages were fetched live on 2026-09-23 (WebFetch), the two named in section 1:
+platform.claude.com/docs/en/agents-and-tools/mcp-connector and
+developers.openai.com/api/docs/guides/tools-connectors-mcp. Neither page documents a mode in which the API consumer
+performs every tools/list AND tools/call itself: the provider still runs the calls in both.
+
+- Anthropic (platform.claude.com/docs/en/agents-and-tools/mcp-connector, fetched 2026-09-23):
+  - `Request fields:` `mcp_servers[]` = `type` ("url" only), `url` (https), `name`, `authorization_token`; the tool entry
+    `{ type: "mcp_toolset", mcp_server_name, default_config, configs, cache_control }`, each per-tool config `{ enabled,
+    defer_loading }`; with the NEWER beta header `mcp-client-2026-09-15` the toolset also accepts `tools`, a pinned copy of
+    the server's tool list (`name`, `description`, `input_schema` per entry). CHANGED since 2026-09-17: `mcp_toolset`
+    replaced a flat tool entry, and `tools` / `mcp-client-2026-09-15` are new.
+  - `Credential-bearing fields:` `authorization_token` only. The page states the API consumer runs the OAuth flow itself,
+    obtains the access token and refreshes it. UNCHANGED.
+  - `Approval controls:` none. There is no per-call approval: the only control is which tools are enabled
+    (`default_config` / `configs`), and the page recommends disabling write or destructive tools "when you want a human
+    confirmation step before state changes". UNCHANGED (P5 stands).
+  - `Output items and content blocks:` `mcp_tool_use` (`id`, `name`, `server_name`, `input`) and `mcp_tool_result`
+    (`tool_use_id`, `is_error`, `content`); under `mcp-client-2026-09-15` also `mcp_tool_listing` (`mcp_server_name`,
+    `tools`), emitted once per server the API asked. CHANGED: `mcp_tool_listing` is new.
+  - `Linked protocol revision:` beta header `mcp-client-2025-11-20` (or `mcp-client-2026-09-15`, which "includes
+    everything mcp-client-2025-11-20 does"); the `authorization_token` row links the 2025-11-25 authorization spec. Still
+    handshake-era: neither header names 2026-07-28. UNCHANGED (P3 stands).
+  - `Account-level configuration:` not documented. Every server and toolset is supplied in the request; the page shows no
+    console, account or organization registration of a connector. UNKNOWN whether one exists elsewhere.
+- OpenAI (developers.openai.com/api/docs/guides/tools-connectors-mcp, fetched 2026-09-23):
+  - `Request fields:` `type: "mcp"`, `server_label`, `server_description`, `server_url`, `tunnel_id` (a local server
+    through the Secure MCP Tunnel), `authorization`, `require_approval`, `allowed_tools`, `connector_id` (documented as
+    legacy/deprecated), `defer_loading`. CHANGED since 2026-09-17: `server_description`, `tunnel_id` and `defer_loading`
+    are new; `headers` is no longer documented on this page.
+  - `Credential-bearing fields:` `authorization` (an OAuth access token, "not stored"); `tunnel_id` references tunnel
+    client credentials. CHANGED: `tunnel_id` is a second credential-bearing field.
+  - `Approval controls:` `require_approval` takes `"always"`, `"never"`, or an object naming `tool_names` under `never`
+    (and correspondingly under `always`); the default is that approval is requested before any data is shared. The
+    provider emits `mcp_approval_request` and continues only after the consumer sends an `mcp_approval_response` input
+    item (`approve`, `approval_request_id`). UNCHANGED in substance (P6 stands).
+  - `Output items and content blocks:` `mcp_list_tools`, `mcp_call`, `mcp_approval_request`; the consumer-sent
+    `mcp_approval_response` is an input item. UNCHANGED.
+  - `Linked protocol revision:` the page names and links MCP revision 2025-03-26 (its tools error-handling section).
+    Still handshake-era. UNCHANGED (P3 stands).
+  - `Account-level configuration:` not documented as a registration: `connector_id` names a provider-hosted connector
+    (`connector_dropbox`, `connector_gmail`, …) and is itself a REQUEST field, now documented as legacy. UNKNOWN whether a
+    dashboard-level connector exists.
+
+What this changed in A5, and what it did not:
+
+- The D6 tripwire vocabulary gained the new wire spellings: `mcp_server_name`, `mcp_tool_listing`, `server_description`,
+  `tunnel_id`, `defer_loading`, `default_config`. `mcp-client-2026-09-15` is already covered case-folded by the existing
+  `mcp-client-20` token. `configs` and `cache_control` were NOT added: they are ordinary English words a production file
+  could carry innocently, and a tripwire with no allowlist must not manufacture reviewed pin moves. `headers` was not
+  removed — a gate never narrows on its own authority.
+- `handshake_era_only` stays in the refusal vocabulary: neither connector speaks 2026-07-28 (§12 U1 does not fire).
+- Anthropic's `tools` pinning lets the CONSUMER supply the listing, so the provider does not ask the server for its tools.
+  It does not move tools/call: the provider still opens the connection and runs every call, so M1-M6 hold unchanged and
+  the stop condition of A5 section 0 is not met. It does, however, narrow M1 for Anthropic alone: a future connector could
+  pin the listing Sirkit itself read (a condition OD-92 already requires for OpenAI's `allowed_tools`).
+- Live behaviour of both connectors stays BLOCKED-LIVE-QUALIFICATION (OD-7, LB-2): nothing here was executed.

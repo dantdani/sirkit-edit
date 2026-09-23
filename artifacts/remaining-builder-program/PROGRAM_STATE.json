@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20: A0-A4, A4L, B1-B4 and C1-C3 all committed and merged on chapter/b20-mcp-adapter; one track from here",
+  "currentCheckpoint": "B20: A0-A5 and A4L, B1-B4, C1-C3 all committed on chapter/b20-mcp-adapter; D1..D3 next",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "A5 (task-A5.md + task-A5-lead-corrections.md), then D1..D3 (task-D.md, on this merged tree), then the B20 closeout (closeout-plan.md) and PR #10.",
-  "updatedAt": "2026-09-23T01:53:33-04:00",
+  "nextAction": "D1..D3 (scratchpad/b20/task-D.md, on this merged tree), then the B20 closeout (closeout-plan.md) and PR #10.",
+  "updatedAt": "2026-09-23T03:33:55-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

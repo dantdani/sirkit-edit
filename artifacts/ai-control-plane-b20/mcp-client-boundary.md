@@ -95,7 +95,7 @@ endpoint, no new dependency.
   in-process token cache → A3 (D20-19; OD-46 keeps credentials by environment name only in B20). — Closed in A3 (see
   Authorization client (A3)); the authorization-code flow and PKCE stay deferred (OD-46).
 - Observation envelope, agent read port, trace attribution → A4 (D20-22, D20-11).
-- Provider-native connector policy → A5 (D20-29, OD-45).
+- Provider-native connector policy → A5 (D20-29, OD-45). — Closed in A5 (refused by policy: OD-90, OD-45, OD-91; see `mcp-provider-connectors.md`). — Closed in A5 (refused by policy: OD-90, OD-45, OD-91; see `mcp-provider-connectors.md`).
 
 ## Transport (A1) — CONFIRMED
 

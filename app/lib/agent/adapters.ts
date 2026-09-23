@@ -17,6 +17,21 @@
  * the assistant's `tool_use` blocks verbatim and immediately follows them
  * with a user message whose `tool_result` blocks (exact `tool_use_id`,
  * `is_error` on failures) precede any other content.
+ *
+ * [B20 A5] Each adapter reads its response's output list ONCE and judges it
+ * before anything of the response is used (OD-91): a well-formed item the
+ * adapters did not request — a tool the provider ran on its own, or an
+ * unknown type — stops the run with `provider_unrequested_output`, and a
+ * malformed one with `provider_unknown`.
+ *
+ * A malformed LIST fails as it did before A5 (a non-array `output` /
+ * `content` already raised a TypeError inside the try below). A malformed
+ * ITEM does NOT: before A5 the filters here skipped anything that was not a
+ * `function_call` / `text` / `tool_use` and round-tripped it verbatim into
+ * the continuation, so an entry with a non-string, inherited-only,
+ * over-long or non-token `type` — and a list past the item cap — completed
+ * the step. Since A5 each of those stops the run too. That is a deliberate
+ * fail-closed change, not parity.
  */
 
 import OpenAI from "openai";
@@ -35,10 +50,11 @@ import type {
   MessageParam,
   Tool as AnthropicTool,
 } from "@anthropic-ai/sdk/resources/messages/messages";
-import { toProviderError } from "../llm/errors";
+import { LLMProviderError, toProviderError } from "../llm/errors";
 import { configuredOpenAIModel, configuredOpenAIReasoningEffort, type OpenAIReasoningEffort } from "../llm/openai-config";
 import type { AgentStep, AgentToolResult, ProviderAgentAdapter, ProviderToolDeclaration } from "./contracts";
 import { renderAnthropicAgentTool, renderOpenAiResponsesTool } from "./provider-tools";
+import { judgeProviderOutput } from "./provider-output-guard"; // [B20 A5] OD-91
 import { fixtureRuntimeEnabled } from "../fixture-runtime/mode"; // [B18-C I10]
 import { FIXTURE_AGENT_ENV, FIXTURE_AGENT_SCRIPTED, FixtureAgentAdapter } from "./fixture-agent-adapter"; // [B18-C I10]
 
@@ -56,7 +72,13 @@ interface OpenAIContinuationState {
 }
 
 function normalizeOpenAIStep(response: OpenAIResponse, state: OpenAIContinuationState): AgentStep {
-  const toolCalls = response.output
+  // [B20 A5] the list is read ONCE and judged before any other field of the
+  // response is touched; from here on only this local is used (OD-91).
+  const output: unknown = (response as { output?: unknown }).output;
+  const judgement = judgeProviderOutput("openai", output);
+  if (!judgement.ok) throw new LLMProviderError("openai", judgement.kind === "unrequested" ? "unrequested_output" : "unknown");
+  const items = output as OpenAIResponse["output"];
+  const toolCalls = items
     .filter((item) => item.type === "function_call")
     .map((item) => ({ callId: item.call_id, providerName: item.name, argumentsText: item.arguments }));
   return {
@@ -69,7 +91,7 @@ function normalizeOpenAIStep(response: OpenAIResponse, state: OpenAIContinuation
       provider: "openai",
       // Every continuation item required by reasoning models is preserved:
       // the response's output items are appended verbatim to the input list.
-      state: { input: [...state.input, ...(response.output as unknown as ResponseInputItem[])], instructions: state.instructions } satisfies OpenAIContinuationState,
+      state: { input: [...state.input, ...(items as unknown as ResponseInputItem[])], instructions: state.instructions } satisfies OpenAIContinuationState,
     },
   };
 }
@@ -151,8 +173,14 @@ interface AnthropicContinuationState {
 }
 
 function normalizeAnthropicStep(message: AnthropicMessage, state: AnthropicContinuationState): AgentStep {
-  const text = message.content.filter((block) => block.type === "text").map((block) => block.text).join("");
-  const toolCalls = message.content
+  // [B20 A5] the blocks are read ONCE and judged before any other field of the
+  // message is touched; from here on only this local is used (OD-91).
+  const content: unknown = (message as { content?: unknown }).content;
+  const judgement = judgeProviderOutput("anthropic", content);
+  if (!judgement.ok) throw new LLMProviderError("anthropic", judgement.kind === "unrequested" ? "unrequested_output" : "unknown");
+  const blocks = content as AnthropicMessage["content"];
+  const text = blocks.filter((block) => block.type === "text").map((block) => block.text).join("");
+  const toolCalls = blocks
     .filter((block) => block.type === "tool_use")
     .map((block) => ({ callId: block.id, providerName: block.name, argumentsText: JSON.stringify(block.input ?? {}) }));
   return {
@@ -167,7 +195,7 @@ function normalizeAnthropicStep(message: AnthropicMessage, state: AnthropicConti
         system: state.system,
         // The assistant's content blocks (tool_use included) are preserved
         // VERBATIM so the follow-up tool_result blocks pair correctly.
-        messages: [...state.messages, { role: "assistant", content: message.content as ContentBlock[] as unknown as ContentBlockParam[] }],
+        messages: [...state.messages, { role: "assistant", content: blocks as ContentBlock[] as unknown as ContentBlockParam[] }],
       } satisfies AnthropicContinuationState,
     },
   };
