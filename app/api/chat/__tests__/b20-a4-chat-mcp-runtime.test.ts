@@ -79,6 +79,7 @@ const ROW = wideServer("docs-token", {
   auth: { mode: "pre-issued-token-env", secrets: [{ env: TOKEN_ENV, role: "access-token" }], scopes: [] },
   descriptorPin: { toolsListDigest: mcpToolsListDigest(DEFS), pinnedAt: "2026-09-21" },
   agentDisclosure: "permitted",
+  agentTools: ["search"], // [B20 A4L] the row's operator approved this one tool (OD-74 amendment)
 });
 
 function hostileServer() {

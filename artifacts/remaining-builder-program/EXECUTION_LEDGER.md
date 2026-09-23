@@ -2347,3 +2347,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   and the AST import gates 76 / 1 064 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean on the 43
   changed and new files; 16 generators with zero drift (A4 had regenerated the B01, B04, B09, B10, B11 and B16-0-1/2
   artifacts its one new descriptor moves). The A4 suites hold 68 cases.
+
+### B20-A4L - the registry row's per-tool agent allowlist, fail closed (2026-09-23 local; increment workflow + lead; this commit)
+
+- The lead did not accept A4's recorded limit (the OD-74 amendment: approving a ROW made every tool of its pinned listing
+  agent-callable as a Tier 0 read, because MCP annotations grant nothing in either direction). The runbook's B20-A says
+  Sirkit consumes "explicitly approved" sources, so approval must name the tools.
+- Delivered test-first: `agentTools` is required on every registry row and validated (at most 32, the count judged first,
+  the client's own tool-name pattern, unique, sorted); the port enforces it in both paths before anything is negotiated,
+  listed, admitted or sent, after the OD-75 argument screen; an empty list takes the row off the roster; a crafted
+  revision approves nothing. Registry 1.1.0 -> 1.2.0 with a 31st CSV column, regenerated and byte-pinned. On the previous
+  commit the two suites failed 12 of 147 - the review's own security-2 scenario answered `['lookup','create-order']`
+  where the operator had named the read alone - and pass after. Ten mutations, each caught by its named case.
+- Adversarial review: 19 findings, 15 checked; among them a row that approved nothing still drove a credentialed
+  negotiate and tools/list (now off the roster), the port's bound truncating instead of failing closed, and the refusal
+  sentence telling the model something false about the server. The lead then split the round's coverage into five cases
+  (14-18), because one bundled case hides every assertion after the first failure - the same short-circuit defect the
+  round had just corrected in the normalizer's page case - and asserted the premise that the withheld tool IS
+  A2-accepted, which had been prose only. The A4 suites hold 73 cases.
+- Gates (lead, one heavy job at a time): mcp, net, http and engineering 131 files / 1 849 passed; agent and acquisition
+  50 / 623 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean (one unused declaration the split
+  left behind, removed); 16 generators with zero drift beyond the regenerated registry CSV.

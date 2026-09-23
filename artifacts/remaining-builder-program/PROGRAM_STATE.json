@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20: A0-A4 committed on the chapter branch; B1-B4 on the server track (B4 committed 5d97728, not yet merged); C1..C3 building",
+  "currentCheckpoint": "B20: A0-A4 and A4L on the chapter branch; B1-B4 and C1-C3 committed on the server track (b3aa13f), not yet merged",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "d7d2f61",
+  "lastGreenSha": "3b4b337",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -14,7 +14,7 @@
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "The agentTools allowlist follow-up (OD-74 default), then A5; merge the server track (B4 + C) and re-pin the A4-affected counts; then D1..D3 (task-D.md) and the B20 closeout (closeout-plan.md).",
-  "updatedAt": "2026-09-22T23:33:55-04:00",
+  "nextAction": "Merge the server track (B4 + C) into the chapter branch, re-derive the moved citations by content anchor, apply the B4 and C records, re-pin the A4-affected counts and regenerate; then A5, D1..D3 and the B20 closeout.",
+  "updatedAt": "2026-09-23T01:30:16-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

@@ -597,7 +597,6 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
       expect(stated?.[1], suite).toBe(String(cases));
     }
     expect(section).toContain(`${total} cases in seven suites`);
-    expect(flat(read("artifacts/ai-control-plane-b20/README.md")), "the lead's README row").toContain(`${total} cases in seven suites`);
     const codes = [
       "server_unavailable", "disclosure_prohibited", "listing_unpinned", "negotiation_failed", "listing_failed", "listing_pin_mismatch", "listing_truncated", "unknown_tool", "arguments_invalid", "arguments_too_large",
       "arguments_disclose_run_identity", "arguments_secret_shaped", "input_required_unsupported", "authorization_failed", "paused", "upstream_error", "transport_failed", "result_invalid", "clock_invalid", "cancelled", "port_failed",
@@ -617,6 +616,10 @@ describe("[B20 A4] 6.1 the observation normalizer", () => {
       `${MCP_OBSERVATION_BOUNDS.freshnessMs / 60_000} minutes`,
     ];
     for (const phrase of phrases) expect(section, phrase).toContain(phrase);
+    // [B20 A4L review] LAST, and deliberately so (review tests-1): the README is the LEAD's file — this implementer may not
+    // edit it — so while an increment's case total waits for the lead's one-word edit this assertion is the only red line of
+    // the case. Before it, every assertion above it stopped running with it, which silently turned the whole page gate off.
+    expect(flat(read("artifacts/ai-control-plane-b20/README.md")), "the lead's README row").toContain(`${total} cases in seven suites`);
   });
   it("17. the joined reading (review, security-1): a directive or a credential split across two blocks, two leaves or two keys is withheld whole, and benign neighbours are still shown", () => {
     // A2 already refuses exactly this split in a descriptor (b20-a2-foreign-tools case "twenty-seven hostile descriptions",

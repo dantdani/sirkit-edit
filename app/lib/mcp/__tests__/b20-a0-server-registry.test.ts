@@ -12,6 +12,7 @@ import { MCP_DISABLED_SERVERS_ENV, MCP_ENABLED_ENV } from "../rollout";
 import {
   admittedMcpServer,
   frozenMcpServerEntries,
+  MCP_AGENT_TOOLS_MAX,
   MCP_PROTOCOL_VERSION_COMPATIBILITY,
   MCP_PROTOCOL_VERSION_CURRENT,
   MCP_SERVER_ID_PATTERN,
@@ -57,8 +58,9 @@ function csvCells(line: string): string[] {
 
 describe("[B20 A0] the committed registry", () => {
   // [B20 A3] reviewed pin move: 1.0.0 -> 1.1.0, the authorization-server pin and its two CSV columns (OD-61)
-  it("is versioned 1.1.0, validates, and is EMPTY: every server is refused until a reviewed row with an owner decision id is added (OD-48)", () => {
-    expect(MCP_SERVER_REGISTRY_VERSION).toBe("1.1.0");
+  // [B20 A4L] reviewed pin move: 1.1.0 -> 1.2.0, the per-tool agent allowlist `agentTools` and its CSV column (OD-74 amendment)
+  it("is versioned 1.2.0, validates, and is EMPTY: every server is refused until a reviewed row with an owner decision id is added (OD-48)", () => {
+    expect(MCP_SERVER_REGISTRY_VERSION).toBe("1.2.0");
     expect(validateMcpServerRegistry()).toEqual([]);
     expect([...MCP_SERVER_REGISTRY]).toEqual([]);
     expect([...MCP_SERVER_IDS]).toEqual([]);
@@ -81,7 +83,7 @@ describe("[B20 A0] the committed registry", () => {
     const row = fixtureServer();
     const frozen = frozenMcpServerEntries([row]);
     expect(frozen[0]).toBe(row);
-    const nested = [frozen, row, row.endpoint, row.supportedProtocolVersions, row.auth, row.auth.secrets, row.auth.scopes, row.descriptorPin, row.limits, row.limits.breaker, row.limits.perTool, row.limits.perTool!.search, row.terms, row.state];
+    const nested = [frozen, row, row.endpoint, row.supportedProtocolVersions, row.auth, row.auth.secrets, row.auth.scopes, row.descriptorPin, row.limits, row.limits.breaker, row.limits.perTool, row.limits.perTool!.search, row.agentTools, row.terms, row.state];
     for (const inner of nested) expect(Object.isFrozen(inner)).toBe(true);
     expect(() => { (row.state as { status: string }).status = "blocked"; }).toThrow(TypeError);
     expect(() => { (row.limits.breaker as { failureThreshold: number }).failureThreshold = 99; }).toThrow(TypeError);
@@ -222,6 +224,13 @@ describe("[B20 A0] the validator refuses what a registry row must never contain"
     ["a per-tool name of 129 characters", [mutated((entry) => { entry.limits.perTool = { ["t".repeat(129)]: { requestsPerMinute: 4 } }; })], "per-tool", /tool name/],
     ["an unknown agentDisclosure", [mutated((entry) => { entry.agentDisclosure = "maybe"; })], "agent-disclosure", /agentDisclosure/],
     ["agentDisclosure permitted on a disabled server", [mutated((entry) => { entry.agentDisclosure = "permitted"; entry.state.status = "disabled"; })], "agent-disclosure", /permitted/],
+    // [B20 A4L] the per-tool agent allowlist (OD-74 amendment): an array, bounded, every entry a tool name, no duplicate, sorted
+    ["agentTools that is not an array", [mutated((entry) => { entry.agentTools = "search"; })], "agent-tools", /agentTools must be an array/],
+    ["33 agentTools entries (the count is judged before any entry meets the pattern)", [mutated((entry) => { entry.agentTools = Array.from({ length: 33 }, (_unused, index) => `t${String(index).padStart(2, "0")}`); })], "agent-tools", /at most 32/],
+    ["an agentTools entry outside the tool-name pattern", [mutated((entry) => { entry.agentTools = ["search docs"]; })], "agent-tools", /tool name/],
+    ["an agentTools entry that is not a string", [mutated((entry) => { entry.agentTools = [7]; })], "agent-tools", /tool name/],
+    ["a duplicated agentTools entry", [mutated((entry) => { entry.agentTools = ["search", "search"]; })], "agent-tools", /duplicate/],
+    ["an unsorted agentTools list (the CSV column renders them in order)", [mutated((entry) => { entry.agentTools = ["search", "read"]; })], "agent-tools", /sorted/],
     ["a plain-HTTP documentation URL", [mutated((entry) => { entry.terms.documentationUrl = "http://example.com/docs"; })], "terms", /documentationUrl/],
     ["a documentation URL with a query", [mutated((entry) => { entry.terms.documentationUrl = "https://example.com/docs?x=1"; })], "terms", /documentationUrl/],
     ["checkedOn that is not a date", [mutated((entry) => { entry.terms.checkedOn = "last week"; })], "terms", /checkedOn/],
@@ -249,6 +258,40 @@ describe("[B20 A0] the validator refuses what a registry row must never contain"
   it("the lower bound of a minute window is 4, so the agent's 25% share (OD-40) is at least one request", () => {
     expect(MCP_SERVER_LIMIT_BOUNDS.requestsPerMinute[0]).toBe(4);
     expect(validateMcpServerRegistry([mutated((entry) => { entry.limits.requestsPerMinute = 4; entry.limits.perTool = { search: { requestsPerMinute: 4 } }; })])).toEqual([]);
+  });
+
+  it("[B20 A4L] the per-tool agent allowlist is required and fails closed: an empty list is valid and names no tool, 32 sorted names are valid, and a row without the field is refused (OD-74 amendment)", () => {
+    expect(MCP_AGENT_TOOLS_MAX).toBe(32);
+    expect([...fixtureServer().agentTools], "a fixture row approves no tool for the agent").toEqual([]);
+    expect(validateMcpServerRegistry([fixtureServer({ agentTools: [] })])).toEqual([]);
+    expect(validateMcpServerRegistry([fixtureServer({ agentTools: ["read", "search"] })])).toEqual([]);
+    expect(validateMcpServerRegistry([fixtureServer({ agentTools: Array.from({ length: MCP_AGENT_TOOLS_MAX }, (_unused, index) => `t${String(index).padStart(2, "0")}`) })])).toEqual([]);
+    // the entry pattern is the tool-name pattern the client already admits for a foreign name, not a second one
+    expect(validateMcpServerRegistry([fixtureServer({ agentTools: ["a.b-c_D9"] })])).toEqual([]);
+    // a row that is not `permitted` for an agent may still name tools: the disclosure decides whether the row is offered at all
+    expect(validateMcpServerRegistry([fixtureServer({ agentDisclosure: "prohibited", agentTools: ["search"] })])).toEqual([]);
+    // a row written before the field existed is refused: every row names its agent-callable tools, even when it names none
+    expect(rulesOf([mutated((entry) => { delete (entry as { agentTools?: unknown }).agentTools; })])).toContain("agent-tools");
+  });
+
+  it("[B20 A4L review] the agentTools COUNT is judged before any entry is read: an over-bound list is refused whole, by the count alone, however its entries are spelled", () => {
+    // The row above spells its 33 entries so that every one of them MATCHES the tool-name pattern, so it cannot tell a
+    // count-first reading from a loop-first one. These entries all FAIL the pattern, so a loop-first reading would report 33
+    // pattern violations beside the count; the count message alone is the pin. It is the rule the port relies on: the reviewed
+    // answer for an over-bound list is "this row approves nothing", never "its first 32 names".
+    const overBound = Array.from({ length: MCP_AGENT_TOOLS_MAX + 1 }, (_unused, index) => `t ${index}`);
+    for (const name of overBound) expect(MCP_TOOL_NAME_PATTERN.test(name), name).toBe(false);
+    const of = (list: readonly string[]): string[] =>
+      validateMcpServerRegistry([mutated((entry) => { entry.agentTools = [...list]; })]).filter((violation) => violation.rule === "agent-tools").map((violation) => violation.message);
+    const overMessages = of(overBound);
+    expect(overMessages, "the count alone").toHaveLength(1);
+    expect(overMessages[0]).toMatch(/at most 32/);
+    expect(overMessages.join(NEWLINE), "no entry was read for the pattern").not.toMatch(/must be a tool name matching/);
+    // the scope ceiling's neighbour (B20-A3 drives `scopes(1 000 000)`): a crafted list no reviewer would write is still ONE
+    // violation, so nothing walks it entry by entry before it is refused
+    const millionMessages = of(Array.from({ length: 1_000_000 }, (_unused, index) => `t ${index}`));
+    expect(millionMessages).toHaveLength(1);
+    expect(millionMessages[0]).toMatch(/at most 32/);
   });
 
   it("the id and tool-name patterns are the ones the rules above enforce", () => {
@@ -368,27 +411,31 @@ describe("[B20 A0] admission returns only an approved row, never without the fla
 describe("[B20 A0] the rendered artifact", () => {
   it("has exactly these columns in this order (a schema change is a reviewed diff in the constant, here and in mcp-server-registry.md)", () => {
     // [B20 A3] reviewed pin move: `authorization_issuer` and `token_endpoint` after `scopes` (OD-61), 28 -> 30 columns
+    // [B20 A4L] reviewed pin move: `agent_tools` after `agent_disclosure` (the OD-74 amendment's allowlist), 30 -> 31 columns
     expect([...MCP_SERVER_REGISTRY_CSV_COLUMNS]).toEqual([
       "registry_version", "id", "status", "owner_decision", "title", "canonical_uri", "endpoint_host", "endpoint_port", "endpoint_path", "protocol_versions", "compatibility_era",
       "auth_mode", "secret_references", "scopes", "authorization_issuer", "token_endpoint", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
-      "per_tool_limits", "redirects", "agent_disclosure", "documentation_url", "docs_checked_on", "retention_note", "reason",
+      "per_tool_limits", "redirects", "agent_disclosure", "agent_tools", "documentation_url", "docs_checked_on", "retention_note", "reason",
     ]);
   });
 
   it("has a deterministic column order, one row per entry sorted by id, and only secret NAMES by construction", () => {
-    const zeta = fixtureServer({ id: "zeta-server", auth: { mode: "pre-issued-token-env", secrets: [{ env: "EXAMPLE_ZETA_TOKEN", role: "access-token" }], scopes: ["docs:read"] } });
+    const zeta = fixtureServer({ id: "zeta-server", auth: { mode: "pre-issued-token-env", secrets: [{ env: "EXAMPLE_ZETA_TOKEN", role: "access-token" }], scopes: ["docs:read"] }, agentTools: ["read", "search"] });
     const alpha = fixtureServer({ id: "alpha-server", descriptorPin: { toolsListDigest: `sha256:${"a".repeat(64)}`, pinnedAt: "2026-09-17" } });
     expect(validateMcpServerRegistry([zeta, alpha])).toEqual([]);
     const rendered = renderMcpServerRegistryCsv([zeta, alpha]);
     expect(rendered).toBe(renderMcpServerRegistryCsv([alpha, zeta]));
     const lines = rendered.split(NEWLINE);
     expect(lines[0]).toBe(MCP_SERVER_REGISTRY_CSV_COLUMNS.join(","));
-    // [B20 A3] reviewed pin move: the registry version 1.1.0
-    expect(lines[1]!.startsWith("1.1.0,alpha-server,approved,OD-48,")).toBe(true);
-    expect(lines[2]!.startsWith("1.1.0,zeta-server,approved,OD-48,")).toBe(true);
+    // [B20 A3] reviewed pin move: the registry version 1.1.0; [B20 A4L] reviewed pin move: 1.2.0 (the `agentTools` column)
+    expect(lines[1]!.startsWith("1.2.0,alpha-server,approved,OD-48,")).toBe(true);
+    expect(lines[2]!.startsWith("1.2.0,zeta-server,approved,OD-48,")).toBe(true);
     expect(lines).toHaveLength(4);
     expect(lines[3]).toBe("");
     expect(lines[2]).toContain("EXAMPLE_ZETA_TOKEN|access-token");
+    // [B20 A4L] the allowlist renders as the names joined by `;`, in the order the row states (the validator pins it sorted)
+    expect(csvCells(lines[2]!)[MCP_SERVER_REGISTRY_CSV_COLUMNS.indexOf("agent_tools")]).toBe("read;search");
+    expect(csvCells(lines[1]!)[MCP_SERVER_REGISTRY_CSV_COLUMNS.indexOf("agent_tools")], "a row that approves no tool renders an empty cell").toBe("");
     expect(lines[2]).toContain(",zeta-server.example.com,,/mcp,"); // host, no port, path
     expect(lines[1]).toContain(`sha256:${"a".repeat(64)}`);
     expect(csvCells(lines[2]!)).toHaveLength(MCP_SERVER_REGISTRY_CSV_COLUMNS.length);

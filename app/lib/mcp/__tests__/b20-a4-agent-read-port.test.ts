@@ -16,10 +16,10 @@ import { externalResultClassOf, McpObservationReadService, MCP_OBSERVATION_TOOL_
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { makeBoard, makeInstance, makeResistorDef } from "../../pcb/__tests__/autoplace-fixture";
 import { collectProductionFiles, moduleImportOffenders } from "../../project/__tests__/_import-gate-helpers";
-import { createMcpAgentPort, mcpAgentRoster, mcpPortRefusalOf, mcpRunIdentifierSubjects, resolveMcpAgentPort, type McpAgentPortOptions } from "../agent-port";
+import { createMcpAgentPort, mcpAgentRoster, mcpAgentToolAllowlist, mcpPortRefusalOf, mcpRunIdentifierSubjects, resolveMcpAgentPort, type McpAgentPortOptions } from "../agent-port";
 import { MCP_AUTHORIZATION_FAILURE_CODES, mcpAuthorizationTokenProvider, resetMcpAuthorization, type McpAuthorizationClosed } from "../authorization";
 import { mcpInFlight, preIssuedTokenEnvProvider, resetMcpInFlight, type McpTokenProvider } from "../http-transport";
-import type { McpServerRegistryEntry } from "../server-registry";
+import { validateMcpServerRegistry, type McpServerRegistryEntry } from "../server-registry";
 import { mcpToolsListDigest, resetMcpToolCache } from "../tool-discovery";
 import { importClosure } from "../server/__tests__/_import-closure";
 import { T0 } from "./_fixtures";
@@ -52,9 +52,31 @@ let now = T0;
 const SCHEMATIC: SchematicState = { components: [], wires: [], netLabels: [], kicadComponents: [{ id: "k1", partId: "lib:ne555", x: 100, y: 100, rotation: 0, refDes: "U1", value: "NE555" }] };
 const BOARD = JSON.parse(JSON.stringify(makeBoard(40, 30, [makeInstance("r3", makeResistorDef(), { x: 5, y: 5 }, { "1": 1, "2": 2 })], 2)));
 
-/** An approved, flag-admitted, pinned row whose pin is the digest of `defs`. */
-function pinnedRow(id: string, defs: readonly unknown[] = DEFS, overrides: Partial<McpServerRegistryEntry> = {}): McpServerRegistryEntry {
+/**
+ * [B20 A4L] The names `defs` declares, sorted in code-point order: the allowlist of an operator who approved the WHOLE pinned
+ * listing (the OD-74 amendment's alternative). A row that approves less names less; `agentTools` never admits a name A2
+ * rejected or the listing does not hold.
+ */
+const toolNames = (defs: readonly unknown[]): string[] =>
+  defs.map((def) => String((def as { name?: unknown }).name)).filter((name) => /^[A-Za-z0-9_.-]{1,128}$/.test(name)).sort();
+
+/**
+ * An approved, flag-admitted, pinned row whose pin is the digest of `defs`. [B20 A4L review] `agentTools` is REQUIRED here, as
+ * it is on a reviewed registry row: no helper of this suite approves a tool by default, so a tool added to a fixture listing is
+ * never silently agent-callable. The two wrappers below name which of the amendment's two readings a case means.
+ */
+function pinnedRow(id: string, defs: readonly unknown[], overrides: Partial<McpServerRegistryEntry> & { agentTools: readonly string[] }): McpServerRegistryEntry {
   return wideServer(id, { descriptorPin: { toolsListDigest: mcpToolsListDigest(defs), pinnedAt: "2026-09-21" }, agentDisclosure: "permitted", ...overrides });
+}
+
+/** [B20 A4L] the amendment's ALTERNATIVE, named at every call site that means it: the operator approved the WHOLE pinned listing. */
+function wholeListingRow(id: string, defs: readonly unknown[] = DEFS, overrides: Partial<McpServerRegistryEntry> = {}): McpServerRegistryEntry {
+  return pinnedRow(id, defs, { agentTools: toolNames(defs), ...overrides });
+}
+
+/** [B20 A4L] the amendment's DEFAULT: the row names exactly the tools its operator approved, sorted as the registry requires. */
+function namingRow(id: string, defs: readonly unknown[], names: readonly string[], overrides: Partial<McpServerRegistryEntry> = {}): McpServerRegistryEntry {
+  return pinnedRow(id, defs, { agentTools: [...names].sort(), ...overrides });
 }
 
 function script(defs: readonly unknown[], call: FakeScript = (request) => rpcResult(request, { content: [text(BENIGN)], structuredContent: { mpn: "LM358DR", stock: 12 } }), discover?: FakeScript): FakeScript {
@@ -108,20 +130,23 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   it("1. the roster: only approved, flag-on, not operator-disabled, pinned, not-prohibited rows with an id the trace can record, sorted, at most 16, with nothing sent; the resolver is null off the flag, for a non-human principal and in the fixture runtime", () => {
     const fake = fakeMcpServer(script(DEFS));
     const entries = [
-      pinnedRow("docs-b"),
-      pinnedRow("docs-a"),
+      wholeListingRow("docs-b"),
+      wholeListingRow("docs-a"),
       wideServer("docs-unpinned"),
-      pinnedRow("docs-prohibited", DEFS, { agentDisclosure: "prohibited" }),
-      pinnedRow("docs-disabled", DEFS, { state: { status: "disabled", ownerDecision: "OD-48", reason: "fixture" } }),
-      pinnedRow("docs-operator"),
-      pinnedRow("task-manager-docs"),
+      wholeListingRow("docs-prohibited", DEFS, { agentDisclosure: "prohibited" }),
+      wholeListingRow("docs-disabled", DEFS, { state: { status: "disabled", ownerDecision: "OD-48", reason: "fixture" } }),
+      wholeListingRow("docs-operator"),
+      wholeListingRow("task-manager-docs"),
+      // [B20 A4L review] a row whose operator approved NO tool is not a roster row: it can never answer anything, so it is
+      // dropped here rather than offered to a model that would spend a run operation, and a credentialed request, to learn that
+      namingRow("docs-approves-nothing", DEFS, []),
     ];
     const env = { ...ENV_ON, SIRKIT_MCP_DISABLED_SERVERS: "docs-operator" };
     expect(mcpAgentRoster(entries, env).map((row) => row.id)).toEqual(["docs-a", "docs-b"]);
     const port = portOver(entries, fake.transport, { env });
     expect(port.servers().map((row) => row.serverId)).toEqual(["docs-a", "docs-b"]);
     expect(port.servers()[0]).toEqual({ serverId: "docs-a", title: entries[1]!.title, registryVersion: expect.stringMatching(/^\d+\.\d+\.\d+$/) });
-    const twenty = Array.from({ length: 20 }, (_unused, index) => pinnedRow(`docs-${String(index).padStart(2, "0")}`));
+    const twenty = Array.from({ length: 20 }, (_unused, index) => wholeListingRow(`docs-${String(index).padStart(2, "0")}`));
     expect(mcpAgentRoster(twenty, ENV_ON)).toHaveLength(16);
     expect(fake.calls).toHaveLength(0);
     const human = { humanPrincipal: true, ...PRINCIPAL };
@@ -136,7 +161,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   });
 
   it("2. tools: a pinned catalog; titles only for permitted rows; schema text stripped at node positions, a property named title kept; no instructions; pin mismatch, truncation and no pin refused; the catalog budget shrinks in order; one tool by name", async () => {
-    const row = pinnedRow("docs-a");
+    const row = wholeListingRow("docs-a");
     const fake = fakeMcpServer(script(DEFS, undefined, (call) => rpcResult(call, discoverResult({ instructions: `Look up parts. ${INSTRUCTIONS_SENTINEL}` }))));
     const port = portOver([row], fake.transport);
     const catalog = await port.tools(toolsRequest("docs-a")) as Extract<McpObservationToolsAnswer, { ok: true }>;
@@ -164,7 +189,9 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     // one tool by name
     const one = await port.tools(toolsRequest("docs-a", "titled")) as Extract<McpObservationToolsAnswer, { ok: true }>;
     expect(one.tools.map((entry) => entry.name)).toEqual(["titled"]);
-    expect(await port.tools(toolsRequest("docs-a", "sneaky"))).toMatchObject({ ok: false, code: "unknown_tool" });
+    // [B20 A4L review] this row approved the WHOLE listing, so the refusal is A2's, AFTER the listing was fetched: `sent` names
+    // which branch fired (a name the row's `agentTools` does not hold is refused with `sent: false`, case 14)
+    expect(await port.tools(toolsRequest("docs-a", "sneaky"))).toMatchObject({ ok: false, code: "unknown_tool", sent: true });
 
     // a pin that does not match: no tool, and no call
     const mismatched = fakeMcpServer(script([...DEFS, tool("added")]));
@@ -177,7 +204,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
       const page = Number((call.body.params as { cursor?: string } | undefined)?.cursor ?? "0");
       return rpcResult(call, { tools: [pageDefs[page] ?? tool(`page${page}`)], nextCursor: String(page + 1), ttlMs: 0, cacheScope: "private" });
     } }));
-    expect(await portOver([pinnedRow("docs-p", pageDefs)], paging.transport).tools(toolsRequest("docs-p"))).toMatchObject({ ok: false, code: "listing_truncated" });
+    expect(await portOver([wholeListingRow("docs-p", pageDefs)], paging.transport).tools(toolsRequest("docs-p"))).toMatchObject({ ok: false, code: "listing_truncated" });
     // no pin: refused before anything is sent
     const unpinnedFake = fakeMcpServer(script(DEFS));
     const unpinned = portOver([wideServer("docs-u")], unpinnedFake.transport);
@@ -192,7 +219,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     }));
     expect(JSON.stringify(heavy[0]!.inputSchema).length).toBeGreaterThan(29_000);
     const heavyFake = fakeMcpServer(script(heavy));
-    const shrunk = await viaService(portOver([pinnedRow("docs-h", heavy)], heavyFake.transport), { operation: "tools", serverId: "docs-h", toolName: "", argumentsJson: "" }, "permitted");
+    const shrunk = await viaService(portOver([wholeListingRow("docs-h", heavy)], heavyFake.transport), { operation: "tools", serverId: "docs-h", toolName: "", argumentsJson: "" }, "permitted");
     expect(shrunk.kind).toBe("external-observation");
     const result = (shrunk as unknown as { output: { result: Record<string, unknown> } }).output.result;
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(8_000);
@@ -203,7 +230,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   });
 
   it("3. call: an observation for an accepted tool; unknown and excluded tools never sent; arguments_invalid carries no issue; a cold port sends nothing for run identity or a credential in the arguments", async () => {
-    const row = pinnedRow("docs-a");
+    const row = wholeListingRow("docs-a");
     const fake = fakeMcpServer(script(DEFS));
     const port = portOver([row], fake.transport);
     const answer = await port.call(callRequest("docs-a", "search", { mpn: "LM358DR" }));
@@ -221,7 +248,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     expect(methods(fake.calls).filter((method) => method === "tools/call")).toHaveLength(1);
 
     // a COLD port: the screen runs before any negotiation, listing, admission or request
-    const tokenRow = pinnedRow("docs-token", DEFS, { auth: { mode: "pre-issued-token-env", secrets: [{ env: TOKEN_ENV, role: "access-token" }], scopes: [] } });
+    const tokenRow = wholeListingRow("docs-token", DEFS, { auth: { mode: "pre-issued-token-env", secrets: [{ env: TOKEN_ENV, role: "access-token" }], scopes: [] } });
     const token = TOKENS[1]!;
     const screened: Array<[string, string, Record<string, unknown>, string]> = [
       ["a project id", "docs-a", { mpn: `for ${PRINCIPAL.projectId}` }, "arguments_disclose_run_identity"],
@@ -256,7 +283,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   });
 
   it("4. every request is admitted under the agent purpose: a 4-per-minute row gives the agent one request, and the second is paused until the window ends", async () => {
-    const row = pinnedRow("docs-slow", DEFS, { limits: { ...wideServer("x").limits, requestsPerMinute: 4 } });
+    const row = wholeListingRow("docs-slow", DEFS, { limits: { ...wideServer("x").limits, requestsPerMinute: 4 } });
     const fake = fakeMcpServer(script(DEFS));
     const answer = await portOver([row], fake.transport).tools(toolsRequest("docs-slow"));
     expect(answer).toMatchObject({ ok: false, code: "paused", sent: false });
@@ -265,7 +292,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   });
 
   it("5. A3: a client-credentials row succeeds; an exact echo is [redacted], a case-changed one withheld, also for a token that expires during the call; a provider that cannot list its tokens withholds everything; a token rotated during the call is still a subject; nothing survives", async () => {
-    const cc = ccRow("docs-cc", "mcp.example.com", { descriptorPin: { toolsListDigest: mcpToolsListDigest(DEFS), pinnedAt: "2026-09-21" }, agentDisclosure: "permitted" });
+    const cc = ccRow("docs-cc", "mcp.example.com", { descriptorPin: { toolsListDigest: mcpToolsListDigest(DEFS), pinnedAt: "2026-09-21" }, agentDisclosure: "permitted", agentTools: toolNames(DEFS) });
     const echo = (spell: (token: string) => string, before?: (world: AuthWorld) => void) => (call: AuthCall, world: AuthWorld): Response => {
       switch (call.body.method) {
         case "server/discover": return jsonAnswer({ jsonrpc: "2.0", id: call.body.id, result: { resultType: "complete", ...discoverResult() } });
@@ -317,7 +344,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     for (const token of refreshed.issued) expect(survivor(refreshedRecord, token)).toBeNull();
 
     // a pre-issued token row whose provider cannot list the tokens it holds: every block and the structured value withheld
-    const tokenRow = pinnedRow("docs-token", DEFS, { auth: { mode: "pre-issued-token-env", secrets: [{ env: TOKEN_ENV, role: "access-token" }], scopes: [] } });
+    const tokenRow = wholeListingRow("docs-token", DEFS, { auth: { mode: "pre-issued-token-env", secrets: [{ env: TOKEN_ENV, role: "access-token" }], scopes: [] } });
     const throwing = ((row: McpServerRegistryEntry, environment: Readonly<Record<string, string | undefined>>) => preIssuedTokenEnvProvider(row, environment)) as McpTokenProvider;
     Object.defineProperty(throwing, "redactionSubjects", { value: () => { throw new Error("subjects unavailable"); } });
     const blind = fakeMcpServer(script(DEFS));
@@ -364,7 +391,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
       return new Response(frames, { status: 200, headers: { "content-type": "text/event-stream" } });
     };
     const fake = fakeMcpServer(script(DEFS, stream));
-    const record = observation(await portOver([pinnedRow("docs-a")], fake.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" })));
+    const record = observation(await portOver([wholeListingRow("docs-a")], fake.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" })));
     expect(record.content.blocks).toHaveLength(1);
     expect(record.notificationsIgnored).toBe(2);
     expect(JSON.stringify(record)).not.toContain(sentinel);
@@ -381,7 +408,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     for (const [label, answer, code, overrides] of cases) {
       resetAdmissionControl();
       const fake = fakeMcpServer(script([SEARCH_DEF], answer));
-      const result = await portOver([pinnedRow("docs-e", [SEARCH_DEF], overrides)], fake.transport).call(callRequest("docs-e", "search", { mpn: "LM358DR" }));
+      const result = await portOver([wholeListingRow("docs-e", [SEARCH_DEF], overrides)], fake.transport).call(callRequest("docs-e", "search", { mpn: "LM358DR" }));
       expect(result, label).toMatchObject({ ok: false, code, sent: true });
       expect(externalResultClassOf(code, true), label).toBe(code === "transport_failed" ? "transport_failed" : "upstream_error");
     }
@@ -397,7 +424,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
       return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
     };
     const fake = fakeMcpServer(script(DEFS, hanging));
-    const answer = await portOver([pinnedRow("docs-a")], fake.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" }, controller.signal));
+    const answer = await portOver([wholeListingRow("docs-a")], fake.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" }, controller.signal));
     expect(answer).toMatchObject({ ok: false, code: "cancelled" });
     expect(Object.hasOwn(answer, "observation")).toBe(false);
     expect(mcpInFlight("docs-a")).toBe(0);
@@ -405,7 +432,7 @@ describe("[B20 A4] 6.2 the agent read port", () => {
 
   it("9. the negotiation memo: reused within its ttlMs on the injected clock, redone after it", async () => {
     const fake = fakeMcpServer(script(DEFS, undefined, (call) => rpcResult(call, discoverResult({ ttlMs: 60_000, cacheScope: "private" }))));
-    const port = portOver([pinnedRow("docs-a")], fake.transport);
+    const port = portOver([wholeListingRow("docs-a")], fake.transport);
     await port.tools(toolsRequest("docs-a"));
     now = T0 + 30_000;
     await port.tools(toolsRequest("docs-a"));
@@ -414,12 +441,12 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     await port.tools(toolsRequest("docs-a"));
     expect(methods(fake.calls).filter((method) => method === "server/discover")).toHaveLength(2);
     // another port (another run) never reuses this one's negotiation
-    await portOver([pinnedRow("docs-a")], fake.transport).tools(toolsRequest("docs-a"));
+    await portOver([wholeListingRow("docs-a")], fake.transport).tools(toolsRequest("docs-a"));
     expect(methods(fake.calls).filter((method) => method === "server/discover")).toHaveLength(3);
   });
 
   it("10. never rejects: a throwing fetch, resolver, clock or environment gives a closed answer whose attribution fields match their patterns", async () => {
-    const row = pinnedRow("docs-a");
+    const row = wholeListingRow("docs-a");
     const hostileEnv = new Proxy({}, { get() { throw new Error("env trap"); }, has() { throw new Error("env trap"); }, ownKeys() { throw new Error("env trap"); } }) as Record<string, string | undefined>;
     const ports = [
       ["a throwing fetch", portOver([row], (() => { throw new Error("fetch"); }) as unknown as typeof fetch)],
@@ -469,11 +496,11 @@ describe("[B20 A4] 6.2 the agent read port", () => {
   it("13. the per-call roster gate, the port's own closed codes, and annotations granting nothing (review: tests-10, security-2)", async () => {
     // tests-10: every row the roster excludes is refused PER CALL too — `rosterRow` reads the roster, never `entries`
     const entries = [
-      pinnedRow("docs-a"),
-      pinnedRow("docs-prohibited", DEFS, { agentDisclosure: "prohibited" }),
-      pinnedRow("docs-disabled", DEFS, { state: { status: "disabled", ownerDecision: "OD-48", reason: "fixture" } }),
-      pinnedRow("docs-operator"),
-      pinnedRow("task-manager-docs"),
+      wholeListingRow("docs-a"),
+      wholeListingRow("docs-prohibited", DEFS, { agentDisclosure: "prohibited" }),
+      wholeListingRow("docs-disabled", DEFS, { state: { status: "disabled", ownerDecision: "OD-48", reason: "fixture" } }),
+      wholeListingRow("docs-operator"),
+      wholeListingRow("task-manager-docs"),
     ];
     const env = { ...ENV_ON, SIRKIT_MCP_DISABLED_SERVERS: "docs-operator" };
     const excluded: Array<[string, string]> = [
@@ -494,26 +521,174 @@ describe("[B20 A4] 6.2 the agent read port", () => {
     // tests-10: a negotiation, a listing and the port's OWN deadline, each as its own closed code
     resetAdmissionControl();
     const negotiation = fakeMcpServer(script(DEFS, undefined, (call) => rpcResult(call, discoverResult({ capabilities: {} }))));
-    expect(await portOver([pinnedRow("docs-a")], negotiation.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "negotiation_failed", sent: true });
+    expect(await portOver([wholeListingRow("docs-a")], negotiation.transport).call(callRequest("docs-a", "search", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "negotiation_failed", sent: true });
     resetAdmissionControl();
     const listing = fakeMcpServer(byMethod({ list: (call) => rpcResult(call, { tools: "nope", ttlMs: 0, cacheScope: "private" }) }));
-    expect(await portOver([pinnedRow("docs-a")], listing.transport).tools(toolsRequest("docs-a"))).toMatchObject({ ok: false, code: "listing_failed", sent: true });
+    expect(await portOver([wholeListingRow("docs-a")], listing.transport).tools(toolsRequest("docs-a"))).toMatchObject({ ok: false, code: "listing_failed", sent: true });
     resetAdmissionControl();
     const hanging = fakeMcpServer(() => new Response(new ReadableStream<Uint8Array>({ start() { /* never closed */ } }), { status: 200, headers: { "content-type": "text/event-stream" } }));
-    const late = await portOver([pinnedRow("docs-a")], hanging.transport).call({ ...callRequest("docs-a", "search", { mpn: "LM358DR" }), deadlineMs: 1 });
+    const late = await portOver([wholeListingRow("docs-a")], hanging.transport).call({ ...callRequest("docs-a", "search", { mpn: "LM358DR" }), deadlineMs: 1 });
     expect(late).toMatchObject({ ok: false, code: "transport_failed" }); // the port's own deadline, never the caller's `cancelled`
     expect(mcpInFlight("docs-a")).toBe(0);
 
     // security-2: annotations grant NOTHING in either direction (the specification: a client MUST treat them as untrusted).
-    // An un-annotated tool and one that declares readOnlyHint are both accepted, offered and callable; only an explicit write
-    // declaration excludes one (A2). The reviewed listing pin and the owner's approval are the only gate — a stated limit.
+    // An un-annotated tool and one that declares readOnlyHint are both accepted; only an explicit write declaration excludes
+    // one (A2). [B20 A4L] REVIEWED PIN MOVE: this case pinned the permissive half of that reading too — "an un-annotated tool
+    // is OFFERED and CALLABLE", with the reviewed pin and the owner's approval of the ROW as the only gate (the OD-74
+    // amendment's stated limit). The operator's approval now names the TOOLS, so the second half moves to: what is offered and
+    // callable is the row's `agentTools`, and the server's annotations decide nothing either way (case 14 is its own rule).
     resetAdmissionControl();
     const annotated = [tool("plainly"), tool("hinted", { annotations: { readOnlyHint: true } }), tool("writes", { annotations: { readOnlyHint: false } })];
     const annFake = fakeMcpServer(script(annotated, (call) => rpcResult(call, { content: [text(BENIGN)] })));
-    const annPort = portOver([pinnedRow("docs-ann", annotated)], annFake.transport);
+    // a row whose operator approved the WHOLE pinned listing (the amendment's alternative): A2's acceptance alone narrows it
+    const annPort = portOver([wholeListingRow("docs-ann", annotated)], annFake.transport);
     const annCatalog = await annPort.tools(toolsRequest("docs-ann")) as Extract<McpObservationToolsAnswer, { ok: true }>;
     expect(annCatalog.tools.map((entry) => entry.name)).toEqual(["plainly", "hinted"]);
     expect(await annPort.call(callRequest("docs-ann", "writes", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
     expect(observation(await annPort.call(callRequest("docs-ann", "plainly", { mpn: "LM358DR" }))).content.blocks[0]).toMatchObject({ disposition: "text", untrustedText: BENIGN });
+    // the same listing under a row that names ONE tool: `readOnlyHint: true` earns NOTHING (the hinted tool is refused, with
+    // nothing sent) and the UN-annotated tool the operator named is callable — the rule is the operator's list, never the hint
+    resetAdmissionControl();
+    const narrowFake = fakeMcpServer(script(annotated, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const narrowPort = portOver([namingRow("docs-narrow", annotated, ["plainly"])], narrowFake.transport);
+    const narrowCatalog = await narrowPort.tools(toolsRequest("docs-narrow")) as Extract<McpObservationToolsAnswer, { ok: true }>;
+    expect(narrowCatalog.tools.map((entry) => entry.name)).toEqual(["plainly"]);
+    expect(await narrowPort.tools(toolsRequest("docs-narrow", "hinted"))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    expect(await narrowPort.call(callRequest("docs-narrow", "hinted", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    expect(observation(await narrowPort.call(callRequest("docs-narrow", "plainly", { mpn: "LM358DR" }))).content.blocks[0]).toMatchObject({ disposition: "text", untrustedText: BENIGN });
+    expect(methods(narrowFake.calls).filter((method) => method === "tools/call"), "only the named tool was ever called").toHaveLength(1);
+  });
+
+  it("14. the row's per-tool agent allowlist, fail closed (B20-A4L, the OD-74 amendment): only the tools the operator named are offered or called, and the list NARROWS — it never admits", async () => {
+    // the A4 review's security-2 scenario: the pinned listing holds a WRITING tool that declares no annotations, so A2 accepts
+    // it exactly as it accepts the read (annotations grant nothing). The row's operator named the read alone.
+    const defs = [tool("lookup"), tool("create-order", { title: "Create order", description: "Create a supplier order." })];
+    const fake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const port = portOver([namingRow("docs-read", defs, ["lookup"])], fake.transport);
+    // [B20 A4L lead] the premise, asserted not merely stated: under a row that approves the WHOLE listing, A2 accepts both, so
+    // what removes `create-order` below is the operator's list and nothing else (the check's second new issue)
+    const wholeFake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const wholePort = portOver([wholeListingRow("docs-whole", defs)], wholeFake.transport);
+    const wholeCatalog = await wholePort.tools(toolsRequest("docs-whole")) as Extract<McpObservationToolsAnswer, { ok: true }>;
+    expect(wholeCatalog.tools.map((entry) => entry.name), "A2 accepts both; only the row's list narrows").toEqual(["lookup", "create-order"]);
+    resetAdmissionControl();
+    const catalog = await port.tools(toolsRequest("docs-read")) as Extract<McpObservationToolsAnswer, { ok: true }>;
+    expect(catalog.tools.map((entry) => entry.name)).toEqual(["lookup"]);
+    expect(catalog.toolsTotal).toBe(1);
+    const listed = fake.calls.length;
+    expect(await port.call(callRequest("docs-read", "create-order", { mpn: "LM358DR" }))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    expect(await port.tools(toolsRequest("docs-read", "create-order"))).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+    // the argument screen (OD-75) stays FIRST: arguments that disclose the run are refused as that even for a tool the row
+    // does not name — the allowlist is the step after it, and neither sends anything
+    expect(await port.call(callRequest("docs-read", "create-order", { mpn: `for ${PRINCIPAL.projectId}` }))).toMatchObject({ ok: false, code: "arguments_disclose_run_identity", sent: false });
+    expect(fake.calls, "nothing is negotiated, listed or sent for a tool the row does not name").toHaveLength(listed);
+    expect(observation(await port.call(callRequest("docs-read", "lookup", { mpn: "LM358DR" }))).content.blocks[0]).toMatchObject({ disposition: "text", untrustedText: BENIGN });
+
+    // [B20 A4L review] D18's ONE fixed sentence per code must be TRUE of both causes (review regressions-5). `create-order` IS
+    // an accepted tool of this pinned listing — A2 accepted it — so a sentence saying otherwise would send the model off to
+    // report that the server does not offer it, or to retry elsewhere. It may not name the cause either: which of the two
+    // fired would let a model enumerate the operator's list one name at a time.
+    const refusedCall = await viaService(port, { operation: "call", serverId: "docs-read", toolName: "create-order", argumentsJson: JSON.stringify({ mpn: "LM358DR" }) }, "permitted", "run-a4-000000000014");
+    expect(refusedCall).toMatchObject({ kind: "refused", status: "unknown_tool" });
+    const sentence = (refusedCall as unknown as { diagnostics: string[] }).diagnostics[0]!;
+    expect(sentence).toBe("That tool is not available for agent use on MCP server \"docs-read\"; nothing was sent.");
+    expect(sentence, "the tool IS an accepted tool of that listing; only the operator's list refuses it").not.toMatch(/accepted tool/);
+    for (const leak of ["lookup", "agentTools", "allowlist"]) expect(sentence, leak).not.toContain(leak);
+
+  });
+
+  it("15. an EMPTY allowlist is not a roster row at all: a row whose operator approved no tool is dropped before servers() offers it, and nothing is ever sent to it (B20-A4L review)", async () => {
+    const defs = [tool("lookup"), tool("create-order", { title: "Create order", description: "Create a supplier order." })];
+    // [B20 A4L review] an EMPTY allowlist is not a roster row at all (review regressions-1 / security-1): a row whose operator
+    // approved no tool can never answer anything, so it is dropped BEFORE `servers()` offers it — a whole-catalog request used
+    // to negotiate and list against the third party, carrying the row's bearer, for a result that was empty by construction
+    resetAdmissionControl();
+    const noneFake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const noneRow = namingRow("docs-none", defs, []);
+    expect(mcpAgentToolAllowlist(noneRow)).toEqual(new Set());
+    expect(mcpAgentRoster([noneRow], ENV_ON), "a row that approves nothing is off the roster").toEqual([]);
+    const nonePort = portOver([noneRow], noneFake.transport);
+    expect(nonePort.servers()).toEqual([]);
+    expect(await nonePort.tools(toolsRequest("docs-none"))).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+    expect(await nonePort.tools(toolsRequest("docs-none", "lookup"))).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+    for (const name of ["lookup", "create-order"]) {
+      expect(await nonePort.call(callRequest("docs-none", name, { mpn: "LM358DR" })), name).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+    }
+    expect(noneFake.calls, "nothing is negotiated, listed or sent for a row that approves nothing").toHaveLength(0);
+
+  });
+
+  it("16. the allowlist NARROWS, it never admits: a named tool the pinned listing does not hold, and one A2 rejected, answer the same unknown_tool and one sentence (B20-A4L)", async () => {
+    // the allowlist NARROWS: a name the pinned listing does not hold, and one A2 rejected, answer `unknown_tool` exactly as today
+    resetAdmissionControl();
+    const wideFake = fakeMcpServer(script(DEFS));
+    const widePort = portOver([namingRow("docs-wide", DEFS, ["absent", "search", "sneaky"])], wideFake.transport);
+    const wideCatalog = await widePort.tools(toolsRequest("docs-wide")) as Extract<McpObservationToolsAnswer, { ok: true }>;
+    expect(wideCatalog.tools.map((entry) => entry.name), "`titled` is accepted but not named; `sneaky` is named but A2 rejects it").toEqual(["search"]);
+    for (const name of ["absent", "sneaky"]) {
+      expect(await widePort.call(callRequest("docs-wide", name, { mpn: "LM358DR" })), name).toMatchObject({ ok: false, code: "unknown_tool", sent: false });
+      expect(await widePort.tools(toolsRequest("docs-wide", name)), name).toMatchObject({ ok: false, code: "unknown_tool", sent: true });
+    }
+    expect(methods(wideFake.calls).filter((method) => method === "tools/call")).toHaveLength(0);
+    // the SAME one sentence answers the other cause, a name the pinned listing does not hold at all: one code, one sentence
+    const absent = await viaService(widePort, { operation: "call", serverId: "docs-wide", toolName: "absent", argumentsJson: JSON.stringify({ mpn: "LM358DR" }) }, "permitted", "run-a4-000000000015");
+    expect(absent).toMatchObject({ kind: "refused", status: "unknown_tool" });
+    expect((absent as unknown as { diagnostics: string[] }).diagnostics[0]).toBe("That tool is not available for agent use on MCP server \"docs-wide\"; nothing was sent.");
+
+  });
+
+  it("17. the port applies the registry's own bound and FAILS CLOSED: a 33-name list approves nothing, never its first 32 names (B20-A4L review)", async () => {
+    // [B20 A4L review] the port applies the registry's OWN bound, and it FAILS CLOSED exactly as the validator judges it
+    // (review regressions-3 / tests-3): the validator refuses the WHOLE row on the count, before any entry meets the pattern,
+    // so the reviewed answer for a 33-name list is "this row approves nothing". Truncating to the first 32 would admit 32
+    // unreviewed names — and the writing tool named FIRST would be one of them, which is the security-2 hole A4L closes.
+    resetAdmissionControl();
+    const overDefs = [...Array.from({ length: 32 }, (_unused, index) => tool(`t${String(index).padStart(2, "0")}`)), tool("create-order")];
+    const overNames = ["create-order", ...Array.from({ length: 32 }, (_unused, index) => `t${String(index).padStart(2, "0")}`)];
+    expect(overNames).toHaveLength(33);
+    expect(overNames[0], "the writing tool is FIRST, well inside any truncation to 32").toBe("create-order");
+    const overRow = pinnedRow("docs-over", overDefs, { agentTools: overNames });
+    expect(validateMcpServerRegistry([overRow]).map((violation) => violation.rule), "the validator refuses the row on the count alone").toEqual(["agent-tools"]);
+    expect(mcpAgentToolAllowlist(overRow), "the whole list is void, never its first 32 names").toEqual(new Set());
+    expect(mcpAgentRoster([overRow], ENV_ON)).toEqual([]);
+    const overFake = fakeMcpServer(script(overDefs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const overPort = portOver([overRow], overFake.transport);
+    for (const name of ["create-order", "t00", "t31"]) {
+      expect(await overPort.call(callRequest("docs-over", name, { mpn: "LM358DR" })), name).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+    }
+    expect(overFake.calls, "nothing is sent for a row whose list the validator refuses whole").toHaveLength(0);
+
+  });
+
+  it("18. crafted allowlist shapes fail closed in the port too: an absent list, a string, an array-like object and a list whose entry throws approve nothing (B20-A4L review)", async () => {
+    const defs = [tool("lookup"), tool("create-order", { title: "Create order", description: "Create a supplier order." })];
+    // [B20 A4L review] the crafted shapes the validator refuses reach the PORT too (review tests-2), and its own reading fails
+    // closed for every one of them: an absent list, a string, an array-LIKE object (the coercion a reader might reach for), and
+    // a list whose entry throws when it is read — a throw leaves NOTHING approved, never the names read before it
+    resetAdmissionControl();
+    const craftedFake = fakeMcpServer(script(defs, (call) => rpcResult(call, { content: [text(BENIGN)] })));
+    const throwing = new Proxy(["lookup", "create-order"], { get: (target, key) => { if (key === "1") throw new Error("crafted revision"); return Reflect.get(target, key) as unknown; } });
+    // `validated` is false for the throwing list alone: it is not a shape a registry FILE can hold, so only the port reads it
+    const crafted: ReadonlyArray<readonly [string, (row: Record<string, unknown>) => void, boolean]> = [
+      ["no agentTools at all", (row) => { delete row.agentTools; }, true],
+      ["a string", (row) => { row.agentTools = "lookup"; }, true],
+      ["an array-like object", (row) => { row.agentTools = { 0: "create-order", 1: "lookup", length: 2 }; }, true],
+      ["a list whose entry throws when it is read", (row) => { row.agentTools = throwing; }, false],
+    ];
+    for (const [label, change, validated] of crafted) {
+      const row = { ...namingRow("docs-crafted", defs, ["lookup"]) } as Record<string, unknown>;
+      change(row);
+      const craftedRow = row as unknown as McpServerRegistryEntry;
+      if (validated) expect(validateMcpServerRegistry([craftedRow]).map((violation) => violation.rule), label).toContain("agent-tools");
+      expect(mcpAgentToolAllowlist(craftedRow), label).toEqual(new Set());
+      expect(mcpAgentRoster([craftedRow], ENV_ON), label).toEqual([]);
+      const craftedPort = portOver([craftedRow], craftedFake.transport);
+      expect(craftedPort.servers(), label).toEqual([]);
+      expect(await craftedPort.tools(toolsRequest("docs-crafted")), label).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+      for (const name of ["lookup", "create-order"]) {
+        expect(await craftedPort.call(callRequest("docs-crafted", name, { mpn: "LM358DR" })), `${label} / ${name}`).toMatchObject({ ok: false, code: "server_unavailable", sent: false });
+      }
+    }
+    expect(craftedFake.calls, "nothing is ever sent for a crafted row").toHaveLength(0);
   });
 });

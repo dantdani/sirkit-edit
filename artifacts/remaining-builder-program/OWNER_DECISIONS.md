@@ -638,10 +638,15 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 
 ## OD-74 amendment (B20-A4 review, 2026-09-22), appended to "Default applied":
 - Nothing in code proves an accepted tool is a READ. `annotations` grant nothing in either direction (the specification: a client MUST treat them as untrusted; `mcp-client-boundary.md` "readOnlyHint === true earns NOTHING"), so a tool with no annotations is accepted exactly as one declaring `readOnlyHint: true`; only an explicit `readOnlyHint: false` or `destructiveHint: true` excludes one (A2). The gate on "B20-A is read-only" is therefore the reviewed descriptor pin (a sha256 over every definition's name, title, description, input and output schema and annotations, so a server cannot add a tool after the fact) plus the owner's approval of the row (OD-48). The registry row has NO per-tool allowlist: an owner who approves a row whose pinned listing holds a writing tool makes that tool agent-callable as a Tier 0 read with no approval tier. Recorded as a stated limit and pinned by `b20-a4-agent-read-port` case 13. *The owner may choose otherwise: a reviewed `agentTools` allowlist on the registry row (a registry schema change, so a registry version bump and its byte gates).*
-- **The lead's decision (2026-09-22):** that limit is NOT accepted as the default. A following commit adds the reviewed
-  `agentTools` allowlist to the registry row (fail closed: a row names the tools its agent may call, and nothing else is
-  offered or sent), with the registry version bump and its byte gates. *The owner may choose otherwise: approve the whole
-  pinned listing, as this amendment first recorded.*
+- **The lead's decision, DELIVERED (B20-A4L, 2026-09-23):** that limit is not accepted as the default. Every registry row
+  now carries the REQUIRED per-tool agent allowlist `agentTools`, fail closed: `[]` names no tool and takes the row off
+  the agent roster entirely (nothing is negotiated, listed or sent for it), a row without the field is refused, at most 32
+  entries with the count judged first, every entry the client's own tool-name pattern, no duplicate, sorted. The port
+  enforces it in `tools` and in `call` before any negotiation, listing, admission or request, after the OD-75 argument
+  screen, and reads no annotation: the list NARROWS what A2 accepted and never admits. A crafted revision (a missing,
+  string, array-like or throwing list) approves nothing. Registry `1.1.0` -> `1.2.0`, a 31st CSV column `agent_tools`,
+  the byte pin regenerated. Pinned by `b20-a0-server-registry` (133 cases) and `b20-a4-agent-read-port` cases 14-18.
+  *The owner may choose otherwise: approve the whole pinned listing, as this amendment first recorded.*
 
 ## OD-80 amendment (B20-A4 review, 2026-09-22), replacing the last bullet of "Default applied":
 - ~~The principal half, and any widening of `provider`, stay with B3.~~ → The principal half was closed by B3 (2026-09-21); `provider` is NOT widened (OD-72 settled the B2 amendment). Server and tool are attributed by identity — the registry version and the pinned listing digest — never by version; `serverInfo.version` is deliberately not recorded.

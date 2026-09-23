@@ -6,7 +6,9 @@
  * revisions it speaks (2026-07-28 always; 2025-11-25 only as a compatibility era, OD-41), how Sirkit authenticates to it
  * (by secret REFERENCE — an environment variable name — never a value), the digest its tools/list is pinned to, its
  * per-server and per-tool quota, deadline, body and breaker budget, whether its results may be disclosed to an agent
- * (OD-36 pattern), its terms, and whether it is approved, disabled or blocked — every row carrying an owner decision id.
+ * (OD-36 pattern), WHICH of its tools an agent may call at all ([B20 A4L] `agentTools`, fail closed: the approval names the
+ * tools, never the server alone — OD-74 amendment), its terms, and whether it is approved, disabled or blocked — every row
+ * carrying an owner decision id.
  *
  * It is not documentation beside the code: the client boundary reads its policy from here. The transport (A1) builds the
  * request URL from `canonicalUri` and admits only its origin (scheme, host AND port) and its exact path — never host only —
@@ -22,7 +24,7 @@
 import { containsTokenAnchoredSecretShapedText } from "../agent/redaction";
 import { MCP_DISABLED_SERVERS_ENV, MCP_ENABLED_ENV, mcpFeatureState } from "./rollout";
 
-export const MCP_SERVER_REGISTRY_VERSION = "1.1.0"; // [B20 A0]; [B20 A3] 1.1.0: the authorization-server pin and its two columns (OD-61)
+export const MCP_SERVER_REGISTRY_VERSION = "1.2.0"; // [B20 A0]; [B20 A3] 1.1.0: the authorization-server pin and its two columns (OD-61); [B20 A4L] 1.2.0: the per-tool agent allowlist and its column (OD-74 amendment)
 
 /** The current specification revision (the authority path, OD-41) and the compatibility-era revision (never the authority path). */
 export const MCP_PROTOCOL_VERSION_CURRENT = "2026-07-28";
@@ -38,6 +40,8 @@ export const MCP_DESCRIPTOR_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 /** [B20 A3] The scope ceiling a row may name (OD-62), and the length of a pinned authorization-server URL (OD-61). */
 export const MCP_SCOPES_MAX = 32;
 export const MCP_AUTHORIZATION_URL_MAX_CHARS = 512;
+/** [B20 A4L] How many tools one row may make agent-callable (OD-74 amendment); an empty list makes none. */
+export const MCP_AGENT_TOOLS_MAX = 32;
 /**
  * Inclusive bounds every row's limits must lie within. A minute window (the server's and every tool's) starts at 4 because
  * the agent purpose gets `floor(max * 0.25)` of it (OD-40, `PURPOSE_QUOTA_SHARE`): below 4 that share is 0 and the window
@@ -116,6 +120,13 @@ export interface McpServerRegistryEntry {
   limits: McpServerLimits;
   maxRedirects: 0;
   agentDisclosure: McpAgentDisclosure;
+  /**
+   * [B20 A4L] The tools of this row's PINNED listing an agent may be offered and may call (OD-74 amendment). REQUIRED on
+   * every row and fail closed: `[]` means no tool of this row is agent-callable. It only NARROWS — a name the listing does
+   * not hold, or one the descriptor gates did not accept, is still refused. The disclosure decides whether the row is
+   * offered at all; a row that is not `permitted` may still carry names.
+   */
+  agentTools: readonly string[];
   terms: McpServerTerms;
   state: { status: McpServerStatus; ownerDecision: string; reason: string };
 }
@@ -324,6 +335,8 @@ export type McpRegistryRule =
   | "per-tool"
   | "redirects"
   | "agent-disclosure"
+  /** [B20 A4L] the per-tool agent allowlist (OD-74 amendment) */
+  | "agent-tools"
   | "terms"
   | "state"
   | "secret-shaped"
@@ -538,6 +551,19 @@ export function validateMcpServerRegistry(entries: readonly McpServerRegistryEnt
     if (!AGENT_DISCLOSURES.includes(disclosure)) at("agent-disclosure", `agentDisclosure must be one of ${AGENT_DISCLOSURES.join(" | ")}`);
     else if (entry.state?.status !== "approved" && disclosure === "permitted") at("agent-disclosure", `agentDisclosure may not be "permitted" for a ${String(entry.state?.status)} server`);
 
+    // [B20 A4L] the per-tool agent allowlist (OD-74 amendment): approval names the TOOLS, not just the server. The count is
+    // judged before any entry meets the pattern, as the scope ceiling is. The names are ASCII by their pattern, so the sort
+    // rule is code-point order either way, and the `agent_tools` CSV cell renders them in that order.
+    const agentTools: unknown = entry.agentTools;
+    if (!Array.isArray(agentTools) || agentTools.length > MCP_AGENT_TOOLS_MAX) {
+      at("agent-tools", `agentTools must be an array of at most ${MCP_AGENT_TOOLS_MAX} tool names (every row names the tools an agent may call; [] names none)`);
+    } else {
+      for (const name of agentTools) if (typeof name !== "string" || !MCP_TOOL_NAME_PATTERN.test(name)) at("agent-tools", `an agentTools entry must be a tool name matching ${MCP_TOOL_NAME_PATTERN.source}`);
+      const names = agentTools.filter((name): name is string => typeof name === "string");
+      if (new Set(names).size !== names.length) at("agent-tools", "duplicate agentTools entry");
+      if (names.some((name, index) => index > 0 && name < names[index - 1]!)) at("agent-tools", "agentTools must be sorted in code-point order (the CSV column renders them in that order)");
+    }
+
     const terms = entry.terms ?? {};
     if (terms.documentationUrl !== undefined && (typeof terms.documentationUrl !== "string" || !PLAIN_HTTPS_LINK.test(terms.documentationUrl))) at("terms", "documentationUrl must be a plain https link with no credentials, query or fragment");
     if (terms.checkedOn !== undefined && (typeof terms.checkedOn !== "string" || !DATE.test(terms.checkedOn))) at("terms", "checkedOn must be an ISO date");
@@ -574,7 +600,7 @@ function duration(ms: number): string {
 export const MCP_SERVER_REGISTRY_CSV_COLUMNS = [
   "registry_version", "id", "status", "owner_decision", "title", "canonical_uri", "endpoint_host", "endpoint_port", "endpoint_path", "protocol_versions", "compatibility_era",
   "auth_mode", "secret_references", "scopes", "authorization_issuer", "token_endpoint", "descriptor_pin", "pinned_at", "requests_per_minute", "max_concurrent", "deadline", "max_response_bytes", "breaker",
-  "per_tool_limits", "redirects", "agent_disclosure", "documentation_url", "docs_checked_on", "retention_note", "reason",
+  "per_tool_limits", "redirects", "agent_disclosure", "agent_tools", "documentation_url", "docs_checked_on", "retention_note", "reason",
 ] as const;
 
 /** One row per entry, sorted by id. Secret REFERENCES render as `NAME|role`; no value exists in a row, so none can render. */
@@ -609,6 +635,7 @@ export function renderMcpServerRegistryCsv(entries: readonly McpServerRegistryEn
       Object.entries(entry.limits.perTool ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([name, limit]) => `${name}=${limit.requestsPerMinute}/minute`).join(";"),
       String(entry.maxRedirects),
       entry.agentDisclosure,
+      entry.agentTools.join(";"), // [B20 A4L]
       entry.terms.documentationUrl ?? "",
       entry.terms.checkedOn ?? "",
       entry.terms.retentionNote ?? "",

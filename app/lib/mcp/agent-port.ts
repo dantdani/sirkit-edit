@@ -6,7 +6,12 @@
  * `app/api/chat/mcp-observation-runtime.ts` (the chat import-closure ratchet pins that), and the agent boundary
  * (`app/lib/agent/mcp-observation-reads.ts`) decides what may be asked and what a model may read. It composes what A0-A3 built:
  *  - the roster: approved, flag-admitted, not operator-disabled rows (`admittedMcpServer`) that carry a descriptor pin, are not
- *    `prohibited` for an agent and have an id the run trace can record; sorted by id, at most 16; no request is sent for it;
+ *    `prohibited` for an agent, have an id the run trace can record and name at least one agent-callable tool; sorted by id, at
+ *    most 16; no request is sent for it;
+ *  - [B20 A4L] the row's per-tool allowlist (`agentTools`, the OD-74 amendment): only the tools its operator approved are
+ *    offered or called — in `tools` after the roster row, in `call` after the screen below, always before anything is
+ *    negotiated, listed, admitted or sent; it narrows what A2 accepted, never admits, and reads no annotation. A row that
+ *    approves NOTHING never reaches this step: the roster drops it, so nothing is negotiated, listed or sent for it at all;
  *  - `call`, FIRST — after the roster row, before any negotiation, listing, admission or request — the argument screen (OD-75):
  *    arguments that carry a run identifier (the tenant, project, branch, run and principal ids, every context digest and each
  *    digest's bare hexadecimal part) or a credential Sirkit holds for the row, in any spelling (the case-folded skeleton), are
@@ -37,7 +42,7 @@ import { mcpTextReadsAsDirective, type McpAcceptedTool } from "./foreign-tools";
 import { mcpRedactionSubjects, skeletonCarries, type McpTokenProvider, type McpTransportDeps } from "./http-transport";
 import { discoverMcpServer, type McpNegotiatedServer } from "./negotiation";
 import { mcpObservationArgumentsDigest, normalizeMcpToolResult } from "./observation";
-import { admittedMcpServer, MCP_SERVER_ID_PATTERN, MCP_SERVER_REGISTRY, MCP_SERVER_REGISTRY_VERSION, type McpServerRegistryEntry } from "./server-registry";
+import { admittedMcpServer, MCP_AGENT_TOOLS_MAX, MCP_SERVER_ID_PATTERN, MCP_SERVER_REGISTRY, MCP_SERVER_REGISTRY_VERSION, type McpServerRegistryEntry } from "./server-registry";
 import { callMcpTool } from "./tool-call";
 import { listMcpTools, type McpToolListing } from "./tool-discovery";
 
@@ -198,9 +203,39 @@ export function mcpRunIdentifierSubjects(identifiers: unknown): string[] {
 // ── The roster ────────────────────────────────────────────────────────────────
 
 /**
+ * [B20 A4L] The tools the row's operator made agent-callable (`agentTools`, OD-74 amendment): the names of its allowlist,
+ * bounded and pattern-checked HERE too, because a crafted revision reaches the port without passing the validator. Fail
+ * closed — a row without a list allows nothing — and it only NARROWS: a name it holds that the pinned listing does not, or
+ * that the descriptor gates (A2) did not accept, is still `unknown_tool`. Annotations are never read: the server's hints
+ * grant nothing in either direction (OD-81), the operator's list is the rule. Pure; never throws.
+ *
+ * [B20 A4L review] The bound fails closed exactly as the VALIDATOR judges it (`agent-tools`: the count is judged before any
+ * entry meets the pattern), so a crafted list longer than the bound approves NOTHING. Truncating it to its first names would
+ * admit names no reviewer ever read — with a writing tool named first among them, the very hole A4L closes — while the
+ * reviewed answer for that row is "it approves nothing". A read that throws part way leaves nothing approved either.
+ */
+export function mcpAgentToolAllowlist(row: McpServerRegistryEntry): ReadonlySet<string> {
+  const names = new Set<string>();
+  try {
+    const list: unknown = row?.agentTools;
+    if (!Array.isArray(list) || list.length > MCP_AGENT_TOOLS_MAX) return names;
+    for (const name of list as readonly unknown[]) {
+      if (typeof name === "string" && TOOL_NAME_PATTERN.test(name)) names.add(name);
+    }
+  } catch {
+    names.clear();
+    return names;
+  }
+  return names;
+}
+
+/**
  * The rows an agent may be offered: approved and flag-admitted (`admittedMcpServer`: an operator-disabled row is refused), with a
  * descriptor pin, not `prohibited`, with an id the run trace can record (the unanchored secret classifier: `task-manager-docs`
- * spells `sk-manager-docs`); sorted by id, at most 16. Pure: nothing is sent. Never throws.
+ * spells `sk-manager-docs`); sorted by id, at most 16. [B20 A4L review] And naming at least one agent-callable tool: a row whose
+ * `agentTools` approves nothing can never answer a catalog or a call, so it is dropped HERE rather than offered — otherwise a
+ * whole-catalog request for it would negotiate and list against the third party, carrying the row's credential, and spend one of
+ * the run's four operations, for an answer that is empty by construction. Pure: nothing is sent. Never throws.
  */
 export function mcpAgentRoster(entries: readonly McpServerRegistryEntry[], env: Readonly<Record<string, string | undefined>>): readonly McpServerRegistryEntry[] {
   try {
@@ -215,6 +250,7 @@ export function mcpAgentRoster(entries: readonly McpServerRegistryEntry[], env: 
       const row = admission.entry;
       if (row.descriptorPin?.toolsListDigest === null || row.descriptorPin?.toolsListDigest === undefined) continue;
       if (row.agentDisclosure === "prohibited" || containsSecretShapedText(row.id)) continue;
+      if (mcpAgentToolAllowlist(row).size === 0) continue; // [B20 A4L review] a row that approves no tool is no roster row
       rows.push(row);
     }
     return Object.freeze(rows.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)).slice(0, MCP_AGENT_ROSTER_MAX));
@@ -296,12 +332,18 @@ export async function listMcpToolsForAgent(runtime: McpAgentPortRuntime, request
   try {
     const found = rosterRow(runtime, serverId);
     if (!found.ok) return refused(attribution(serverId, toolName, null, null, false), found.refusal);
+    // [B20 A4L] the row's allowlist, BEFORE anything is negotiated, listed or sent: a name its operator did not approve is
+    // `unknown_tool` exactly as a name no server holds is
+    const allowed = mcpAgentToolAllowlist(found.row);
+    if (toolName !== null && !allowed.has(toolName)) return refused(attribution(serverId, toolName, null, null, false), { code: "unknown_tool", sent: false, retryAtMs: null });
     composed = composeSignal(request);
     const negotiation = await negotiate(runtime, found.row, composed.signal);
     if (!negotiation.ok) return refused(attribution(serverId, toolName, null, null, false), ownDeadline(negotiation.refusal, composed));
     const listed = await listing(runtime, found.row, negotiation.negotiated, composed.signal);
     if (!listed.ok) return refused(attribution(serverId, toolName, negotiation.negotiated, listed.listing, false), ownDeadline(listed.refusal, composed));
-    const tools = toolName === null ? listed.listing.tools : listed.listing.tools.filter((tool) => tool.name === toolName);
+    // the catalog offers only ACCEPTED tools the allowlist names (it narrows what A2 accepted; it never adds to it)
+    const offered = listed.listing.tools.filter((tool) => allowed.has(tool.name));
+    const tools = toolName === null ? offered : offered.filter((tool) => tool.name === toolName);
     const base = attribution(serverId, null, negotiation.negotiated, listed.listing, true);
     if (toolName !== null && tools.length === 0) return refused(base, { code: "unknown_tool", sent: true, retryAtMs: null });
     return Object.freeze({ ok: true as const, kind: "catalog" as const, ...base, tools: Object.freeze(tools.slice(0, MCP_AGENT_CATALOG_TOOLS_MAX).map(catalogEntry)), toolsTotal: tools.length });
@@ -335,6 +377,9 @@ export async function callMcpToolForAgent(runtime: McpAgentPortRuntime, request:
     if (skeletonCarries(canonical, await mcpRedactionSubjects(row, runtime.deps), true)) {
       return refused(attribution(serverId, toolName, null, null, false), { code: "arguments_secret_shaped", sent: false, retryAtMs: null });
     }
+    // [B20 A4L] the row's allowlist (OD-74 amendment), still before any negotiation, listing, admission or request: a tool its
+    // operator did not approve answers the same `unknown_tool` and nothing is sent. The screen (OD-75) stays first.
+    if (!mcpAgentToolAllowlist(row).has(toolName)) return refused(attribution(serverId, toolName, null, null, false), { code: "unknown_tool", sent: false, retryAtMs: null });
     composed = composeSignal(request);
     const negotiation = await negotiate(runtime, row, composed.signal);
     if (!negotiation.ok) return refused(attribution(serverId, toolName, null, null, false), ownDeadline(negotiation.refusal, composed));

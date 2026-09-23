@@ -31,6 +31,9 @@ export function fixtureServer(overrides: Partial<McpServerRegistryEntry> = {}): 
     },
     maxRedirects: 0,
     agentDisclosure: "unknown",
+    // [B20 A4L] fail closed: a fixture row names NO agent-callable tool. A suite that drives the agent port names the
+    // tools that row's operator approved, exactly as a reviewed registry row would.
+    agentTools: [],
     terms: { documentationUrl: "https://example.com/docs/mcp", checkedOn: "2026-09-17", retentionNote: "fixture; nothing is retained" },
     state: { status: "approved", ownerDecision: "OD-48", reason: "test fixture; never a committed row" },
   };
@@ -58,6 +61,8 @@ export type WritableServer = {
   };
   maxRedirects: number;
   agentDisclosure: string;
+  /** [B20 A4L] the per-tool agent allowlist; `unknown` so a crafted revision can hold a non-array or a hostile entry */
+  agentTools: unknown;
   terms: { documentationUrl?: string; checkedOn?: string; retentionNote?: string };
   state: { status: string; ownerDecision: string; reason: string };
 };

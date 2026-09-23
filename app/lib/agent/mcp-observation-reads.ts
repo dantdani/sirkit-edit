@@ -1,9 +1,9 @@
 /**
  * [B20 A4] The agent's one bounded READ-ONLY external tool read over approved MCP servers, at the agent boundary.
  *
- *   sirkit.mcp.observation-read   servers: the roster of approved, pinned servers (no request);
- *                                 tools:   one server's pinned catalog, or one of its tools by exact name;
- *                                 call:    one accepted tool of a pinned, complete listing, observed (OD-74).
+ *   sirkit.mcp.observation-read   servers: approved, pinned servers that name an agent-callable tool (no request);
+ *                                 tools:   one server's pinned catalog, narrowed to the tools its row's `agentTools` names;
+ *                                 call:    one such tool of a pinned, complete listing, observed (OD-74 and its A4L amendment).
  *
  * Nothing here reaches a server, a token or a database. The server port (`app/lib/mcp/agent-port.ts`) is INJECTED into the gateway
  * by the chat route through its one approved runtime boundary (`app/api/chat/mcp-observation-runtime.ts`); this module imports
@@ -77,7 +77,7 @@ const SENTENCES: Readonly<Record<string, string>> = Object.freeze({
   listing_failed: "MCP server {server} did not list its tools in a form this client accepts.",
   listing_pin_mismatch: "MCP server {server} listed tools that differ from its reviewed descriptor pin; no tool of it is offered.",
   listing_truncated: "MCP server {server} listed more tools than this client reads; no incomplete listing is offered.",
-  unknown_tool: "That tool is not an accepted tool of MCP server {server}; nothing was sent.",
+  unknown_tool: "That tool is not available for agent use on MCP server {server}; nothing was sent.", // [B20 A4L review] ONE sentence true of BOTH causes: a tool the pinned listing does not hold or A2 did not accept, and a tool the row's `agentTools` does not name — which of the two is never disclosed, or a model could enumerate the operator's list
   arguments_invalid: "The arguments are not a JSON object this tool accepts; nothing was sent.",
   arguments_too_large: "The arguments exceed 2 048 characters; nothing was sent.",
   arguments_disclose_run_identity: "The arguments name this project, run or principal; only the part numbers or terms the user asked to look up may be sent. Nothing was sent.",
