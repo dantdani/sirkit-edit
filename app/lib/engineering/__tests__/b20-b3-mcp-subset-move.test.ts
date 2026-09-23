@@ -3,6 +3,8 @@
  * the exposed list to the withheld list (each needs browser-only state), the nine servable reads stay exposed, the five
  * proposals stay listed; six board reads declare the durable-server-board authority beside the local working copy. No
  * descriptor's version, no other field and no other descriptor changes, and the agent path is byte-identical.
+ * [B20 B4] pin move (OD-82, OD-87): B4 moved the five proposals to the withheld list too, so the subset is the nine reads and
+ * seven ids are withheld (b20-b4-withhold-proposals).
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -36,7 +38,9 @@ const SERVED_READS = [
   "sirkit.pcb.revision-inspect", "sirkit.pcb.via-inspect", "sirkit.project.canonical-revision-inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run",
 ];
 const PROPOSALS = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
-const WITHHELD = ["sirkit.project.history-inspect", "sirkit.schematic.inspect"];
+const WITHHELD_READS = ["sirkit.project.history-inspect", "sirkit.schematic.inspect"];
+// [B20 B4] pin move (OD-82, OD-87): the five proposals are withheld too
+const WITHHELD = [...WITHHELD_READS, ...PROPOSALS].sort();
 const WIDENED = ["sirkit.project.canonical-revision-inspect", "sirkit.pcb.board-inspect", "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect", "sirkit.validation.drc-run", "sirkit.validation.connectivity-verify"];
 const WIDENED_NOTE = "B20-B3: durable-server-board declared (served over MCP from the durable board)";
 
@@ -87,8 +91,9 @@ function servableFromDurableState(item: ToolDescriptor): boolean {
 }
 
 describe("[B20 B3] F — the reviewed MCP subset move", () => {
-  it("1. exactly 14 exposed ids and 2 withheld ids, sorted and frozen, each withheld id with its reason comment; the report is clean with count 14", () => {
-    expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]).toEqual([...SERVED_READS, ...PROPOSALS].sort());
+  it("1. exactly 9 exposed ids and 7 withheld ids, sorted and frozen, each withheld id with its reason comment; the report is clean with count 9", () => {
+    // [B20 B4] pin move: 14 exposed / 2 withheld -> 9 / 7 (the five proposals withheld, OD-82, OD-87)
+    expect([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS]).toEqual([...SERVED_READS]);
     expect([...MCP_WITHHELD_TOOL_IDS]).toEqual(WITHHELD);
     for (const list of [INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS]) {
       expect(Object.isFrozen(list)).toBe(true);
@@ -98,7 +103,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
     const withheldBlock = source.slice(source.indexOf("export const MCP_WITHHELD_TOOL_IDS"));
     for (const id of WITHHELD) expect(withheldBlock, id).toMatch(new RegExp(`"${id.replaceAll(".", "\\.")}",\\s+// .{20,}`));
     const report = mcpExposureReport(registry);
-    expect(report).toMatchObject({ ok: true, missing: [], unexpected: [], outsideAgentSet: [], duplicates: [], count: 14 });
+    expect(report).toMatchObject({ ok: true, missing: [], unexpected: [], outsideAgentSet: [], duplicates: [], count: 9 });
     expect([...report.excludedByReason.withheld]).toEqual(WITHHELD);
   });
 
@@ -107,7 +112,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
   });
 
   it("3. each withheld read fails that rule", () => {
-    for (const id of WITHHELD) expect(servableFromDurableState(descriptor(id)), id).toBe(false);
+    for (const id of WITHHELD_READS) expect(servableFromDurableState(descriptor(id)), id).toBe(false);
   });
 
   it("4. the six widened descriptors carry exactly the new authority at their base version; every other field and every other descriptor equals its base pin", () => {
@@ -143,7 +148,7 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
     }
   });
 
-  it("6. under the most permissive context the mcp channel includes exactly the 9 reads and the 5 proposals", () => {
+  it("6. under the most permissive context the mcp channel includes exactly the 9 reads ([B20 B4] the 5 proposals are withheld)", () => {
     const context: DiscoveryContext = {
       tenantId: "local", projectId: "p", branchId: "main", actorId: "u1", actorRole: "project_admin",
       grantedCapabilities: ["read_project", "edit_placement", "edit_copper", "edit_zones", "edit_stackup_outline", "edit_constraints", "edit_components", "manage_protection", "run_automation", "approve_proposal", "restore_project", "migrate_project", "export_project"],
@@ -154,22 +159,24 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
       grantableCapabilities: ["edit_placement"], grantLineageId: "grant-lineage-1",
     };
     const included = discoverTools(registry, context).included.map((item) => item.toolId).sort();
-    expect(included).toEqual([...SERVED_READS, ...PROPOSALS].sort());
+    expect(included).toEqual([...SERVED_READS]); // [B20 B4] pin move: the proposals left the channel with the subset
     for (const id of WITHHELD) expect(included).not.toContain(id);
   });
 
-  it("7. mcp-tool-manifest.csv and .json byte-equal the renderers: 14 rows exposed, the 2 withheld rows with reason withheld", () => {
+  it("7. mcp-tool-manifest.csv and .json byte-equal the renderers: 9 rows exposed, the 7 withheld rows with reason withheld", () => {
     expect(read("artifacts/ai-control-plane-b20/mcp-tool-manifest.csv")).toBe(renderMcpToolManifestCsv(registry));
     expect(read("artifacts/ai-control-plane-b20/mcp-tool-manifest.json")).toBe(renderMcpToolManifestJson(registry));
     const rows = renderMcpToolManifestCsv(registry).split(NEWLINE).slice(1, -1).map((row) => row.split(","));
-    expect(rows.filter((row) => row[5] === "yes").map((row) => row[0])).toEqual([...SERVED_READS, ...PROPOSALS].sort());
+    // [B20 B4] pin move: 14 / 2 -> 9 / 7 (OD-82, OD-87)
+    expect(rows.filter((row) => row[5] === "yes").map((row) => row[0])).toEqual([...SERVED_READS]);
     expect(rows.filter((row) => row[6] === "withheld").map((row) => row[0])).toEqual(WITHHELD);
-    expect(renderMcpToolListing(registry).tools.map((tool) => tool.name)).toEqual([...SERVED_READS, ...PROPOSALS].sort());
+    expect(renderMcpToolListing(registry).tools.map((tool) => tool.name)).toEqual([...SERVED_READS]);
   });
 
-  it("8. the page states 14, 9, 5 and 2 and each B3 suite's case count, and every file:line reference resolves to the code it quotes", () => {
+  it("8. the page states 9, 7, 2 and 5 and each B3 suite's case count, and every file:line reference resolves to the code it quotes", () => {
     const page = read("artifacts/ai-control-plane-b20/mcp-server-reads.md");
-    expect(page).toMatch(/The MCP subset is 14 tools: 9 served reads and 5 listed proposals; 2 reads are withheld\./);
+    // [B20 B4] pin move (OD-82, OD-87): the page's subset sentence moves with the withholding of the five proposals
+    expect(page).toMatch(/The MCP subset is 9 tools: the 9 served reads; 7 tools are withheld: 2 reads and, since B4, the 5 proposals\./);
     const suites = [
       "app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts",
       "app/lib/mcp/server/__tests__/b20-b3-read-arguments.test.ts",

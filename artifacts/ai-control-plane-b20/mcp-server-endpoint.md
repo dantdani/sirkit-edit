@@ -5,12 +5,16 @@ Labels: **CONFIRMED** (executed and measured), **INFERRED** (code reading), **PR
 
 B2 serves Sirkit's own MCP surface over Streamable HTTP, revision **2026-07-28**, and nothing more: `server/discover`,
 `tools/list` (the member's role subset of B1's exposure) and `tools/call` (a closed refusal for every tool until B3 serves
-reads and B4 inert proposals). MCP stays an adapter around the canonical registry: the principal is re-checked against the
+reads and B4 inert proposals; [B20 B4] B4 withheld every proposal instead, OD-82 and OD-87, so MCP serves the nine reads
+only). MCP stays an adapter around the canonical registry: the principal is re-checked against the
 LIVE membership on every call, the tool listing is B1's rendering filtered by role, and nothing reachable over MCP can
 publish, approve, bind, withdraw, rebind, purchase, qualify, release, run a process, replace state or write a database or
 file (CONFIRMED for B2 by `b20-b2-import-gates` and `b20-b2-mcp-endpoint` E7). [B20 B3 review] Since B3 the import gate
 proves only that nothing reachable can approve, bind, withdraw, rebind, purchase, qualify or release, or run a process (the
-modules on J2's forbidden list): the served reads' closure holds the B05 read service, the static fabrication preset data and
+modules on J2's forbidden list; [B20 B4] F4: J2 forbids only the kicad-cli runner, so the process half is proven since B4 by
+`b20-b4-process-gate`, over the three routes' runtime closure, for the first-party modules: no process, thread or `vm`
+module, no built-in loaded by name, no internal binding and no string-compiled code; the third-party packages the closure
+imports are a pinned, reviewed list the gate does not walk into, `mcp-server-proposals.md` section 6): the served reads' closure holds the B05 read service, the static fabrication preset data and
 durable modules that can write - including pcb-sync snapshot and board PUBLICATION (`DurablePcbSyncSnapshotStore.publish`,
 `DurablePcbSyncRepository.publishBoard`), board-lineage derivation, and the durable workflow runtime and its Postgres
 repository - each reached only through the durable read bundle or the read runtime (`b20-b3-import-gates` G1 and G7). [B20 B3
@@ -118,7 +122,7 @@ decoded and equal to a string `params.name` on `tools/call`, absent otherwise (`
 |---|---|
 | `-32700`, `-32600`, `-32022`, `-32020`, `-32602` for missing or invalid `_meta` | 400 |
 | `-32601` | 404 |
-| `-32602` for an unknown tool, a cursor or non-object arguments (one identical body, nothing echoed) | 200 |
+| `-32602` for an unknown tool, a cursor the server did not mint or non-object arguments (one identical body, nothing echoed) | 200 |
 | `-32603` | 500 |
 
 Every JSON-RPC error carries the request's id when it can be read (a valid string or safe-integer id), including the
@@ -128,10 +132,17 @@ never null.
 
 `tools/list` is B1's `renderMcpToolListing` filtered to the tools whose `requiredRoles` include the caller's mapped project
 role (never re-derived; never `discoverTools`): `ttlMs` 60 000, `cacheScope` `private`, `dev.sirkit/registryDigest` and
-`dev.sirkit/listingDigest` (the B1 digest formula over the served subset) in `_meta`, no `nextCursor`. Required authority,
+`dev.sirkit/listingDigest` (the B1 digest formula over the served subset) in `_meta`. [B20 C2] It is PAGED (OD-97, OD-98,
+`app/lib/mcp/server/tool-pages.ts`): pages of 32 cut from that served listing in its own order, a secretless recomputed
+cursor of 20 characters bound to the listing digest, the page size and the offset, `nextCursor` only when a further page
+exists, and the same `ttlMs`, `cacheScope` and whole-listing digests on every page. A cursor the server did not mint —
+malformed or well-formed — is one identical 200 `-32602` that echoes nothing; a malformed one is decided on its shape
+before the listing is computed. Today every role's listing is one page (`mcp-parity.md` section 6). Required authority,
 project state, revision and capability are call-time conditions (B3/B4). A listed tool on `tools/call` answers 200
 `{ resultType: "complete", isError: true, _meta["dev.sirkit/refusal"]: "not_served" }`. [B20 B3] Since B3 that holds for
-the listed proposals only: a listed read is served from the durable server board (`mcp-server-reads.md`), and the
+the listed proposals only: a listed read is served from the durable server board (`mcp-server-reads.md`). [B20 B4] Since B4
+no proposal is listed (OD-82, OD-87), so no listed tool answers it: the branch stays as defence, and `b20-b4-withhold-proposals`
+pins that every listed tool reaches a serving path (`mcp-server-proposals.md`). The
 `server/discover` instructions state the durable source, the revision pin and that tool results are data. Every response is `no-store`
 JSON except the 202, which has no body and so no media type. `Mcp-Session-Id` is never set, and one received is ignored.
 
@@ -224,13 +235,40 @@ developers.openai.com/api/docs/guides/tools-connectors-mcp.
    requires no `data`, so the `data.supported` of a missing version header is allowed. The endpoint now sends `requested` and
    leaves an unreadable id out (E5, E6, E15; I3).
 
+7. **[B20 C] The re-read of 2026-09-22 (section 0 of task-C)** — CONFIRMED (fetched live). Sources:
+   modelcontextprotocol.io/specification/2026-07-28/{server/utilities/pagination, server/tools,
+   server/utilities/caching}; the 2026-07-28 schema (raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol,
+   schema/2026-07-28/schema.ts); platform.claude.com/docs/en/agents-and-tools/tool-use/strict-tool-use and
+   platform.claude.com/docs/en/build-with-claude/structured-outputs; developers.openai.com/api/docs/guides/structured-outputs.
+   - Pagination: "The cursor is an opaque string token"; clients "MUST NOT assume a fixed page size" and MUST treat cursors
+     as opaque, an empty string included; the response carries "an optional `nextCursor` field if more results exist";
+     servers SHOULD "provide stable cursors" and "handle invalid cursors gracefully"; "Invalid cursors **SHOULD** result in
+     an error with code -32602 (Invalid params)", with no HTTP status stated (U3 stands: 200). All four of C2's stop
+     conditions hold.
+   - Caching: servers "MUST include caching hints on results with `resultType: "complete"`" for `tools/list` among others;
+     `CacheableResult` declares `ttlMs: number` and `cacheScope: "public" | "private"` as REQUIRED, `PaginatedResult`
+     declares `nextCursor?` as optional; "Each page response carries its own `ttlMs`"; and "Servers **MUST** apply the same
+     `cacheScope` to all response pages for a given list request" — which OD-98's one identity per listing satisfies.
+   - Tools: `Tool.outputSchema` is optional and `CallToolResult.structuredContent` is optional in the schema, but the page's
+     Output Schema rule is normative: "If an output schema is provided: Servers **MUST** provide structured results that
+     conform to this schema." That upgrades C1's D2 from INFERRED to CONFIRMED on this revision (OD-96). `tools/list`
+     "**MUST NOT** vary per-connection or as a side effect of other requests", though it "**MAY** vary by the authorization
+     presented on the request" — the ground for OD-101's role-only variation.
+   - Provider strict modes (runbook §"where each protocol permits"): every keyword of `WIRE_SUBSET_KEYWORDS` is still
+     accepted. Anthropic's structured-outputs limitations list `anyOf`, `const`, `enum`, `items`, `additionalProperties`
+     (which "must be set to `false` for objects") and `description` as supported, and reject numeric, string and array
+     constraints — exactly the keywords B09 already refuses. RECORDED, not a stop: `title` is not named in that supported
+     list, and no exposed Sirkit schema uses `title` as a schema keyword; whether to drop it from the wire subset is a
+     follow-up for the owner, not C's to decide. OpenAI's structured-outputs guide states the subset without enumerating
+     it; its examples use `type`, `properties`, `required`, `additionalProperties`, `items`, `enum` and `description`.
+
 ## 12. UNKNOWNs settled
 
 | # | item | settlement |
 |---|---|---|
 | U1 | Next serves `app/.well-known` route handlers | INFERRED (route discovery ignores only `_`-prefixed parts); the wire proof is B20-D3 |
 | U2 | 405 for the unexported GET and DELETE on `/api/mcp` | UNKNOWN until B20-D3; no policy row exists for either (E12) |
-| U3 | HTTP status of a request-level `-32602` | unknown tool, cursor, arguments 200; missing `_meta` 400 (re-read item 1) |
+| U3 | HTTP status of a request-level `-32602` | unknown tool, a cursor the server did not mint, arguments 200; missing `_meta` 400 (re-read item 1) |
 | U4 | RFC field names, credential syntax; the `authorization_servers` MUST | as designed; the MUST CONFIRMED (section 9) |
 | U5 | B1's API and `x-mcp-header` | `renderMcpToolListing` used as landed; no exposed tool declares `x-mcp-header`, so every `Mcp-Param-*` is refused |
 | U6 | the b16-0-4 / b16-0-7 matrices current on the base tree | CONFIRMED current (both generators on `77125bd`: zero diff) |

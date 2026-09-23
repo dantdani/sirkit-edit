@@ -480,19 +480,21 @@ describe("[B20 B3] C — the served-read pipeline", () => {
     expect((now as Date).getTime()).toBe(HARNESS_T0);
   });
 
-  it("14. all five proposals still answer not_served through the dispatch, with no durable read", async () => {
+  it("14. all five proposals, withheld since B4, answer the identical -32602 through the dispatch, with no durable read", async () => {
     const h = await readHarness();
     const loadHead = vi.spyOn(h.workflow, "loadHead");
     const proposals = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
     const admin = await harnessPrincipal((() => { h.repo.set({ tenantId: "local", projectId: "proj-mcp", userId: "user-admin", role: "admin", state: "active", version: 1, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", auditActorId: "test" }); return h.repo; })(), { user: "user-admin" });
-    for (const name of proposals) {
+    // [B20 B4] pin move (OD-82, OD-87): withheld, each proposal is B2's one identical -32602 (a nonexistent id's bytes)
+    const answer = async (name: string): Promise<{ status: number; text: string }> => {
       const headers: McpRequestHeaders = { protocolVersion: { state: "present", value: "2026-07-28" }, method: { state: "present", value: "tools/call" }, name: { state: "present", value: name }, paramHeaderCount: 0 };
       const input = { principal: admin, message: { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: {}, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {} } } }, bytes: 100, mcp: headers, meta: { method: "POST", pathname: "/api/mcp" }, signal: new AbortController().signal } as McpBearerJsonInput;
       const response = await handleMcpRequest(input, { reads: h.deps });
-      expect(response.status, name).toBe(200);
-      const body = await response.json() as { result: Record<string, unknown> };
-      expect(body.result, name).toMatchObject({ resultType: "complete", isError: true, _meta: { "dev.sirkit/refusal": "not_served" } });
-    }
+      return { status: response.status, text: await response.text() };
+    };
+    const reference = await answer("sirkit.no-such-tool");
+    expect(JSON.parse(reference.text)).toMatchObject({ jsonrpc: "2.0", id: 7, error: { code: -32602 } });
+    for (const name of proposals) expect(await answer(name), name).toEqual(reference);
     expect(loadHead).not.toHaveBeenCalled();
   });
 

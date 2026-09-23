@@ -5,8 +5,8 @@
  * POST, answered with application/json only (no stream in B2). A Sirkit-issued bearer token (POST /api/mcp/token) is
  * verified on every call and the member's LIVE membership is re-read; the dispatch serves server/discover, tools/list (the
  * member's role subset of the MCP exposure) and tools/call. [B20 B3] A listed read is served from the project's durable
- * server board; its dependencies are resolved inside the authenticated callback only, never at module scope. A listed
- * proposal answers a closed refusal until B4.
+ * server board; its dependencies are resolved inside the authenticated callback only, never at module scope. [B20 B4] No
+ * proposal is listed: MCP exposure is read-only in B20 (OD-82, OD-87).
  * GET, DELETE and OPTIONS are not exported (a legacy GET stream or session DELETE answers 405).
  */
 import { mcpBearerJsonRoute } from "@/app/lib/auth/route-handlers";

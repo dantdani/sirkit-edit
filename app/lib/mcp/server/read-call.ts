@@ -20,7 +20,10 @@
  *  11. the bundle of exactly the binding's kinds (`not_servable`);
  *  12. B05 on the `mcp` channel, behind a seam (its failure statuses pass through verbatim; a throw is internal_error);
  *  13. cancellation again; 14. the durable post-check (`stale_revision`, the result discarded); 15. the membership, re-read
- *      (`membership_changed`, `membership_unavailable`); 16. rendering (`output_too_large_for_model` over 60 000 characters);
+ *      (`membership_changed`, `membership_unavailable`); 16. rendering (`output_too_large_for_model` over 60 000 characters)
+ *      and [B20 C1] the output-schema gate (OD-96): a tool whose listing declares an `outputSchema` carries a
+ *      `structuredContent` that conforms to it after the model-safe walk, one that declares none carries none, and a value
+ *      that does not conform is `invalid_output` — before the replay store, so the answer, the cache and the trace agree;
  *  17. the replay cache stores successes only; 18. every counter and marker is released — [B20 B3 review] the admission slot
  *      only once every durable query the call started has settled (a query outlives a deadline or a cancel: it cannot be
  *      cancelled); 19. one closed trace record.
@@ -63,6 +66,8 @@ import { MCP_META_KEY_SERVER_INFO, MCP_SERVER_INFO } from "./protocol";
 import { gateMcpReadArguments, parseMcpReadBindings } from "./read-arguments";
 import { MCP_READ_REFUSAL_STATUSES, recordMcpReadTrace, type McpReadRefusalStatus, type McpReadTrace, type McpReadTraceOutcome } from "./read-trace";
 import { mcpReadReplayCache, type McpReplayCall, type McpReplayContext, type McpReplayIdentity } from "./replay-cache";
+import { gateStructuredContent } from "./structured-content"; // [B20 C1] OD-96
+import { mcpOutputSchemaDecision } from "./tool-definitions"; // [B20 C1] OD-96
 
 export { MCP_READ_REFUSAL_STATUSES };
 
@@ -665,6 +670,13 @@ export async function serveMcpReadCall(input: McpReadCallInput, deps: McpReadDep
     // 16. rendering: the native payload plus the note, sanitized, within the model transfer budget
     const text = JSON.stringify(mcpModelSafe({ ok: true, note: MCP_READ_DATA_NOTE, tool: descriptor.toolId, revision: bound, verification: result.verification, output: result.output }));
     if (typeof text !== "string" || text.length > MCP_READ_RESULT_MAX_CHARS) throw new Refusal("output_too_large_for_model");
+    // [B20 C1] OD-96: the listing's own decision binds the answer — a tool that declares an output schema returns a
+    // structuredContent that conforms to it AFTER the model-safe walk, one that declares none returns nothing, and a value
+    // that does not conform is B05's closed `invalid_output`. It runs before the replay store and the trace, so the answer,
+    // the cache and the trace agree.
+    const declaredOutput = mcpOutputSchemaDecision(descriptor);
+    const structured = gateStructuredContent(mcpModelSafe(result.output), declaredOutput.declared ? descriptor.outputSchema : null);
+    if (structured.kind === "refuse") throw new Refusal("invalid_output");
     const meta: Record<string, unknown> = {
       ...alwaysMeta(),
       "dev.sirkit/invocationId": trace.invocationId,
@@ -676,7 +688,7 @@ export async function serveMcpReadCall(input: McpReadCallInput, deps: McpReadDep
       "dev.sirkit/verification": result.verification,
       "dev.sirkit/idempotency": idempotencyKey !== null ? "stored" : "none",
     };
-    const rendered = { resultType: "complete", content: [{ type: "text", text }], structuredContent: mcpModelSafe(result.output), isError: false, _meta: meta };
+    const rendered = { resultType: "complete", content: [{ type: "text", text }], ...(structured.kind === "include" ? { structuredContent: structured.value } : {}), isError: false, _meta: meta };
 
     // 17. the replay cache keeps successes only
     const replay = held.replay;

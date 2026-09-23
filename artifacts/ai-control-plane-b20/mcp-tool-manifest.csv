@@ -14,7 +14,7 @@ sirkit.pcb.dimension,1.2.0,mutate,1,bound-mutation-editor-session,no,granted_exe
 sirkit.pcb.edit-track,1.0.0,mutate,2,bound-mutation-editor-session,no,never_exposed,,,
 sirkit.pcb.mechanical-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.pcb.move-footprint,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,
-sirkit.pcb.propose-bounded-edit,1.0.0,propose,2,bound-proposal,yes,,false,true,declared
+sirkit.pcb.propose-bounded-edit,1.0.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.pcb.repair-plan,1.0.0,propose,2,bound-proposal,no,not_agent_exposed,,,
 sirkit.pcb.revision-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.pcb.rotate-side-footprint,1.2.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,
@@ -23,14 +23,14 @@ sirkit.pcb.undo-redo-canonical,1.0.0,mutate,1,bound-mutation-editor-session,no,n
 sirkit.pcb.undo-redo-granted,1.0.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,
 sirkit.pcb.via-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.pcb.zone-edit,1.1.0,mutate,2,unbound,no,never_exposed,,,
-sirkit.placement.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
+sirkit.placement.propose,1.1.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.project.canonical-revision-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.project.history-inspect,1.0.0,read,0,bound-read,no,withheld,,,
-sirkit.routing.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
+sirkit.routing.propose,1.1.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.schematic.add-component,1.0.0,mutate,2,unbound,no,not_agent_exposed,,,
 sirkit.schematic.inspect,1.1.0,read,0,bound-read,no,withheld,,,
-sirkit.schematic.propose-component-replacement,1.0.0,propose,2,bound-proposal,yes,,false,true,declared
-sirkit.schematic.propose-tier1-edit,1.1.0,propose,2,bound-proposal,yes,,false,true,declared
+sirkit.schematic.propose-component-replacement,1.0.0,propose,2,bound-proposal,no,withheld,,,
+sirkit.schematic.propose-tier1-edit,1.1.0,propose,2,bound-proposal,no,withheld,,,
 sirkit.selection.control,1.0.0,view-session,0,bound-view-session,no,view_session,,,
 sirkit.selection.inspect,1.1.0,read,0,bound-read,no,view_state_read,,,
 sirkit.validation.connectivity-verify,1.0.0,read,0,bound-read,yes,,true,true,declared

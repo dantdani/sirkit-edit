@@ -4,21 +4,26 @@
  *
  *  - server/discover: the DiscoverResult (the same for every caller);
  *  - tools/list: B1's rendering of the MCP subset (`renderMcpToolListing`), filtered to the tools whose `requiredRoles`
- *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private, the registry
- *    and listing digests in `_meta`, no pagination (a cursor is -32602);
+ *    include the caller's mapped project role — never re-derived here. `ttlMs` 60 000, `cacheScope` private and the registry
+ *    and listing digests of the caller's WHOLE served listing on every page; [B20 C2] pages of 32 in the listing's own order
+ *    with a secretless recomputed cursor (`tool-pages.ts`, OD-97/OD-98) — a cursor this server would not mint, malformed or
+ *    not, is one identical 200 -32602 that echoes nothing, and the last page carries no `nextCursor`;
  *  - tools/call: [B20 B3] a listed READ is served by the read pipeline (`read-call.ts`) from the project's durable server
- *    board; a listed proposal answers a closed refusal (`not_served`: B4 decides each one); any other name — role-filtered,
- *    never exposed or nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
+ *    board; [B20 B4] no proposal is listed (OD-82, OD-87); any other name — withheld, role-filtered, never exposed or
+ *    nonexistent — and non-object arguments answer one identical -32602 that echoes nothing.
  *
- * MCP is an adapter here: nothing this module reaches can approve, bind, withdraw, rebind, purchase, qualify or release,
- * or run a process (b20-b2-import-gates J2). [B20 B3 review] Since B3 its import closure also holds the B05 read service
- * (through read-call.ts alone, b20-b3-import-gates G1), the static fabrication preset data, and durable modules that CAN
- * write - pcb-sync snapshot and board PUBLICATION and board-lineage derivation, reached only through the durable read bundle,
- * and the durable workflow runtime, reached only through the read runtime (G7). [B20 B3 lead] Every one of those writes goes
- * through `workflow.commit`. That a served read writes no database is enforced at run
- * time, not by the import gate: the read reaches the durable repository only through `readOnlyDurableWorkflow`, which refuses
- * every write without delegating (b20-b3-durable-read-bundle A12, b20-b3-mcp-tools-call-reads H10 and H15). One closed trace
- * record is kept per handled request; anything thrown is the JSON-RPC internal error.
+ * MCP is an adapter here: nothing this module reaches can approve, bind, withdraw, rebind, purchase, qualify or release
+ * (b20-b2-import-gates J2), and none of its first-party modules starts a process or a thread through a process, thread or vm
+ * module, a built-in loaded by name, an internal binding or string-compiled code, and the third-party packages it reaches are
+ * a reviewed list ([B20 B4] b20-b4-process-gate, which does not walk inside those packages; J2 forbids only the fab runner).
+ * [B20 B3 review] Since B3 its import closure also holds the B05 read service (through read-call.ts alone, b20-b3-import-gates
+ * G1), the static fabrication preset data, and durable modules that CAN write - pcb-sync snapshot and board PUBLICATION and
+ * board-lineage derivation, reached only through the durable read bundle, and the durable workflow runtime, reached only
+ * through the read runtime (G7). [B20 B3 lead] Every one of those writes goes through `workflow.commit`. That a served read
+ * writes no database is enforced at run time, not by the import gate: the read reaches the durable repository only through
+ * `readOnlyDurableWorkflow`, which refuses every write without delegating (b20-b3-durable-read-bundle A12,
+ * b20-b3-mcp-tools-call-reads H10 and H15). One closed trace record is kept per handled request; anything thrown is the
+ * JSON-RPC internal error.
  */
 import type { McpBearerJsonInput } from "../../auth/route-handlers";
 import { mcpServerNowMs } from "../../auth/mcp-bearer";
@@ -43,8 +48,9 @@ import {
 import { serveMcpReadCall, type McpReadDependencies } from "./read-call";
 import { MCP_SERVER_TRACE_SCHEMA, recordMcpServerRequest, type McpServerTraceMethod, type McpServerTraceOutcome } from "./request-trace";
 import { MCP_TOOL_LISTING_SCHEMA, renderMcpToolListing, type McpToolDefinition, type McpToolListing } from "./tool-definitions";
+import { mcpToolsListCursorWellFormed, mcpToolsListPage, mcpToolsListPageSize, type McpToolsListCursorInput } from "./tool-pages"; // [B20 C2] OD-97
 
-/** The text of the closed refusal a listed proposal answers until B4 decides it ([B20 B3] listed reads are served). */
+/** [B20 B4] The closed refusal of a listed tool with no serving path: none since B4 (every listed tool is a served read), kept as defence. */
 export const MCP_NOT_SERVED_TEXT = "This tool is listed but not yet served; nothing was done." as const;
 
 export interface McpDispatchDeps {
@@ -122,14 +128,28 @@ async function handle(input: McpBearerJsonInput, registry: ToolRegistry, reads: 
   if (verdict.method === "server/discover") return done(mcpResultResponse(id, renderMcpDiscoverResult()), "discovered", 200);
 
   if (verdict.method === "tools/list") {
-    // no pagination in B2: every cursor (the empty string included) is invalid
-    if (Object.hasOwn(params, "cursor")) return done(mcpErrorResponse(200, id, C.INVALID_PARAMS, M.INVALID_CURSOR), "cursor_refused", 200);
+    // [B20 C2] the SHAPE of a present cursor is judged before the listing is computed: a malformed one (the empty string
+    // included) costs nothing and answers identically whatever the registry does — B2's byte-for-byte answer (OD-97)
+    const cursor: McpToolsListCursorInput = Object.hasOwn(params, "cursor") ? { present: true, value: params.cursor } : { present: false };
+    const cursorRefused = (): Handled => done(mcpErrorResponse(200, id, C.INVALID_PARAMS, M.INVALID_CURSOR), "cursor_refused", 200);
+    if (cursor.present && !mcpToolsListCursorWellFormed(cursor.value)) return cursorRefused();
     const served = servedListing(registry, input.principal.role);
+    const size = mcpToolsListPageSize();
+    const page = mcpToolsListPage(served, cursor, size);
+    if (page.kind === "invalid_cursor") return cursorRefused();
+    // DEFENCE, unreachable from here: `served.tools` is always an array, its digest always the helper's non-empty string
+    // and `size` always inside the reviewed bounds (b20-c2 G9 pins all three). A throw is the same 500 -32603 a refusing
+    // listing answers — which is what a broken listing actually answers, before this line (G12).
+    if (page.kind === "internal") throw new Error("MCP_TOOLS_LIST_PAGE_INTERNAL");
+    // [B20 C2] OD-98: every page carries the same identity — `ttlMs`, `cacheScope` and the digest of the caller's WHOLE
+    // served listing. The key order is B2's, and a single page carries no `nextCursor` key, so a one-page body is
+    // byte-identical to the pre-C2 answer.
     const result = {
       resultType: "complete",
-      tools: served.tools,
+      tools: page.tools,
       ttlMs: MCP_CACHE_TTL_MS,
       cacheScope: "private",
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
       _meta: { ...SERVER_INFO_META, "dev.sirkit/registryDigest": served.registryDigest, "dev.sirkit/listingDigest": served.listingDigest },
     };
     return done(mcpResultResponse(id, result), "listed", 200, { listingDigest: served.listingDigest });
@@ -150,6 +170,7 @@ async function handle(input: McpBearerJsonInput, registry: ToolRegistry, reads: 
     const outcome: McpServerTraceOutcome = answer.outcome === "succeeded" || answer.outcome === "replayed" ? "read_served" : "read_refused";
     return done(mcpResultResponse(id, answer.result), outcome, 200, { toolId: name, listingDigest: served.listingDigest });
   }
+  // [B20 B4] defence only: a listed tool with no serving path (none since B4; the ratchet is b20-b4-withhold-proposals case 5)
   const refusal = {
     resultType: "complete",
     content: [{ type: "text", text: MCP_NOT_SERVED_TEXT }],

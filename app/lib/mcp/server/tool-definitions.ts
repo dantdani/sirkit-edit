@@ -8,7 +8,9 @@
  *    three-way parity of C1 starts true; a no-argument tool renders `{type:"object", additionalProperties:false,
  *    properties:{}, required:[]}`;
  *  - `outputSchema` is declared only when the registry's output schema is inside the proven wire subset with an object root
- *    (OD-56); otherwise it is omitted and the manifest records why;
+ *    (OD-56) and [B20 C1] Sirkit's own deterministic output validator can EVALUATE it (OD-96, `structured-content.ts`);
+ *    otherwise it is omitted and the manifest records why. A declared schema binds the served success: it carries a
+ *    conforming `structuredContent` or the read is refused `invalid_output` (`read-call.ts` step 16);
  *  - `annotations` are DERIVED from Sirkit's classification alone and never read from anywhere (clients must treat any
  *    server's annotations as untrusted; Sirkit's permission tiers have no annotation input);
  *  - `_meta` carries Sirkit's identity under its own, unreserved prefix `dev.sirkit/` (OD-60).
@@ -20,8 +22,10 @@
 import { strictCompatibility, validateSchemaStructure, validateWireSubset } from "../../agent/provider-tools";
 import { mcpExclusionReason, mcpExposureReport, type McpExclusionReason } from "../../engineering/mcp-exposure";
 import { permissionTierOfDescriptor, type PermissionTier } from "../../engineering/permission-tiers";
+import { firstPartyIdIssues, firstPartyTextIssues } from "../../engineering/descriptor-text"; // [B20 C3] OD-99
 import { engineeringDigest } from "../../engineering/stable";
 import { renderRegistryJson, type JsonSchema, type ToolDescriptor, type ToolOperationClass, type ToolRegistry } from "../../engineering/tool-registry";
+import { mcpOutputSchemaEvaluable } from "./structured-content"; // [B20 C1] OD-96
 
 /** Reference notes section 6: 1-128 characters of A-Z a-z 0-9 _ . - (case-sensitive, unique per server). */
 export const MCP_TOOL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -113,6 +117,7 @@ export const MCP_OUTPUT_SCHEMA_OMISSIONS = Object.freeze([
   "outside the proven wire subset",
   "not a valid schema structure",
   "root is not an explicit object schema",
+  "not evaluable by the output validator", // [B20 C1] OD-96: nothing weaker than a schema Sirkit can check is ever declared
 ] as const);
 export type McpOutputSchemaOmission = (typeof MCP_OUTPUT_SCHEMA_OMISSIONS)[number];
 
@@ -157,6 +162,10 @@ function outputDecisionOf(outputSchema: unknown): McpOutputSchemaDecision {
   if (validateWireSubset(outputSchema).length > 0) return Object.freeze({ declared: false, reason: "outside the proven wire subset" });
   if (validateSchemaStructure(outputSchema).length > 0) return Object.freeze({ declared: false, reason: "not a valid schema structure" });
   if ((outputSchema as Record<string, unknown>).type !== "object") return Object.freeze({ declared: false, reason: "root is not an explicit object schema" });
+  // [B20 C1] OD-96, last: a schema Sirkit's own deterministic output validator cannot EVALUATE would be a promise it cannot
+  // keep (the specification's "servers MUST provide structured results that conform to this schema"), so it is omitted and
+  // the tool stays listed with no structuredContent — never declared and then unchecked.
+  if (!mcpOutputSchemaEvaluable(outputSchema)) return Object.freeze({ declared: false, reason: "not evaluable by the output validator" });
   return Object.freeze({ declared: true });
 }
 
@@ -233,8 +242,12 @@ function renderDefinition(descriptor: unknown, registryDigest: unknown): McpTool
   if (typeof registryDigest !== "string" || !REGISTRY_DIGEST_PATTERN.test(registryDigest)) throw new McpToolRenderError("registry_digest_invalid");
   const facts = renderFactsOf(descriptor);
   if (!facts) throw new McpToolRenderError("descriptor_invalid");
-  // the name first: a name that fails the MCP rule is refused as a name, whatever else the descriptor is
+  // the name first: a name that fails the MCP rule is refused as a name, whatever else the descriptor is — STRUCTURALLY
+  // (the alphabet and the length) and then [B20 C3] LEXICALLY (OD-99), because the name is the one field this renderer
+  // emits verbatim to a model and both provider adapters derive theirs from. It is refused as a NAME, carrying no toolId
+  // and no detail: the refusal of a directive-shaped id must never echo the id.
   if (!MCP_TOOL_NAME_PATTERN.test(facts.toolId)) throw new McpToolRenderError("name_invalid");
+  if (firstPartyIdIssues(facts.toolId).length > 0) throw new McpToolRenderError("name_invalid");
   const named = facts.toolId;
   // the structural rule AND the reviewed decision (listed, not withheld) over the same snapshot that is rendered
   const reason = mcpExclusionReason(facts.candidate);
@@ -246,6 +259,17 @@ function renderDefinition(descriptor: unknown, registryDigest: unknown): McpTool
   const strict = strictCompatibility({ inputSchema: facts.inputSchema } as ToolDescriptor);
   if (!strict.ok) throw new McpToolRenderError("input_schema_not_strict", named);
   const output = outputDecisionOf(facts.outputSchema);
+  // [B20 C3] the first-party text gate re-applied AFTER the strict conversion, over exactly what this renderer emits
+  // (OD-99): the title, the description, the rendered strict input schema, and the output schema only when it is declared.
+  // The NAME is not repeated here — it was judged above, before the exposure decision, and is refused as a name.
+  // The annotation-field rule is NOT applied here — the renderer reads no annotation field of a descriptor and B1 pins that
+  // it ignores them. The whole listing refuses, as it does for every other render refusal.
+  if (firstPartyTextIssues({
+    title: facts.title,
+    description: facts.description,
+    inputSchema: strict.schema,
+    ...(output.declared ? { outputSchema: facts.outputSchema } : {}),
+  }).length > 0) throw new McpToolRenderError("descriptor_invalid", named);
   const annotations: McpToolAnnotations = {
     readOnlyHint: facts.operationClass === "read",
     destructiveHint: false, // nothing destructive is MCP-exposable (only read and propose pass the rule)

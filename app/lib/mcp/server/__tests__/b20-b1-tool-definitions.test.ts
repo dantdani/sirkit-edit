@@ -83,7 +83,7 @@ const LABEL = "[A-Za-z](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
 const META_KEY = new RegExp(`^(?:(${LABEL}(?:\\.${LABEL})*)/)?[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$`);
 
 describe("[B20 B1] MCP tool definitions rendered from the canonical registry", () => {
-  it("the listing renders exactly the 14 reviewed ids, sorted by name in code-point order, with the registry digest bound in", () => {
+  it("the listing renders exactly the 9 reviewed ids, sorted by name in code-point order, with the registry digest bound in", () => {
     const listing = renderMcpToolListing(registry);
     expect(Object.keys(listing).sort()).toEqual(["excluded", "listingDigest", "registryDigest", "tools"]);
     expect(listing.tools.map((tool) => tool.name)).toEqual([...INTENTIONAL_MCP_EXPOSED_TOOL_IDS].sort(byCodePoint));
@@ -153,13 +153,14 @@ describe("[B20 B1] MCP tool definitions rendered from the canonical registry", (
   });
 
   it("annotations are derived only from Sirkit's classification; annotation-like fields on the descriptor are ignored", () => {
-    // hard-coded per exposed id (never re-derived with the implementation's own formula): 9 reads, 5 proposals, all `natural`
-    // ([B20 B3] pin move: 11 -> 9 reads, two withheld under OD-69)
+    // hard-coded per exposed id (never re-derived with the implementation's own formula): 9 reads, all `natural`
+    // ([B20 B3] pin move: 11 -> 9 reads, two withheld under OD-69; [B20 B4] pin move: the 5 proposals are withheld under
+    // OD-82 / OD-87, so no exposed tool renders readOnlyHint false)
     const PROPOSALS = ["sirkit.pcb.propose-bounded-edit", "sirkit.placement.propose", "sirkit.routing.propose", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"];
     const EXPECTED: Record<string, { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean; openWorldHint: boolean }> = Object.fromEntries(
       INTENTIONAL_MCP_EXPOSED_TOOL_IDS.map((id) => [id, { readOnlyHint: !PROPOSALS.includes(id), destructiveHint: false, idempotentHint: true, openWorldHint: false }]),
     );
-    expect(Object.keys(EXPECTED)).toHaveLength(14); // [B20 B3] pin move: 16 -> 14
+    expect(Object.keys(EXPECTED)).toHaveLength(9); // [B20 B3] pin move: 16 -> 14; [B20 B4] pin move: 14 -> 9
     for (const item of exposed()) {
       const expected = EXPECTED[item.toolId]!;
       expect(renderMcpToolDefinition(item, DIGEST).annotations, item.toolId).toEqual(expected);
@@ -169,7 +170,8 @@ describe("[B20 B1] MCP tool definitions rendered from the canonical registry", (
     const listing = renderMcpToolListing(registry).tools;
     expect(Object.fromEntries(listing.map((tool) => [tool.name, tool.annotations]))).toEqual(EXPECTED);
     // idempotentHint is true ONLY for `natural`: every other idempotency value (and a missing or unknown one) renders false
-    for (const base of [descriptor("sirkit.pcb.board-inspect"), descriptor("sirkit.placement.propose")]) {
+    // [B20 B4] pin move: the second base was placement.propose, withheld since B4 (it no longer renders); a second read instead
+    for (const base of [descriptor("sirkit.pcb.board-inspect"), descriptor("sirkit.pcb.via-inspect")]) {
       for (const idempotency of ["required-key", "not-applicable", "sometimes", ""]) {
         expect(renderMcpToolDefinition(forged(base, { idempotency }), DIGEST).annotations.idempotentHint, `${base.toolId} ${idempotency}`).toBe(false);
       }
@@ -207,9 +209,10 @@ describe("[B20 B1] MCP tool definitions rendered from the canonical registry", (
     for (const value of objectsOf(second)) expect(firstObjects.has(value)).toBe(false);
     const registryObjects = objectsOf(registry.list());
     for (const value of firstObjects) expect(registryObjects.has(value)).toBe(false);
-    const definition = renderMcpToolDefinition(descriptor("sirkit.schematic.propose-tier1-edit"), DIGEST);
+    // [B20 B4] pin move: the single definition was propose-tier1-edit, withheld since B4; via-inspect has an input property too
+    const definition = renderMcpToolDefinition(descriptor("sirkit.pcb.via-inspect"), DIGEST);
     for (const value of objectsOf(definition)) expect(Object.isFrozen(value)).toBe(true);
-    expect(objectsOf(definition).has(descriptor("sirkit.schematic.propose-tier1-edit").inputSchema)).toBe(false);
+    expect(objectsOf(definition).has(descriptor("sirkit.pcb.via-inspect").inputSchema)).toBe(false);
   });
 
   it("the listing digest is engineeringDigest over {schema, registryDigest, tools} and is stable under the registry's input order", () => {
@@ -453,10 +456,11 @@ describe("[B20 B1] the byte-gated MCP tool manifest", () => {
     expect(rows).toHaveLength(registry.list().length);
     expect(rows.map((row) => row.split(",")[0])).toEqual(registry.list().map((item) => item.toolId).sort(byCodePoint));
     expect(rows).toContain("sirkit.pcb.board-inspect,1.1.0,read,0,bound-read,yes,,true,true,declared");
-    expect(rows).toContain("sirkit.placement.propose,1.1.0,propose,2,bound-proposal,yes,,false,true,declared");
+    // [B20 B4] pin move (OD-87): placement is withheld, so its row carries the reason and no hints
+    expect(rows).toContain("sirkit.placement.propose,1.1.0,propose,2,bound-proposal,no,withheld,,,");
     expect(rows).toContain("sirkit.pcb.move-footprint,1.1.1,mutate,1,bound-mutation-editor-session,no,granted_execution,,,");
     expect(rows).toContain("sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,");
-    expect(rows.filter((row) => row.split(",")[5] === "yes")).toHaveLength(14); // [B20 B3] pin move: 16 -> 14 (OD-69)
+    expect(rows.filter((row) => row.split(",")[5] === "yes")).toHaveLength(9); // [B20 B3] pin move: 16 -> 14 (OD-69); [B20 B4] pin move: 14 -> 9 (OD-82, OD-87)
   });
 
   it("mcp-tool-manifest.csv and mcp-tool-manifest.json byte-match the render", () => {

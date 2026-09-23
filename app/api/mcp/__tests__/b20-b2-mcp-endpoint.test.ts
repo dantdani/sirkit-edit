@@ -26,7 +26,7 @@ import type { InMemoryProjectMembershipRepository, ProjectMembershipRepository }
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
-import type { ToolRegistry } from "@/app/lib/engineering/tool-registry";
+import { ToolRegistry } from "@/app/lib/engineering/tool-registry";
 import { encodeMcpNameHeader } from "@/app/lib/mcp/http-transport";
 import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
 import { createDurableBoardReader, readOnlyDurableWorkflow } from "@/app/lib/engineering/durable-read-bundle";
@@ -547,11 +547,13 @@ describe("[B20 B2] E7 — methods", () => {
     expect(((body.result as Record<string, unknown>).instructions as string).length).toBeLessThanOrEqual(300);
   });
 
-  it("tools/list for the stored roles viewer, editor and admin serves exactly B1's rendering of the subset the mapped role may use", async () => {
+  it("tools/list for the stored roles viewer, commenter, editor and admin serves exactly B1's rendering of the subset the mapped role may use", async () => {
     const registry = sirkitToolRegistry();
     const full = renderMcpToolListing(registry);
     const seen: Record<string, string> = {};
-    for (const stored of ["viewer", "editor", "admin"] as MembershipRole[]) {
+    // [B20 B4] pin move: with the proposals withheld (OD-82, OD-87) viewer, editor and admin list the same nine reads, so the
+    // commenter (seven reads) keeps the claim that the listing, and its digest, vary by role
+    for (const stored of ["viewer", "commenter", "editor", "admin"] as MembershipRole[]) {
       member(stored);
       const token = await tokenFor();
       const first = await call(rpc("tools/list"), { token });
@@ -583,7 +585,9 @@ describe("[B20 B2] E7 — methods", () => {
     expect(new Set(Object.values(seen)).size).toBeGreaterThan(1);
   });
 
-  it("a cursor is 200 -32602 (no pagination in B2)", async () => {
+  // [B20 C2] retitle only (the assertions and the case count are unchanged): C2 pages the listing, so these three values
+  // are no longer "any cursor" but three the server would never mint — the answer they get is the same one, byte for byte
+  it("a cursor that is not one the server minted is 200 -32602 (B20-C2 pages the listing)", async () => {
     const token = await tokenFor();
     for (const cursor of ["", "next", 5]) {
       const { status, body } = await call(rpc("tools/list", { cursor }), { token });
@@ -592,24 +596,34 @@ describe("[B20 B2] E7 — methods", () => {
     }
   });
 
-  it("a listed tool on tools/call is the 200 isError refusal not_served, whatever the arguments", async () => {
+  it("a listed tool with no serving path on tools/call is the 200 isError refusal not_served, whatever the arguments", async () => {
     const token = await tokenFor();
     // [B20 B3] pin move: B3 serves the listed READS, so the not_served answer is now a listed PROPOSAL's (B4 decides those)
-    const registry = sirkitToolRegistry();
-    const listed = servedFor("pcb_editor").find((tool) => registry.get(tool.name)!.operationClass === "propose")!.name;
+    // [B20 B4] pin move (OD-82, OD-87): no proposal is listed since B4, so no production tool answers not_served; the dispatch
+    // keeps the branch as defence, reached here through the canonical wrapper with a forged registry that lists placement's
+    // proposal descriptor under the listed read id sirkit.pcb.via-inspect (b20-b4-withhold-proposals case 5 is the ratchet)
+    const production = sirkitToolRegistry();
+    const placement = production.get("sirkit.placement.propose")!;
+    const forged = new ToolRegistry(production.list().map((item) => (item.toolId === "sirkit.pcb.via-inspect" ? ({ ...placement, toolId: "sirkit.pcb.via-inspect" } as typeof item) : item)));
+    const listed = "sirkit.pcb.via-inspect";
+    const route = mcpBearerJsonRoute({ maxBytes: 65_536 }, (input) => handleMcpRequest(input, { registry: forged }));
     for (const args of [{}, { anything: "x" }, undefined]) {
-      const { status, body } = await call(rpc("tools/call", { name: listed, ...(args === undefined ? {} : { arguments: args }) }), { token });
+      const response = await route(request(rpc("tools/call", { name: listed, ...(args === undefined ? {} : { arguments: args }) }), { token }));
+      const status = response.status;
+      const body = (await response.json()) as Record<string, unknown>;
       expect(status).toBe(200);
       expect(body.result).toEqual({ resultType: "complete", content: [{ type: "text", text: "This tool is listed but not yet served; nothing was done." }], isError: true, _meta: { "io.modelcontextprotocol/serverInfo": { name: "sirkit", version: "0.1.0" }, "dev.sirkit/refusal": "not_served" } });
     }
   });
 
   it("a role-filtered tool, a release tool, a granted mutation, a nonexistent id and non-object arguments are one identical 200 -32602 without echo", async () => {
-    member("viewer");
+    // [B20 B4] pin move: with the proposals withheld (OD-82, OD-87) the viewer may use every listed read, so the role-filtered
+    // tool is a read the commenter may not use (sirkit.component-authority.inspect or the readiness report)
+    member("commenter");
     const token = await tokenFor();
     const registry = sirkitToolRegistry();
-    const roleFiltered = renderMcpToolListing(registry).tools.find((tool) => !registry.get(tool.name)!.requiredRoles.includes("viewer"))!.name;
-    const listed = servedFor("viewer")[0]!.name;
+    const roleFiltered = renderMcpToolListing(registry).tools.find((tool) => !registry.get(tool.name)!.requiredRoles.includes("commenter"))!.name;
+    const listed = servedFor("commenter")[0]!.name;
     const bodies = new Set<string>();
     for (const [name, args] of [[roleFiltered, {}], ["sirkit.manufacturing.release", {}], ["sirkit.pcb.move-footprint", {}], ["sirkit.no-such-tool", {}], [listed, "not-an-object"], [listed, [1]]] as Array<[string, unknown]>) {
       const { status, body, text } = await call(rpc("tools/call", { name, arguments: args }), { token });
