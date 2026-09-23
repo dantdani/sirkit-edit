@@ -2368,3 +2368,78 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Gates (lead, one heavy job at a time): mcp, net, http and engineering 131 files / 1 849 passed; agent and acquisition
   50 / 623 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean (one unused declaration the split
   left behind, removed); 16 generators with zero drift beyond the regenerated registry CSV.
+
+### B20-B4 - no proposal over MCP: the withholding move, the process gate, the stop evidence (2026-09-21 local; server-track workflows + lead; 5d97728, merged in 4f3dd30)
+
+- The first dispatch (design `scratchpad/b20/task-B4.md`: placement served behind a propose delegation, returned as a
+  bounded projection) STOPPED at its D-9 timing probe, as its decision rule required. On the synthetic probe board, at
+  `candidateCount` 8 and `timeoutMs` 15 000: 12 runs at 400 iterations / 250 footprints took 44.3-104.0 s; 1 run at 1
+  iteration took 55.7 s; 12 runs at 25 footprints stayed at or under 16.6 s; 2 runs at 50 footprints took 28.2 s and
+  43.3 s (the second cancelled); 1 run at 100 footprints took 262.3 s; at 2 000 iterations / 500 footprints no run finished
+  in 11 minutes. The engine checks its budget and cancellation only between candidate specs, so an iteration cap cannot
+  shorten the first spec. Its review round corrected the stop record (4 findings) and left the evidence suite.
+- The lead's decision (OD-87's default; `scratchpad/b20/task-B4-withhold.md`): B20 serves no proposal over MCP. The runbook's
+  B22-B names a bounded "pinned placement/routing experiment" runtime profile, the natural host for a reversal.
+- The second dispatch moved all five proposals to `MCP_WITHHELD_TOOL_IDS` (OD-82, OD-87): 9 served reads exposed, 7
+  withheld, the registry digest and every descriptor unchanged; a proposal on tools/call gets B2's identical -32602; a
+  listed-means-served ratchet keeps `not_served` as defence. New suites `b20-b4-withhold-proposals` (8),
+  `b20-b4-process-gate` (5) and `b20-b4-stop-evidence` (8; it pins unchanged base code, so it did not fail first - its
+  mutation runs show it is sensitive, and its citations are content-anchored). Reviewed pin moves in seven B1, B2 and B3
+  suites, each with its reason; only the MCP manifest and exposure page regenerated. Adversarial review: 9 findings
+  confirmed and fixed test-first, among them the process gate seeing only first-party module references (now built-ins
+  loaded by name, internal bindings, string-compiled code, `vm` and a reviewed package list) and the B3 pages crediting
+  J2 with "no process run" (J2 forbids only the kicad-cli runner; the other four spawners were absent by chance until this
+  gate, F4).
+- The check's three new issues, fixed by the lead test-first (9 new tripwire probes failed first; four mutations, each
+  reverting one fix, failed its probes; restored by sha256): names written with escapes skipped the text prefilter, `module`
+  (a loader through `createRequire`) was not a process module, and a computed destructuring key or `Function.call` /
+  `.apply` passed. The gate is a tripwire against a spawner reaching MCP by accident; review stays the guarantee against a
+  deliberate one (as OD-81 says of the directive filter).
+- Follow-ups: F1, the anonymous `/api/pcb/placement/preview` route blocks the event loop for about 125 s per request
+  (measured in process), raised with the owner as a separate task; the native agent path's 110 s clamp is a between-spec
+  budget; stale text in `action-registry.ts` (`mcp.server`) and `route-policy.ts` (`/api/mcp`) still names proposals and
+  moves with the B20 closeout (D20-30).
+- Gates (lead, in the worktree, one heavy job at a time): auth, API MCP, lib MCP and net 69 files / 1 114 (+9 env-gated
+  skips); app/api 27 / 1 059; engineering, agent, acquisition, AST gates, the acceptance pipeline and pcb candidates 148 /
+  1 733 (+2 skips); tsc 0; eslint clean on 15 files; 16 generators with zero drift; census 165/162/3/0.
+
+### B20-C1..C3 - three-way parity, tools/list pages, the first-party descriptor text gate (2026-09-22/23 local; server-track workflow + lead; b3aa13f, merged in 4f3dd30)
+
+- Designed read-only first (designer, critic, reviser; `scratchpad/b20/task-C.md`), built in the server worktree in three
+  checkpoints after B4, each to its own green gate.
+  - **C1.** `renderMcpProviderParity` proves that the name mapping, the description and the strict `inputSchema` are equal
+    across the OpenAI, Anthropic and MCP renderings of every MCP-exposed tool, and records `title`, `outputSchema`,
+    `annotations`, the tool `_meta` keys, the request `_meta` bindings and B3's four result `_meta` key sets as MCP-only,
+    byte-gated as `mcp-parity.{json,md}`. An output schema is declared only when it passes the reserved-key scan, the wire
+    subset, the structure check, an explicit object root and the output validator's evaluability; a declared tool's success
+    always carries a conforming `structuredContent`, else the read is refused `invalid_output` before the replay store and
+    the trace. The B09 parity artifact gains its first byte pin.
+  - **C2.** tools/list pages of 32 in the listing's own code-point order, a secretless, stateless recomputed cursor bound to
+    the served listing digest, the page size and the offset; a malformed cursor is refused on its shape before the listing
+    is computed, and any cursor the server would not mint is one identical 200 `-32602` that echoes nothing; `ttlMs` 60 000,
+    `cacheScope` private and the whole-listing identity on every page.
+  - **C3.** One lexical gate in `validateToolDescriptor` (`app/lib/engineering/descriptor-text.ts`) over the tool id, the
+    title, the description and every judged schema string - a closed character set, reviewed bounds, a secret shape, closed
+    markers and closed directive phrases, every count and length decided before any regular expression - re-applied by the
+    MCP renderer after the strict conversion over exactly what it emits; annotation-shaped descriptor keys are refused, so
+    an MCP annotation can only come from Sirkit's own classification. Negative tripwires prove a Tier 3 family id, a
+    `.release` id, an instruction in any judged text and a forged `readOnlyHint` never reach tools/list, and A2's foreign
+    matcher runs over the whole catalog as a test-time cross-check.
+- The live re-read of 2026-09-22 (pagination, tools, caching, the schema, both providers' strict-mode pages) confirmed all
+  five stop conditions and upgraded C1's central sentence from INFERRED to CONFIRMED: a tool that declares an output schema
+  MUST return conforming structured results.
+- Adversarial review: 20 findings, all fixed test-first except one the lead owns (stale citations in the reserved
+  `discovery.md`). The two that mattered: `structuredContent` conformance was judged AFTER Sirkit's own model-safe rewrite,
+  so the sanitizer could turn an already-validated result into a non-conforming one that was still sent; and the tool ID -
+  the one model-bound field the renderer emits verbatim - was never judged for injection, so D20-15's "names" leg was not
+  met. Both closed.
+- At the merge (this commit): A2's matcher read A4's own descriptor description as a directive on the words "a credential";
+  the description now says "a secret-shaped value", which is what the code checks. The subset-derived literals moved with
+  the merged registry (42 descriptors, 33 agent-exposed, 9 MCP-exposed, 24 agent-only), B4's base pins were rebased on the
+  registry without A4's descriptor, the measured descriptor maxima moved with A4's description, and every mappable
+  `discovery.md` citation was re-derived from the merge base by a line map (91 references), with the two
+  standing-obligation anchors verified by their quoted text.
+- Gates (lead, in the worktree and again on the merged tree): auth, API MCP, lib MCP and net 76 files / 1 182 (+9
+  env-gated skips); app/api 27 / 1 059; engineering, agent, acquisition, AST gates and the acceptance pipeline 147 / 1 728
+  (+2 skips); on the merged tree 142 / 1 932, 122 / 1 635 (+11 skips) and 91 / 1 618 (+5 skips); tsc 0; eslint clean;
+  17 generators with zero drift; census 165/162/3/0.

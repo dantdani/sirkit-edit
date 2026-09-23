@@ -650,3 +650,153 @@ Decisions the program cannot take safely on its own. Each row states the safe de
 
 ## OD-80 amendment (B20-A4 review, 2026-09-22), replacing the last bullet of "Default applied":
 - ~~The principal half, and any widening of `provider`, stay with B3.~~ → The principal half was closed by B3 (2026-09-21); `provider` is NOT widened (OD-72 settled the B2 amendment). Server and tool are attributed by identity — the registry version and the pinned listing digest — never by version; `serverInfo.version` is deliberately not recorded.
+
+## OD-50 — Inert proposal delivery over MCP (B20-B4, 2026-09-21)
+- Default applied: no proposal is delivered over MCP in B20 (OD-82, OD-87). Neither the returned sealed artifact nor a durable proposal record is built. The discovery default (return the sealed artifact as `structuredContent`) is superseded.
+- The returned-only projection is recorded for a reversal (`task-B4.md` D-10; `mcp-server-proposals.md` section 9). The raw sealed candidate embeds the whole board and its constraint history and measured 2 233 630 to 3 869 953 characters on the probe board, so a served proposal would return a bounded, sanitized projection instead.
+- The owner may choose otherwise: serve a proposal through that projection once its OD-82 or OD-87 reversal condition holds; or persist a durable inert proposal record (a write on the MCP path, which B20 excludes).
+
+## OD-82 — Every proposal withheld from MCP; the subset shrinks from 14 to 9 (B20-B4, 2026-09-21)
+- Default applied: all five proposals move from `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` to `MCP_WITHHELD_TOOL_IDS` in one reviewed move, each with its reason. The MCP subset is the 9 served reads; 7 tools are withheld (2 reads under OD-69, 5 proposals). MCP exposure in B20 is read-only. A `tools/call` naming a proposal gets B2's identical `-32602` and reads nothing.
+- The reasons:
+  - `sirkit.schematic.propose-tier1-edit` and `sirkit.schematic.propose-component-replacement` compile against the editor's `SchematicState` and head mark, which exist only in the browser (as OD-69).
+  - `sirkit.pcb.propose-bounded-edit` seals the open editor's history head, lineage and DRC preset. No durable source holds them, and apply re-verifies them against the live editor.
+  - `sirkit.routing.propose` runs its engine as the FreeRouting child process, and an MCP call may not start a process.
+  - `sirkit.placement.propose` is decided under OD-87.
+- The registry digest (`eng1-4aacd63c7e0a6193`), every descriptor and the agent set (32) are unchanged. The five stay agent-exposed inert proposals that the structural rule admits.
+- Every listed tool reaches a serving path (`b20-b4-withhold-proposals` case 5). The dispatch keeps its closed `not_served` branch as defence.
+- The owner may choose otherwise: restore a proposal by a reviewed move once its state has a durable source (for the schematic proposals, a durable `SchematicState` store, which also reverses OD-69), or, for routing, once a sandboxed routing worker exists under B22-B.
+
+## OD-87 — Placement over MCP: the engine cannot be bounded or stopped inside a spec (B20-B4, 2026-09-21)
+- **Facts.** CONFIRMED unless labelled. Every number comes from one synthetic probe board, measured on an Intel Core Ultra 5 125U (14 threads), 15 GiB, Node v24.15.0, one heavy job at a time. Real boards: UNKNOWN (none could be loaded without PGlite).
+  - **The probe board.** 200 fixed nets, so pads per used net grow with the footprint count: 1.35 at 25, 20 at 500. IC courtyards overlap only at 250 and 500 footprints. The footprint series is one pseudo-random netlist, not a size sweep.
+  - **Runs at `candidateCount` 8, `timeoutMs` 15 000:**
+    - 400 iterations, 250 footprints: 12 runs took 44.3 to 104.0 s (5 unrouted, median 89.9 s; 5 routed, median 92.9 s; 44.3 s unrouted; 47.4 s routed).
+    - 1 iteration, 250 footprints: 1 run, 55.7 s.
+    - 400 iterations, 25 footprints: 12 runs, at most 16.6 s (10 in `b4f-03`, 1 in the breakdown probe, 1 in the abort probe).
+    - 400 iterations, 50 footprints: 2 runs, 28.2 s and 43.3 s (the second cancelled at its second poll; its first spec took at least 42.99 s).
+    - 400 iterations, 100 footprints: 1 run, 262.3 s.
+    - At 2 000 iterations and 500 footprints, no run finished within 11 minutes.
+  - The time budget and the cancellation hook are checked only between candidate specs. An iteration cap cannot shorten the first spec (the current-placement seed). An abort raised inside a spec is seen only at the next poll. `runPlacementCandidate` passes no observer.
+  - All of this is confirmed by `b20-b4-stop-evidence` cases 1 to 5 and 7. That suite pins unchanged base code.
+- **Default applied:** placement is withheld (OD-82's move); MCP is read-only in B20.
+- **The owner may choose otherwise:**
+  - a bounded engine host with kill semantics, stopped hard at the budget (the runbook's B22-B "run a pinned placement/routing experiment" profile). This deliberately changes `b20-b4-process-gate`, which forbids `worker_threads`, `child_process` and `cluster` in the MCP closure.
+  - an accepted bound, after a real-board probe.
+  - serving placement only below a measured footprint cap.
+- OD-83, 84, 85, 86 and 88 are not recorded: their numbers stay reserved for the reversal's design (`task-B4.md` section 8).
+
+## OD-95 — Where the three-way parity of the MCP-exposed tools is proven and recorded (B20-C, 2026-09-22)
+
+- Facts read at execution time: `renderAgentProviderParity` compares `{name, description, inputSchema}` between the OpenAI
+  and Anthropic renderings only (`provider-tools.ts:379-400`, schema `sirkit.agent-provider-parity.v2`); the B04 v2 report
+  adds the fixed difference "output schema is registry-only metadata" (`tool-provider-adapters.ts:117`); the populations
+  differ (32 agent-exposed, 9 MCP-exposed); `b09-3-closure:257-262` is a stale-phrase tripwire and a manifest read, not a
+  byte pin, so the B09 parity artifact had none.
+- Default applied: a new pure renderer `renderMcpProviderParity` (`app/lib/mcp/server/tool-parity.ts`,
+  `sirkit.mcp-provider-parity.v1`) over the MCP subset, with byte-gated `artifacts/ai-control-plane-b20/mcp-parity.{json,md}`
+  written by `scripts/generate-b20-mcp-parity.ts`. It compares the name (raw id on MCP, `agentProviderName` on the
+  providers, both resolving through the declarations' reverse map to one `{toolId, version}`), the description (byte-equal)
+  and the strict inputSchema (canonical-equal, one conversion). It RECORDS as MCP-only: `title`, `outputSchema`,
+  `annotations`, the tool `_meta` keys, the request `_meta` bindings and the read result's fields with B3's four closed
+  `_meta` key sets (a frozen copy pinned deep-equal to `MCP_READ_RESULT_META_KEYS`, because importing `read-call.ts` would
+  pull `node:crypto` and the whole read pipeline into a pure renderer); provider-only: `strict: true`. Agent-only tools are
+  listed with their closed MCP exclusion reason. The v2 reports and the B04 and B09 parity artifacts stay byte-identical;
+  the B09 artifact is byte-pinned for the first time, in a C1 suite that replicates the generator's expression.
+- The owner may choose otherwise: a v3 agent parity report carrying an MCP leg inside the B09 artifact — which moves the
+  B09 artifacts and must be merged with A4's regeneration of them.
+
+## OD-96 — Output schemas and `structuredContent` at the MCP boundary (B20-C, 2026-09-22; amends OD-56)
+
+- Facts read at execution time: MCP 2026-07-28 server/tools, "Output Schema" — "If an output schema is provided: Servers
+  MUST provide structured results that conform to this schema" (re-read live 2026-09-22; this upgrades the design's
+  INFERRED rule to CONFIRMED). Sirkit's deterministic output validator switches on ONE `type` string, has no `anyOf`
+  branch, never reads `const`, and reads `required` with `in` and properties by key, so a name that is an
+  `Object.prototype` member resolves through the prototype (`tool-io-validation.ts:82-142`). All nine exposed tools
+  declare an output schema today, and every one is evaluable.
+- Default applied: an output schema is declared to MCP only when it passes the reserved-key scan, `validateWireSubset`,
+  `validateSchemaStructure`, an explicit object root AND evaluability by that validator (no `anyOf`, no `const`, no type
+  array, no untyped non-enum node, no property or `required` name that is reserved or an `Object.prototype` member —
+  `mcpOutputSchemaEvaluable`, `app/lib/mcp/server/structured-content.ts`). Otherwise it is omitted with the closed reason
+  `not evaluable by the output validator` and the tool stays listed. For every served success, a tool whose LISTING
+  declares an output schema returns `structuredContent`, and only a value that passes `assertSafeJsonValue` with B05's
+  output limits and then `validateAgainstSchema` AFTER the model-safe walk; a value that does not is refused with B05's own
+  closed `invalid_output`, before the replay store and before the trace, so the answer, the cache and the trace agree, and
+  nothing is stored. A tool without a declared output schema never returns `structuredContent`. The registry's shallow
+  output schemas are NOT tightened in B20 (that would change B05's runtime output validation on the agent path and every
+  registry artifact); the parity report lists each tool's opaque output members instead.
+- The owner may choose otherwise: exclude a tool whose output schema cannot be declared; tighten the output schemas tool by
+  tool in a later reviewed increment; or declare no output schemas and send text only.
+
+## OD-97 — tools/list pagination (B20-C, 2026-09-22)
+
+- Facts read at execution time: MCP 2026-07-28 pagination — "The cursor is an opaque string token", clients "MUST NOT
+  assume a fixed page size" and MUST treat cursors as opaque (an empty string included), `nextCursor` is optional, servers
+  SHOULD provide stable cursors and handle invalid ones gracefully, and an invalid cursor SHOULD be `-32602` with no HTTP
+  status stated (so 200, U3). Every served listing today is at most 9 tools.
+- Default applied: pages of 32 (reviewed bounds [1, 128]) cut from the caller's served listing in its own code-point name
+  order. The cursor is `tl1-` plus 16 hex of `engineeringDigest({schema: "sirkit.mcp-tools-list-cursor.v1", listingDigest,
+  pageSize, offset})` — exactly 20 characters, `^tl1-[0-9a-f]{16}$`. There is NO secret and NO server state: the server
+  recomputes the cursors it would mint for the caller's current served listing and page size and accepts a presented value
+  only by exact equality with one of them, so a cursor is never minted for offset 0, a non-multiple offset or the count.
+  The SHAPE of a present cursor (a string of exactly 20 characters, judged before any pattern) is decided BEFORE the
+  listing is computed, so a malformed cursor costs nothing and answers identically whatever the registry does; a
+  well-formed cursor against a refusing registry is the 500 `-32603` a cursor-free request already gets. Any refused cursor
+  is one identical 200 `-32602` "Invalid params: invalid cursor" that echoes nothing, in the body or in the trace. The last
+  page carries no `nextCursor` key, so today's one-page body is byte-identical to B2's.
+- Trade-off: because the cursor binds the listing and not the principal, two roles whose served listings are equal have
+  interchangeable cursors — a cursor is a position, never a capability, and every page is authorized on its own request.
+- The owner may choose otherwise: a smaller page so that current listings page in production; HMAC-sealed cursors (needs a
+  key and its rotation); or server-side cursor state.
+
+## OD-98 — Listing identity and caching of tools/list pages (B20-C, 2026-09-22; amends OD-57)
+
+- Facts read at execution time: MCP 2026-07-28 caching — servers "MUST include caching hints on results with
+  `resultType: "complete"`" for `tools/list`; `CacheableResult` declares `ttlMs` and `cacheScope` as REQUIRED; "Each page
+  response carries its own `ttlMs`"; and "Servers MUST apply the same `cacheScope` to all response pages for a given list
+  request".
+- Default applied: every page carries `resultType: "complete"`, `ttlMs` 60 000, `cacheScope "private"`, and exactly three
+  `_meta` keys — the server info, `dev.sirkit/registryDigest`, and `dev.sirkit/listingDigest` computed with B1's formula
+  over the caller's WHOLE served listing, identical on every page. A registry, role or page-size change therefore
+  invalidates every outstanding cursor and the client restarts from no cursor. B1's role-independent listing digest stays
+  the manifest identity.
+- The owner may choose otherwise: a per-page digest in `_meta`; another TTL.
+
+## OD-99 — The first-party descriptor text gate: what it judges and under which bounds (B20-C, 2026-09-23)
+Sirkit's own tool **ids**, titles, descriptions and schema texts (schema titles and descriptions, property names, `required` entries, string `enum` and `const` members) are reviewed repository text and also MODEL-BOUND text. They are judged by one gate in `app/lib/engineering/descriptor-text.ts`, applied in `validateToolDescriptor` — so every registry and every adapter inherits it — and re-applied by the MCP renderer after the strict conversion over exactly what it emits. Rules, in this order: the bounded schema walk, length, characters, secret shape, markers, directive phrases. Bounds: `idMaxChars` 128 (the specification's own tool-name limit, re-read live 2026-09-23), `titleMaxChars` 120 and `descriptionMaxChars` 1 000 (A2's foreign bounds applied to our own text), `schemaTextMaxChars` 500, `schemaMaxStrings` 512, `schemaMaxDepth` 64, `schemaMaxNodes` 4 096.
+**The id is judged** because it is the one descriptor field a model reads verbatim: MCP lists it as the tool `name` and both provider adapters render `agentProviderName(toolId)` from it. The structural rules (`TOOL_ID_PATTERN`, `MCP_TOOL_NAME_PATTERN`) decide its alphabet, never its meaning. The renderer judges it right after the structural name rule and **before** the exposure decision, and refuses it as `name_invalid` carrying neither `toolId` nor `detail`, because the refusal of a directive-shaped id must not echo the id.
+This is defense in depth, like OD-81's foreign-text rules, not a guarantee against every paraphrase; the specification requires none of it.
+**Stated limit:** `TOOL_REGISTRY_INVALID` still echoes the refused descriptor's `id@version` — the refused id included — its `owningCommandId` and its view command ids. That message is a build-time refusal on the server, never model-bound text.
+
+## OD-100 — Annotation-shaped fields and privilege labels on first-party descriptors (B20-C, 2026-09-22)
+
+- Facts read at execution time: MCP annotations are derived from Sirkit's classification alone and B1 pins that the
+  renderer ignores annotation-shaped descriptor fields; the ids of Tier 3 families are Tier 3 whatever their record says
+  (`permission-tiers.ts:36`) and `tier3` precedes `never_exposed` (`mcp-exposure.ts:131-132`); every exposed read's title
+  begins Inspect, Verify or Run; proposal DESCRIPTIONS legitimately say the user applies the result
+  (`tool-catalog.ts`), so a word ban on descriptions would refuse production text.
+- Default applied: a descriptor carrying an own `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` or
+  `annotations` key is INVALID. MCP annotations stay derived from the operation class and the idempotency alone. Privilege
+  mislabeling is prevented structurally, not lexically. A TEST tripwire — not a production gate — pins the labels of the
+  served listing: a read's title begins Inspect, Verify or Run and a proposal's begins Propose; no exposed id or title
+  contains, as a whole word ignoring case, apply, applies, approve, release, publish, upload, order, purchase, qualify,
+  execute, delete or commit; no proposal description claims to be read-only.
+- The owner may choose otherwise: allow descriptive hints that every renderer ignores; or make the label rule a production
+  gate in `validateToolDescriptor`.
+
+## OD-101 — Contextual discovery on tools/list (B20-C, 2026-09-22)
+
+- Facts read at execution time: MCP 2026-07-28 server/tools — the served set "MUST NOT vary per-connection or as a side
+  effect of other requests on the connection" but "MAY vary by the authorization presented on the request"; tools/list
+  deliberately does not use `discoverTools`; an `mcp` discovery channel exists as a diagnostic; the served corpus is at
+  most 9 tools and pagination bounds any page.
+- Default applied: tools/list varies only by the caller's mapped project role (OD-57). Project state, required authority,
+  revision and capability stay call-time conditions. The contextual `mcp` channel of `discoverTools` stays a diagnostic.
+- The owner may choose otherwise: state-based narrowing through the `mcp` channel, with `listChanged` notifications, in a
+  later increment.
+```
+
+Amendments to existing entries:
+- **OD-56**: "Implemented by C1 in the read pipeline for every served success, before the replay store and the trace: declared ⇒ `structuredContent` present and conforming after the model-safe walk, else `invalid_output`; not declared ⇒ absent; an unevaluable schema is omitted (OD-96)."
+- **OD-57**: "No pagination in B2 → C2 pages the listing (OD-97); every page carries `ttlMs` and `cacheScope` and the whole-listing identity (OD-98); contextual discovery is settled by OD-101."
+- **OD-52 (first-party)**: "C1 records the mapping: MCP lists the raw registry id, the providers `agentProviderName(toolId)`, and the declarations' reverse map resolves that name to one `{toolId, version}` — a documented, reversible difference, byte-gated in `mcp-parity.{json,md}`."

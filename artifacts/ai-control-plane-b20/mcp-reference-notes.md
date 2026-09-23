@@ -201,3 +201,19 @@ allowlist, private-range rejection, timeouts, size limits, logging); unresolved 
 - **Security considerations (tools):** clients SHOULD prompt for confirmation on sensitive operations, show tool inputs to the user before calling the server, validate tool results before passing them to the model, follow the `$ref` rules, implement timeouts and log tool usage; there SHOULD be a human in the loop able to deny invocations. A4 meets validation, timeouts and the audit trail; showing inputs and a confirm step are not met in B20 and are recorded (OD-75).
 - **Caching:** the MUST-carry-hints list is `server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list` and `resources/read`; `tools/call` is not a cacheable result and carries no `ttlMs`. A4's 15-minute `freshUntil` is Sirkit's own label, not a server hint (INFERRED, OD-78), and nothing is cached.
 - **Outcome:** no contradiction with task-A4 sections 4-6 (U2); nothing was stopped.
+
+## 11. Re-read of 2026-09-21 (B20-B4: tools, authorization status codes, provider connectors)
+
+- MCP 2026-07-28 tools:
+  - `tools/list` MUST NOT vary per connection and MAY vary by the request's authorization.
+  - `structuredContent` conforms to `outputSchema`, and a tool that returns it SHOULD also return it as text.
+  - An unknown tool is `-32602`; a validation or business failure is `isError: true`.
+- MCP 2026-07-28 authorization: the status codes are a MUST (403 for insufficient scope); the `insufficient_scope` challenge parameters are SHOULD. The 403 fallback is moot in B20: there is no propose scope and the token carries only `sirkit.mcp`.
+- OpenAI `type: "mcp"` (developers.openai.com/api/docs/guides/tools-connectors-mcp):
+  - The page names MCP 2025-03-26 and links that revision's tools error-handling section.
+  - `mcp_call` has `id`, `type`, `approval_request_id`, `arguments`, `error`, `name`, `output` and `server_label`. Which result field feeds `output` is UNKNOWN.
+- Anthropic MCP connector (platform.claude.com/docs/en/agents-and-tools/mcp-connector):
+  - Beta `mcp-client-2025-11-20`; links the 2025-11-25 authorization spec.
+  - `mcp_tool_result` has `tool_use_id`, `is_error` and `content`; `structuredContent` is not mentioned.
+- Both connectors are handshake-era clients that cannot call this modern-only server (OD-41, OD-70).
+- RFC 6749 section 3.3, RFC 6750 section 3.1 and RFC 9728 section 2 were re-read for the scope design, which B4 does not build.
