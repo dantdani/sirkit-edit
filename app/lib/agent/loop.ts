@@ -24,6 +24,7 @@ import { REPLAY_FAMILY } from "../engineering/execution-grant";
 import type { ToolRegistry } from "../engineering/tool-registry";
 import { resolveReadBinding } from "../engineering/tool-bindings-readonly";
 import { resolveExternalReadBinding } from "./acquisition-reads"; // [B19-E E6]
+import { resolveMcpObservationBinding } from "./mcp-observation-reads"; // [B20 A4]
 import type { AgentTraceRecorder } from "./trace-recorder";
 import type { ReadResourceKind } from "../engineering/resource-envelopes";
 import { REPLACEMENT_PROPOSAL_SCHEMA } from "../engineering/replacement-proposals";
@@ -38,6 +39,7 @@ import type {
   AgentExecutionGrantMinter,
   AgentExecutionSettlement,
   AgentRunContext,
+  ExternalToolAttribution,
   AgentRunEvent,
   AgentRunRequest,
   AgentRunResult,
@@ -217,6 +219,15 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
         if (descriptor.toolId === "sirkit.schematic.propose-component-replacement"
           && !availableResourceKinds(context).has("component-authority-records")) {
           warn(`Tool ${descriptor.toolId} unavailable: required resource(s) component-authority-records cannot be supplied for this run.`);
+          return false;
+        }
+        return true;
+      }
+      // [B20 A4] the external tool read (approved MCP servers) is advertised only when ITS allowlisted binding resolves, the server
+      // bound the external tool port to this run (its own fact) and a verified canonical state exists
+      if (resolveMcpObservationBinding(descriptor).state === "resolved") {
+        if (context.mcpObservationAvailable !== true || !context.canonicalState || !context.canonicalRevisionDigest) {
+          warn(`Tool ${descriptor.toolId} unavailable: no approved external tool server and verified canonical state for this run.`);
           return false;
         }
         return true;
@@ -478,7 +489,8 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
         anyToolExecuted = true;
         // [B11] bounded metadata: identities, argument/output DIGESTS, the
         // closed-vocabulary outcome class, and the verification state.
-        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused" | "view_command" | "layout_candidate" | "execution_grant", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null }): void => {
+        // [B20 A4] + external_observation, and `external`: an external tool call's attribution (identities and hashes, never content)
+        const recordTrace = (outcomeClass: "read" | "proposal" | "proposal_blocked" | "refused" | "view_command" | "layout_candidate" | "execution_grant" | "external_observation", status: string, extra?: { verification?: string | null; output?: Record<string, unknown> | null; proposal?: { proposalId: string; operationsDigest: string } | null; external?: ExternalToolAttribution }): void => {
           try {
             trace?.recordTool({
               callId: call.callId, toolId: resolved.toolId, version: resolved.version,
@@ -487,6 +499,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
               verification: extra?.verification ?? null,
               output: extra?.output ?? null,
               proposal: extra?.proposal ?? null,
+              ...(extra?.external ? { external: extra.external } : {}),
             });
           } catch { /* passive */ }
         };
@@ -497,6 +510,17 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             callId: call.callId,
             outputText: resultText({ ok: true, tool: outcome.toolId, revision: outcome.sourceRevisionDigest, verification: outcome.verification, output: outcome.output }),
             isError: false,
+          });
+        } else if (outcome.kind === "external-observation" && outcome.ok) {
+          // [B20 A4] an external tool read over an approved MCP server: the model gets the closed view (labels, and untrusted text
+          // only under untrusted keys); a server-reported tool error is an error result the model may correct; the trace keeps the
+          // attribution (identities and hashes) and the output digest only.
+          recordTrace("external_observation", "succeeded", { verification: outcome.verification, output: outcome.output, external: outcome.external });
+          emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: true, status: "succeeded" });
+          results.push({
+            callId: call.callId,
+            outputText: resultText({ ok: !outcome.toolError, tool: outcome.toolId, revision: outcome.sourceRevisionDigest, verification: outcome.verification, output: outcome.output }),
+            isError: outcome.toolError,
           });
         } else if (outcome.kind === "view-command" && outcome.ok) {
           // [B17-F] the browser executes the validated request on the user's
@@ -706,7 +730,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
             isError: true,
           });
         } else if (outcome.kind === "refused") {
-          recordTrace("refused", outcome.status);
+          recordTrace("refused", outcome.status, outcome.external ? { external: outcome.external } : undefined); // [B20 A4] attribution when the port was asked
           emitOnce({ type: "tool_finished", runId: request.runId, callId: call.callId, toolId: resolved.toolId, title, tier, ok: false, status: outcome.status });
           results.push({
             callId: call.callId,

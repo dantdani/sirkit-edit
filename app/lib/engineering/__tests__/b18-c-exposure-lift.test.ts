@@ -53,7 +53,9 @@ describe("B18-C I3 — the exposure lift", () => {
     // EXACT — every other addition beyond the B17 baseline is still a reviewed granted execution.
     // [B19-E E6] reviewed pin move: + the two bounded Tier 0 external reads (sirkit.parts.evidence-read, sirkit.parts.external-search),
     // reviewed in agent-exposure.ts and pinned in b19-e-external-read-descriptors; still no other non-granted addition.
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !B17_BASELINE.includes(id))).toEqual([...GRANTED_EXECUTION_TOOL_IDS, "sirkit.parts.evidence-read", "sirkit.parts.external-search", "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect"].sort());
+    // [B20 A4] reviewed pin move: + the one bounded Tier 0 external tool read of approved MCP servers (sirkit.mcp.observation-read),
+    // reviewed in agent-exposure.ts and pinned in b20-a4-observation-descriptor.
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => !B17_BASELINE.includes(id))).toEqual([...GRANTED_EXECUTION_TOOL_IDS, "sirkit.mcp.observation-read", "sirkit.parts.evidence-read", "sirkit.parts.external-search", "sirkit.pcb.mechanical-inspect", "sirkit.pcb.via-inspect"].sort());
     for (const tool of GRANTED_EXECUTION_TOOLS) expect(tool.reason.length, tool.toolId).toBeGreaterThan(40);
     expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], executionViolations: [] });
   });

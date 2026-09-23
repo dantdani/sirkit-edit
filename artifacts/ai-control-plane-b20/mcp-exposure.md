@@ -19,7 +19,7 @@ case counts; the tests, not the numbers, are the gate.
 A tool is exposed only when BOTH hold: the structural rule (section 3) admits its descriptor, AND the reviewed decision
 lists it — `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` (`app/lib/engineering/mcp-exposure-review.ts:14` (`export const INTENTIONAL_MCP_EXPOSED_TOOL_IDS`)),
 one reason comment per id — and does not withhold it (`MCP_WITHHELD_TOOL_IDS`: empty at B1, two reads since B3). The exposure
-(the structural rule and the reviewed decision together) admits exactly these 14 from the production registry of 41 descriptors;
+(the structural rule and the reviewed decision together) admits exactly these 14 from the production registry of 42 descriptors;
 the structural rule alone admits two more, the withheld reads of section 2. `mcpExposureReport` (`app/lib/engineering/mcp-exposure.ts:197` (`export function mcpExposureReport(`))
 compares the two in both directions: an admitted id that is neither listed nor withheld is `unexpected` (never exposed, and
 drift until reviewed), a listed id that is not exposed is `missing`, any id outside the reviewed agent set is
@@ -50,7 +50,7 @@ or the b17-f id tripwire (`process|exec|shell|database|db.|file.|replace-state|i
 `permissionTierOfDescriptor` (`app/lib/engineering/permission-tiers.ts:51` (`export function permissionTierOfDescriptor(`)):
 a read with no approval tier is Tier 0, a proposal is Tier 2 by construction (an inert sealed artifact a human approves).
 
-## 2. The 27 excluded descriptors, by closed reason — CONFIRMED
+## 2. The 28 excluded descriptors, by closed reason — CONFIRMED
 
 `MCP_EXCLUSION_REASONS` (`app/lib/engineering/mcp-exposure.ts:33` (`export const MCP_EXCLUSION_REASONS`)) is closed and
 ordered by precedence: the first reason that applies is THE reason, so every descriptor carries exactly one. The first ten
@@ -65,7 +65,7 @@ are the structural rule; the last two are the reviewed decision over a descripto
 | `view_session` | `sirkit.selection.control`, `sirkit.view.canvas-navigation`, `sirkit.view.layers`, `sirkit.view.measure`, `sirkit.view.pcb3d`, `sirkit.view.reveal-finding` | OD-49 (D20-7): a view-session command is executed by an open editor in the user's browser, which an MCP principal does not have |
 | `not_read_or_propose` | none in the registry (a forged or future mutate or destructive descriptor) | only read and propose are MCP-exposable: no mutation and no command execution over MCP (runbook B20-B) |
 | `side_effects` | none in the registry (a forged or future read or proposal that declares a state-writing side effect) | a read may declare no side effect or a derived cache, a proposal a proposal artifact only — the rule the executors behind MCP apply (`app/lib/engineering/tool-invocation.ts:304` (`if (descriptor.sideEffects !== "none" && descriptor.sideEffects !== "derived-cache") {`), `gateway.ts`, `layout-proposals.ts`); the registry validator does not tie these classes to their side effects, so the MCP rule does |
-| `external_read` | `sirkit.parts.evidence-read`, `sirkit.parts.external-search` | OD-55: live vendor quota, labels only while agent disclosure is unknown (OD-36, OD-40) |
+| `external_read` | `sirkit.mcp.observation-read`, `sirkit.parts.evidence-read`, `sirkit.parts.external-search` | OD-55: live vendor quota, labels only while agent disclosure is unknown (OD-36, OD-40); [B20 A4] the external tool read of approved MCP servers is the agent's only (OD-74) |
 | `view_state_read` | `sirkit.selection.inspect`, `sirkit.view.read-state` | OD-49 (D20-7): they read an open editor's selection or view state |
 | `not_servable` | none in the registry (a forged or future descriptor) | not an active, discoverable, callable descriptor bound to a server-side read or an inert proposal with no approval tier of its own |
 | `withheld` | `sirkit.project.history-inspect`, `sirkit.schematic.inspect` | structurally admissible, but withheld from MCP by a reviewed decision recorded with its reason (how B3 and B4 remove an id). [B20 B3] OD-69: each needs browser-only state — the captured project timeline, and the editor's `SchematicState` (browser storage; no durable table holds it) — so no durable server source can serve it (`mcp-server-reads.md`) |
@@ -74,7 +74,7 @@ are the structural rule; the last two are the reviewed decision over a descripto
 `tier3` and `never_exposed` precede `not_agent_exposed`, so a descriptor outside the agent set still names the stronger
 reason (`sirkit.manufacturing.release` is Tier 3 and matches `\.release$`; the page and the manifest say `tier3`).
 The agent set (`app/lib/engineering/agent-exposure.ts:30` (`export const INTENTIONAL_AGENT_EXPOSED_TOOL_IDS`)) holds:
-32 ids = the 14 above + 6 granted executions + 2 external reads + 6 view-session controls + 2 open-editor reads + 2 withheld reads.
+33 ids = the 14 above + 6 granted executions + 3 external reads + 6 view-session controls + 2 open-editor reads + 2 withheld reads.
 B3 and B4 may REMOVE an id they cannot serve safely, as a reviewed ratchet move of `app/lib/engineering/mcp-exposure-review.ts`:
 the id moves from `INTENTIONAL_MCP_EXPOSED_TOOL_IDS` to `MCP_WITHHELD_TOOL_IDS`
 (`app/lib/engineering/mcp-exposure-review.ts:36` (`export const MCP_WITHHELD_TOOL_IDS`)) with its reason, and the pins of
@@ -100,7 +100,7 @@ classification, and then, for a descriptor the rule admits, the reviewed decisio
 5. `app/lib/engineering/mcp-exposure.ts:135` (`return "view_session";`) — class `view-session`;
 6. `app/lib/engineering/mcp-exposure.ts:136` (`return "not_read_or_propose";`) — any class but `read` and `propose`;
 7. `app/lib/engineering/mcp-exposure.ts:137` (`return "side_effects";`) — a read whose side effects are not `none` or `derived-cache`, or a proposal whose side effect is not `proposal-artifact`;
-8. `app/lib/engineering/mcp-exposure.ts:138` (`return "external_read";`) — binding `bound-external-read` or the `external-observation` authority;
+8. `app/lib/engineering/mcp-exposure.ts:138` (`return "external_read";`) — binding `bound-external-read` or the `external-observation` or ([B20 A4]) `external-mcp-observation` authority;
 9. `app/lib/engineering/mcp-exposure.ts:139` (`return "view_state_read";`) — category `view` or `selection`, or any `*-surface` project state (an open editor);
 10. `app/lib/engineering/mcp-exposure.ts:140` (`return "not_servable";`) — a binding other than `bound-read` / `bound-proposal`, not active, not discoverable, not callable, or an approval tier of its own;
 11. `app/lib/engineering/mcp-exposure.ts:146` (`return "withheld";`) — the id is in `MCP_WITHHELD_TOOL_IDS` (checked first: an id in both lists is withheld);
@@ -124,7 +124,7 @@ tier.
 
 `DISCOVERY_CHANNELS` gains `mcp`, appended (`app/lib/engineering/tool-discovery.ts:32` (`"api", "mcp"] as const;`)), and
 the exclusion reasons gain `not_mcp_exposed`, appended. The channel is deny-by-default
-(`app/lib/engineering/tool-discovery.ts:173` (`if (context.channel === "mcp" && mcpExclusionReason(descriptor) !== null) {`)):
+(`app/lib/engineering/tool-discovery.ts:174` (`if (context.channel === "mcp" && mcpExclusionReason(descriptor) !== null) {`)):
 after the lifecycle and internal-only checks, a descriptor `mcpExclusionReason` excludes (structurally or by the reviewed
 decision) is dropped as `not_agent_exposed` (outside the agent set) or `not_mcp_exposed` (inside it), whatever the context
 claims — a release risk ceiling, every approval, a grant context and the external-observation authority together still
@@ -134,7 +134,9 @@ import gate, which matches only an import line that ends at its semicolon, sees 
 capability, revision, lineage, editor, project state, authority, name length, budgets) applies unchanged, and internal-only
 tools are never reported on the channel. The four existing channels are unchanged: their included and excluded ids,
 versions and reasons under the pinned contexts byte-match pins computed at `0ae9b57`, before the channel existed, and the B04,
-B10, B17-F and B18-C discovery suites pass unchanged.
+B10, B17-F and B18-C discovery suites pass unchanged. [B20 A4 review] The pins are still the `0ae9b57` values: B20-A4 added one
+descriptor (`sirkit.mcp.observation-read`), so the suite computes them over the registry WITHOUT that addition and then pins
+the addition as the only difference on each channel — offered on `assistant-agent`, `authority_missing` on the other three.
 
 ## 5. How a definition is rendered — CONFIRMED
 
@@ -187,7 +189,7 @@ whose second read answers differently: `app/lib/mcp/server/tool-definitions.ts:3
 every other descriptor once with its closed reason, sorted by id. The listing digest is the repository's digest helper over
 the schema, the registry digest and the rendered tools
 (`app/lib/mcp/server/tool-definitions.ts:307` (`const listingDigest = engineeringDigest({ schema: MCP_TOOL_LISTING_SCHEMA, registryDigest, tools });`)),
-where the registry digest is `ToolRegistry.digest()` (`app/lib/engineering/tool-registry.ts:391` (`digest(): string {`)). It
+where the registry digest is `ToolRegistry.digest()` (`app/lib/engineering/tool-registry.ts:396` (`digest(): string {`)). It
 is stable under the registry's input order, and changes when any rendered definition changes or the registry digest alone
 changes (so any registry change, even to an excluded descriptor's text, moves it: the registry version is bound in).
 

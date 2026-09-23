@@ -2,6 +2,7 @@ tool_id,version,operation_class,permission_tier,binding,exposed,exclusion_reason
 sirkit.component-authority.inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.manufacturing.readiness-inspect,1.0.0,read,0,bound-read,yes,,true,true,declared
 sirkit.manufacturing.release,1.0.0,release,3,unbound,no,tier3,,,
+sirkit.mcp.observation-read,1.0.0,read,0,bound-external-read,no,external_read,,,
 sirkit.parts.evidence-read,1.0.0,read,0,bound-external-read,no,external_read,,,
 sirkit.parts.external-search,1.0.0,read,0,bound-external-read,no,external_read,,,
 sirkit.parts.search,1.0.0,read,0,bound-read,no,not_agent_exposed,,,

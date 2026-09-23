@@ -445,7 +445,7 @@ can be taken on (was a rejection). R3-4 changes no behaviour (test strength).
   inert-scrubbing `content[]` text, describing non-text blocks and validating `structuredContent` are A4's normaliser.
   Results are NOT Unicode-normalised here (review-3): a leaf or key is either returned as sent with the literal token
   redacted in place, or — when its skeleton holds the token — replaced whole. A4 must treat result text as untrusted and
-  normalise it BEFORE any comparison of its own; nothing it compares against is normalised for it.
+  normalise it BEFORE any comparison of its own; nothing it compares against is normalised for it. — Closed in A4 (every result string is NFC-normalised after it is bounded and before any comparison of A4's own).
 - The skeleton check FAILS CLOSED (review-3): a text that merely RESEMBLES the token after compatibility folding — the
   token's characters in order with only combining marks, format characters or compatibility spellings between or instead
   of them — is redacted whole, whether or not the server meant an echo; so is a text over its window whose cut end folds
@@ -487,7 +487,7 @@ can be taken on (was a rejection). R3-4 changes no behaviour (test strength).
   checks, scope step-up from the recorded challenge, the in-process token cache → A3 (D20-19; OD-46). — Closed in A3
   (Authorization client (A3)).
 - The observation envelope, the agent read port and trace attribution from the outcome's fields (`serverId`,
-  `protocolVersion`, `method`, `elapsedMs`, the byte counts, the SSE notifications) → A4 (D20-22, D20-11).
+  `protocolVersion`, `method`, `elapsedMs`, the byte counts, the SSE notifications) → A4 (D20-22, D20-11). — Closed in A4.
 - Provider-native connector policy → A5 (D20-29, OD-45).
 
 ## Negotiation, discovery and foreign descriptor gates (A2) — CONFIRMED
@@ -1044,7 +1044,7 @@ of the codes below.
   provider, `mcpRedactionSubjects` asks for the tokens it HOLDS (`redactionSubjects`), never for a token, and the negotiation
   and the listing keep one collector per call that every sent token joins.
 - A foreign tool is classified `observation: "external-read"` here; nothing in A2 hands one to a model, records an
-  observation, or attributes a call to a trace. That is A4, and the flag keeps every server off (OD-48).
+  observation, or attributes a call to a trace. That is A4, and the flag keeps every server off (OD-48). — Closed in A4 (the flag still keeps every server off).
 
 ### Deferred
 
@@ -1056,7 +1056,7 @@ of the codes below.
   and A2 still passes a final `unauthorized` / `forbidden` through unchanged.
 - The observation envelope (`sirkit.mcp-observation.v1`), the agent read port, the refusal of an UNPINNED listing for
   the agent, the rule that no foreign text is ever given to a model as an instruction, and trace attribution from the
-  exchange attributions → A4 (D20-22, D20-11).
+  exchange attributions → A4 (D20-22, D20-11). — Closed in A4.
 - First-party MCP tool naming and the exposure subset → B1 (OD-52 decides the FOREIGN spelling only); the endpoint,
   principal and route policy → B2; parity and the first-party half of D20-15 → C1..C3.
 
@@ -1338,6 +1338,279 @@ the client-credentials grant has none (runbook line 706; OD-46 defers the author
   single-use `state`, RFC 9207 `iss` validation with the metadata flag, `resource` on the authorization request, client
   registration keyed by issuer, refresh-token rotation, revocation by membership, a consent UI and confused-deputy consent.
 - A durable or shared token cache (OD-63's alternative); an agent share of the token window.
-- The composition root that injects `mcpAuthorizationTokenProvider`, and provider token forwarding (OD-45) → A4 / A5; the
+- The composition root that injects `mcpAuthorizationTokenProvider`, and provider token forwarding (OD-45) → A4 / A5 —
+  the AGENT half closed in A4 (`createMcpAgentPort` injects it; provider token forwarding stays with A5); the
   import tripwire of `b20-a3-secret-hygiene.test.ts` pins that nothing outside `app/lib/mcp/` imports the two modules.
 - `private_key_jwt` (JWT client assertion): not required by the extension (RECOMMENDED only) and outside OD-46.
+
+## Observation envelope, agent port and trace attribution (A4) — CONFIRMED
+
+Closes D20-22 (deterministic conversion into Sirkit observation records) and the external half of D20-11 (complete trace
+attribution to server, tool and version; the principal half was closed by B3). A `complete` tools/call outcome of an
+ACCEPTED tool from a PINNED, COMPLETE listing becomes one deterministic, deep-frozen record, `sirkit.mcp-observation.v1`;
+the agent reaches it through ONE Tier 0 read, `sirkit.mcp.observation-read` (three operations: `servers`, `tools`, `call`),
+served by a port the chat route injects through ONE runtime file; MCP facts enter the quarantine pipeline and stay
+quarantined; every external call is attributed on its `tool_invocation` trace event by identities and hashes, never by
+content. New files: `app/lib/mcp/observation.ts` (the normalizer), `app/lib/mcp/agent-port.ts` (the server port),
+`app/api/chat/mcp-observation-runtime.ts` (the chat route's one boundary to it) and `app/lib/agent/mcp-observation-reads.ts`
+(the agent boundary). Changed: `foreign-tools.ts` (two `export` keywords on their own lines and one helper appended at the
+end, lead correction C-1), `tool-call.ts` (an optional redaction collector, no line moved), the agent core (contracts,
+context, gateway, loop, trace, trace recorder), the prompt (1.4.0), the tool registry, discovery, catalog, exposure and
+action registries, the MCP exposure rule, `SourceClass`, quarantine and import review, the chat route and the agent
+artifact generator. The A3 deferred row's composition root is delivered for the agent: `createMcpAgentPort` injects
+`mcpAuthorizationTokenProvider` as the port's token provider. No endpoint, no route, no new dependency (OD-42); every fake is
+in-process behind `OutboundDeps` and the global fetch is poisoned in every suite. The production port is null today: the
+committed registry is empty and the flag is off (OD-48), so scenario 15 ("Use an approved external MCP read tool without
+credential or project leakage") stays BLOCKED-LIVE-QUALIFICATION; it is proven against in-process fakes by
+`b20-a4-chat-mcp-runtime.test.ts` case 2.
+
+What it closes, by the text the earlier sections carry (each marked there "Closed in A4"): the A1 limit "Results are NOT
+Unicode-normalised here" (every text block and every structured leaf is NFC-normalised after it is bounded and before any
+comparison of A4's own; [B20 A4 review] a structured KEY, a media type, a URI scheme and an `annotations.audience` entry are
+compared raw — a key by the same matcher, the other three by an ASCII pattern or by equality, and none of them is ever shown);
+the A1 deferred row "The observation envelope, the agent read port and trace attribution from the outcome's fields"; the A2
+limit "nothing in A2 hands one to a model, records an observation, or attributes a call to a trace"; and the A2 deferred row
+"The observation envelope (`sirkit.mcp-observation.v1`), the agent read port, the refusal of an UNPINNED listing for the
+agent, the rule that no foreign text is ever given to a model as an instruction, and trace attribution". Not the A2 limit on
+resolving the row's token a second time (A3's).
+
+Line numbers are of the A4 working tree (2026-09-21, on `b2b16e4`). A4 moved no line the A0-A3 sections cite: the two
+`export` keywords sit on their own lines, the helper is appended after the last line of `foreign-tools.ts`, the collector is
+passed on existing lines of `tool-call.ts`, and the prompt's doc comment and the recorder's imports were written on existing
+lines so that `app/lib/prompts.ts` keeps the DATA rule at line 42 and `app/lib/agent/trace-recorder.ts` keeps the provider
+vocabulary at line 137 (the A2 page resolver passes unchanged).
+
+### What is enforced
+
+| decision | where | what |
+|---|---|---|
+| D1 placement and closure | `app/api/chat/mcp-observation-runtime.ts:32-37` (`resolveMcpObservationPort`), `:14` (`@/app/lib/mcp/agent-port`); `app/lib/agent/mcp-observation-reads.ts:30-31` (`../mcp/server-registry`) | the normalizer is pure, synchronous and never throws; the port lives inside `app/lib/mcp/` (A3's tripwire holds for its import of `authorization.ts`); the runtime file imports only the port and fails closed to null; the agent boundary's only run-time import from `app/lib/mcp/` is the registry, everything else is `import type`; the chat import-closure ratchet (b19-d) reaches the MCP client only through the runtime file |
+| D2 one descriptor, three operations | `app/lib/engineering/tool-catalog.ts:494-521` (`sirkit.mcp.observation-read`); `app/lib/agent/mcp-observation-reads.ts:297-322` (`parseArguments`) | four REQUIRED strings `operation`, `serverId`, `toolName`, `argumentsJson`, exact keys; `servers` takes the other three empty and answers the roster with no network; `tools` takes a server and an empty `argumentsJson`, and `toolName` empty (the pinned catalog) or one exact accepted name; `call` takes all four, `argumentsJson` the text of a JSON object; the output schema is `OUT_RESULT` |
+| D3 authority and fact | `app/lib/engineering/tool-registry.ts:96-97` (`external-mcp-observation`), `:276-288` (`external-mcp-observation`); `app/lib/engineering/tool-discovery.ts:158-159` (`external-mcp-observation`); `app/lib/agent/context.ts:495-496` (`mcpObservationAvailable`), `:522-524` (`external-mcp-observation`); `app/lib/agent/gateway.ts:178-185` (`mcpObservationAvailable`); `app/lib/agent/loop.ts:226-233` (`mcpObservationAvailable`) | a new authority, `external-mcp-observation`, which a bound external read requires alone (never beside `external-observation`) and which belongs to a bound external read only; a new server fact, `mcpObservationAvailable`, on the context input, the run context and discovery; the authority is advertised only with the fact AND a verified canonical state, and dropped on every channel but `assistant-agent`; the gateway's integrity check holds both ways (a malformed fact, the authority without the fact, the fact without the authority, either without canonical state); the loop advertises the tool only with its own fact, behind discovery; the fact is independent of E6's |
+| D4 availability | `app/lib/mcp/agent-port.ts:205-224` (`mcpAgentRoster`), `:410-422` (`resolveMcpAgentPort`) | a roster row is admitted (`admittedMcpServer`: approved, the flag exactly `1`, not operator-disabled), carries a descriptor pin, is not `prohibited` for an agent and has an id the unanchored secret classifier passes (so the trace can record it); sorted by id, at most 16 rows; the port exists only for a human principal, outside the fixture runtime, with a non-empty roster |
+| D5 budget, share and deadline | `app/lib/agent/mcp-observation-reads.ts:416-423` (`this.charge`), `:346-356` (`MAX_TRACKED_RUNS`); `app/lib/mcp/agent-port.ts:265-275` (`ttlMs`), `:239-258` (`composeSignal`) | at most 4 server operations per run (`tools` and `call`), each charged BEFORE the port is asked and never refunded — kept on a port throw, a timeout, a cancellation and a refused argument screen; `servers` is free; a service refusal charges nothing; the run map holds 256 runs; every request uses the agent purpose; the timeout is the loop's when it is a finite positive safe integer, else 15 000 ms, clamped into [1, 15 000], and the port's deadline ends `min(500, timeout / 4)` earlier; the negotiation is memoised for the port's life (one run) and reused only within its `ttlMs` on the injected clock |
+| D6 argument egress (OD-75) | `app/lib/agent/mcp-observation-reads.ts:297-322` (`containsTokenAnchoredSecretShapedText`); `app/lib/mcp/agent-port.ts:330-337` (`skeletonCarries`), `:181-197` (`PREFIXED_HEX`) | in the service, before any charge: at most 2 048 characters of arguments, judged before parsing; a plain JSON object; plain bounded JSON with no prototype key; no secret shape in any key or value (`arguments_secret_shaped`). In the port, FIRST — after the roster row, before any negotiation, listing, admission or request: arguments that carry a run identifier of at least 8 characters (the tenant, project, branch, run and principal ids and every context digest, each prefixed digest also as its bare hexadecimal part) are `arguments_disclose_run_identity`, and arguments that carry a credential Sirkit holds for the row are `arguments_secret_shaped`, both compared case-folded on the skeleton; nothing is sent. Last, the accepted input schema (`arguments_invalid`, no issue forwarded) |
+| D7 the record | `app/lib/mcp/observation.ts:471-550` (`normalizeMcpToolResult`), `:496` (`hashDepth`), `:544` (`contentId`) | checks in order: the negotiation brand and the listing's server, revision and digest (`not_negotiated`); pinned (`listing_unpinned`); complete (`listing_truncated`); the tool an accepted descriptor of this listing (`not_accepted`); a `complete` outcome with `resultType: "complete"` (`not_complete`); the clock a finite number in [0, 8 639 999 999 100 000], floored (`clock_invalid`); then ONE bounded copy (depth 32, 200 000 nodes) of `{content, structuredContent, isError}` — the only thing read from there on — hashed as `contentHash` (`result_invalid` when it does not fit); anything thrown is `normalize_failed`. The id is the content id of the canonical body; `isError` is true only for a literal `true`; `rawRetained: false`, `untrusted: true` |
+| D8 text blocks | `app/lib/mcp/observation.ts:253-267` (`judgeText`), `:300-360` (`judgeContent`), `:233-239` (`forUserOnly`), `:292-298` (`joinedRefusal`) | at most 16 content blocks are read (the rest counted in `blocksNotRead`); a block whose `annotations.audience` (at most 8 entries read) leaves out `assistant` is `withheld_audience`; a text that is not a string is `malformed`; each text is hashed whole and deduplicated by that hash (`repeats`); its window — a scan window of 8 192 characters plus the longest redaction subject, never ending inside a surrogate pair — is charged to ONE per-result budget of 262 144 characters per result BEFORE any normalisation (`withheld_budget` past it); then NFC; a token row whose credentials cannot be listed withholds every block (`withheld_credential`, `redactionSubjectsUnavailable`); a credential in any spelling (`withheld_credential`) or a directive read by A2's one matcher (`withheld_instruction`) withholds the block WHOLE; the display scrub keeps 2 000 code points per text block, and the text as it would be shown is read AGAIN for both (T9); an empty result is `empty`, anything else `text` with `untrustedText`. [B20 A4 review] Then the shown blocks are read ONCE MORE as ONE text, one line each (`mcpJoinedTextReadsAsDirective`, and the credential comparison over them joined with nothing between): a directive or a credential split across two of them withholds EVERY text block of the result, `withheld_instruction` or `withheld_credential` |
+| D9 non-text | `app/lib/mcp/observation.ts:216-228` (`nameableMediaType`), `:335-347` (`described`) | image, audio, resource link and embedded resource blocks are `described`, never embedded: a media type only when it is bounded, plain lower-case, not secret-shaped and carries no held credential; an approximate size from the base64 length; a URI scheme (`https`, `http`, `other`) from a 16-character prefix, never the URI; an embedded resource's text is never shown; no budget is charged |
+| D10 `structuredContent` | `app/lib/mcp/observation.ts:414-461` (`judgeStructured`), `:385-399` (`orderedStrings`) | `absent` (or `absent_declared` when an output schema was accepted), `no_output_schema`, `schema_unevaluable` (the call-time validator cannot evaluate the schema); `unsafe` (not plain bounded JSON: depth 8, 2 000 nodes, 64 keys, strings of 10 000 characters; or a key that is not a property name); `invalid` (the RAW value fails the accepted schema; the issues are discarded); `withheld_budget` (the same per-result budget); `withheld_credential`; `withheld_instruction` (a key read as ONE judged string, or a leaf's NFC window, or a leaf as shown); `too_large` past 4 000 characters; else `kept` with every leaf scrubbed to 500 code points under `untrustedValue`. [B20 A4 review] Before `kept`, the strings are read as ONE text in THREE readings — the shown leaves in order, the keys in order, and the two interleaved as the JSON reads — so a split across two leaves, two keys, or a key and its own value withholds the WHOLE value |
+| D11 disclosure and the catalog (OD-76) | `app/lib/agent/mcp-observation-reads.ts:333` (`disclosureOf`), `:199-215` (`withoutNodeText`), `:528-550` (`fitCatalog`); `app/lib/mcp/agent-port.ts:286-289` (`mcpTextReadsAsDirective`) | disclosure is decided at the agent boundary from the COMMITTED registry, never taken from the port: `permitted` shows untrusted text, a row the committed registry does not hold or marks `unknown` is labels only, a `prohibited` row is refused (`disclosure_prohibited`, nothing charged or asked); the catalog shows each tool's name and accepted input schema with `title` and `description` removed at schema-node positions only (a property named `title` stays), tool titles and descriptions only for a `permitted` row and only when the one matcher reads them clean as shown; at most 32 tools; the server's `instructions` and serverInfo never enter any view; within 8 000 characters: titles and descriptions dropped first, then schemas from the last tool back (`schemaOmitted`), then tools from the end (`toolsOmitted`), else `invalid_output` |
+| D12 the model projection | `app/lib/agent/mcp-observation-reads.ts:229-257` (`recordIsSound`), `:492-514` (`withheld_disclosure`), `:553-568` (`fitObservation`) | closed keys; every field of the port's answer checked and every string re-bounded — an answer that names another server or tool, a malformed hash, an unknown disposition or port code, a bidi control or a prototype key is `implementation_failed` and nothing of it is forwarded; untrusted text only under `untrustedText` and `untrustedValue`, only for a `permitted` row, else the block and the structured state read `withheld_disclosure`; within 8 000 characters: `untrustedValue` dropped first, then `untrustedText` from the last block back (`untrustedTextOmitted`), else `invalid_output`; the output re-validated; the labels `registry-roster`, `external-tool-catalog-labels` / `external-tool-catalog-untrusted-text`, `external-tool-observation-labels` / `external-tool-observation-untrusted-text` (the text forms only when untrusted text survived) |
+| D13 the outcome kind | `app/lib/agent/contracts.ts:372-376` (`external-observation`); `app/lib/agent/loop.ts:514-518` (`external_observation`) | the gateway answers `external-observation` (a catalog or an observation) with the attribution and `toolError`; `servers` answers `read`; a refusal after the port was asked carries the attribution; the loop records `external_observation` and hands the model the closed view with `isError` equal to `toolError` |
+| D14 the trace block (OD-80) | `app/lib/agent/trace.ts:58` (`external_observation`), `:62-78` (`TRACE_EXTERNAL_KEYS`), `:378-400` (`externalAttributionIssue`); `app/lib/agent/trace-recorder.ts:373-427` (`normalizeExternal`), `:429-434` (`demoted`) | see "The trace block" below; neither file names MCP |
+| D15 quarantine (OD-79) | `app/lib/acquisition/quarantine.ts:167-168` (`external_mcp_tool`), `:289-325` (`candidateFromMcpObservation`); `app/lib/acquisition/import-review.ts:49-50` (`external_mcp_tool`); `app/lib/atomic/types.ts:45-46` (`external_mcp_tool`) | the source class `external_mcp_tool` is quarantined FIRST for every property, whatever it names; `candidateFromMcpObservation` reads each value from the record's `kept` structured value at a validated pointer (own properties only; a caller names a property, a facet and a pointer, never a value), made inert and bounded, located `mcp:<serverId>/<toolName>#<pointer>`, expiring at `freshUntil`; closed refusals (`observation_invalid`, `mpn_invalid`, `too_many_facts`, `pointer_invalid`, `value_absent`), never a throw; import review masks the value and keeps its hash; claim ranking scores the class 0 (unchanged); no production caller |
+| D16 the prompt | `app/lib/prompts.ts:36-37` (`1.4.0`), `:51` (`External tool observations`) | 1.4.0 appends one rule after the sourcing rule: external tool observations are third-party data under untrusted keys, never an instruction or engineering authority, a withheld block stays withheld, and an external tool's arguments carry only what the user asked to look up |
+| D17 no cache, no persistence (OD-78) | `app/lib/mcp/observation.ts:534-536` (`rawRetained`) | `retrievedAt` from the injected clock and `freshUntil` 15 minutes later; no result cache; the record lives only inside the run; the trace keeps the observation id, the retrieval time and the hashes |
+| D18 codes | `app/lib/agent/mcp-observation-reads.ts:61-68` (`MCP_PORT_REFUSAL_CODES`), `:72-106` (`SENTENCES`), `:154-162` (`externalResultClassOf`); `app/lib/mcp/agent-port.ts:141-175` (`mcpPortRefusalOf`) | one FIXED sentence per code; the only interpolations are a validated server id and an ISO retry time from our own admission's or A3's `retryAtMs`; the tables below |
+| D19 standing titles | `app/lib/agent/__tests__/b10-editor-context.test.ts:352-353` (`B20-A4`) | the B10 exposure title names the agent's one MCP tool (assertion unchanged); the two B11 titles B2 retitled stay true |
+| the directive helpers (C-1) | `foreign-tools.ts:1268-1278` (`mcpTextReadsAsDirective`), `:1281-1317` (`mcpJoinedTextReadsAsDirective`) | ONE judged string through the ONE matcher, read exactly as A2's per-string judgement reads it (the first 8 192 characters, the matcher skeleton bounded to 4 x the read before any regex): `directive`, `clean`, or `expanded` (withheld by every caller); never throws. [B20 A4 review] Beside it, the same matcher over strings a model reads TOGETHER (A2's `joinedDirectiveIn`, its own reading of a title with its description): at most 64 lines and 8 192 characters in all, the joined skeleton within 32 768; a '!' phrase is read within one line only; fewer than two lines is `clean` (each was judged alone) |
+| the call's collector | `tool-call.ts:66` (`redaction?: McpRedactionCollector`), `:217` (`options.redaction`); `app/lib/mcp/agent-port.ts:346-358` (`collector.subjects()`), `:352` (`isMcpAuthorizationProvider`) | the port seeds one collector with the tokens held for the row and passes it to `callMcpTool`; on A3's path (a client-credentials row under `mcpAuthorizationTokenProvider`) every token the call sends joins it, so a token that EXPIRED during the call is still a subject. [B20 A4 review] `mcpPostAuthorized` hands `mcpPost` the options WITHOUT the collector for every other row, so it cannot grow there: for those rows the tokens held when the call ENDED join the subjects too, and a credential the environment rotated to between the seed and the send is compared as well. The normalizer compares the result with ALL of them; absent, the call is exactly A3's |
+| the chat route | `app/api/chat/route.ts:279-283` (`resolveMcpObservationPort`), `:403-404` (`mcpObservation`) | ONE resolution from the trusted context (a human principal, the validated scope) feeds the gateway's port and both context assemblies' fact; the body or the model can claim neither |
+
+### Codes
+
+Port codes (closed, 21), each with the trace result class it records; `sent` is whether the MCP request the outcome is about
+was sent (an authorization-server request is never counted):
+
+| port code | when | trace result class |
+|---|---|---|
+| `server_unavailable` | not on the run's roster | `not_sent` |
+| `disclosure_prohibited` | a `prohibited` row (the port's roster and the service's committed registry both refuse it) | none (refused before the port) or `not_sent` |
+| `listing_unpinned` | an admitted row without a descriptor pin, or a listing that comes back unpinned | `not_sent` / `result_invalid` |
+| `negotiation_failed` | a negotiation code (`no_common_version`, `legacy_server`, ...) | `upstream_error` |
+| `listing_failed` | a listing code | `result_invalid` |
+| `listing_pin_mismatch` | `descriptor_pin_mismatch` | `result_invalid` |
+| `listing_truncated` | a listing stopped by its bounds | `result_invalid` |
+| `unknown_tool` | not an accepted tool of the listing (`call`: nothing sent) | `not_sent` / `result_invalid` |
+| `arguments_invalid` / `arguments_too_large` | the accepted input schema, or the prepared arguments' bound | `not_sent` |
+| `arguments_disclose_run_identity` / `arguments_secret_shaped` | the port's screen | `not_sent` |
+| `input_required_unsupported` | an MRTR result | `upstream_error` |
+| `authorization_failed` | an A3 code other than the four below, a token code, or a final `unauthorized` / `forbidden` | `authorization_failed` |
+| `paused` | `authorization_paused`, `authorization_backoff`, `token_requests_exhausted`; `concurrency_exhausted`, `admission_refused` (with the ISO retry time) | `not_sent` |
+| `upstream_error` | a JSON-RPC error | `upstream_error` |
+| `transport_failed` | any other transport code after sending; `egress_refused` (not sent); the port's own deadline | `transport_failed` / `not_sent` |
+| `result_invalid` / `clock_invalid` | the normalizer's two data codes | `result_invalid` |
+| `cancelled` | `aborted`, `authorization_aborted` | `cancelled` |
+| `port_failed` | `invalid_request`, `reserved_meta`, `protocol_version_unsupported`, `endpoint_mismatch`, `not_accepted`, `not_negotiated`, `call_failed`, a normalizer failure, anything thrown | `not_sent` / `result_invalid` |
+
+The mapping to the trace result class is `externalResultClassOf`, in order: `cancelled`; `authorization_failed`; not sent
+→ `not_sent`; sent `upstream_error`, `input_required_unsupported` or `negotiation_failed` → `upstream_error`; sent
+`transport_failed` → `transport_failed`; anything else sent → `result_invalid`. A3's closed codes map as the lead decided:
+`authorization_paused`, `authorization_backoff` and `token_requests_exhausted` → `paused`; `authorization_aborted` →
+`cancelled`; every other A3 code (`authorization_not_configured`, `client_credentials_*`, `prm_*`, `as_*`,
+`token_endpoint_*`, `token_request_refused`, `token_response_invalid`, `token_type_unsupported`, `token_scope_exceeds_row`,
+`scope_exceeds_row`, `step_up_exhausted`, `authorization_subjects_exhausted`, `authorization_failed`) →
+`authorization_failed`; none counts as sent (pinned one row per code by `b20-a4-agent-read-port.test.ts` case 12).
+
+Service codes, each refused before the port unless marked: `not_registered`, `not_callable`, `context_integrity`,
+`authority_unavailable`, `not_discoverable`, `unauthorized`, `invalid_input`, `run_call_limit`, `timeout` (after the
+port was asked: `transport_failed`), `implementation_failed` (a lying port: `result_invalid`), `invalid_output`, and
+`disclosure_prohibited`, `arguments_too_large`, `arguments_invalid`, `arguments_secret_shaped`; the port codes pass
+through with their sentence.
+
+Normalizer codes: `not_negotiated`, `listing_unpinned`, `listing_truncated`, `not_accepted`, `not_complete`,
+`result_invalid`, `clock_invalid`, `normalize_failed`. Block dispositions: `text`, `empty`, `described`, `malformed`,
+`withheld_audience`, `withheld_budget`, `withheld_credential`, `withheld_instruction`, and at the projection
+`withheld_disclosure`. Structured states: `absent`, `absent_declared`, `no_output_schema`, `schema_unevaluable`, `unsafe`,
+`invalid`, `withheld_budget`, `withheld_credential`, `withheld_instruction`, `too_large`, `kept`, and at the projection
+`withheld_disclosure`.
+
+### The trace block
+
+The trace stays `sirkit.agent-run-trace.v1`. `tool_invocation` gains the outcome class `external_observation` (appended) and
+an optional `external` block with exactly the keys `serverId`, `toolName`, `registryVersion`, `protocolVersion`,
+`listingDigest`, `resultClass`, `contentHash`, `observationId`, `retrievedAt`, each within a closed pattern and passing the
+trace's secret denylist. The block is required on `external_observation` (result class `catalog`, `complete` or
+`tool_error`), allowed on a post-resolution `refused` (any other result class) and forbidden otherwise; the hash, the
+observation id and the retrieval time are present exactly for `complete` and `tool_error`; a `catalog` names no tool and a
+listing digest. The recorder is total: a field is kept only when it matches its pattern AND passes `sanitizeTraceText`
+unchanged; otherwise the tool name, protocol version and listing digest become null, the registry version `0.0.0`, and a bad
+hash, id or time nulls all three; a block that still breaks a rule becomes `result_invalid` on a `refused` event, and one
+that cannot be recorded at all (a server id outside its pattern) is dropped with the event `refused`; each normalisation
+adds `trace_input_normalized`. Never content, arguments, URLs or credentials; traces without external calls are unchanged in
+shape; none of the nine B11-scanned files contains "mcp", and the provider vocabulary is unchanged.
+
+### The re-read (2026-09-21)
+
+`mcp-reference-notes.md` section 10 records the live re-read of the tools page, the resources page's Annotations, the
+caching page and `schema/2026-07-28/schema.ts`: the result shape, the five content block types, `annotations.audience`
+(`user`, `assistant`; clients filter by it — D8's narrowing), `structuredContent` against `outputSchema` (clients SHOULD
+validate), `isError` against protocol errors, result `_meta`, the security text (clients SHOULD validate results before the
+model and show inputs), and that `tools/call` results are not cacheable results. No contradiction; nothing was stopped.
+
+### Evidence
+
+- `app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts` — 17 cases: determinism and the content id; the exact
+  deep-frozen shape; the eight refusals and the clock; hostile content (A2's 27 directives and 12 benign texts read from the
+  A2 suite, bidi, ESC and NUL, decomposed and fullwidth, the NFC dilution of the non-printing share, the three T9 rows);
+  three tokens in five disguises in text, leaves and keys; enormous content within pinned times; duplicates; non-text;
+  every structured state; disclosure left to the boundary; never throwing; S3; no console; the helper and its agreement with
+  A2's tables; this page; [B20 A4 review] the JOINED reading (a directive or a credential split across two blocks, two
+  leaves, two keys or a key and its value; the benign neighbours still shown; the joined matcher's own bounds and answers).
+- `app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts` — 13 cases, through the real transport and A3: the roster; the
+  catalog; the call and the screen on a cold port; the agent purpose and its pause; the A3 client-credentials row with a
+  token that expires and one that rotates during the call; an event stream carrying the response twice; upstream errors;
+  cancellation; the negotiation memo; never rejecting; the import gates; the A3 code table; [B20 A4 review] a SECOND token
+  fetched during the call (only the collector holds it), a pre-issued row whose held token drifts between the seed and the
+  send, both sides of the run-identifier floor, the per-call roster gate on every excluded row, `negotiation_failed`,
+  `listing_failed` and the port's own deadline, and annotations granting nothing in either direction.
+- `app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts` — 14 cases: advertising; integrity both ways (each rule
+  by the exact sentence it pushes, each row built so that rule alone can fire); keys and
+  schema; the budget; the deadline; the projection and a lying port; the 8 000-character order and every label; the loop's
+  repeated call; a directive under a permitted row (the real port and normalizer); run identity in a digest's bare hex from
+  a real assembled context; the copied vocabularies; [B20 A4 review] the run identifiers the port screens with (the whole
+  assembled context), a server-reported tool error, and scenario 15 under a PERMITTED row end to end through the loop.
+- `app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts` — 7 cases: the vocabulary; the validator table; the recorder
+  cascade; the loop through the gateway; a hostile run's trace; `e03-valid-board` without the key; the nine B11 files.
+- `app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts` — 7 cases: the exact descriptor; the validator rows;
+  the intentional list; no never-exposed pattern; the binding; discovery per channel; the action record.
+- `app/lib/acquisition/__tests__/b20-a4-mcp-quarantine.test.ts` — 6 cases: every property quarantined; the closed refusals;
+  values from the record; a bundle beside a distributor; the adapter and the claim score; import review.
+- `app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts` — 4 cases: the flag off; the flag on through the setter
+  (servers, tools, call; labels only; no directive, token disguise, image, link-host, `instructions`, tool-description,
+  invalid-structured or 1 MB-tail sentinel in what the model, the run stream or the trace sees; a call whose arguments
+  name the project refused by the screen and never sent; and nothing the fake server received — URL, body, every header
+  but `Authorization` — names the project, the principal, the canonical digest or its bare hexadecimal part, or carries
+  the token: scenario 15; the trace's own scope names the project by design); a throwing factory and a body that claims
+  the fact; the import gates.
+- In all, 68 cases in seven suites. Reviewed pin moves, each with its reason beside it: `b04-tool-registry` (the MCP
+  resolver's split), `b17-f-agent-exposure`, `b18-c-exposure-lift`, `b18-c-gateway-execution` (1.4.0),
+  `b17-f-view-tools` and `b18-b-loop-execution` (the class; [B20 A4 review] the `b17-f-view-tools` case title said "the two
+  new outcome classes" while pinning eight — it now names the eight), `b10-editor-context` (the title), the b19-d chat-closure
+  ratchet (a second approved boundary, and an A4 case), `b19-e-ci-job-scope` (an A4 case), `b17-a-control-inventory` (the
+  action is effect-driven: it runs only as the chat agent's tool inside `POST /api/chat`), and the B1 and B3 pins that
+  count the registry (`b20-b3-mcp-subset-move`, `mcp-exposure.md`: one more descriptor and one more external read; its case 5
+  title now says which 32). [B20 A4 review] `b20-b1-mcp-exposure` is NO LONGER a pin move: its 12 channel digests were
+  regenerated on the A4 tree, which would have absorbed any other move of an old channel, so the `0ae9b57` values are back and
+  are computed over the registry WITHOUT `sirkit.mcp.observation-read` (B3's `baseRegistry` technique), with the addition then
+  pinned as the only difference per channel — offered on `assistant-agent`, `authority_missing` on the other three; the
+  mutation that widens an old channel's authority filter is caught by those restored pins. The A0-A3 suites pass unmodified.
+- Failing-first (2026-09-21, the tree clean at `b2b16e4`; the suites and pin moves written before any source): 13 of 16
+  files failed — the seven new suites (six could not import their module; the quarantine suite failed 5 of 6), `b04`
+  (import), `b19-d`, `b17-f-view-tools`, `b18-b`, `b18-c` gateway and exposure-lift — 10 failed, 61 passed. The first
+  code draft failed 4 of 158: the regenerated B04 and B01 artifacts, one test-side needle (the record's own key
+  `notificationsIgnored` holds "Ignore"; the needle became "Ignore previous") and this page.
+- Mutation checks (2026-09-21), each applied alone to the passing tree, the named suite run under the lock, and the file
+  restored and its sha256 confirmed: (1) no NFC before the scans — normalizer case 4, "decomposition cannot dilute the
+  non-printing share": its first run failed nothing (every comparison normalises internally), so the case was strengthened
+  test-first with the one reading NFC changes — 4 zero-width joiners are 4 in 204 characters decomposed and 4 in 104
+  composed, past A2's 2 % share — and the mutation re-run; (2) no re-scan of the shown text — case 4, the T9 row whose
+  shortened secret-shaped run pulls a directive past the scan window into view (the C0 row passes without the re-scan: A2's
+  matcher now reads it); (3) keys not scanned — case 9; (4) no case-fold in the credential check — case 5; (5) no collector
+  (the subjects re-read from the held tokens at the end) — port case 5, the token that expires during the call; (6)
+  structured kept without validation — case 9; (7) image data embedded — case 8; (8) the charge moved after the port —
+  service case 4; (9) the port screen moved after negotiation — port case 3; (10) an unpinned listing allowed (the roster's
+  pin rule and the listing's) — port cases 1 and 2; (11) advertising without the fact — service case 1, strengthened
+  test-first (discovery drops the tool first, so a context whose discovery still carries the authority but lacks the fact
+  now pins the loop's own rule); (12) `external` made optional on `external_observation` — trace case 2; (13) no
+  `sanitizeTraceText` gate in the recorder — trace case 3; (14) the MCP class made a candidate class — quarantine cases 1 and
+  4; (15) `servers` charged — service case 4, strengthened test-first (the used count is now read before and after the
+  limit); (16) port text forwarded in a refusal (an unknown port code passed through as the status) — service case 6; (17)
+  disclosure taken from the port's record — service case 6. Logs: `scratchpad/b20/a4-mut-*.log`.
+- [B20 A4 review] Mutation checks of the review round, each applied alone to the passing tree and the file restored and its
+  sha256 confirmed: (18) the joined reading of the shown blocks never run — normalizer case 17; (19) the joined reading of
+  the structured strings never run, and (20) only the leaves read together (never the keys nor the key-with-its-value
+  interleaving) — case 17; (21) the joined matcher reading each line ALONE (the per-string reading) — case 17; (22) the
+  joined credential comparison separating the lines — case 17; (23) the normalizer no longer checking that the negotiation,
+  the listing and the tool are THIS server's, and (24) an arguments digest outside its pattern accepted — case 3; (25) the
+  collector not reaching `callMcpTool`, and (26) `tool-call.ts` dropping the collector it was given — port case 5 (its new
+  row fetches a SECOND token during the call, which the seed cannot hold); (27) the end re-read of the held tokens dropped
+  for a row A3 does not collect for — port case 5's drifting provider; (28) the run-identifier floor raised to 10 — port
+  case 3; (29) the per-call roster gate reading the entries directly, and (30) the port's own deadline recorded as the
+  caller's cancellation — port case 13; (31) the malformed-fact rule and (32) the canonical-state rule deleted — service
+  case 2; (33) a server-reported tool error recorded as `complete` and (34) not forwarded to the model — service case 13 and
+  trace case 4; (35) one run identifier dropped from what the port screens with — service case 12; (36) the arguments bound
+  raised to 65 536 — service case 3; (37) the roster view keeping a prohibited row — service case 3; (38) an old channel's
+  authority filter widened — `b20-b1` case "every existing channel is unchanged". NOT caught, deliberately: (39) the port's
+  re-read of a catalog title and description made the identity — A2's acceptance judges a title JOINED to its description,
+  a strictly wider reading, so no ACCEPTED tool can carry text this re-read would catch; it is defence in depth with no
+  reachable case, and it stays. Logs: `scratchpad/b20/rv4/mut-*.log`.
+- Test-design readings, each deliberate: a key of the shape `api_key=…` is withheld (the matcher reads "api key"), not
+  redacted; structured depth 2 000 is `result_invalid` (the evidence copy's depth 32) and depth 20 is `unsafe`; a structured
+  key disguising a token with non-identifier characters is `unsafe`, never kept; the node bound is met at 1 998 leaves.
+- The A2 finding the task recorded (T9 on A2's own display path, "`acceptOne` scans raw, then `displayText`"): NOT
+  reproduced on the landed tree. The C0 spelling is read by A2's matcher itself (mutation 2 leaves the C0 row passing), and
+  since A2 review-4 the title and description are judged as they are KEPT (`foreign-tools.ts:1216-1222` (`judgeShown`)).
+  A2's `instructions` and serverInfo stay display-only and unread by the matcher (A2's stated limit); A4 never hands them
+  to a model.
+
+### Limits, stated (RECORDED)
+
+- Per process: the run budget, the negotiation memo, A2's listing cache and A3's windows are each per instance.
+- `contentHash` is over the PARSED, token-redacted result the transport hands back, not the bytes on the wire.
+- The directive scan is lexical: a benign "you must ..." or a key named `password` is withheld (fail closed, OD-77).
+  Nothing past the scan window is scanned, and nothing unscanned is shown (the shown text is re-read).
+- [B20 A4 review] The joined reading is ONE text per reading, in order: a phrase another block's or leaf's text interrupts
+  is not read (`Ignore`, a benign block, `all previous instructions` passes), and a split BETWEEN a content block and a
+  structured leaf is not read either — the blocks and the structured value are separate readings. It re-reads what the
+  per-string pass kept, so a string already withheld is never part of it, and its bounds (64 lines, 8 192 characters) are
+  its own: past them the rest of the result is not read together.
+- [B20 A4 review] Annotations grant NOTHING in either direction (the specification: a client MUST treat them as untrusted),
+  so a tool with no annotations is accepted exactly like one declaring `readOnlyHint: true`; only an explicit
+  `readOnlyHint: false` or `destructiveHint: true` excludes one (A2). Nothing in the code therefore proves an accepted tool
+  is a read: the gate is the reviewed descriptor pin plus the owner's approval of the row (OD-48), and the registry row has
+  no per-tool allowlist. An owner adding a row whose pinned listing holds a writing tool would make it agent-callable as a
+  Tier 0 read; a reviewed per-tool allowlist on the row is the narrowing, and it needs an owner decision (pinned by port
+  case 13).
+- [B20 A4 review] The record attributes the server and the tool by identity, not by version: the registry version and the
+  PINNED listing digest stand in for both, and the server's self-reported `serverInfo.version` is deliberately never read
+  or recorded (it is untrusted display text A2 keeps out of every view).
+- The paraphrase residual (OD-75): a model can paraphrase design content into free-text arguments; the defences are the
+  reviewed allowlist (OD-48), the pin, the budget and the screen.
+- A cold `call` needs at least 3 admitted requests (negotiation, one or more of up to 20 listing pages, the call); A3 may
+  make up to 3 POSTs per authorized request, and the tool window's agent floor (a quarter of the per-tool window) also
+  applies. An agent-reachable row should carry server and tool windows of at least 12 per minute (INFERRED).
+- A refused argument screen still costs one of the 4 operations.
+- The run stream shows Sirkit's tool id, not the server, the tool or the arguments: the specification's SHOULD on showing
+  tool inputs to the user (`mcp-reference-notes.md` section 6) is not met in B20 (OD-75).
+- Results are tenant-agnostic (A3's Sirkit-wide token); the DNS rebinding window (D20-23) applies to every server origin.
+- Import review masks MCP values; claim ranking scores the class 0.
+- `sent` names the MCP request an outcome is about: an `unknown_tool` answer of `tools`, and a listing fetched and found
+  unpinned, are recorded as `result_invalid` (the listing request was sent); `unknown_tool` on `call` and
+  `listing_unpinned` for a row without a pin are `not_sent`.
+
+### Deferred
+
+- Per-tool provider declarations (`mcp_<serverId>__<name>`); a preview-and-confirm UI; a durable observation store and any
+  result cache; real structured-to-fact mappings (OD-79's alternative); trace v2; the principal half of D20-11 (B3, done).
+- Provider-native connectors and token forwarding → A5 (OD-45); the 2025-11-25 era → A2b.

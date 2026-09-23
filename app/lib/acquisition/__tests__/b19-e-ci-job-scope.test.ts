@@ -186,6 +186,26 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(b20.filter(startsPostgres)).toEqual([]);
   });
 
+  it("[B20 A4] the seven A4 suites run in prompt-to-gerber: four explicit entries, three through directory filters, none starts PGlite", () => {
+    const filters = jobFilters("prompt-to-gerber");
+    const explicit = [
+      "app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts",
+      "app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts",
+      "app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts",
+      "app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts",
+    ];
+    const byDirectory = [
+      "app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts",
+      "app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts",
+      "app/lib/acquisition/__tests__/b20-a4-mcp-quarantine.test.ts",
+    ];
+    for (const file of explicit) expect(filters, file).toContain(file);
+    for (const file of byDirectory) expect(filters, file).not.toContain(file);
+    const promptToGerber = selected(filters);
+    expect(promptToGerber).toEqual(expect.arrayContaining([...explicit, ...byDirectory]));
+    expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
+  });
+
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {
     const filters = jobFilters("prompt-to-gerber");
     const redundant = filters.filter((filter) => /\.test\.tsx?$/.test(filter) && filters.some((other) => other !== filter && filter.includes(other)));

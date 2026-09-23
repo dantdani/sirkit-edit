@@ -11,14 +11,23 @@ import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "../agent-exposure";
 import { DURABLE_BUILDABLE_RESOURCE_KINDS } from "../durable-read-bundle";
 import { INTENTIONAL_MCP_EXPOSED_TOOL_IDS, MCP_WITHHELD_TOOL_IDS, mcpExposureReport } from "../mcp-exposure";
 import { engineeringDigest } from "../stable";
-import { sirkitToolRegistry } from "../tool-catalog";
+import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
 import { resolveReadBinding } from "../tool-bindings-readonly";
 import { discoverTools, type DiscoveryContext } from "../tool-discovery";
-import { TOOL_AUTHORITY_SOURCES, TOOL_PROJECT_STATES, TOOL_SELECTION_KINDS, type ToolDescriptor } from "../tool-registry";
+import { ToolRegistry, TOOL_AUTHORITY_SOURCES, TOOL_PROJECT_STATES, TOOL_SELECTION_KINDS, type ToolDescriptor } from "../tool-registry";
 import { renderMcpToolListing, renderMcpToolManifestCsv, renderMcpToolManifestJson } from "../../mcp/server/tool-definitions";
 
 const registry = sirkitToolRegistry();
 const descriptor = (toolId: string): ToolDescriptor => registry.get(toolId)!;
+/**
+ * [B20 A4] pin move: B20-A4 ADDED one descriptor after this move (sirkit.mcp.observation-read, the agent's external tool read of
+ * approved MCP servers; never MCP-exposed). The base pins below state B3's move, so they are compared over the registry WITHOUT
+ * that one addition; cases 4 and 5 also pin that the addition is the only difference (one more descriptor, one more agent id,
+ * and under these contexts one more exclusion: `authority_missing` since none carries its authority, or `project_state_missing`
+ * where the board is absent, a reason checked first).
+ */
+const A4_ADDITION = "sirkit.mcp.observation-read";
+const baseRegistry = new ToolRegistry(SIRKIT_TOOL_CATALOG.filter((item) => item.toolId !== A4_ADDITION));
 const NEWLINE = String.fromCharCode(10);
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), "utf8").replaceAll(`${String.fromCharCode(13)}${NEWLINE}`, NEWLINE);
 
@@ -108,18 +117,30 @@ describe("[B20 B3] F — the reviewed MCP subset move", () => {
       expect(item.version, id).toBe(BASE.versions[id]);
       expect(item.versionNotes?.endsWith(WIDENED_NOTE), id).toBe(true);
     }
-    expect(registry.list()).toHaveLength(BASE.count);
-    expect(engineeringDigest(Object.fromEntries(registry.list().map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(strip(item))])))).toBe(BASE.strippedAll);
-    expect(engineeringDigest(Object.fromEntries(registry.list().filter((item) => !WIDENED.includes(item.toolId)).map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(item)])))).toBe(BASE.untouchedFull);
+    expect(baseRegistry.list()).toHaveLength(BASE.count);
+    expect(registry.list().map((item) => item.toolId).filter((id) => !baseRegistry.get(id))).toEqual([A4_ADDITION]); // [B20 A4]
+    expect(engineeringDigest(Object.fromEntries(baseRegistry.list().map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(strip(item))])))).toBe(BASE.strippedAll);
+    expect(engineeringDigest(Object.fromEntries(baseRegistry.list().filter((item) => !WIDENED.includes(item.toolId)).map((item) => [`${item.toolId}@${item.version}`, engineeringDigest(item)])))).toBe(BASE.untouchedFull);
     // pcb.revision-inspect and readiness-inspect already declared it; the withheld reads keep their own authority
     expect([...descriptor("sirkit.pcb.revision-inspect").requiredAuthority]).toEqual(["local-working-copy", "durable-server-board"]);
     expect([...descriptor("sirkit.schematic.inspect").requiredAuthority]).toEqual(["local-working-copy"]);
   });
 
-  it("5. the agent set is still 32 and assistant-agent discovery under the B04 contexts is byte-equal to the base pins", () => {
-    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(32);
-    const actual = Object.fromEntries(Object.entries(AGENT_CONTEXTS).map(([name, overrides]) => [name, identityOf(discoverTools(registry, editorContext(overrides)))]));
+  it("5. the agent set is still B3's 32 without A4's one addition (33 with it) and assistant-agent discovery under the B04 contexts is byte-equal to the base pins", () => {
+    // [B20 A4] pin move: 32 + the external tool read (33); B3's 32 are unchanged
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.filter((id) => id !== A4_ADDITION)).toHaveLength(32);
+    expect(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS).toHaveLength(33);
+    const actual = Object.fromEntries(Object.entries(AGENT_CONTEXTS).map(([name, overrides]) => [name, identityOf(discoverTools(baseRegistry, editorContext(overrides)))]));
     expect(actual).toEqual(BASE.discovery);
+    for (const overrides of Object.values(AGENT_CONTEXTS)) {
+      const base = discoverTools(baseRegistry, editorContext(overrides));
+      const now = discoverTools(registry, editorContext(overrides));
+      expect(now.included).toEqual(base.included);
+      expect(now.excluded.filter((entry) => entry.toolId !== A4_ADDITION)).toEqual(base.excluded);
+      // no context here carries the external-mcp-observation authority; agentNoBoard also lacks the board, a reason checked first
+      const expected = overrides.projectState !== undefined && !overrides.projectState.includes("board-present") ? "project_state_missing" : "authority_missing";
+      expect(now.excluded.filter((entry) => entry.toolId === A4_ADDITION).map((entry) => entry.reason)).toEqual([expected]);
+    }
   });
 
   it("6. under the most permissive context the mcp channel includes exactly the 9 reads and the 5 proposals", () => {

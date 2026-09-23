@@ -31,6 +31,7 @@ import { loadRunComponentAuthority } from "@/app/lib/engineering/component-autho
 import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
+import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -275,6 +276,11 @@ export const POST = agentStreamRoute(
   // vendor lookup may happen is the server's policy (a human principal only), never the body's or the model's.
   const externalAcquisition = resolveExternalAcquisitionPort({ live: context.actor.actorKind === "human" });
   const externalAcquisitionAvailable = externalAcquisition !== null;
+  // [B20 A4] ONE server fact decides whether this run has the external tool read (approved MCP servers): a port resolved through
+  // the approved runtime boundary from the TRUSTED context (a human principal, the validated scope). The same resolution feeds
+  // the gateway (the port) and both context assemblies (the fact); the body or the model can never claim either.
+  const mcpObservation = resolveMcpObservationPort({ humanPrincipal: context.actor.actorKind === "human", tenantId: requestScope.tenantId, projectId: requestScope.projectId, principalId: context.principalId });
+  const mcpObservationAvailable = mcpObservation !== null;
 
   const assembly = assembleAgentRunContext({
     ...requestScope,
@@ -290,6 +296,7 @@ export const POST = agentStreamRoute(
     autonomy,
     executionGrantsAvailable,
     externalAcquisitionAvailable, // [B19-E E6]
+    mcpObservationAvailable, // [B20 A4]
   });
   if (!assembly.ok) {
     return Response.json({ ok: false, error: assembly.reason }, { status: 400 });
@@ -348,6 +355,7 @@ export const POST = agentStreamRoute(
           autonomy,
           executionGrantsAvailable,
           externalAcquisitionAvailable, // [B19-E E6]
+          mcpObservationAvailable, // [B20 A4]
         });
         // Fail closed: a re-assembly failure keeps the authority-free context.
         if (reassembled.ok) runContext = reassembled.context;
@@ -392,6 +400,8 @@ export const POST = agentStreamRoute(
     promptVersion: AGENT_SYSTEM_PROMPT_VERSION,
     // [B19-E E6] the external acquisition port (the same resolution as the context's availability fact)
     ...(externalAcquisition ? { externalAcquisition } : {}),
+    // [B20 A4] the external tool port (the same resolution as the context's availability fact)
+    ...(mcpObservation ? { mcpObservation } : {}),
     ...(replacementFactsSource
       ? { replacementPinFacts: (atomicPartRevisionId: string, role: ReplacementPinFactsRole) => loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) } // [B19-E E5] current or target
       : {}),

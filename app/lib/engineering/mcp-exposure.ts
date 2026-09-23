@@ -135,7 +135,7 @@ function structuralReasonOf(facts: ExposureFacts): McpExclusionReason | null {
   if (facts.operationClass === "view-session") return "view_session";
   if (!(MCP_EXPOSABLE_OPERATION_CLASSES as readonly string[]).includes(facts.operationClass)) return "not_read_or_propose";
   if (!(facts.operationClass === "read" ? MCP_READ_SIDE_EFFECTS : MCP_PROPOSAL_SIDE_EFFECTS).includes(facts.sideEffects)) return "side_effects";
-  if (facts.bindingStatus === "bound-external-read" || facts.requiredAuthority.includes("external-observation")) return "external_read";
+  if (facts.bindingStatus === "bound-external-read" || facts.requiredAuthority.includes("external-observation") || facts.requiredAuthority.includes("external-mcp-observation")) return "external_read"; // [B20 A4] + the external tool read's authority
   if ((MCP_VIEW_STATE_CATEGORIES as readonly string[]).includes(facts.category) || facts.requiredProjectState.some((state) => MCP_EDITOR_SURFACE_STATES.includes(state))) return "view_state_read";
   if (!(MCP_SERVED_BINDING_STATUSES as readonly string[]).includes(facts.bindingStatus) || facts.lifecycle !== "active" || facts.discovery !== "discoverable" || facts.callability !== "callable" || facts.approvalTier !== "none") return "not_servable";
   return null;

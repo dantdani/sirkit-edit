@@ -113,7 +113,12 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
   // Policy and type modules are allowed (the source registry's retention constants, the lifecycle SQL expression, shared
   // types); anything that fetches, caches, stores or quarantines vendor data is not. Allowed modules are still walked, so a
   // forbidden import behind one of them is still found.
-  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/];
+  // [B20 A4] REVIEWED AMENDMENT (pin move): + the MCP client. The model-facing closure may reach the MCP registry (row data, as the
+  // source registry above) and the flag, and — through the auth route wrapper since B20-B2 — the MCP server's inbound limits and its
+  // JSON-RPC id reader; every other `app/lib/mcp` module (the transport, the authorization client, the negotiation, the listing,
+  // the tool call, the normalizer, the agent port) is forbidden outside the one MCP runtime boundary below. The task's rule
+  // (`server-registry.ts` and `rollout.ts` only) would have flagged the two B20-B2 server modules the wrapper already imported.
+  const FORBIDDEN = [/^app\/lib\/acquisition\/(?!source-registry\.ts$)/, /^app\/lib\/distributors\/(?!types\.ts$|lifecycle-sql\.ts$|shared\.ts$)/, /^app\/lib\/mcp\/(?!server-registry\.ts$|rollout\.ts$|server\/inbound-limits\.ts$|server\/protocol\.ts$)/];
 
   function resolveImport(from: string, spec: string): string | null {
     let base: string;
@@ -148,6 +153,17 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
    */
   const APPROVED_BOUNDARY = "app/api/chat/external-acquisition-runtime.ts";
   const APPROVED_BOUNDARY_ENTRY = "app/api/chat/route.ts";
+  /**
+   * [B20 A4] REVIEWED AMENDMENT (pin move). Reason: A4 gives the agent ONE bounded read-only tool over approved external MCP servers
+   * (sirkit.mcp.observation-read), served by a server-only port that reaches the MCP transport and the authorization client. The
+   * walk now stops at TWO approved boundaries, each imported only by the chat route and each importing exactly its one port; the
+   * E6 expectations below are unchanged. What reaches the model through the MCP boundary is labels only unless the committed
+   * registry permits disclosure (OD-76), checked in app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts.
+   */
+  const APPROVED_BOUNDARIES: Readonly<Record<string, readonly string[]>> = {
+    [APPROVED_BOUNDARY]: ["app/lib/acquisition/agent-read-port.ts"],
+    "app/api/chat/mcp-observation-runtime.ts": ["app/lib/mcp/agent-port.ts"],
+  };
 
   function walk(entry: string): { seenFiles: Set<string>; offenders: string[]; boundaryImporters: string[] } {
     const seenFiles = new Set<string>();
@@ -159,7 +175,7 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
       if (seenFiles.has(file)) continue;
       seenFiles.add(file);
       const relative = path.relative(ROOT, file).split(path.sep).join("/");
-      if (relative === APPROVED_BOUNDARY) {
+      if (Object.hasOwn(APPROVED_BOUNDARIES, relative)) { // [B20 A4] either approved boundary
         if (entry !== APPROVED_BOUNDARY_ENTRY) offenders.push(relative); // the Build-mode loop and the LLM router never reach it
         continue;
       }
@@ -167,7 +183,7 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
       for (const spec of runtimeImports(file)) {
         const resolved = resolveImport(file, spec);
         if (!resolved) continue;
-        if (path.relative(ROOT, resolved).split(path.sep).join("/") === APPROVED_BOUNDARY) boundaryImporters.push(relative);
+        if (Object.hasOwn(APPROVED_BOUNDARIES, path.relative(ROOT, resolved).split(path.sep).join("/"))) boundaryImporters.push(relative); // [B20 A4] either
         queue.push(resolved);
       }
     }
@@ -198,5 +214,33 @@ describe("[B19-D I5e row 31] vendor-data code is outside the model-facing import
     }
     expect([...throughBoundary].filter((file) => FORBIDDEN.some((rule) => rule.test(file)))).toEqual(expect.arrayContaining(["app/lib/acquisition/agent-read-port.ts", "app/lib/distributors/index.ts"]));
     for (const entry of ["app/lib/build-loop.ts", "app/lib/llm/router.ts"]) expect(walk(entry).boundaryImporters, entry).toEqual([]);
+  });
+
+  it("[B20 A4] the chat closure reaches the MCP client only through mcp-observation-runtime.ts, which imports only agent-port; each boundary is imported by the chat route alone", () => {
+    const importersOf = (boundary: string): string[] => {
+      const importers: string[] = [];
+      for (const file of walk(APPROVED_BOUNDARY_ENTRY).seenFiles) {
+        const relative = path.relative(ROOT, file).split(path.sep).join("/");
+        if (runtimeImports(file).some((spec) => resolveImport(file, spec) !== null && path.relative(ROOT, resolveImport(file, spec)!).split(path.sep).join("/") === boundary)) importers.push(relative);
+      }
+      return importers;
+    };
+    for (const [boundary, ports] of Object.entries(APPROVED_BOUNDARIES)) {
+      expect(importersOf(boundary), boundary).toEqual([APPROVED_BOUNDARY_ENTRY]);
+      const imports = runtimeImports(path.join(ROOT, boundary)).map((spec) => resolveImport(path.join(ROOT, boundary), spec)).map((file) => (file ? path.relative(ROOT, file).split(path.sep).join("/") : "(unresolved)"));
+      expect(imports, boundary).toEqual(ports);
+      for (const entry of ["app/lib/build-loop.ts", "app/lib/llm/router.ts"]) expect(walk(entry).offenders, `${entry} never reaches ${boundary}`).toEqual([]);
+    }
+    // not vacuous: walked WITHOUT the stop, the MCP port reaches the transport and the authorization client the closure may never reach
+    const throughBoundary = new Set<string>();
+    const queue = [path.join(ROOT, "app/lib/mcp/agent-port.ts")];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      const relative = path.relative(ROOT, file).split(path.sep).join("/");
+      if (throughBoundary.has(relative)) continue;
+      throughBoundary.add(relative);
+      for (const spec of runtimeImports(file)) { const resolved = resolveImport(file, spec); if (resolved) queue.push(resolved); }
+    }
+    expect([...throughBoundary].filter((file) => FORBIDDEN.some((rule) => rule.test(file)))).toEqual(expect.arrayContaining(["app/lib/mcp/agent-port.ts", "app/lib/mcp/http-transport.ts", "app/lib/mcp/authorization.ts"]));
   });
 });

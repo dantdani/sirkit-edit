@@ -560,3 +560,88 @@ Decisions the program cannot take safely on its own. Each row states the safe de
   - LD-2: `client_secret_basic` when listed or when the list is absent (RFC 8414 §2); `client_secret_post` only when listed without Basic; otherwise `as_client_auth_unsupported`. The ext-auth draft's method text and OAuth 2.1 draft-13 §2.4.1 point to the body method.
   - Metadata omitting `grant_types_supported` is refused (the RFC 8414 default lacks `client_credentials`).
 - The owner may choose otherwise: `client_secret_post` first; compare scheme and host case-insensitively; accept an origin-level `resource` from the root fallback; follow a cross-origin challenge URL under its own policy; treat a dropped probe URL as absent; proceed when `grant_types_supported` is absent, with the token endpoint's `unsupported_grant_type` as the backstop.
+
+## OD-74 — The agent's reach into approved external MCP servers (B20-A4, 2026-09-21)
+- Facts read at execution time: A0–A3 give a flag-admitted, pinned, admission-metered, authorized MCP client. The committed registry is empty and `SIRKIT_MCP_ENABLED` is off (OD-48), so the production port is null. B19-E E6 is the precedent: one bound external read, over a port the chat route injects through one runtime file.
+- Default applied: one Tier 0 agent read, `sirkit.mcp.observation-read`, with three operations:
+  - `servers`: the registry roster, with no network request.
+  - `tools`: one server's pinned catalog, or one of its tools by exact name.
+  - `call`: one accepted tool of a pinned, complete listing.
+- The read is offered only when all of these hold:
+  - it is a human principal's chat run;
+  - the MCP flag is on;
+  - the roster has at least one row that is approved, pinned, not prohibited, and has an id the trace can record;
+  - the run is outside the fixture runtime;
+  - the run has a verified canonical state.
+- Every project role, viewer included, may use it, so its calls use Sirkit's server-side credential for the row on behalf of any member. It is never offered on the automation channel and never exposed over MCP.
+- At most 4 server operations per run. Each is charged before the port is asked and kept on a failure, timeout, cancellation or refused argument screen; `servers` is free.
+- Every request is admitted under the agent purpose (at most 25 % of each server and tool window, per process), with a 15 s deadline.
+- Unpinned, truncated and mismatched listings are refused, as are `input_required` results. Nothing is written in Sirkit and no result is cached.
+- The owner may choose otherwise: each accepted tool as its own provider declaration (`mcp_<serverId>__<name>`); another per-run budget; board-less runs; restricting the read to roles above viewer; an agent share of A3's token window.
+
+## OD-75 — What may leave Sirkit in an agent-authored MCP call (B20-A4, 2026-09-21)
+- Facts read at execution time: `skeletonCarries` lives in `http-transport.ts`, which the chat-closure ratchet forbids the agent boundary to import at run time. The screen therefore runs in the port, before any request.
+- Default applied: the arguments are the text of a JSON object of at most 2 048 characters, judged before parsing. They must be plain bounded JSON with no prototype key, and they are validated against the accepted input schema; the schema's issues are never forwarded.
+- A secret-shaped key or value is refused before any charge. As the port's first step, before any request is sent, a key or value is refused if it carries either of these (compared case-folded on the skeleton):
+  - a run identifier of at least 8 characters: the tenant, project, branch, run and principal ids and every context digest, each prefixed digest also as its bare hexadecimal part;
+  - a credential Sirkit holds for the server.
+- There is no per-call human approval in B20. The run stream shows that Sirkit's external tool started and finished, but not the server, the tool or the arguments; the trace keeps the arguments' digest.
+- Residual (RECORDED): a model can paraphrase design content into free text. The defences are OD-48's reviewed allowlist, the pin, the budget and this screen.
+- The owner may choose otherwise: a preview-and-confirm step before every external call; showing the server, tool and arguments in the run stream; a per-tool allowlist of argument properties; no free-text arguments.
+
+## OD-76 — What of an external MCP result and catalog reaches the model (B20-A4, 2026-09-21)
+- Facts read at execution time: the registry row carries `agentDisclosure: permitted | prohibited | unknown`, and the E6 precedent decides disclosure at the agent boundary.
+- Default applied: the committed registry row's `agentDisclosure` decides, applied when the answer is projected for the model and never taken from the port.
+  - `permitted`: bounded, scrubbed, re-scanned text under `untrustedText`, and validated structured content under `untrustedValue`.
+  - `unknown`, or a server the committed registry does not hold: labels only (types, lengths, hashes, dispositions, `isError`, the structured state); text and value read `withheld_disclosure`.
+  - `prohibited`: not offered, and an answer for it is refused (`disclosure_prohibited`, nothing charged).
+- The in-run record keeps the scrubbed content either way and is never persisted.
+- The catalog shows names and accepted input schemas, with `title` and `description` removed at schema-node positions only. Tool titles and descriptions appear only for `permitted` rows, and only when A2's matcher reads them clean as shown.
+- The server's `instructions` and serverInfo never reach the model.
+- The owner may choose otherwise: labels only everywhere; descriptions for `unknown` rows; prohibited rows offered labels-only.
+
+## OD-77 — Result text that reads as an instruction or carries a credential (B20-A4, 2026-09-21)
+- Facts read at execution time: A2's one directive matcher (OD-81), used through `mcpTextReadsAsDirective`, reads one judged string. Its word streams treat `_`, `.`, `-` and case boundaries as spaces.
+- Default applied: a block is withheld whole, per block, never stripped or repaired.
+- A block is `withheld_instruction` when the matcher trips on its NFC-normalised, bounded text, or on the text as it would be shown. The matcher trips on:
+  - overrides, role or tool-call markers, exfiltration phrasing and credential URLs;
+  - any bidi control;
+  - a high non-printing share, judged on the composed text.
+- A structured value is withheld whole when any key (read as one judged string) or any leaf trips the matcher.
+- `withheld_credential` applies to a block that carries a credential Sirkit holds for the server in any spelling, or to every block of a token row whose credentials cannot be listed. Other secret shapes are redacted within shown text; shapes the matcher reads as a phrase (for example `api_key=`) are withheld.
+- The rule is lexical and fails closed: a benign "you must ..." or a key named `password` is withheld (RECORDED).
+- The owner may choose otherwise: show such blocks with a warning flag; strip only the marker.
+
+## OD-78 — Freshness, caching and retention of external MCP observations (B20-A4, 2026-09-21)
+- Facts read at execution time: `tools/call` is not a cacheable result in 2026-07-28 and carries no `ttlMs` (`mcp-reference-notes.md` section 10).
+- Default applied: `retrievedAt` comes from the injected clock and `freshUntil` is 15 minutes later (Sirkit's own label; INFERRED). There is no result cache: each call is live.
+- `rawRetained: false` and nothing is persisted. The trace keeps the observation id, the retrieval time and the hashes; the terms are identified by the server id and the registry version.
+- Results are tenant-agnostic data (A3's Sirkit-wide token), never authority.
+- The owner may choose otherwise: per-row freshness; a per-principal result cache; a durable observation store with retention per the row's terms.
+
+## OD-79 — MCP facts in the quarantine pipeline (B20-A4, 2026-09-21)
+- Facts read at execution time: `classify` has three authority lists, and `claims.ts` scores an unknown class 0.
+- Default applied: SourceClass `external_mcp_tool`, in no engineering-authority list and quarantined first, whatever the property.
+- `candidateFromMcpObservation` reads every value from the observation record's kept structured value at a validated pointer. A caller names a property, a facet and a pointer, never a value. The locator is `mcp:<server>/<tool>#<pointer>` and the candidate expires at `freshUntil`. Refusals are closed codes and it never throws.
+- Such a fact is never a candidate, hint, sourcing fact or conflict, and never clears missing evidence. Import review masks its values as it masks distributor values, and claim ranking scores the class lowest. There is no production mapping in B20.
+- The owner may choose otherwise: a reviewed row with a reviewed deterministic parser may yield sourcing facts or identity hints.
+
+## OD-80 — How an external call is attributed in the run trace (B20-A4, 2026-09-21)
+- Facts read at execution time: none of the nine B11-scanned files may contain "mcp", and `AgentTraceIdentity.provider` stays closed (`trace-recorder.ts:137`).
+- Default applied: the trace stays `sirkit.agent-run-trace.v1`, with the outcome class `external_observation` and an optional `external` block on `tool_invocation`.
+  - The block is required on `external_observation` (`catalog`, `complete` or `tool_error`), allowed on a post-resolution `refused`, and forbidden otherwise.
+  - Its keys are exactly `serverId`, `toolName`, `registryVersion`, `protocolVersion`, `listingDigest`, `resultClass`, `contentHash`, `observationId`, `retrievedAt`, each in a closed pattern that also passes the trace's secret denylist.
+  - It never holds content, arguments, URLs or credentials.
+- The recorder is total. A bad field becomes null, or `0.0.0` for the registry version; a block that still breaks a rule becomes `result_invalid` on `refused`, and an unrecordable server id drops the block.
+- Traces without external calls are unchanged in shape, and the vocabulary is neutral. The principal half, and any widening of `provider`, stay with B3.
+- The owner may choose otherwise: trace v2 with the block on every event; elapsed times and byte counts in the block.
+
+## OD-74 amendment (B20-A4 review, 2026-09-22), appended to "Default applied":
+- Nothing in code proves an accepted tool is a READ. `annotations` grant nothing in either direction (the specification: a client MUST treat them as untrusted; `mcp-client-boundary.md` "readOnlyHint === true earns NOTHING"), so a tool with no annotations is accepted exactly as one declaring `readOnlyHint: true`; only an explicit `readOnlyHint: false` or `destructiveHint: true` excludes one (A2). The gate on "B20-A is read-only" is therefore the reviewed descriptor pin (a sha256 over every definition's name, title, description, input and output schema and annotations, so a server cannot add a tool after the fact) plus the owner's approval of the row (OD-48). The registry row has NO per-tool allowlist: an owner who approves a row whose pinned listing holds a writing tool makes that tool agent-callable as a Tier 0 read with no approval tier. Recorded as a stated limit and pinned by `b20-a4-agent-read-port` case 13. *The owner may choose otherwise: a reviewed `agentTools` allowlist on the registry row (a registry schema change, so a registry version bump and its byte gates).*
+- **The lead's decision (2026-09-22):** that limit is NOT accepted as the default. A following commit adds the reviewed
+  `agentTools` allowlist to the registry row (fail closed: a row names the tools its agent may call, and nothing else is
+  offered or sent), with the registry version bump and its byte gates. *The owner may choose otherwise: approve the whole
+  pinned listing, as this amendment first recorded.*
+
+## OD-80 amendment (B20-A4 review, 2026-09-22), replacing the last bullet of "Default applied":
+- ~~The principal half, and any widening of `provider`, stay with B3.~~ → The principal half was closed by B3 (2026-09-21); `provider` is NOT widened (OD-72 settled the B2 amendment). Server and tool are attributed by identity — the registry version and the pinned listing digest — never by version; `serverInfo.version` is deliberately not recorded.

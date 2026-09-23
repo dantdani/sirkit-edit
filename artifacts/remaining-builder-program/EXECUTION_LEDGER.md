@@ -2312,3 +2312,38 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Gates (lead, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 721 passed;
   app/api/mcp 75; agent, B16.1C tripwires, AST import gates and the CI job-scope guard 430; tsc 0; eslint clean on the 20
   changed and new files; the registry generator byte-identical. The A3 suites hold 146 cases.
+
+### B20-A4 - external MCP results as observations, the agent port and trace attribution (2026-09-21/22 local; increment workflow + lead; this commit)
+
+- Built test-first on b2b16e4 (13 of 16 files failed first; 10 cases failed and 61 passed before any source), with the lead's
+  corrections (`scratchpad/b20/task-A4-lead-corrections.md`) replacing the design's removed `readsAsDirective` by A2's one
+  directive matcher through a helper appended at the end of `foreign-tools.ts`, so no cited line moved there.
+  - `normalizeMcpToolResult` turns ONE `complete` tools/call outcome of an ACCEPTED tool from a PINNED, COMPLETE listing into
+    one deterministic, deep-frozen `sirkit.mcp-observation.v1` record: identity checked, one bounded evidence copy hashed,
+    at most 16 text blocks deduplicated and windowed, charged to one 262 144-character budget BEFORE normalisation,
+    NFC-normalised, compared case-folded with every credential the call held, read by A2's matcher, scrubbed and re-read as
+    shown; non-text blocks described, never embedded; `structuredContent` kept only when an accepted output schema exists
+    and the RAW value validates.
+  - ONE Tier 0 bound external read `sirkit.mcp.observation-read` (`servers`, `tools`, `call`) served by `agent-port.ts` and
+    injected by the chat route through the one runtime file `mcp-observation-runtime.ts`; at most 4 server operations per
+    run, charged before the port and never refunded; the argument screen for run identity and held credentials runs FIRST,
+    so nothing is negotiated, listed or sent for arguments that disclose either; disclosure is decided at the agent boundary
+    from the COMMITTED registry, never from the port.
+  - MCP facts enter the quarantine pipeline as `external_mcp_tool` and stay quarantined; the run trace gains an `external`
+    block and the outcome class `external_observation`, in neutral vocabulary, so none of the nine files the B11 token
+    tripwires scan names MCP (OD-80). Prompt 1.4.0 carries the MCP rule. 17 mutations, each caught by its named case.
+- Adversarial review (four lenses, one skeptic each): 23 findings raised, 18 confirmed and fixed test-first, and one further
+  real defect found and closed in the same round: on a pre-issued-token row the redaction collector never grows, so a token
+  the environment rotated to between the seed and the send could be echoed case-changed and SHOWN to the model; the port now
+  adds the tokens held when such a call ended to the subjects. The strings a model reads TOGETHER are now judged together
+  (a directive or a credential split across two blocks, two leaves, two keys or a key and its value withholds the whole).
+  The independent check: every confirmed fix verified, with the residuals recorded rather than claimed.
+- Recorded as limits, not closed: an accepted tool is not proven to be a read - MCP annotations grant nothing in either
+  direction, so a row whose pinned listing holds a writing tool makes it agent-callable as a Tier 0 read (OD-74 amendment).
+  The lead does not accept that as the default: the next commit adds the reviewed `agentTools` allowlist to the registry
+  row, fail closed. D20-11's distributor-egress half stays open and is named in its clause; the record attributes server and
+  tool by identity (registry version plus the pinned listing digest), never by version.
+- Gates (lead, one heavy job at a time): mcp, net, http and engineering 131 files / 1 836 passed; agent, acquisition, atomic
+  and the AST import gates 76 / 1 064 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean on the 43
+  changed and new files; 16 generators with zero drift (A4 had regenerated the B01, B04, B09, B10, B11 and B16-0-1/2
+  artifacts its one new descriptor moves). The A4 suites hold 68 cases.

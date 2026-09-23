@@ -92,8 +92,9 @@ export type ToolProjectState = (typeof TOOL_PROJECT_STATES)[number];
 export const TOOL_SELECTION_KINDS = ["footprint", "track", "via", "zone", "text", "pad"] as const;
 export type ToolSelectionKind = (typeof TOOL_SELECTION_KINDS)[number];
 
-/** [B19-E E6] `external-observation`: the server bound an external acquisition port to this chat run (never a body claim). */
-export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "none"] as const;
+/** [B19-E E6] `external-observation`: the server bound an external acquisition port to this chat run (never a body claim).
+ *  [B20 A4] `external-mcp-observation`: the server bound the external tool port (approved MCP servers) to this chat run. */
+export const TOOL_AUTHORITY_SOURCES = ["durable-server-board", "local-working-copy", "catalog", "external-observation", "external-mcp-observation", "none"] as const;
 export type ToolAuthoritySource = (typeof TOOL_AUTHORITY_SOURCES)[number];
 
 export type JsonSchema = Record<string, unknown>;
@@ -272,14 +273,18 @@ export function validateToolDescriptor(descriptor: ToolDescriptor, knownCommandI
   }
   // [B19-E E6] a bound external read is a Tier 0 read over the injected server port and nothing else: read class, no side
   // effect beyond a derived cache, no approval tier, exactly the external-observation authority; that authority is its alone.
+  // [B20 A4] ... or exactly the external-mcp-observation authority (the external tool read over approved MCP servers): ONE of
+  // the two, never both, and each belongs to a bound external read alone.
   if (binding.status === "bound-external-read") {
     if (descriptor.operationClass !== "read") err("bound-external-read tools are read class only");
     if (descriptor.sideEffects !== "none" && descriptor.sideEffects !== "derived-cache") err("bound-external-read tools have no side effects beyond a derived cache");
     if (descriptor.approvalTier !== "none") err("bound-external-read tools carry no approval tier");
-    if (!Array.isArray(descriptor.requiredAuthority) || descriptor.requiredAuthority.length !== 1 || descriptor.requiredAuthority[0] !== "external-observation") err("bound-external-read tools require exactly the external-observation authority");
+    if (!Array.isArray(descriptor.requiredAuthority) || descriptor.requiredAuthority.length !== 1 || (descriptor.requiredAuthority[0] !== "external-observation" && descriptor.requiredAuthority[0] !== "external-mcp-observation")) err("bound-external-read tools require exactly the external-observation authority");
     if (!binding.module || !binding.symbol) err("bound-external-read tools must name their port module and symbol");
   } else if (Array.isArray(descriptor.requiredAuthority) && descriptor.requiredAuthority.includes("external-observation")) {
     err("the external-observation authority belongs to bound-external-read tools only");
+  } else if (Array.isArray(descriptor.requiredAuthority) && descriptor.requiredAuthority.includes("external-mcp-observation")) {
+    err("the external-mcp-observation authority belongs to bound-external-read tools only"); // [B20 A4]
   }
   if (descriptor.lifecycle === "deprecated" && !descriptor.deprecation?.reason) err("deprecated tools must carry deprecation metadata");
   if (descriptor.lifecycle === "retired" && descriptor.discovery !== "internal-only") err("retired tools cannot remain discoverable");

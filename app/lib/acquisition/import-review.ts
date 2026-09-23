@@ -10,7 +10,8 @@
  * distributor freshness and a distributor's own spelling are outside it, so DigiKey's 1 h offer retention never voids a review.
  *
  * Nothing here keeps a vendor value: a distributor observation's facts keep only ids, a SHA-256 of each value, the source,
- * times and the registry version (OD-39), so the projection may be persisted as it is. It proves nothing (`proven: false`).
+ * times and the registry version (OD-39), so the projection may be persisted as it is. [B20 A4] Nor an external MCP tool's value
+ * (OD-79): masked the same way. It proves nothing (`proven: false`).
  */
 import { conflictKey, type CandidateFact, type EvidenceBundle, type EvidenceConflictValue, type ExternalObservation } from "./quarantine";
 import { SOURCE_REGISTRY, SOURCE_REGISTRY_VERSION } from "./source-registry";
@@ -45,7 +46,8 @@ export function buildImportReviewEvidence(bundle: EvidenceBundle, observations: 
   const stale = new Set(bundle.staleObservationIds);
   const superseded = new Set(bundle.supersededObservationIds);
   const source = bundleFacts(bundle);
-  const fromDistributor = (fact: CandidateFact): boolean => observationsById.has(fact.observationId) || fact.sourceClass === "distributor_catalog";
+  // [B20 A4] a fact read from an external MCP tool is masked like a vendor's: its value never persists, only its hash (OD-79)
+  const fromDistributor = (fact: CandidateFact): boolean => observationsById.has(fact.observationId) || fact.sourceClass === "distributor_catalog" || fact.sourceClass === "external_mcp_tool";
 
   const idOf = new Map<CandidateFact, string>();
   const facts: ImportReviewFact[] = source.map((fact) => {

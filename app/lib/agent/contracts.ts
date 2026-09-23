@@ -147,6 +147,9 @@ export interface AgentRunContext {
   /** [B19-E E6] SERVER fact: the chat route bound an external acquisition port to this run AND a verified canonical state exists.
    *  Present (true) exactly when the discovery context advertises the external-observation authority; absent otherwise. */
   externalAcquisitionAvailable?: boolean;
+  /** [B20 A4] SERVER fact: the chat route bound the external tool port (approved MCP servers) to this run AND a verified canonical
+   *  state exists. Present (true) exactly when the discovery context advertises the external-mcp-observation authority. */
+  mcpObservationAvailable?: boolean;
 }
 
 /** [B15.3] see `AgentRunContext.pcbProposalBasis`. */
@@ -327,6 +330,23 @@ export interface AgentExecutionGrantMinter {
 
 // ─── Invocation gateway boundary ─────────────────────────────────────────────
 
+/**
+ * [B20 A4] What the run trace records of one external tool call (D14, OD-80): identities and hashes, never content, arguments,
+ * URLs or credentials. `contentHash`, `observationId` and `retrievedAt` are present exactly for `complete` and `tool_error`; a
+ * `catalog` names no tool and always a listing digest.
+ */
+export interface ExternalToolAttribution {
+  serverId: string;
+  toolName: string | null;
+  registryVersion: string;
+  protocolVersion: string | null;
+  listingDigest: string | null;
+  resultClass: "catalog" | "complete" | "tool_error" | "not_sent" | "authorization_failed" | "upstream_error" | "transport_failed" | "result_invalid" | "cancelled";
+  contentHash: string | null;
+  observationId: string | null;
+  retrievedAt: string | null;
+}
+
 export type GatewayInvocationOutcome =
   | { kind: "read"; ok: true; toolId: string; version: string; output: Record<string, unknown>; sourceRevisionDigest: string; verification: string }
   | { kind: "proposal"; ok: true; toolId: string; version: string; proposal: SealedAgentProposal }
@@ -349,7 +369,11 @@ export type GatewayInvocationOutcome =
    *  awaiting confirmation for preview_then_confirm. Producing it changes
    *  nothing. */
   | { kind: "execution-grant"; ok: true; toolId: string; version: string; grant: PublicExecutionGrant; decision: ExecutionDecisionMode; note: string | null }
-  | { kind: "refused"; ok: false; toolId: string; version?: string; status: string; diagnostics: string[] };
+  /** [B20 A4] an external tool read over an approved MCP server (a catalog or an observation): labels, and untrusted text only under
+   *  untrusted keys where the committed registry permits it; `toolError` is the server's own `isError` (the model is told so). */
+  | { kind: "external-observation"; ok: true; toolId: string; version: string; output: Record<string, unknown>; sourceRevisionDigest: string; verification: string; external: ExternalToolAttribution; toolError: boolean }
+  /** [B20 A4] `external`: a refusal after the external tool port was asked carries the call's attribution. */
+  | { kind: "refused"; ok: false; toolId: string; version?: string; status: string; diagnostics: string[]; external?: ExternalToolAttribution };
 
 export interface AgentToolInvocationGateway {
   invoke(input: {

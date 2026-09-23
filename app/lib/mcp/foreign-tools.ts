@@ -754,7 +754,7 @@ export function boundedJsonCopy(value: unknown, depthBudget: number, nodeBudget:
 }
 
 /** [B20 A2 review] A property name kept as a KEY: a bounded identifier, never a member of Object.prototype (the call-time validator reads `required` with `in`). */
-function isPropertyName(name: string): boolean {
+export function isPropertyName(name: string): boolean {
   return name.length <= MCP_SCHEMA_PROPERTY_NAME_MAX_CHARS && PROPERTY_NAME_PATTERN.test(name) && !PROTOTYPE_KEYS.has(name) && !Object.hasOwn(Object.prototype, name);
 }
 
@@ -763,7 +763,7 @@ function isPropertyName(name: string): boolean {
  * copy: it switches on ONE `type` string (or answers by `enum` alone), has no `anyOf` branch and never reads `const`. An
  * input schema it cannot evaluate would be a tool that can never be called, or a constraint that is never enforced.
  */
-function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
+export function callValidatorEvaluates(schema: Record<string, unknown>): boolean {
   const stack: unknown[] = [schema];
   while (stack.length > 0) {
     const node = stack.pop();
@@ -1253,4 +1253,65 @@ function acceptOne(serverId: string, raw: unknown, names: ReadonlySet<string>, p
   });
   accepted.add(tool);
   return { ok: true, tool };
+}
+
+// ── [B20 A4] The directive judgement of one text the observation boundary shows ──
+
+/**
+ * [B20 A4] The ONE directive matcher over ONE judged string (lead correction C-1), for the observation boundary (`observation.ts`)
+ * and the agent port: a result text, a structured key or leaf, a tool title or description as a model would read it. The read is
+ * built exactly as A2's per-string judgement builds it (`carriesDirective`): the first `MCP_DIRECTIVE_SCAN_CHARS` characters,
+ * their matcher skeleton bounded to 4 x the read (S5) before any regex; `directiveIn` then reads it. Three answers: `directive`,
+ * `clean`, or `expanded` when the skeleton would pass its bound (never read; the caller withholds it). Never throws (S4): a throw
+ * answers `directive`, and anything that is not a non-empty string is `clean` (there is nothing to read).
+ */
+export function mcpTextReadsAsDirective(text: unknown): "directive" | "clean" | "expanded" {
+  try {
+    if (typeof text !== "string" || text === "") return "clean";
+    const read = readOf(text);
+    const { skeleton } = boundedSkeleton(read, skeletonCap(read));
+    if (skeleton === null) return "expanded";
+    return directiveIn({ read, skeleton }) ? "directive" : "clean";
+  } catch {
+    return "directive";
+  }
+}
+
+/** [B20 A4 review] The most lines one joined reading takes; its characters are `MCP_DIRECTIVE_SCAN_CHARS` in all. */
+export const MCP_JOINED_READ_LINES = 64;
+
+/**
+ * [B20 A4 review] The ONE matcher over strings a model reads TOGETHER (security-1), for the observation boundary: the shown
+ * texts of one result, or the keys and shown leaves of one structured value, read as ONE judged text, one line each — so
+ * `Ignore` in one block and `all previous instructions` in the next are read ACROSS the join, exactly as A2 reads a title
+ * with its description (`joinedDirectiveIn`; a '!' phrase is still read within one line only). Bounded like every judged
+ * string (S3/S5, each bound judged before the work it bounds): at most `MCP_JOINED_READ_LINES` lines and
+ * `MCP_DIRECTIVE_SCAN_CHARS` characters in all, the joined skeleton held to `MCP_SKELETON_MAX_CHARS` before any regex.
+ * Three answers, as `mcpTextReadsAsDirective`: `directive`, `clean`, or `expanded` (never read; the caller withholds).
+ * Never throws (S4): a throw answers `directive`; anything that is not an array, and fewer than two readable lines, is
+ * `clean` — a lone line was already judged alone, and this reading only ADDS detections to that one.
+ */
+export function mcpJoinedTextReadsAsDirective(texts: unknown): "directive" | "clean" | "expanded" {
+  try {
+    if (!Array.isArray(texts)) return "clean";
+    const reads: string[] = [];
+    const skeletons: string[] = [];
+    let room = MCP_DIRECTIVE_SCAN_CHARS;
+    let cap = MCP_SKELETON_MAX_CHARS;
+    for (let index = 0; index < Math.min(texts.length, MCP_JOINED_READ_LINES) && room > 0; index += 1) {
+      const text: unknown = texts[index];
+      if (typeof text !== "string" || text === "") continue;
+      const read = text.length > room ? text.slice(0, room) : text;
+      const built = boundedSkeleton(read, Math.min(skeletonCap(read), cap));
+      if (built.skeleton === null) return "expanded";
+      room -= read.length;
+      cap -= built.skeleton.length;
+      reads.push(read);
+      skeletons.push(built.skeleton);
+    }
+    if (reads.length < 2) return "clean";
+    return joinedDirectiveIn({ read: reads.join(" "), skeleton: skeletons.join(LINE_BREAK) }) ? "directive" : "clean";
+  } catch {
+    return "directive";
+  }
 }

@@ -14,11 +14,11 @@
  * A `header_mismatch` (-32020) means the server read the mirrored headers differently from the body: the cached listing
  * of that server is invalidated and the closed outcome is returned — there is no automatic retry loop in A2.
  * [B20 A3] The post goes through `mcpPostAuthorized` (a client-credentials row gets its token, one refresh and one step-up
- * there) with no collector: this layer keeps no server text after the post, and the transport redacts the result.
+ * there) with the caller's collector when one is given ([B20 A4]: the agent port's, which its normaliser reads), else none.
  */
 import type { AdmissionPurpose } from "../acquisition/admission-control";
 import { assertSafeJsonValue, DEFAULT_INPUT_LIMITS, validateAgainstSchema } from "../engineering/tool-io-validation";
-import { mcpPostAuthorized, type McpAuthorizedPostResult } from "./authorization";
+import { mcpPostAuthorized, type McpAuthorizedPostResult, type McpRedactionCollector } from "./authorization";
 import { isAcceptedMcpTool, utf8Exceeds, type McpAcceptedTool, type McpHeaderParameter } from "./foreign-tools";
 import {
   encodeMcpNameHeader, MCP_PARAM_HEADER_VALUE_MAX_CHARS, mcpRedactionSubjects,
@@ -63,7 +63,7 @@ export type McpToolCallOutcome = McpAuthorizedPostResult | McpToolCallClosed;
 export interface McpToolCallOptions {
   purpose: AdmissionPurpose;
   signal?: AbortSignal;
-  deps?: McpTransportDeps;
+  deps?: McpTransportDeps; /** [B20 A4] every token the post sends joins it (A3, D12); absent, the call is exactly A3's */ redaction?: McpRedactionCollector;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -214,7 +214,7 @@ export async function callMcpTool(
     const post = await mcpPostAuthorized(
       server,
       { jsonrpc: "2.0", id: nextMcpRequestId(), method: CALL_METHOD, params: { name: prepared.name, arguments: prepared.arguments } },
-      { purpose: options.purpose, era: "current", protocolVersion: negotiated.negotiatedVersion, paramHeaders: prepared.paramHeaders, signal: options.signal, deps: options.deps },
+      { purpose: options.purpose, era: "current", protocolVersion: negotiated.negotiatedVersion, paramHeaders: prepared.paramHeaders, signal: options.signal, deps: options.deps, ...(options.redaction === undefined ? {} : { redaction: options.redaction }) },
     );
     if (post.kind === "input_required") {
       return closed(

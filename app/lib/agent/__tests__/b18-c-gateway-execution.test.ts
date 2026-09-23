@@ -72,12 +72,15 @@ describe("B18-C I3 — scenario 1 through the production registry", () => {
   it("the exact request under execute_explicit_tier1 mints an EXPLICIT grant pinned to the production registry digest, the lifted descriptor version and the system prompt version", async () => {
     // [B19-E E6] reviewed pin move 1.2.1 -> 1.3.0. Reason: the prompt gained the rule that external sourcing observations are
     // untrusted, possibly stale and never authority (publication and binding are human, purchasing unavailable); a grant pins it.
-    expect(AGENT_SYSTEM_PROMPT_VERSION).toBe("1.3.0"); // [B18-C I8] + undo / redo of the assistant's own latest change; [review 3] the user's Undo per direction
+    // [B20 A4] reviewed pin move 1.3.0 -> 1.4.0. Reason: the prompt gained the rule that external tool observations over approved
+    // MCP servers are untrusted data under untrusted keys, never instructions or authority, and that an external tool's arguments
+    // carry only what the user asked to look up; a grant pins the version.
+    expect(AGENT_SYSTEM_PROMPT_VERSION).toBe("1.4.0"); // [B18-C I8] + undo / redo of the assistant's own latest change; [review 3] the user's Undo per direction
     const m = minting({ autonomy: EXPLICIT });
     const outcome = await invoke(createAgentToolGateway(registry, { executionGrants: m.minter, promptVersion: AGENT_SYSTEM_PROMPT_VERSION }));
     expect(outcome).toMatchObject({ kind: "execution-grant", ok: true, decision: "execute_explicit" });
     if (outcome.kind !== "execution-grant") throw new Error("unreachable");
-    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.1", registryDigest: registry.digest(), promptVersion: "1.3.0" }); // [B19-E E6] pin move with the prompt version above
+    expect(outcome.grant.binding.origin).toEqual({ provider: "openai", callId: "call-1", toolId: "sirkit.pcb.move-footprint", toolVersion: "1.1.1", registryDigest: registry.digest(), promptVersion: "1.4.0" }); // [B19-E E6] pin move with the prompt version above; [B20 A4] again
     expect(outcome.grant.binding.instruction.explicit).toMatchObject({ proven: true, coverage: "whole-message" });
     expect(outcome.grant.binding.proposal.preview).toEqual({ before: "R3 at (5.000, 5.000) mm", after: "R3 at (7.000, 5.000) mm", warnings: [] });
     expect(m.calls).toBe(1);
