@@ -7,7 +7,7 @@
  * member's role subset of the MCP exposure) and tools/call. [B20 B3] A listed read is served from the project's durable
  * server board; its dependencies are resolved inside the authenticated callback only, never at module scope. [B20 B4] No
  * proposal is listed: MCP exposure is read-only in B20 (OD-82, OD-87).
- * GET, DELETE and OPTIONS are not exported (a legacy GET stream or session DELETE answers 405).
+ * GET, DELETE and OPTIONS are not exported (a legacy GET stream or session DELETE answers 405; OPTIONS is Next's own 204 - both measured on the wire by e2e/mcp-endpoint.spec.ts, B20-D3).
  */
 import { mcpBearerJsonRoute } from "@/app/lib/auth/route-handlers";
 import { handleMcpRequest } from "@/app/lib/mcp/server/dispatch";

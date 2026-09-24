@@ -262,12 +262,55 @@ developers.openai.com/api/docs/guides/tools-connectors-mcp.
      follow-up for the owner, not C's to decide. OpenAI's structured-outputs guide states the subset without enumerating
      it; its examples use `type`, `properties`, `required`, `additionalProperties`, `items`, `enum` and `description`.
 
+8. **[B20 D] The re-read of 2026-09-23 (section 0 of task-D)** - CONFIRMED (fetched live). Sources:
+   modelcontextprotocol.io/specification/2026-07-28/{basic/index, basic/versioning, basic/transports/streamable-http,
+   basic/authorization, basic/authorization/authorization-server-discovery, server/tools, server/utilities/pagination,
+   client/elicitation} and modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices.
+   **None of D's five stop conditions fired.** What the re-read settled, and what it changed in D:
+   - **Origin.** "Servers **MUST** validate the `Origin` header on all incoming connections to prevent DNS rebinding
+     attacks. If the `Origin` header is present and invalid, servers **MUST** respond with HTTP 403 Forbidden." The
+     endpoint's "validate it only when present" is exactly that rule, and it is what lets a Playwright `request` context
+     (which sends none) reach the endpoint at all. The specification requires no CLIENT `Origin` anywhere, which settles
+     B20's discovery UNKNOWN 2 as NOT NEEDED rather than unknown.
+   - **Legacy GET and DELETE.** 405 is a **SHOULD**, not a MUST: "A server that supports only this revision and receives
+     such traffic from an older client **SHOULD** respond as follows: HTTP GET or DELETE to the MCP endpoint: respond with
+     `405 Method Not Allowed`." **OPTIONS is not mentioned at all.** This is why D3's spec DERIVES the answer to an
+     unexported method instead of asserting 405 (see section 12, U2).
+   - **Headers.** `Mcp-Method` is REQUIRED on all requests and `Mcp-Name` on `tools/call`, `resources/read` and
+     `prompts/get`; "These headers are **REQUIRED** for compliance", and a missing or mismatched one is
+     "`400 Bad Request` ... `-32020` (`HeaderMismatch`)". Sirkit's answers match, including the 400 `-32020` for an
+     `Mcp-Name` sent on a method that does not carry one.
+   - **Required `_meta`.** "A request missing any required field is malformed; the server **MUST** reject it with JSON-RPC
+     error code `-32602` (Invalid params). On HTTP, the response status **MUST** be `400 Bad Request`." As landed.
+   - **Unsupported version.** The versioning page's example carries `"data": { "supported": [...], "requested": "1900-01-01" }`,
+     which is what D3's W11 pins on the wire.
+   - **`authorization_servers`.** Re-confirmed verbatim: "The Protected Resource Metadata document returned by the MCP
+     server **MUST** include the `authorization_servers` field containing at least one authorization server." Section 9's
+     recorded deviation (OD-43) stands unchanged, and D3's W7 pins the served document AS IT IS, including the absent
+     field.
+   - **Tokens.** "Access tokens **MUST NOT** be included in the URI query string"; "MCP clients **MUST NOT** send tokens to
+     the MCP server other than ones issued by the MCP server's authorization server"; "MCP servers **MUST NOT** accept or
+     transit any other tokens." Unchanged.
+   - **Annotations.** "For trust & safety and security, clients **MUST** consider tool annotations to be untrusted unless
+     they come from trusted servers" - the ground for D1 case 10 on the client half.
+   - **Pagination.** "Invalid cursors **SHOULD** result in an error with code -32602 (Invalid params)", still with no HTTP
+     status stated (U3 stands: 200). Clients "**MUST NOT** assume a fixed page size".
+   - **Elicitation.** "Clients that support elicitation **MUST** declare the `elicitation` capability in
+     `_meta.io.modelcontextprotocol/clientCapabilities` on each request" and "Servers **MUST NOT** send elicitation
+     requests with modes that are not supported by the client." Nothing permits a client that declares none to answer one,
+     which is what the client half refuses as `input_required_unsupported`.
+   - **Security best practices.** DNS rebinding now appears under SSRF as a Time-of-Check-to-Time-of-Use concern -
+     "Consider pinning DNS resolution results between check and use. Defense in depth: combine DNS checks with other
+     mitigations" - and the private ranges to block include `169.254.0.0/16`. That is OD-51's recorded mitigation, and it
+     is what `b20-d1-rebinding-window.test.ts` proves. "Session Hijacking" is replaced in this revision by "State Handle
+     Hijacking"; Sirkit mints no state handle.
+
 ## 12. UNKNOWNs settled
 
 | # | item | settlement |
 |---|---|---|
-| U1 | Next serves `app/.well-known` route handlers | INFERRED (route discovery ignores only `_`-prefixed parts); the wire proof is B20-D3 |
-| U2 | 405 for the unexported GET and DELETE on `/api/mcp` | UNKNOWN until B20-D3; no policy row exists for either (E12) |
+| U1 | Next serves `app/.well-known` route handlers | **SETTLED 2026-09-23 by B20-D3 W7**: `GET /.well-known/oauth-protected-resource/api/mcp` answers **200** on the running fixture server with the resource, the one scope, `bearer_methods_supported: ["header"]` and no `authorization_servers` |
+| U2 | the answer to an unexported GET, DELETE and OPTIONS on `/api/mcp` | **SETTLED 2026-09-23 by B20-D3 W1-W3** on Next 16.2.6 under the fixture server: **GET 405, DELETE 405, OPTIONS 204**. The 405s match this route's header claim and the transport binding's SHOULD. **OPTIONS 204 is new and contradicts nothing**: the route header makes no OPTIONS claim and the 2026-07-28 transport binding does not mention OPTIONS, so Next's App Router answers it itself. No `Access-Control-Allow-*` header exists anywhere in the application, so no cross-origin browser call can follow that preflight; the route header naming OPTIONS explicitly is a follow-up for the lead, not a D change. No policy row exists for any of the three (E12). Re-measured 2026-09-24 after the review: the same three answers; the spec admits only {405, 404, 204, 501} and refuses a 200 (the one answer that would mean the method is served — proven by exporting a `GET` answering 200 and watching W1-W3 fail) |
 | U3 | HTTP status of a request-level `-32602` | unknown tool, a cursor the server did not mint, arguments 200; missing `_meta` 400 (re-read item 1) |
 | U4 | RFC field names, credential syntax; the `authorization_servers` MUST | as designed; the MUST CONFIRMED (section 9) |
 | U5 | B1's API and `x-mcp-header` | `renderMcpToolListing` used as landed; no exposed tool declares `x-mcp-header`, so every `Mcp-Param-*` is refused |

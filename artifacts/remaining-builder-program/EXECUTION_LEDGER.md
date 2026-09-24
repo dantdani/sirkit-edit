@@ -2507,3 +2507,71 @@ _(discovery, reproduction and results appended below as they are observed)_
   40-footprint bounded ingest it passed, so all nine DB-gated suites are qualified on the real server.
 - The ingest's embedding pass was refused: OpenAI answered `429 You have no credits remaining` for the organisation behind
   BOTH configured keys, so footprint embeddings stay unqualified until credits exist. No other live call was made.
+
+### B20-D - the adversarial chapter: D1..D3, reviewed and fixed (2026-09-23/24 local; increment workflow + lead; this commit)
+
+- Delivered on the single chapter branch after A3, A4, A4L, A5, B1..B4 and C1..C3 had landed there: five vitest suites
+  (61 cases) and one Playwright spec (11), the in-process hostile-server harness (`_hostile-server.ts`), the page
+  `mcp-adversarial.md`, `mcp-server-endpoint.md` section 11 item 8 (the live re-read of 2026-09-23: none of D's five stop
+  conditions fired; Origin validation only when present is the MUST, 405 for legacy GET/DELETE is a SHOULD and OPTIONS is
+  not mentioned) and section 12 U1/U2 settled, and one configuration edit (`playwright.config.ts` `webServer.env`: the
+  MCP flag, the expected origin and an obviously fake token secret assembled from parts). No production code changed;
+  the lead's one edit is the `route.ts` header comment naming the measured OPTIONS answer (DEC-12, same line count).
+- D1 (`b20-d1-malicious-server`, 25; `b20-d1-rebinding-window`, 6): one hostile server through the whole client chain -
+  asserted on the agent-visible refusal code, its fixed sentence, the observation record, the attribution and the leak
+  sweep - for redirects, a peer naming a URL, PRM resource spellings, two credential rows, invented and echoed secrets,
+  schema bombs, 500-tool listings, name collisions, forged annotations, directives in every judged place, enormous
+  content, delayed streams, duplicate results, cancellation, MRTR and the composed authorization loop (one refresh, one
+  step-up, then failure). D20-23 closed AS RECORDED under OD-51: a resolver flip between two admissions is the closed
+  `egress_refused`/`address_blocked` observed on the transport (`not_sent` at the agent); every blocked class the same;
+  throwing, rejecting, empty, hanging and non-string resolvers each closed with nothing sent; the window inside one
+  admission->connect pair is recorded as open (a pinned `undici` dispatcher stays OD-42's follow-up).
+- D2 (`b20-d2-never-reachable-sweep`, 16; `b20-d2-name-spellings`, 7): every descriptor of the canonical registry (42)
+  under every mapped role (5) through `POST /api/mcp` - 210 requests, partitioned (OD-104) into 167 unknown-tool refusals
+  (one identical body, no `data`, every spy 0, one trace record each, never a 429) and 43 served reads with a served
+  floor; cross-project and cross-tenant scope measured on the reader's arguments; tampered tokens at both verifier
+  layers with the verdict pinned per shape; replay in isolation; a thousand hostile spellings sent in three shapes and
+  never echoed in a body, a header or the trace; thirteen name spellings, header/body disagreement, nested spellings and
+  wrong-shaped arguments each pinned to the refusal the gate that reads them writes.
+- D3 (`b20-d3-authority-import-gates`, 7; `e2e/mcp-endpoint.spec.ts`, 11): the asymmetric gate (OD-105) - the
+  approval-controller family on both halves, grants, reauthorization and fabrication on the derived client half only,
+  every family by prefix, B2 J2 case 2 bound by title, the fab-preset exemption server-only. The wire spec on Next 16.2.6
+  under the fixture server settled discovery UNKNOWN 3 (GET 405, DELETE 405, OPTIONS 204 - a 200 refused as the one
+  answer meaning the method is served), and proved 403 for a foreign and a null Origin, the RFC 9728 challenge on a 401,
+  the metadata route, 202 for a notification, 400 -32020 / -32022, a query string refused, a cookie refused as a bearer,
+  the hidden release tool's identical -32602, and no token, secret, stack frame or file path in any body or header.
+  D20-28 closed by D1 (loopback half) and D3 (wire half). The live-contract `describe.skipIf` is not written (OD-102);
+  what D may duplicate is OD-103, with the count coupling recorded: every A-suite case addition is a D page edit.
+- Adversarial review (2026-09-24, four lenses then skeptics): 46 findings, 40 confirmed across 24 distinct defects; the
+  three high ones were case 17 never exercising the refresh or the step-up, E11 sending 25 of its 1 000 spellings, and
+  N4/N5 never reading the refusal code. Each fixed test-first against a hash-verified production mutation (M1..M21:
+  the view delegating a write, the unmapped role folded into 401, `membership_changed` not refused, expiry removed, a
+  project-selector header honoured, the refusal echoing arguments, the audience not compared, the post-check inverted,
+  undeclared keys dropped, the normalizer's catch removed, structured keys kept outside an untrusted key, a peer secret
+  shape withheld, the registry lookup ignoring the id, an empty catalog, a listing `input_required` remapped, backoff
+  never set, an empty resolution admitted, the allowlist ignored, a new grant module imported by the client, B2 naming
+  an approval module - the strengthening no longer refused - and `GET` exported answering 200), every production file
+  restored to its pre-fix SHA-256. Fix-round figures: suites 31/31, 23/23, 7/7 + 11/11; wire runs `mcp-endpoint` alone
+  11/11 in 10 s, all five specs 48/48 in 818 s, the four pre-existing 37/37 in 805 s (green with the configuration edit
+  in place; OD-30's margin held); gates 52 files / 920 tests and 13 / 229; tsc and eslint clean; the twenty-five B17/B18
+  evidence PNGs the browser specs rewrite restored from HEAD's bytes and verified by blob hash.
+- Lead follow-ups on the checker's residuals: E2's per-row spy sum omitted `viewRead`/`viewWrite` (now `spySum` over all
+  seven counters, shared with `spyTotal`); the "32-byte" label on E8's other secret (it is 50 bytes; test and page);
+  N2's title said the throwing getter is the same 200 while its body asserts the closed 400 (title corrected); G-D4's
+  vacuous `Array.isArray` assertion around the "no other gate names the family" count removed - recorded on the page,
+  deliberately not asserted, so B2's `FORBIDDEN` may grow; the page's section 0 binding paragraph rewritten to what the
+  titles carry (the sweep's composing cases E2, E4, E5, E6, E7b and E10 name the bound B3/B4 title; N1..N5 name none and
+  N6 binds B4 case 5 for the suite; which case binds which title listed); the count coupling (regressions-6) accepted as
+  the page states it. D suites after the follow-ups: 61/61.
+- Lead gates (2026-09-24): `app/lib/mcp` + `app/api/mcp/__tests__` 918/920 in a 35-minute run under load (the two
+  failures were 120 s timeouts inside AST tripwires - `b20-a3-secret-hygiene` D14 and `b20-b4-process-gate` case 3 -
+  with `[vitest-worker]: Timeout calling "onTaskUpdate"`; re-run alone both suites pass 12/12 in 55 s; the cause is the
+  loaded machine, the cold-import-under-load pattern recorded at B16-0, and it is recorded here rather than dismissed);
+  tripwires 13 files / 229 cases; tsc clean; eslint clean on the D files and the configuration; Playwright
+  `mcp-endpoint` 11/11 in 14.3 s (GET 405, DELETE 405, OPTIONS 204 measured again); the mcp-only wire run rewrote no
+  evidence PNG; no generator affected (no descriptor, manifest, digest or generated artifact moves).
+- Records: OD-102..OD-105 (highest in use OD-105; OD-83..86 and OD-88 stay reserved); `discovery.md` D20-23, D20-28 and
+  section 8 UNKNOWN 3 closed on their rows, section 7 "as built", a section 10 block; README B20-D row; PROGRAM_STATE
+  moved to the closeout. Follow-ups outside D: the pinned egress dispatcher (OD-42), the live contract once a server is
+  approved (OD-48/OD-102), a wire proof of the flag-off 404, and the owner question case 6a records (whether a
+  peer-invented, non-secret-shaped value should be withheld).
