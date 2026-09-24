@@ -1,0 +1,278 @@
+# MCP reference notes — read at execution time on 2026-09-17 (B20 start)
+
+Sources fetched today (WebFetch, live): modelcontextprotocol.io/specification/latest (resolves to revision **2026-07-28**),
+/specification/versioning, /specification/2026-07-28/{changelog, basic/index, basic/transports/streamable-http,
+basic/transports/stdio, basic/authorization, basic/authorization/security-considerations, basic/patterns/mrtr, server/discover,
+server/tools}, /docs/2026-07-28/tutorials/security/security_best_practices; platform.claude.com/docs/en/agents-and-tools/mcp-connector
+(docs.anthropic.com/en/docs/mcp now 301s to platform.claude.com and then 307s to modelcontextprotocol.io);
+developers.openai.com/api/docs/guides/tools-connectors-mcp (platform.openai.com/docs/... 301s there);
+registry.npmjs.org/@modelcontextprotocol/sdk (+ unpkg types.js of 1.30.0).
+
+## 1. Which revision is current
+
+- The **current** protocol version is **2026-07-28** (versioning page). Previous revision: 2025-11-25. Schema of record:
+  schema/2026-07-28/schema.ts.
+- **The official TypeScript SDK (`@modelcontextprotocol/sdk` 1.30.0, dist-tag latest, no 2.x tag) implements
+  LATEST_PROTOCOL_VERSION "2025-11-25", SUPPORTED ["2025-11-25","2025-06-18","2025-03-26","2024-11-05","2024-10-07"]; it defines
+  none of server/discover, subscriptions/listen, InputRequiredResult, resultType, CacheableResult/ttlMs, Mcp-Method.** So the
+  SDK speaks the previous (handshake) era only.
+- Anthropic's Messages API MCP connector (beta header `mcp-client-2025-11-20`) links the 2025-11-25 authorization spec; it
+  supports "Streamable HTTP and SSE transports", tools only, remote HTTPS only (no stdio), `authorization_token` supplied by the
+  API consumer who runs OAuth themselves. OpenAI's Responses `type: "mcp"` tool supports "Streamable HTTP or the HTTP/SSE
+  transport", references the 2025-03-26 spec, `authorization` token not stored, `require_approval` "always"/"never"/object,
+  `allowed_tools`, `server_label`, `server_url`, `connector_id`, `headers`, output items mcp_list_tools/mcp_call/
+  mcp_approval_request/mcp_approval_response.
+- Consequence for B20: implement the **2026-07-28 revision natively** (it is the current spec; the runbook forbids a remembered
+  or deprecated draft) AND the **2025-11-25 era** (initialize handshake, Mcp-Session-Id, GET stream) for interoperability with
+  the provider connectors and the SDK-based ecosystem — exactly the "Backward Compatibility" the 2026-07-28 spec defines. Owner
+  decision to record (OD-41): dual-era support, current revision first; the older era is the compatibility path, never the
+  authority path.
+
+## 2. 2026-07-28 key changes (changelog, verbatim gist)
+
+1. No protocol-level sessions, no `Mcp-Session-Id`; list endpoints do not vary per connection; cross-call state = explicit
+   server-minted handles passed as ordinary tool arguments (SEP-2567).
+2. Stateless: no `initialize`/`notifications/initialized`. Every request carries `_meta["io.modelcontextprotocol/protocolVersion"]`
+   (required) and `_meta["io.modelcontextprotocol/clientCapabilities"]` (required); `clientInfo` SHOULD; results SHOULD carry
+   `_meta["io.modelcontextprotocol/serverInfo"]`. Version mismatch → `UnsupportedProtocolVersionError` (-32022) listing supported
+   versions (SEP-2575).
+3. `server/discover` — servers MUST implement; returns `supportedVersions`, `capabilities`, `instructions`, serverInfo in _meta,
+   plus `ttlMs`/`cacheScope`.
+4. `subscriptions/listen` replaces the GET stream and resources/subscribe: one long-lived POST response stream; opt-in types
+   `toolsListChanged`, `promptsListChanged`, `resourcesListChanged`, `resourceSubscriptions`; notifications tagged with
+   `_meta["io.modelcontextprotocol/subscriptionId"]`.
+5. Removed `ping`, `logging/setLevel`, `notifications/roots/list_changed`; log level per request via
+   `_meta["io.modelcontextprotocol/logLevel"]`; servers MUST NOT emit `notifications/message` for requests without it.
+6. Tasks moved to extension `io.modelcontextprotocol/tasks` (tasks/get polling, tasks/update).
+7. **MRTR**: server-to-client requests (roots/list, sampling/createMessage, elicitation/create) are no longer sent as requests;
+   the server returns `InputRequiredResult` (`resultType: "input_required"`, `inputRequests` map, opaque `requestState`); the
+   client retries the ORIGINAL request with `inputResponses` (+ `requestState` echoed exactly) under a NEW id. Only prompts/get,
+   resources/read, tools/call may return it. `requestState` MUST be treated as attacker-controlled; integrity-protect (HMAC/AEAD)
+   when it influences authz/logic; SHOULD bind principal + TTL + originating-request digest; single-use must be enforced
+   server-side when required. Servers MUST NOT send inputRequests the client did not declare capability for.
+8. Every result carries required `resultType` ("complete" | "input_required" | extension values); absent → treat as "complete"
+   (older servers); unrecognized → invalid.
+9. No SSE resumability (`Last-Event-ID` gone); a broken stream loses the request; re-issue with a new id.
+Minor: `extensions` in capabilities; OpenTelemetry `traceparent`/`tracestate`/`baggage` in _meta; deterministic tools/list
+order; required headers `Mcp-Method` (all POSTs) and `Mcp-Name` (tools/call, resources/read, prompts/get) + `x-mcp-header`
+→ `Mcp-Param-{Name}`; `CacheableResult` (`ttlMs`, `cacheScope` "public"|"private") REQUIRED on tools/list, prompts/list,
+resources/list, resources/read, resources/templates/list (and server/discover supports caching); resource-not-found now
+-32602; `iss` validation (RFC 9207) MUST when present; DCR needs `application_type`; client credentials keyed by issuer;
+inputSchema/outputSchema any 2020-12 keywords, structuredContent any JSON value; `$ref` to network URIs MUST NOT be
+auto-dereferenced; composition bounds SHOULD; error code policy: -32000..-32019 legacy (do not allocate), -32020..-32099
+spec-reserved (-32020 HeaderMismatch, -32021 MissingRequiredClientCapability, -32022 UnsupportedProtocolVersion); app errors
+outside -32768..-32000.
+Deprecated: Roots, Sampling, Logging features (SEP-2577); HTTP+SSE transport (2024-11-05); includeContext thisServer/allServers;
+DCR (RFC 7591) in favour of Client ID Metadata Documents.
+
+## 3. Streamable HTTP (2026-07-28) — normative
+
+- Single MCP endpoint, POST only. Client MUST: POST each JSON-RPC request/notification; `Accept: application/json, text/event-stream`;
+  include `MCP-Protocol-Version` (MUST equal the _meta value, else 400 + -32020), `Mcp-Method`, `Mcp-Name` where applicable
+  (Base64 sentinel `=?base64?...?=` when not header-safe); body = ONE request or notification, never a response.
+- Server: notification accepted → `202` no body; request → `application/json` single object or `text/event-stream` scoped to
+  that request (only request-related notifications, then the final response; MUST NOT send independent requests on it);
+  `X-Accel-Buffering: no` SHOULD; keep-alive comment lines on long streams; unknown method → 404 + -32601; unsupported version
+  → 400 + -32022; missing required _meta → 400 + -32602; missing client capability → 400 + -32021.
+- Security: servers MUST validate `Origin` (403 if present and invalid); local servers SHOULD bind 127.0.0.1; SHOULD authenticate.
+- Cancellation on HTTP: client closes the SSE response stream (no notifications/cancelled); server MUST NOT send more messages.
+- Legacy traffic on a modern-only server: GET/DELETE → 405; ignore `Mcp-Session-Id` (never mint/echo); ignore `Last-Event-ID`.
+- Modern client probing a server: try a modern request; on 400 inspect the body — a recognized modern JSON-RPC error means modern
+  (retry per `supported`), an empty/unrecognized body means legacy → `initialize` handshake. A modern server MAY treat a request
+  with no MCP-Protocol-Version header as 2025-03-26 only if it supports such clients; otherwise reject.
+- `x-mcp-header`: constraints (tchar token, unique CI, primitive types only, statically reachable via `properties` chain only);
+  clients MUST exclude a tool whose annotation violates them from tools/list and SHOULD log; servers MUST reject
+  `Mcp-Param-*` that mismatch the body (400 + -32020); do not mark sensitive params.
+
+## 4. stdio (2026-07-28)
+
+Newline-delimited JSON-RPC on stdin/stdout, no embedded newlines; stderr free-form logging; server MUST NOT write non-MCP to
+stdout; server MUST NOT write requests to stdout (MRTR instead); cancellation via `notifications/cancelled`; shutdown by
+closing stdin then wait then force (TerminateProcess/Job Objects on Windows); restart on unexpected exit and re-establish
+listen streams; probe with `server/discover` first (DiscoverResult → modern; recognized modern error → modern; anything else or
+timeout → legacy initialize); no per-request headers — everything in `_meta`; the process is NOT a session: unrelated requests
+may interleave; credentials come from the environment (authorization spec does not apply to stdio).
+
+## 5. Authorization (2026-07-28) — normative
+
+- HTTP transports SHOULD conform; stdio SHOULD NOT (environment credentials). AS MUST implement OAuth 2.1 (draft-13).
+- MCP servers MUST implement Protected Resource Metadata (RFC 9728); clients MUST use it for AS discovery; AS MUST provide RFC 8414
+  or OIDC discovery; clients MUST support both.
+- Client registration: Client ID Metadata Documents SHOULD (URL-shaped client_id); DCR MAY (deprecated; needs `application_type`);
+  pre-registration allowed. Credentials keyed by issuer; never reused across AS.
+- PKCE: clients MUST implement, MUST verify support via `code_challenge_methods_supported` (absent → MUST refuse), MUST use S256.
+- Resource indicators (RFC 8707): `resource` MUST be in authorization and token requests, = the MCP server's canonical URI
+  (scheme+host[:port][/path], lowercase, no fragment, no trailing slash by convention). Sent regardless of AS support.
+- `iss` (RFC 9207): client MUST record the validated issuer before redirecting; compare with simple string comparison, no
+  normalization; if `authorization_response_iss_parameter_supported` true and `iss` absent → reject; on mismatch MUST NOT act
+  on error fields either.
+- Tokens: `Authorization: Bearer` on EVERY request; MUST NOT be in the query string. Servers MUST validate audience (issued for
+  this server), 401 invalid/expired, 403 insufficient scope with `WWW-Authenticate: Bearer error="insufficient_scope",
+  scope="...", resource_metadata="..."`, 400 malformed. Clients MUST NOT send tokens not issued by the server's AS; servers MUST
+  NOT accept or transit other tokens (**token passthrough forbidden**); upstream APIs get a SEPARATE token; the MCP server MUST
+  NOT pass through the client's token.
+- Scopes: challenge `scope` is authoritative for the operation; clients SHOULD least-privilege, step-up = union of previous and
+  challenged scopes, bounded retries; servers MUST honour scope hierarchies; `offline_access` not a resource requirement.
+- Security considerations: HTTPS for all AS endpoints; redirect URIs localhost or HTTPS; exact redirect URI registration/match;
+  state SHOULD; refresh-token rotation for public clients; short-lived access tokens; CIMD fetch SSRF protections; localhost
+  redirect warnings; proxies with static upstream client id MUST obtain per-client consent (confused deputy).
+- Best practices: SSRF on OAuth metadata URLs — HTTPS only (loopback exception in dev), block private/link-local/loopback ranges
+  incl. 169.254.169.254, validate redirect targets per hop, consider DNS pinning; state-handle hijacking — a handle is never
+  authentication, bind handles to the verified principal (`<user_id>:<handle>`), random + expiring; local server compromise —
+  show the exact command, explicit consent, sandbox, least privilege; authorization URL validation — allow only http(s), reject
+  javascript:/data:/file:/vbscript:, never open via a shell; scope minimization.
+
+## 6. Tools (2026-07-28)
+
+- `tools` capability with `listChanged`; tools/list MUST NOT vary per connection or as a side effect (MAY vary by the
+  authorization on the request); deterministic order SHOULD; pagination `cursor`/`nextCursor`; `ttlMs` + `cacheScope` required.
+- Tool: `name` (SHOULD 1–128 chars, `[A-Za-z0-9_.-]`, case-sensitive, unique per server; aggregators SHOULD prefix by server),
+  `title`, `description`, `icons`, `inputSchema` (valid JSON Schema object, 2020-12 default; no-arg tools
+  `{type:"object", additionalProperties:false}`), `outputSchema`, `annotations` (**clients MUST treat annotations as untrusted
+  unless from trusted servers**), `_meta`.
+- tools/call result: `resultType`, `content[]` (text/image/audio/resource_link/resource), `structuredContent` (MUST conform
+  to outputSchema; SHOULD also serialize into a text block), `isError` for execution errors (model-recoverable) vs JSON-RPC
+  errors for protocol errors (-32602 unknown tool). May return InputRequiredResult.
+- Security: servers MUST validate inputs, access control, rate limit, sanitize outputs; clients SHOULD confirm sensitive ops, show
+  inputs, validate results before the LLM, follow $ref rules, timeouts, audit logs. "Human in the loop with the ability to deny".
+- Stateful tools: explicit opaque random handles; a handle is a name not a capability; validate authorization per call; state
+  retention stated in the description; expiry → tool execution error.
+
+## 7. Base protocol (2026-07-28)
+
+Requests: id string|integer, never null, unique among in-flight. Results: `resultType` required. Errors: integer codes; `data`
+optional. Notifications: no id. Statelessness: servers MUST NOT rely on prior requests on the same connection for context;
+state spanning requests MUST be referenced by an explicit identifier. `_meta` key syntax: optional reverse-DNS prefix + `/`;
+prefixes whose second label is `modelcontextprotocol` or `mcp` are reserved; name `[A-Za-z0-9]` at both ends with `-_.` inside.
+JSON Schema: 2020-12 MUST; unsupported dialect → error; network `$ref` MUST NOT be auto-dereferenced (opt-in only with host
+allowlist, private-range rejection, timeouts, size limits, logging); unresolved external $ref → reject; composition bounds
+(depth, subschema count, time budget) SHOULD. Icons: https or data: only, same-origin, no credentials, magic-byte checks.
+
+## 8. Re-read of 2026-09-21 (B20-B3: tools/call results and `_meta`)
+
+- **Sources:** modelcontextprotocol.io/specification/2026-07-28/server/tools, /specification/2026-07-28/basic/index, and schema/2026-07-28/schema.ts, all fetched live.
+- **`tools/call` results:**
+  - `structuredContent` is any JSON value that conforms to `outputSchema` when one is defined; servers MUST provide conforming structured results.
+  - A tool returning structured content SHOULD also return the serialized JSON in a TextContent block; the spec's own example carries both.
+  - `isError: true` reports tool execution errors (input validation, business logic); unknown tools and malformed requests are JSON-RPC errors such as `-32602`.
+  - Types: `CallToolResult extends Result { content: ContentBlock[]; structuredContent?: unknown; isError?: boolean }`, and `Result` requires `resultType` with an optional `_meta: ResultMetaObject`.
+- **`_meta`:**
+  - `RequestMetaObject extends MetaObject = Record<string, unknown>`; third-party extensions use their own vendor prefix.
+  - A prefix whose second label is `modelcontextprotocol` or `mcp` is reserved; a name begins and ends alphanumeric.
+  - A missing required `_meta` field is `-32602` with HTTP 400. `dev.sirkit/*` keys are valid on both request params and results.
+- **SEP-2567 ("Stateful Tools", non-normative):** the protocol has no handle concept; a handle is an ordinary string argument, "a name, not a capability", authorized on every call.
+
+## 9. Re-read of 2026-09-21 (B20-A3: authorization)
+
+- **Sources (fetched live 2026-09-21, each page also read in its `.md` form):** modelcontextprotocol.io/specification/2026-07-28/basic/authorization, /specification/2026-07-28/basic/authorization/authorization-server-discovery, /extensions/auth/oauth-client-credentials, /extensions/auth/overview and /extensions/overview; github.com/modelcontextprotocol/ext-auth `specification/draft/oauth-client-credentials.mdx` ("Protocol Revision: draft"); RFC 8414, RFC 9728, RFC 6749 and RFC 8707 (rfc-editor.org); draft-ietf-oauth-v2-1-13 (ietf.org). The first dispatch stopped at this re-read before any code (the Outcome bullet); the re-dispatch applied the lead's decisions (the last bullet).
+- **Protected-resource metadata (authorization-server-discovery):**
+  - MCP servers MUST implement ONE of two mechanisms: `resource_metadata` in the `WWW-Authenticate` header of a 401 (RFC 9728 §5.1), or a well-known URI, path-inserted (`/.well-known/oauth-protected-resource<endpoint path>`) or at the root. A server that publishes its metadata only through the challenge conforms.
+  - Clients MUST support both, MUST use the challenge URL when present, and otherwise MUST fall back to the well-known URIs in that order (path-inserted, then root). The metadata MUST list at least one authorization server; the client chooses (RFC 9728 §7.6) and keeps credentials and tokens per authorization server.
+  - The page's sequence diagram (non-normative) begins with an unauthenticated MCP request; when neither well-known URI answers it reads "Abort or use pre-configured values".
+  - Consequence for A3: the task's default (D2, OD-64) discovers from the well-known URIs and sends no request without a token to a row that needs one (`mcpPost` answers `token_unavailable`), so it never receives the 401 that carries the challenge URL. Under that default A3 cannot reach a conforming server that publishes its metadata only through the challenge; that row ends in `prm_unavailable`. Reaching it needs an unauthenticated first request (or one probe after both well-known URIs answer 404 or 410) or a row-pinned metadata URL: an OD-64 decision. Superseded by LD-3 (applied): discovery starts with ONE credential-free probe of the endpoint, so a server that publishes its metadata only through the challenge is reached (`b20-a3-prm-discovery`); a same-origin challenge URL is fetched as the metadata, and a cross-origin one is refused `prm_url_not_allowed` (fail closed, RFC 9728 §7.7), the one recorded departure from the MUST (OD-64).
+- **Authorization-server metadata:** with an issuer path, `/.well-known/oauth-authorization-server{path}`, then `/.well-known/openid-configuration{path}`, then `{path}/.well-known/openid-configuration`; without a path, the first two. The document's `issuer` MUST be identical to the issuer the URL was built from (RFC 8414 §3.3; OIDC Discovery §4.3), else it MUST NOT be used; RFC 8414 §3.1 removes a terminating `/` of the issuer before inserting. This matches task §5.9.
+- **Canonical server URI (basic/authorization):** the canonical form uses lowercase scheme and host components, but implementations SHOULD accept uppercase scheme and host components for robustness and interoperability; the form without a trailing slash SHOULD be used. RFC 9728 §3.3: the metadata `resource` MUST be identical to the resource identifier the well-known URL was built from, or, for metadata fetched from a challenge URL, to the URL of the request to the resource server. Consequence: the task's exact comparison (D3; suite 2's "case variant" row) follows RFC 9728 "identical" and departs from this SHOULD for an uppercase scheme or host: an OD-64 decision (record the departure, or compare scheme and host case-insensitively). Decided (LD-5, applied): the comparison stays exact; the registry already holds the canonical URI in its lowercase form, and a `resource` differing only in the case of its scheme or host is `prm_resource_mismatch` (OD-64 records the departure and the owner's alternative).
+- **Signed metadata:** consumers MAY ignore `signed_metadata` (RFC 9728 §2.2); the §3.3 signature rule binds a consumer that uses it.
+- **Scopes:** the challenge `scope` is authoritative for the current operation; the initial request SHOULD use the challenge `scope`, else all of `scopes_supported`, omitting `scope` when that is undefined; step-up requests the union of the previously requested set and the challenge; clients acting on their own behalf (`client_credentials`) MAY attempt step-up or abort immediately; retry limits SHOULD. Task D4's `scopes_supported` ∩ the row ceiling narrows the SHOULD (OD-62).
+- **Resource indicator:** `resource` MUST be in every token request, the canonical URI, sent whether or not the authorization server supports it. RFC 8707 §2: an absolute URI without a fragment; `invalid_target` for a refused resource.
+- **Client-credentials extension (`io.modelcontextprotocol/oauth-client-credentials`):**
+  - The extension page's client guide lists "Declare support" first: include the extension in the per-request capabilities, `_meta["io.modelcontextprotocol/clientCapabilities"].extensions["io.modelcontextprotocol/oauth-client-credentials"] = {}`. The extensions overview: clients declare extensions in every request's `clientCapabilities`, extensions are never active by default, and a server that requires an authentication extension can reject a client that does not declare it. The ext-auth normative draft does not itself state the declaration.
+  - Client authentication (ext-auth draft): clients MUST use JWT authentication (RFC 7523 §2.2, RECOMMENDED) or a client secret "transmitted in the request content" as OAuth 2.1 §2.4.1 defines. When supporting the flow, the authorization server's metadata MUST include `token_endpoint_auth_methods_supported` with at least one of `private_key_jwt` and `client_secret_basic` (and `token_endpoint_auth_signing_alg_values_supported` for JWT). Its flow diagram begins with an MCP request without a token and reads `resource_metadata` from the 401.
+  - draft-ietf-oauth-v2-1-13 §2.4.1: the authorization server MUST support client credentials in the request body; HTTP Basic is MAY. RFC 6749 §2.3.1 is the reverse (Basic MUST, the body NOT RECOMMENDED). The task's §5.9 (Basic unless only `client_secret_post` is listed) is the reverse of the extension's body method: an OD-64 decision.
+- **RFC 8414 §2:** `grant_types_supported` omitted means `["authorization_code", "implicit"]` (confirms task D10); `token_endpoint_auth_methods_supported` omitted means `client_secret_basic`.
+- **RFC 6749:** §4.4.2 `grant_type=client_credentials`, `scope` optional, the client MUST authenticate; §4.4.3 a refresh token SHOULD NOT be included; §5.1 `token_type` is case-insensitive, `expires_in` RECOMMENDED, `scope` REQUIRED when it differs from the request, `Cache-Control: no-store`; §5.2 a 400 (a 401 for `invalid_client` over an Authorization header) with one closed `error` code.
+- **Outcome:** the declared capability contradicts task §4 (no decision declares one; the transport sends `clientCapabilities` `{}` unless a caller passes more, `http-transport.ts` `McpPostOptions.clientCapabilities`), which is the task's stop condition. A3 stopped before code on 2026-09-21 (no source changed). A re-dispatch waits on a decision on the capability declaration and on OD-61..OD-64, where OD-64 now also settles the client-authentication method, the challenge-only metadata path and the uppercase comparison. The stop is answered by these decisions: the lead decided LD-1..LD-6 the same day, and the re-dispatch applied them (next bullet).
+- **Decisions applied (B20-A3 re-dispatch, 2026-09-21):**
+  - LD-1: every request of a client-credentials row declares `io.modelcontextprotocol/oauth-client-credentials` in `_meta` clientCapabilities `extensions` (the probe, `server/discover`, `tools/list`, `tools/call`), merged with the caller's capabilities; `none` and pre-issued rows declare nothing; a server's own advertisement is neither required nor read (OD-64).
+  - LD-2: `client_secret_basic` when the list names it or is absent (RFC 8414 §2 default, SEP-1046, the extension's metadata rule); `client_secret_post` only when it is listed and Basic is not; a list naming neither is `as_client_auth_unsupported` (OD-64 records that the extension's method text and OAuth 2.1 point to the body method).
+  - LD-3: discovery starts with ONE credential-free probe (the negotiation's own `server/discover` shape, the LD-1 declaration, no `Authorization` header); a 401 challenge's same-origin `resource_metadata` is the metadata URL, a cross-origin one is refused, and any other answer falls back to the well-known URIs (path-inserted, then root). The probe's body is never read. On the probe the challenge's `resource_metadata` is judged as the server wrote it (the raw header parameter), not as the transport's challenge parser keeps it: a URL the parser would drop (http, a blocked or private host, userinfo, a fragment) or normalise (case, dot segments, a spelled-out default port), or a parameter repeated within the Bearer challenge, is refused as well (a challenge of another scheme in the same field, such as DPoP, is not read), and nothing falls back (review of 2026-09-21). On a refresh the challenge comes through the transport, which hands over only the normalised URL it kept; a URL it dropped counts as none there (D2).
+  - LD-4: the first token request asks for the challenge `scope` when the probe gave one, else `scopes_supported` ∩ the row ceiling, else no `scope`; a challenge scope outside the ceiling is refused (OD-62 records the narrowing of the SHOULD).
+  - LD-5: the comparison stays exact (above).
+  - Re-verified live 2026-09-21 (the re-dispatch, LD-6): modelcontextprotocol.io/extensions/auth/oauth-client-credentials (its client guide still lists "Declare support" first): the per-request `_meta` declaration, then obtain, include and refresh the token; for servers, advertising the extension in `server/discover` stays optional but recommended; and modelcontextprotocol.io/specification/2026-07-28/basic/authorization/authorization-server-discovery (unchanged): servers implement one of the two mechanisms, clients use the challenge URL when present and otherwise fall back in the stated order, and the AS-metadata order and the identical-issuer rule stand. No new contradiction.
+
+## 10. Re-read of 2026-09-21 (B20-A4: tools/call results as observations)
+
+- **Sources (fetched live 2026-09-21):** modelcontextprotocol.io/specification/2026-07-28/server/tools, /specification/2026-07-28/server/resources (its Annotations section), /specification/2026-07-28/server/utilities/caching, and the schema at github.com/modelcontextprotocol/modelcontextprotocol `schema/2026-07-28/schema.ts` (the raw file on `main`). Read for task-A4 section 7.4 and its stop condition U2; the B3 re-read (section 8) is confirmed, not repeated.
+- **`CallToolResult`:** `extends Result { content: ContentBlock[]; structuredContent?: unknown; isError?: boolean }`; `Result` requires `resultType` (`"complete" | "input_required" | string`) and allows `_meta` (a `ResultMetaObject`, whose one named key is `io.modelcontextprotocol/serverInfo`). A server MAY answer tools/call with an `InputRequiredResult` (at least one of `inputRequests` and `requestState`). A4 refuses it (`input_required_unsupported`) and never reads result `_meta` (the transport keeps the result as data; the normalizer copies only `content`, `structuredContent` and `isError`).
+- **Content blocks:** `TextContent {type:"text", text, annotations?, _meta?}`; `ImageContent` and `AudioContent {type, data (base64), mimeType, annotations?, _meta?}`; `ResourceLink` (a `Resource` with `type:"resource_link"`: `uri`, `name` required); `EmbeddedResource {type:"resource", resource: TextResourceContents | BlobResourceContents, annotations?, _meta?}` with `uri`, `mimeType?` and `text` or `blob`. The tools page's own embedded-resource example places `annotations` inside `resource`; the schema places them on the block, which is where A4 reads them. A4 describes every non-text block (D9) and never embeds `data`, `blob`, `text` of a resource, or a URI.
+- **Annotations:** `Annotations {audience?: Role[]; priority?: number; lastModified?: string}` with `Role = "user" | "assistant"`; the resources page: audience names the intended audience(s), and clients can use annotations to filter by it. A4's rule (D8 step 1: a block whose audience leaves out `assistant` is withheld from the model) is that filtering and only ever narrows what is shown: no contradiction. `priority` and `lastModified` are not read.
+- **`structuredContent` and `outputSchema`:** any JSON value that conforms to the tool's `outputSchema` when one is defined; servers MUST provide conforming results and clients SHOULD validate them; a tool returning structured content SHOULD also serialize it into a text block (so a result usually carries both, and A4 judges each). A4 keeps a structured value only when it validates against the accepted output schema (D10).
+- **`isError`:** tool execution errors (API failures, input validation, business logic) are results with `isError: true` that clients SHOULD hand to the model; unknown tools and malformed requests are JSON-RPC errors (`-32602`). A4 hands the model an `isError` result as a tool error (`tool_error`) and a JSON-RPC error as `upstream_error`.
+- **Security considerations (tools):** clients SHOULD prompt for confirmation on sensitive operations, show tool inputs to the user before calling the server, validate tool results before passing them to the model, follow the `$ref` rules, implement timeouts and log tool usage; there SHOULD be a human in the loop able to deny invocations. A4 meets validation, timeouts and the audit trail; showing inputs and a confirm step are not met in B20 and are recorded (OD-75).
+- **Caching:** the MUST-carry-hints list is `server/discover`, `tools/list`, `prompts/list`, `resources/list`, `resources/templates/list` and `resources/read`; `tools/call` is not a cacheable result and carries no `ttlMs`. A4's 15-minute `freshUntil` is Sirkit's own label, not a server hint (INFERRED, OD-78), and nothing is cached.
+- **Outcome:** no contradiction with task-A4 sections 4-6 (U2); nothing was stopped.
+
+## 11. Re-read of 2026-09-21 (B20-B4: tools, authorization status codes, provider connectors)
+
+- MCP 2026-07-28 tools:
+  - `tools/list` MUST NOT vary per connection and MAY vary by the request's authorization.
+  - `structuredContent` conforms to `outputSchema`, and a tool that returns it SHOULD also return it as text.
+  - An unknown tool is `-32602`; a validation or business failure is `isError: true`.
+- MCP 2026-07-28 authorization: the status codes are a MUST (403 for insufficient scope); the `insufficient_scope` challenge parameters are SHOULD. The 403 fallback is moot in B20: there is no propose scope and the token carries only `sirkit.mcp`.
+- OpenAI `type: "mcp"` (developers.openai.com/api/docs/guides/tools-connectors-mcp):
+  - The page names MCP 2025-03-26 and links that revision's tools error-handling section.
+  - `mcp_call` has `id`, `type`, `approval_request_id`, `arguments`, `error`, `name`, `output` and `server_label`. Which result field feeds `output` is UNKNOWN.
+- Anthropic MCP connector (platform.claude.com/docs/en/agents-and-tools/mcp-connector):
+  - Beta `mcp-client-2025-11-20`; links the 2025-11-25 authorization spec.
+  - `mcp_tool_result` has `tool_use_id`, `is_error` and `content`; `structuredContent` is not mentioned.
+- Both connectors are handshake-era clients that cannot call this modern-only server (OD-41, OD-70).
+- RFC 6749 section 3.3, RFC 6750 section 3.1 and RFC 9728 section 2 were re-read for the scope design, which B4 does not build.
+
+## 12. Re-read of 2026-09-23 (B20-A5: provider-native connectors)
+
+Both provider pages were fetched live on 2026-09-23 (WebFetch), the two named in section 1:
+platform.claude.com/docs/en/agents-and-tools/mcp-connector and
+developers.openai.com/api/docs/guides/tools-connectors-mcp. Neither page documents a mode in which the API consumer
+performs every tools/list AND tools/call itself: the provider still runs the calls in both.
+
+- Anthropic (platform.claude.com/docs/en/agents-and-tools/mcp-connector, fetched 2026-09-23):
+  - `Request fields:` `mcp_servers[]` = `type` ("url" only), `url` (https), `name`, `authorization_token`; the tool entry
+    `{ type: "mcp_toolset", mcp_server_name, default_config, configs, cache_control }`, each per-tool config `{ enabled,
+    defer_loading }`; with the NEWER beta header `mcp-client-2026-09-15` the toolset also accepts `tools`, a pinned copy of
+    the server's tool list (`name`, `description`, `input_schema` per entry). CHANGED since 2026-09-17: `mcp_toolset`
+    replaced a flat tool entry, and `tools` / `mcp-client-2026-09-15` are new.
+  - `Credential-bearing fields:` `authorization_token` only. The page states the API consumer runs the OAuth flow itself,
+    obtains the access token and refreshes it. UNCHANGED.
+  - `Approval controls:` none. There is no per-call approval: the only control is which tools are enabled
+    (`default_config` / `configs`), and the page recommends disabling write or destructive tools "when you want a human
+    confirmation step before state changes". UNCHANGED (P5 stands).
+  - `Output items and content blocks:` `mcp_tool_use` (`id`, `name`, `server_name`, `input`) and `mcp_tool_result`
+    (`tool_use_id`, `is_error`, `content`); under `mcp-client-2026-09-15` also `mcp_tool_listing` (`mcp_server_name`,
+    `tools`), emitted once per server the API asked. CHANGED: `mcp_tool_listing` is new.
+  - `Linked protocol revision:` beta header `mcp-client-2025-11-20` (or `mcp-client-2026-09-15`, which "includes
+    everything mcp-client-2025-11-20 does"); the `authorization_token` row links the 2025-11-25 authorization spec. Still
+    handshake-era: neither header names 2026-07-28. UNCHANGED (P3 stands).
+  - `Account-level configuration:` not documented. Every server and toolset is supplied in the request; the page shows no
+    console, account or organization registration of a connector. UNKNOWN whether one exists elsewhere.
+- OpenAI (developers.openai.com/api/docs/guides/tools-connectors-mcp, fetched 2026-09-23):
+  - `Request fields:` `type: "mcp"`, `server_label`, `server_description`, `server_url`, `tunnel_id` (a local server
+    through the Secure MCP Tunnel), `authorization`, `require_approval`, `allowed_tools`, `connector_id` (documented as
+    legacy/deprecated), `defer_loading`. CHANGED since 2026-09-17: `server_description`, `tunnel_id` and `defer_loading`
+    are new; `headers` is no longer documented on this page.
+  - `Credential-bearing fields:` `authorization` (an OAuth access token, "not stored"); `tunnel_id` references tunnel
+    client credentials. CHANGED: `tunnel_id` is a second credential-bearing field.
+  - `Approval controls:` `require_approval` takes `"always"`, `"never"`, or an object naming `tool_names` under `never`
+    (and correspondingly under `always`); the default is that approval is requested before any data is shared. The
+    provider emits `mcp_approval_request` and continues only after the consumer sends an `mcp_approval_response` input
+    item (`approve`, `approval_request_id`). UNCHANGED in substance (P6 stands).
+  - `Output items and content blocks:` `mcp_list_tools`, `mcp_call`, `mcp_approval_request`; the consumer-sent
+    `mcp_approval_response` is an input item. UNCHANGED.
+  - `Linked protocol revision:` the page names and links MCP revision 2025-03-26 (its tools error-handling section).
+    Still handshake-era. UNCHANGED (P3 stands).
+  - `Account-level configuration:` not documented as a registration: `connector_id` names a provider-hosted connector
+    (`connector_dropbox`, `connector_gmail`, …) and is itself a REQUEST field, now documented as legacy. UNKNOWN whether a
+    dashboard-level connector exists.
+
+What this changed in A5, and what it did not:
+
+- The D6 tripwire vocabulary gained the new wire spellings: `mcp_server_name`, `mcp_tool_listing`, `server_description`,
+  `tunnel_id`, `defer_loading`, `default_config`. `mcp-client-2026-09-15` is already covered case-folded by the existing
+  `mcp-client-20` token. `configs` and `cache_control` were NOT added: they are ordinary English words a production file
+  could carry innocently, and a tripwire with no allowlist must not manufacture reviewed pin moves. `headers` was not
+  removed — a gate never narrows on its own authority.
+- `handshake_era_only` stays in the refusal vocabulary: neither connector speaks 2026-07-28 (§12 U1 does not fire).
+- Anthropic's `tools` pinning lets the CONSUMER supply the listing, so the provider does not ask the server for its tools.
+  It does not move tools/call: the provider still opens the connection and runs every call, so M1-M6 hold unchanged and
+  the stop condition of A5 section 0 is not met. It does, however, narrow M1 for Anthropic alone: a future connector could
+  pin the listing Sirkit itself read (a condition OD-92 already requires for OpenAI's `allowed_tools`).
+- Live behaviour of both connectors stays BLOCKED-LIVE-QUALIFICATION (OD-7, LB-2): nothing here was executed.

@@ -20,6 +20,20 @@
  *  - runs under one hard deadline covering connection, headers and body, and honours the caller's abort signal;
  *  - reads the body through the bounded reader, so an oversized or never-ending response is refused, not buffered;
  *  - returns errors as a closed code plus a redacted sentence — never the remote body, never a secret.
+ *
+ * [B20 A1] Three ADDITIVE extensions for the MCP client (D20-16, D20-17), each off unless a policy asks for it:
+ *  - a success result carries `headers`: a bounded, allowlisted subset of the response headers (`content-type`,
+ *    `www-authenticate`, `retry-after`, `mcp-protocol-version` and any `mcp-*` name; at most 16; a value over 2 048 bytes
+ *    is dropped whole and counted in `headersDropped`). `set-cookie`, `authorization`, `proxy-authenticate`, `cookie` and
+ *    every other name are never surfaced;
+ *  - `errorBody: { maxBytes, contentTypes? }`: a 400..599 answer becomes the closed failure `http_error` carrying the same
+ *    header subset and, when its media type is one of `contentTypes` (the policy's accepted types when omitted), its body
+ *    read through the bounded reader under min(maxBytes, 64 KiB) and the same deadline. A 3xx stays the redirect rule; a
+ *    2xx is untouched; a body of another type, or one over the bound, is dropped unread (or unfinished) with the headers
+ *    kept — they were read before it, and a 401's challenge lives there; one dropped for its size sets `errorBodyDropped`;
+ *  - `streamBody: { contentTypes }`: a 2xx answer of a named media type is handed back UNREAD as `body` (with empty
+ *    `bytes`) for an incremental consumer (`sse-reader.ts`), because the bounded reader succeeds only when a stream ends.
+ * Without these options every existing caller sees exactly the B19 behaviour; the distributor policies enable none of them.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { readBoundedStream } from "../http/bounded-stream";
@@ -39,11 +53,45 @@ export type OutboundFailureCode =
   | "aborted"
   | "response_too_large"
   | "unexpected_content_type"
-  | "network_error";
+  | "network_error"
+  /** [B20 A1] a 400..599 answer under `errorBody`: the status, the header subset and (when read) the bounded body */
+  | "http_error";
+
+/** [B20 A1] The surfaced response headers: lowercase names, at most `OUTBOUND_HEADER_MAX_COUNT`, values bounded. */
+export type OutboundHeaders = Readonly<Record<string, string>>;
 
 export type OutboundResult =
-  | { ok: true; status: number; url: string; contentType: string; bytes: Uint8Array }
-  | { ok: false; code: OutboundFailureCode; message: string; status?: number };
+  | {
+      ok: true;
+      status: number;
+      url: string;
+      contentType: string;
+      bytes: Uint8Array;
+      /** [B20 A1] the allowlisted, bounded header subset */
+      headers: OutboundHeaders;
+      /** [B20 A1] allowlisted headers left out: over the count, or a value over the byte bound (never truncated) */
+      headersDropped: number;
+      /** [B20 A1] present only under `streamBody`: the unread body (null when the answer had none); `bytes` is then empty */
+      body?: ReadableStream<Uint8Array> | null;
+    }
+  | {
+      ok: false;
+      code: OutboundFailureCode;
+      message: string;
+      status?: number;
+      /** [B20 A1] on `http_error`: the header subset and the bounded body (absent when its media type was not accepted) */
+      headers?: OutboundHeaders;
+      headersDropped?: number;
+      bytes?: Uint8Array;
+      /** [B20 A1 review-2] on `http_error` only: true when a body of an accepted type was over the bound and dropped whole (absent otherwise) */
+      errorBodyDropped?: true;
+    };
+type OutboundFailure = Extract<OutboundResult, { ok: false }>;
+
+/** [B20 A1] Bounds of the surfaced header subset and of an error body; a policy cannot raise them. */
+export const OUTBOUND_HEADER_MAX_COUNT = 16;
+export const OUTBOUND_HEADER_MAX_VALUE_BYTES = 2_048;
+export const OUTBOUND_ERROR_BODY_MAX_BYTES = 65_536;
 
 export interface OutboundPolicy {
   /** The source this client belongs to — used only in redacted messages. */
@@ -60,6 +108,14 @@ export interface OutboundPolicy {
   acceptContentTypes: readonly string[];
   /** Query-string parameter names that carry a secret for this source (vendor-mandated, e.g. Mouser's `apiKey`). */
   secretQueryParams?: readonly string[];
+  /**
+   * [B20 A1] Read a 400..599 body (bounded by min(maxBytes, 64 KiB)) onto the `http_error` failure. Off unless set.
+   * `contentTypes` names the media types whose error body is read (prefix match); omitted, the policy's accepted types
+   * decide; empty, no error body is read at all — the headers are surfaced either way.
+   */
+  errorBody?: { maxBytes: number; contentTypes?: readonly string[] };
+  /** [B20 A1] Hand a 2xx body of one of these media types back unread as `body`. Off unless set. */
+  streamBody?: { contentTypes: readonly string[] };
 }
 
 export interface OutboundDeps {
@@ -84,8 +140,32 @@ async function defaultResolve(hostname: string): Promise<string[]> {
   return records.map((record) => record.address);
 }
 
-function fail(code: OutboundFailureCode, message: string, status?: number): OutboundResult {
+function fail(code: OutboundFailureCode, message: string, status?: number): OutboundFailure {
   return { ok: false, code, message: redactSecrets(message), ...(status === undefined ? {} : { status }) };
+}
+
+/** [B20 A1] Header names surfaced beside any `mcp-*` name; nothing else ever is (so never set-cookie, authorization, proxy-authenticate, cookie). */
+const SURFACED_HEADER_NAMES: ReadonlySet<string> = new Set(["content-type", "www-authenticate", "retry-after", "mcp-protocol-version"]);
+
+/** [B20 A1] The bounded, allowlisted subset of a response's headers, in the response's (name-sorted) order. */
+function responseHeaderSubset(source: Headers): { headers: OutboundHeaders; headersDropped: number } {
+  const encoder = new TextEncoder();
+  const entries: Array<[string, string]> = [];
+  let headersDropped = 0;
+  for (const [rawName, value] of source) {
+    const name = rawName.toLowerCase();
+    if (!SURFACED_HEADER_NAMES.has(name) && !name.startsWith("mcp-")) continue;
+    if (encoder.encode(value).byteLength > OUTBOUND_HEADER_MAX_VALUE_BYTES || entries.length >= OUTBOUND_HEADER_MAX_COUNT) {
+      headersDropped += 1;
+      continue;
+    }
+    entries.push([name, value]);
+  }
+  return { headers: Object.freeze(Object.fromEntries(entries)), headersDropped };
+}
+
+function accepted(policy: OutboundPolicy, contentType: string): boolean {
+  return policy.acceptContentTypes.length === 0 || policy.acceptContentTypes.some((accept) => contentType.startsWith(accept));
 }
 
 /** The URL as it may appear in a message: origin and path only, never the query string (which may carry a secret). */
@@ -207,9 +287,38 @@ export async function outboundFetch(request: OutboundRequest, policy: OutboundPo
       }
 
       const contentType = mediaType(response.headers.get("content-type"));
-      if (policy.acceptContentTypes.length > 0 && !policy.acceptContentTypes.some((accepted) => contentType.startsWith(accepted))) {
+      const surfaced = responseHeaderSubset(response.headers); // [B20 A1]
+      if (policy.errorBody !== undefined && response.status >= 400 && response.status <= 599) {
+        // [B20 A1] the error-body rule: the status and the header subset always; the body only when its type is one the
+        // option (or, without `contentTypes`, the policy) accepts, under its own ceiling (never above 64 KiB, independent of
+        // maxResponseBytes; a non-finite request falls back to the ceiling) and the same deadline. [B20 A1 review] Over the
+        // ceiling the body is dropped whole and the headers — read before it — are kept: a 401's challenge survives.
+        const failure = fail("http_error", `${policy.source}: the server answered HTTP ${response.status}.`, response.status);
+        const named = policy.errorBody.contentTypes;
+        const readable = named === undefined ? accepted(policy, contentType) : named.some((accept) => contentType.startsWith(accept));
+        if (!readable) {
+          void response.body?.cancel().catch(() => undefined);
+          return { ...failure, ...surfaced };
+        }
+        const requested = Number.isFinite(policy.errorBody.maxBytes) ? Math.floor(policy.errorBody.maxBytes) : OUTBOUND_ERROR_BODY_MAX_BYTES;
+        const bound = Math.min(Math.max(1, requested), OUTBOUND_ERROR_BODY_MAX_BYTES);
+        const read = await readBoundedStream(response.body, bound, { signal: controller.signal });
+        if (!read.ok) {
+          // the bounded reader cancelled the rest; [B20 A1 review-2] the caller is TOLD the body was dropped for its size, so
+          // "no bytes" is never mistaken for "no body" (the MCP transport must not read a large modern 400 as an older revision)
+          if (read.reason === "over-limit") return { ...failure, ...surfaced, errorBodyDropped: true };
+          if (read.reason === "aborted" || read.reason === "timeout") return interrupted();
+          return fail("network_error", `${policy.source}: the response body could not be read.`, response.status);
+        }
+        return { ...failure, ...surfaced, bytes: read.bytes };
+      }
+      if (!accepted(policy, contentType)) {
         void response.body?.cancel().catch(() => undefined);
         return fail("unexpected_content_type", `${policy.source}: expected ${policy.acceptContentTypes.join(" or ")}, received ${contentType || "no content type"}.`, response.status);
+      }
+      if (policy.streamBody !== undefined && response.status >= 200 && response.status <= 299 && policy.streamBody.contentTypes.some((named) => contentType.startsWith(named))) {
+        // [B20 A1] the hand-off: the consumer reads the stream incrementally under its own deadline and cancels it.
+        return { ok: true, status: response.status, url: describeUrl(current), contentType, bytes: new Uint8Array(0), ...surfaced, body: response.body ?? null };
       }
       const read = await readBoundedStream(response.body, policy.maxResponseBytes, { signal: controller.signal });
       if (!read.ok) {
@@ -217,7 +326,7 @@ export async function outboundFetch(request: OutboundRequest, policy: OutboundPo
         if (read.reason === "aborted" || read.reason === "timeout") return interrupted();
         return fail("network_error", `${policy.source}: the response body could not be read.`, response.status);
       }
-      return { ok: true, status: response.status, url: describeUrl(current), contentType, bytes: read.bytes };
+      return { ok: true, status: response.status, url: describeUrl(current), contentType, bytes: read.bytes, ...surfaced };
     }
   } finally {
     settle();

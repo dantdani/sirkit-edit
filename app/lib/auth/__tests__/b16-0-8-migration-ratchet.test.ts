@@ -10,12 +10,12 @@
  *    at its floor — the ratchet is monotonic;
  *  - the generator refuses baseline ADDITIONS (test-pinned empty exception list).
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { classifyRouteMethodForm, exportedHttpMethods } from "./_boundary-analysis";
 import { ALLOWED_BASELINE_ADDITIONS, refusedBaselineAdditions, currentRawMethods } from "../../../../scripts/generate-b16-0-8-baseline";
 import baseline from "./_raw-route-baseline.json";
+import { listRouteFiles, routePathOf } from "../route-tree";
 
 const ROOT = process.cwd();
 /** RATCHET PINS — update ONLY downward (baseline) / upward (migrated floor)
@@ -271,24 +271,15 @@ const APPROVED_FACTORIES: ReadonlyArray<[string, string]> = [
   ["POST", "/api/pcb-sync"],
 ];
 
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
 interface Inventory { wrappers: Array<[string, string]>; legacy: Array<[string, string]>; factories: Array<[string, string]>; rawHandlers: Array<[string, string]> }
 function inventory(): Inventory {
   const wrappers: Array<[string, string]> = [];
   const legacy: Array<[string, string]> = [];
   const factories: Array<[string, string]> = [];
   const rawHandlers: Array<[string, string]> = [];
-  for (const file of routeFiles(join(ROOT, "app", "api"))) {
-    const rel = relative(ROOT, file).replaceAll("\\", "/");
-    const route = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+  // [B20 B2] app/api AND app/.well-known, through the one route-tree helper (OD-66)
+  for (const file of listRouteFiles(ROOT)) {
+    const route = routePathOf(ROOT, file);
     const src = readFileSync(file, "utf8");
     for (const method of exportedHttpMethods(src, file)) {
       const c = classifyRouteMethodForm(src, method, file, ROOT);

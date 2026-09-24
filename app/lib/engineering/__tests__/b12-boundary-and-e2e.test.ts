@@ -46,7 +46,7 @@ const ROOT = process.cwd();
 // ─── §G: static exposure and the model boundary ─────────────────────────────
 
 describe("B12 §G — the provider surface stays eleven read/propose tools", () => {
-  it("static agent exposure is exactly ELEVEN read/propose tools, and apply is not among them", () => {
+  it("static agent exposure is exactly the intentional agent-exposed set (ELEVEN read/propose tools when written; the set has since grown by reviewed moves, B20-A4 among them, and the assertion counts the set itself), and apply is not among them", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     const ids = exposed.map((descriptor) => descriptor.toolId).sort();
     expect(new Set(ids).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit

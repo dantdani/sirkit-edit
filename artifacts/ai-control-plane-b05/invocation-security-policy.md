@@ -61,5 +61,5 @@ Traces are bounded, provider-neutral, and secret-free.
 
 No mutation, proposal, or release execution; no provider calls (parts search
 stayed INACTIVE because its recall path calls a provider-hosted embedding
-service); no chat integration; no MCP; no agent exposure (agent-channel
+service); no chat integration; no MCP [superseded 2026-09-24 by B20: Sirkit now exposes nine bounded reads over `POST /api/mcp` behind a Sirkit-issued bearer, served through this same invocation layer with `durable-server-board` authority - see `artifacts/ai-control-plane-b20/mcp-server-reads.md`; no proposal and nothing beyond a read is reachable over MCP]; no agent exposure (agent-channel
 discovery remains empty); no writes to any project authority.

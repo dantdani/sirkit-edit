@@ -49,6 +49,9 @@ const ALL_TESTS = ["app", "lib", "components"].flatMap((root) => {
   }
 });
 const selected = (filters: readonly string[]): string[] => ALL_TESTS.filter((file) => filters.some((filter) => file.includes(filter)));
+/** [B20 A0] The chapters whose every suite must be admitted to a CI job (OD-59); a suite belongs to a chapter by its file-name prefix. */
+const CHAPTERS = ["b19-", "b20-"] as const;
+const chapterFiles = (chapter: (typeof CHAPTERS)[number]): string[] => ALL_TESTS.filter((file) => file.includes(`/${chapter}`));
 
 /**
  * [B19-E E2 follow-up] Does a suite start PostgreSQL, itself or through a test helper it imports? Relative imports are followed
@@ -94,7 +97,7 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(promptToGerber.length).toBeGreaterThan(100);
     expect(promptToGerber.filter(startsPostgres)).toEqual([]);
     const databaseDelivery = selected(jobFilters("database-delivery"));
-    const b19Postgres = ALL_TESTS.filter((file) => /\/b19-/.test(file) && startsPostgres(file));
+    const b19Postgres = chapterFiles("b19-").filter(startsPostgres);
     expect(b19Postgres).toEqual(expect.arrayContaining(["app/lib/distributors/__tests__/b19-offer-retention.test.ts", "app/lib/distributors/__tests__/b19-e-external-search-retention.test.ts"]));
     expect(b19Postgres.filter((file) => !databaseDelivery.includes(file))).toEqual([]);
   }, 60_000);
@@ -122,7 +125,7 @@ describe("[B19-E E2 review] CI job scope", () => {
   it("[B19-E E3 review] every B19 suite runs in CI: a PGlite suite in database-delivery, every other one in prompt-to-gerber", () => {
     const promptToGerber = selected(jobFilters("prompt-to-gerber"));
     const databaseDelivery = selected(jobFilters("database-delivery"));
-    const b19 = ALL_TESTS.filter((file) => /\/b19-/.test(file));
+    const b19 = chapterFiles("b19-");
     expect(b19).toEqual(expect.arrayContaining(["app/lib/atomic/__tests__/b19-e-publication-integrity.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-publication-durable.test.ts", "app/lib/atomic/__tests__/b19-e-atomic-revision-loaders.test.ts"]));
     // [B19-E E4] the publication review suites: two start PGlite, the rest (a shared fixture harness included) do not
     expect(["app/lib/atomic/__tests__/b19-e-publication-review-durable.test.ts", "app/lib/atomic/__tests__/b19-e-publication-fake-vendors.test.ts"].every(startsPostgres)).toBe(true);
@@ -140,6 +143,68 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect(databaseDelivery).toContain("app/lib/distributors/__tests__/b19-e-exact-mpn-offer-cache.test.ts");
     expect(b19.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
   }, 60_000);
+
+  it.each(CHAPTERS)("[B20 A0] every %s suite runs in CI (OD-59): a PGlite suite in database-delivery, every other one in prompt-to-gerber", (chapter) => {
+    const promptToGerber = selected(jobFilters("prompt-to-gerber"));
+    const databaseDelivery = selected(jobFilters("database-delivery"));
+    const files = chapterFiles(chapter);
+    expect(files.length, `${chapter} suites exist`).toBeGreaterThan(0);
+    expect(files.filter((file) => !(startsPostgres(file) ? databaseDelivery : promptToGerber).includes(file))).toEqual([]);
+  }, 60_000);
+
+  it("[B20 A0] the B20 suites: app/lib/mcp is a prompt-to-gerber directory filter; no A0 suite starts PGlite", () => {
+    expect(jobFilters("prompt-to-gerber")).toContain("app/lib/mcp");
+    // [B20 B2] the endpoint suites (E-H) run through the app/api/mcp/__tests__ directory filter (OD-59)
+    expect(jobFilters("prompt-to-gerber")).toContain("app/api/mcp/__tests__");
+    const b20 = chapterFiles("b20-");
+    expect(b20).toEqual(expect.arrayContaining([
+      "app/lib/mcp/__tests__/b20-a0-server-registry.test.ts",
+      "app/lib/mcp/__tests__/b20-a0-admission-by-server-and-tool.test.ts",
+      "app/lib/mcp/__tests__/b20-a0-feature-flag.test.ts",
+      // [B20 B2] the ten B2 suites: none starts PGlite; the app/lib/mcp/server suites ride the app/lib/mcp filter
+      "app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts",
+      "app/lib/auth/__tests__/b20-b2-mcp-route-policy.test.ts",
+      "app/lib/auth/__tests__/b20-b2-route-tree.test.ts",
+      "app/lib/auth/__tests__/b20-b2-route-matrices-pinned.test.ts",
+      "app/api/mcp/__tests__/b20-b2-mcp-endpoint.test.ts",
+      "app/api/mcp/__tests__/b20-b2-mcp-token-route.test.ts",
+      "app/api/mcp/__tests__/b20-b2-protected-resource-metadata.test.ts",
+      "app/api/mcp/__tests__/b20-b2-own-client-interop.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b2-server-protocol.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b2-import-gates.test.ts",
+      // [B20 B3] the eight B3 suites: none starts PGlite (the in-memory durable repository); A and F are explicit prompt-to-gerber
+      // entries, the app/lib/mcp/server suites ride the app/lib/mcp filter and H the app/api/mcp/__tests__ filter
+      "app/lib/engineering/__tests__/b20-b3-durable-read-bundle.test.ts",
+      "app/lib/engineering/__tests__/b20-b3-mcp-subset-move.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-arguments.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-call.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-replay-cache.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-read-trace.test.ts",
+      "app/lib/mcp/server/__tests__/b20-b3-import-gates.test.ts",
+      "app/api/mcp/__tests__/b20-b3-mcp-tools-call-reads.test.ts",
+    ]));
+    expect(b20.filter(startsPostgres)).toEqual([]);
+  });
+
+  it("[B20 A4] the seven A4 suites run in prompt-to-gerber: four explicit entries, three through directory filters, none starts PGlite", () => {
+    const filters = jobFilters("prompt-to-gerber");
+    const explicit = [
+      "app/lib/agent/__tests__/b20-a4-observation-read-service.test.ts",
+      "app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts",
+      "app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts",
+      "app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts",
+    ];
+    const byDirectory = [
+      "app/lib/mcp/__tests__/b20-a4-observation-normalizer.test.ts",
+      "app/lib/mcp/__tests__/b20-a4-agent-read-port.test.ts",
+      "app/lib/acquisition/__tests__/b20-a4-mcp-quarantine.test.ts",
+    ];
+    for (const file of explicit) expect(filters, file).toContain(file);
+    for (const file of byDirectory) expect(filters, file).not.toContain(file);
+    const promptToGerber = selected(filters);
+    expect(promptToGerber).toEqual(expect.arrayContaining([...explicit, ...byDirectory]));
+    expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
+  });
 
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {
     const filters = jobFilters("prompt-to-gerber");

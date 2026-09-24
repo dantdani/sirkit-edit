@@ -96,11 +96,13 @@ import { evidenceDirectory, writeEvidence } from "./fixtures/evidence";
 import { verifyReleaseArchiveIndependently } from "@/app/lib/pcb/fab/independent-archive-verifier";
 import { BLINKER_ACCEPTANCE_PROMPT, BLINKER_NETLIST, blinkerCatalog } from "./fixtures/blinker-catalog";
 import { verifyBlinkerBoardParity, verifyBlinkerRouting, verifyBlinkerSchematic, type ElectricalReport } from "./fixtures/blinker-electrical";
-import { applyRequest, BOARD_ID, DESIGN_ID, deterministicUuids, FIXED_NOW, freezeClock, getRequest, jsonRequest, layoutProposal, preflightRequest, publicationRequest, readJson, restoreIdentity, signInAs, signOut, USERS, type LaidOutSchematic } from "./fixtures/harness";
+import { applyRequest, BOARD_ID, DESIGN_ID, deterministicUuids, FIXED_NOW, freezeClock, getRequest, jsonRequest, layoutProposal, preflightRequest, publicationRequest, readJson, restoreIdentity, SCOPE, signInAs, signOut, USERS, type LaidOutSchematic } from "./fixtures/harness";
 import type { BuildLogicalNetlist } from "@/lib/schematic-types";
 import type { PcbBoard } from "@/app/lib/pcb/types";
 import type { PcbSyncManufacturingSummary } from "@/app/api/pcb-sync/handler";
 import type { PcbSyncBoardRecord } from "@/app/lib/pcb-sync/types";
+import { assembleAgentRunContext } from "@/app/lib/agent/context";
+import { durableComponentInstanceIds } from "@/app/lib/engineering/durable-read-bundle";
 
 const RECORDING = recordingRequested();
 const LIVE = liveRouterRequested();
@@ -269,6 +271,15 @@ describe("B16.1C fresh-browser prompt-to-Gerber (deterministic, credit-free)", (
     expect(body.manufacturing!.snapshot).toMatchObject({ revision: 1, schematicRevision });
     expect(body.manufacturing!.authority).toBeNull();
     expect(body.manufacturing!.latestRelease).toBeNull();
+    // [B20 B3 review] U5: the synced durable board names exactly the component instances the chat route asks the server-owned
+    // authority source for (the run context's schematic kicadComponents ids), so an MCP read, which takes them from the
+    // board's syncIdentity (durableComponentInstanceIds), asks the same source for the same components
+    const chatContext = assembleAgentRunContext({ ...SCOPE, schematic: schematic.state, board: body.result.record!.board });
+    if (!chatContext.ok) throw new Error(`U5: ${chatContext.reason}`);
+    const chatIds = (chatContext.context.schematic?.kicadComponents ?? []).map((component) => component.id).sort();
+    expect(chatIds).toHaveLength(9);
+    expect(body.result.record!.board.footprints.every((footprint) => footprint.syncIdentity !== undefined)).toBe(true);
+    expect(durableComponentInstanceIds(body.result.record!.board)).toEqual(chatIds);
     const parity = verifyBlinkerBoardParity(schematic.netlist, body.result.record!.board);
     console.log(`[B16.1C §G parity]\n${table(parity)}`);
     evidence.parityChecks = parity;

@@ -50,7 +50,7 @@ import type { SealedTier1Proposal } from "../engineering/schematic-proposals";
 import {
   AGENT_RUN_TRACE_SCHEMA,
   CANCELLED_FAILURE_REASON,
-  TRACE_OUTCOME_CLASSES,
+  TRACE_OUTCOME_CLASSES, TRACE_EXTERNAL_KEYS, TRACE_EXTERNAL_PATTERNS, TRACE_EXTERNAL_RESULT_CLASSES, externalAttributionIssue, // [B20 A4] one line: no cited line moves
   isValidFailureReason,
   sanitizeTraceText,
   TRACE_BOUNDS,
@@ -58,7 +58,7 @@ import {
   type AgentRunTrace,
   type AgentTraceEvent,
   type DistributiveOmit,
-  type TraceContextDigests,
+  type TraceContextDigests, type TraceExternalAttribution, // [B20 A4]
   type TraceOutcomeClass,
   type TraceRecorderDiagnostic,
   type TraceScope,
@@ -143,6 +143,8 @@ export interface AgentTraceIdentity {
 }
 
 const UNKNOWN_FIELD = "unknown";
+/** [B20 A4] the registry version an external block keeps when the one it was handed is outside its pattern */
+const UNKNOWN_REGISTRY_VERSION = "0.0.0";
 
 export class AgentTraceRecorder {
   private readonly identity: Readonly<AgentTraceIdentity>;
@@ -360,6 +362,77 @@ export class AgentTraceRecorder {
     });
   }
 
+  /**
+   * [B20 A4] The external block of a tool event, normalised so the recorder never records an invalid event (the cascade): a field
+   * is kept only when it matches its pattern AND passes the redactor unchanged; otherwise the tool name, protocol version and
+   * listing digest become null, the registry version "0.0.0", and a bad hash, id or time nulls all three. A block that then breaks
+   * a validator rule becomes `result_invalid` (its three nulled) on a `refused` event; one that still breaks one (a server id that
+   * cannot be recorded) is dropped and the event is `refused`. A block on a class that forbids it is dropped. Each normalisation
+   * adds `trace_input_normalized`.
+   */
+  private normalizeExternal(outcomeClass: TraceOutcomeClass, raw: unknown): { outcomeClass: TraceOutcomeClass; external?: TraceExternalAttribution } {
+    const normalized = (): void => { this.diagnostics.add("trace_input_normalized"); };
+    if (raw === undefined) {
+      if (outcomeClass !== "external_observation") return { outcomeClass };
+      normalized();
+      return { outcomeClass: "refused" };
+    }
+    if (outcomeClass !== "external_observation" && outcomeClass !== "refused") {
+      normalized();
+      return { outcomeClass };
+    }
+    const read = (key: string): unknown => this.safeRead(raw, key);
+    const kept = (value: unknown, pattern: RegExp): value is string => typeof value === "string" && pattern.test(value) && sanitizeTraceText(value, 200) === value;
+    try {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw) || Reflect.ownKeys(raw).some((key) => !(TRACE_EXTERNAL_KEYS as readonly unknown[]).includes(key))) normalized();
+    } catch {
+      normalized();
+    }
+    const serverId = read("serverId");
+    if (!kept(serverId, TRACE_EXTERNAL_PATTERNS.serverId)) {
+      normalized();
+      return { outcomeClass: "refused" };
+    }
+    const nullable = (key: "toolName" | "protocolVersion" | "listingDigest"): string | null => {
+      const value = read(key);
+      if (value === null) return null;
+      if (kept(value, TRACE_EXTERNAL_PATTERNS[key])) return value;
+      normalized();
+      return null;
+    };
+    const registryRaw = read("registryVersion");
+    const registryVersion = kept(registryRaw, TRACE_EXTERNAL_PATTERNS.registryVersion) ? registryRaw : (normalized(), UNKNOWN_REGISTRY_VERSION);
+    const rawClass = read("resultClass");
+    const knownClass = (TRACE_EXTERNAL_RESULT_CLASSES as readonly unknown[]).includes(rawClass);
+    if (!knownClass) normalized();
+    const trio = (["contentHash", "observationId", "retrievedAt"] as const).map((key) => read(key));
+    const trioKept = trio.every((value, index) => value === null || kept(value, TRACE_EXTERNAL_PATTERNS[(["contentHash", "observationId", "retrievedAt"] as const)[index]!]));
+    if (!trioKept) normalized();
+    const block: TraceExternalAttribution = {
+      serverId,
+      toolName: nullable("toolName"),
+      registryVersion,
+      protocolVersion: nullable("protocolVersion"),
+      listingDigest: nullable("listingDigest"),
+      resultClass: knownClass ? (rawClass as TraceExternalAttribution["resultClass"]) : "result_invalid",
+      contentHash: trioKept ? (trio[0] as string | null) : null,
+      observationId: trioKept ? (trio[1] as string | null) : null,
+      retrievedAt: trioKept ? (trio[2] as string | null) : null,
+    };
+    if (!knownClass) return this.demoted(block);
+    if (externalAttributionIssue(outcomeClass, block) === null) return { outcomeClass, external: block };
+    normalized();
+    return this.demoted(block);
+  }
+
+  /** [B20 A4] The cascade's last two steps: `result_invalid` on a refused event, or no block at all. */
+  private demoted(block: TraceExternalAttribution): { outcomeClass: TraceOutcomeClass; external?: TraceExternalAttribution } {
+    const invalid: TraceExternalAttribution = { ...block, resultClass: "result_invalid", contentHash: null, observationId: null, retrievedAt: null };
+    if (externalAttributionIssue("refused", invalid) === null) return { outcomeClass: "refused", external: invalid };
+    this.diagnostics.add("trace_input_normalized");
+    return { outcomeClass: "refused" };
+  }
+
   recordTool(input: {
     callId: string; toolId: string; version: string; operationClass: string;
     args: Record<string, unknown>;
@@ -367,14 +440,17 @@ export class AgentTraceRecorder {
     verification?: string | null;
     output?: Record<string, unknown> | null;
     proposal?: Pick<SealedTier1Proposal, "proposalId" | "operationsDigest"> | null;
+    /** [B20 A4] an external tool call's attribution (normalised by `normalizeExternal`) */
+    external?: unknown;
   }): void {
     this.total(() => {
       const proposal = this.safeRead(input, "proposal");
       const output = this.safeRead(input, "output");
       const rawOutcomeClass = this.safeRead(input, "outcomeClass");
-      const outcomeClass = (TRACE_OUTCOME_CLASSES as readonly string[]).includes(rawOutcomeClass as string)
+      const declaredClass = (TRACE_OUTCOME_CLASSES as readonly string[]).includes(rawOutcomeClass as string)
         ? (rawOutcomeClass as TraceOutcomeClass)
         : (this.diagnostics.add("trace_input_normalized"), "refused" as TraceOutcomeClass);
+      const { outcomeClass, external } = this.normalizeExternal(declaredClass, this.safeRead(input, "external"));
       this.append({
         kind: "tool_invocation",
         callId: this.boundedIdentifier(this.safeRead(input, "callId"), TRACE_BOUNDS.maxIdChars),
@@ -389,6 +465,7 @@ export class AgentTraceRecorder {
         outputDigest: output ? this.digestOf({ schema: "sirkit.agent-trace-output.v1", output }, { schema: "sirkit.agent-trace-output.v1", output: "[undigestible]" }) : null,
         proposalId: this.boundedNullable(this.safeRead(proposal, "proposalId"), TRACE_BOUNDS.maxDigestChars),
         proposalDigest: this.boundedNullable(this.safeRead(proposal, "operationsDigest"), TRACE_BOUNDS.maxDigestChars),
+        ...(external === undefined ? {} : { external }),
       });
     });
   }

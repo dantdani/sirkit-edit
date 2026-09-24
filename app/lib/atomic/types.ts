@@ -41,7 +41,9 @@ export type SourceClass =
   | "cad_geometry_inference"
   | "ocr_extraction"
   | "llm_suggestion"
-  | "human_reviewed";
+  | "human_reviewed"
+  /** [B20 A4] a result of an approved external MCP tool: quarantined for every property (OD-79), in no authority list */
+  | "external_mcp_tool";
 
 export type ExtractionMethod =
   | "manual"

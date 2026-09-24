@@ -19,24 +19,14 @@
  * When the migration completes, flip `EXPECT_FULL_ADOPTION` to true (or delete
  * the baseline) to turn this into the hard gate the stop condition requires.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { classifyRouteMethodForm, exportedHttpMethods } from "./_boundary-analysis";
 import { policyFor } from "../route-policy";
+import { listRouteFiles, routePathOf } from "../route-tree";
 
 const ROOT = process.cwd();
 const FP = "app/api/synthetic/route.ts";
-
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
 
 describe("B16.0.7 §D — canonical wrapper form is recognized by exact provenance", () => {
   it("the canonical wrapper form is `canonical-wrapper`", () => {
@@ -61,9 +51,9 @@ describe("B16.0.7 §D — adoption inventory (baseline; migration in progress)",
   const EXPECT_FULL_ADOPTION = false; // flip to true when the migration lands
   it("records the current wrapper-adoption baseline over all app/api methods", () => {
     let total = 0, wrappers = 0, factories = 0, raw = 0;
-    for (const file of routeFiles(join(ROOT, "app", "api"))) {
-      const rel = relative(ROOT, file).replaceAll("\\", "/");
-      const path = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
+    // [B20 B2] app/api AND app/.well-known, through the one route-tree helper (OD-66)
+    for (const file of listRouteFiles(ROOT)) {
+      const path = routePathOf(ROOT, file);
       const src = readFileSync(file, "utf8");
       for (const method of exportedHttpMethods(src, file)) {
         total += 1;

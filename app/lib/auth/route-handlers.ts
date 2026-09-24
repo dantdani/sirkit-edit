@@ -41,10 +41,37 @@ import { readBoundedJsonBody, readBoundedJsonObject, boundedJsonRefusalResponse,
 import { readBoundedStream } from "../http/bounded-stream";
 import { authorizeKicadHttpLibrary } from "../atomic/server-auth";
 import { policyFor } from "./route-policy";
-import { requireSameOrigin, forbidden } from "./request-security";
-import { resolveExpectedOrigin } from "./expected-origin";
-import { projectAuthRuntime, type AuthRuntimeProjection } from "./mode";
+import { requireSameOrigin, forbidden, jsonError } from "./request-security";
+import { parseOriginHeader, resolveExpectedOrigin } from "./expected-origin";
+import { projectAuthRuntime, sensitiveOperationsBlocker, type AuthRuntimeProjection } from "./mode";
 import { resolveTrustedRequestContext } from "./trusted-request-context";
+import { resolveMembershipRepository } from "./identity-runtime";
+import { membershipRevisionOf, projectRoleFromMembership, type ProjectMembershipRecord } from "./project-membership";
+import {
+  MCP_ACCEPT_MAX_CHARS,
+  MCP_ACCEPT_MAX_RANGES,
+  MCP_CONTENT_TYPE_MAX_CHARS,
+  MCP_METHOD_HEADER_MAX_CHARS,
+  MCP_NAME_HEADER_MAX_CHARS,
+  MCP_PROTOCOL_VERSION_HEADER_MAX_CHARS,
+  MCP_ROUTE_DEADLINE_MS_CEILING,
+  MCP_ROUTE_MAX_BYTES_CEILING,
+  buildMcpBearerContext,
+  mcpBearerChallenge,
+  mcpClaimsSatisfy,
+  mcpHeaderValue,
+  mcpServerNowMs,
+  newMcpRequestId,
+  parseMcpBearerAuthorization,
+  resolveMcpAccessTokenVerifier,
+  resolveMcpResourceConfiguration,
+  type McpBearerContext,
+  type McpRequestHeaders,
+  type McpTokenVerification,
+} from "./mcp-bearer";
+import { mcpFeatureState } from "../mcp/rollout";
+import { mcpEndpointLimiter } from "../mcp/server/inbound-limits";
+import { readableMcpRequestId, type JsonRpcId } from "../mcp/server/protocol";
 
 // ── Declared metadata / projection options ────────────────────────────────────
 
@@ -663,6 +690,11 @@ function selectorReaderRefusal(read: { reason: string; status: number }): Respon
 function selectorRefusal(code: string, status: number): Response {
   return Response.json({ ok: false, code }, { status, headers: { "Cache-Control": "no-store" } });
 }
+/** [B20 B2] An mcp-bearer row is served ONLY by `mcpBearerJsonRoute` (D-5): every other policy-reading wrapper refuses it
+ *  before any identity, CSRF or body work, so an ambient cookie can never authenticate the bearer-only endpoint. */
+function wrapperMismatch(): Response {
+  return jsonError(500, "AUTH_POLICY_WRAPPER_MISMATCH", "This route's policy is served by another wrapper; the request is refused.");
+}
 
 export function selectorEnvelopeJsonRoute<B = Record<string, unknown>>(
   options: SelectorEnvelopeOptions,
@@ -673,6 +705,7 @@ export function selectorEnvelopeJsonRoute<B = Record<string, unknown>>(
     const { pathname } = new URL(request.url);
     const policy = policyFor(pathname, request.method);
     if (!policy || !policy.requiresAuth) return selectorRefusal("policy-missing", 500);
+    if (policy.identitySource === "mcp-bearer") return wrapperMismatch();
 
     // 3. policy-required same-origin CSRF BEFORE any body pull.
     if (policy.requiresCsrf) {
@@ -783,6 +816,7 @@ export function agentStreamRoute(
     const { pathname } = new URL(request.url);
     const policy = policyFor(pathname, request.method);
     if (!policy || !policy.requiresAuth) return selectorRefusal("policy-missing", 500);
+    if (policy.identitySource === "mcp-bearer") return wrapperMismatch();
 
     // 2. media type BEFORE any body pull (415, zero pulls).
     if (!isJsonContentType(request)) {
@@ -821,5 +855,220 @@ export function agentStreamRoute(
     // 8. callback — trusted context + parsed body + scope + signal; the raw
     //    Request never escapes. The callback builds the NDJSON stream Response.
     return handler({ context: trusted.context, body, scope, signal: request.signal, meta: buildMeta(request, {}) });
+  };
+}
+
+// ── MCP bearer JSON route (B20-B2; sole adopter: /api/mcp) ────────────────────
+//
+// The Sirkit MCP endpoint's boundary (D-6; OD-43, OD-44). Its ORDER is the security property, by construction:
+//
+//   1. the MCP feature flag (off: 404, zero other work);
+//   2. the declared options (invalid: 500, never a throw at construction);
+//   3. the EXACT route policy, which must be an mcp-bearer row;
+//   4. the production blocker (as the trusted-context resolver);
+//   5. the configuration and the token verifier (503 when absent);
+//   6. Origin: absence is accepted (MCP clients are not browsers); a PRESENT Origin, blank included, must parse strictly and
+//      equal the configured origin in every mode (403);
+//   7. no query string (a token is never accepted from the URL: 400 invalid_request);
+//   8. the Authorization header: length first, then the scheme (case-insensitive), then the RFC 6750 credential syntax;
+//   9. the verifier, then the wrapper's own re-check of every claim it relies on;
+//  10. the per-principal rate limit (keyed on verified ids only);
+//  11. the LIVE membership, re-read on every call: a missing, revoked or changed membership (another revision) refuses;
+//  12. the policy's role gate;
+//  13. media (Content-Type, Accept), lengths judged first;
+//  14. the ONE bounded reader (a body that is not JSON is the JSON-RPC parse error -32700);
+//  15. the handler, with exactly { principal, message, bytes, mcp, meta, signal }.
+//
+// No cookie, Authorization header, raw Request or header map reaches the handler, and the wrapper never consults the
+// identity provider: a cookie session is never a bearer principal. Every 401 carries the Bearer challenge; the 400s of
+// steps 7 and 8 carry it with error="invalid_request"; no other status does. Refusals before the body are plain
+// { ok: false, code, error } envelopes with no-store.
+
+export interface McpBearerRouteOptions {
+  /** REAL wire-byte ceiling: a safe integer in [1, 1 048 576]. */
+  maxBytes: number;
+  /** Hard body deadline: a safe integer in [1, 60 000] (the reader's 30 s when omitted). */
+  deadlineMs?: number;
+  environment?: Record<string, string | undefined>;
+}
+export interface McpBearerJsonInput {
+  principal: McpBearerContext;
+  /** the parsed JSON-RPC message, unvalidated (the dispatch owns its shape) */
+  message: unknown;
+  bytes: number;
+  mcp: McpRequestHeaders;
+  meta: RequestMeta;
+  signal: AbortSignal;
+}
+export type McpBearerJsonHandler = (input: McpBearerJsonInput) => Promise<Response> | Response;
+
+const MCP_NO_STORE = { "Cache-Control": "no-store" } as const;
+
+function mcpRefusal(status: number, code: string, error: string, headers: Record<string, string> = {}): Response {
+  return Response.json({ ok: false, code, error }, { status, headers: { ...MCP_NO_STORE, ...headers } });
+}
+/** A JSON-RPC failure the wrapper answers itself: `id` is echoed when the parsed message carries a readable one and is left
+ *  out otherwise (MCP 2026-07-28: `JSONRPCErrorResponse.id?: RequestId`, a string or a number, never null). */
+function mcpJsonRpcFailure(status: number, code: number, message: string, id: JsonRpcId | null = null): Response {
+  return Response.json({ jsonrpc: "2.0", ...(id === null ? {} : { id }), error: { code, message } }, { status, headers: MCP_NO_STORE });
+}
+
+interface DeclaredMcpOptions { maxBytes: number; deadlineMs?: number }
+function declaredMcpOptions(options: unknown): DeclaredMcpOptions | null {
+  try {
+    if (typeof options !== "object" || options === null) return null;
+    const { maxBytes, deadlineMs } = options as McpBearerRouteOptions;
+    if (typeof maxBytes !== "number" || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MCP_ROUTE_MAX_BYTES_CEILING) return null;
+    if (deadlineMs !== undefined && (typeof deadlineMs !== "number" || !Number.isSafeInteger(deadlineMs) || deadlineMs < 1 || deadlineMs > MCP_ROUTE_DEADLINE_MS_CEILING)) return null;
+    return deadlineMs === undefined ? { maxBytes } : { maxBytes, deadlineMs };
+  } catch {
+    return null;
+  }
+}
+
+/** OD-44: absence is exactly a null header; anything present (blank included) must parse strictly and equal the issuer. */
+function mcpOriginRefusal(request: Request, issuer: string): Response | null {
+  if (request.headers.get("origin") === null) return null;
+  const presented = parseOriginHeader(request);
+  if (!presented.ok) {
+    return presented.code === "AUTH_ORIGIN_NULL"
+      ? forbidden("AUTH_ORIGIN_NULL", "An opaque (null) Origin is refused.")
+      : forbidden("AUTH_ORIGIN_MALFORMED", "The Origin header is malformed.");
+  }
+  if (presented.origin !== issuer) return forbidden("AUTH_CROSS_ORIGIN_DENIED", "Cross-origin requests are refused.");
+  return null;
+}
+
+function hasQueryString(url: string): boolean {
+  try {
+    return new URL(url).search !== "";
+  } catch {
+    return true;
+  }
+}
+
+/** Accept admits JSON when it is absent, or when one of at most 32 ranges (1 024 characters in all) is application/json,
+ *  application/(any) or (any)/(any), without q=0. */
+function acceptAdmitsJson(accept: string | null): boolean {
+  if (accept === null) return true;
+  if (accept.length > MCP_ACCEPT_MAX_CHARS) return false;
+  const ranges = accept.split(",");
+  if (ranges.length > MCP_ACCEPT_MAX_RANGES) return false;
+  return ranges.some((range) => {
+    const [type, ...parameters] = range.split(";");
+    const media = (type ?? "").trim().toLowerCase();
+    if (media !== "application/json" && media !== "application/*" && media !== "*/*") return false;
+    const quality = parameters.map((parameter) => parameter.trim().toLowerCase()).find((parameter) => parameter.startsWith("q="));
+    if (quality === undefined) return true;
+    const weight = Number(quality.slice(2));
+    return Number.isFinite(weight) && weight > 0;
+  });
+}
+
+function mcpHeadersOf(request: Request): McpRequestHeaders {
+  let paramHeaderCount = 0;
+  for (const name of request.headers.keys()) if (name.startsWith("mcp-param-")) paramHeaderCount += 1;
+  return Object.freeze({
+    protocolVersion: mcpHeaderValue(request.headers.get("mcp-protocol-version"), MCP_PROTOCOL_VERSION_HEADER_MAX_CHARS),
+    method: mcpHeaderValue(request.headers.get("mcp-method"), MCP_METHOD_HEADER_MAX_CHARS),
+    name: mcpHeaderValue(request.headers.get("mcp-name"), MCP_NAME_HEADER_MAX_CHARS),
+    paramHeaderCount,
+  });
+}
+
+export function mcpBearerJsonRoute(
+  options: McpBearerRouteOptions,
+  handler: McpBearerJsonHandler,
+): (request: Request) => Promise<Response> {
+  const declared = declaredMcpOptions(options);
+  let declaredEnvironment: Record<string, string | undefined> | undefined;
+  try {
+    declaredEnvironment = typeof options?.environment === "object" && options.environment !== null ? options.environment : undefined;
+  } catch {
+    declaredEnvironment = undefined;
+  }
+  return async (request: Request): Promise<Response> => {
+    // the parsed message, once read: a failure after that point echoes its id when it is readable
+    let parsed: unknown;
+    try {
+      const environment = declaredEnvironment ?? process.env;
+      // 1. the flag: off answers 404 with zero other work
+      if (!mcpFeatureState(environment).enabled) return mcpRefusal(404, "MCP_NOT_ENABLED", "The MCP endpoint is not enabled.");
+      // 2. the declared options
+      if (declared === null) return mcpRefusal(500, "AUTH_ROUTE_MISCONFIGURED", "This route is misconfigured; the request is refused.");
+      // 3. the exact policy, which must be the mcp-bearer row
+      let pathname = "";
+      try {
+        pathname = new URL(request.url).pathname;
+      } catch {
+        pathname = "";
+      }
+      const policy = policyFor(pathname, request.method);
+      if (!policy) return jsonError(500, "AUTH_POLICY_MISSING", "This route has no authorization policy.");
+      if (policy.identitySource !== "mcp-bearer") return wrapperMismatch();
+      // 4. the production blocker
+      const blocker = sensitiveOperationsBlocker(environment);
+      if (blocker) return forbidden("AUTH_PRODUCTION_NOT_CONFIGURED", blocker);
+      // 5. the configuration and the verifier
+      const config = resolveMcpResourceConfiguration(environment);
+      const verifier = resolveMcpAccessTokenVerifier(environment);
+      if (!config.ok || verifier === null) return mcpRefusal(503, "MCP_NOT_CONFIGURED", "The MCP endpoint is not configured.");
+      const challenged = (status: number, code: string, error: string, kind?: "invalid_request" | "invalid_token"): Response =>
+        mcpRefusal(status, code, error, { "WWW-Authenticate": mcpBearerChallenge(config.resourceMetadataUrl, kind) });
+      const invalidToken = (): Response => challenged(401, "MCP_TOKEN_INVALID", "The access token is invalid or expired.", "invalid_token");
+      // 6. Origin, validated when present
+      const originRefusal = mcpOriginRefusal(request, config.issuer);
+      if (originRefusal) return originRefusal;
+      // 7. no query string: a token never travels in the URL (RFC 6750 section 2.3 is not supported)
+      if (hasQueryString(request.url)) return challenged(400, "MCP_QUERY_REFUSED", "The MCP endpoint accepts no query string; send the access token in the Authorization header only.", "invalid_request");
+      // 8. the Authorization header
+      const credential = parseMcpBearerAuthorization(request.headers.get("authorization"));
+      if (credential.kind === "absent" || credential.kind === "other_scheme") return challenged(401, "MCP_UNAUTHENTICATED", "A Sirkit MCP access token is required.");
+      if (credential.kind === "malformed") return challenged(400, "MCP_AUTHORIZATION_MALFORMED", "The Authorization header is malformed.", "invalid_request");
+      // 9. the verifier, then this wrapper's own re-check of every claim it relies on
+      const nowMs = mcpServerNowMs();
+      let verified: McpTokenVerification;
+      try {
+        verified = await verifier.verify(credential.token, { audience: config.resourceUri, issuer: config.issuer, nowMs });
+      } catch {
+        verified = { ok: false, reason: "malformed" };
+      }
+      if (!verified || verified.ok !== true || !mcpClaimsSatisfy(verified.claims, config, nowMs)) return invalidToken();
+      const claims = verified.claims;
+      // 10. the endpoint rate limit, keyed on verified ids only
+      const admitted = mcpEndpointLimiter.take([claims.tenantId, claims.projectId, claims.subject], nowMs);
+      if (!admitted.ok) return mcpRefusal(429, "MCP_RATE_LIMITED", "Too many MCP requests; retry later.", { "Retry-After": String(admitted.retryAfterS) });
+      // 11. the LIVE membership, pinned to the token's revision: one answer for missing, revoked or changed (no oracle)
+      const memberships = resolveMembershipRepository();
+      if (!memberships) return forbidden("AUTH_MEMBERSHIP_UNAVAILABLE", "Project membership authority is unavailable; the request is refused.");
+      let record: ProjectMembershipRecord | null;
+      try {
+        record = await memberships.loadActiveMembership({ tenantId: claims.tenantId, projectId: claims.projectId, userId: claims.subject });
+      } catch {
+        return forbidden("AUTH_MEMBERSHIP_UNAVAILABLE", "Project membership authority is unavailable; the request is refused.");
+      }
+      if (!record || record.tenantId !== claims.tenantId || record.projectId !== claims.projectId || record.userId !== claims.subject || membershipRevisionOf(record) !== claims.membershipRevision) return invalidToken();
+      const role = projectRoleFromMembership(record.role);
+      if (!role) return forbidden("AUTH_ROLE_UNMAPPED", "The stored membership role is not a recognized project role.");
+      const principal = buildMcpBearerContext({ claims, role, membershipRevision: claims.membershipRevision, requestId: newMcpRequestId() });
+      // 12. the policy's role gate
+      const denied = authorizeActor({ ...principal.actor }, policy);
+      if (denied) return denied;
+      // 13. media, lengths judged first; zero body pulls on a refusal
+      const contentType = request.headers.get("content-type");
+      if (contentType === null || contentType.length > MCP_CONTENT_TYPE_MAX_CHARS || contentType.split(";", 1)[0]!.trim().toLowerCase() !== "application/json") return unsupportedMedia();
+      if (!acceptAdmitsJson(request.headers.get("accept"))) return mcpRefusal(406, "MCP_NOT_ACCEPTABLE", "The client must accept application/json.");
+      // 14. the ONE bounded reader; a body that is not JSON is the JSON-RPC parse error
+      const read = await readBoundedJsonBody(request, { maxBytes: declared.maxBytes, ...(declared.deadlineMs !== undefined ? { deadlineMs: declared.deadlineMs } : {}) });
+      if (!read.ok) {
+        if (read.reason === "invalid-json" || read.reason === "invalid-utf8") return mcpJsonRpcFailure(400, -32700, "Parse error");
+        return boundedJsonRefusalResponse(read);
+      }
+      // 15. the handler: the principal, the parsed message and the bounded MCP headers only
+      parsed = read.value;
+      return await handler({ principal, message: read.value, bytes: read.bytes, mcp: mcpHeadersOf(request), meta: buildMeta(request, {}), signal: request.signal });
+    } catch {
+      return mcpJsonRpcFailure(500, -32603, "Internal error", readableMcpRequestId(parsed));
+    }
   };
 }

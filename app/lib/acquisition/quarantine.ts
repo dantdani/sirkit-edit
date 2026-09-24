@@ -16,8 +16,13 @@
  * Stages 4 and 5 — the reviewed atomic revision and the published project binding — live in `app/lib/atomic` and need a
  * qualified human's review. Nothing in this module creates, approves or publishes a revision or binds a design, and a
  * bundle's `engineering.proven` is always false.
+ *
+ * [B20 A4] An approved external MCP tool's result (`sirkit.mcp-observation.v1`) enters as the source class `external_mcp_tool`,
+ * QUARANTINED for every property whatever it names (OD-79): never a candidate, a hint, a sourcing fact or a conflict, and it
+ * never clears missing evidence. `candidateFromMcpObservation` reads each value from the record itself at a validated pointer.
  */
 import type { EngineeringFacet, ExtractionMethod, SourceClass } from "../atomic/types";
+import type { McpObservationRecord } from "../mcp/observation";
 import { canonicalExactMpn } from "../atomic/identity";
 import { inertExternalText, safeExternalHref } from "../net/external-href";
 import { canonicalJson, contentId, deepFreeze, sha256 } from "../atomic/stable";
@@ -46,6 +51,8 @@ export const ENGINEERING_CANDIDATE_SOURCE_CLASSES: readonly SourceClass[] = Obje
 
 const UNTRUSTED_METHODS: readonly ExtractionMethod[] = ["llm", "ocr"];
 const UNTRUSTED_CLASSES: readonly SourceClass[] = ["llm_suggestion", "ocr_extraction"];
+/** [B20 A4] The one reason every fact read from an external MCP tool carries (OD-79). */
+export const MCP_QUARANTINE_REASON = "read from an external MCP tool: quarantined for every property; never a candidate, a hint, a sourcing fact or a conflict (OD-79)";
 
 export type FactEstablishes = "sourcing" | "identity_hint" | "engineering_candidate" | "quarantined";
 
@@ -157,6 +164,8 @@ export interface NormalizedCandidate {
 }
 
 function classify(property: string, sourceClass: SourceClass, method: ExtractionMethod): { establishes: FactEstablishes; reason?: string } {
+  // [B20 A4] FIRST: an external MCP tool's fact is quarantined whatever its property or method (OD-79)
+  if (sourceClass === "external_mcp_tool") return { establishes: "quarantined", reason: MCP_QUARANTINE_REASON };
   if (UNTRUSTED_METHODS.includes(method) || UNTRUSTED_CLASSES.includes(sourceClass)) {
     return { establishes: "quarantined", reason: "extracted by a model or OCR: quarantined until deterministic validation and review" };
   }
@@ -244,6 +253,75 @@ export function candidateFromExtraction(input: {
     return { ...fact, value, locator, observationId: documentId, sourceId: input.sourceId, sourceClass: input.sourceClass, method: input.method, parserVersion: input.parserVersion, ...classify(fact.property, input.sourceClass, input.method) };
   });
   return candidate(input.exactMpn, facts, [documentId], null, { superseded: typeof input.supersededBy === "string" && input.supersededBy.trim() !== "" });
+}
+
+/** [B20 A4] Why `candidateFromMcpObservation` built no candidate (closed). */
+export type McpCandidateRefusal = "observation_invalid" | "mpn_invalid" | "too_many_facts" | "pointer_invalid" | "value_absent";
+const MCP_POINTER = /^(\/[A-Za-z0-9_.-]{1,64}){0,8}$/;
+const MCP_OBSERVATION_ID = /^external_tool_observation_[0-9a-f]{64}$/;
+const MCP_SERVER_ID = /^[a-z0-9][a-z0-9-]{1,30}$/;
+const MCP_TOOL_NAME = /^[A-Za-z0-9_.-]{1,128}$/;
+const MCP_ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+/** A pointer resolved against the record's kept value, own properties only: a string, number or boolean leaf, or nothing. */
+function pointedLeaf(value: unknown, pointer: string): string | number | boolean | null {
+  let current: unknown = value;
+  for (const step of pointer === "" ? [] : pointer.slice(1).split("/")) {
+    if (Array.isArray(current)) {
+      if (!/^(0|[1-9][0-9]{0,5})$/.test(step)) return null;
+      current = current[Number(step)];
+    } else if (current !== null && typeof current === "object" && Object.hasOwn(current, step)) {
+      current = (current as Record<string, unknown>)[step];
+    } else {
+      return null;
+    }
+  }
+  if (typeof current === "string" || typeof current === "boolean") return current;
+  return typeof current === "number" && Number.isFinite(current) ? current : null;
+}
+
+/**
+ * [B20 A4] The facts an approved external MCP tool's observation states, each QUARANTINED (OD-79). Every value is READ FROM THE
+ * RECORD at a validated pointer into its kept structured value (`structured.state === "kept"`) — a caller names a property, a
+ * facet and a pointer, never a value — and made inert and bounded; the locator is `mcp:<serverId>/<toolName>#<pointer>`, the
+ * candidate expires at the observation's `freshUntil`. Refuses with a closed code and never throws. No production caller in B20.
+ */
+export function candidateFromMcpObservation(observation: McpObservationRecord, request: { exactMpn: string; facts: ReadonlyArray<{ property: string; facet: EngineeringFacet; pointer: string }> }): { ok: true; candidate: Readonly<NormalizedCandidate> } | { ok: false; code: McpCandidateRefusal } {
+  try {
+    const record = observation as unknown as Record<string, unknown>;
+    const source = record?.source as Record<string, unknown> | undefined;
+    const tool = record?.tool as Record<string, unknown> | undefined;
+    if (record === null || typeof record !== "object" || typeof record.id !== "string" || !MCP_OBSERVATION_ID.test(record.id) || record.schema !== "sirkit.mcp-observation.v1") return { ok: false, code: "observation_invalid" };
+    if (typeof source !== "object" || source === null || source.sourceClass !== "external_mcp_tool" || typeof source.serverId !== "string" || !MCP_SERVER_ID.test(source.serverId)) return { ok: false, code: "observation_invalid" };
+    if (typeof tool !== "object" || tool === null || typeof tool.name !== "string" || !MCP_TOOL_NAME.test(tool.name)) return { ok: false, code: "observation_invalid" };
+    if (typeof record.freshUntil !== "string" || !MCP_ISO_TIME.test(record.freshUntil) || typeof record.normalizerVersion !== "string") return { ok: false, code: "observation_invalid" };
+    const facts = request?.facts;
+    if (!Array.isArray(facts)) return { ok: false, code: "observation_invalid" };
+    if (facts.length > EXTRACTION_MAX_FACTS) return { ok: false, code: "too_many_facts" };
+    let exactMpn: string;
+    try {
+      exactMpn = canonicalExactMpn(request.exactMpn);
+    } catch {
+      return { ok: false, code: "mpn_invalid" };
+    }
+    const structured = record.structured as { state?: unknown; untrustedValue?: unknown } | undefined;
+    const kept = structured !== undefined && structured !== null && structured.state === "kept" ? structured.untrustedValue : undefined;
+    const base = { observationId: record.id, sourceId: `mcp:${source.serverId}`, sourceClass: "external_mcp_tool" as const, method: "structured_api" as const, parserVersion: record.normalizerVersion };
+    const built: CandidateFact[] = [];
+    for (const fact of facts) {
+      const pointer: unknown = fact?.pointer;
+      if (typeof pointer !== "string" || pointer.length > 600 || !MCP_POINTER.test(pointer)) return { ok: false, code: "pointer_invalid" };
+      if (typeof fact.property !== "string" || fact.property === "" || fact.property.length > 64) return { ok: false, code: "pointer_invalid" };
+      const leaf = kept === undefined ? null : pointedLeaf(kept, pointer);
+      if (leaf === null) return { ok: false, code: "value_absent" };
+      const value = typeof leaf === "string" ? inertExternalText(leaf, EXTRACTION_VALUE_MAX_LENGTH) : leaf;
+      if (value === null) return { ok: false, code: "value_absent" };
+      built.push({ ...base, property: fact.property, facet: fact.facet, value, locator: `mcp:${source.serverId}/${tool.name}#${pointer}`, ...classify(fact.property, "external_mcp_tool", "structured_api") });
+    }
+    return { ok: true, candidate: candidate(exactMpn, built, [record.id], record.freshUntil) };
+  } catch {
+    return { ok: false, code: "observation_invalid" };
+  }
 }
 
 // ── 3. Verified evidence bundle ──────────────────────────────────────────────

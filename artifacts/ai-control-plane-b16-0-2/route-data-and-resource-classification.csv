@@ -1,4 +1,5 @@
 path,method,is_public,durable_access,project_data_sensitivity,provider_credit,external_process,expensive,authoritative_write,release_or_qualification,static_or_catalog
+/.well-known/oauth-protected-resource/api/mcp,GET,true,none,none,false,,false,false,false,true
 /api/agent/autonomy,GET,false,read-write,project-durable,false,,false,false,false,false
 /api/agent/autonomy,POST,false,read-write,project-durable,false,,false,true,false,false
 /api/agent/execution-grant,GET,false,read-write,session-identity,false,,false,false,false,false
@@ -86,6 +87,8 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/kicad/v1/parts/category/[id],GET,true,none,none,false,,false,false,false,true
 /api/mapping-verification,GET,false,none,caller-supplied-only,false,,false,false,false,false
 /api/mapping-verification,POST,false,write,project-durable,false,,false,true,false,false
+/api/mcp,POST,false,read,session-identity,false,,false,false,false,false
+/api/mcp/token,POST,false,none,session-identity,false,,false,false,false,false
 /api/model-simulation/denominator,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/model-simulation/execute,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/model-simulation/measure,POST,false,none,caller-supplied-only,false,,false,false,false,false

@@ -11,6 +11,8 @@ export type LLMProviderFailureReason =
   | "timeout"
   | "cancelled"
   | "network"
+  /** [B20 A5] the provider returned an output item Sirkit's agent adapters did not request (OD-91) */
+  | "unrequested_output"
   | "unknown";
 
 function providerName(provider: LLMProviderId): string {
@@ -40,6 +42,10 @@ function friendlyMessage(provider: LLMProviderId, reason: LLMProviderFailureReas
       return `The ${name} request was cancelled before it completed.`;
     case "network":
       return `${name} could not be reached from the Sirkit server.`;
+    // [B20 A5] never inferred from a provider message: the adapters raise it themselves, before anything of that response
+    // is used (OD-91).
+    case "unrequested_output":
+      return `${name} returned output Sirkit did not request, such as a tool the provider ran on its own; the run was stopped and nothing from that response was used.`;
     default:
       return `${name} is currently unavailable.`;
   }

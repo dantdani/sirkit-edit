@@ -115,7 +115,8 @@ const sequence = (events: AgentRunEvent[]): string[] => events.filter((e) => e.t
 
 describe("B18-B — the loop and a server-minted execution grant", () => {
   it("the closed trace vocabulary gained exactly execution_grant", () => {
-    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant"]);
+    // [B20 A4] reviewed pin move: B20-A4 appends external_observation after it (D14 / OD-80); execution_grant is still B18-B's one addition
+    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant", "external_observation"]);
   });
 
   it("an execute_explicit grant: the grant event is emitted, the run awaits the DURABLE settlement (bounded by the budget) and answers the model `executed` from the settled record; the trace records execution_grant with the grant identity and the operations digest", async () => {

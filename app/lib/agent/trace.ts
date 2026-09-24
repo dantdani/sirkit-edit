@@ -18,6 +18,12 @@
  * `run_started`, or usage that does not equal the summed steps — is
  * refused. Validator output is bounded so a hostile document cannot
  * produce unbounded diagnostics.
+ *
+ * [B20 A4] An external tool call (an approved third-party tool server) is attributed on its `tool_invocation` event by an
+ * optional `external` block — server and tool identity, the registry and protocol versions, the listing digest, a closed result
+ * class, and the content hash, observation id and retrieval time of an observation — never content, arguments, URLs or
+ * credentials. The block is required on the outcome class `external_observation`, allowed on `refused`, forbidden otherwise; a
+ * trace without external calls keeps its shape, and the schema stays v1.
  */
 
 import { engineeringDigest } from "../engineering/stable";
@@ -49,8 +55,27 @@ export const TRACE_BOUNDS = Object.freeze({
   maxScanDepth: 32,
 });
 
-export const TRACE_OUTCOME_CLASSES = ["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant"] as const;
+export const TRACE_OUTCOME_CLASSES = ["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant", "external_observation"] as const;
 export type TraceOutcomeClass = (typeof TRACE_OUTCOME_CLASSES)[number];
+
+/** [B20 A4] What became of one external tool call (closed). */
+export const TRACE_EXTERNAL_RESULT_CLASSES = ["catalog", "complete", "tool_error", "not_sent", "authorization_failed", "upstream_error", "transport_failed", "result_invalid", "cancelled"] as const;
+export type TraceExternalResultClass = (typeof TRACE_EXTERNAL_RESULT_CLASSES)[number];
+/** [B20 A4] The classes an `external_observation` event may carry, and the ones that name an observation (hash, id and time). */
+const OBSERVED_RESULT_CLASSES: readonly string[] = ["catalog", "complete", "tool_error"];
+const HASHED_RESULT_CLASSES: readonly string[] = ["complete", "tool_error"];
+/** [B20 A4] The closed pattern of every `external` field (each value must also pass the secret denylist). */
+export const TRACE_EXTERNAL_PATTERNS = Object.freeze({
+  serverId: /^[a-z0-9][a-z0-9-]{1,30}$/,
+  toolName: /^[A-Za-z0-9_.-]{1,128}$/,
+  registryVersion: /^\d{1,4}\.\d{1,4}\.\d{1,4}$/,
+  protocolVersion: /^\d{4}-\d{2}-\d{2}$/,
+  listingDigest: /^sha256:[0-9a-f]{64}$/,
+  contentHash: /^sha256:[0-9a-f]{64}$/,
+  observationId: /^external_tool_observation_[0-9a-f]{64}$/,
+  retrievedAt: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+});
+export const TRACE_EXTERNAL_KEYS = ["serverId", "toolName", "registryVersion", "protocolVersion", "listingDigest", "resultClass", "contentHash", "observationId", "retrievedAt"] as const;
 
 export const TRACE_TERMINAL_OUTCOMES = ["completed", "failed", "cancelled"] as const;
 export type TraceTerminalOutcome = (typeof TRACE_TERMINAL_OUTCOMES)[number];
@@ -183,6 +208,19 @@ export interface TraceContextDigests {
 /** Distributive omit so union members keep their own shapes. */
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/** [B20 A4] The attribution of one external tool call: identities and hashes, never content. */
+export interface TraceExternalAttribution {
+  serverId: string;
+  toolName: string | null;
+  registryVersion: string;
+  protocolVersion: string | null;
+  listingDigest: string | null;
+  resultClass: TraceExternalResultClass;
+  contentHash: string | null;
+  observationId: string | null;
+  retrievedAt: string | null;
+}
+
 export type AgentTraceEvent =
   | { seq: number; kind: "run_started" }
   | { seq: number; kind: "step"; model: string; inputTokens: number; outputTokens: number; toolCallCount: number }
@@ -193,6 +231,8 @@ export type AgentTraceEvent =
       outcomeClass: TraceOutcomeClass; status: string;
       verification: string | null; outputDigest: string | null;
       proposalId: string | null; proposalDigest: string | null;
+      /** [B20 A4] required on external_observation, allowed on refused, absent otherwise */
+      external?: TraceExternalAttribution;
     }
   | { seq: number; kind: "terminal"; outcome: TraceTerminalOutcome; failureReason: string | null };
 
@@ -332,6 +372,34 @@ function nonNegativeInteger(value: unknown, label: string, issues: Issues): valu
 }
 
 /**
+ * [B20 A4] The rule an `external` block breaks on an event of `outcomeClass` (`undefined`: no block), or null. The validator and the
+ * recorder's normalisation cascade share it, so the recorder never records a block the validator refuses.
+ */
+export function externalAttributionIssue(outcomeClass: unknown, external: unknown): string | null {
+  if (external === undefined) return outcomeClass === "external_observation" ? "external: required on external_observation" : null;
+  if (outcomeClass !== "external_observation" && outcomeClass !== "refused") return "external: allowed only on external_observation and refused";
+  if (typeof external !== "object" || external === null || Array.isArray(external)) return "external: must be an object";
+  const block = external as Record<string, unknown>;
+  const keys = Object.keys(block);
+  if (keys.length !== TRACE_EXTERNAL_KEYS.length || !TRACE_EXTERNAL_KEYS.every((key) => Object.prototype.hasOwnProperty.call(block, key))) return "external: exact keys required";
+  const field = (key: keyof typeof TRACE_EXTERNAL_PATTERNS, nullable: boolean): boolean => {
+    const value = block[key];
+    if (value === null) return nullable;
+    return typeof value === "string" && TRACE_EXTERNAL_PATTERNS[key].test(value) && !containsSecretShapedText(value);
+  };
+  if (!field("serverId", false) || !field("toolName", true) || !field("registryVersion", false) || !field("protocolVersion", true) || !field("listingDigest", true)) return "external: an identity field is outside its pattern";
+  if (!field("contentHash", true) || !field("observationId", true) || !field("retrievedAt", true)) return "external: a hash, id or time is outside its pattern";
+  const resultClass = block.resultClass;
+  if (!(TRACE_EXTERNAL_RESULT_CLASSES as readonly unknown[]).includes(resultClass)) return "external.resultClass: outside the closed vocabulary";
+  const observed = OBSERVED_RESULT_CLASSES.includes(resultClass as string);
+  if (outcomeClass === "external_observation" ? !observed : observed) return "external.resultClass: not a result class of this outcome";
+  const hashed = HASHED_RESULT_CLASSES.includes(resultClass as string);
+  if ((block.contentHash !== null) !== hashed || (block.observationId !== null) !== hashed || (block.retrievedAt !== null) !== hashed) return "external: the hash, id and time are present exactly for complete and tool_error";
+  if (resultClass === "catalog" && (block.toolName !== null || block.listingDigest === null)) return "external: a catalog names no tool and a listing digest";
+  return null;
+}
+
+/**
  * Returns every violation (bounded); empty ⇔ the document is a complete,
  * internally consistent, redacted trace.
  */
@@ -425,7 +493,9 @@ function validateCapturedTrace(raw: unknown): string[] {
     // Object.prototype member and be fed to exactKeys as a "key list",
     // throwing a TypeError instead of returning bounded issues.
     if (typeof kind !== "string" || !Object.prototype.hasOwnProperty.call(EVENT_KEYS, kind)) { issues.push(`${label}.kind: unknown event kind`); continue; }
-    if (!exactKeys(event, EVENT_KEYS[kind as keyof typeof EVENT_KEYS], label, issues)) continue;
+    // [B20 A4] a tool_invocation may carry the optional `external` block (judged below): its key is exact too
+    const eventKeys: readonly string[] = kind === "tool_invocation" && Object.prototype.hasOwnProperty.call(event, "external") ? [...EVENT_KEYS.tool_invocation, "external"] : EVENT_KEYS[kind as keyof typeof EVENT_KEYS];
+    if (!exactKeys(event, eventKeys, label, issues)) continue;
 
     switch (kind) {
       case "run_started":
@@ -454,6 +524,8 @@ function validateCapturedTrace(raw: unknown): string[] {
         nullableDigest(event.outputDigest, `${label}.outputDigest`, issues);
         nullableDigest(event.proposalId, `${label}.proposalId`, issues);
         nullableDigest(event.proposalDigest, `${label}.proposalDigest`, issues);
+        const externalIssue = externalAttributionIssue(event.outcomeClass, Object.prototype.hasOwnProperty.call(event, "external") ? event.external : undefined); // [B20 A4]
+        if (externalIssue !== null) issues.push(`${label}.${externalIssue}`);
         break;
       }
       case "terminal": {

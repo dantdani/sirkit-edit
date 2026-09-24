@@ -7,9 +7,10 @@
  * deadline / safe-header / forbidden-key screen fails CI here.
  */
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyRouteMethodForm } from "./_boundary-analysis";
+import { listRouteFiles } from "../route-tree"; // [B20 B2] app/api AND app/.well-known (OD-66); the sole-adopter paths below stay split on /app/api/
 import { ASSIGNMENT_API_DEADLINE_MS, ASSIGNMENT_API_MAX_BYTES, ASSIGNMENT_FORBIDDEN_BODY_KEYS } from "../../../api/assignment-queue/_scope";
 import { FOOTPRINT_RESOLUTION_API_DEADLINE_MS, FOOTPRINT_RESOLUTION_API_MAX_BYTES } from "../../../api/footprint-resolution/_scope";
 import { PHYSICAL_BINDING_API_DEADLINE_MS, PHYSICAL_BINDING_API_MAX_BYTES } from "../../../api/physical-bindings/_scope";
@@ -38,15 +39,6 @@ function code(rel: string): string {
     .replace(/'(?:\\.|[^'\\])*'/g, "''");
 }
 function raw(rel: string): string { return readFileSync(join(ROOT, rel), "utf8"); }
-function allRouteFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) allRouteFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out;
-}
 
 describe("B16.0.22 §H — canonical adoption (provenance-checked)", () => {
   it("all eight tranche-15 methods classify canonical-wrapper", () => {
@@ -104,7 +96,7 @@ describe("B16.0.22 §H — preserved ceilings, deadlines, and screens", () => {
   it("the legacy refusal contract has EXACTLY two closed-enum adopters, each with its own frozen profile [B16.0.24]", () => {
     // replacement-authority → replacement-authority-v1; sign-in → auth-signin-v1.
     // Any OTHER adopter, or a free-form profile, fails CI.
-    const adopters = allRouteFiles(join(ROOT, "app", "api"))
+    const adopters = listRouteFiles(ROOT)
       .filter((file) => readFileSync(file, "utf8").includes("legacyReaderRefusals"))
       .map((file) => file.replace(/\\/g, "/").split("/app/api/")[1]!)
       .sort();

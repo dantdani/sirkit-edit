@@ -19,7 +19,9 @@ export type AuthRouteClass =
   | "authenticated-mutation"
   | "authenticated-release"
   | "internal-worker"
-  | "demo-deprecated";
+  | "demo-deprecated"
+  /** [B20 B2] the bearer-authenticated MCP endpoint (OD-54) */
+  | "authenticated-mcp";
 
 /** How a route establishes request identity today. */
 export type IdentitySource =
@@ -32,7 +34,9 @@ export type IdentitySource =
   /** No identity — a public/catalog/compute route. */
   | "none"
   /** LEGACY: still reads `x-sirkit-*` identity headers — migration pending. */
-  | "legacy-header-scope";
+  | "legacy-header-scope"
+  /** [B20 B2] a Sirkit-issued MCP access token re-checked against the LIVE membership (OD-43). */
+  | "mcp-bearer";
 
 export interface AuthRouteCoverageEntry {
   path: string;
@@ -57,9 +61,9 @@ export interface AuthRouteCoverageEntry {
  */
 export const LEGACY_HEADER_SCOPE_PATH_PREFIXES: readonly string[] = [];
 
-const IDENTITY_PRECEDENCE: readonly IdentitySource[] = ["worker-secret", "trusted-context", "body-scope-server-actor"];
+const IDENTITY_PRECEDENCE: readonly IdentitySource[] = ["worker-secret", "trusted-context", "body-scope-server-actor", "mcp-bearer"];
 const AUTH_CLASS_PRECEDENCE: readonly AuthRouteClass[] = [
-  "authenticated-release", "authenticated-mutation", "authenticated-propose", "authenticated-read", "internal-worker", "public",
+  "authenticated-release", "authenticated-mutation", "authenticated-propose", "authenticated-mcp", "authenticated-read", "internal-worker", "public",
 ];
 
 function policyRowsFor(path: string) {
@@ -96,7 +100,7 @@ export function buildAuthRouteCoverage(coverage: readonly ApiRouteCoverageEntry[
         methods: entry.methods,
         authClass: authClassFor(entry, identitySource),
         identitySource,
-        migrated: identitySource === "trusted-context" || identitySource === "body-scope-server-actor" || identitySource === "worker-secret",
+        migrated: identitySource === "trusted-context" || identitySource === "body-scope-server-actor" || identitySource === "worker-secret" || identitySource === "mcp-bearer",
       };
     });
 }

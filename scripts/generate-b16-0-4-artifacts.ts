@@ -6,6 +6,10 @@
  * Run after any route / policy / body-reader change:
  *   npx tsx scripts/generate-b16-0-4-artifacts.ts
  *
+ * [B20 B2] D20-35: the two renderers are exported pure functions, byte-pinned by
+ * b20-b2-route-matrices-pinned; the files are written only when this module runs
+ * as a script. The inventory walks app/api AND app/.well-known (OD-66).
+ *
  * Deterministic: sorted route order, no timestamps — running twice must be
  * byte-identical. The authorization verdict column comes from the SAME
  * method-scoped analyzer the CI gate runs (`analyzeMethodBoundary`), so the
@@ -13,26 +17,16 @@
  * script (tsx), never part of the production runtime graph.
  */
 
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { policyFor } from "../app/lib/auth/route-policy";
+import { listRouteFiles, routePathOf } from "../app/lib/auth/route-tree";
 import {
   analyzeMethodBoundary,
   directBodyReads,
   exportedHttpMethods,
 } from "../app/lib/auth/__tests__/_boundary-analysis";
 
-const ROOT = process.cwd();
-
-function routeFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    if (entry === "__tests__" || entry === "node_modules") continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) routeFiles(full, out);
-    else if (entry === "route.ts") out.push(full);
-  }
-  return out.sort();
-}
 
 /** Resolve a numeric literal or a same-file `const NAME = <number>` reference. */
 function resolveNumber(source: string, expr: string): string {
@@ -104,64 +98,84 @@ function downstream(source: string): string {
 const csvEscape = (v: string): string => (/[",\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
 const row = (cells: string[]): string => cells.map(csvEscape).join(",");
 
-const authRows: string[] = [row(["method", "route", "policy_class", "access", "handler_symbol", "verdict", "shape", "detail"])];
-const bodyRows: string[] = [row(["method", "route", "policy_class", "access", "handler_symbol", "media_type", "max_wire_bytes", "deadline_ms", "authorization_ordering", "parser", "downstream", "evidence_test"])];
+/** [B20 B2] Both matrices of the route tree under `rootDir`, as the exact committed bytes (pure: reads, never writes). */
+function renderMatrices(rootDir: string): { method: string; body: string } {
+  const authRows: string[] = [row(["method", "route", "policy_class", "access", "handler_symbol", "verdict", "shape", "detail"])];
+  const bodyRows: string[] = [row(["method", "route", "policy_class", "access", "handler_symbol", "media_type", "max_wire_bytes", "deadline_ms", "authorization_ordering", "parser", "downstream", "evidence_test"])];
 
-for (const file of routeFiles(join(ROOT, "app", "api"))) {
-  const rel = relative(ROOT, file).replaceAll("\\", "/");
-  const path = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
-  const source = readFileSync(file, "utf8");
-  // [B16.0.8] a canonical JSON WRAPPER consumes the body inside route-handlers:
-  // extract its declared limits so the matrix reports the true body contract.
-  const wrapperJson = source.match(/(authenticatedJsonRoute|publicJsonRoute|workerJsonRoute)\s*(?:<[^>]*>)?\s*\(\s*\{([^}]*)\}/);
-  const wrapperFacts = wrapperJson
-    ? {
-      parser: `canonical-wrapper:${wrapperJson[1]}`,
-      maxBytes: resolveNumber(source, /maxBytes:\s*([A-Za-z0-9_]+)/.exec(wrapperJson[2]!)?.[1] ?? "(declared)"),
-      deadlineMs: (() => { const d = /deadlineMs:\s*([A-Za-z0-9_]+)/.exec(wrapperJson[2]!); return d ? resolveNumber(source, d[1]!) : "30000(default)"; })(),
-      mediaType: "application/json",
+  for (const file of listRouteFiles(rootDir)) {
+    const rel = relative(rootDir, file).replaceAll("\\", "/");
+    const path = routePathOf(rootDir, file);
+    const source = readFileSync(file, "utf8");
+    // [B16.0.8] a canonical JSON WRAPPER consumes the body inside route-handlers:
+    // extract its declared limits so the matrix reports the true body contract.
+    const wrapperJson = source.match(/(authenticatedJsonRoute|publicJsonRoute|workerJsonRoute|mcpBearerJsonRoute)\s*(?:<[^>]*>)?\s*\(\s*\{([^}]*)\}/);
+    const wrapperFacts = wrapperJson
+      ? {
+        parser: `canonical-wrapper:${wrapperJson[1]}`,
+        maxBytes: resolveNumber(source, /maxBytes:\s*([A-Za-z0-9_]+)/.exec(wrapperJson[2]!)?.[1] ?? "(declared)"),
+        deadlineMs: (() => { const d = /deadlineMs:\s*([A-Za-z0-9_]+)/.exec(wrapperJson[2]!); return d ? resolveNumber(source, d[1]!) : "30000(default)"; })(),
+        mediaType: "application/json",
+      }
+      : null;
+    const facts = wrapperFacts ?? bodyFacts(source, file);
+    const reads = directBodyReads(source, rel);
+    for (const method of exportedHttpMethods(source, file)) {
+      const policy = policyFor(path.replace(/\[[^\]]+\]/g, "x"), method) ?? policyFor(path, method);
+      const worker = /timingSafeEqual|WORKER_SECRET/.test(source);
+      const access = policy?.requiresAuth ? (worker ? "worker" : "authenticated") : "public";
+      const symbolMatch = source.match(new RegExp(`export\\s+const\\s+${method}\\s*=\\s*([A-Za-z0-9_]+)\\s*\\(`));
+      const symbol = symbolMatch ? `${symbolMatch[1]}(…)` : method;
+      const policyClass = policy ? `${policy.requiresAuth ? "auth" : "public"}${policy.requiresCsrf ? "+csrf" : ""}` : "(no policy row)";
+
+      if (policy?.requiresAuth) {
+        const v = analyzeMethodBoundary(source, method, file, rootDir);
+        authRows.push(row([method, path, policyClass, access, symbol, v.ok ? "load-bearing" : "REJECT", v.ok ? v.via : "-", v.ok ? v.detail : v.reason]));
+      } else {
+        authRows.push(row([method, path, policyClass, access, symbol, "n/a(public)", "-", "-"]));
+      }
+
+      const consumesBody = method !== "GET" && method !== "HEAD" && (facts !== null || reads.length > 0);
+      const ordering = !consumesBody
+        ? "no-body"
+        : access === "authenticated" ? "authorize-then-body"
+          : access === "worker" ? "worker-secret-then-body"
+            : "bounded-body-before-compute";
+      bodyRows.push(row([
+        method, path, policyClass, access, symbol,
+        consumesBody ? (facts?.mediaType ?? "UNBOUNDED") : "-",
+        consumesBody ? (facts?.maxBytes ?? "UNBOUNDED") : "-",
+        consumesBody ? (facts?.deadlineMs ?? "UNBOUNDED") : "-",
+        ordering,
+        consumesBody ? (facts?.parser ?? `DIRECT:${reads.map((r) => r.api).join("/")}`) : "-",
+        downstream(source),
+        policy?.requiresAuth
+          ? "b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior"
+          : "b16-0-2-gates §C + b16-0-4-bounded-body-behavior",
+      ]));
     }
-    : null;
-  const facts = wrapperFacts ?? bodyFacts(source, file);
-  const reads = directBodyReads(source, rel);
-  for (const method of exportedHttpMethods(source, file)) {
-    const policy = policyFor(path.replace(/\[[^\]]+\]/g, "x"), method) ?? policyFor(path, method);
-    const worker = /timingSafeEqual|WORKER_SECRET/.test(source);
-    const access = policy?.requiresAuth ? (worker ? "worker" : "authenticated") : "public";
-    const symbolMatch = source.match(new RegExp(`export\\s+const\\s+${method}\\s*=\\s*([A-Za-z0-9_]+)\\s*\\(`));
-    const symbol = symbolMatch ? `${symbolMatch[1]}(…)` : method;
-    const policyClass = policy ? `${policy.requiresAuth ? "auth" : "public"}${policy.requiresCsrf ? "+csrf" : ""}` : "(no policy row)";
-
-    if (policy?.requiresAuth) {
-      const v = analyzeMethodBoundary(source, method, file, ROOT);
-      authRows.push(row([method, path, policyClass, access, symbol, v.ok ? "load-bearing" : "REJECT", v.ok ? v.via : "-", v.ok ? v.detail : v.reason]));
-    } else {
-      authRows.push(row([method, path, policyClass, access, symbol, "n/a(public)", "-", "-"]));
-    }
-
-    const consumesBody = method !== "GET" && method !== "HEAD" && (facts !== null || reads.length > 0);
-    const ordering = !consumesBody
-      ? "no-body"
-      : access === "authenticated" ? "authorize-then-body"
-        : access === "worker" ? "worker-secret-then-body"
-          : "bounded-body-before-compute";
-    bodyRows.push(row([
-      method, path, policyClass, access, symbol,
-      consumesBody ? (facts?.mediaType ?? "UNBOUNDED") : "-",
-      consumesBody ? (facts?.maxBytes ?? "UNBOUNDED") : "-",
-      consumesBody ? (facts?.deadlineMs ?? "UNBOUNDED") : "-",
-      ordering,
-      consumesBody ? (facts?.parser ?? `DIRECT:${reads.map((r) => r.api).join("/")}`) : "-",
-      downstream(source),
-      policy?.requiresAuth
-        ? "b16-0-2-gates §A/§C + b16-0-4-bounded-body-behavior"
-        : "b16-0-2-gates §C + b16-0-4-bounded-body-behavior",
-    ]));
   }
+  return { method: authRows.join("\n") + "\n", body: bodyRows.join("\n") + "\n" };
 }
 
-const outDir = join(ROOT, "artifacts", "ai-control-plane-b16-0-4");
-mkdirSync(outDir, { recursive: true });
-writeFileSync(join(outDir, "method-authorization-matrix.csv"), authRows.join("\n") + "\n");
-writeFileSync(join(outDir, "request-body-boundary-matrix.csv"), bodyRows.join("\n") + "\n");
-process.stdout.write(`Wrote method-authorization-matrix.csv (${authRows.length - 1} rows) and request-body-boundary-matrix.csv (${bodyRows.length - 1} rows) to ${outDir}\n`);
+/** method-authorization-matrix.csv, rendered (byte-pinned). */
+export function renderMethodAuthorizationMatrix(rootDir: string): string {
+  return renderMatrices(rootDir).method;
+}
+
+/** request-body-boundary-matrix.csv, rendered (byte-pinned). */
+export function renderRequestBodyBoundaryMatrix(rootDir: string): string {
+  return renderMatrices(rootDir).body;
+}
+
+// Run only as a script (tsx) - importing this module from a test is side-effect free (the generate-b16-0-8-baseline precedent).
+const invokedAsScript = Boolean(process.argv[1] && process.argv[1].replace(/\\/g, "/").includes("generate-b16-0-4-artifacts"));
+if (invokedAsScript) {
+  const ROOT = process.cwd();
+  const { method, body } = renderMatrices(ROOT);
+  const outDir = join(ROOT, "artifacts", "ai-control-plane-b16-0-4");
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(join(outDir, "method-authorization-matrix.csv"), method);
+  writeFileSync(join(outDir, "request-body-boundary-matrix.csv"), body);
+  process.stdout.write(`Wrote method-authorization-matrix.csv (${method.split("\n").length - 2} rows) and request-body-boundary-matrix.csv (${body.split("\n").length - 2} rows) to ${outDir}\n`);
+}

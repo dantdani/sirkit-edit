@@ -1,19 +1,20 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B19",
-  "currentCheckpoint": "B19 validation complete (final tree green: suite, tsc, eslint, generators, ratchets); closeout artifacts committed",
+  "currentChapter": "B20",
+  "currentCheckpoint": "B20 complete on chapter/b20-mcp-adapter (A0-A5, A4L, B1-B4, C1-C3, D1-D3, D20-30, the four validation artifacts, verdict PARTIAL); PR #10 to be undrafted and merged after green CI",
   "status": "in_progress",
-  "baseSha": "5a59a1f",
-  "branch": "chapter/b19-external-acquisition",
-  "lastGreenSha": "bf88eba",
-  "pullRequest": "https://github.com/dantdani/sirkit-edit/pull/9 (draft; opened for per-increment CI, not to be merged before the B19 validation checkpoint)",
+  "baseSha": "102dd27",
+  "branch": "chapter/b20-mcp-adapter",
+  "lastGreenSha": "4f3dd30",
+  "pullRequest": "PR #10 (chapter/b20-mcp-adapter -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B19: rewrite PR #9 description for the chapter, un-draft, merge normally after green CI on the closeout commit; then B20 (MCP consumption and Sirkit MCP exposure): re-read the current MCP specification at execution time, discovery, one branch, checkpoint loop.",
-  "updatedAt": "2026-09-17T01:03:03-04:00"
+  "nextAction": "Undraft PR #10 with a truthful description, wait for green CI, merge normally (no auto-merge); then B21 on a new chapter branch from main.",
+  "updatedAt": "2026-09-24T14:50:43-04:00",
+  "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }

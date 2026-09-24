@@ -22,6 +22,10 @@
  *  - [B19-E E6] A bound EXTERNAL READ (external-search, evidence-read)
  *    travels `ExternalReadInvocationService` (./acquisition-reads) over the
  *    port the chat route injects; the model receives closed labels only.
+ *  - [B20 A4] The bound EXTERNAL TOOL READ over approved MCP servers
+ *    (sirkit.mcp.observation-read) travels `McpObservationReadService`
+ *    (./mcp-observation-reads) over the port the chat route injects; disclosure
+ *    is decided there from the committed registry, never by the port.
  *
  * No provider SDK types, no CanonicalEditorSession/SchematicEditorSession
  * imports, no API-route-to-API-route execution, no LLM-backed routes as
@@ -50,6 +54,7 @@ import { prepareViewCommandRequest, viewContextDigest } from "./view-context";
 import { LAYOUT_PROPOSAL_TOOL_IDS, LayoutProposalService, type RoutingExecutorFactory } from "./layout-proposals";
 import { dispatchGrantedExecution } from "./execution-dispatch";
 import { ExternalReadInvocationService, type ExternalAcquisitionReadPort } from "./acquisition-reads"; // [B19-E E6]
+import { McpObservationReadService, resolveMcpObservationBinding, type McpObservationPort } from "./mcp-observation-reads"; // [B20 A4]
 import type { AgentExecutionGrantMinter, AgentRunContext, AgentToolInvocationGateway, GatewayInvocationOutcome } from "./contracts";
 import { TIER1_EXECUTE_ROLES } from "../engineering/permission-tiers"; // [B18-C]
 import { TIER1_GRANTABLE_CAPABILITIES } from "../engineering/execution-grant"; // [B18-C]
@@ -170,6 +175,14 @@ export function verifyAgentContextIntegrity(context: AgentRunContext): string[] 
   if (externalAdvertised && !externalFact) issues.push("the external-observation authority is advertised without the server's external acquisition fact");
   if (externalFact && !externalAdvertised) issues.push("the server's external acquisition fact is present but the external-observation authority is not advertised");
   if ((externalAdvertised || externalFact) && context.canonicalState === null) issues.push("external acquisition is claimed without canonical state");
+  // [B20 A4] the external-mcp-observation authority and the server's MCP port fact agree in BOTH directions, and neither exists
+  // without canonical state; the fact is independent of the external acquisition fact above.
+  const mcpAdvertised = discovery.availableAuthority.includes("external-mcp-observation");
+  const mcpFact = context.mcpObservationAvailable === true;
+  if (context.mcpObservationAvailable !== undefined && typeof context.mcpObservationAvailable !== "boolean") issues.push("the external tool fact is malformed");
+  if (mcpAdvertised && !mcpFact) issues.push("the external-mcp-observation authority is advertised without the server's external tool fact");
+  if (mcpFact && !mcpAdvertised) issues.push("the server's external tool fact is present but the external-mcp-observation authority is not advertised");
+  if ((mcpAdvertised || mcpFact) && context.canonicalState === null) issues.push("the external tool read is claimed without canonical state");
   // [B18-A] the autonomy setting is server-owned and project-scoped: a setting
   // for another project (or a malformed one) fails every invocation closed.
   if (!context.autonomy || context.autonomy.schema !== "sirkit.agent-autonomy-setting.v1" || context.autonomy.tenantId !== context.tenantId || context.autonomy.projectId !== context.projectId) {
@@ -470,6 +483,10 @@ export interface AgentGatewayOptions {
    *  (app/api/chat/external-acquisition-runtime.ts). Absent: both external read tools refuse authority_unavailable. */
   externalAcquisition?: ExternalAcquisitionReadPort;
   externalReadService?: ExternalReadInvocationService;
+  /** [B20 A4] the server's external tool port (approved MCP servers), wired by the chat route through its one approved runtime
+   *  boundary (app/api/chat/mcp-observation-runtime.ts). Absent: the external tool read refuses authority_unavailable. */
+  mcpObservation?: McpObservationPort;
+  mcpObservationService?: McpObservationReadService;
 }
 
 export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGatewayOptions): AgentToolInvocationGateway {
@@ -477,6 +494,7 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
   const proposalService = options?.proposalService ?? new ProposalInvocationService(registry, options?.now, options?.replacementPinFacts);
   const layoutService = options?.layoutProposalService ?? new LayoutProposalService(registry, { now: options?.now, routingExecutor: options?.routingExecutor });
   const externalReadService = options?.externalReadService ?? new ExternalReadInvocationService(registry, { ...(options?.externalAcquisition ? { port: options.externalAcquisition } : {}), integrity: verifyAgentContextIntegrity });
+  const mcpObservationService = options?.mcpObservationService ?? new McpObservationReadService(registry, { ...(options?.mcpObservation ? { port: options.mcpObservation } : {}), integrity: verifyAgentContextIntegrity }); // [B20 A4]
   return {
     async invoke(input): Promise<GatewayInvocationOutcome> {
       const descriptor = registry.get(input.toolId, input.version);
@@ -487,6 +505,11 @@ export function createAgentToolGateway(registry: ToolRegistry, options?: AgentGa
       const integrity = verifyAgentContextIntegrity(input.context);
       if (integrity.length > 0) {
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: "context_integrity", diagnostics: integrity.slice(0, 5) };
+      }
+      // [B20 A4] the external tool read (approved MCP servers) travels its own service, BEFORE the E6 external reads: its port,
+      // its per-run operation budget, its disclosure decision and its closed projection live there.
+      if (resolveMcpObservationBinding(descriptor).state === "resolved") {
+        return mcpObservationService.invoke({ toolId: input.toolId, version: input.version, args: input.args, context: input.context, runId: input.runId, timeoutMs: input.timeoutMs, ...(input.signal ? { signal: input.signal } : {}) });
       }
       // [B19-E E6] a bound external read travels its own service BEFORE the B05 read service: it has no canonical-state read
       // binding, and its port, its per-run live budget and its closed projection live there.

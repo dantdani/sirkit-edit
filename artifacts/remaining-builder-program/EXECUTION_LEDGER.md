@@ -1882,3 +1882,722 @@ _(discovery, reproduction and results appended below as they are observed)_
   B19-D, B19-E and validation updated. Not run: the optional live contract check (no vendor credentials here; a run spends the
   operator's quota) — BLOCKED-LIVE-QUALIFICATION; no browser run this chapter (memory) — CI's browser job covers the committed specs.
 - Next: PR #9 description rewritten for the whole chapter, un-drafted, merged normally after green CI on the closeout commit; then B20.
+
+### B20 — chapter start and discovery (2026-09-17 local, workflow + lead; this commit)
+
+- B19 merged normally into `main` as `102dd27` (PR #9) with both workflows green on `3296753`. B20 opens from that base on
+  `chapter/b20-mcp-adapter`; the draft PR is opened with this commit so every increment gets CI.
+- References re-read live before any code was read (runbook: never a remembered or deprecated draft): the current MCP
+  revision is 2026-07-28 (stateless; `server/discover`; MRTR; no sessions; `Mcp-Method`/`Mcp-Name`/`MCP-Protocol-Version`
+  headers; `ttlMs`/`cacheScope`; error codes -32020/-32021/-32022); the TypeScript SDK 1.30.0 (latest, no prerelease) speaks
+  2025-11-25 only; Anthropic's connector (`mcp-client-2025-11-20`) and OpenAI's `type: "mcp"` tool are handshake-era, remote
+  HTTP only, tools only. Recorded in `artifacts/ai-control-plane-b20/mcp-reference-notes.md`; OD-41 (dual era, current
+  revision as the authority path) and OD-42 (no SDK dependency) recorded in `OWNER_DECISIONS.md`.
+- Discovery by six parallel read-only readers (workflow `wf_dacb9f05-091`, 7 agents, no process started): 211 facts and 69
+  gaps with file:line, synthesized into `discovery.md` and spot-checked by the lead (nine load-bearing claims re-read, all
+  as cited). 36 candidate defects D20-1 … D20-36 — among them: exposure is one boolean with no per-protocol dimension; a
+  registry-generated list would advertise the six granted Tier 1 mutations; no bearer principal, no audience validation,
+  and a missing `Origin` is refused on every authenticated POST; no server-side canonical-state source for a browser-less
+  read; view-session commands and inert proposals exist only as chat-stream events; the egress path discards response
+  headers and cannot consume an SSE stream; no OAuth 2.1 client, no token store, host-level allowlist, per-source-only quota;
+  no MCP feature flag; the CI admission guard covers `b19-` only.
+- Owner decisions the chapter needs (OD-41 … OD-59) listed with a safe default each; increments A0 … A5, B1 … B4, C1 … C3,
+  D1 … D3 planned test-first with their suites, CI lists, ratchet moves and artifacts (`discovery.md` section 7, adjusted in
+  section 9: the protected-resource metadata document and a Sirkit-issued short-lived MCP token are part of B20-B2; B5
+  view-session delivery and B6 stdio deferred by default).
+
+### B20-A0 - the MCP server registry, generalised admission, the feature flag and the CI admission rule (2026-09-17 local; workflow + lead; this commit)
+
+- Implemented test-first by a single-writer workflow (`wf_ec6622a8-858`; the three new suites and the two new CI-guard cases
+  failed on the unchanged tree first): `app/lib/mcp/server-registry.ts` (registry 1.0.0, EMPTY by OD-48, deep-frozen with no
+  add/remove API; RFC 8707 canonical URIs with origin (host and port) and exact-path endpoints; supported protocol versions
+  with 2025-11-25 only under `compatibilityEra`; secret references by environment-variable NAME with closed roles; descriptor
+  pin; bounded limits with a minute-window floor of 4 so the agent's 25% share never rounds to 0; per-tool windows;
+  `maxRedirects` pinned 0; agentDisclosure unknown; state with an owner-decision id; a validator with 18 closed rule codes
+  that never echoes a malformed id; `admittedMcpServer(id, env = process.env)` that consults the flag and the operator
+  disabled list on every call; a 28-column CSV renderer), `app/lib/mcp/rollout.ts` (`SIRKIT_MCP_ENABLED` enables only on the
+  exact untrimmed string "1"; `SIRKIT_MCP_DISABLED_SERVERS` removes only), the generic admission key in
+  `admission-control.ts` (server + optional tool; both windows required; breaker per server; agent share on both; existing
+  distributor behaviour and signatures unchanged), the CI job-scope guard generalised to `b19-`/`b20-` with the
+  `app/lib/mcp` directory filter in the prompt-to-gerber job, `scripts/generate-b20-mcp-server-registry.ts` with the
+  byte-gated `mcp-server-registry.csv`, `mcp-server-registry.md`, `mcp-client-boundary.md` (registry and admission section),
+  `.env.example` entries, README row, OD-46/48/53/54/59.
+- Adversarial review (four lenses, one skeptic each): 20 findings, 18 confirmed, all fixed test-first by the fix workflow
+  (15 failing cases first; the deep-freeze strengthening proven by a deliberate shallow-freeze mutation caught, source restored
+  by hash) and confirmed by an independent checker: admission no longer fails open when the environment is omitted; the
+  endpoint keeps the port (a ported URI and its port-443 twin are different endpoints); the secret-shape scan uses the
+  token-anchored classifier (`containsTokenAnchoredSecretShapedText`, one new export in `redaction.ts`) so `desk-lamp-tools`
+  is an identity, not a key; cross-row uniqueness of canonical URIs and credential references; a malformed id is labelled
+  `(malformed id, row n)` in every message; the flag comparison untrimmed; artifact counts and citations corrected and one
+  test pins the page's column count to the renderer's constant.
+- Lead follow-ups on the checker's two residual low items (one case failed first): `shared-secret-reference` applies to
+  credential roles only (a `client-id` is a public identifier one OAuth client may present to several resource servers;
+  client secrets and access tokens stay one-server-only); discovery.md records D20-20 as closed on its registry half only,
+  with the wire half (origin-and-path admission instead of hostname-only) in A1 and the pin comparison in A2.
+- Gates (lead re-run on the combined tree, bounded batches, one at a time): mcp, acquisition, distributor quota/registry/
+  egress 18 files / 384 (+2 env-gated skips); agent, redaction consumers, AST import gates, B16.1C tripwires (ratchet unchanged
+  162 = 159 + 3 + 0: A0 adds no route), B17-F exposure, no-purchase 40 / 471; tsc 0; eslint clean on the 10 changed .ts files;
+  the B20 registry, B19 source registry, action-toolability and B16.0.1/0.2 generators re-run with zero drift; no CRLF or
+  control characters. Closes D20-20 (registry half), D20-21 (per-tool dimension; meters per process, OD-53), D20-24
+  (registry pins `maxRedirects` 0; the wire test follows in A1), D20-26, D20-27.
+
+### B20-A1 - the Streamable HTTP transport of the MCP client (2026-09-17 to 2026-09-20 local; workflow, three review-fix rounds, lead; this commit)
+
+- Implemented test-first by a single-writer workflow (`wf_a330a7b8-60d`; 14 of 17 header cases failed and the two new modules
+  did not exist on the unchanged tree): additive options on `app/lib/net/outbound-fetch.ts` (a bounded, allowlisted response
+  header subset of at most 16 values of at most 2,048 bytes with `headersDropped`; `errorBody` for a bounded 4xx/5xx JSON body
+  under the closed code `http_error`; `streamBody` handing a 2xx `text/event-stream` body back unread - without it no SSE
+  reader can exist, since the bounded reader succeeds only at `done`), `app/lib/net/sse-reader.ts` (`readSseJsonRpc`:
+  incremental frames, keep-alive comments ignored, stops and cancels at the awaited response, per-event, total and
+  event-count caps, deadline, abort, server-initiated requests refused) and `app/lib/mcp/http-transport.ts` (`mcpPost`:
+  URL only from the row's canonical URI and admitted by origin AND exact path - the wire half of D20-20; `maxRedirects` 0
+  with the Authorization header never re-sent - D20-24 on the wire; `Accept`, `MCP-Protocol-Version`, `Mcp-Method`,
+  `Mcp-Name` with the Base64 sentinel; transport-owned `_meta` and forged reserved keys refused; Bearer only from injected
+  providers, on every request, never in a URL, error or result; admission and the in-flight bound before anything is sent;
+  one closed outcome per status, body and header - 202, JSON, SSE, -32020/-32021/-32022, 401/403 challenges parsed and only
+  recorded, 404/405 as `legacy_or_unknown` for A2's era probe, 429/5xx with `Retry-After`). `schgen/endpoint-client.ts` gains
+  one row in its total failure map. No route: ratchet unchanged at 162 = 159 + 3 + 0. Closes D20-16, D20-17.
+- Review round 1 (four lenses, one skeptic each): 28 findings, 23 confirmed, fixed test-first (14 cases failed first): unread
+  stream hand-offs cancelled on every non-consuming path, the sent token redacted from every result and notification leaf,
+  notification text inert and bounded, capability lists as validated names, error bodies read as JSON only with a 401's
+  challenge surviving an oversized body, the streamed event cap at the row's ceiling, a 400 with a Bearer challenge as
+  `unauthorized`, egress refusals counted for the breaker, a non-finite `errorBody.maxBytes` clamped. A session restart cut
+  off the checker; on resume the skeptics re-judged all 28 findings against the fixed tree (27 no longer real) and one more
+  was confirmed and fixed (the attribution's `method` is the validated plain name or empty, never the caller's raw string);
+  the lead closed the checker's residual (the attribution's `protocolVersion` likewise; one case failed first). Because the
+  resume had skipped the formal check of the first pass, four independent read-only checkers then re-examined its 23 fixes:
+  24 of 24 fixed (three documentation-only), and ten further distinct issues found.
+- Review round 2 (`wf_d45a360c-4da`, R2-A to R2-K, 19 of 106 cases failed first; two checkers: 11 of 11 fixed and
+  revert-sensitive): object KEYS redacted and scrubbed with a deterministic collision rule; the media-type sentence names only
+  a plain bounded type; a token straddling the scrub's cut no longer survives as a prefix; a wire-level bodiless 202 typed
+  `text/event-stream` is probed under min(1 s, remaining deadline) and accepted; an error body dropped for size is
+  `response_too_large`, never `legacy_or_unknown`; the SSE reader's caps withstand NaN, Infinity and negatives under a 16 MiB
+  ceiling; the read deadline is clamped against a clock stepping backwards; a caller abort is the MCP-only breaker outcome
+  `inconclusive` (as the half-open trial it re-opens the breaker; the identical distributor gap at
+  `distributors/egress.ts:74` is recorded as a B19 follow-up, not changed); the scrub's work is bounded (256 strings and keys
+  per notification, 262,144 characters per call, `notificationsDropped`); the B19 URL-credential redaction pattern runs in
+  linear time (a 100,000-character text: 3,184 ms before, 1.4 ms after; 1,500 of 1,875 corpus texts identical, the rest strict
+  supersets; every redaction consumer passes unchanged); plus one found by the fixer: NFC folded a KELVIN SIGN into a real K
+  after the comparison.
+- Review round 3 (`wf_cc422016-251`, R3-1 to R3-5, 9 of 96 cases failed first, 34 mutations each caught, checker 5 of 5):
+  the round-2 regression that a token followed by one combining mark survived the single NFC comparison - redaction is now
+  three passes, fail closed (raw window, NFC form, then a skeleton of NFKD without combining marks and format characters; a
+  disguised text is replaced whole; results get passes one and three only and are not normalised - a stated limit for A4);
+  the dropped-notification stub never names a method that carries the token; a rewritten key can never mint a structural
+  JSON-RPC name or `__proto__`; the 202 probe's four branches pinned; `mcpPost` never rejects (locked bodies, a throwing body
+  getter, a hostile signal) with the in-flight count and the breaker record consistent.
+- Lead follow-ups on the last checker's two low items (2 cases failed first; the digit-token fix also proven by mutation and
+  restored by hash): a clock that throws after admission no longer skips the breaker record or replaces the call's outcome;
+  a bearer token of digits only is refused before anything is sent, because a number in an answer is never redacted.
+- Gates (lead re-run on the final combined tree, bounded batches, one at a time): net, http, mcp 9 files / 323; acquisition,
+  distributor egress and quota, schgen, cross-verify 17 / 242 (+2 env-gated skips); agent and the other redaction consumers
+  36 / 420; AST import gates, B16.1C tripwires, B17-F exposure, no-purchase 4 / 51; tsc 0; eslint clean on the 10 changed
+  .ts files; the B20 and B19 registry generators with zero drift; no CRLF, control characters, console calls or mutation
+  markers. The four A1 suites hold 122 cases (20 + 28 + 70 + 4), pinned against the page by a test.
+- Recorded, not fixed: the DNS rebinding window of the egress path (D20-23, for D1); `x-mcp-header` mirroring, negotiation
+  and the era probe (A2); PRM and token flows (A3); trace attribution and result normalisation (A4); the redaction pattern
+  is still quadratic on many `scheme://` runs without `@` (bounded to about 210 ms per call by the scrub budget) and
+  `sanitizeModelBoundText` is slow on 100,000 spaces (B19 owner follow-ups); the SSE reader's own count of notifications
+  beyond its cap of 64 is not surfaced.
+
+### B20-A2 - negotiation, tool discovery and foreign-descriptor gates of the MCP client (2026-09-20 local; workflow, review workflow, lead; this commit)
+
+- Implemented test-first against the current revision (2026-07-28). The first attempt (`wf_2c08f734-596`) stopped on a usage
+  limit after writing the fake MCP server harness and the 20-case negotiation suite against a module that did not exist yet;
+  both were kept, and the relaunch (`wf_b7c30da6-dd6`) wrote the rest before a restart cut it off ahead of its review, so the
+  review ran as its own workflow (`wf_14729c0f-bc0`) over the finished tree. Four modules: `app/lib/mcp/negotiation.ts`
+  (`discoverMcpServer`: one `server/discover` through `mcpPost`, the newest revision both the row and the server list, exactly
+  one retry on -32022, `legacy_server` for the handshake era with nothing else sent, a strict DiscoverResult, `instructions`
+  and serverInfo display-only and labelled untrusted), `foreign-tools.ts` (`acceptForeignTools`: namespaced reversible ids
+  that can never take or shadow a `sirkit.` id, name / directive / annotation / schema gates with one closed reason each,
+  `x-mcp-header` as the one extension keyword, every accepted descriptor a new frozen object), `tool-discovery.ts`
+  (`listMcpTools`: bounded paging and cursor rules, the listing digest compared against the row's `descriptorPin` - the pin
+  half of D20-20 - and a 64-entry per-process cache honouring `ttlMs` / `cacheScope`), `tool-call.ts` (`callMcpTool`:
+  arguments validated against the accepted schema, the Value Encoding table for `Mcp-Param-{Name}`, `input_required`
+  refused, a `header_mismatch` invalidating the listing); five additive changes to `http-transport.ts` (the `paramHeaders`
+  option and the exports A2 needs); no new dependency. Closes D20-18, the foreign halves of D20-15 and D20-13, and the
+  D20-20 pin comparison. OD-52 (foreign naming) and OD-58 (foreign schemas within the proven wire subset, in-house) recorded.
+- Adversarial review (four lenses, one skeptic each): 35 findings, 33 confirmed (20 distinct), fixed test-first (18 cases
+  failed first; test-strength findings proven against named mutations) and checked by two independent checkers: 33 of 33
+  fixed, 30 revert-sensitive and 3 documentation-only by construction (a null `x-mcp-header` value is refused by the schema
+  validator before the header code runs, so the unreachable branch was removed and the limit stated). The worst: schema
+  descriptions, titles, enum values and property NAMES were copied into the accepted descriptor with no directive scan, no
+  scrub and no token comparison (a directive or the sent token hidden inside `inputSchema` reached the object A4 renders to
+  the model); the sent token, case-flipped, was accepted as a tool NAME and echoed in the internal id and the provider name;
+  a principal scope key of "public" made a private listing's cache key equal the shared one, so a private listing crossed
+  principals; the cache key omitted the reserved provider names, so a cache hit skipped the collision gate; the directive
+  pattern backtracked cubically on server text; a nested `x-mcp-header` parameter was read from the top-level argument of
+  the same leaf name; accepted foreign schemas used constructs the call-time validator rejects; a backwards clock let a
+  cached listing outlive its ttl; the page's line references were unpinned.
+- Gates (lead re-run on the combined tree, one heavy job at a time under the global lock): mcp, net, http 13 files / 422;
+  acquisition, distributor egress and quota, schgen, cross-verify 17 / 242 (+2 env-gated skips); agent, B04 registry, B17-F
+  exposure, no-purchase, build-loop injection 38 / 463; AST import gates and B16.1C tripwires 2 / 29 (ratchet unchanged,
+  162 = 159 + 3 + 0: A2 adds no route); tsc 0; eslint clean on the 10 changed .ts files; the B20 registry, B04 tool-registry
+  and B09 agent generators with zero drift; no CRLF, control characters, console calls or mutation markers. The four A2
+  suites hold 99 cases (32 + 26 + 15 + 26).
+- Open, and taken in the next commit (review round 2): the checkers found 8 further issues - a whole upper-cased token that
+  straddles the display bound surviving as a prefix; enum and const values scanned without treating `_` and `-` as
+  separators, so an underscore-joined directive and a camelCase property name pass; unbudgeted scrub work over schema text;
+  the probe rule classifying the RETRY as `legacy_server`; and four statements on the page that the tests do not back.
+
+### B20-A2 review round 2 - the eight residual issues of the independent check (2026-09-21 local; fix workflow + lead; this commit)
+
+- Fixed test-first by a single-writer fixer (`wf_f5324e1b-350`; 10 of 111 cases failed on the unchanged source; the
+  test-strength items proven against their named mutations, every source restored by sha256) and checked by two
+  independent checkers: 8 of 8 fixed and revert-sensitive.
+  - A whole upper-cased token straddling the display bound survived as a prefix: `scrubDisplayText` in `http-transport.ts`
+    compares case-folded over the same extended window the scrub reads, before any cut, and removes a case-folded prefix
+    at the end of a cut window (a prefix only the skeleton shows replaces the text whole). Used for titles, descriptions,
+    schema text, instructions, serverInfo and tool-call issues through one `displayText`.
+  - Enum and const values and property names read `_`, `-` and camelCase as letters, so the review's own payload was
+    accepted: `readsAsDirective` scans raw and again with those boundaries read as spaces; the tool NAME and an
+    `x-mcp-header` token are judged the same way.
+  - Scrub work over schema text had no per-listing budget: one budget per `acceptForeignTools` call (16 384 strings,
+    262 144 characters - the transport's per-call scrub figure), charged before anything is scrubbed, including a tool's
+    own title and description; a tool over the remaining budget is excluded whole as `schema_text_budget`. 500 worst-case
+    tools: 65 891 ms before, 576 ms after.
+  - The legacy probe rule classified the RETRY: it now applies to the first attempt only.
+  - Four page statements the tests did not back are now pinned or restated (the non-object `paramHeaders` refusal, both
+    sides of the size / property / depth bounds with literal counts, the output-schema drop-versus-exclude branches, and
+    the pin digest now ordered by NAME as documented - recomputed independently by a test).
+- Gates (lead re-run, one heavy job at a time under the global lock): mcp, net, http, acquisition, distributor egress and
+  quota 28 files / 650 (+2 env-gated skips); agent, build-loop injection, B16.1C tripwires, AST import gates 37 / 440;
+  tsc 0; eslint clean. The four A2 suites hold 111 cases.
+- Open, and taken in review round 3: the checkers found 7 further issues - a directive written with other separators
+  (`/`, `+`, `:`, `,`, `|`, `~`, middle dot, em dash) in an enum or const value still passes (medium: it reaches the
+  declaration a model reads); the camelCase rule mis-splits an ALL-CAPS run and never splits a directive with no
+  separators; the skeleton-only prefix branch of `scrubDisplayText` is unpinned; enum and const values are uncharged,
+  and NFKD expands characters up to 18 times, so the scan cost is outside the budget; and three page statements that
+  over-state what holds (the retry pass-through, the list of structural refusals that drop an output schema, and
+  'bytes' where the code counts UTF-16 characters).
+
+### B20-B1 - the MCP exposure subset and the tool definitions rendered from the registry (2026-09-20/21 local; server-track workflow + lead; 77125bd, merged in 5121891)
+
+- The first increment of the SERVER track, run in parallel with the client track in a separate git worktree
+  (`chapter/b20-mcp-server`, one global heavy-job lock across both trees), then merged into this branch with a normal
+  merge (no file overlapped the client track). Implemented test-first (`wf_28e3e062-cf8`: both suites failed to import
+  and the CI job-scope guard failed 1 of 7 on the unchanged tree): `app/lib/engineering/mcp-exposure.ts` and
+  `mcp-exposure-review.ts` (a tool is MCP-exposed only when the structural rule over its own classification admits it AND
+  the reviewed decision lists it; 16 of the 32 agent-set tools; 25 excluded with one of 12 closed reasons; a removal is a
+  reviewed move to `MCP_WITHHELD_TOOL_IDS`), a deny-by-default discovery channel `mcp` in `tool-discovery.ts` (the four
+  existing channels pinned byte-identical against pre-B1 digests), `app/lib/mcp/server/tool-definitions.ts` (definitions
+  rendered from the registry: raw-id names, the providers' strict input schema, output schemas only within the wire
+  subset, annotations derived only from Sirkit's classification, `_meta` under `dev.sirkit/`; a listing digest bound to
+  the registry digest, never partial), the generator `scripts/generate-b20-mcp-tool-manifest.ts` with the byte-gated
+  `mcp-tool-manifest.csv` / `.json`, and `mcp-exposure.md`. Closes D20-1, D20-2, the exclusion half of D20-33 and the
+  order-and-identity half of D20-14. OD-49, OD-52 (first-party part), OD-55, OD-56 and OD-60 recorded.
+- Adversarial review (four lenses, one skeptic each): 15 findings, 9 confirmed, fixed test-first (13 cases failed first;
+  12 mutations each caught and restored by hash) and checked (9 of 9): a read or proposal that declares a state-writing
+  side effect was admitted (now `side_effects`); the structural rule alone admitted a new agent-set read at runtime, so
+  exposure now also requires the reviewed decision; the B04 import gate could not see B1's import; a registry whose second
+  read answered differently got a partial listing (now `exposure_drift`); four test-strength gaps. The lead corrected one
+  page sentence the checker found (which refusal code each runtime gate uses).
+- Gates (lead re-run in the worktree, under the lock): the B1 suites, mcp and the CI scope guard 8 files / 291;
+  engineering 96 / 1 078; agent, B16.1C tripwires and AST import gates 36 / 423 (ratchet unchanged at 162 = 159 + 3 + 0:
+  B1 adds no route); tsc 0; eslint clean on the 7 changed .ts files; the B04 and B09 generators and the new manifest
+  generator with zero drift. 42 cases in two suites.
+
+### B20-A2 review round 3 - one directive matcher for every judged string, a scan budget, UTF-8 size bounds (2026-09-21 local; fix workflow + lead; this commit)
+
+- The round-2 check found directives still readable through other separators, ALL-CAPS runs and no separator at all, so
+  round 3 replaced the per-separator patches with one matcher (`wf_5d177b3f-c40`; 9 of 123 cases failed on the unchanged
+  source; every named mutation caught, sources restored by sha256): one phrase list (`MCP_DIRECTIVE_PHRASES`) compiled
+  once into a whole-word pattern and a squashed pattern, read over word streams of the skeleton (every run of non-letters
+  one space, every case boundary a space, a capital run kept whole, an acronym reading), a partial homoglyph fold
+  (Cyrillic, Greek, four Latin letters), and the existing raw markers. The payload table (118 spellings x 8 places) is
+  excluded everywhere (547 of 944 rows were wrong before); a benign table of 83 identifiers, values and descriptions is
+  accepted. Every judged string is charged to a per-listing scan budget (2 097 152 characters) by its skeleton length
+  before it is scanned, and a skeleton over 4x the characters read (or 32 768) excludes the tool as `text_expansion`
+  (500 tools of the finding's worst text: 28 051 ms before, 33 ms after). The serialised schema bound now counts UTF-8
+  bytes in one pass without a copy. The skeleton-only prefix branch of `scrubDisplayText` is pinned. The retry and
+  output-schema page statements corrected.
+- Checked by two independent checkers: 6 of 6 fixed (two page-only, not pinned by a page test). They found 13 further
+  issues, among them TWO REGRESSIONS against the previous commit: a short phrase in inverted or mixed case (`yOU mUST`)
+  that the previous lowercased pass excluded is now accepted, because a case boundary always splits; and a format
+  character between the words of a short phrase is deleted by the matcher's skeleton (joining the words) while the kept
+  display text turns it into a space, so a clean directive is accepted and kept. Both are taken in round 4 together with
+  an uncharged failing read (scan work outside the budget), the skeleton-length charge being unpinned, the argument bound
+  of `tool-call.ts` still counting UTF-16 units, directives split across adjacent strings, new false positives from the
+  squashed stream crossing word boundaries (`new instruction set`, `complex filtration`), Latin small capitals, and five
+  page statements. Nothing is exposed meanwhile: the flag is off, the registry is empty and no agent path reads A2 yet.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 488 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean. The four A2 suites hold 123 cases.
+
+### B20-A2 review round 4 - the matcher regressions, bounded failing reads, word-aligned squashing, OD-81 (2026-09-21 local; fix workflow + lead; this commit)
+
+- Declared the last A2 round (`wf_61ec4859-3da`): a blocklist of directives can never be complete, so the round fixed every
+  regression and every bounded-work defect, closed the cheap and precise classes, made each page statement exact and
+  pinned, and recorded the filter as defense-in-depth (OD-81). 13 of 134 cases failed on the previous commit's tree;
+  23 named code mutations and 8 page / owner-decision mutations each caught; sources restored by sha256.
+  - Round 3's two regressions fixed: a case-free reading of the lowercased skeleton restores mixed and inverted case
+    (`yOU mUST`); the matcher's skeleton keeps format characters as word separators and the kept display text is judged
+    too, so a zero-width character between two words no longer hides a directive.
+  - A read that fails is charged what it cost before its outcome is judged, and the skeleton is built in steps that stop
+    within one code point of its bound: 500 tools of the worst uncharged text 839 ms -> 54 ms and 2 083 ms -> 119 ms.
+  - `tool-call.ts` counts its argument bound in UTF-8 bytes like the schema bound.
+  - Strings a model reads together are judged as one text (an enum's members, a property name before its description,
+    the tool's title then its description); squashed matching is word-aligned and covers every phrase, which catches
+    glued spellings (`IGNOREPRIORINSTRUCTIONS`) while accepting `new instruction set`, `complex filtration`,
+    `ignorePriority` and `ignoreAboveThreshold`; Latin small capitals and the enclosed negative letters are folded.
+    The benign table holds 92 entries, every one accepted; three false positives are stated on the page.
+  - OD-81 recorded: the filter fails closed on what it recognises, and cannot recognise every paraphrase or obfuscation;
+    the guarantee that foreign text cannot direct the agent comes from the operator-reviewed descriptor pin, untrusted-data
+    labelling and the absence of authority (A4).
+- Checked by an independent checker scoped to regressions, claimed classes, bounded work, leaks and page statements: 9 of 9
+  fixed and revert-sensitive. It found 4 further issues, taken in a short follow-up round: a format character INSIDE a word
+  of an exact phrase (`Ig<ZWSP>nore the above`) now passes, because the previous commit's reading that deleted format
+  characters was dropped (medium, a regression); word-aligned squashing drops two glued spellings the previous substring
+  squashing caught, beyond the one stated limit; a schema property's own title is not joined with its description, as the
+  page claims; and two statements of the scan-budget and `text_expansion` rows no longer match the code. Nothing is
+  exposed: the flag is off, the registry is empty and no agent path reads A2 yet.
+- One incident, recorded: the fixer's mutation harness called `bash` from Python, which Windows resolved to WSL's
+  `bash.exe` and booted the WSL VM; nothing ran in it, the fixer shut it down (`wsl --shutdown`), and WSL reports no
+  running distribution. Harnesses must name Git Bash explicitly.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 499 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean. The A2 suites hold 134 cases.
+
+### B20-B2 - the Sirkit MCP endpoint, its principal, the route policy and the census move (2026-09-20/21 local; server-track workflow + lead; 0e80b30, merged in 71250ad)
+
+- the Sirkit MCP endpoint, its principal, the route policy and the census move, on `chapter/b20-mcp-server` over `77125bd`, test-first (22 of 23 files failed first: missing modules and renderer exports, and the old generators rewriting the matrices on import). POST `/api/mcp` is served by the new canonical wrapper `mcpBearerJsonRoute`, whose order is by construction: the flag, the options, the exact `mcp-bearer` policy, the production blocker, the configuration, Origin when present, no query string, the RFC 6750 credential, the verifier plus the wrapper's own claim re-check, the per-principal limit, the LIVE membership revision, the role gate, media, the bounded body. The token is a Sirkit-issued HS256 JWS (header pinned by bytes, exactly eleven claims, one hour, nothing stored), minted by POST `/api/mcp/token` for a live cookie member. The dispatch serves `server/discover`, `tools/list` (B1's rendering filtered by the mapped role) and `tools/call` (a closed `not_served` refusal). The RFC 9728 metadata is served from `app/.well-known`, and every route inventory walks both roots through `route-tree.ts`. Census 162/159/3/0 → 165/162/3/0; eight artifacts regenerated (+3 rows each, +1 action record); the three route matrices are now byte-pinned. The live re-read changed one default: a missing `MCP-Protocol-Version` is 400 `-32020` (Server Validation), naming the supported versions; an unsupported value is 400 `-32022`. It also CONFIRMED that the metadata's `authorization_servers` is a MUST in MCP 2026-07-28; B2 leaves it out per OD-43 (recorded deviation, D20-3 partial / BLOCKED-LIVE). Gates, re-run one at a time: B2 10 files / 101; auth and API 48 / 545 (+9 skipped); registry, CI, MCP, B04/B05/B09/B10/B11 23 / 556; other policy readers 37 / 1193; route suites 3 / 39 (+1 skipped); tsc 0; eslint clean on 51 files (the `app/.well-known` route included); zero generator drift; eight mutations each caught. Recorded, not fixed: the served `.well-known` route and the 405s are for B20-D3; suite H awaits A2's discovery calls; the wrapper's pre-dispatch refusals are untraced; the limits are per process.
+- Adversarial review (four lenses, one skeptic each): 18 findings, 16 confirmed and fixed test-first, 16 of 16 checked. All 15 confirmed findings were fixed test-first. - The route walker no longer skips dot-directories below `app/api` and `app/.well-known`. This closes a gap in the census and inventories introduced with the shared walker. A virtual-tree case and a census of every route file Next would serve now pin it. - -32022 now carries `data.requested`, and JSON-RPC errors never send `"id": null`: the id is echoed when it can be read, including after an internal failure. - The weak tests were strengthened: the internal-error catch-alls, response-shaped bodies, the Accept, Content-Type and secret bounds, Origin checked before verification, per-member rate-limit keys, the byte-identical invalid-token answer, the wrapper's role, capability and policy branches, `local_dev` minting, the route-matcher tripwire, and J2's runtime import closure. - 19 deliberate source breakages were each caught by the intended test, and every restore was verified by sha256. - Cases went from 101 to 108. The census stays at 165/162/3/0, with zero artifact diff. tsc and eslint are clean.
+- Lead follow-ups on the checker's two low items (one case failed first): the runtime import closure of the J2 gate resolves specifiers case-insensitively, like the direct-import helper it replaced, so a case-variant import of a forbidden module is followed on Sirkit's case-insensitive filesystems; a stale walker comment corrected. Merged into this branch with a normal merge; no file overlapped the client track. Lead gates in the worktree: auth, API MCP and lib MCP 53 files / 808 (+9 env-gated skips); app/api 27 / 1 059; engineering, agent, CI scope and AST gates 132 / 1 501; tsc 0; eslint clean on 50 files; 14 generators with zero drift; census 165/162/3/0.
+
+### B20-A2 follow-up - format characters inside a word, glued spellings, a schema node read as one text, two page rows (2026-09-21 local; fix workflow + lead; this commit)
+
+- The four items the round-4 check left (`wf_43ac79ad-8a4`), each fixed test-first with named mutations caught and
+  sources restored by sha256:
+  - A format character INSIDE a word of a phrase (`Ig<ZWSP>nore the above`, `pri<SHY>or`) is read again: when the
+    matcher's skeleton holds a format character, the phrase readings run twice, once with the characters as separators
+    and once with them deleted (600 rows; 330 failed on the previous commit).
+  - Glued spellings the earlier substring squashing caught are read again without reviving the round-4 false positives:
+    a `~` word may run on from inside the word that holds its last two letters, and a verb glued to `always` may run on
+    into its object (`ALWAYSINVOKESIRKIT_PCB_EXPORT`, `iGNOREpREVIOUSLYgIVENiNSTRUCTIONS`); prose such as "always calls"
+    stays accepted (40 rows failed before).
+  - A schema node's own title and description are judged as one text (with the property's name first), charged to the
+    scan budget like every judged text (5 hostile rows and one charge row failed before).
+  - The scan-budget, `text_expansion` and `schema_text_budget` rows of `mcp-client-boundary.md` now say what the code
+    does, pinned by a page case. OD-81 lists the stated limits; the benign table still holds 92 entries, all accepted.
+- Checked by an independent checker: 4 of 4 fixed and revert-sensitive. It found 3 further issues, taken in a short
+  round next: the `~` run-on lets `these` match `the se...`, so benign prose such as "ignore the server certificate"
+  is refused (medium, a regression, not stated); the one node text meets the `email ... the` phrase, so a node titled
+  `Email` whose description starts "The ..." is refused, and the name-then-title half went beyond the decision (low, a
+  regression); and the glued always-verb wording on the page, in the code comment and in OD-81 does not match what the
+  acronym stream reads (low). Nothing is exposed: the flag is off, the registry is empty and no agent path reads A2 yet.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 514 passed;
+  agent 394; B16.1C tripwires and AST import gates 29; tsc 0; eslint clean on the three changed files. The A2 suites
+  hold 139 cases.
+
+### B20-A2 round 6 - the in-word run-on narrowed, the exfiltration phrase within one string, exact always-verb statements (2026-09-21 local; fix workflow + lead; this commit)
+
+- The three items the follow-up's check left (`wf_fa70993d-38e`), each fixed test-first with named mutations caught and
+  sources restored by sha256 (12 code mutations, 8 page mutations):
+  - A `~` word runs on across a split only after its FIRST letter, the rest contiguous (the shape inverted case gives a
+    word), and a `~` word of three letters or fewer only contiguous: the follow-up's split before the last two letters
+    read `these~` as `the se<anything>`, so "Ignore the server certificate" was refused (70 of 90 rows and 44 of the
+    sweep's 54 failed before). A sweep of every `~` word split after an English word or a filler finds no benign sentence
+    the new rule refuses; two spellings the follow-up read are stated limits.
+  - The exfiltration phrase (`send|post|upload|email|forward` + object) is read only WITHIN one judged string, never across
+    the line break of a joined text: its verbs are the common noun labels of fields, so `{email: {description: "The user's
+    email address."}}` - refused since review-4 - is accepted, while "Email the project secrets to ..." within one string
+    stays excluded (14 rows failed before).
+  - The glued always-verb is stated as the two case-split streams read it (page, code comment, OD-81).
+- Checked by an independent checker: 3 of 3 fixed and revert-sensitive. It found two page statements inexact; the lead
+  made both exact, each with a case appended at the end of its suite (no cited line moved; the three-letter rule's revert
+  fails it, restored by sha256): a `~` word of three letters or fewer split after its first letter is not read
+  (`nEVERlOGS`, a stated limit beside `doNotLOgout`), and after an ALL-CAPS `ALWAYS` the unread verb is the one whose run
+  of capitals ends before its last letter. The filter stays defense-in-depth (OD-81): nothing is exposed, the flag is off,
+  the registry is empty and no agent path reads A2 yet.
+- Gates (lead re-run, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 521 passed;
+  agent, B16.1C tripwires and AST import gates 423; tsc 0; eslint clean on the three changed files. The A2 suites hold
+  146 cases.
+
+### B20-B3 - MCP reads served from the durable server board (2026-09-21 local; server-track workflow + lead; 78c0339, merged in a097c3a)
+
+- Designed read-only first (designer, critic, reviser; `scratchpad/b20/task-B3.md`), answering where canonical state
+  lives for a principal without a browser: the durable pcb-sync board (the current generation of the lineage rooted at
+  `board:<projectId>`), the server-owned B13 component authority and the static presets; no table stores the editor's
+  `SchematicState`. `tools/call` on a listed read now answers from that board through the canonical B05 service on the
+  `mcp` channel with `durable-server-board` authority, behind `readOnlyDurableWorkflow` (its `commit` refuses
+  `DW_READ_ONLY_VIEW`, proven over the resolved production defaults). Each call binds its revision (`_meta
+  dev.sirkit/expectedRevision`, required except on the two revision reads), optionally the registry digest and an
+  idempotency key; the board (id, `pcb2-`, sha256 `pb1-`) and the membership are checked again after the read; refusals
+  are closed codes with fixed sentences; one `sirkit.mcp-read-trace.v1` record per call. `sirkit.schematic.inspect` and
+  `sirkit.project.history-inspect` are withheld (OD-69), so the subset is 14 (9 served reads, 5 listed proposals answering
+  `not_served` until B4). Six board reads declare `durable-server-board` (OD-68); the registry digest moved to
+  `eng1-4aacd63c7e0a6193` and the B09, B11, b16-0-2 and MCP manifest artifacts were regenerated. `/api/mcp` is classified
+  durable `read`; the census is unchanged at 165/162/3/0. Written test-first (9 mutations caught); OD-67..73.
+- Adversarial review (four lenses, one skeptic each): 13 findings confirmed and fixed test-first, each test-strength fix
+  proved by a named mutation with the source restored by sha256. The most serious: an aborted or timed-out read released
+  its admission slot while its durable query still ran, so the caps did not bound the load on the shared database pool
+  (now held until the query settles; C20, A14); the import gate and the dispatch header credited J2 with "no database
+  write", which since B3 is enforced at run time (G7, H15); the `pcb2-` output of `pcb.revision-inspect` read as the pin
+  (the instructions and sentences now name the `eng1-` pin's place; H17). U5 (the component id space) is CONFIRMED on the
+  prompt-to-Gerber acceptance run's synced board.
+- Lead follow-ups (test-first, mutation-proven): the review's slot hold had no ceiling, so a query that never settles
+  held its slot until the process restarted; the lead added `MCP_READ_STUCK_WORK_GRACE_MS` (60 s after the call answered,
+  a ninth read bound with its ceiling), releasing the slot and counting the abandonment once (C23 fails with the watchdog
+  removed). The endpoint page and the dispatch header now state exactly what the import gate proves (no approve, bind,
+  withdraw, rebind, purchase, qualify, release or process run); pcb-sync publication and board-lineage derivation are in
+  the closure, and every such write goes through `workflow.commit`, which the read-only view refuses. The page's line
+  references were re-derived and are pinned by F8 (a moved citation fails it).
+- Gates (lead re-run in the worktree, one heavy job at a time): auth, API MCP and lib MCP 59 files / 880 (+9 env-gated
+  skips); app/api 27 / 1 059; engineering, agent, CI scope, AST gates and the acceptance pipeline 135 / 1 534; tsc 0;
+  eslint clean on 34 files; 14 generators with zero drift (artifact hashes compared before and after). Merged into this
+  branch with a normal merge.
+- On the merged tree (lead, after recording OD-67..73, the closure clauses, the README row and the reference notes' re-read):
+  auth, API MCP, lib MCP, net and http 67 files / 1 107 (+9 env-gated skips); app/api 27 / 1 059; engineering, agent,
+  acquisition, AST gates and the acceptance pipeline 147 / 1 728 (+2 env-gated skips); tsc 0; 16 generators with zero
+  drift.
+
+### B20-A3 - first dispatch stopped at the live re-read of the authorization pages, before any code; the lead's decisions (2026-09-21 local; workflow, review-fix round + lead; this commit)
+
+- Dispatched on 4299067 to build the MCP client's authorization (RFC 9728 discovery, RFC 8414 / OIDC metadata from a pinned
+  issuer, the client-credentials grant with RFC 8707 `resource`, an in-process token cache, one refresh and one bounded
+  step-up). The task's section 0 re-read (fetched live 2026-09-21) found that the client-credentials extension
+  (`io.modelcontextprotocol/oauth-client-credentials`) lists "Declare support" first for a client: the extension goes in
+  every request's `_meta["io.modelcontextprotocol/clientCapabilities"].extensions`, and a server that requires it can reject
+  a client that does not declare it. No section 4 decision declared a capability - the task's stop condition - so A3
+  stopped before code and no source file changed.
+- The same re-read found three more departures of the task's defaults: the ext-auth draft sends a client secret in the
+  request content (OAuth 2.1 section 2.4.1: the body MUST, HTTP Basic MAY), the reverse of the task's Basic preference; an
+  MCP server MUST implement only ONE of the challenge `resource_metadata` and the well-known URIs, so the proactive default
+  (no token-less request) could not reach a conforming server that publishes its metadata only through the challenge; and
+  implementations SHOULD accept an uppercase scheme and host in the canonical URI, from which the exact `resource`
+  comparison departs.
+- Review of the stop report (four lenses): 4 coverage findings confirmed and fixed test-first. The dated re-read is
+  `mcp-reference-notes.md` section 9, appended (sections 1-8 byte-identical, pinned by sha256, so discovery.md's line
+  citations do not move); `app/lib/mcp/__tests__/b20-a3-live-reread.test.ts` (7 cases) pins the record and this entry; 4
+  mutations caught, the notes restored by sha256 each time.
+- The lead's decisions (`scratchpad/b20/task-A3-lead-decisions.md`, each with the owner's alternative, recorded in OD-62
+  and OD-64 when A3 lands): declare the extension on every request of a client-credentials row only (LD-1); keep HTTP Basic
+  when listed or when the method list is absent, the body method only when it alone is listed, and refuse a list naming
+  neither (LD-2); follow the specification's discovery order - one credential-free probe to read a same-origin 401
+  challenge, then the well-known URIs; a cross-origin challenge URL stays refused, the one recorded departure (LD-3); the
+  first token request asks for the challenge scope, else `scopes_supported`, each intersected with the row ceiling (LD-4);
+  keep the exact `resource` comparison, a recorded departure from the uppercase SHOULD (LD-5). D20-19 and D20-31 stay open
+  until A3 lands.
+- Gates (fix round and lead, one heavy job at a time): lib MCP, net and the CI job-scope guard pass with this entry; tsc 0;
+  eslint clean on the new suite; no generator input changed.
+
+### B20-A3 - the authorization client, delivered by the re-dispatch with the lead's decisions (2026-09-21 local; increment workflow + lead; this commit)
+
+- Re-dispatched on d7d2f61 with the lead's decisions LD-1..LD-6 (`scratchpad/b20/task-A3-lead-decisions.md`), after a session
+  restart interrupted the first re-dispatch (its partial files were moved to the scratchpad and the tree cleaned). Built
+  test-first: the eight new suites could not import and the A0 and live-reread suites failed their changed expectations
+  (10 files, 6 cases) before any code. `mcpPostAuthorized` authorizes only a client-credentials row under
+  `mcpAuthorizationTokenProvider` (every other row is `mcpPost`, with the LD-1 declaration for a client-credentials row):
+  one credential-free probe of the endpoint for a same-origin 401 challenge, then the well-known URIs (LD-3); RFC 9728
+  metadata with `resource` identical to the canonical URI (LD-5); RFC 8414 / OIDC metadata from the PINNED issuer; the
+  client-credentials grant with RFC 8707 `resource`, Basic unless only the body method is listed (LD-2); the first scope
+  from the challenge or `scopes_supported` within the ceiling (LD-4); an in-process cache; one refresh after a 401 and one
+  bounded step-up; a per-call collector redacting every token the call held. The registry moves to 1.1.0 with the
+  authorization-server pin (30 CSV columns). Live re-read of the two pages the decisions rest on (2026-09-21): unchanged.
+  16 named mutations each failed its case; sources restored by sha256.
+- Adversarial review (four lenses, one skeptic each): 28 findings raised, 22 confirmed and fixed test-first (13 of 144
+  cases failed on the review's tree). Among them: a pre-issued token over 8 192 characters could escape the case-folded
+  redaction (now never sent, `token_malformed`); a token endpoint with a trailing slash could equal an MCP endpoint, and a
+  client-id reference could name another row's credential (both refused by the registry now); a still-valid token evicted
+  mid-walk could surface in a later page's error (every post's `redactAlso` now carries the call's collector); the probe
+  judged the transport's normalised URL instead of what the server wrote (now the raw parameter). The independent check:
+  every confirmed fix done, all but two revert-sensitive (one page wording, one state-probe walk not pinned).
+- The check's one new issue, fixed by the lead test-first (the new prm-discovery case failed on the review's tree): the raw
+  parameter read every `resource_metadata` after `Bearer` to the end of the field, so a 401 carrying a second challenge
+  (`Bearer ..., DPoP algs="ES256", resource_metadata="..."`, which RFC 9728 section 5.1 allows) was refused as a repeated
+  parameter, and `parseBearerChallenge` could take a later challenge's `scope` as the Bearer challenge's. Both parsers now
+  read only the Bearer challenge's own parameters (`bearerChallengeParams`); the boundary page's 44 transport citations
+  after the change were re-pinned by a line map of the diff.
+- OD-61..OD-64 recorded (OD-62 and OD-64 carry LD-1..LD-5 with the owner's alternatives); D20-19 closed for the B20-A
+  credential shapes, reachable once A4's composition root injects the provider; the client side of D20-31 closed. Nothing
+  is exposed: the flag is off and the registry holds no server.
+- Gates (lead, one heavy job at a time): mcp (client and server), net, http and the B1 exposure suite 721 passed;
+  app/api/mcp 75; agent, B16.1C tripwires, AST import gates and the CI job-scope guard 430; tsc 0; eslint clean on the 20
+  changed and new files; the registry generator byte-identical. The A3 suites hold 146 cases.
+
+### B20-A4 - external MCP results as observations, the agent port and trace attribution (2026-09-21/22 local; increment workflow + lead; this commit)
+
+- Built test-first on b2b16e4 (13 of 16 files failed first; 10 cases failed and 61 passed before any source), with the lead's
+  corrections (`scratchpad/b20/task-A4-lead-corrections.md`) replacing the design's removed `readsAsDirective` by A2's one
+  directive matcher through a helper appended at the end of `foreign-tools.ts`, so no cited line moved there.
+  - `normalizeMcpToolResult` turns ONE `complete` tools/call outcome of an ACCEPTED tool from a PINNED, COMPLETE listing into
+    one deterministic, deep-frozen `sirkit.mcp-observation.v1` record: identity checked, one bounded evidence copy hashed,
+    at most 16 text blocks deduplicated and windowed, charged to one 262 144-character budget BEFORE normalisation,
+    NFC-normalised, compared case-folded with every credential the call held, read by A2's matcher, scrubbed and re-read as
+    shown; non-text blocks described, never embedded; `structuredContent` kept only when an accepted output schema exists
+    and the RAW value validates.
+  - ONE Tier 0 bound external read `sirkit.mcp.observation-read` (`servers`, `tools`, `call`) served by `agent-port.ts` and
+    injected by the chat route through the one runtime file `mcp-observation-runtime.ts`; at most 4 server operations per
+    run, charged before the port and never refunded; the argument screen for run identity and held credentials runs FIRST,
+    so nothing is negotiated, listed or sent for arguments that disclose either; disclosure is decided at the agent boundary
+    from the COMMITTED registry, never from the port.
+  - MCP facts enter the quarantine pipeline as `external_mcp_tool` and stay quarantined; the run trace gains an `external`
+    block and the outcome class `external_observation`, in neutral vocabulary, so none of the nine files the B11 token
+    tripwires scan names MCP (OD-80). Prompt 1.4.0 carries the MCP rule. 17 mutations, each caught by its named case.
+- Adversarial review (four lenses, one skeptic each): 23 findings raised, 18 confirmed and fixed test-first, and one further
+  real defect found and closed in the same round: on a pre-issued-token row the redaction collector never grows, so a token
+  the environment rotated to between the seed and the send could be echoed case-changed and SHOWN to the model; the port now
+  adds the tokens held when such a call ended to the subjects. The strings a model reads TOGETHER are now judged together
+  (a directive or a credential split across two blocks, two leaves, two keys or a key and its value withholds the whole).
+  The independent check: every confirmed fix verified, with the residuals recorded rather than claimed.
+- Recorded as limits, not closed: an accepted tool is not proven to be a read - MCP annotations grant nothing in either
+  direction, so a row whose pinned listing holds a writing tool makes it agent-callable as a Tier 0 read (OD-74 amendment).
+  The lead does not accept that as the default: the next commit adds the reviewed `agentTools` allowlist to the registry
+  row, fail closed. D20-11's distributor-egress half stays open and is named in its clause; the record attributes server and
+  tool by identity (registry version plus the pinned listing digest), never by version.
+- Gates (lead, one heavy job at a time): mcp, net, http and engineering 131 files / 1 836 passed; agent, acquisition, atomic
+  and the AST import gates 76 / 1 064 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean on the 43
+  changed and new files; 16 generators with zero drift (A4 had regenerated the B01, B04, B09, B10, B11 and B16-0-1/2
+  artifacts its one new descriptor moves). The A4 suites hold 68 cases.
+
+### B20-A4L - the registry row's per-tool agent allowlist, fail closed (2026-09-23 local; increment workflow + lead; this commit)
+
+- The lead did not accept A4's recorded limit (the OD-74 amendment: approving a ROW made every tool of its pinned listing
+  agent-callable as a Tier 0 read, because MCP annotations grant nothing in either direction). The runbook's B20-A says
+  Sirkit consumes "explicitly approved" sources, so approval must name the tools.
+- Delivered test-first: `agentTools` is required on every registry row and validated (at most 32, the count judged first,
+  the client's own tool-name pattern, unique, sorted); the port enforces it in both paths before anything is negotiated,
+  listed, admitted or sent, after the OD-75 argument screen; an empty list takes the row off the roster; a crafted
+  revision approves nothing. Registry 1.1.0 -> 1.2.0 with a 31st CSV column, regenerated and byte-pinned. On the previous
+  commit the two suites failed 12 of 147 - the review's own security-2 scenario answered `['lookup','create-order']`
+  where the operator had named the read alone - and pass after. Ten mutations, each caught by its named case.
+- Adversarial review: 19 findings, 15 checked; among them a row that approved nothing still drove a credentialed
+  negotiate and tools/list (now off the roster), the port's bound truncating instead of failing closed, and the refusal
+  sentence telling the model something false about the server. The lead then split the round's coverage into five cases
+  (14-18), because one bundled case hides every assertion after the first failure - the same short-circuit defect the
+  round had just corrected in the normalizer's page case - and asserted the premise that the withheld tool IS
+  A2-accepted, which had been prose only. The A4 suites hold 73 cases.
+- Gates (lead, one heavy job at a time): mcp, net, http and engineering 131 files / 1 849 passed; agent and acquisition
+  50 / 623 (+2 env-gated skips); app/api 90 / 1 614 (+5 skips); tsc 0; eslint clean (one unused declaration the split
+  left behind, removed); 16 generators with zero drift beyond the regenerated registry CSV.
+
+### B20-B4 - no proposal over MCP: the withholding move, the process gate, the stop evidence (2026-09-21 local; server-track workflows + lead; 5d97728, merged in 4f3dd30)
+
+- The first dispatch (design `scratchpad/b20/task-B4.md`: placement served behind a propose delegation, returned as a
+  bounded projection) STOPPED at its D-9 timing probe, as its decision rule required. On the synthetic probe board, at
+  `candidateCount` 8 and `timeoutMs` 15 000: 12 runs at 400 iterations / 250 footprints took 44.3-104.0 s; 1 run at 1
+  iteration took 55.7 s; 12 runs at 25 footprints stayed at or under 16.6 s; 2 runs at 50 footprints took 28.2 s and
+  43.3 s (the second cancelled); 1 run at 100 footprints took 262.3 s; at 2 000 iterations / 500 footprints no run finished
+  in 11 minutes. The engine checks its budget and cancellation only between candidate specs, so an iteration cap cannot
+  shorten the first spec. Its review round corrected the stop record (4 findings) and left the evidence suite.
+- The lead's decision (OD-87's default; `scratchpad/b20/task-B4-withhold.md`): B20 serves no proposal over MCP. The runbook's
+  B22-B names a bounded "pinned placement/routing experiment" runtime profile, the natural host for a reversal.
+- The second dispatch moved all five proposals to `MCP_WITHHELD_TOOL_IDS` (OD-82, OD-87): 9 served reads exposed, 7
+  withheld, the registry digest and every descriptor unchanged; a proposal on tools/call gets B2's identical -32602; a
+  listed-means-served ratchet keeps `not_served` as defence. New suites `b20-b4-withhold-proposals` (8),
+  `b20-b4-process-gate` (5) and `b20-b4-stop-evidence` (8; it pins unchanged base code, so it did not fail first - its
+  mutation runs show it is sensitive, and its citations are content-anchored). Reviewed pin moves in seven B1, B2 and B3
+  suites, each with its reason; only the MCP manifest and exposure page regenerated. Adversarial review: 9 findings
+  confirmed and fixed test-first, among them the process gate seeing only first-party module references (now built-ins
+  loaded by name, internal bindings, string-compiled code, `vm` and a reviewed package list) and the B3 pages crediting
+  J2 with "no process run" (J2 forbids only the kicad-cli runner; the other four spawners were absent by chance until this
+  gate, F4).
+- The check's three new issues, fixed by the lead test-first (9 new tripwire probes failed first; four mutations, each
+  reverting one fix, failed its probes; restored by sha256): names written with escapes skipped the text prefilter, `module`
+  (a loader through `createRequire`) was not a process module, and a computed destructuring key or `Function.call` /
+  `.apply` passed. The gate is a tripwire against a spawner reaching MCP by accident; review stays the guarantee against a
+  deliberate one (as OD-81 says of the directive filter).
+- Follow-ups: F1, the anonymous `/api/pcb/placement/preview` route blocks the event loop for about 125 s per request
+  (measured in process), raised with the owner as a separate task; the native agent path's 110 s clamp is a between-spec
+  budget; stale text in `action-registry.ts` (`mcp.server`) and `route-policy.ts` (`/api/mcp`) still names proposals and
+  moves with the B20 closeout (D20-30).
+- Gates (lead, in the worktree, one heavy job at a time): auth, API MCP, lib MCP and net 69 files / 1 114 (+9 env-gated
+  skips); app/api 27 / 1 059; engineering, agent, acquisition, AST gates, the acceptance pipeline and pcb candidates 148 /
+  1 733 (+2 skips); tsc 0; eslint clean on 15 files; 16 generators with zero drift; census 165/162/3/0.
+
+### B20-C1..C3 - three-way parity, tools/list pages, the first-party descriptor text gate (2026-09-22/23 local; server-track workflow + lead; b3aa13f, merged in 4f3dd30)
+
+- Designed read-only first (designer, critic, reviser; `scratchpad/b20/task-C.md`), built in the server worktree in three
+  checkpoints after B4, each to its own green gate.
+  - **C1.** `renderMcpProviderParity` proves that the name mapping, the description and the strict `inputSchema` are equal
+    across the OpenAI, Anthropic and MCP renderings of every MCP-exposed tool, and records `title`, `outputSchema`,
+    `annotations`, the tool `_meta` keys, the request `_meta` bindings and B3's four result `_meta` key sets as MCP-only,
+    byte-gated as `mcp-parity.{json,md}`. An output schema is declared only when it passes the reserved-key scan, the wire
+    subset, the structure check, an explicit object root and the output validator's evaluability; a declared tool's success
+    always carries a conforming `structuredContent`, else the read is refused `invalid_output` before the replay store and
+    the trace. The B09 parity artifact gains its first byte pin.
+  - **C2.** tools/list pages of 32 in the listing's own code-point order, a secretless, stateless recomputed cursor bound to
+    the served listing digest, the page size and the offset; a malformed cursor is refused on its shape before the listing
+    is computed, and any cursor the server would not mint is one identical 200 `-32602` that echoes nothing; `ttlMs` 60 000,
+    `cacheScope` private and the whole-listing identity on every page.
+  - **C3.** One lexical gate in `validateToolDescriptor` (`app/lib/engineering/descriptor-text.ts`) over the tool id, the
+    title, the description and every judged schema string - a closed character set, reviewed bounds, a secret shape, closed
+    markers and closed directive phrases, every count and length decided before any regular expression - re-applied by the
+    MCP renderer after the strict conversion over exactly what it emits; annotation-shaped descriptor keys are refused, so
+    an MCP annotation can only come from Sirkit's own classification. Negative tripwires prove a Tier 3 family id, a
+    `.release` id, an instruction in any judged text and a forged `readOnlyHint` never reach tools/list, and A2's foreign
+    matcher runs over the whole catalog as a test-time cross-check.
+- The live re-read of 2026-09-22 (pagination, tools, caching, the schema, both providers' strict-mode pages) confirmed all
+  five stop conditions and upgraded C1's central sentence from INFERRED to CONFIRMED: a tool that declares an output schema
+  MUST return conforming structured results.
+- Adversarial review: 20 findings, all fixed test-first except one the lead owns (stale citations in the reserved
+  `discovery.md`). The two that mattered: `structuredContent` conformance was judged AFTER Sirkit's own model-safe rewrite,
+  so the sanitizer could turn an already-validated result into a non-conforming one that was still sent; and the tool ID -
+  the one model-bound field the renderer emits verbatim - was never judged for injection, so D20-15's "names" leg was not
+  met. Both closed.
+- At the merge (this commit): A2's matcher read A4's own descriptor description as a directive on the words "a credential";
+  the description now says "a secret-shaped value", which is what the code checks. The subset-derived literals moved with
+  the merged registry (42 descriptors, 33 agent-exposed, 9 MCP-exposed, 24 agent-only), B4's base pins were rebased on the
+  registry without A4's descriptor, the measured descriptor maxima moved with A4's description, and every mappable
+  `discovery.md` citation was re-derived from the merge base by a line map (91 references), with the two
+  standing-obligation anchors verified by their quoted text.
+- Gates (lead, in the worktree and again on the merged tree): auth, API MCP, lib MCP and net 76 files / 1 182 (+9
+  env-gated skips); app/api 27 / 1 059; engineering, agent, acquisition, AST gates and the acceptance pipeline 147 / 1 728
+  (+2 skips); on the merged tree 142 / 1 932, 122 / 1 635 (+11 skips) and 91 / 1 618 (+5 skips); tsc 0; eslint clean;
+  17 generators with zero drift; census 165/162/3/0.
+
+### B20-A5 - the provider-native MCP connector policy, refused (2026-09-23 local; increment workflow + lead; this commit)
+
+- Designed read-only first (`scratchpad/b20/task-A5.md`), delivered as policy and tripwires: Sirkit renders NO
+  provider-native MCP connector, for any server, row, role, provider or flag state (OD-90). A connector makes the PROVIDER
+  list and call the MCP server, so its listing and results never pass A2's descriptor gates and pin, A4's normalisation,
+  withholding, disclosure projection, quarantine and budget, A0/A1 admission, quotas, breaker and egress checks, the OD-75
+  argument screen, the loop's sanitiser or the trace: the runbook's "behind the same policy" cannot be met, because those
+  controls live in Sirkit's own request path. An external MCP server reaches a model only through A4's
+  `sirkit.mcp.observation-read`.
+- OD-45 is recorded as delivered: no credential Sirkit holds or can obtain for an MCP server ever reaches a provider
+  request, in any field, header or URL. It is enforced structurally, not by intention: no production file carries the
+  connector wire vocabulary; exactly five modules import a provider SDK and none of them reaches `app/lib/mcp/**` or the
+  MCP bearer module through its runtime import closure; every provider client is constructed with `apiKey`, `maxRetries`
+  and `timeout` alone; and both agent adapters' request key sets and string provenance are pinned at run time.
+- OD-91: a provider response carrying output the adapters did not request stops the run closed
+  (`provider_unrequested_output`); a malformed one is `provider_unknown`. The two halves read apart, and the page says so:
+  a malformed LIST failed before A5 too, but a malformed ITEM used to be skipped and round-tripped into the continuation,
+  and now fails - a deliberate fail-closed change, not parity. Nothing of a refused response reaches the continuation, a
+  tool, the trace or the user, and Sirkit never answers a provider's approval request.
+- OD-92 records what any future connector would have to meet, so a reversal is a reviewed increment and not a
+  configuration change: its own flag, an approved row with no credential and a NON-EMPTY `agentTools` allowlist (A4L),
+  OpenAI only until Anthropic documents a per-call approval control, the server URL byte-equal to the row's canonical URI,
+  the allowed-tool list exactly the intersection of the row's allowlist with a pinned, untruncated listing taken in the
+  same run, approval on every call answered only by a human, no header, authorization, `tunnel_id` or `connector_id`
+  field, a deep-frozen byte-deterministic object whose digest is traced, withdrawal on any pin, listing, allowlist or flag
+  change, and live qualification first.
+- The live re-read of both provider pages (2026-09-23) did not fire the stop condition: Anthropic's newer beta header lets
+  the API consumer pin the tool list, but the provider still opens the connection and runs every call; OpenAI documents
+  `tunnel_id`, a second credential-bearing field, and no longer documents `headers`. Both stay handshake-era, so neither
+  can call Sirkit's own modern-only server.
+- Adversarial review: 13 findings confirmed and fixed test-first. Two mattered: the guard's 32-character type bound
+  misclassified two real Anthropic provider-run block types (38 and 44 characters) as shape faults - exactly the items the
+  decision exists to detect - so the bound is 64; and the page claimed the malformed-item change was parity with the
+  behaviour before A5, which it is not.
+- Lead follow-ups on the check's residuals: the one citation the increment could not fix (`discovery.md:105`,
+  `adapters.ts:42-43` -> `:58-59`); the suite docstring that still carried the false parity claim its own case disproves;
+  the page's "44 characters" (the longest type either SDK declares is 45, nested where the guard never sees it) and its
+  stale "two page checks"; and a tenth policy case pinning that the policy's own copy of A4L's `agentTools` rule agrees
+  with `mcpAgentToolAllowlist` over fourteen shapes a row can hold (dropping the count bound from either copy fails it).
+  The A5 suites hold 34 cases.
+- Gates (lead, one heavy job at a time): mcp and agent 77 files / 1 195 passed; engineering, acquisition, auth and app/api
+  245 / 3 412 (+16 env-gated skips); tsc 0; eslint clean on the 8 changed and new files; 17 generators with zero drift.
+
+### LB-4 - the database qualification run against a real server (2026-09-24 local; lead, owner-authorised)
+
+- The owner authorised the main Supabase project for live tests. Two EMPTY disposable databases (`sirkit_qual_clean`,
+  `sirkit_qual_upgrade`) were created on its PostgreSQL 17.6 server and provisioned with the platform prerequisites the
+  migration checker names (`vector`; `auth.uid()` copied verbatim from the main database), the gate's URLs held in a
+  session-only file that is never printed; the main `postgres` database was not written.
+- `b16-b-postgres-qualification` on the real server: every migration applied on the clean database and every runbook
+  criterion held against the server's catalog; replay applied nothing with a clean status; the 0000-0026 upgrade on the
+  second database reached the identical fingerprint `schema1-0f952875894c2a3a7485dc1883bacf1a9f1aae6276ec0d1cffaa6663c0628b55`. `b16-b-database-qualification` (the gate's
+  contract, 26 cases) passed.
+- The seven other DB-gated suites, run together with two workers and then again: four failed - `failed_precommit`
+  instead of `applied` (pcb-sync), `blocked_stale_snapshot` (electrical identity), `AQ_IDEMPOTENCY_KEY_REUSE_CONFLICT`
+  (assignment revalidation) and two 5 s timeouts that hid the same causes. Not dismissed as flakes: each passes when run
+  ALONE on a database reset to its post-migration state, so the cause is the suites' own fixture assumptions - fixed
+  `tenant-1` / `project-1` / `board-1` ids (no run-unique component; `tenant-scope` alone does it right) and one fixed
+  idempotency key - which collide across workers and re-runs, plus a default timeout too short for a remote round trip.
+  A separate fix is queued for the owner. `ingest-integrity` found `pcb_footprints` empty on the fresh database; after a
+  40-footprint bounded ingest it passed, so all nine DB-gated suites are qualified on the real server.
+- The ingest's embedding pass was refused: OpenAI answered `429 You have no credits remaining` for the organisation behind
+  BOTH configured keys, so footprint embeddings stay unqualified until credits exist. No other live call was made.
+
+### B20-D - the adversarial chapter: D1..D3, reviewed and fixed (2026-09-23/24 local; increment workflow + lead; this commit)
+
+- Delivered on the single chapter branch after A3, A4, A4L, A5, B1..B4 and C1..C3 had landed there: five vitest suites
+  (61 cases) and one Playwright spec (11), the in-process hostile-server harness (`_hostile-server.ts`), the page
+  `mcp-adversarial.md`, `mcp-server-endpoint.md` section 11 item 8 (the live re-read of 2026-09-23: none of D's five stop
+  conditions fired; Origin validation only when present is the MUST, 405 for legacy GET/DELETE is a SHOULD and OPTIONS is
+  not mentioned) and section 12 U1/U2 settled, and one configuration edit (`playwright.config.ts` `webServer.env`: the
+  MCP flag, the expected origin and an obviously fake token secret assembled from parts). No production code changed;
+  the lead's one edit is the `route.ts` header comment naming the measured OPTIONS answer (DEC-12, same line count).
+- D1 (`b20-d1-malicious-server`, 25; `b20-d1-rebinding-window`, 6): one hostile server through the whole client chain -
+  asserted on the agent-visible refusal code, its fixed sentence, the observation record, the attribution and the leak
+  sweep - for redirects, a peer naming a URL, PRM resource spellings, two credential rows, invented and echoed secrets,
+  schema bombs, 500-tool listings, name collisions, forged annotations, directives in every judged place, enormous
+  content, delayed streams, duplicate results, cancellation, MRTR and the composed authorization loop (one refresh, one
+  step-up, then failure). D20-23 closed AS RECORDED under OD-51: a resolver flip between two admissions is the closed
+  `egress_refused`/`address_blocked` observed on the transport (`not_sent` at the agent); every blocked class the same;
+  throwing, rejecting, empty, hanging and non-string resolvers each closed with nothing sent; the window inside one
+  admission->connect pair is recorded as open (a pinned `undici` dispatcher stays OD-42's follow-up).
+- D2 (`b20-d2-never-reachable-sweep`, 16; `b20-d2-name-spellings`, 7): every descriptor of the canonical registry (42)
+  under every mapped role (5) through `POST /api/mcp` - 210 requests, partitioned (OD-104) into 167 unknown-tool refusals
+  (one identical body, no `data`, every spy 0, one trace record each, never a 429) and 43 served reads with a served
+  floor; cross-project and cross-tenant scope measured on the reader's arguments; tampered tokens at both verifier
+  layers with the verdict pinned per shape; replay in isolation; a thousand hostile spellings sent in three shapes and
+  never echoed in a body, a header or the trace; thirteen name spellings, header/body disagreement, nested spellings and
+  wrong-shaped arguments each pinned to the refusal the gate that reads them writes.
+- D3 (`b20-d3-authority-import-gates`, 7; `e2e/mcp-endpoint.spec.ts`, 11): the asymmetric gate (OD-105) - the
+  approval-controller family on both halves, grants, reauthorization and fabrication on the derived client half only,
+  every family by prefix, B2 J2 case 2 bound by title, the fab-preset exemption server-only. The wire spec on Next 16.2.6
+  under the fixture server settled discovery UNKNOWN 3 (GET 405, DELETE 405, OPTIONS 204 - a 200 refused as the one
+  answer meaning the method is served), and proved 403 for a foreign and a null Origin, the RFC 9728 challenge on a 401,
+  the metadata route, 202 for a notification, 400 -32020 / -32022, a query string refused, a cookie refused as a bearer,
+  the hidden release tool's identical -32602, and no token, secret, stack frame or file path in any body or header.
+  D20-28 closed by D1 (loopback half) and D3 (wire half). The live-contract `describe.skipIf` is not written (OD-102);
+  what D may duplicate is OD-103, with the count coupling recorded: every A-suite case addition is a D page edit.
+- Adversarial review (2026-09-24, four lenses then skeptics): 46 findings, 40 confirmed across 24 distinct defects; the
+  three high ones were case 17 never exercising the refresh or the step-up, E11 sending 25 of its 1 000 spellings, and
+  N4/N5 never reading the refusal code. Each fixed test-first against a hash-verified production mutation (M1..M21:
+  the view delegating a write, the unmapped role folded into 401, `membership_changed` not refused, expiry removed, a
+  project-selector header honoured, the refusal echoing arguments, the audience not compared, the post-check inverted,
+  undeclared keys dropped, the normalizer's catch removed, structured keys kept outside an untrusted key, a peer secret
+  shape withheld, the registry lookup ignoring the id, an empty catalog, a listing `input_required` remapped, backoff
+  never set, an empty resolution admitted, the allowlist ignored, a new grant module imported by the client, B2 naming
+  an approval module - the strengthening no longer refused - and `GET` exported answering 200), every production file
+  restored to its pre-fix SHA-256. Fix-round figures: suites 31/31, 23/23, 7/7 + 11/11; wire runs `mcp-endpoint` alone
+  11/11 in 10 s, all five specs 48/48 in 818 s, the four pre-existing 37/37 in 805 s (green with the configuration edit
+  in place; OD-30's margin held); gates 52 files / 920 tests and 13 / 229; tsc and eslint clean; the twenty-five B17/B18
+  evidence PNGs the browser specs rewrite restored from HEAD's bytes and verified by blob hash.
+- Lead follow-ups on the checker's residuals: E2's per-row spy sum omitted `viewRead`/`viewWrite` (now `spySum` over all
+  seven counters, shared with `spyTotal`); the "32-byte" label on E8's other secret (it is 50 bytes; test and page);
+  N2's title said the throwing getter is the same 200 while its body asserts the closed 400 (title corrected); G-D4's
+  vacuous `Array.isArray` assertion around the "no other gate names the family" count removed - recorded on the page,
+  deliberately not asserted, so B2's `FORBIDDEN` may grow; the page's section 0 binding paragraph rewritten to what the
+  titles carry (the sweep's composing cases E2, E4, E5, E6, E7b and E10 name the bound B3/B4 title; N1..N5 name none and
+  N6 binds B4 case 5 for the suite; which case binds which title listed); the count coupling (regressions-6) accepted as
+  the page states it. D suites after the follow-ups: 61/61.
+- Lead gates (2026-09-24): `app/lib/mcp` + `app/api/mcp/__tests__` 918/920 in a 35-minute run under load (the two
+  failures were 120 s timeouts inside AST tripwires - `b20-a3-secret-hygiene` D14 and `b20-b4-process-gate` case 3 -
+  with `[vitest-worker]: Timeout calling "onTaskUpdate"`; re-run alone both suites pass 12/12 in 55 s; the cause is the
+  loaded machine, the cold-import-under-load pattern recorded at B16-0, and it is recorded here rather than dismissed);
+  tripwires 13 files / 229 cases; tsc clean; eslint clean on the D files and the configuration; Playwright
+  `mcp-endpoint` 11/11 in 14.3 s (GET 405, DELETE 405, OPTIONS 204 measured again); the mcp-only wire run rewrote no
+  evidence PNG; no generator affected (no descriptor, manifest, digest or generated artifact moves).
+- Records: OD-102..OD-105 (highest in use OD-105; OD-83..86 and OD-88 stay reserved); `discovery.md` D20-23, D20-28 and
+  section 8 UNKNOWN 3 closed on their rows, section 7 "as built", a section 10 block; README B20-D row; PROGRAM_STATE
+  moved to the closeout. Follow-ups outside D: the pinned egress dispatcher (OD-42), the live contract once a server is
+  approved (OD-48/OD-102), a wire proof of the flag-off 404, and the owner question case 6a records (whether a
+  peer-invented, non-secret-shaped value should be withheld).
+
+### B20 closeout - the four validation artifacts, D20-30, the verdict (2026-09-24 local; lead; this commit)
+
+- D20-30 (the previous commit): the standing "no MCP" statements superseded truthfully now that the server exists -
+  `action-registry.ts`'s `mcp.server` record and `route-policy.ts`'s `/api/mcp` evidence text no longer name proposals
+  over MCP (regenerated into the B01 and B16-0-1 CSV rows; no other generated artifact moved, 17 generators' outputs
+  otherwise byte-identical); dated supersessions beside the B05 and B19 "no MCP" sentences; the six "exactly ELEVEN"
+  titles say what their assertions have counted since B15.3; `b20-b4-withhold-proposals` case 8 and the B4 page now pin
+  that nothing outside the lead's files names a proposal over MCP uncorrected. The b11-5 fixture's literal ESC byte
+  became its JS escape so the commit-time no-control-character check holds for every file this chapter touched.
+- The four artifacts in `artifacts/ai-control-plane-b20/`: `changed-files.md` (every path since `102dd27`, grouped by
+  area, with the first commit that touched it), `test-and-validation-report.md` (67 suites / 994 cases as `it(` blocks on
+  the tree, and each increment's gate line as the ledger records it), `unknowns-and-owner-decisions.md` (OD-41..OD-105
+  with the reserved and gap numbers named, D20-1..36 with their closing increment, the unknowns and blocked items) and
+  `final-verdict.md` (PARTIAL: B20-A, B20-C and B20-D delivered; B20-B delivered read-only with inert proposals over MCP
+  DEFERRED by OD-50/OD-82/OD-87; connectors refused; every live behaviour still BLOCKED-LIVE-QUALIFICATION named). The
+  first three are generated by the lead's read-only script from the git history, the decisions file, the discovery and
+  the ledger; the verdict is written by the lead.
+- README: the validation row; PROGRAM_STATE: chapter B20 complete on the branch, B21 next once PR #10 merges.
+- Gates for this commit: the artifacts are documents; no suite, generator or production file changed here. The last
+  green tree-wide runs stand as recorded under B20-D and D20-30 (mcp 918/920 under load with the two AST timeouts re-run
+  alone 12/12; tripwires 229/229; the 17 suites reading the superseded texts 258/258; tsc 0; eslint clean; Playwright
+  `mcp-endpoint` 11/11). CI on PR #10 is the merge gate.
+- Report lines: `MCP-EXPOSED TOOLS: 9 (reads only; every proposal withheld, OD-82 / OD-87)`; `MCP STATUS: client behind
+  SIRKIT_MCP_ENABLED (off) with an empty registry; server read-only over POST /api/mcp; connectors refused; proposals
+  deferred`.

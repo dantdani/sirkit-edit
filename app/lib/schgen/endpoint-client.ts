@@ -80,6 +80,9 @@ const FAILURE_BY_CODE: Readonly<Record<OutboundFailureCode, SchGenFailure>> = Ob
   too_many_redirects: "redirect_refused",
   response_too_large: "unusable_answer",
   unexpected_content_type: "unusable_answer",
+  // [B20 A1] the egress path's `http_error` exists only under its `errorBody` option, which this policy never sets; the
+  // map stays total over the closed union, and a status answer keeps being judged below exactly as before.
+  http_error: "http_error",
 });
 
 export type SchGenOutcome =

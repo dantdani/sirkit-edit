@@ -6,8 +6,9 @@
  * exists only if its source file says so. Never import this from client code.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { listRouteFiles, routePathOf } from "../auth/route-tree";
 
 export const HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
@@ -18,14 +19,6 @@ export interface ScannedApiRoute {
   /** URL path, e.g. "/api/chat" (dynamic segments kept as "[id]"). */
   path: string;
   methods: HttpMethod[];
-}
-
-function walk(dir: string, out: string[]): void {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) walk(full, out);
-    else if (entry.isFile() && entry.name === "route.ts") out.push(full);
-  }
 }
 
 /** Extract the HTTP methods a Next.js route module actually exports. */
@@ -42,15 +35,13 @@ export function extractRouteMethods(source: string): HttpMethod[] {
   return [...found].sort();
 }
 
-/** Enumerate every API route file and its exported methods from the filesystem. */
+/** Enumerate every route file (app/api and app/.well-known, through the one route-tree helper: [B20 B2] OD-66) and its
+ *  exported methods from the filesystem. */
 export function scanApiRoutes(cwd: string): ScannedApiRoute[] {
-  const files: string[] = [];
-  walk(join(cwd, "app", "api"), files);
-  return files
+  return listRouteFiles(cwd)
     .map((file) => {
       const rel = relative(cwd, file).split(sep).join("/");
-      const path = "/" + rel.replace(/^app\//, "").replace(/\/route\.ts$/, "");
-      return { file: rel, path, methods: extractRouteMethods(readFileSync(file, "utf8")) };
+      return { file: rel, path: routePathOf(cwd, file), methods: extractRouteMethods(readFileSync(file, "utf8")) };
     })
     .sort((a, b) => a.path.localeCompare(b.path));
 }

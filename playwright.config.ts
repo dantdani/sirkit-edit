@@ -56,6 +56,14 @@ export default defineConfig({
       SIRKIT_PCB_SYNC_STAGE3: "opt_in",
       // [B18-C I10] the chat route answers with the SCRIPTED agent (never a model): honoured only under the fixture runtime.
       SIRKIT_FIXTURE_AGENT: "scripted",
+      // [B20 D3] the MCP endpoint, for the wire-level proof (e2e/mcp-endpoint.spec.ts). The flag must be exactly "1".
+      // SIRKIT_EXPECTED_ORIGIN moves CSRF resolution from request-url-local-dev to `configured`; the value is exactly the
+      // origin `baseURL` produces, so every existing spec's Origin still matches (the four pre-existing specs staying
+      // green in the same run is the proof, not the argument). The secret is assembled from parts at run time, exceeds
+      // the minimum byte length, and is an obvious fake that no real deployment would use.
+      SIRKIT_MCP_ENABLED: "1",
+      SIRKIT_EXPECTED_ORIGIN: `http://localhost:${PORT}`,
+      SIRKIT_MCP_TOKEN_SECRET: ["e2e", "mcp", "token", "secret", "0123456789abcdef0123456789abcdef"].join("-"),
       // Never let a developer's .env.local database leak into the proof.
       DATABASE_URL: "",
     },

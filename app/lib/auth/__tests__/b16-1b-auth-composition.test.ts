@@ -19,6 +19,7 @@ import { InMemoryProjectMembershipRepository } from "../project-membership";
 import { resolveAuthMode, localDevAllowed, sensitiveOperationsBlocker } from "../mode";
 import { allRoutePolicies, policyFor } from "../route-policy";
 import { classifyRouteMethodForm, exportedHttpMethods } from "./_boundary-analysis";
+import { listRouteFiles } from "../route-tree";
 import { sirkitToolRegistry } from "../../engineering/tool-catalog";
 import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS } from "@/app/lib/engineering/agent-exposure"; // [B17-F] the ONE reviewed exposure set — never a hard-coded count
 
@@ -238,17 +239,10 @@ describe("B16.1B §G — no unrestricted signup surface", () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe("B16.1B §G — exact invariants", () => {
-  function routeFiles(dir: string, out: string[] = []): string[] {
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) { if (entry !== "__tests__") routeFiles(full, out); }
-      else if (entry === "route.ts") out.push(full);
-    }
-    return out;
-  }
-  it("exactly 162 route methods: 159 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status); exactly the intentional agent-exposed tools", () => {
+  it("exactly 165 route methods: 162 canonical wrappers, 3 approved factories, 0 raw handlers (B18-A: + GET/POST /api/agent/autonomy; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status; B20-B2: + POST /api/mcp, POST /api/mcp/token, GET /.well-known/oauth-protected-resource/api/mcp); exactly the intentional agent-exposed tools", () => {
     let total = 0, canonical = 0, factories = 0, raw = 0;
-    for (const file of routeFiles(join(ROOT, "app", "api"))) {
+    // [B20 B2] the census walks app/api AND app/.well-known through the one route-tree helper (OD-66)
+    for (const file of listRouteFiles(ROOT)) {
       const src = readFileSync(file, "utf8");
       for (const method of exportedHttpMethods(src, file)) {
         total += 1;
@@ -258,7 +252,7 @@ describe("B16.1B §G — exact invariants", () => {
         else raw += 1;
       }
     }
-    expect({ total, canonical, factories, raw }).toEqual({ total: 162, canonical: 159, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0)
+    expect({ total, canonical, factories, raw }).toEqual({ total: 165, canonical: 162, factories: 3, raw: 0 }); // B18-A: + GET/POST /api/agent/autonomy; B18-B: + GET/POST /api/agent/execution-grant, POST /api/agent/execution-grant/settle; B19-E E2: + POST /api/parts/external-search; B19-E E4: + GET/POST /api/components/atomic/publication; B19-E E5: + POST /api/components/revision-status (reviewed ratchet move: one new canonical wrapper, a member's catalog status read; 0 raw stays 0); B20-B2: + POST /api/mcp (mcpBearerJsonRoute), POST /api/mcp/token (authenticatedJsonRoute), GET /.well-known/oauth-protected-resource/api/mcp (publicRoute): three new canonical wrappers, 0 raw stays 0
     const exposed = sirkitToolRegistry().list().filter((d) => d.agentExposed);
     expect(exposed).toHaveLength(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);
     expect(new Set(exposed.map((d) => d.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length);

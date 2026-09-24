@@ -215,7 +215,7 @@ describe("B11.5 §B — diagnostics never carry untrusted values or key content 
     }
     expect(redactPathSegment("x".repeat(500)).length).toBeLessThanOrEqual(60);
     // Control characters and non-ASCII cannot carry a terminal payload.
-    expect(redactPathSegment("a[31mb‮")).toBe("a?[31mb?");
+    expect(redactPathSegment("a\u001b[31mb‮")).toBe("a?[31mb?");
     // There is ONE classifier: the capture path and the trace path agree.
     expect(scanPlainJson({ apiKey: () => 1 }, "$")).toContain(REDACTED_KEY_SEGMENT);
   });
@@ -350,7 +350,7 @@ describe("B11.5 §D — every B11.4 closure is preserved", () => {
     }
   });
 
-  it("static exposure remains exactly ELEVEN read/propose tools", () => {
+  it("static exposure remains exactly the intentional agent-exposed set (ELEVEN read/propose tools when written; the set has since grown by reviewed moves, B20-A4 among them, and the assertion counts the set itself)", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
     for (const descriptor of exposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);

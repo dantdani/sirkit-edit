@@ -1,4 +1,5 @@
 method,route,policy_class,access,handler_symbol,verdict,shape,detail
+GET,/.well-known/oauth-protected-resource/api/mcp,public,public,publicRoute(…),n/a(public),-,-
 GET,/api/agent/autonomy,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/agent/autonomy,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 GET,/api/agent/execution-grant,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
@@ -86,6 +87,8 @@ GET,/api/kicad/v1/parts/category/[id],public,public,kicadLibraryRoute(…),n/a(p
 GET,/api/kicad/v1,public,public,kicadLibraryRoute(…),n/a(public),-,-
 GET,/api/mapping-verification,auth,authenticated,authenticatedRoute(…),load-bearing,wrapper,authenticatedRoute
 POST,/api/mapping-verification,auth+csrf,authenticated,createMappingPostHandler(…),load-bearing,factory,createMappingPostHandler → scopedMappingJson → !parsed.ok refused (union); dominance holds
+POST,/api/mcp,auth,authenticated,mcpBearerJsonRoute(…),load-bearing,wrapper,mcpBearerJsonRoute
+POST,/api/mcp/token,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/model-simulation/denominator,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/model-simulation/execute,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute
 POST,/api/model-simulation/measure,auth+csrf,authenticated,authenticatedJsonRoute(…),load-bearing,wrapper,authenticatedJsonRoute

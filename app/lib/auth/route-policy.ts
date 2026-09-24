@@ -2,11 +2,14 @@
  * B16.0.1 §A — the EXACT, method-aware route authorization policy.
  *
  * One explicit policy entry per (path, method). There are NO broad prefix
- * exceptions and NO `legacy-header-scope`: every authenticated route derives
- * identity from `TrustedRequestContext`. A route/method with no entry has no
- * policy (`policyFor` → null), which fails closed at runtime and trips the CI
- * gate — so a newly-added route (even under an existing family) must be
- * classified before it can serve.
+ * exceptions and NO `legacy-header-scope`: every authenticated human route
+ * derives identity from `TrustedRequestContext`; the worker rows use the worker
+ * secret; and [B20 B2] exactly one row, POST /api/mcp, uses the `mcp-bearer`
+ * identity source (a Sirkit-issued MCP access token re-checked against the LIVE
+ * membership, served only by `mcpBearerJsonRoute`, OD-43/OD-44). A route/method
+ * with no entry has no policy (`policyFor` → null), which fails closed at runtime
+ * and trips the CI gate — so a newly-added route (even under an existing family)
+ * must be classified before it can serve.
  */
 
 import type { EngineeringCapability, ProjectRole } from "../engineering/types";
@@ -17,13 +20,17 @@ export type AuthRouteClass =
   | "authenticated-propose"
   | "authenticated-mutation"
   | "authenticated-release"
-  | "internal-worker";
+  | "internal-worker"
+  /** [B20 B2] the bearer-authenticated JSON-RPC MCP endpoint (OD-54): its per-tool role rules apply inside the handler */
+  | "authenticated-mcp";
 
 export type IdentitySource =
   | "trusted-context"
   | "body-scope-server-actor"
   | "worker-secret"
-  | "none";
+  | "none"
+  /** [B20 B2] a Sirkit-issued MCP access token and the LIVE membership: never a cookie, never CSRF-bound (OD-43, OD-44) */
+  | "mcp-bearer";
 
 export interface RoutePolicy {
   path: string;
@@ -69,6 +76,10 @@ function release(path: string, methods: readonly string[], evidence: string, rol
 }
 function worker(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
   return methods.map((method) => ({ path, method, authClass: "internal-worker", identitySource: "worker-secret", requiresAuth: true, permittedRoles: [], providerCredit: false, requiresCsrf: false, authoritativeWrite: true, releaseOrQualification: false, evidence }));
+}
+/** [B20 B2] the one bearer row: no cookie is read, so no same-origin CSRF (the wrapper validates a present Origin itself, OD-44). */
+function mcpBearer(path: string, methods: readonly string[], evidence: string): RoutePolicy[] {
+  return methods.map((method) => ({ path, method, authClass: "authenticated-mcp", identitySource: "mcp-bearer", requiresAuth: true, permittedRoles: ALL_MEMBERS, providerCredit: false, requiresCsrf: false, authoritativeWrite: false, releaseOrQualification: false, evidence }));
 }
 function bodyScope(path: string, methods: readonly string[], authClass: AuthRouteClass, evidence: string, opts: { providerCredit?: boolean; write?: boolean } = {}): RoutePolicy[] {
   return methods.map((method) => ({ path, method, authClass, identitySource: "body-scope-server-actor", requiresAuth: true, permittedRoles: EDITORS, providerCredit: opts.providerCredit ?? false, requiresCsrf: method !== "GET" && method !== "HEAD", authoritativeWrite: opts.write ?? false, releaseOrQualification: false, evidence }));
@@ -284,6 +295,11 @@ const ALL: RoutePolicy[] = [
   ...read("/api/simulate", ["POST"], "ngspice process execution on caller-supplied schematic", EDITORS),
   ...read("/api/pcb/autoroute", ["POST"], "freerouting (java) process execution on caller-supplied board", EDITORS),
   ...read("/api/pcb/export/gerbers", ["POST"], "kicad-cli process execution — client-working-copy ENGINEERING export only (not verified release); attribution server-derived", REVIEW_EDITORS),
+
+  // ── [B20 B2] the Sirkit MCP endpoint, its token route and its RFC 9728 metadata (OD-43, OD-44, OD-54, OD-66) ──
+  ...mcpBearer("/api/mcp", ["POST"], "app/api/mcp (the Sirkit MCP endpoint: MCP 2026-07-28 Streamable HTTP, JSON only; a Sirkit-issued bearer token re-checked against the LIVE membership on every call; Origin validated when present; lists the nine-read subset only - every proposal withheld, OD-82 / OD-87)"),
+  ...read("/api/mcp/token", ["POST"], "app/api/mcp/token (mints a one-hour, audience-bound MCP access token for the signed-in member's selected project; nothing is stored; same-origin CSRF)", ALL_MEMBERS),
+  ...pub("/.well-known/oauth-protected-resource/api/mcp", ["GET"], "RFC 9728 protected-resource metadata of the MCP endpoint (static configuration only; no project data)"),
 ];
 
 // ── Lookup ────────────────────────────────────────────────────────────────────

@@ -181,6 +181,9 @@ export interface AssembleAgentContextInput {
   /** [B19-E E6] SERVER fact from the composition root: an external acquisition port is bound to this run. Never a body field.
    *  It becomes the external-observation authority only alongside a verified canonical state. */
   externalAcquisitionAvailable?: boolean;
+  /** [B20 A4] SERVER fact from the composition root: the external tool port (approved MCP servers) is bound to this run. Never a
+   *  body field. It becomes the external-mcp-observation authority only alongside a verified canonical state. */
+  mcpObservationAvailable?: boolean;
 }
 
 /** [B10] oversized selections are REJECTED (resource withheld), never
@@ -489,6 +492,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
   const grantable = input.executionGrantsAvailable === true && (TIER1_EXECUTE_ROLES as readonly string[]).includes(actor.actorRole) && board !== null && pcbProposalBasis !== null;
   // [B19-E E6] the external read tools need the server's port AND a verified canonical state (reads never run board-less)
   const externalAcquisition = input.externalAcquisitionAvailable === true && canonicalState !== null;
+  // [B20 A4] the external tool read needs the server's MCP port AND a verified canonical state; the fact is independent of E6's
+  const mcpObservation = input.mcpObservationAvailable === true && canonicalState !== null;
   const discovery: DiscoveryContext = {
     tenantId: input.tenantId,
     projectId: input.projectId,
@@ -515,7 +520,8 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
     // [B13] durable-server-board authority is advertised ONLY when the
     // server-owned component-authority resource was loaded and verified.
     // [B19-E E6] external-observation is advertised ONLY with the server's port fact and a verified canonical state.
-    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : [])],
+    // [B20 A4] external-mcp-observation likewise, ONLY with the server's MCP port fact and a verified canonical state.
+    availableAuthority: [...(componentAuthority ? ["local-working-copy", "durable-server-board"] : ["local-working-copy"]), ...(externalAcquisition ? ["external-observation"] : []), ...(mcpObservation ? ["external-mcp-observation"] : [])],
     providerCapabilities: {
       supportsJsonSchema: input.providerSupportsJsonSchema ?? true,
       toolNameMaxLength: 64,
@@ -555,6 +561,7 @@ export function assembleAgentRunContext(input: AssembleAgentContextInput): Agent
       pcbProposalBasis,
       executionGrantsAvailable: grantable,
       ...(externalAcquisition ? { externalAcquisitionAvailable: true } : {}),
+      ...(mcpObservation ? { mcpObservationAvailable: true } : {}), // [B20 A4]
       view,
       viewDigest,
       autonomy,

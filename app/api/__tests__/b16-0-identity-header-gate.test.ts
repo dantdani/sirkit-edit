@@ -5,7 +5,7 @@
  *  - the migrated release-perimeter routes read NONE of the forbidden
  *    identity headers (`x-sirkit-role` / `x-sirkit-actor-kind` /
  *    `x-sirkit-actor-id`);
- *  - EVERY `app/api` file that still reads a forbidden identity header lies
+ *  - EVERY route-tree file (app/api, app/.well-known) that still reads a forbidden identity header lies
  *    within the documented legacy-migration backlog (a NEW route reading one
  *    outside that backlog trips the gate);
  *  - no browser/client module imports the server auth core;
@@ -20,6 +20,7 @@ import {
   moduleImportOffenders,
 } from "@/app/lib/project/__tests__/_import-gate-helpers";
 import { LEGACY_HEADER_SCOPE_PATH_PREFIXES } from "@/app/lib/auth/route-coverage";
+import { isRouteTreePath } from "@/app/lib/auth/route-tree"; // [B20 B2] route handlers live under app/api AND app/.well-known (OD-66)
 import { workerActor } from "@/app/lib/auth/worker-principal";
 
 const files = collectProductionFiles();
@@ -51,7 +52,7 @@ describe("B16.0 §CI — the migrated release perimeter reads no forbidden ident
 
   it("EVERY app/api file that reads a forbidden identity header is within the documented legacy backlog", { timeout: 120_000 }, () => {
     for (const header of FORBIDDEN_IDENTITY_HEADERS) {
-      const readers = identifierReferences(files, header, new Set()).filter((f) => f.startsWith("app/api/"));
+      const readers = identifierReferences(files, header, new Set()).filter((f) => isRouteTreePath(f));
       for (const reader of readers) {
         const inBacklog = LEGACY_FILE_PREFIXES.some((prefix) => reader === prefix || reader.startsWith(prefix + "/"));
         expect(inBacklog, `${reader} reads ${header} but is NOT in the documented legacy backlog — migrate it or add it to LEGACY_HEADER_SCOPE_PATH_PREFIXES`).toBe(true);
@@ -62,7 +63,7 @@ describe("B16.0 §CI — the migrated release perimeter reads no forbidden ident
   it("NEGATIVE tripwire: a NEW route outside the backlog reading x-sirkit-role trips the gate", { timeout: 120_000 }, () => {
     const injected = new Map(files);
     injected.set("app/api/evil/route.ts", 'export async function POST(request: Request) { const r = request.headers.get("x-sirkit-role"); return Response.json({ r }); }');
-    const readers = identifierReferences(injected, "x-sirkit-role", new Set()).filter((f) => f.startsWith("app/api/"));
+    const readers = identifierReferences(injected, "x-sirkit-role", new Set()).filter((f) => isRouteTreePath(f));
     expect(readers).toContain("app/api/evil/route.ts");
     const inBacklog = LEGACY_FILE_PREFIXES.some((prefix) => "app/api/evil/route.ts".startsWith(prefix + "/") || "app/api/evil/route.ts" === prefix);
     expect(inBacklog).toBe(false);

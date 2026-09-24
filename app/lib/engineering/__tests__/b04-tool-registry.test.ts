@@ -15,6 +15,7 @@ import { SIRKIT_TOOL_CATALOG, sirkitToolRegistry } from "../tool-catalog";
 import { GRANTED_EXECUTION_TOOLS, GRANTED_EXECUTION_TOOL_IDS, grantedExecutionViolations } from "../granted-execution-families"; // [B18-C I3]
 import { resolveReadBinding } from "../tool-bindings-readonly";
 import { resolveExternalReadBinding } from "../../agent/acquisition-reads"; // [B19-E E6]
+import { resolveMcpObservationBinding } from "../../agent/mcp-observation-reads"; // [B20 A4]
 import {
   discoverTools,
   type DiscoveryContext,
@@ -344,10 +345,19 @@ describe("truthful classification", () => {
     expect(exposed).toEqual([...INTENTIONAL_AGENT_EXPOSED_TOOL_IDS]);
     expect(agentExposureReport(registry)).toMatchObject({ ok: true, missing: [], unexpected: [], classViolations: [], count: INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length });
     for (const descriptor of registry.list().filter((item) => item.agentExposed)) {
-      if (descriptor.operationClass === "read" && descriptor.binding.status === "bound-external-read") {
+      if (descriptor.operationClass === "read" && descriptor.binding.status === "bound-external-read" && descriptor.requiredAuthority.includes("external-mcp-observation")) {
+        // [B20 A4] reviewed pin move: the split below. Reason: A4 adds the agent's one external TOOL read of approved MCP servers
+        // (sirkit.mcp.observation-read), a bound external read resolved by ITS OWN allowlist over the MCP port the chat route
+        // injects — never by the E6 resolver, never by a B05 binding, and with its own authority.
+        expect(resolveMcpObservationBinding(descriptor).state, descriptor.toolId).toBe("resolved");
+        expect(resolveExternalReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable");
+        expect(resolveReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable");
+        expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["external-mcp-observation"]);
+      } else if (descriptor.operationClass === "read" && descriptor.binding.status === "bound-external-read") {
         // [B19-E E6] reviewed pin move: an exposed read is backed EITHER by the B05 allowlist OR — for the two bounded external
         // reads — by the external read allowlist over the chat route's injected port (never a B05 binding; still a real binding).
         expect(resolveExternalReadBinding(descriptor).state, descriptor.toolId).toBe("resolved");
+        expect(resolveMcpObservationBinding(descriptor).state, descriptor.toolId).toBe("not_callable"); // [B20 A4]
         expect(resolveReadBinding(descriptor).state, descriptor.toolId).toBe("not_callable");
         expect(descriptor.requiredAuthority, descriptor.toolId).toEqual(["external-observation"]);
       } else if (descriptor.operationClass === "read") {

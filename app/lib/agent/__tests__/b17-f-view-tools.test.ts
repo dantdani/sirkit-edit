@@ -290,7 +290,8 @@ describe("B17-F §D — the loop emits view_command_ready and layout_candidate_r
     expect(events.some((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready")).toBe(false);
   });
 
-  it("the closed trace vocabulary names the two new outcome classes", () => {
-    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant"]); // B18-B: + execution_grant
+  it("the closed trace vocabulary is the eight outcome classes, B17-F's two included", () => {
+    // [B20 A4] reviewed pin move: + external_observation (an external tool call over an approved MCP server, D14 / OD-80), appended
+    expect([...TRACE_OUTCOME_CLASSES]).toEqual(["read", "proposal", "proposal_blocked", "refused", "view_command", "layout_candidate", "execution_grant", "external_observation"]); // B18-B: + execution_grant
   });
 });
