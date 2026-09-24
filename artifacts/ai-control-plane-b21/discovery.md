@@ -1130,9 +1130,9 @@ Spot-check of the draft against the tree at `6fd5a7b` before the first increment
   here" comment (`loop.ts:763-765`); `requestedProvider` defaulting to `"openai"` (`request.ts:3-5`); the 33 exposed ids, against which
   every id in OD-120's table resolves (`agent-exposure.ts:30-64`); the eleven evaluation categories (`evaluation.ts:18-22`); the fixture
   constructor tripwire (`b18-c-fixture-agent.test.ts:64-67`); `LIVE_BLOCKERS.md` holds LB-1..LB-8, so LB-9 is the next row.
-- **One citation corrected:** `b20-a4-trace-attribution.test.ts` lives under `app/lib/agent/__tests__/`, not `app/lib/mcp/__tests__/`
-  (the provider-literal pin is at its line 255 as the draft says; the B20 test report lists the suite under `app/lib/agent`). The path is
-  corrected in place (0 occurrences in the body).
+- **One path verified:** the draft cites `b20-a4-trace-attribution.test.ts` by basename; the suite lives under
+  `app/lib/agent/__tests__/` (not under `app/lib/mcp/__tests__/`, where the other B20-A4 suites are), and its provider-literal pin is
+  at line 255 as cited. Read every reference in sections 0, 2.6, D21-11, D21-26 and D21-27 with that directory.
 - **UNKNOWN 6 resolved by the lead:** the read-only closeout generator is not in the repository; it is the lead's
   `scratchpad/b20/closeout/generate.py` (session scratchpad), which builds `changed-files.md`, `test-and-validation-report.md` and
   `unknowns-and-owner-decisions.md` from the git history, `OWNER_DECISIONS.md`, `discovery.md` and the ledger. It is reused for B21 with
