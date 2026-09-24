@@ -2,19 +2,19 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B20",
-  "currentCheckpoint": "B20: A0-A5 and A4L, B1-B4, C1-C3 and D1-D3 all committed on chapter/b20-mcp-adapter; closeout next",
+  "currentCheckpoint": "B20 complete on chapter/b20-mcp-adapter (A0-A5, A4L, B1-B4, C1-C3, D1-D3, D20-30, the four validation artifacts, verdict PARTIAL); PR #10 to be undrafted and merged after green CI",
   "status": "in_progress",
   "baseSha": "102dd27",
   "branch": "chapter/b20-mcp-adapter",
   "lastGreenSha": "4f3dd30",
-  "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B20 validation checkpoint)",
+  "pullRequest": "PR #10 (chapter/b20-mcp-adapter -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "B20 closeout (scratchpad/b20/closeout/closeout-plan.md): supersede the standing 'no MCP' statements (D20-30), regenerate and re-pin, write changed-files / test-and-validation-report / unknowns-and-owner-decisions / final-verdict (B20-B PARTIAL: proposals deferred, OD-87), undraft PR #10, merge after green CI; then B21.",
-  "updatedAt": "2026-09-24T14:40:09-04:00",
+  "nextAction": "Undraft PR #10 with a truthful description, wait for green CI, merge normally (no auto-merge); then B21 on a new chapter branch from main.",
+  "updatedAt": "2026-09-24T14:50:43-04:00",
   "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
 }
