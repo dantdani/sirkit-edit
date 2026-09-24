@@ -275,7 +275,7 @@ describe("B11.4 §G8–G12 — earlier closures and pins remain intact", () => {
     expect(validateReplayCapsule(accessorCapsule).length).toBeGreaterThan(0);
   });
 
-  it("G12: static exposure is still exactly ELEVEN read/propose tools", () => {
+  it("G12: static exposure is still exactly the intentional agent-exposed set (ELEVEN read/propose tools when written; the set has since grown by reviewed moves, B20-A4 among them, and the assertion counts the set itself)", () => {
     const exposed = sirkitToolRegistry().list().filter((descriptor) => descriptor.agentExposed);
     expect(new Set(exposed.map((descriptor) => descriptor.toolId)).size).toBe(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length); // B15.3: + sirkit.pcb.propose-bounded-edit
     for (const descriptor of exposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);

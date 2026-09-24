@@ -693,7 +693,7 @@ Nothing below is a claim that a gap exists until an increment REPRODUCES it with
   - Atomic claim sourceText does not either (`AtomicAgentTools` is test-only).
   - Alternates `matchReasons` are closed enums (`alternates.ts:273-321`).
   - `sirkit.parts.search` is not agent-exposed (`agent-exposure.ts:30-61`).
-  - No MCP runtime; no credentials forwarded to models; SchGen DSL is parsed, never executed.
+  - No MCP runtime [superseded 2026-09-24 by B20: an MCP client exists behind `SIRKIT_MCP_ENABLED` (off) with an empty registry, and an MCP server serves nine reads - `artifacts/ai-control-plane-b20/README.md`]; no credentials forwarded to models (B20-A5 keeps this: no MCP credential ever reaches a provider request, OD-45); SchGen DSL is parsed, never executed.
 - **Open redirect on the Sirkit origin:** none; only auth callback with `safeRedirectPath`.
 - **Vendor URL as `src`; `window.open` with vendor data:** none (`BomView.tsx:616` opens constants).
 - **TSV, clipboard or XLSX writers:** none.

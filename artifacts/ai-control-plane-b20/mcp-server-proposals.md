@@ -265,17 +265,19 @@ Restoring any proposal is a reviewed ratchet move back to the exposed list with 
 - **The native agent path's budget.** `sirkit.placement.propose` over the chat run clamps the engine to 110 s (C14), a
   between-spec budget like every other: a spec that has started runs to its end.
 - **F4** is closed by the process gate (section 6).
-- **Stale text left for the lead:** follow-up increment: B20 closeout, with D20-30's stale statements, unless the lead
-  approves the regeneration earlier. Two registry texts still say MCP serves or lists proposals, and each is generated into
-  an artifact that must show no drift in B4:
-  - the `mcp.server` record's `mutationAuthority` in `app/lib/engineering/action-registry.ts` ("tools/call answers a closed
-    refusal in B2 (B3 serves reads through the B05 invocation layer, B4 inert proposals)"), generated into the `mcp.server`
-    row of `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv`;
-  - the `/api/mcp` evidence text in `app/lib/auth/route-policy.ts` ("lists the read and inert-proposal subset only"),
-    generated into the `/api/mcp` row of `artifacts/ai-control-plane-b16-0-1/exact-route-authorization-policy.csv`.
-  [B20 B4 review] The first B4 text named the action-registry record alone and said it fed the B16 route artifacts; it
-  feeds the B01 matrix, and the route-policy text feeds the B16 one (coverage-2, regressions-4). `b20-b4-withhold-proposals`
-  case 8 pins this list: every such statement outside the lead's files is corrected beside it (`[B20 B4]`) or named here.
+- **Stale text left for the lead:** superseded 2026-09-24 by the B20 closeout (D20-30). The two registry texts that said MCP
+  serves or lists proposals were rewritten to what B4 landed, and their generated artifacts regenerated with no other drift:
+  - the `mcp.server` record's `mutationAuthority` in `app/lib/engineering/action-registry.ts` now reads "(B3 serves the nine
+    reads through the B05 invocation layer from the durable server board; B4 withheld every proposal, OD-82 / OD-87, so
+    tools/list holds reads only)", generated into the `mcp.server` row of
+    `artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv`;
+  - the `/api/mcp` evidence text in `app/lib/auth/route-policy.ts` now reads "lists the nine-read subset only - every proposal
+    withheld, OD-82 / OD-87", generated into the `/api/mcp` row of
+    `artifacts/ai-control-plane-b16-0-1/exact-route-authorization-policy.csv`.
+  Before the closeout this bullet named those four paths as a follow-up. [B20 B4 review] The first B4 text named the
+  action-registry record alone and said it fed the B16 route artifacts; it feeds the B01 matrix, and the route-policy text
+  feeds the B16 one (coverage-2, regressions-4). `b20-b4-withhold-proposals` case 8 pins the state: every such statement
+  outside the lead's files is corrected beside it (`[B20 B4]`), and none is left uncorrected.
 
 ## 11. Citations, as of base 4299067
 

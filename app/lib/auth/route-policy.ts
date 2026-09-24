@@ -297,7 +297,7 @@ const ALL: RoutePolicy[] = [
   ...read("/api/pcb/export/gerbers", ["POST"], "kicad-cli process execution — client-working-copy ENGINEERING export only (not verified release); attribution server-derived", REVIEW_EDITORS),
 
   // ── [B20 B2] the Sirkit MCP endpoint, its token route and its RFC 9728 metadata (OD-43, OD-44, OD-54, OD-66) ──
-  ...mcpBearer("/api/mcp", ["POST"], "app/api/mcp (the Sirkit MCP endpoint: MCP 2026-07-28 Streamable HTTP, JSON only; a Sirkit-issued bearer token re-checked against the LIVE membership on every call; Origin validated when present; lists the read and inert-proposal subset only)"),
+  ...mcpBearer("/api/mcp", ["POST"], "app/api/mcp (the Sirkit MCP endpoint: MCP 2026-07-28 Streamable HTTP, JSON only; a Sirkit-issued bearer token re-checked against the LIVE membership on every call; Origin validated when present; lists the nine-read subset only - every proposal withheld, OD-82 / OD-87)"),
   ...read("/api/mcp/token", ["POST"], "app/api/mcp/token (mints a one-hour, audience-bound MCP access token for the signed-in member's selected project; nothing is stored; same-origin CSRF)", ALL_MEMBERS),
   ...pub("/.well-known/oauth-protected-resource/api/mcp", ["GET"], "RFC 9728 protected-resource metadata of the MCP endpoint (static configuration only; no project data)"),
 ];

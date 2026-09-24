@@ -293,9 +293,12 @@ describe("[B20 B4] no proposal over MCP: the withholding move, listed means serv
     }
     const page = read(PAGE);
     const staleList = /^- \*\*Stale text left for the lead:\*\*([\s\S]*?)(?=^- \*\*|^## )/m.exec(page)?.[1] ?? "";
-    expect.soft([...new Set(listed)].sort()).toEqual(["app/lib/auth/route-policy.ts", "app/lib/engineering/action-registry.ts", "artifacts/ai-control-plane-b01/ui-command-toolability-matrix.csv", "artifacts/ai-control-plane-b16-0-1/exact-route-authorization-policy.csv"]);
-    for (const path of new Set(listed)) expect.soft(staleList, path).toContain(`\`${path}\``);
-    expect.soft(staleList).toMatch(/follow-up increment: B20 closeout/);
+    // [B20 closeout, 2026-09-24] D20-30: the four listed texts (route-policy.ts, action-registry.ts and their two generated
+    // CSV rows) were superseded and regenerated; nothing outside the lead's files names a proposal over MCP uncorrected
+    expect.soft([...new Set(listed)].sort()).toEqual([]);
+    expect.soft(staleList).toMatch(/superseded 2026-09-24 by the B20 closeout \(D20-30\)/);
+    expect.soft(read("app/lib/engineering/action-registry.ts")).toContain("B4 withheld every proposal, OD-82 / OD-87, so tools/list holds reads only");
+    expect.soft(read("app/lib/auth/route-policy.ts")).toContain("lists the nine-read subset only - every proposal withheld, OD-82 / OD-87");
     expect.soft([...new Set(corrected)].sort()).toEqual(["artifacts/ai-control-plane-b20/mcp-server-endpoint.md", "artifacts/ai-control-plane-b20/mcp-server-reads.md"]);
     // [B20 B4 review] regressions-5: D-13 quotes B1's header as it reads since B4, and the header says it
     const reads = read("artifacts/ai-control-plane-b20/mcp-server-reads.md").replace(/\s+/g, " ");
