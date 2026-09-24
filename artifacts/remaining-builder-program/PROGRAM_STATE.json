@@ -1,20 +1,20 @@
 {
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
-  "currentChapter": "B20",
-  "currentCheckpoint": "B20 complete on chapter/b20-mcp-adapter (A0-A5, A4L, B1-B4, C1-C3, D1-D3, D20-30, the four validation artifacts, verdict PARTIAL); PR #10 to be undrafted and merged after green CI",
+  "currentChapter": "B21",
+  "currentCheckpoint": "B21: discovery (read-only readers over main at 6fd5a7b) in progress on chapter/b21-specialist-orchestration; no increment committed yet",
   "status": "in_progress",
-  "baseSha": "102dd27",
-  "branch": "chapter/b20-mcp-adapter",
-  "lastGreenSha": "4f3dd30",
-  "pullRequest": "PR #10 (chapter/b20-mcp-adapter -> main): undrafted at the closeout; merge only after green CI, never auto-merge",
+  "baseSha": "6fd5a7b",
+  "branch": "chapter/b21-specialist-orchestration",
+  "lastGreenSha": "96a0314",
+  "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings"
   ],
-  "nextAction": "Undraft PR #10 with a truthful description, wait for green CI, merge normally (no auto-merge); then B21 on a new chapter branch from main.",
-  "updatedAt": "2026-09-24T14:50:43-04:00",
-  "previousChapter": "B19 merged normally into main as 102dd27 (PR #9) after green CI on 3296753"
+  "nextAction": "Commit the B21 discovery (artifacts/ai-control-plane-b21/discovery.md + provider-reference-notes.md + README.md), open draft PR #11, then B21-A (canonical orchestration contracts) test-first.",
+  "updatedAt": "2026-09-24T15:10:40-04:00",
+  "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

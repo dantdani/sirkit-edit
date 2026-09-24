@@ -2601,3 +2601,45 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Report lines: `MCP-EXPOSED TOOLS: 9 (reads only; every proposal withheld, OD-82 / OD-87)`; `MCP STATUS: client behind
   SIRKIT_MCP_ENABLED (off) with an empty registry; server read-only over POST /api/mcp; connectors refused; proposals
   deferred`.
+
+### B20 — merged (2026-09-24 local; lead)
+
+- PR #10 (`chapter/b20-mcp-adapter` -> `main`) merged normally as `6fd5a7b` at 19:10 UTC after all four checks passed on `96a0314`
+  (benchmark-core, database-delivery, prompt-to-gerber, page-browser-e2e 16m47s; benchmark-nightly skipped). No auto-merge, no
+  force-push. Local `main` fast-forwarded; `chapter/b21-specialist-orchestration` created from `6fd5a7b` and pushed.
+
+### B21 — chapter start and discovery (2026-09-24 local; read-only workflow + lead; this commit)
+
+- Read-only discovery over the tree at `96a0314` (= `6fd5a7b`, empty diff): six parallel readers (the single-agent loop and its
+  runtime; the provider adapters and the live provider documentation; trace, replay and durability; sealed artifacts, identities and
+  deterministic verification; tools, roles and least privilege; tests, CI, the chat UI and standing obligations) returned 214 facts,
+  59 gap candidates, 75 reuse rows and 55 questions, every claim with a file:line; one synthesizer re-read every defect-bearing fact
+  in the code, resolved nineteen reader disagreements and unknowns (section 0) and wrote the draft; the lead spot-checked eleven
+  load-bearing claims, corrected one citation path and resolved one unknown (section 9). Nothing was executed; no process started;
+  no repository file written by the readers.
+- What exists: one single-agent loop with a closed 14-event protocol, one frozen budget for every message, cancellation that is
+  first-class and resume that does not exist (a retry is a new run), a run-local in-memory trace sink whose digest is discarded,
+  provider choice from the request body with SDK-internal retries and no Sirkit breaker, structured output only as a forced tool
+  call, one reviewed 33-tool exposure with no per-role subset, four artifact families with four scope shapes and no proposal-to-proposal
+  comparator, and a pre-existing model-judged `Promise.all` fan-out at `POST /api/schematic/build-multi` outside the loop.
+- Defects D21-1..31 (17 high): no orchestration contracts (D21-1) or evidence shape (D21-2); no persisted run record (D21-3); no
+  resume (D21-4); no complexity router (D21-5); no caps on agents / parallelism / tokens / cost (D21-6); no per-role tool subset (D21-7);
+  nothing distinguishes coordinator from specialist (D21-8); no comparator (D21-10); provider/model identity closed and uneven (D21-11);
+  no breaker (D21-18); no per-role provider policy (D21-19); the structured-output mechanism contradicted by the live Anthropic pages
+  for the newest models (D21-20, BLOCKED-LIVE-QUALIFICATION); every DAG vocabulary closed and pinned (D21-22); the fixtures cannot
+  express the B21-F scenarios (D21-23, D21-24); no model-in-loop opt-in (D21-25); CI admission (D21-26); the standing "single-agent"
+  statements and tripwires (D21-27).
+- Provider documentation re-read live on 2026-09-24 (section 1.2, RECORDED with URLs and dates): the runbook's hosts redirect
+  (`developers.openai.com`, `platform.claude.com`, `code.claude.com` for the Agent SDK); OpenAI structured outputs via `text.format`,
+  `parallel_tool_calls`, background mode with its 10-minute retention under `store: false`, the Agents SDK; Anthropic strict tool use
+  and `output_config` structured outputs listed for opus-5-5 / opus-5 / sonnet-5 / haiku-4-5 (not the code's default `claude-opus-4-7`),
+  forced `any`/`tool` documented as a 400 on Claude Opus 5.5 / Fable 5.1 / Mythos 5.1, stop reasons, streaming, batches. No page
+  changes OD-90/OD-91's premises.
+- Owner decisions drafted OD-106..OD-133 with safe defaults (section 6); the lead's reconciliation sets the DAG wall-time default to
+  300 s (OD-107) and accepts the rest as drafted; OD-83..86 and OD-88 stay reserved. Plan (section 7): A contracts + durable record +
+  CI + LB-9; B router + no-provider path + sequential scheduler; C roles + least privilege + no-elevation proof; D merge and
+  disagreement; E provider routing, breakers, degraded modes, the trace block; F evaluations; closeout. Simple commands stay on the
+  existing path throughout; no new exposed tool; no new route; census 165/162/3/0.
+- Records: `artifacts/ai-control-plane-b21/{discovery.md, provider-reference-notes.md, README.md}`; `PROGRAM_STATE.json` -> B21
+  (base `6fd5a7b`, last green `96a0314`); draft PR #11 opened after this commit so every increment gets CI. Gates for this commit:
+  documents only — no suite, generator or production file changed.
