@@ -2486,3 +2486,24 @@ _(discovery, reproduction and results appended below as they are observed)_
   The A5 suites hold 34 cases.
 - Gates (lead, one heavy job at a time): mcp and agent 77 files / 1 195 passed; engineering, acquisition, auth and app/api
   245 / 3 412 (+16 env-gated skips); tsc 0; eslint clean on the 8 changed and new files; 17 generators with zero drift.
+
+### LB-4 - the database qualification run against a real server (2026-09-24 local; lead, owner-authorised)
+
+- The owner authorised the main Supabase project for live tests. Two EMPTY disposable databases (`sirkit_qual_clean`,
+  `sirkit_qual_upgrade`) were created on its PostgreSQL 17.6 server and provisioned with the platform prerequisites the
+  migration checker names (`vector`; `auth.uid()` copied verbatim from the main database), the gate's URLs held in a
+  session-only file that is never printed; the main `postgres` database was not written.
+- `b16-b-postgres-qualification` on the real server: every migration applied on the clean database and every runbook
+  criterion held against the server's catalog; replay applied nothing with a clean status; the 0000-0026 upgrade on the
+  second database reached the identical fingerprint `schema1-0f952875894c2a3a7485dc1883bacf1a9f1aae6276ec0d1cffaa6663c0628b55`. `b16-b-database-qualification` (the gate's
+  contract, 26 cases) passed.
+- The seven other DB-gated suites, run together with two workers and then again: four failed - `failed_precommit`
+  instead of `applied` (pcb-sync), `blocked_stale_snapshot` (electrical identity), `AQ_IDEMPOTENCY_KEY_REUSE_CONFLICT`
+  (assignment revalidation) and two 5 s timeouts that hid the same causes. Not dismissed as flakes: each passes when run
+  ALONE on a database reset to its post-migration state, so the cause is the suites' own fixture assumptions - fixed
+  `tenant-1` / `project-1` / `board-1` ids (no run-unique component; `tenant-scope` alone does it right) and one fixed
+  idempotency key - which collide across workers and re-runs, plus a default timeout too short for a remote round trip.
+  A separate fix is queued for the owner. `ingest-integrity` found `pcb_footprints` empty on the fresh database; after a
+  40-footprint bounded ingest it passed, so all nine DB-gated suites are qualified on the real server.
+- The ingest's embedding pass was refused: OpenAI answered `429 You have no credits remaining` for the organisation behind
+  BOTH configured keys, so footprint embeddings stay unqualified until credits exist. No other live call was made.
