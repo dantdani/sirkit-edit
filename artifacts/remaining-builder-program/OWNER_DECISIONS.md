@@ -1128,6 +1128,15 @@ Amendments to existing entries:
   for instance a read that lets the sourcing specialist run and report the missing binding itself (a new or re-scoped read descriptor:
   the D21-9 pin move); or accept the recorded dissent as the missing-evidence answer (the default applied).
 
+**Amendment (B21-D, 2026-09-26) — OD-120 — addendum (B21-D, 2026-09-26)**
+
+- **Decided in D:** the ten dormant row entries stay dormant (no role is offered a proposal tool); the merge judges every proposed
+  action by its FAMILY's verifiers whatever role carried it (the artifact, never the messenger) - a verification critic's sound Tier 1
+  edit is accepted like the circuit specialist's (merge case 12) - and binds it itself to its family's keys, its lifetime and this run's
+  principal, because the families' digests are checksums, not signatures; who produced an artifact is never claimed. **The owner may
+  choose otherwise:** a role-row ceiling in the merge (only a role whose row names the family's proposal tool may carry its action) - a
+  one-rule change pinned by a merge case.
+
 ## OD-121 — How the role allowlist is enforced, as applied (B21-C, 2026-09-26)
 
 - **Question:** a new `DiscoveryContext` field, a new channel value, or a post-discovery intersection.
@@ -1151,3 +1160,74 @@ Amendments to existing entries:
   while specialists read only.
 - **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
   schematic execution (reverses OD-15; its own chapter).
+
+## OD-114 — Merge decisions and dissent as closed records, as applied (B21-D, 2026-09-26)
+
+- **Question:** should merge-layer rejections of specialist results (and pre-invocation refusals) become traced events with a closed
+  vocabulary?
+- **Applied (the record half):** every merge verdict is a PERSISTED record of the orchestration run with the closed decision
+  vocabulary (`accepted`, `stale`, `contradicted`, `expired`, `malformed`, `escalated`): per judged result and merge pass one record -
+  `decision` for `accepted`, `dissent` otherwise - under a CONTENT key naming the task attempt it judges (`<taskId>.merge-<16 hex of the
+  verdict>`, the judged attempt), with a bounded reason of closed codes and ids (the provider and the model it reported, every
+  verification the result asked for with its outcome and output digest, the recomputed readiness report) and the result's digest as its
+  subject; per unresolved conflict and per part review request one `decision` `escalated` under `merge-<16 hex>`; all written before
+  anything reaches the follow-up turn. The same verdict replays; a CHANGED verdict on the same result (a later pass: an artifact
+  expired, a new conflict partner) is appended as its own record and the LATEST verdict of a task attempt stands - the record is
+  append-only and a key is never written over; a resume re-runs a result whose latest verdict is `stale` or `expired`. The TRACED
+  `specialist_result` outcome class (and the trace block that carries it) stays B21-E's (OD-112); the single-agent path's untraced
+  `tool_refused` (OD-17 D6) is unchanged.
+- **The owner may choose otherwise:** a separate record kind per merge verdict with a verdict sequence (a store schema move), or the
+  traced form first.
+
+## OD-129 — The only accepted readiness evidence kind, as applied (B21-D, 2026-09-26)
+
+- **Question:** what carries a readiness claim (D21-15)?
+- **Applied:** a reference to a ReadinessReport `{ reportId, designRevision, manufacturingProfileId, freshness }` - an
+  `EvidenceReference` of kind `readiness-report` with the report's `reportId` and the digest of the report as the readiness read returns
+  it (`readinessReference` in `merge.ts`, the read's `pinned.reportDigest`); never free text. The merge RECOMPUTES the report from the
+  verified board with the run's presets and accepts a reference only when it names that current report (another reportId, or a report
+  whose freshness is not current, is `stale`; the right id with another digest is `malformed`); the manufacturing-readiness reviewer is
+  SHOWN that form in its frame, its report is always recomputed, and its result carrying no readiness reference is refused `malformed`
+  (`readiness-claim-unreferenced`) - structurally, without judging prose. A qualification-authority reference cannot be checked by the
+  merge, so it is `stale` (`qualification-authority-unverified`) wherever it appears and never satisfies the rule. Another role's
+  readiness prose is not detected (no prose is judged); it stays that specialist's unverified claim.
+- **The owner may choose otherwise:** a structured readiness field in the result contract (a contracts schema move), or a verifier of
+  the qualification authority in the merge (then a verified digest may satisfy the rule).
+
+## OD-130 — A candidate part is evidence, never a replacement target, as applied (B21-D, 2026-09-26)
+
+- **Question:** may the sourcing specialist propose a candidate part that is not the exact authority (D21-16)?
+- **Applied:** no. Only the server-owned exact authority (a `verified-exact` component authority with its complete `exactAuthority`,
+  the assembler's rule) may be a replacement target: a sealed replacement naming another target is `contradicted`
+  (`part-not-exact-authority`) and writes a PART REVIEW request record for the human (`merge-<16 hex>`: the instance, the candidate part,
+  the exact authority, the `request_atomic_review` path) with its own line and envelope entry; with no verified-exact authority loaded
+  the target is `stale` (`part-authority-unverified`). Two part claims that disagree are also an identity conflict - every party
+  `contradicted`, ONE escalation that cites the exact authority and names the review path. A part named only in prose is not detected.
+  The exact target remains the only replacement target (OD-23).
+- **The owner may choose otherwise:** an evidence-only candidate-part kind in the result contract that the envelope lists for review
+  (a contracts schema move), or letting the human pick between candidates in a later UI increment.
+
+## OD-132 — Provider and model per result live in the envelope, never in the sealed schemas, as applied (B21-D, 2026-09-26)
+
+- **Question:** provider, model and run id in the sealed artifact schemas (v3 -> v4 / v2 -> v3; drop the constant `agent-tool-loop`)?
+- **Applied:** the sealed schemas are unchanged (the PCB proposal keeps its constant `model: "agent-tool-loop"`, C53). Every judged
+  result carries the provider it was dispatched through and the model that provider REPORTED, in the merge's view, the follow-up
+  envelope and its persisted verdict reason. The source is the PROVIDER: the scheduler runs every specialist through this run's one
+  adapter per provider (OD-117's one configured model per provider), and a reported model is provider-controlled text - recorded, never
+  counted as independence. A replayed result's provider and model are not in the record, so its source is
+  `(replayed: provenance not recorded)` and it counts with every other source. Nothing secret is recorded (closed codes, ids and model
+  tokens only; an unrecognizable model string is recorded as `(unrecognized)`). The trace block that records them per step stays
+  B21-E's (OD-112), which will key sources by the provider and model its per-role table dispatches with (OD-117).
+- **The owner may choose otherwise:** version the sealed schemas to carry provenance (three sealers, their verifiers and every pinned
+  artifact move together), or persist provider and model with each result record (a store schema move) so a replay keeps them.
+
+## OD-133 — Scope on the layout candidate, as applied (B21-D, 2026-09-26)
+
+- **Question:** the layout candidate carries no tenant/project/branch/lineage scope (D21-13).
+- **Applied:** wrapped, with no artifact schema change: every action of a judged result is bound to the `RevisionBoundProjectScope` of
+  the request that result answered (read from the orchestration record); a request that is missing or whose scope is not the
+  coordinator's pinned scope makes the action `stale` (`request-missing` / `scope-mismatch`, merge case 13), and an accepted layout
+  candidate reaches the envelope WITH that scope. The candidate's own `base` (`{ revision, generation?, historyHead? }`) is unchanged
+  because the editor's hooks share it - recorded as the follow-up defect D21-34.
+- **The owner may choose otherwise:** a v2 layout candidate carrying its own scope (the editor hooks, the verifier and the candidate
+  suites move together).

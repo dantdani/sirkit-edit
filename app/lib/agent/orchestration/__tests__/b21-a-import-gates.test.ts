@@ -67,7 +67,8 @@ describe("[B21 A] the orchestration import gate", () => {
   it("1. the entry set is DERIVED from the tree and pinned to the modules of the chapter (A's three, B's router and scheduler); every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => {
     // [B21 B] + router.ts and scheduler.ts; app/api/chat/orchestration-runtime.ts lives OUTSIDE the prefix by design (it binds the durable runtime)
     // [B21 C] + role-tools.ts (a pin move: the module joins the gate the day it is written; case 6)
-    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/role-tools.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
+    // [B21 D] + merge.ts (a pin move: the merge joins the gate the day it is written; case 7)
+    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/merge.ts", "app/lib/agent/orchestration/role-tools.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
     expect(production.has("app/api/chat/orchestration-runtime.ts")).toBe(true);
     const members = (family: Family): string[] => [...production.keys()].filter((path) => familyOf(path) === family).sort();
     expect(members("GRANTS")).toEqual(["app/lib/execution-grant/consume.ts", "app/lib/execution-grant/mint.ts", "app/lib/execution-grant/route-contract.ts", "app/lib/execution-grant/settle.ts", "app/lib/execution-grant/store.ts"]);
@@ -159,7 +160,7 @@ describe("[B21 A] the orchestration import gate", () => {
     expect(runtimeClosure.has("app/lib/agent/orchestration/router.ts")).toBe(true);
     expect(runtimeClosure.has("app/lib/agent/orchestration/store.ts")).toBe(true);
     // the injected probes never touched the disk: the production entry set is unchanged
-    expect(entriesOf(production)).toHaveLength(6); // [B21 C] + role-tools.ts
+    expect(entriesOf(production)).toHaveLength(7); // [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7)
   });
 
   it("4. the nine B11-scanned files import nothing under app/lib/agent/orchestration/ by ANY reference kind (a type-only import counts here) and carry no orchestration identifier; an injected copy with an orchestration value import, a type-only import or the identifier text appended is caught; tripwires.ts is the only orchestration module that names those files", { timeout: 180_000 }, () => {
@@ -184,7 +185,7 @@ describe("[B21 A] the orchestration import gate", () => {
 
   it("5. hygiene over the orchestration modules: no opaque module load, no declaration shadowing the loader, no root-escaping import, zero parse diagnostics, and every import is a static string the gate can resolve", { timeout: 180_000 }, () => {
     const scoped = new Map([...production].filter(([path]) => path.startsWith(ORCHESTRATION_MODULE_PREFIX)));
-    expect(scoped.size).toBe(6); // [B21 B] + router.ts, scheduler.ts; [B21 C] + role-tools.ts
+    expect(scoped.size).toBe(7); // [B21 B] + router.ts, scheduler.ts; [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7)
     expect(opaqueModuleLoads(scoped)).toEqual([]);
     expect(requireShadowDeclarations(scoped)).toEqual([]);
     expect(rootEscapingImports(scoped)).toEqual([]);
@@ -206,5 +207,50 @@ describe("[B21 A] the orchestration import gate", () => {
     // the module's own references are its four imports (b21-c-role-tools case 5 reads them as text)
     const references = moduleReferences(roleTools, production.get(roleTools)!).map((reference) => reference.specifier).sort();
     expect(references).toEqual(["../../engineering/agent-exposure", "../../engineering/permission-tiers", "../../engineering/tool-registry", "./contracts"]);
+  });
+
+  it("7. [B21 D] merge.ts is in the entry set and its whole runtime closure reaches no forbidden family and no provider SDK - not even the fab preset data (the readiness verifier takes the run's preset by injection): it imports the families' own verifiers (the Tier 1 and replacement verifiers, the PCB edit's integrity verifier, validation policy, expiry and the bounded compiler), the deterministic verifiers (DRC, connectivity, readiness with parity, the project and board revisions, the canonical validator, the netlist proof, the component-authority inspection) and ([B21 D fix]) the layout apply's pure board builders (the routing import command, its application, the placement transaction), and NEVER the layout family's module - whose closure reaches the executor through the commit gateway, so its verifier is injected by the composition root (D21-35) - nor the executor, the collaboration session, the loop, the gateway, the catalog or the durable runtime", { timeout: 180_000 }, () => {
+    const merge = "app/lib/agent/orchestration/merge.ts";
+    expect(entriesOf(production)).toContain(merge);
+    const closure = importClosure(production, [merge]);
+    expect(walk(production, [merge])).toEqual([]);
+    for (const member of [
+      "app/lib/engineering/schematic-proposals.ts", "app/lib/engineering/replacement-proposals.ts", "app/lib/pcb/proposal/sealed-pcb-edit-proposal.ts",
+      "app/lib/pcb/proposal/bounded-edit-compiler.ts", "app/lib/pcb/drc/run-drc.ts", "app/lib/pcb/connectivity-board.ts", "app/lib/pcb/readiness/evaluate.ts",
+      "app/lib/pcb/readiness/parity.ts", "app/lib/engineering/revision.ts", "app/lib/pcb/revision.ts", "app/lib/engineering/schematic-model.ts",
+      "app/lib/agent/netlist-validation.ts", "app/lib/engineering/component-authority.ts", "app/lib/agent/orchestration/scheduler.ts",
+      "app/lib/pcb/autoroute/command.ts", "app/lib/pcb/route-tool.commands.ts", "app/lib/pcb/placement/transaction.ts",
+    ]) expect(closure.has(member), member).toBe(true);
+    for (const never of [
+      "app/lib/pcb/candidates/layout-candidate.ts", "app/lib/pcb/fab/presets/index.ts", "app/lib/engineering/executor.ts", "app/lib/engineering/collaboration.ts",
+      "app/lib/engineering/transaction-service.ts", "app/lib/engineering/pcb-commit-gateway.ts", "app/lib/agent/loop.ts", "app/lib/agent/gateway.ts",
+      "app/lib/engineering/tool-catalog.ts", "app/lib/durable-workflow/runtime.ts", "app/lib/agent/adapters.ts",
+    ]) expect(closure.has(never), never).toBe(false);
+    // D21-35: a module under the prefix that imports the layout family's module for its verifier is caught, through the commit
+    // gateway, by the EXECUTOR family - the invariant is pinned (caught, through layout-candidate.ts), never the exact hops below it
+    const injected = new Map(production);
+    const probe = `${ORCHESTRATION_MODULE_PREFIX}evil-layout.ts`;
+    const NEWLINE = String.fromCharCode(10);
+    injected.set(probe, `import { verifyLayoutCandidate } from "../../pcb/candidates/layout-candidate";${NEWLINE}export const x = verifyLayoutCandidate;`);
+    const caught = walk(injected, [probe]);
+    expect(caught.length).toBeGreaterThan(0);
+    const throughLayout = (line: string): boolean => line.includes(`: ${probe} -> app/lib/pcb/candidates/layout-candidate.ts -> `) && /^[A-Z_]+: /.test(line);
+    for (const line of caught) expect(throughLayout(line), line).toBe(true);
+    expect(caught.some((line) => line.startsWith("EXECUTOR: "))).toBe(true);
+    // a type-only import of the layout family's types is erased and not caught (merge.ts imports the candidate's TYPES only)
+    injected.set(`${ORCHESTRATION_MODULE_PREFIX}layout-types-only.ts`, `import type { LayoutCandidate } from "../../pcb/candidates/layout-candidate";${NEWLINE}export type T = LayoutCandidate;`);
+    expect(walk(injected, [`${ORCHESTRATION_MODULE_PREFIX}layout-types-only.ts`])).toEqual([]);
+    // the merge's own references, spelled out: which verifiers it imports ("say which")
+    const references = moduleReferences(merge, production.get(merge)!).filter((reference) => reference.kind !== "import-type").map((reference) => reference.specifier);
+    const runtime = runtimeDeclarationSpecifiers(merge, production.get(merge)!);
+    // [B21 D fix] pin move (coverage-5 / security review): the merge builds a layout candidate's board exactly as the family's apply
+    // does, with the apply's own PURE builders - the routing import command and its application, the placement transaction - never
+    // the layout family's module (its closure reaches the executor); each builder's closure is walked above and reaches no family
+    expect([...new Set(references.filter((specifier) => runtime.has(specifier)))].sort()).toEqual([
+      "../../engineering/component-authority", "../../engineering/replacement-proposals", "../../engineering/revision", "../../engineering/schematic-model",
+      "../../engineering/schematic-proposals", "../../engineering/stable", "../../pcb/autoroute/command", "../../pcb/board-identity", "../../pcb/connectivity-board", "../../pcb/drc/presets",
+      "../../pcb/drc/run-drc", "../../pcb/placement/transaction", "../../pcb/proposal/bounded-edit-compiler", "../../pcb/proposal/sealed-pcb-edit-proposal", "../../pcb/readiness/evaluate",
+      "../../pcb/readiness/parity", "../../pcb/revision", "../../pcb/route-tool.commands", "../netlist-validation", "../redaction", "./contracts", "./scheduler",
+    ]);
   });
 });

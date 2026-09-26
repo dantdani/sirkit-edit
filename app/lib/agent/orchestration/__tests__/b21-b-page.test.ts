@@ -152,7 +152,7 @@ describe("[B21 B] the task-complexity-router page", () => {
     for (const claim of claims) expect(caseBody(claim.routeCase), `route case ${claim.routeCase}`).toContain(`map((head) => head.revision)).toEqual([${claim.revision}])`);
     const title = /^ {2}it\("4\. ([^"]*)"/m.exec(suite)![1]!;
     expect(title).not.toMatch(/three requests and three results/);
-    expect(title).toMatch(/revision 6/);
+    expect(title).toMatch(/revision 8/); // [B21 D] pin move: the merge's two decisions follow the committed results (6 -> 8)
     const row = page.split(NEWLINE).find((line) => line.startsWith("| `app/api/chat/__tests__/b21-b-chat-router.test.ts` |"))!;
     expect(row).not.toMatch(/the three-specialist DAG in one stream/);
     const c39 = page.split(NEWLINE).find((line) => line.startsWith("| C39 |"))!;

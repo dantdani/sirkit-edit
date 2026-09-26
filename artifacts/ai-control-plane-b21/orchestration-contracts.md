@@ -332,12 +332,13 @@ capsule key below the top level.]
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts` | 14 | 14 |
 | `app/lib/agent/orchestration/__tests__/b21-a-store.test.ts` | 15 | 15 |
-| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 6 | 6 |
+| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | 7 |
 | `app/lib/agent/orchestration/__tests__/b21-a-page.test.ts` | 6 | 6 |
 | `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 7 | 7 + 1 per chapter |
 
 [B21 C] The gate suite gained case 6 (role-tools.ts joins the entry set; the three pins of cases 1, 3 and 5 moved from five modules
-to six, `specialist-roles.md` section 6); B21-B had moved them from three to five the same way.
+to six, `specialist-roles.md` section 6); B21-B had moved them from three to five the same way. [B21 D] The gate suite gained case 7
+(merge.ts joins the entry set; the same three pins moved from six modules to seven, `merge-and-disagreement.md` section 7).
 
 The guard's `it.each(CHAPTERS)` adds one runtime test per chapter of its list, so a run prints 7 + 3 = 10 tests today (`b19-`, `b20-`,
 `b21-`) for its 7 `it(` blocks; the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never

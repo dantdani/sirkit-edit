@@ -477,7 +477,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(history[2]!.record).toEqual({ kind: "dissent", decision: "escalated", reason: "deadline", subjectDigest: null });
   }, 20_000);
 
-  it("13. resume checks the revision: a committed result whose request was bound to another scope/revision is dissent `stale` (with the stale result's digest) and the task RUNS AGAIN at the next attempt, never replayed as current evidence; the same scope replays (case 5)", async () => {
+  it("13. resume checks the revision: a committed result whose request was bound to another scope/revision is dissent `stale` (with the stale result's digest) and the task RUNS AGAIN at the next attempt ([B21 D] one past its stale dissent), never replayed as current evidence; the same scope replays (case 5)", async () => {
     const first = await rig({});
     const outcome1 = await runSpecialistDag({ roles: REPLACEMENT }, first.coordinator, first.deps);
     expect(outcome1.kind).toBe("ran");
@@ -490,7 +490,9 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome2.kind).toBe("ran");
     if (outcome2.kind !== "ran") return;
     expect(outcome2.stop).toBe("completed");
-    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 1, "accepted"], ["component-sourcing-evidence", 1, "accepted"], ["verification-critic", 1, "accepted"]]);
+    // [B21 D] pin move: the re-run takes the attempt AFTER its stale dissent (2), so the merge's verdict on the re-run never shares a key
+    // with the stale dissent about the old result (the durable repository replays a repeated key's first commit without comparing payloads)
+    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 2, "accepted"], ["component-sourcing-evidence", 2, "accepted"], ["verification-critic", 2, "accepted"]]);
     expect(second.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "verification-critic"]);
     const history = await second.store.history(second.scope);
     const stale = history.filter((entry) => entry.record.kind === "dissent");
@@ -498,25 +500,26 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     // other scopes then record two dissents instead of the second replaying the first under an identical idempotency key
     expect(stale.map((entry) => [entry.taskId, entry.attempt, (entry.record as { decision: string }).decision])).toEqual([["task-1-circuit-topology", 1, "stale"], ["task-2-component-sourcing-evidence", 1, "stale"], ["task-3-verification-critic", 1, "stale"]]);
     expect((stale[0]!.record as { reason: string; subjectDigest: string | null })).toMatchObject({ reason: expect.stringMatching(/^stale_scope: /), subjectDigest: outcome1.tasks[0]!.resultDigest });
-    expect(history.filter((entry) => entry.record.kind === "result").map((entry) => [entry.taskId, entry.attempt])).toEqual([["task-1-circuit-topology", 0], ["task-2-component-sourcing-evidence", 0], ["task-3-verification-critic", 0], ["task-1-circuit-topology", 1], ["task-2-component-sourcing-evidence", 1], ["task-3-verification-critic", 1]]);
+    expect(history.filter((entry) => entry.record.kind === "result").map((entry) => [entry.taskId, entry.attempt])).toEqual([["task-1-circuit-topology", 0], ["task-2-component-sourcing-evidence", 0], ["task-3-verification-critic", 0], ["task-1-circuit-topology", 2], ["task-2-component-sourcing-evidence", 2], ["task-3-verification-critic", 2]]);
     expect(warningsOf(second.events).filter((message) => /is STALE/.test(message))).toHaveLength(3);
     // the new requests are bound to the moved revision
-    const rebound = history.filter((entry) => entry.record.kind === "request" && entry.attempt === 1);
+    const rebound = history.filter((entry) => entry.record.kind === "request" && entry.attempt === 2);
+    expect(rebound).toHaveLength(3);
     for (const entry of rebound) expect((entry.record as { document: { scope: { canonicalRevisionDigest: string } } }).document.scope.canonicalRevisionDigest).toBe(moved.canonicalRevisionDigest);
-    // [B21 B lead] a THIRD resume under a third scope: the attempt-1 results are stale in turn, the new dissents land under attempt 2
-    // (their own key), and every earlier record stays - nothing is replayed over
+    // [B21 B lead] a THIRD resume under a third scope: the attempt-2 results ([B21 D]; attempt 1 before) are stale in turn, the new dissents
+    // land under attempt 3 (their own key) and the re-runs at attempt 4, and every earlier record stays - nothing is replayed over
     const third = await rig({}, { repository: first.repository, store: first.store });
     const movedAgain = { ...third.deps.context, canonicalRevisionDigest: `eng1-${"1".repeat(16)}` };
     const outcome3 = await runSpecialistDag({ roles: REPLACEMENT }, third.coordinator, { ...third.deps, context: movedAgain });
     expect(outcome3.kind).toBe("ran");
     if (outcome3.kind !== "ran") return;
-    expect(outcome3.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 2, "accepted"], ["component-sourcing-evidence", 2, "accepted"], ["verification-critic", 2, "accepted"]]);
+    expect(outcome3.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 4, "accepted"], ["component-sourcing-evidence", 4, "accepted"], ["verification-critic", 4, "accepted"]]);
     const laterHistory = await third.store.history(third.scope);
     const dissents = laterHistory.filter((entry) => entry.record.kind === "dissent" && entry.taskId === "task-1-circuit-topology");
-    expect(dissents.map((entry) => entry.attempt)).toEqual([1, 2]);
+    expect(dissents.map((entry) => entry.attempt)).toEqual([1, 3]);
     expect(dissents.map((entry) => (entry.record as { reason: string }).reason)).toEqual([expect.stringMatching(/^stale_scope: /), expect.stringMatching(/^stale_scope: /)]);
     expect(dissents.map((entry) => (entry.record as { subjectDigest: string | null }).subjectDigest)).toEqual([outcome1.tasks[0]!.resultDigest, outcome2.tasks[0]!.resultDigest]);
-    expect(laterHistory.filter((entry) => entry.record.kind === "result" && entry.taskId === "task-1-circuit-topology").map((entry) => entry.attempt)).toEqual([0, 1, 2]);
+    expect(laterHistory.filter((entry) => entry.record.kind === "result" && entry.taskId === "task-1-circuit-topology").map((entry) => entry.attempt)).toEqual([0, 2, 4]);
   });
 
   it("14. every attempt is measured and attributed: steps, tool calls and usage of a FAILED attempt count too (the meter sits on the adapter, not on run_completed), each outcome carries its provider and model, the DAG's used tokens sum every attempt, and a specialist's refused tool call reaches the coordinator's stream as ONE bounded warning line", async () => {

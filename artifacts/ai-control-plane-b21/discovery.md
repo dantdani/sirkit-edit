@@ -653,7 +653,7 @@ with already-committed change sets (`collaboration.ts:8-21`); sealed proposals a
 sealed proposals against the same head are never intersected; a replacement and a PCB edit touching the same component instance are
 invisible to each other; `EngineeringProposal` with `conflicts`, `approvals`, `verificationReport` and `status: "stale"` exists only in
 `AuthoritativeCollaborationSession` (`types.ts:329-342`; `collaboration.ts:23-41`). Severity high. **CONFIRMED**. Closes: B21-D. Source:
-authority D21-31.
+authority D21-31. — CLOSED by B21-D as a capability: `merge.ts` (`b21-d-merge.test.ts` cases 2, 6, 12, 16 and 18): the surviving actions' stable identities are intersected pairwise (schematic and PCB joined through a footprint's sync identity) and each overlap of two different changes classified with ConflictClass and conflictForTransaction's resolutions (`same_field`, `edit_vs_delete`, `schematic_vs_pcb`, `net_vs_routing`, `unknown_interaction`); every party is `contradicted` and one escalation record goes to the human per conflict group. In production no specialist carries an artifact today (the OD-120 proposal ids are dormant, a specialist's context has no head mark and no PCB basis, its registry is read-only), so no conflict reaches the merge and no escalation is written - CONFIRMED-unreachable until a role is offered a proposal tool; a disagreement in prose is carried to the follow-up turn as each specialist's unverified claims, never escalated structurally.
 
 **D21-11 — Provider/model identity is recorded once per run, closed to `openai | anthropic`, pinned literally, and not carried
 uniformly by the artifacts a merge layer would compare.** Requirement: B21-D "records which provider/model produced each result
@@ -668,7 +668,7 @@ proposals record provider + instruction excerpt, no model, no runId (`gateway.ts
 layout candidate records `producer: "agent"` (`layout-candidate.ts:36-37`); transactions record `source: "ai"` (`types.ts:236`). A run in
 which a specialist runs on another provider/model, or two "independent" specialists share a model, cannot be recorded truthfully in
 v1 or detected from artifacts. Severity high. **CONFIRMED**. Closes: B21-D (artifact envelope) and B21-E (trace block; needs OD-112,
-OD-132). Sources: loop D21-7, traces D21-20, authority D21-32.
+OD-132). Sources: loop D21-7, traces D21-20, authority D21-32. — the artifact-envelope half CLOSED by B21-D (OD-132): every judged result carries the provider it was dispatched through and the model that provider reported, in the merge's view, the follow-up envelope and its persisted verdict; one provider = one source (a reported model is never counted as independence) and a replayed result's provenance is unrecorded, counted with every source; the sealed schemas are unchanged; the trace half stays B21-E's (OD-112).
 
 **D21-12 — Pre-invocation refusals are untraced, `verification` is free text, and no traced field carries assumptions, evidence,
 decisions, dissent or a source/model correlation key.** Requirement: B21-D "rejects stale results; requests deterministic verification
@@ -678,7 +678,7 @@ UNTRACED `tool_refused` events (`loop.ts:405-460`; OD-17 D6 `OWNER_DECISIONS.md:
 only, `verification` is a digest-bounded string with no closed vocabulary (`trace.ts:227-236`; reader `:523`), and per-event keys are exact
 (`:279`), so every new field moves the validator's key list, the recorder cascade and every committed pin together (the `external` block is
 the only precedent, `:234-235`). Severity medium. **CONFIRMED**. Closes: B21-D (dissent records) and B21-E (trace block; needs OD-114).
-Sources: traces D21-24, D21-28.
+Sources: traces D21-24, D21-28. — the dissent-records half CLOSED by B21-D (OD-114): every merge verdict is a persisted `decision` / `dissent` record under a content key naming the task attempt it judges, with the verifications it asked for; every escalation and part review request its own record; a changed verdict appended, the latest standing; the traced form stays B21-E's.
 
 **D21-13 — The layout candidate carries no tenant/project/branch/lineage scope.** Requirement: B21-D "compares semantic object
 identities and base revisions; rejects stale results" (`:835, :838`); the B09.1 discipline that a byte-identical board in another scope
@@ -687,7 +687,7 @@ historyHead? }` (`layout-candidate.ts:40-47`) and `verifyLayoutCandidate` checks
 (`:296-303`); the agent's placement/routing proposals inherit this (`layout-proposals.ts:111-125`); the agent context has no generation to
 offer (`contracts.ts:156-166`). A candidate produced for one project could pass verification against a byte-identical board in another
 scope, and two agents' candidates cannot be told apart by scope. Severity medium. **CONFIRMED**. Closes: B21-D (wrap; needs OD-133).
-Source: authority D21-39.
+Source: authority D21-39. — CLOSED by B21-D (OD-133): every action is bound to the RevisionBoundProjectScope of the request its result answered, a missing or mismatched request is `stale` (merge case 13), an accepted candidate reaches the envelope with that scope; the candidate's own `base` is the follow-up D21-34.
 
 **D21-14 — Deterministic verification is complete for PCB claims and thin for circuit/topology claims, and no exposed tool verifies a
 sibling specialist's sealed artifact before apply.** Requirement: B21-C "deterministic verification critic" (`:825`); B21-D "requests
@@ -699,7 +699,7 @@ legality report); no ERC exists (`view-session/schematic.ts:13-15, :75-76`), so 
 (the B21-F timer-replacement disagreement) has no deterministic tie-breaker beyond the canonical validator, the server-side netlist
 proof and parity and must escalate by construction; a verifier specialist without the verified canonical-state resource gets a
 zero-tool run (`loop.ts:248-259`). Severity medium. **CONFIRMED** (the escalation consequence INFERRED). Closes: B21-D (recorded limit;
-verification requests by binding id). Sources: authority D21-34, tools D21-45.
+verification requests by binding id). Sources: authority D21-34, tools D21-45. — RECORDED by B21-D: the five verification bindings run DRC, connectivity, readiness with parity, the canonical revision with the canonical validator and the netlist proof, and the board revision with parity (each a pass only when its check ran); no ERC exists, so a topology contradiction between two circuit specialists has no deterministic tie-breaker - and it is not detected and NOT escalated: the merge reads no prose and an escalation needs two artifacts, which no specialist carries today; it reaches the human only as each specialist's unverified claims in the follow-up turn, whose header asks it to say what stays unresolved (the earlier wording "an escalation by construction" overstated this).
 
 **D21-15 — A readiness claim has no carrier in any proposal.** Requirement: B21-D "detects contradictory … readiness claims" (`:837`);
 B21-B "manufacturing readiness → deterministic checks plus manufacturing reviewer, never an autonomous release agent" (`:811`).
@@ -707,7 +707,7 @@ Finding: the bounded compiler always emits readiness `{ state: "unavailable", re
 the verifier refuses anything else (`sealed-pcb-edit-proposal.ts:700-706`); readiness-inspect is inspection-only provenance
 (`tool-catalog.ts:551, :559`). A manufacturing-readiness reviewer can only REFERENCE a `ReadinessReport` by reportId + designRevision +
 manufacturingProfileId (reader `readiness/evaluate.ts:259-268`) or a qualification-authority digest (reader `qualification-authority.ts:238`).
-Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-129). Source: authority D21-35.
+Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-129). Source: authority D21-35. — CLOSED by B21-D (OD-129) for the manufacturing-readiness reviewer, structurally: its result must reference the recomputed current ReadinessReport (its frame shows it how), free text from that role is refused, a qualification-authority reference is `stale` and never satisfies the rule (`b21-d-merge.test.ts` cases 7, 15, 21 and 22; route case 7); another role's readiness prose is not detected.
 
 **D21-16 — A component can be replaced only by its one server-owned exact authority target; a sourcing specialist cannot propose an
 alternative part through any existing tool.** Requirement: B21-B "component replacement → circuit, component-authority and
@@ -717,7 +717,7 @@ never choose (`replacement-proposal-assembler.ts:228-245`); a permitted alternat
 `asset_mismatch` (`schematic-authority.internal.ts:298-331`); OD-23 defines the "approved lower-power part" as the single exact authority
 (reader `OWNER_DECISIONS.md:55-63`). "Provider disagreement" on the target can only be whether to replace with the sole exact target
 unless an evidence-only candidate-part kind (never authority) is introduced and bound through the human review path
-(reader `acceptance-pipeline.test.ts:187-238`). Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-130). Source: authority D21-36.
+(reader `acceptance-pipeline.test.ts:187-238`). Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-130). Source: authority D21-36. — CLOSED by B21-D as OD-130: a non-exact target is contradicted and writes a part review request for `request_atomic_review`, disagreeing part claims escalate once citing the exact authority (cases 6 and 19); a part named only in prose is not detected.
 
 **D21-17 — Artifact lifetimes are fixed and inconsistent with a DAG's wall time; a parallel specialist finishing after any commit is
 deterministically stale.** Requirement: B21-B caps/wall time and resume (`:813`); B21-F "stale revision during parallel specialists"
@@ -727,7 +727,7 @@ deterministically stale.** Requirement: B21-B caps/wall time and resume (`:813`)
 pinned to one head (headMark / pcbRevisionId + historyHead + lineage), so a commit between specialists makes the later result
 stale-head / stale-revision / STALE_REVISION — correct, but the orchestration must treat it as a regenerate signal, never a merge
 input, and nothing ties a task `deadlineAt` to these TTLs. Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-107's wall-time
-clause). Source: authority D21-37. — the wall-time clause CLOSED by B21-B: the DAG wall time 300 000 ms is ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, so nothing the DAG produces expires before the human sees it (OD-107); the stale-as-regenerate-signal clause stays B21-D's (B's scheduler already treats a committed result from a moved revision as `stale` and re-runs it, never as a merge input). - **A's stated deviation (no runtime binds the store in A)** — closed by B21-B: `app/api/chat/orchestration-runtime.ts` binds the production repository (the fixture runtime's in-memory one proven, route case 7); D21-3's "closed in part" is unchanged (tool calls are still not persisted; B21-E — a specialist's refused tool calls are visible as bounded warning lines meanwhile).
+clause). Source: authority D21-37. — the wall-time clause CLOSED by B21-B: the DAG wall time 300 000 ms is ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, so nothing the DAG produces expires before the human sees it (OD-107); the stale-as-regenerate-signal clause stays B21-D's (B's scheduler already treats a committed result from a moved revision as `stale` and re-runs it, never as a merge input). - **A's stated deviation (no runtime binds the store in A)** — closed by B21-B: `app/api/chat/orchestration-runtime.ts` binds the production repository (the fixture runtime's in-memory one proven, route case 7); D21-3's "closed in part" is unchanged (tool calls are still not persisted; B21-E — a specialist's refused tool calls are visible as bounded warning lines meanwhile). — the stale clause CLOSED by B21-D against the coordinator's request-time snapshot: a stale or expired artifact is dissent with its family's code, never a merge input, and a resume re-runs a committed result the merge judged stale or expired - the regenerate signal (cases 3, 4, 11 and 23); with B's wall-time clause the defect is closed. OPEN for B21-E/F: a commit that lands DURING the DAG is not seen by the merge (it judges against the snapshot the request assembled; no server-side live head exists to re-read) - every apply re-verifies against the live head, and section 9's planned B21-F case (results merged after a commit lands between them) needs a live head at merge time.
 
 **D21-18 — No provider-level circuit breaker, quota or Sirkit-owned retry exists; the only thing preventing a paid retry storm is the
 human not clicking Retry.** Requirement: B21-E "quota/rate-limit circuit breakers; no repeated paid retry storm" (`:853-854`); B21-B
@@ -876,6 +876,12 @@ Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: too
 **D21-32 — The durable-workflow production runtime reaches the OpenAI SDK.** Requirement: the B21-A import gate (no provider SDK in an orchestration module's closure); standing constraint OD-45 (no provider SDK outside the five reviewed modules' purpose). Finding: `app/lib/durable-workflow/runtime.ts` -> `server-repository.ts` -> `app/lib/db/schema.ts` -> `app/lib/embeddings.ts` -> `openai` (a schema constant `EMBEDDING_DIMENSIONS` pulls the SDK). Consequence: an orchestration module gated against provider SDKs cannot resolve the production repository itself; the store takes it by injection and B21-B's runtime file binds it. Severity low. **CONFIRMED** (gate case 3, injected probe, chain quoted). Closes: a follow-up outside B21 (move the constant to a dependency-free module); no owner decision needed. Source: B21-A.
 
 **D21-33 — The loop's own import closure reaches the fab presets.** `app/lib/agent/loop.ts -> app/lib/engineering/tool-bindings-readonly.ts -> app/lib/pcb/ai/snapshot.ts -> app/lib/pcb/fab/presets/index.ts` (measured 2026-09-26; the gate pins the invariant, not the hops), the RELEASE family of A's gate (no preset exemption). Consequence: an orchestration module may never import `runAgentLoop` / `buildRunToolset`; the scheduler takes both by injection from the composition root (`SchedulerDeps.runLoop` / `buildToolset`). Severity low. **CONFIRMED** (gate case 3's `evil-loop` probe). Closes: recorded; no owner decision needed. Source: B21-B.
+
+**D21-34 — The layout candidate's own `base` carries no tenant/project/branch/lineage scope.** B21-D wraps it in the request's scope inside the envelope (OD-133); the candidate itself (`LayoutCandidateBase`, C40) is unchanged because the editor's hooks share it. Closes: a follow-up outside B21 (a v2 candidate with its own scope, the hooks and the candidate suites moved together). Source: B21-D.
+
+**D21-35 — The layout family's module reaches the executor.** `app/lib/pcb/candidates/layout-candidate.ts -> app/lib/engineering/pcb-commit-gateway.ts -> app/lib/engineering/editor-adapter.ts -> app/lib/engineering/executor.ts` (C38, C39; for `applyLayoutCandidate`), so no orchestration module may import `verifyLayoutCandidate`: the merge takes it by injection from the composition root (`specialistMergeDeps`), the D21-33 pattern; the merge builds a candidate's board with the apply's own PURE builders (the routing import command and its application, the placement transaction), whose closures reach no family. **CONFIRMED** (gate case 7's probe). Closes: recorded; a follow-up outside B21 may move the pure verifier to a module of its own. Source: B21-D.
+
+**D21-36 — B's `specialistResultsEnvelope` has no production caller.** Since B21-D the route builds the merge's `mergedResultsEnvelope` (C31); B's function (C74) stays only because B's route case 12 and C's least-privilege case 8 pin it. D's route case 6 carries their checks (the bound, the sanitizer, the sources, the not-run task) on the production envelope. Closes: the lead retires the function with those two cases' envelope assertions at the closeout (a reviewed pin move; B's page C45 and the OD-108 text that names it move with it). Source: B21-D review fix pass.
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1221,3 +1227,27 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
   alone), so the chat route's replacement flow runs two specialists without one.
 - **Section 8:** the lead's residual fixes (the full-circuit grammar requires the circuit kind to head the object, optionally followed
   by a container noun; the stale-then-no-tools dissent offset is now proven by least-privilege case 8 part C).
+
+### B21-D (recorded by the lead, 2026-09-26)
+
+- **Section 4:** D21-10, D21-13, D21-15, D21-16 closed and D21-17's stale clause closed (the defect closed with B's wall-time clause);
+  D21-11's envelope half and D21-12's dissent-records half closed (their trace halves stay B21-E's); D21-14 recorded; D21-34, D21-35 and
+  D21-36 opened (all low). D21-10 is closed as a CAPABILITY and is CONFIRMED-unreachable in production: no specialist carries an artifact
+  today (the OD-120 proposal ids are dormant and a specialist's context has no head mark or PCB basis), so no conflict reaches the merge
+  and no escalation is written - the lead schedules **B21-D2** (specialists propose through existing tools, with provenance taken from
+  the gateway's own seal) before B21-E, because runbook B21-C says a specialist "proposes through existing tools" and scenario 17 needs a
+  real disagreement to resolve.
+- **Section 6:** OD-114, OD-129, OD-130, OD-132, OD-133 applied as `merge-and-disagreement.md` states them; OD-120's addendum recorded.
+  The lead's reading of the layout-family stop condition: INJECTION of the family's own pure `verifyLayoutCandidate` from the composition
+  root (the merge's closure holds no executor, gate case 7) is the intended reading - the stop condition exists to keep the executor out
+  of the merge, and it is out; moving the pure verifier to a module of its own stays the follow-up D21-35 names.
+- **Section 7, B21-D:** as built - the merge between the scheduler and the envelope (every family's own integrity and currency checks
+  against the coordinator's pinned scope, a bounded PCB edit recompiled and byte-matched, proposal-to-proposal identity intersection
+  classified by ConflictClass, contradicted parties and one escalation per group, the exact-authority part rule and part review requests,
+  readiness only as a reference to the recomputed report, the five verification bindings executed with no model, one provider one source,
+  every verdict persisted before hand-on and the latest standing); the scheduler re-runs a task after a stale dissent at the next attempt
+  and re-runs a committed result the merge judged stale or expired.
+- **Section 8:** the lead's residual fixes (DRC regressions compared by what a violation is, never its measured id, and an incomplete net
+  judged by its pad groups; the escalation subject carries its claims; a verdict returning to an earlier value is recorded again under a
+  key chained to the verdict it supersedes). Open for B21-E/F: the merge judges against the request-time snapshot, not a live head
+  (D21-17's second half), and B's `specialistResultsEnvelope` is retired at the closeout (D21-36).

@@ -340,7 +340,7 @@ export function specialistSystemPrompt(system: string, task: { role: SpecialistR
     `Task run: ${task.specialistRunId}`,
     `Objective: ${task.objective}`,
     "Rules: use only the read tools offered; you cannot propose, execute, approve, bind, qualify, purchase or release anything, and nothing you write has authority - it is evidence the coordinator and the human weigh against deterministic checks. Do not write hidden reasoning into the result.",
-    `Your FINAL message must be exactly ONE JSON document and nothing else, of this shape: {"schema":"${SPECIALIST_RESULT_SCHEMA}","role":"${task.role}","summary":"<at most 4000 characters>","proposedActions":[],"assumptions":[{"id":"<id>","statement":"<text>","evidenceIds":[]}],"evidence":[],"requiredTools":[],"risks":[{"id":"<id>","severity":"low|medium|high","statement":"<text>","mitigation":null}],"unresolvedQuestions":[{"id":"<id>","question":"<text>","blocking":false}],"validationRequests":[],"confidence":"low|medium|high"}`,
+    `Your FINAL message must be exactly ONE JSON document and nothing else, of this shape: {"schema":"${SPECIALIST_RESULT_SCHEMA}","role":"${task.role}","summary":"<at most 4000 characters>","proposedActions":[],"assumptions":[{"id":"<id>","statement":"<text>","evidenceIds":[]}],"evidence":[],"requiredTools":[],"risks":[{"id":"<id>","severity":"low|medium|high","statement":"<text>","mitigation":null}],"unresolvedQuestions":[{"id":"<id>","question":"<text>","blocking":false}],"validationRequests":[],"confidence":"low|medium|high"}`, ...specialistResultRules(task.role),
   ].join("\n");
 }
 /** A specialist's budget: the coordinator's (never over DEFAULT_AGENT_BUDGET) with the run deadline bounded to the remaining wall time. */
@@ -471,18 +471,18 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
       let staleWritten = false;
       if (committed && committed.record.kind === "result") {
         const answered = history.find((entry) => entry.taskId === task.taskId && entry.attempt === committed.attempt && entry.record.kind === "request");
-        const committedScopeDigest = answered && answered.record.kind === "request" ? engineeringDigest(answered.record.document.scope) : null;
+        const committedScopeDigest = answered && answered.record.kind === "request" && !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null; // [B21 D fix] the merge's stale / expired verdict is a regenerate signal
         if (committedScopeDigest === currentScopeDigest) {
           outcomes.push({ taskId: task.taskId, role: task.role, attempt: committed.attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "replayed", reason: null, resultDigest: committed.record.digest, result: committed.record.document, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
           warn(`Orchestration: specialist ${task.role} replayed from the record (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}); it did not run again.`);
           continue;
         }
         // the board moved (or the scope differs): the committed result is STALE - dissent, then the task runs again
-        const reason = `stale_scope: committed under scope ${committedScopeDigest ?? "(unknown)"}, resumed under ${currentScopeDigest}`;
+        const reason = mergeJudgedStale(history, task.taskId, committed.attempt) ? `stale_verdict: the merge judged the committed result ${latestMergeVerdict(history, task.taskId, committed.attempt)?.decision} (a regenerate signal, D21-17)` : `stale_scope: committed under scope ${committedScopeDigest ?? "(unknown)"}, resumed under ${currentScopeDigest}`;
         const written = await write(task.taskId, baseAttempt, dissent("stale", reason, committed.record.digest));
         if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
         staleWritten = true;
-        warn(`Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision; the task runs again.`);
+        warn(`Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision, or the merge judged it stale or expired; the task runs again.`);
       }
       // [B21 C fix] no tools this run: the task is not run and records its missing evidence (a dissent of its own key: one past a
       // stale dissent just written); the outcome carries it, so every planned task is in `tasks` or `notStarted`
@@ -497,7 +497,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         continue;
       }
       for (let offset = 0; offset < SPECIALIST_CAPS.attemptsPerTask; offset += 1) {
-        const attempt = baseAttempt + offset;
+        const attempt = baseAttempt + (staleWritten ? 1 : 0) + offset; // [B21 D] after a stale dissent the re-run takes its own attempt: its own dissent (malformed, escalated) never shares the stale dissent's key
         const remainingMs = dagDeadline - now();
         if (remainingMs < SPECIALIST_CAPS.minTaskMs) { stop = "deadline"; notStarted.push(task); break; }
         const runId = specialistRunId(coordinator.runId, task.taskId);
@@ -609,4 +609,29 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
     clearTimeout(dagTimer);
   }
   return { kind: "ran", tasks: outcomes, notStarted, stop, outputTokenCeiling, outputTokensUsed };
+}
+
+// ─── [B21 D fix] The merge's verdicts as a resume reads them, and a role's output rules ───────────────────────────────────
+// Appended on purpose: a function declaration is hoisted, so these move no line the B21 pages cite in this file.
+
+/** The infix of a merge verdict's record key: the merge writes its verdict on a task attempt under `<taskId>.merge-<16 hex of the
+ *  verdict>` and the judged attempt, so the same verdict replays and a changed one (a later judgement) is its own record. */
+export const MERGE_VERDICT_INFIX = ".merge-" as const;
+/** The LATEST merge verdict recorded on a task attempt (a re-judgement appends; the latest stands), or null when none. */
+export function latestMergeVerdict(history: readonly OrchestrationRunEntry[], taskId: string, attempt: number): { taskId: string; decision: OrchestrationDecision } | null {
+  const prefix = `${taskId}${MERGE_VERDICT_INFIX}`;
+  const entry = history.filter((item) => item.taskId.startsWith(prefix) && item.attempt === attempt && (item.record.kind === "decision" || item.record.kind === "dissent")).at(-1);
+  return entry && (entry.record.kind === "decision" || entry.record.kind === "dissent") ? { taskId: entry.taskId, decision: entry.record.decision } : null;
+}
+/** D21-17: a committed result whose latest merge verdict is `stale` or `expired` is a regenerate signal - a resume runs the task
+ *  again at a new attempt instead of replaying it (any other verdict replays: a conflict or a refusal is the human's to decide). */
+export function mergeJudgedStale(history: readonly OrchestrationRunEntry[], taskId: string, attempt: number): boolean {
+  const verdict = latestMergeVerdict(history, taskId, attempt);
+  return verdict !== null && (verdict.decision === "stale" || verdict.decision === "expired");
+}
+/** OD-129 as the reviewer is told it: the ONLY accepted readiness evidence is a reference to the report its read returned. */
+export const READINESS_CITATION_RULE = 'Readiness citation (this role must cite, or its result is refused): add to "evidence" exactly {"kind":"readiness-report","id":"<report.reportId>","digest":"<pinned.reportDigest>","sourceClass":"deterministic_verifier","reviewed":false} with the two values copied from your sirkit.manufacturing.readiness-inspect read; a readiness claim in free text is refused, and the merge recomputes the report to check the reference.';
+/** [B21 D fix] The output rules a role's frame adds below the result shape (regressions-3: the reviewer was never shown how to cite). */
+export function specialistResultRules(role: SpecialistRole): string[] {
+  return role === "manufacturing-readiness-reviewer" ? [READINESS_CITATION_RULE] : [];
 }

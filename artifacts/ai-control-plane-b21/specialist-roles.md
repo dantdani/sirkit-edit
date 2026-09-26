@@ -148,7 +148,8 @@ as an allowlist (33 ids, over the bound) — the coordinator's run carries none.
   both records exist, `stale` at the resuming attempt and `escalated` one past it; lead, 2026-09-26), its outcome is `escalated` with no
   step, and one visible warning names it (`Orchestration: specialist <role> not run (role_has_no_tools, task <taskId>): …`); the
   plan record's reason names every such role and the scheduled line counts only the roles that run. So every planned task is in the
-  outcome's `tasks` or `notStarted`, and the follow-up coordinator turn's envelope (`specialistResultsEnvelope`) carries the not-run
+  outcome's `tasks` or `notStarted`, and the follow-up coordinator turn's envelope (`specialistResultsEnvelope`; [B21 D fix] superseded
+  in production by the merge's `mergedResultsEnvelope`, which carries the not-run task the same way - D's route case 6, D21-36) carries the not-run
   task with its reason — the model is told which evidence is missing, never handed a "completed" plan without it (least-privilege
   cases 4 and 8; route case 4). A resume for the same coordinator run and scope therefore never meets `plan_mismatch` because a
   resource loaded or failed to load this time: a committed result replays whatever the role's tools now, and a role that now has
@@ -299,7 +300,7 @@ routing") can still select the layout variant. **CONFIRMED** by `b21-b-router.te
 | `app/lib/agent/orchestration/__tests__/b21-b-router.test.ts` | 9 | B's seven cases, case 3's full-circuit pins moved; case 8 the trim; case 9 the full-circuit grammar (a new circuit named from words; the layout variant's own ask) |
 | `app/lib/agent/orchestration/__tests__/b21-b-scheduler.test.ts` | 14 | B's fourteen cases, five pin moves (below) |
 | `app/lib/agent/orchestration/__tests__/b21-b-page.test.ts` | 8 | B's seven cases; case 8 the run shapes B's page states equal the route suite's pins |
-| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 6 | A's five cases (the entry set pinned to six modules); case 6 role-tools.ts |
+| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | A's five cases (the entry set pinned to six modules); case 6 role-tools.ts; [B21 D] case 7 merge.ts (seven modules) |
 | `app/api/chat/__tests__/b21-b-chat-router.test.ts` | 18 | B's sixteen `it(` blocks, pin moves (below); case 16 the per-role structure through the production POST (the bare gateway by identity, the role's list at the gateway); case 17 all three specialists with the component authority loaded |
 
 **Test-first.** The adopted `b21-c-role-tools.test.ts` failed at import before any code (`Cannot find module '../role-tools'`,
@@ -325,7 +326,7 @@ role to `specialistAllowedToolIds`; cases 4, 8 and 14 script reads inside the ca
 or the circuit specialist's tool). `b21-a-import-gates.test.ts` cases 1, 3 and 5 — five modules to six. `b21-b-chat-router.test.ts`
 cases 4, 11, 12b and 15 — the route's context holds no component authority (no durable binding), so the sourcing specialist has no
 tools and is not run: two specialists run, the sourcing task records its `role_has_no_tools` dissent (the record ends at revision 6
-with the plan's three tasks), and the hang and the directive-looking summary move to the verification critic (the second specialist to
+with the plan's three tasks; [B21 D] at revision 8 once the merge records its two decisions), and the hang and the directive-looking summary move to the verification critic (the second specialist to
 run); case 4's title now says exactly that. The pages that count these suites (A's §7, B's §6) carry the new `it(` counts; B's page
 gains the `D-full-circuit-layout` row, the trimmed list, the run shapes of route cases 4 and 17, and its citations of `router.ts` and
 `scheduler.ts` are re-pinned to the lines as left (page case 7 checks them).

@@ -247,7 +247,7 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(traces[0]!.warnings).toEqual([`Refused before any model call: ${TIER3_REFUSAL_SENTENCE}`]);
   });
 
-  it("4. flag ON: the replacement request runs the coordinator turn as today, THEN the plan's specialists ([B21 C] three planned; this run loads no component authority - no durable binding, the suite's default - so the sourcing specialist has no tools and is NOT RUN: two further adapter runs, one at a time, each a read-only specialist prompt) and ONE READ-ONLY follow-up coordinator turn that receives the shape-validated results as data and is told the sourcing evidence is missing - all in one stream with exactly one run_started and one terminal event whose steps, tool calls and usage are the run's TOTALS (equal to the trace's) and in which no toolset warning is repeated; the record holds the plan of three tasks, two requests with their results and the sourcing task's `role_has_no_tools` dissent under the stream's run id (revision 6; route case 17 runs all three with the authority loaded)", async () => {
+  it("4. flag ON: the replacement request runs the coordinator turn as today, THEN the plan's specialists ([B21 C] three planned; this run loads no component authority - no durable binding, the suite's default - so the sourcing specialist has no tools and is NOT RUN: two further adapter runs, one at a time, each a read-only specialist prompt) and ONE READ-ONLY follow-up coordinator turn that receives the shape-validated results as data and is told the sourcing evidence is missing - all in one stream with exactly one run_started and one terminal event whose steps, tool calls and usage are the run's TOTALS (equal to the trace's) and in which no toolset warning is repeated; the record holds the plan of three tasks, two requests with their results, the sourcing task's `role_has_no_tools` dissent and ([B21 D]) the merge's two `accepted` decisions under the stream's run id (revision 8; route case 17 runs all three with the authority loaded)", async () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { repository, store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
@@ -299,10 +299,13 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     const scope = { ...SCOPE, runId };
     const history: OrchestrationRunEntry[] = await store.history(scope);
     // [B21 C fix] the plan keeps all three tasks (stable ids); the sourcing task's dissent records the missing evidence
-    expect(history.map((entry) => `${entry.taskId}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-verification-critic:request", "task-3-verification-critic:result"]);
+    // [B21 D] pin move: the deterministic merge runs between the scheduler and the envelope and persists its verdict on every judged
+    // result before the follow-up turn - two `accepted` decisions under the judged task attempts (revision 6 -> 8); [B21 D fix] each
+    // under its content key `<taskId>.merge-<16 hex>` (a re-judgement appends its own record, never blocked; its hex elided here)
+    expect(history.map((entry) => `${entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-verification-critic:request", "task-3-verification-critic:result", "task-1-circuit-topology.merge-*:decision", "task-3-verification-critic.merge-*:decision"]);
     expect((history[0]!.record as { reason: string }).reason).toContain(`(${ROLE_HAS_NO_TOOLS}): component-sourcing-evidence`);
     expect(history[3]!.record).toMatchObject({ kind: "dissent", decision: "escalated", reason: expect.stringMatching(/^role_has_no_tools: /), subjectDigest: null });
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([6]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([8]);
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2, usage: { inputTokens: 6, outputTokens: 10 } });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
@@ -516,7 +519,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(types(events).filter((type) => type === "proposal_ready" || type === "pcb_proposal_ready" || type === "execution_grant_ready" || type === "view_command_ready" || type === "layout_candidate_ready")).toEqual([]);
     expect(terminals(events)).toEqual(["run_completed"]);
     expect(events.at(-1)).toMatchObject({ type: "run_completed", steps: 3, toolCalls: 0, finalText: "(scripted) The follow-up turn answers from the results." });
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result"]); // [B21 C fix] the not-run sourcing task's dissent
+    // [B21 D] pin move: the merge's two `accepted` decisions follow the committed results (the directive-looking summary is data; the merge judges no prose)
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent
   });
 
   it("13. a record that throws a driver-style error on use never leaks its text to the stream: the warning carries the closed reason only, the connection string (host, user, password) reaches neither the stream nor the trace unredacted", async () => {
@@ -576,7 +580,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(warnings.some((message) => message.startsWith("Orchestration: the follow-up coordinator turn did not complete (provider_network)"))).toBe(true);
     expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(2);
     // the record keeps the committed specialist work; the trace is one completed run whose step count the stream reports
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result"]); // [B21 C fix] the not-run sourcing task's dissent
+    // [B21 D] pin move: the merge ran (and persisted its two `accepted` decisions) before the follow-up turn failed
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", failureReason: null });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
@@ -637,7 +642,7 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(state.gateways).toHaveLength(2); // nothing above constructed another gateway
   });
 
-  it("17. [B21 C fix] with the component authority LOADED (a stubbed durable source returning U1's binding - what production loads for a bound part), the replacement DAG runs ALL THREE specialists through the production POST (review: no route case ran the sourcing specialist): five adapter starts, the sourcing specialist offered exactly component-authority.inspect, the follow-up turn given three results, and the record at revision 7 with three requests and three results", async () => {
+  it("17. [B21 C fix] with the component authority LOADED (a stubbed durable source returning U1's binding - what production loads for a bound part), the replacement DAG runs ALL THREE specialists through the production POST (review: no route case ran the sourcing specialist): five adapter starts, the sourcing specialist offered exactly component-authority.inspect, the follow-up turn given three results, and the record at revision 10 with three requests, three results and ([B21 D]) the merge's three `accepted` decisions", async () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { repository, store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
@@ -658,10 +663,11 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(warnings.some((message) => message.includes(ROLE_HAS_NO_TOOLS))).toBe(false);
     expect(terminals(events)).toEqual(["run_completed"]);
     const history: OrchestrationRunEntry[] = await store.history({ ...SCOPE, runId });
-    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result"]);
+    // [B21 D] pin move: the merge's three `accepted` decisions (revision 7 -> 10)
+    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result", "decision", "decision", "decision"]);
     const sourcing = history.find((entry) => entry.record.kind === "request" && entry.record.document.role === "component-sourcing-evidence")!;
     expect((sourcing.record as { document: { allowedToolIds: readonly string[] } }).document.allowedToolIds).toEqual(["sirkit.component-authority.inspect"]);
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([7]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([10]);
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2 });
   });

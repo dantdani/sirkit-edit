@@ -2810,3 +2810,61 @@ _(discovery, reproduction and results appended below as they are observed)_
   least-privilege case 8; sources restored, SHA-256 equal). The C page states both corrections. Records hygiene: B's section-10 bullet
   had leaked into D21-33's paragraph in `discovery.md` through the records script's clause boundary; removed, and the script fixed.
 - Lead gates (2026-09-26, one job at a time): every B21 suite (A 4, B 4, C 4 suites plus the extended router and gate cases), the route suite and the CI guard 13 files / 127 cases; `app/api/chat/__tests__` in full 15 files / 96; `app/lib/agent/__tests__` in full 36 files / 415; the exposure, tier and discovery pins (b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b18-c-never-execution-sweep, b20-a4-observation-descriptor, b20-b1-mcp-exposure, b20-b3-mcp-subset-move, b20-c1-three-way-parity), the MCP gates (b20-b2, b20-d3), b18-d-composer-routing and the B19-D closure gate 12 files / 143; `app/lib/mcp/__tests__` in full (every B20 page citation) 26 files / 642 - no cited line moved; tsc 0; eslint clean on every new and changed TS file; no descriptor, discovery channel, exclusion reason, route, UI or generator input changed, the B04/B01 artifacts byte-identical; census 165/162/3/0.
+
+### B21-D — merge and disagreement: the deterministic merge layer (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the four D suites and gate case 7 were written first, with the pin moves of the A and B suites; all ran against the
+  unchanged code (`d-failing-first.log`: 8 files - the four D suites at import, 11 moved cases on their assertions); then the module
+  (`d-impl-1.log`: the merge suites 15/17 - case 11 failed on the unchanged scheduler, which is what moved the scheduler line; case 12
+  on its fixture); then green with the wiring (`d-impl-2.log`: 6 files, 61 tests).
+- Adversarial review fix pass: 30 confirmed findings (regressions-1..4, four security, eleven coverage, eleven tests) fixed test-first -
+  the reproducing cases first against the unchanged code (`f3-failing-first.log`: 27 of 55 red, each on its finding's assertion;
+  `f11` for the persisted evidence), then the fix (`f4-fix-1.log`: 55/55); every test-strength case proven by a deliberate breakage of
+  the fixed source and a hash-verified restore (`f6`..`f10`). What changed: the envelope bounded by five stages; the canonical and
+  connectivity verifiers never invent a pass; base-state verification is evidence only and a layout candidate's own board is checked by
+  the compiler's rules; the merge binds each artifact's keys, lifetime and principal and claims no provenance; one provider = one
+  source, a replay's provenance unrecorded; verdicts under content keys, the latest standing, a stale or expired verdict regenerated on
+  resume; the reviewer's frame shows the readiness citation, a qualification-authority reference never satisfies OD-129; standings
+  ignore a specialist's `reviewed` and read extraction; one change carried twice is no conflict; the schematic-PCB endpoint join; a
+  part review request per non-exact target; the verifications persisted in the verdict; B's envelope marked superseded.
+- Code: `app/lib/agent/orchestration/merge.ts` (the families' verifiers against the pinned scope, the merge's binding of each artifact,
+  the PCB recompile, the injected layout verifier, the candidate board check and OD-133's scope wrap, the identity intersection and
+  ConflictClass, the exact-authority rule with review requests, the readiness reference rule, the five verifiers as deterministic_verifier
+  evidence, B19's labels, sources, persistence before hand-on under content keys, bounded lines, a digest over the view);
+  `app/api/chat/orchestration-runtime.ts` (the merge between the scheduler and the envelope, its stand-down, the staged merged envelope,
+  the injected verifier - appended; B's envelope's doc lines in place, no cited line moved); `app/lib/agent/orchestration/scheduler.ts`
+  (the re-run after a stale dissent at the next attempt, the regenerate signal, the reviewer's citation rule - in place and appended, no
+  cited line moved); the workflow's one explicit entry for the route suite. No route, descriptor, UI or generator input changed; census
+  165/162/3/0.
+- Pin moves with their reasons: B's route cases 4, 12b, 15, 17 (the merge's decisions; revisions 6 -> 8, 7 -> 10; case 4 the content
+  keys), B's page case 8, B's scheduler case 13 (the re-run attempt), A's gate cases 1, 3, 5 (seven modules) and 7 (the layout apply's
+  pure builders); A's, B's and C's pages carry the gate's count, B's page its restated revisions, case 13's attempts and re-pinned
+  C48/C49, B's and C's pages the superseded envelope.
+- Findings: D21-34 (low) - the layout candidate's own `base` carries no scope (OD-133's follow-up); D21-35 (low) - the layout family's
+  module reaches the executor through the commit gateway, so the merge takes `verifyLayoutCandidate` by injection (gate case 7's probe);
+  D21-36 (low) - B's `specialistResultsEnvelope` has no production caller and is pinned by B's route case 12 and C's least-privilege
+  case 8.
+- Gates re-run one job at a time (the lead re-runs them): the D suites and every B21 suite; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` (b09-*, b11-*, b18-*, b20-a4-*); the engineering exposure / tier / verifier suites; the MCP gates and
+  `app/lib/mcp/__tests__`; the CI guard; tsc; eslint on every new and changed file - figures in the report.
+- Records: `merge-and-disagreement.md`; OD-114, OD-129, OD-130, OD-132, OD-133 as applied, OD-120's addendum; D21-10 (as a capability),
+  D21-11 (envelope), D21-12 (dissent records), D21-13, D21-15 (the reviewer role), D21-16, D21-17 (stale clause, request-time
+  snapshot) closed; D21-14 recorded; D21-34, D21-35, D21-36 found. Live: every B21 behaviour with a real model
+  BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 30 fixes and raised 3 new low issues, all latent until
+  specialists carry artifacts or a route-level resume exists): (1) the layout candidate's DRC regression check compared error ids, which
+  hash the measured value, so partial routing progress (an incompleteNet whose remaining count fell) or a persisting clearance violation
+  with another gap read as NEW - violations are now compared by `drcViolationIdentity` (kind, items, objects, layer), incompleteNet is
+  judged by the per-net pad-group count (more groups = a lost connection; fewer = progress); (2) an escalation's persisted reason names
+  its claims but its subject digest did not, so a re-judgement whose claims changed collided with the old record (`store_conflict`) -
+  `escalationSubjectDigest` now carries the claims; (3) OD-114's "the latest verdict stands" failed when a verdict returned to an earlier
+  value (A, B, A: the returning A matched the first A's key and was skipped) - a verdict identical to the LATEST writes nothing, and one
+  that differs is keyed against the verdict it supersedes (`mergeVerdictTaskId`'s `previous`), so the returning A is recorded and is the
+  latest. Merge case 9 restated (a superseded verdict is never written over: the new verdict lands under a chained key, the old record
+  untouched), case 9b added (A, B, A and a replay that writes nothing), case 9c added (the two identities, and the merge keys through
+  them - read as text). Each fix proven revert-sensitive by mutation (`d-lead-probe-*.log`: an identity that includes the id fails case
+  9c, a subject without claims fails case 9c, an unchained verdict key fails cases 9 and 9b; the source restored from its backup,
+  SHA-256 equal). The full-board partial-routing scenario is proven at the function level only (stated on the page). A vacuous
+  assertion drafted during the fix (it accepted either outcome) was removed before the gates. The D page's citation lines re-pinned (22
+  rows) and its merge-suite count updated.
+- Lead gates (2026-09-26, one job at a time): every B21 suite with both route suites and the CI guard 17 files / 175 tests; `app/api/chat/__tests__` in full 16 / 103; `app/lib/agent/__tests__` in full 36 / 415; the engineering pins (b04, b13, b15, b17-e, b17-f, b18-a, b18-c) with the MCP gates and ratchets 10 / 115; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds, so D moved no cited line); tsc clean; eslint clean. All passed.

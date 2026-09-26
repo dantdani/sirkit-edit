@@ -27,13 +27,13 @@ import { pcbRevisionId } from "@/app/lib/pcb/revision";
 import { createEmptyBoard, type PcbBoard, type Track } from "@/app/lib/pcb/types";
 import type { SchematicState } from "@/lib/schematic-types";
 
-const SCOPE = { tenantId: "local", projectId: "p21-sealed", branchId: "main" } as const;
-const NOW = 1_700_000_000_000;
-const PRINCIPAL = "user-fixture";
+export const SCOPE = { tenantId: "local", projectId: "p21-sealed", branchId: "main" } as const;
+export const NOW = 1_700_000_000_000;
+export const PRINCIPAL = "user-fixture";
 
 /** A canonical head mark in the mark grammar the sealers validate (`validateSchematicCanonicalMark`); the replacement assembler
  *  binds the mark's digest to its own reference content (`replacementHeadDigestFor`), the Tier 1 sealer to the state digest. */
-function headMarkFor(canonicalStateDigest: string): Tier1ProposalHeadMark {
+export function headMarkFor(canonicalStateDigest: string): Tier1ProposalHeadMark {
   return { lineageId: `lin1-${engineeringDigest({ fixture: "lineage" }).slice(5)}`, headSequence: 0, canonicalStateDigest };
 }
 
@@ -62,13 +62,13 @@ export function sealedTier1Proposal(): SealedTier1Proposal {
 function pin(number: string, name: string, xMm: number): KicadPin {
   return { number, name, type: "passive", position: { x: xMm, y: 0 }, orientation: 0, length: 2.54 };
 }
-const PART_PINS: readonly KicadPin[] = [pin("1", "A", -2.5), pin("2", "B", 2.5)];
+export const PART_PINS: readonly KicadPin[] = [pin("1", "A", -2.5), pin("2", "B", 2.5)];
 const U1 = { id: "u1-id", partId: "lib:part-a", x: 300, y: 100, rotation: 0 as const, refDes: "U1", value: "MCU", atomicPartRevisionId: "rev-old", symbolAssetVersionId: "sym-old" };
-function replacementState(): SchematicState {
+export function replacementState(): SchematicState {
   const pin1 = kicadPinWorldPos(U1, PART_PINS[0]!);
   return { components: [], kicadComponents: [{ ...U1 }], wires: [{ id: "w1", vertices: [{ x: pin1.x - 60, y: pin1.y }, pin1] }], netLabels: [] };
 }
-function authorityRecord(): ComponentAuthorityRecord {
+export function authorityRecord(): ComponentAuthorityRecord {
   return {
     authorityRecordId: "auth:u1-id", componentId: "u1-id", projectId: SCOPE.projectId, authorityRevision: "rev-new",
     selectedPart: { mpn: "lib:part-b", manufacturer: "Fixture Semiconductor", provenance: "physical-binding" },
@@ -78,7 +78,7 @@ function authorityRecord(): ComponentAuthorityRecord {
     evidenceRefs: ["binding:fixture:u1-id"],
   };
 }
-function pinFacts(rev: string, symbol: string, certificateId = "cert-new"): PublishedSymbolPinFacts {
+export function pinFacts(rev: string, symbol: string, certificateId = "cert-new"): PublishedSymbolPinFacts {
   const ids = PART_PINS.map((entry) => `pin-${entry.number}`);
   return {
     atomicPartRevisionId: rev, symbolAssetVersionId: symbol, pins: [...PART_PINS],
@@ -126,8 +126,8 @@ export function sealedPcbEditProposal(): SealedPcbEditProposal {
 // ── Routing layout candidate (b17-e's recipe) ───────────────────────────────
 
 const MM = 1_000_000;
-const track = (id: string, netId: number, x1: number, y1: number, x2: number, y2: number, extra: Partial<Track> = {}): Track => ({ id, layer: "copperTop", netId, start: { x: x1 * MM, y: y1 * MM }, end: { x: x2 * MM, y: y2 * MM }, width: 250_000, ...extra } as Track);
-function routedBoard(): PcbBoard {
+export const track = (id: string, netId: number, x1: number, y1: number, x2: number, y2: number, extra: Partial<Track> = {}): Track => ({ id, layer: "copperTop", netId, start: { x: x1 * MM, y: y1 * MM }, end: { x: x2 * MM, y: y2 * MM }, width: 250_000, ...extra } as Track);
+export function routedBoard(): PcbBoard {
   const def = makeResistorDef();
   const b = makeBoard(40, 30, [
     makeInstance("r1", def, { x: 5, y: 5 }, { "1": 1, "2": 2 }),
