@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21: discovery (read-only readers over main at 6fd5a7b) in progress on chapter/b21-specialist-orchestration; no increment committed yet",
+  "currentCheckpoint": "B21-A committed on chapter/b21-specialist-orchestration: canonical orchestration contracts, the durable record, the import gate, CI admission, LB-9; next B21-B",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
@@ -12,9 +12,10 @@
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
-    "bundled FreeRouting runtime is local-only; CI replays committed recordings"
+    "bundled FreeRouting runtime is local-only; CI replays committed recordings",
+    "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "Commit the B21 discovery (artifacts/ai-control-plane-b21/discovery.md + provider-reference-notes.md + README.md), open draft PR #11, then B21-A (canonical orchestration contracts) test-first.",
-  "updatedAt": "2026-09-24T15:10:40-04:00",
+  "nextAction": "B21-B test-first: the task-complexity router (a Tier 0/1 command, a 3D/view request and a Tier 3 name each produce today's single-agent run shape or a refusal with no provider call - the proof order of discovery section 9), the no-provider path (OD-110), the sequential scheduler over runAgentLoop with the durable record bound through app/api/chat/orchestration-runtime.ts (OD-107, OD-111, OD-122).",
+  "updatedAt": "2026-09-26T00:42:08-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

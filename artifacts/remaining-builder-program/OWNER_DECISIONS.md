@@ -844,3 +844,134 @@ Amendments to existing entries:
 **Record explicitly:** D20-23 closes under the existing **OD-51** and spends no new number; where the adversarial evidence lives (one D-owned page) is recorded on `mcp-adversarial.md`, not spent as a number. Highest number in use after D: OD-105 (OD-83..86 and OD-88 stay reserved).
 
 **Recorded explicitly (B20-D, 2026-09-24):** D20-23 closes under the existing OD-51 and spends no new number; where the adversarial evidence lives (one D-owned page, `mcp-adversarial.md`) is recorded there, not spent as a number. Highest number in use after D: OD-105 (OD-83..86 and OD-88 stay reserved for the proposal reversal).
+
+## OD-106 — `POST /api/schematic/build-multi` is scoped out of B21 and tripwired (B21-A, 2026-09-24)
+
+- **Question:** the only fan-out in the repository (a planner forced to `submit_plan`, then an unbounded `Promise.all` of build loops on
+  the planner's block count, with no AbortSignal, run id, trace or per-block budget beyond `MAX_ITERATIONS`; D21-5) contradicts B21's
+  pass criteria. Retire it, route it through the B21-B router, or record it as a legacy structured route outside B21?
+- **Default applied:** scoped OUT of the chat DAG and recorded as legacy with its own gate cited: the B21-A import gate holds
+  `app/api/schematic/build-multi/` and `app/lib/build-loop.ts` as forbidden families of their own (judged before the general `app/api/`
+  family), so no orchestration module can ever import the route or `runBuildToolLoop`; no artifact presents it as the B21 orchestration;
+  B21-B's route-level suite proves it untouched. Retirement is a separate owner-approved change.
+- **The owner may choose otherwise:** retire the route now (a route census move, 165 -> 164, with every ratchet artifact regenerated);
+  or route it through the B21-B DAG (then its planner becomes the coordinator's first turn and its blocks become specialist tasks,
+  which is B21-B/C work with the same gates).
+
+## OD-107 — The DAG caps (B21-A records; B21-B applies) (2026-09-24)
+
+- **Question:** agents per coordinator run, parallelism, per-specialist budget, tokens, cost, wall time.
+- **Default applied (the lead's values, discovery §9):** at most 4 specialists per coordinator run; parallelism 1 (sequential — memory,
+  the event-loop-blocking placement engine, and parallel tool calls already off at both providers); each specialist bounded by
+  `DEFAULT_AGENT_BUDGET` or less (6 / 10 / 15 000 / 120 000 / 2 / the settlement timeout; `AgentBudget` adds the two reported token
+  counts, `maxInputTokens` / `maxOutputTokens`, never priced); the DAG wall time is its own scheduler cap of 300 s (not a per-specialist
+  field), ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, so no artifact the DAG produces can expire before
+  the human sees it; the coordinator's loop keeps 120 s per turn; a per-DAG token ceiling of 6 × (coordinator + specialists) × 4 096
+  output tokens reported, not priced; an artifact older than its TTL at merge time is dissent `expired`, never merged.
+- **The owner may choose otherwise:** more specialists or parallelism 2 (needs a concurrency cap on the long-running engines first);
+  a longer DAG (then the proposal TTLs must move, a reviewed pin move across three sealers).
+
+## OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-A, 2026-09-24)
+
+- **Question:** `AgentRunRequest.history` is plain text; a structured result has no turn kind of its own.
+- **Default applied:** as a redacted tool result under `MAX_RESULT_CHARS` (60 000), one specialist per tool call — no `AgentRunRequest`
+  change in B21; the validated snapshot's whole-body digest travels with it so the coordinator can cite it. A structured turn kind is a
+  later contract change.
+- **The owner may choose otherwise:** a `history` entry kind for structured results (moves the loop's request contract and every
+  adapter's rendering in one increment).
+
+## OD-109 — Specialists never hold the three availability facts (B21-A records; B21-C proves) (2026-09-24)
+
+- **Question:** `assembleAgentRunContext` takes `executionGrantsAvailable`, `externalAcquisitionAvailable` and `mcpObservationAvailable`
+  as caller flags (D21-8).
+- **Default applied:** an invariant — a specialist context is DERIVED from the coordinator's and can only narrow: the three facts false,
+  the ports absent, riskCeiling `propose`, approvalsAvailable empty, no grant field; only the coordinator holds the minter and the ports
+  and seals the one proposal; B21-C's gateway wrapper refuses any specialist invocation whose context claims grantability. In A the
+  contracts already make the request carry NO such field (a `budget` or `scope` with an extra key refuses `unknown_key`; the request has
+  no capability, actor or authority field at all).
+- **The owner may choose otherwise:** a sourcing specialist that reads through the external port (then `externalAcquisitionAvailable`
+  becomes a per-role fact under OD-120's table, still never a grant).
+
+## OD-110 — The deterministic no-provider path (B21-A records; B21-B builds) (2026-09-24)
+
+- **Question:** commands that need no model.
+- **Default applied:** a server-side classifier in the chat route BEFORE any adapter: a Tier 3 family name is refused with no provider
+  call; a request whose only need is a Tier 0 read named by grammar is answered from the read binding; everything else takes the existing
+  single-agent path unchanged. No production no-model adapter; the fixture agent stays non-production.
+- **The owner may choose otherwise:** answer every message through a model (today's behaviour; simple work would still be one turn).
+
+## OD-111 — The durable orchestration record (B21-A, 2026-09-24; corrected 2026-09-26)
+
+- **Question:** persist orchestration runs (reversing B11's deferral in part): where, what, how long, who reads, audited?
+- **Default applied:** one durable-workflow aggregate `agent.orchestration-run.v1` scoped by tenant/project/branch, keyed by the
+  coordinator run id, holding only structured, digest-bound, redacted records — plan, validated request, validated result, decision,
+  dissent; bounded summaries; no reasoning text, no provider state, no credential (refused by name and by value at validation, at every
+  level of a wrapped artifact included); a stored request bound to the run and task it is appended under and a stored result to the request
+  it answers (`requestDigest`); every write a compare-and-set commit under `orchestration:<runId>:<taskId>:<attempt>:<kind>` (the runbook's
+  attempt key with the record kind, one segment per record kind, since an attempt writes its request, its result and a decision) in a
+  replay partition PER RUN (the scope key carries the run id: an id may carry `:`, so the key text alone is not injective across runs); a
+  replay returns the committed result and writes nothing; every load digest-verified (`revision` the head, `history` the whole chain); a
+  malformed scope on a read throws `AGENT_ORCHESTRATION_SCOPE_INVALID`; NO outbox topic (no handler exists; D21-28); `history` the audit
+  read. **tool calls are NOT persisted** by A (the runbook's list :801 names them): their carrier is B21-E's per-task trace record on the
+  trace attribution (OD-112); D21-3 is therefore closed in part. The repository is injected and bound by the composition root (D21-32: the
+  durable runtime's production path reaches the OpenAI SDK, which the gate forbids); unbound or without a database the store is
+  UNAVAILABLE and every caller fails closed. **no runtime binds the store in A** — a stated deviation from the task's fixture-runtime
+  binding, deferred to B21-B's `app/api/chat/orchestration-runtime.ts` (the lead may instead have the binder added outside the gated
+  prefix now). **Who reads it:** in B21 the record is server-internal — the scheduler (B21-B) and the merge (B21-D) read it through the
+  store; no route and no MCP read tool exposes it (the chapter adds no route; the census stays 165/162/3/0); member access with
+  `read_project` is a follow-up outside B21 (a route is a census move, an MCP or agent read tool a pin move per D21-9). Retention: an
+  explicit setting defaulting to the grant retention, which today means "kept until an owner-decided purge exists" (nothing in the
+  substrate purges); purge and access audit deferred and stated.
+- **The owner may choose otherwise:** no persistence (then resume after a provider outage re-runs specialists and re-pays them, D21-4);
+  a shorter retention with a purge job (then the outbox needs a handled topic, or a scheduled purge outside it); an access audit now; a
+  sixth record kind `call` persisted by the scheduler (then B21-B carries it, with its own idempotency segment per call).
+
+## OD-118 — The official documentation hosts for execution-time re-checks (B21-A, 2026-09-24)
+
+- **Question:** the hosts the runbook and the task name (`platform.openai.com/docs`, `docs.anthropic.com`) redirect or answer 403 (D21-29).
+- **Default applied:** `developers.openai.com/api/docs`, `platform.claude.com/docs`, and for the Anthropic Agent SDK `code.claude.com`
+  (not fetched) are the hosts of record; every provider fact B21 implements against is in `provider-reference-notes.md` with its URL and
+  date; a page that answers 403 or redirects to an unrecorded host stays UNKNOWN until an increment fetches it and records the date. A
+  re-read nothing in this increment (no provider feature is touched).
+- **The owner may choose otherwise:** pin a documentation snapshot in the repository (then the "re-check at execution time" obligation
+  needs a dated refresh rule).
+
+## OD-124 — CI admission for the B21 suites (B21-A, 2026-09-24)
+
+- **Question:** the job-scope guard covered `b19-` / `b20-` only and no directory filter covered `app/lib/agent/__tests__` (D21-26).
+- **Default applied:** the guard's `CHAPTERS` extended to `b19-`, `b20-`, `b21-`; ONE directory filter `app/lib/agent/orchestration/__tests__`
+  in the `prompt-to-gerber` job (explicit files under it refused as redundant by the existing rule); suites elsewhere (route, page,
+  engineering) by explicit entry, never under `app/lib/engineering/__tests__` (benchmark-core would run them twice); PGlite-backed suites
+  (none planned) to `database-delivery`; `b11-trace-replay-evaluation` admitted explicitly only if B21 adds cases to it, otherwise a new
+  `b21-f-evaluation` suite carries them. A later chapter extends `CHAPTERS` without touching B21's page or suites (they pin membership).
+- **The owner may choose otherwise:** one explicit entry per suite (the B19/B20 pattern for scattered suites; more rows to maintain).
+
+## OD-128 — `LIVE_BLOCKERS.md` LB-9 (B21-A, 2026-09-24)
+
+- **Question:** no row names real specialist disagreement, provider fallback or quota failure with live models (D21-25).
+- **Default applied:** LB-9 added at B21-A, in the register's table format, as the row below; unblocked as LB-2; every B21 live behaviour
+  (disagreement, fallback, quota, timeout, the structured-output and forced-tool rules on the models the live pages name) is recorded
+  under it and never converted into a claim; the model-in-loop track is record-only until credits exist (OD-125, OD-102: no permanently
+  skipped block).
+- **The owner may choose otherwise:** supply provider credits with a spend limit (LB-2), which unblocks LB-7 and LB-9 together.
+
+## OD-131 — Provider text persisted inside a `SpecialistResult` (B21-A, 2026-09-24; corrected 2026-09-26)
+
+- **Question:** what a specialist's own words may be, once they are persisted for replay and audit.
+- **Default applied:** `summary` bounded (4 000 characters) and structured; assumptions, risks and questions are closed typed records with
+  bounded (1 000-character) texts; no rationale transcript; no key named in the capsule denylist (`state`, `response`, `request`, `body`,
+  `headers`, `client`, `sdk`, `openai`, `anthropic`, `token`) nor any reasoning-, thinking-, continuation- or chain-of-thought-shaped key
+  nor any credential-shaped key, at any level the types name; inside a wrapped sealed artifact, a reasoning- or credential-shaped key at ANY
+  level and a capsule key at its top level (below it the artifact is the sealer's; a real certificate carries `state`), the sealers' three
+  declared authorization-binding names (`authorization`, `authorizationBinding`, `authorizationSchema`) exempt from the name check only;
+  AND no credential-shaped VALUE in any text, any id or any string of a wrapped artifact (`secret_shaped_text`), no control or format
+  character anywhere (`invalid_text`) — because the record is persisted (OD-111) and may ride in a capsule, a secret must never enter it.
+  The two value rules are DELIBERATE fail-closed defaults with a recorded availability cost: they reach the sealers' own prose fields inside a wrapped artifact (`provenance.instruction`, `provenance.note`, a PCB proposal's `intent`), so a real proposal built from a benign instruction that carries such a phrase or character is refused whole with the specialist's result (lead, 2026-09-26); the secret scan is the shared diagnostic
+  pattern set with the `sk-` prefixes token-anchored, so a `NAME=value` dump (`R1_VALUE=10k-ohm-0603`, `DRC_PRESET=default-preset-v2`) or
+  a `secret:` / `password:` prefix in benign engineering prose refuses the whole result (never redacted, as every other stored identity
+  field in the codebase refuses); the character rule refuses every `\p{Cf}` character, a soft hyphen (U+00AD, copied datasheet text) or a
+  zero-width joiner included. Under B21-D such a result becomes dissent `malformed`.
+- **The owner may choose otherwise:** allow a longer summary (a bound move, one constant and one pin); allow a free-text rationale field
+  (refused here by default: it is the chain-of-thought storage the runbook forbids); redact instead of refuse for the diagnostic-grade
+  patterns and strip format characters instead of refusing (then the persisted text differs from what the model said, and the page
+  records which substrings were removed).

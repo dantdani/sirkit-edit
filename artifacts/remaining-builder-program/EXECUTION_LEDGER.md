@@ -2643,3 +2643,60 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Records: `artifacts/ai-control-plane-b21/{discovery.md, provider-reference-notes.md, README.md}`; `PROGRAM_STATE.json` -> B21
   (base `6fd5a7b`, last green `96a0314`); draft PR #11 opened after this commit so every increment gets CI. Gates for this commit:
   documents only — no suite, generator or production file changed.
+
+### B21-A — canonical orchestration contracts, the durable record, the import gate, CI admission, LB-9 (2026-09-24 local, reviewed and corrected 2026-09-26; increment workflow + lead; this commit)
+
+- Test-first: the adopted contracts suite (12 cases, written before any module existed) and the three new suites (store 12, import gates
+  5, page 6) plus the `[B21 A]` guard case all failed on the first run (`a-failing-first.log`: the four orchestration suites at import —
+  `Cannot find module '../contracts'` / `'../tripwires'`; the two b21 guard cases on the absent filter: `expected [ …(194) ] to include
+  'app/lib/agent/orchestration/__tests__'`), then green with the code; the adopted suite's reviewable parts moved as recorded on
+  `orchestration-contracts.md` §7 (the scrubbed spelling scan, `secret_shaped_text`, the vocabulary pins).
+- Review (2026-09-26): nine confirmed findings fixed test-first (`a-fix-failing-first.log`: contracts 5/14, store 9/15, page 5/6 failed
+  on the first implementation; then `a-fix-green.log`) — the three sealed families refused by their own authorization-binding name (the
+  sealers' declared names exempt from the name check, values scanned, the four REAL sealed artifacts wrapped verbatim in case 13), the
+  wrapped interior unscanned (walked in full), credential-shaped ids accepted (scanned), a validation request binding any of the 33
+  (closed to five verifiers), a non-injective idempotency key across runs (per-run replay partition), a read throwing an internal code
+  (`AGENT_ORCHESTRATION_SCOPE_INVALID`), a stored request or result bound to no run or request (bound; `requestDigest`), a hostile append
+  envelope throwing (captured whole), and tamper/replay/bound assertions that did not isolate their guards (breakage probes,
+  `a-fix-probe-*.log`, sources restored by hash). Two claims corrected: tool calls are NOT persisted (D21-3 closed in part; B21-E's trace
+  record carries them) and no runtime binds the store in A — a stated DEVIATION from the task's fixture-runtime binding, deferred to
+  B21-B pending the lead's decision. Two fail-closed costs recorded (OD-131: the diagnostic pattern set, every format character). Final
+  counts: contracts 14, store 15, gates 5, page 6 (40 `it(` blocks) + the guard's 7 `it(` blocks (10 runtime tests).
+- Code: `app/lib/agent/orchestration/contracts.ts` (the two schemas, nine roles, the 29-refusal vocabulary, capture-first validation,
+  whole-body and artifact digests, the key-name denylist and the value scan over texts, ids and wrapped interiors, the declared names,
+  the structural tool gate over the 33 and the never-exposed patterns, the verifier set, A4L semantics), `store.ts`
+  (`agent.orchestration-run.v1`: CAS, `orchestration:<runId>:<taskId>:<attempt>:<kind>` in a per-run partition, five record kinds, six
+  decisions, request/result binding, digest-verified loads, the scope sentence, no outbox, injected repository, unavailable default),
+  `tripwires.ts` (data), `__tests__/_sealed-artifacts.ts` (the four real artifacts). No route, descriptor, UI or generator input changed;
+  census 165/162/3/0; the B04/B20/B17-A artifacts byte-identical.
+- Gates re-run one job at a time (the lead re-runs them): the four A suites and the guard; `app/lib/agent/__tests__` (b09-*, b11-*,
+  b18-*, b20-a4-*); the five engineering suites (b04-tool-registry, b17-f-agent-exposure, b18-c-exposure-lift,
+  b18-c-never-execution-sweep, b18-c-fixture-agent); the three MCP gates (b20-b1-mcp-exposure, b20-b2-import-gates,
+  b20-d3-authority-import-gates); the durable-workflow tests; tsc; eslint on every new and changed file — figures in the report.
+- Finding D21-32 (low, INFERRED then CONFIRMED by the gate's probe): `app/lib/db/schema.ts` imports `EMBEDDING_DIMENSIONS` from
+  `app/lib/embeddings.ts`, which imports the OpenAI SDK, so `getDurableWorkflowRepository()` carries the SDK in its production closure;
+  every gated module must take the repository by injection (the autonomy store carries the same closure ungated). Follow-up (not A):
+  move `EMBEDDING_DIMENSIONS` to a dependency-free module.
+- Records: `orchestration-contracts.md`; OD-106..OD-111, OD-118, OD-124, OD-128, OD-131; LB-9; D21-1, D21-2, D21-26 closed, D21-3 closed
+  in part; D21-25, D21-28, D21-29 recorded; D21-32 opened. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed 22 of the 26 fixes, left 4 as recorded decisions and raised
+  6 new low issues): (1) the store's append envelope is no longer captured whole with the document inside it - the envelope is read
+  through its own data-property descriptors, its scalar fields captured under a 4 KiB bound, a plan / decision / dissent record captured
+  whole, a request / result record judged by kind and own keys (symbols and foreign prototypes refused) with the document taken by
+  identity and never re-captured (so a snapshot that validated at the contracts' bounds can always be appended, and no append pays a
+  1 MB deep copy), and a throw anywhere while judging (a stateful or throwing Proxy trap, a revoked Proxy) is the closed
+  `invalid_record` (store case 10: two Proxy envelopes, a symbol key, a foreign prototype); (2) the wrapped-artifact key rule is now by
+  position - the capsule's ten keys refuse at every level except `state` below the top level, and a declared authorization-binding name
+  is exempt only at the top level or directly inside a declared parent (contracts case 14: the nine other capsule keys refused at two
+  depths, a declared name under an operation or an impact record refused, the four real sealed artifacts still validate in case 13);
+  (3) the write-path throw is stated rather than hidden - a `result` append verifies the run's chain to bind its request and throws
+  `AGENT_ORCHESTRATION_RECORD_MISMATCH` on a tampered store before anything is written (store case 5 asserts it for every tampering);
+  (4) page case 4's tautological "runtime tests today" assertion replaced by a real one (only the guard carries one `it.each(CHAPTERS)`;
+  ten runtime tests today); (5) the sealer-prose cost recorded: the value scan reaches a wrapped artifact's `provenance.instruction`,
+  `provenance.note` and `intent`, so a real proposal built from a benign `NAME=value` instruction is refused whole - kept as the same
+  fail-closed default (OD-131, page section 2). Both code changes proven revert-sensitive by hash-verified mutation (`a-lead-probe.log`:
+  the old capsule rule fails exactly case 14, a rethrowing judge fails exactly case 10; sources restored, SHA-256 equal). The four
+  items the fixer deliberately kept stand as recorded: the diagnostic-grade secret patterns and the `\p{Cf}` rule over-refuse benign
+  prose (OD-131, fail closed), and the fixture-runtime binding is DEFERRED to B21-B's `app/api/chat/orchestration-runtime.ts` (the
+  lead's decision on coverage-4: the record has no reader in A, and a binder inside the gated prefix would carry the OpenAI SDK, D21-32).
+- Lead gates (2026-09-26, one job at a time): the four A suites, the CI guard and b20-b1 6 files / 72 cases (contracts 14, store 15, import gates 5, page 6, guard 10 runtime tests, b20-b1 22); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254 - no orchestration identifier in the nine scanned files, the provider literal untouched; b04-tool-registry, b17-f-agent-exposure, b18-c-exposure-lift, b18-c-fixture-agent, b20-b2-import-gates, b20-d3-authority-import-gates and app/lib/durable-workflow 8 files / 87 (+1 file / 2 cases skipped by tenant-scope's own pre-existing gate); tsc 0; eslint clean on the ten new and changed TS files; no generator input changed (no descriptor, route or UI), so no generator was re-run and every generated artifact is byte-identical; census 165/162/3/0.

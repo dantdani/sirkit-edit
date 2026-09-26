@@ -553,7 +553,7 @@ canonical `ProposedAction` must wrap each verbatim as an opaque, digest-verified
 the schematic head mark and the PCB revision/lineage basis. Delegation is refused only in tool ARGUMENTS (strict keys) or as an
 unknown provider name (`b18-c-never-execution-sweep.test.ts:115-132`; `execution-intents.ts:50-52`); no vocabulary or validator exists for
 a structured `ToolRequest`, so a specialist result naming `sirkit.manufacturing.release` would be plain text with no gate. Severity high.
-**CONFIRMED**. Closes: B21-A. Sources: loop D21-2, authority D21-30, tools D21-48.
+**CONFIRMED**. Closes: B21-A. Sources: loop D21-2, authority D21-30, tools D21-48. — CLOSED by B21-A: `contracts.ts` (`b21-a-contracts.test.ts`, 14 cases); the structural tool-request gate refuses a result naming `sirkit.manufacturing.release` before its content is read (case 7); the four real sealed artifacts validate wrapped verbatim (case 13, review).
 
 **D21-2 — No provider-neutral `EvidenceReference` shape; the B19 evidence-class rules are not reusable as a merge weighting.**
 Requirement: B21-A `evidence: EvidenceReference[]`; B21-D "retains every assumption and evidence reference" (`:836`). Finding: four
@@ -561,7 +561,7 @@ shapes coexist — the typed atomic `EvidenceRef` (`app/lib/atomic/types.ts:99-1
 (`component-authority.ts:106-107`), readiness schema/version strings (`readiness/types.ts:104-113`), a bare `string[]` on the unused
 `EngineeringProposal.verificationReport` (`types.ts:338`); the rules that sourcing never proves engineering and that unreviewed LLM/OCR
 extraction is quarantined exist only inside `evaluateApproval` (reader `b19-approval-evidence-authority.test.ts:69-81, :141-154`).
-Severity medium. **CONFIRMED**. Closes: B21-A. Source: authority D21-33.
+Severity medium. **CONFIRMED**. Closes: B21-A. Source: authority D21-33. — CLOSED by B21-A: `EvidenceReference` over the atomic `SourceClass` union plus `deterministic_verifier` and the atomic `ExtractionMethod` union, with `reviewed`; the B19 proof rules are B21-D's merge weighting, recorded there.
 
 **D21-3 — No agent-run record is persisted anywhere; there is no "immutable trace" to resume from.** Requirement: B21-A "Persist
 structured requests, results, evidence, calls, decisions and dissent needed for replay and audit" (`:801`); B21-E "resume from
@@ -570,7 +570,7 @@ trace's digest is computed and discarded (`route.ts:454-461`), no `traceId` reac
 (`route.ts:543-551`; traces reader grep), and retention/storage/access/audit were deferred to the owner by B11
 (`trace-recorder.ts:41-46`; `redaction-and-retention-policy.md:41-57`). Only three agent aggregates exist on the durable substrate
 (`autonomy-store.ts:27`; `execution-grant.ts:26-27`); none for runs, plans, requests, results, evidence, decisions or dissent. Severity
-high. **CONFIRMED**. Closes: B21-A (needs OD-111). Source: traces D21-21.
+high. **CONFIRMED**. Closes: B21-A (needs OD-111). Source: traces D21-21. — CLOSED IN PART by B21-A: `agent.orchestration-run.v1` (`b21-a-store.test.ts`, 15 cases) persists plans, validated requests, validated results (with their evidence references), decisions and dissent; tool calls are NOT persisted by A (the runbook's list :801 names them; no record kind carries a call) — B21-E's per-task trace record on the trace attribution (OD-112) carries them, and the resume that reads the record back is B21-B (D21-4); no runtime binds the store in A (stated deviation, OD-111).
 
 **D21-4 — Resume does not exist: a retry is a NEW run that restarts from the user message, so committed specialist work would be
 redone and re-paid; the single-artifact ledger and the mint key are scoped to one runId.** Requirement: B21-B "Cancellation and resume
@@ -817,7 +817,7 @@ flag anywhere (grep); the only opt-in gates are `SIRKIT_LIVE_ACQUISITION_CONTRAC
 `SIRKIT_LIVE_AUTH_QUALIFICATION` and `SIRKIT_DB_QUALIFICATION` (tests reader); OD-102 forbids a permanently skipped live block
 (`OWNER_DECISIONS.md:820-824`); OpenAI is at 429 no-credits for both keys (`EXECUTION_LEDGER.md:2508-2509`), Anthropic's state is
 unrecorded (UNKNOWN), LB-2 / LB-7 stand (`LIVE_BLOCKERS.md:8, :13`). Severity medium. **CONFIRMED** (absence) /
-**BLOCKED-LIVE-QUALIFICATION** (execution). Closes: B21-A (LB-9 row) and B21-F (needs OD-125, OD-128). Sources: tests D21-51, D21-59.
+**BLOCKED-LIVE-QUALIFICATION** (execution). Closes: B21-A (LB-9 row) and B21-F (needs OD-125, OD-128). Sources: tests D21-51, D21-59. — RECORDED by B21-A as LB-9 (OD-128); the opt-in track itself is B21-F (OD-125).
 
 **D21-26 — CI admission: the job-scope guard covers `b19-`/`b20-` only, no directory filter covers `app/lib/agent/__tests__`,
 `app/lib/engineering/__tests__` (in prompt-to-gerber), `app/components/chat` or `app/lib/project/__tests__`, and the B11 trace/replay/
@@ -827,7 +827,7 @@ trace family only `b20-a4-trace-attribution` (`:141`) and `b18-c-replay-grants` 
 `evaluation-cases.ts` would be gated only locally, and the two CI copies of the B11 regex also forbid `/mcp/i` in the nine files
 (`b20-a4:253`), so specialist vocabulary cannot enter those files without a reviewed re-scoping; suites placed under
 `app/lib/engineering/__tests__` also run in benchmark-core's 20-minute job (`benchmark.yml:15, :35`). Severity medium. **CONFIRMED**.
-Closes: B21-A (needs OD-124). Sources: traces D21-26, tests D21-50, D21-58.
+Closes: B21-A (needs OD-124). Sources: traces D21-26, tests D21-50, D21-58. — CLOSED by B21-A: `CHAPTERS` b21-, the `app/lib/agent/orchestration/__tests__` filter, the `[B21 A]` guard case (OD-124); the B11 trace suites' own admission stays as OD-124 records it.
 
 **D21-27 — Seven "no multi-agent" tripwire cases, the pinned provider literal, three test titles, two stale "ELEVEN" titles, three
 single-agent code headers and about a hundred artifact lines become stale or constraining when B21 lands.** Requirement: B21 mission
@@ -850,14 +850,14 @@ and degraded-mode reporting"; B21-A persistence. Finding: the production handler
 `DW_EFFECT_HANDLER_MISSING` is terminal on first dispatch (`outbox.ts:26-36`); under the fixture runtime the repository is an in-memory
 instance on `globalThis` lost on reset (reader `fixture-runtime/container.ts:29-52`); only in-memory and throwing sinks are proven
 (reader `b11-1-trace-integrity.test.ts:268-311`; `evaluation-cases.ts:115-119`). Severity low. **INFERRED**. Closes: B21-A (record; no
-outbox topics unless handled). Source: traces D21-29.
+outbox topics unless handled). Source: traces D21-29. — RECORDED by B21-A: the store emits no outbox effect (store case 8); a purge or audit topic needs a handled map first.
 
 **D21-29 — The documentation hosts named by the task and the runbook no longer serve the pages; the Agent SDK pages and the OpenAI
 reference defaults were not read.** Requirement: mission "re-check current official … documentation" (`:768`). Finding: the relocation
 facts in §1.2 (`mcp-reference-notes.md:6-8` records the first move on 2026-09-17); the Anthropic Agent SDK pages moved to
 `code.claude.com` (not fetched); the OpenAI reference answers 403 to WebFetch, so the defaults of `parallel_tool_calls` and `store` and the
 full `tool_choice` union stay UNKNOWN. B21's artifacts must cite the live hosts with dates. Severity low. **RECORDED**. Closes: B21-A
-(provider-reference-notes.md; needs OD-118). Source: providers D21-19.
+(provider-reference-notes.md; needs OD-118). Source: providers D21-19. — RECORDED by B21-A as OD-118 in `provider-reference-notes.md`; nothing re-read in A.
 
 **D21-30 — No browser observable proves that a direct Tier 0/1 command never recruits specialists.** Requirement: B21-F "3D control request
 routed directly without a swarm" (`:866`); pass criteria "simple work remains direct". Finding: the page shows no specialist count; the
@@ -872,6 +872,8 @@ session admits editor `schematic` (`:114`), yet no schematic descriptor is a gra
 (`granted-execution-families.ts` reader `:26-57`), mint/consume read only `base.pcb` (reader `mint.ts:134-135`; `consume.ts:127-132`), and
 OD-15 defers schematic execution (`OWNER_DECISIONS.md:21`). A schematic specialist can only produce the two sealed Tier 2 proposals.
 Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: tools D21-49.
+
+**D21-32 — The durable-workflow production runtime reaches the OpenAI SDK.** Requirement: the B21-A import gate (no provider SDK in an orchestration module's closure); standing constraint OD-45 (no provider SDK outside the five reviewed modules' purpose). Finding: `app/lib/durable-workflow/runtime.ts` -> `server-repository.ts` -> `app/lib/db/schema.ts` -> `app/lib/embeddings.ts` -> `openai` (a schema constant `EMBEDDING_DIMENSIONS` pulls the SDK). Consequence: an orchestration module gated against provider SDKs cannot resolve the production repository itself; the store takes it by injection and B21-B's runtime file binds it. Severity low. **CONFIRMED** (gate case 3, injected probe, chain quoted). Closes: a follow-up outside B21 (move the constant to a dependency-free module); no owner decision needed. Source: B21-A.
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1163,3 +1165,14 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
   to an unrecorded host stays UNKNOWN until an increment fetches it and records the date.
 - **Defect numbering is final at D21-1..31** (31 merged from the readers' 59); the reader ids are kept in each defect's "Sources" clause
   for traceability; new defects found by an increment continue from D21-32.
+
+---
+
+## 10. Amendments recorded by the increments
+
+### B21-A (recorded by the lead, 2026-09-26)
+
+- **Section 4:** D21-1, D21-2, D21-3 and D21-26 closed; D21-25, D21-28 and D21-29 recorded; D21-32 opened (the durable runtime's production closure reaches the OpenAI SDK through `db/schema.ts` -> `embeddings.ts`, so gated modules take the repository by injection; a follow-up outside B21 moves `EMBEDDING_DIMENSIONS` to a dependency-free module).
+- **Section 6:** OD-106..OD-111, OD-118, OD-124, OD-128 and OD-131 recorded in `OWNER_DECISIONS.md` as the page states them; OD-107 carries the lead's values from section 9 (4 specialists, parallelism 1, DAG wall time 300 s).
+- **Section 7, B21-A:** as built - the idempotency key carries the record kind (`orchestration:<runId>:<taskId>:<attempt>:<kind>`) because one attempt writes its request, its result and a decision; the store never imports the durable runtime (D21-32) and is UNAVAILABLE until B21-B's composition root binds the repository; the adopted contracts suite's spelling scan scrubs the two runbook-mandated literals (`cost-latency-router`, `qualification-authority`); `secret_shaped_text` refuses a credential-shaped VALUE.
+- **Section 8:** LB-9 added to `LIVE_BLOCKERS.md` (OD-128).
