@@ -982,6 +982,19 @@ Amendments to existing entries:
   authority become a per-role fact for that role, the claim check admits them for it alone, and the three external reads in its OD-120
   row stop being dormant — still never a grant).
 
+**Amendment (B21-D2, 2026-09-26) — OD-109 — Specialists never hold the three availability facts; a proposing role holds its sealer's fact, amended (B21-D2, 2026-09-26)**
+
+- **Question:** B21-C derived every specialist context with no head mark and no PCB basis, so no specialist could seal a proposal.
+- **Amended:** `deriveSpecialistContext` is unchanged; a specialist runs over `specialistContextFor(context, role)`, which for a
+  proposing role only adds EXACTLY the fact its live proposal's sealer needs from the coordinator's VERIFIED context
+  (`SEALER_CONTEXT_FACTS`: the schematic head mark - with the discovery lineage it anchors - for the Tier 1 edit, the PCB proposal basis
+  for the bounded edit) and nothing for a read-only role; a coordinator without the fact gives none. The three availability facts stay
+  false, no grant field, no port, no view, risk ceiling `propose`, no approval tier; the context passes `verifyAgentContextIntegrity`,
+  claims none of the eight elevations, and each claim added to it is refused `role_context_elevated` before the gateway. The specialist
+  gateway is still the bare one (no minter, no port, no prompt version). Proven by `b21-d2-proposing-roles.test.ts` cases 5 and 6.
+- **The owner may choose otherwise:** give the specialist gateway the server's published pin-facts reads (then the replacement proposal
+  can seal for the schematic role - a composition-root injection like the ports, which D2 declined as a stop condition).
+
 ## OD-110 — The deterministic no-provider path (B21-A records; B21-B builds) (2026-09-24)
 
 - **Question:** commands that need no model.
@@ -1100,6 +1113,34 @@ Amendments to existing entries:
   specialists run again — the `userMessageDigest`-keyed cross-run ledger and the route-level resume are B21-E's (with B21-C's per-role
   subsets); specialists producing proposal artifacts the coordinator merges are B21-C/D's.
 
+**Amendment (B21-D2, 2026-09-26) — OD-122 — The artifact ledger scope for "must not duplicate committed work", amended (B21-D2, 2026-09-26)**
+
+- **Question:** with specialists able to seal proposals, which artifact does the human review?
+- **Amended:** one side-effecting artifact per user message. A specialist's sealed proposal is inert (Tier 2, human approval) and is
+  NEVER shown for approval directly. After the merge: when the coordinator's first turn sealed nothing (no proposal, layout candidate
+  or grant) and EXACTLY ONE action is accepted across the DAG with no escalation, part review request, contradicted result or unjudged
+  competitor (`incomplete`: a task's attempt sealed an artifact no merged task judged - its result refused, or its run failed after the
+  seal - or a planned proposing specialist never started), the runtime emits it as the run's own `proposal_ready` /
+  `pcb_proposal_ready` / `layout_candidate_ready` (the family's own event, the shape the coordinator's seal emits, under the
+  coordinator's run id) so the human reviews and approves it through the product's existing path; in every other case NOTHING is
+  emitted for approval and the follow-up turn lists the accepted actions and escalations as data, says why nothing was presented and
+  that the human decides. The one line saying which (presented, with the artifact's kind, id and digest, or withheld and why) is
+  ALWAYS recorded on the run's trace, past the 12-line orchestration cap, within the trace recorder's own 32-warning bound (`TRACE_BOUNDS.maxWarnings`, shared with the coordinator's warnings; a full trace is marked `trace_event_capacity_reached`, never silently short). Deterministic (`specialistApprovalDecision`, over the merged view
+  AND the scheduler's outcome), never by count or majority: two accepted actions, even two equal edits, present nothing. The accepted
+  default's clause "specialists get `proposal_exists` on every attempt once the coordinator holds an artifact" is APPLIED: once the
+  coordinator's own first turn emitted any of its four artifact events, the runtime tells the scheduler (`artifactHeld`) and no
+  specialist is offered a proposal at all (each runs over the plain derivation, B's read-only frame, one line on the stream) - the
+  stricter equivalent of `proposal_exists` (never offered rather than refused at the call), so a coordinator proposal and a specialist
+  proposal on the same component never both exist in a run the route starts (a scheduler-level replay of an earlier committed result
+  keeps its own seal - INFERRED; the route never replays). Proven approvable through the Tier 1 and PCB apply boundaries with the run's
+  principal reauthorized by the real apply-authorization route (`b21-d2-approval.test.ts` cases 1 and 2; route case 3); the clause by
+  approval case 8 (each of the four events through the real runtime) and route case 4; `incomplete` by approval case 7 and route case 7;
+  the trace line by route case 6. The route-level resume and the `userMessageDigest` cross-run ledger stay B21-E's.
+- **The owner may choose otherwise:** present several accepted actions for the human to pick one (a UI change), or never present a
+  specialist's artifact (every accepted action listed as data only - the B21-D behaviour); or let the specialists seal beside the
+  coordinator's artifact and hand that artifact to the merge as an escalation party (a coordinator-vs-specialist conflict then escalates
+  instead of never arising).
+
 ## OD-120 — Which of the 33 exposed tools each role may be offered, as applied (B21-C, 2026-09-26)
 
 - **Question:** the per-role least-privilege subsets (runbook :829; D21-7).
@@ -1136,6 +1177,23 @@ Amendments to existing entries:
   principal, because the families' digests are checksums, not signatures; who produced an artifact is never claimed. **The owner may
   choose otherwise:** a role-row ceiling in the merge (only a role whose row names the family's proposal tool may carry its action) - a
   one-rule change pinned by a merge case.
+
+**Amendment (B21-D2, 2026-09-26) — OD-120 — Which of the 33 exposed tools each role may be offered, amended (B21-D2, 2026-09-26)**
+
+- **Question:** B21-C kept OD-120's proposal entries dormant (specialists read only); D left them so.
+- **Amended:** the proposing roles are offered their row's LIVE, non-long-running proposals and nothing more
+  (`SPECIALIST_PROPOSAL_TOOL_IDS`): the Tier 1 edit for `circuit-topology` and `schematic`, the bounded PCB edit for
+  `pcb-placement-routing`; the view is "read + the role's reviewed proposals" (`specialistToolRegistry`) and the wrapper's refusal
+  (`role_not_permitted_tool`) still covers everything outside the row. Dormant for specialists, each with its reason
+  (`DORMANT_SPECIALIST_PROPOSALS`): `sirkit.placement.propose` and `sirkit.routing.propose` (long-running: the placement engine blocks
+  the event loop 44-104 s per run; FreeRouting up to 180 s) and `sirkit.schematic.propose-component-replacement` (its sealer needs the
+  pin-facts reads only the coordinator's gateway holds - the D2 stop condition, D21-37). Still never a granted execution, a view-session
+  control, a Tier 3 id or a never-exposed id. The merge still judges every action by its family, but only a role offered a proposal
+  tool can carry one (only its run's own seal reaches the merge). Proven by `b21-d2-proposing-roles.test.ts` and
+  `b21-d2-provenance.test.ts`.
+- **The owner may choose otherwise:** make the layout proposals live for the PCB specialist (with a concurrency cap on the engines,
+  OD-107); wire the pin-facts reads into the specialist gateway (OD-109's option) so the replacement is live; or cut the dormant entries
+  from the rows.
 
 ## OD-121 — How the role allowlist is enforced, as applied (B21-C, 2026-09-26)
 

@@ -2868,3 +2868,59 @@ _(discovery, reproduction and results appended below as they are observed)_
   assertion drafted during the fix (it accepted either outcome) was removed before the gates. The D page's citation lines re-pinned (22
   rows) and its merge-suite count updated.
 - Lead gates (2026-09-26, one job at a time): every B21 suite with both route suites and the CI guard 17 files / 175 tests; `app/api/chat/__tests__` in full 16 / 103; `app/lib/agent/__tests__` in full 36 / 415; the engineering pins (b04, b13, b15, b17-e, b17-f, b18-a, b18-c) with the MCP gates and ratchets 10 / 115; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds, so D moved no cited line); tsc clean; eslint clean. All passed.
+
+### B21-D2 — specialists propose through their existing tools; provenance is the gateway's own seal (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the five D2 suites and the moved cases were written first and ran against the unchanged code (`d2-failing-first.log`: 11
+  files, 34 of 103 failing, each on its own assertion or the missing export, except approval cases 1 and 2, which first stopped in their
+  setup because the reauthorizing POST lacked the `origin` header CSRF requires; with it, rechecked against HEAD's four modules, both
+  fail on their own assertions (`d2-failing-first-approval-recheck.log`); the flag-off byte-identity pin passing before and after by
+  design); then the code (`d2-impl-1.log`: 94/96 - two provenance cases merged at the B21-D fixture's frozen clock, before a live seal's
+  `createdAt`, which the merge's lifetime rule refuses; the suite now merges at the run's clock); then green (`d2-impl-2.log`).
+- Adversarial review: 17 confirmed findings (4 medium, 13 low after verification) fixed test-first (`d2fix/f1-failing-first.log`: 14 of
+  60 failing on their own assertions against the unfixed code; the test-strength findings proven by a deliberate breakage of the source,
+  each failing, the source restored and verified by hash) - the specialists offered no proposal once the coordinator's turn holds an
+  artifact (OD-122's `proposal_exists` clause, `artifactHeld`), the approval decision over the scheduler's outcome too (`incomplete`),
+  the frame by the run's effective set, the presentation always on the trace with the artifact's kind, id and digest, the envelope
+  header no longer "read-only", one proposal per run stated as the loop enforces it, and the page's scenario 17, D21-14 and D21-37
+  statements.
+- Code: `role-tools.ts` (the live and dormant proposals as data, `roleProposalToolIds`; six reasons in place), `scheduler.ts` (the
+  role's 'read + reviewed proposals' view, the effective set and the wrapper admitting a live proposal of the role's list, the proposing
+  context `specialistContextFor`, the seal collector and `attachSealedArtifacts` with `proposal_not_sealed_in_run`, the sealed digests on
+  every outcome and replay, the frame, objective and result rule by the run's effective set, `artifactHeld`; in place and appended, no
+  cited line moved), `merge.ts` (the merge's second check `proposal-not-sealed-in-run`, `provenance: sealed-in-run` on every action,
+  the accepted verdict's text, the approval decision with `incomplete` and `unjudgedProposers`; in place and appended),
+  `orchestration-runtime.ts` (the coordinator's first-turn artifacts handed to the scheduler, the presentation of the one accepted
+  action as the run's own family event with its always-recorded line, the envelope's approval block and header; in place and
+  appended); the workflow's one explicit entry for the route suite. No route, descriptor, UI, request key or generator input changed;
+  census 165/162/3/0.
+- Pin moves with their reasons: D's merge fixture relays test seals as the runs' own seal events; D's merge case 17 (provenance
+  established); D's route cases 2..5 relay, case 3 asserts the one presented `proposal_ready`; B's route case 4 (a proposing role's live
+  proposal; then its proposing opening line) and C's least-privilege case 1 and no-elevation case 4 (a proposing role's live proposal,
+  context and view); the A..D pages noted; C's role table and D's own-code table moved with their data.
+- Findings: D21-37, medium (a specialist cannot seal a component replacement: its sealer needs the pin-facts reads only the
+  coordinator's gateway holds - the D2 stop condition, recorded, the replacement dormant as an owner option; OD-130's part review not
+  reachable at the route; scenario 17's replacement DAG holds one proposing specialist, so it produces no structural disagreement).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the CI guard; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; the proposal families' and approval paths' suites; the exposure / tier / discovery pins;
+  `app/lib/mcp/__tests__` in full; tsc; eslint on every new and changed file - figures in the report.
+- Records: `specialist-proposals.md`; OD-109, OD-120, OD-122 amended; D21-10's production half closed; D21-14's addendum; D21-37 found.
+  Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 17 fixes fixed and revert-sensitive and raised 2 new
+  low issues): (1) the scheduler's two request-write failure paths - the request record itself, and a malformed request's dissent -
+  left a task that never ran in neither `tasks` nor `notStarted`, so `unjudgedProposers` missed a proposing peer that never ran and the
+  other specialist's one accepted edit could be presented beside it; both paths now record the task as not started (in place,
+  line-neutral). Approval case 10 added (a store conflict and an unavailable store on the schematic specialist's request write): it
+  failed first on `notStarted` against the unfixed scheduler (`d2-lead-case10-red.log`, "expected [] to deeply equal
+  ['task-2-schematic']") and passes with the fix together with B's scheduler suite (`d2-lead-case10-green.log`, 24/24); the
+  malformed-request path takes the same line and has no case of its own (the scheduler builds every request itself, so no suite can
+  make it invalid without a crafted validator). (2) The presentation line's "ALWAYS recorded on the run's trace" claim now states the
+  trace recorder's own 32-warning bound (`TRACE_BOUNDS.maxWarnings`, shared with the coordinator's warnings; a full trace carries
+  `trace_event_capacity_reached`, never silently short), which `always` does not bypass - in the runtime's comment (in place) and in the
+  page's four statements. The page's approval-suite count (10) and new-case total (43) updated. A comment the lead first wrote inline
+  in the D2 fixture swallowed the rest of its line (nine cases failed on `buildToolset is not a function`); it became a block comment
+  before any gate ran.
+- Lead decision on D21-37 (discovery section 10, B21-D2): the published pin-facts reads are read-only catalog facts, not a port; B21-D3
+  (task: the replacement live for the `schematic` role through the runtime's composition root, `schematic` added to the
+  `component-replacement` DAG, scenario 17's disagreement structural and deterministically resolved or escalated) runs before B21-E.
+- Lead gates (2026-09-26, one job at a time): every B21 suite with the three B21 route suites and the CI guard 22 files / 218 tests; `app/api/chat/__tests__` in full 17 / 110; `app/lib/agent/__tests__` in full 36 / 415; the proposal families and their approval paths 27 / 367; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.

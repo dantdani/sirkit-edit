@@ -3,8 +3,8 @@
  * roles may ever be offered, as DATA with a reason per id, and the report that judges any table against a registry the
  * caller hands in. A role row is a CEILING, never a set of tools a run is offered as such: a specialist is offered its row
  * intersected with the reads its derived context admits (buildRunToolset narrows after every existing gate, OD-121), so an
- * id can sit in a row and stay DORMANT for a run - a proposal while specialists read only, an external read while OD-109
- * keeps the ports from every specialist, the history read while a specialist holds no captured view.
+ * id can sit in a row and stay DORMANT for a run - [B21 D2] a long-running or pin-facts proposal, an external read while OD-109
+ * keeps the ports from every specialist, the history read while a specialist holds no captured view (the live proposals: below).
  *
  * The coordinator's row IS the exposure list itself (the same frozen array, never a copy): the existing single-agent set,
  * unchanged. It is never handed to buildRunToolset as an allowlist (33 ids, over the A4L bound of 32): the coordinator's run
@@ -38,7 +38,7 @@ export const ROLE_TOOL_VIOLATIONS = Object.freeze(["not_exposed", "granted_execu
 export type RoleToolViolation = (typeof ROLE_TOOL_VIOLATIONS)[number];
 
 type ToolHoldingRole = Exclude<SpecialistRole, "coordinator" | "cost-latency-router">;
-const DORMANT_PROPOSAL = "Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it.";
+const LIVE_PROPOSAL = "Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run).", DORMANT_PROPOSAL = "Dormant for specialists (B21-D2): a long-running engine is never offered to a specialist - an owner option under OD-120.", DORMANT_PIN_FACTS = "Dormant for specialists (B21-D2): its sealer needs the server's published pin-facts reads, which only the coordinator's gateway holds - an owner option under OD-120.";
 const DORMANT_PORT = "Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective.";
 
 /** OD-120's table: per role, every id with the reason it serves that role (sorted by id; the page renders these cells verbatim). */
@@ -51,7 +51,7 @@ export const ROLE_TOOL_REASONS: Readonly<Record<ToolHoldingRole | "cost-latency-
   }),
   "circuit-topology": Object.freeze({
     "sirkit.schematic.inspect": "The topology under analysis: the components, pins and nets of the verified schematic.",
-    "sirkit.schematic.propose-tier1-edit": `The sealed schematic edit proposal: the only way a topology change is ever expressed, an inert artifact a human applies (permission Tier 2, OD-15). ${DORMANT_PROPOSAL}`,
+    "sirkit.schematic.propose-tier1-edit": `The sealed schematic edit proposal: the only way a topology change is ever expressed, an inert artifact a human applies (permission Tier 2, OD-15). ${LIVE_PROPOSAL}`,
     "sirkit.selection.inspect": "The user's current selection, when the question is about the selected parts.",
     "sirkit.validation.connectivity-verify": "The deterministic connectivity check a topology claim is tested against: deterministic validation outranks consensus.",
   }),
@@ -63,13 +63,13 @@ export const ROLE_TOOL_REASONS: Readonly<Record<ToolHoldingRole | "cost-latency-
   }),
   schematic: Object.freeze({
     "sirkit.schematic.inspect": "The verified schematic the two sealed proposals compile against.",
-    "sirkit.schematic.propose-component-replacement": `The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). ${DORMANT_PROPOSAL}`,
-    "sirkit.schematic.propose-tier1-edit": `The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). ${DORMANT_PROPOSAL}`,
+    "sirkit.schematic.propose-component-replacement": `The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). ${DORMANT_PIN_FACTS}`,
+    "sirkit.schematic.propose-tier1-edit": `The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). ${LIVE_PROPOSAL}`,
   }),
   "pcb-placement-routing": Object.freeze({
     "sirkit.pcb.board-inspect": "The board the placement and routing question is about.",
     "sirkit.pcb.mechanical-inspect": "The board extents and mounting holes: the placement constraints, within the model's result budget.",
-    "sirkit.pcb.propose-bounded-edit": `The sealed bounded PCB edit (B15.3): an inert artifact a human applies in the PCB editor. ${DORMANT_PROPOSAL}`,
+    "sirkit.pcb.propose-bounded-edit": `The sealed bounded PCB edit (B15.3): an inert artifact a human applies in the PCB editor. ${LIVE_PROPOSAL}`,
     "sirkit.pcb.via-inspect": "One net's vias and their padstack binding, for a routing question.",
     "sirkit.placement.propose": `The revision-bound placement candidate (B17-F) a human applies in the placement panel. ${DORMANT_PROPOSAL}`,
     "sirkit.routing.propose": `The revision-bound routing candidate (B17-F) a human applies in the routing panel. ${DORMANT_PROPOSAL}`,
@@ -233,4 +233,26 @@ export function roleExposureReport(registry: DescriptorLookup, table: unknown = 
   const violations = SPECIALIST_ROLES.flatMap((role) => roles[role].violations.map((violation) => `${role}: ${violation.toolId ?? "the list"} (${violation.reason})`));
   const count = SPECIALIST_ROLES.filter((role) => role !== "coordinator").reduce((sum, role) => sum + roles[role].toolIds.length, 0);
   return { ok: violations.length === 0 && missingRoles.length === 0 && unknownRoles.length === 0 && coordinatorIsExposureList, roles, violations, missingRoles, unknownRoles, coordinatorIsExposureList, count };
+}
+
+// ─── [B21 D2] The proposals a specialist may be offered (OD-120 amended) ─────────────────────────────────────────────────
+// Appended on purpose: nothing above moves (the B21 pages pin this file's lines).
+
+/** [B21 D2] The Tier 2 proposals a PROPOSING role's specialist may be offered - its row intersected with this list, nothing more
+ *  (sorted): each is interactive (never long-running), is sealed by the gateway in the specialist's own run from the verified
+ *  context alone, and needs nothing but that context (no port, nothing the composition root alone holds). */
+export const SPECIALIST_PROPOSAL_TOOL_IDS: readonly string[] = Object.freeze(["sirkit.pcb.propose-bounded-edit", "sirkit.schematic.propose-tier1-edit"]);
+/** [B21 D2] The row proposals that stay DORMANT for specialists, each with its reason - recorded as owner options under OD-120,
+ *  never silently: the two long-running engines, and the replacement, whose sealer needs a server source the bare specialist
+ *  gateway never holds. */
+export const DORMANT_SPECIALIST_PROPOSALS: Readonly<Record<string, string>> = Object.freeze({
+  "sirkit.placement.propose": "long-running (budgetClass long-running): the placement engine blocks the event loop 44-104 s per run (B20's measurement), so it is never offered to a specialist",
+  "sirkit.routing.propose": "long-running (budgetClass long-running): a FreeRouting child process of up to 180 s, so it is never offered to a specialist",
+  "sirkit.schematic.propose-component-replacement": "its sealer needs the server's published pin-facts reads (replacementPinFacts), which only the coordinator's gateway holds; the specialist gateway is built with no option (OD-109), so through it the seal always blocks",
+});
+/** [B21 D2] A role's LIVE proposals: its reviewed row intersected with SPECIALIST_PROPOSAL_TOOL_IDS for a proposing role, none for a
+ *  read-only role, and none for the coordinator (its own turn keeps the whole exposure list; it is never a specialist). */
+export function roleProposalToolIds(role: string): readonly string[] {
+  if (role === "coordinator" || !(PROPOSING_ROLES as readonly string[]).includes(role)) return NO_TOOLS;
+  return Object.freeze(roleAllowedToolIds(role).filter((toolId) => SPECIALIST_PROPOSAL_TOOL_IDS.includes(toolId)));
 }

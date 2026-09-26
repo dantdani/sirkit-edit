@@ -21,11 +21,11 @@
  * detail is rendered through the redaction authority, bounded, and never a raw driver message.
  *
  * A specialist has ZERO authority (OD-109, OD-122): the composition root builds its gateway WITHOUT the execution-grant
- * minter, without the external / MCP ports and without the prompt version (nothing but a read can succeed in it), this module
- * wraps that gateway read-only (`role_not_permitted_tool` for every non-read invocation, defense in depth), advertises reads
- * only through a READ-ONLY REGISTRY VIEW (the persisted `allowedToolIds` IS the advertised set: no proposal, no execution, no
- * view control is ever offered to a specialist's model), over a context derived from the coordinator's whose three
- * availability facts are false, with no head mark, no PCB basis and no view. A refused tool call of a specialist reaches the
+ * minter, without the external / MCP ports and without the prompt version (no grant, no port, no execution can succeed in it),
+ * this module wraps it (`role_not_permitted_tool` for anything but a read of the role or, [B21 D2], a proposing role's LIVE
+ * proposal) and the loop's registry is the role's view (reads + its live proposals; the persisted `allowedToolIds` IS the
+ * advertised set: no execution, no view control, no long-running proposal is ever offered to a specialist's model), over a
+ * context derived from the coordinator's (availability facts false, no view; a head mark or basis only for its sealer). A refused tool call of a specialist reaches the
  * coordinator's stream as a bounded warning line, so it is never silent. [B21 C] Least privilege per role (OD-120, OD-121):
  * a specialist is offered its role's reviewed row (role-tools.ts) intersected with the reads its derived context admits -
  * the loop narrows to that list after every gate and the wrapper refuses anything outside it (`role_not_permitted_tool`); a
@@ -38,19 +38,19 @@
  * (RELEASE family), so this module imports only the loop's types. For B a specialist's result reaches the scheduler as the run's
  * final text, parsed as ONE JSON document and validated by `validateSpecialistResult`; anything else is dissent `malformed` -
  * B21-E replaces this with the strict result tool. No chain of thought is stored: the record holds the validated documents and
- * closed dissent reasons only.
+ * closed dissent reasons only. [B21 D2] Its `proposedActions` are exactly what its own run's gateway sealed (see the end).
  */
 import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunBudget, type AgentRunContext, type AgentRunEvent, type AgentRunRequest, type AgentRunResult, type AgentStep, type AgentToolInvocationGateway, type ProviderAgentAdapter, type ProviderToolDeclaration } from "../contracts";
 import type { AgentLoopDeps } from "../loop";
 import { renderUnknownError } from "../redaction";
 import { ToolRegistry } from "../../engineering/tool-registry";
-import { engineeringDigest } from "../../engineering/stable";
+import { canonicalJson, engineeringDigest } from "../../engineering/stable";
 import type { LLMProviderId } from "../../llm/types";
 import { isRetryableReason, type LLMProviderFailureReason } from "../../llm/errors";
 import { TIER1_GRANTABLE_CAPABILITIES } from "../../engineering/execution-grant";
 import { SPECIALIST_REQUEST_SCHEMA, SPECIALIST_RESULT_SCHEMA, isOrchestrationDigest, validateSpecialistRequest, validateSpecialistResult, type RequiredOutputName, type RevisionBoundProjectScope, type SpecialistRole, type ValidatedSpecialistResult } from "./contracts";
 import type { OrchestrationDecision, OrchestrationPlanTask, OrchestrationRecord, OrchestrationRunEntry, OrchestrationRunScope, OrchestrationRunStore } from "./store";
-import { roleAllowedToolIds } from "./role-tools";
+import { SPECIALIST_PROPOSAL_TOOL_IDS, roleAllowedToolIds, roleProposalToolIds } from "./role-tools";
 
 // ─── The caps (OD-107, the lead's values) and the closed vocabularies ────────────────────────────────────────────────────
 
@@ -105,7 +105,7 @@ export interface CoordinatorRun {
   /** the coordinator's start (ms since the epoch): the DAG wall time counts from here */
   startedAt: number;
   /** the coordinator's composed signal; every specialist's signal derives from it */
-  signal?: AbortSignal;
+  signal?: AbortSignal; /** [B21 D2 fix] OD-122: the coordinator's own turn already handed the human an artifact - no specialist is then offered a proposal */ artifactHeld?: boolean;
 }
 export type SpecialistLoop = (request: AgentRunRequest, deps: AgentLoopDeps) => Promise<AgentRunResult>;
 export type SpecialistToolsetBuilder = (registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void, allowedToolIds?: readonly string[]) => { declarations: readonly ProviderToolDeclaration[] };
@@ -147,7 +147,7 @@ export interface SpecialistTaskOutcome {
   usage: { inputTokens: number; outputTokens: number };
   /** the provider and the model that produced this attempt (the last step's model; null when no step was answered) */
   provider: LLMProviderId;
-  model: string | null;
+  model: string | null; /** [B21 D2] the digests of what this attempt's run SEALED (a replay: its committed result's, attached after that attempt's seal check) */ sealedArtifactDigests?: readonly string[];
 }
 export type SchedulerOutcome =
   | { kind: "refused"; reason: SchedulerRefusal; detail: string }
@@ -275,18 +275,18 @@ export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {
 /** [B21 C] A role's effective set (OD-120, OD-121): its reviewed row intersected with the reads the derived context advertises
  *  through the read-only registry, sorted - the specialist's `allowedToolIds` (A4L semantics), what its loop narrows to and what
  *  its request persists. The coordinator's row (the whole exposure list) yields every admitted read. The class filter stays as
- *  defense in depth. */
+ *  defense in depth. [B21 D2] For a proposing role the row's LIVE proposals its context admits join the set (the role's view). */
 export function specialistAllowedToolIds(registry: ToolRegistry, context: AgentRunContext, buildToolset: SpecialistToolsetBuilder, role: SpecialistRole): string[] {
-  const view = readOnlyToolRegistry(registry);
-  const row = new Set(roleAllowedToolIds(role));
+  const view = specialistToolRegistry(registry, role); // [B21 D2] reads + the role's live proposals (the read-only view itself for a read-only role)
+  const row = new Set(roleAllowedToolIds(role)); const proposals = new Set(roleProposalToolIds(role));
   const { declarations } = buildToolset(view, context, () => undefined);
-  return declarations.filter((declaration) => view.get(declaration.toolId, declaration.version)?.operationClass === "read" && row.has(declaration.toolId)).map((declaration) => declaration.toolId).sort();
+  return declarations.filter((declaration) => { const operationClass = view.get(declaration.toolId, declaration.version)?.operationClass; return (operationClass === "read" || (operationClass === "propose" && proposals.has(declaration.toolId))) && row.has(declaration.toolId); }).map((declaration) => declaration.toolId).sort();
 }
 /** The read-only narrowing: a specialist may invoke reads only; a proposal, an execution, a view command or anything else is
  *  refused before the real gateway is asked. [B21 C] With the role's list, a read outside it is refused the same way
  *  (`role_not_permitted_tool`); and FIRST, before any tool is looked at, a context that claims grantability or a port is refused
  *  `role_context_elevated` (OD-109) - the coordinator cannot elevate a specialist by handing it a wider context. Without a list
- *  (the follow-up coordinator turn) every read passes. */
+ *  (the follow-up coordinator turn) every read passes. [B21 D2] With a list, a LIVE specialist proposal the list names passes too. */
 export function readOnlySpecialistGateway(gateway: AgentToolInvocationGateway, registry: ToolRegistry, allowedToolIds?: readonly string[]): AgentToolInvocationGateway {
   // the list is copied once: a later change to the caller's array widens nothing
   const allowed = allowedToolIds === undefined ? null : new Set(allowedToolIds);
@@ -297,8 +297,8 @@ export function readOnlySpecialistGateway(gateway: AgentToolInvocationGateway, r
         return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_CONTEXT_REFUSAL_STATUS, diagnostics: [`A specialist context may claim no authority; this one claims: ${claims.join(", ")}.`] };
       }
       const descriptor = registry.get(input.toolId, input.version);
-      if (!descriptor || descriptor.operationClass !== "read" || (allowed !== null && !allowed.has(input.toolId))) {
-        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_REFUSAL_STATUS, diagnostics: ["A specialist may only read the tools of its role; proposals, executions and view commands belong to the coordinator."] };
+      if (!descriptor || !(descriptor.operationClass === "read" || (allowed !== null && descriptor.operationClass === "propose" && SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId))) || (allowed !== null && !allowed.has(input.toolId))) { // [B21 D2]
+        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_REFUSAL_STATUS, diagnostics: ["A specialist may only use the tools of its role - reads and a proposing role's reviewed proposals; executions and view commands belong to the coordinator."] };
       }
       return gateway.invoke(input);
     },
@@ -324,23 +324,23 @@ export function meteredAdapter(adapter: ProviderAgentAdapter): { adapter: Provid
     },
   };
 }
-export function specialistObjective(role: SpecialistRole, userMessage: string): string {
+export function specialistObjective(role: SpecialistRole, userMessage: string, proposing = false): string { // [B21 D2 fix] `proposing`: the run OFFERS a live proposal (its effective set), never the role alone
   const message = userMessage.replace(/\s+/g, " ").trim().slice(0, MAX_OBJECTIVE_MESSAGE_CHARS);
-  return `As the ${role} specialist, address this request with reads only and report structured evidence: ${message}`;
+  return proposing ? `As the ${role} specialist, address this request with reads and, only where a change is warranted, ONE sealed proposal of your role (an inert artifact the human reviews), and report structured evidence: ${message}` : `As the ${role} specialist, address this request with reads only and report structured evidence: ${message}`;
 }
 /** The coordinator's system prompt plus the specialist's frame: the role and task lines are machine-readable (the adapters'
  *  scripted doubles read them); the final message must be ONE JSON document of the result schema (B21-E: the strict result tool). */
-export function specialistSystemPrompt(system: string, task: { role: SpecialistRole; taskId: string; specialistRunId: string; objective: string }): string {
+export function specialistSystemPrompt(system: string, task: { role: SpecialistRole; taskId: string; specialistRunId: string; objective: string; proposing?: boolean }): string {
   return [
     system,
     "",
-    "You are now running as ONE bounded read-only SPECIALIST inside a coordinated run, not as the assistant the user is talking to.",
+    task.proposing === true ? PROPOSING_OPENING : "You are now running as ONE bounded read-only SPECIALIST inside a coordinated run, not as the assistant the user is talking to.", // [B21 D2 fix] by the run's effective set
     `Role: ${task.role}`,
     `Task: ${task.taskId}`,
     `Task run: ${task.specialistRunId}`,
     `Objective: ${task.objective}`,
-    "Rules: use only the read tools offered; you cannot propose, execute, approve, bind, qualify, purchase or release anything, and nothing you write has authority - it is evidence the coordinator and the human weigh against deterministic checks. Do not write hidden reasoning into the result.",
-    `Your FINAL message must be exactly ONE JSON document and nothing else, of this shape: {"schema":"${SPECIALIST_RESULT_SCHEMA}","role":"${task.role}","summary":"<at most 4000 characters>","proposedActions":[],"assumptions":[{"id":"<id>","statement":"<text>","evidenceIds":[]}],"evidence":[],"requiredTools":[],"risks":[{"id":"<id>","severity":"low|medium|high","statement":"<text>","mitigation":null}],"unresolvedQuestions":[{"id":"<id>","question":"<text>","blocking":false}],"validationRequests":[],"confidence":"low|medium|high"}`, ...specialistResultRules(task.role),
+    specialistFrameRules(task.proposing === true), // [B21 D2 fix] B's rules verbatim unless THIS run offers a live proposal (its effective set, never the role)
+    `Your FINAL message must be exactly ONE JSON document and nothing else, of this shape: {"schema":"${SPECIALIST_RESULT_SCHEMA}","role":"${task.role}","summary":"<at most 4000 characters>","proposedActions":[],"assumptions":[{"id":"<id>","statement":"<text>","evidenceIds":[]}],"evidence":[],"requiredTools":[],"risks":[{"id":"<id>","severity":"low|medium|high","statement":"<text>","mitigation":null}],"unresolvedQuestions":[{"id":"<id>","question":"<text>","blocking":false}],"validationRequests":[],"confidence":"low|medium|high"}`, ...specialistResultRules(task.role), ...(task.proposing === true ? [SEALED_PROPOSALS_RULE] : []),
   ].join("\n");
 }
 /** A specialist's budget: the coordinator's (never over DEFAULT_AGENT_BUDGET) with the run deadline bounded to the remaining wall time. */
@@ -408,8 +408,8 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   // [B21 C] every role's effective set, once: its reviewed row intersected with the reads the derived context admits; a role whose
   // set is empty is NOT RUN (never with the coordinator's set): its task stays in the plan and, at its turn, records the missing
   // evidence as dissent `escalated` (role_has_no_tools) that the outcome carries on - the DAG continues ([B21 C fix], review)
-  const derived = deriveSpecialistContext(context);
-  const allowedByRole = new Map<SpecialistRole, string[]>(tasks.map((task) => [task.role, specialistAllowedToolIds(deps.registry, derived, deps.buildToolset, task.role)]));
+  const derivedByRole = new Map<SpecialistRole, AgentRunContext>(tasks.map((task) => [task.role, coordinator.artifactHeld === true ? deriveSpecialistContext(context) : specialistContextFor(context, task.role)])); // [B21 D2] a proposing role's context gains exactly its sealer's fact - [B21 D2 fix] none once the coordinator holds an artifact (OD-122's proposal_exists clause)
+  const allowedByRole = new Map<SpecialistRole, string[]>(tasks.map((task) => [task.role, specialistAllowedToolIds(deps.registry, derivedByRole.get(task.role)!, deps.buildToolset, task.role)]));
   const toolless = tasks.filter((task) => allowedByRole.get(task.role)!.length === 0);
   const notRunLine = (task: OrchestrationPlanTask): string => `Orchestration: specialist ${task.role} not run (${ROLE_HAS_NO_TOOLS}, task ${task.taskId}): its reviewed tools (OD-120) and the reads this run admits have nothing in common, so it never runs with the coordinator's set and the evidence it would gather stays missing.`;
 
@@ -449,7 +449,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   }
 
   const outputTokenCeiling = dagOutputTokenCeiling(tasks.length - toolless.length);
-  warn(`Orchestration: ${tasks.length - toolless.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}${toolless.length > 0 ? `; ${toolless.length} planned specialist(s) with no tools this run (${ROLE_HAS_NO_TOOLS}) will not run` : ""}.`);
+  warn(`Orchestration: ${tasks.length - toolless.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}${toolless.length > 0 ? `; ${toolless.length} planned specialist(s) with no tools this run (${ROLE_HAS_NO_TOOLS}) will not run` : ""}.`); if (coordinator.artifactHeld === true) warn(COORDINATOR_ARTIFACT_HELD_LINE); // [B21 D2 fix] visible, never silent
   const outcomes: SpecialistTaskOutcome[] = [];
   const notStarted: OrchestrationPlanTask[] = [];
   let stop: SchedulerStop = "completed";
@@ -473,7 +473,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const answered = history.find((entry) => entry.taskId === task.taskId && entry.attempt === committed.attempt && entry.record.kind === "request");
         const committedScopeDigest = answered && answered.record.kind === "request" && !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null; // [B21 D fix] the merge's stale / expired verdict is a regenerate signal
         if (committedScopeDigest === currentScopeDigest) {
-          outcomes.push({ taskId: task.taskId, role: task.role, attempt: committed.attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "replayed", reason: null, resultDigest: committed.record.digest, result: committed.record.document, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
+          outcomes.push({ taskId: task.taskId, role: task.role, attempt: committed.attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "replayed", reason: null, resultDigest: committed.record.digest, result: committed.record.document, sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest), steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
           warn(`Orchestration: specialist ${task.role} replayed from the record (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}); it did not run again.`);
           continue;
         }
@@ -502,7 +502,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         if (remainingMs < SPECIALIST_CAPS.minTaskMs) { stop = "deadline"; notStarted.push(task); break; }
         const runId = specialistRunId(coordinator.runId, task.taskId);
         const budget = specialistBudget(deps.budget ?? DEFAULT_AGENT_BUDGET, remainingMs);
-        const objective = specialistObjective(task.role, coordinator.userMessage);
+        const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed)); // [B21 D2 fix] the run's effective set
         const maxOutputTokens = budget.maxModelSteps * SPECIALIST_CAPS.outputTokensPerStep;
         const validated = validateSpecialistRequest({
           schema: SPECIALIST_REQUEST_SCHEMA, taskId: task.taskId, role: task.role, objective, scope: requestScope(context), contextRefs: contextReferences(context),
@@ -515,13 +515,13 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         if (!validated.ok) {
           const reason = `request_invalid: ${validated.refusal} at ${validated.path}`;
           const written = await write(task.taskId, attempt, dissent("malformed", reason));
-          if (!written.ok) { stop = written.reason; break; }
+          if (!written.ok) { stop = written.reason; notStarted.push(task); break; } // [B21 D2 lead] never ran: not started, so a proposing peer's presentation is withheld
           outcomes.push(outcome("malformed", reason));
           warn(`Orchestration: specialist ${task.role} malformed (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
           break;
         }
         const requested = await write(task.taskId, attempt, { kind: "request", document: validated.value });
-        if (!requested.ok) { stop = requested.reason; break; }
+        if (!requested.ok) { stop = requested.reason; notStarted.push(task); break; } // [B21 D2 lead] the request was never written, so the task never ran: not started
         // the specialist's signal: the coordinator's plus the DAG backstop; the loop composes its own bounded deadline
         const controller = new AbortController();
         for (const source of [coordinator.signal, dagController.signal]) {
@@ -530,18 +530,18 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           else source.addEventListener("abort", () => controller.abort(), { once: true });
         }
         const metered = meteredAdapter(deps.adapter);
-        let refusalLines = 0;
+        let refusalLines = 0; const seals = sealCollector(); // [B21 D2] every artifact this run's gateway seals
         const result = await deps.runLoop(
           { runId, provider: coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },
           {
             adapter: metered.adapter,
             gateway: readOnlySpecialistGateway(deps.gateway, deps.registry, allowed),
-            registry: readOnlyToolRegistry(deps.registry),
-            context: derived,
+            registry: specialistToolRegistry(deps.registry, task.role), // [B21 D2] reads + the role's live proposals
+            context: derivedByRole.get(task.role)!,
             allowedToolIds: allowed,
-            system: specialistSystemPrompt(deps.system, { role: task.role, taskId: task.taskId, specialistRunId: runId, objective }),
+            system: specialistSystemPrompt(deps.system, { role: task.role, taskId: task.taskId, specialistRunId: runId, objective, proposing: offersProposal(allowed) }),
             // nothing of a specialist run reaches the coordinator's stream except a bounded line per REFUSED tool call
-            emit: (event) => {
+            emit: (event) => { seals.collect(event); // [B21 D2] the run's own seal events, before the refusal filter
               if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;
               refusalLines += 1;
               if (refusalLines <= SPECIALIST_CAPS.maxRefusalLinesPerAttempt) warn(`Orchestration: specialist ${task.role} (task ${task.taskId}, attempt ${attempt}) tool ${event.toolId ?? "(unknown)"} refused: ${event.status}.`);
@@ -552,7 +552,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           },
         );
         outputTokensUsed += metered.meter.usage.outputTokens;
-        const measured = { steps: result.steps, toolCalls: result.toolCalls, usage: { ...metered.meter.usage }, model: metered.meter.model };
+        const measured = { steps: result.steps, toolCalls: result.toolCalls, usage: { ...metered.meter.usage }, model: metered.meter.model, sealedArtifactDigests: seals.digests() };
         /** a record that could not be written after the specialist ran: the task is escalated and NOTHING of it is handed on */
         const uncommitted = (written: Extract<Written, { ok: false }>, kind: string): void => {
           const reason = `${written.reason}: the ${kind} was not committed`;
@@ -561,7 +561,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           stop = written.reason;
         };
         if (result.status === "completed") {
-          const parsed = parseSpecialistResult(result.finalText, task.role);
+          const parsed = attachSealedArtifacts(parseSpecialistResult(result.finalText, task.role), seals.artifacts); // [B21 D2] only what the run sealed
           if (parsed.ok) {
             const written = await write(task.taskId, attempt, { kind: "result", document: parsed.value });
             if (!written.ok) { uncommitted(written, "result"); break; }
@@ -633,5 +633,118 @@ export function mergeJudgedStale(history: readonly OrchestrationRunEntry[], task
 export const READINESS_CITATION_RULE = 'Readiness citation (this role must cite, or its result is refused): add to "evidence" exactly {"kind":"readiness-report","id":"<report.reportId>","digest":"<pinned.reportDigest>","sourceClass":"deterministic_verifier","reviewed":false} with the two values copied from your sirkit.manufacturing.readiness-inspect read; a readiness claim in free text is refused, and the merge recomputes the report to check the reference.';
 /** [B21 D fix] The output rules a role's frame adds below the result shape (regressions-3: the reviewer was never shown how to cite). */
 export function specialistResultRules(role: SpecialistRole): string[] {
-  return role === "manufacturing-readiness-reviewer" ? [READINESS_CITATION_RULE] : [];
+  return role === "manufacturing-readiness-reviewer" ? [READINESS_CITATION_RULE] : []; // [B21 D2 fix] the sealed-proposals rule follows the run's effective set (specialistSystemPrompt), never the role
 }
+
+// ─── [B21 D2] Specialists propose through their existing tools; an artifact's provenance is the gateway's own seal ───────────
+// Appended on purpose: a function declaration is hoisted and the constants below are read only when a run starts, so nothing a
+// B21 page cites in this file moves.
+
+/** [B21 D2] The ONE fact each live proposal's sealer needs from the coordinator's VERIFIED context (OD-109 amended): the Tier 1
+ *  sealer scope-seals against the schematic head mark, the bounded PCB edit against the PCB proposal basis. */
+export const SEALER_CONTEXT_FACTS = Object.freeze({ "sirkit.pcb.propose-bounded-edit": "pcbProposalBasis", "sirkit.schematic.propose-tier1-edit": "schematicHeadMark" } as const);
+/** [B21 D2] A model-written `proposedActions` entry that is not an artifact its own run's gateway sealed: the closed reason. */
+export const PROPOSAL_NOT_SEALED_IN_RUN = "proposal_not_sealed_in_run" as const;
+/** [B21 D2] A proposing role's result rule: its sealed artifacts are attached for it - it names them by id, never copies them. */
+export const SEALED_PROPOSALS_RULE = 'Sealed proposals (this role may propose): a proposal your proposal tool seals in this run is an inert Tier 2 artifact for the human, and the scheduler attaches it to your result for you - leave "proposedActions" empty and name it by its proposal id in your summary; an entry you write yourself that this run did not seal is refused, and your whole result with it. At most one proposal per run: a second proposal call is refused (`proposal_exists`).';
+
+/** [B21 D2] A specialist's context for its role: the hardened derivation (`deriveSpecialistContext`, B21-C) and, for a proposing
+ *  role only, EXACTLY the facts its live proposals' sealers need, taken from the coordinator's verified context - never invented
+ *  (a coordinator without the fact gives none). The head mark anchors the discovery lineage the gateway's integrity check reads;
+ *  the three availability facts stay false, no grant field, no port, no view: the context still claims none of the eight elevations. */
+export function specialistContextFor(context: AgentRunContext, role: SpecialistRole): AgentRunContext {
+  const derived = deriveSpecialistContext(context);
+  const facts = new Set<string>(roleProposalToolIds(role).map((toolId) => (SEALER_CONTEXT_FACTS as Readonly<Record<string, string>>)[toolId] ?? ""));
+  const headMark = facts.has("schematicHeadMark") ? context.schematicHeadMark ?? null : null;
+  const basis = facts.has("pcbProposalBasis") ? context.pcbProposalBasis ?? null : null;
+  if (headMark === null && basis === null) return derived;
+  return { ...derived, schematicHeadMark: headMark, pcbProposalBasis: basis, discovery: { ...derived.discovery, lineageId: headMark ? headMark.lineageId : "" } };
+}
+
+const specialistRegistries = new WeakMap<ToolRegistry, Map<string, ToolRegistry>>();
+/** [B21 D2] The role's view of a registry (built once per registry and role): every read and EXACTLY the role's live proposals -
+ *  never a mutation, a view control or a long-running proposal - validated against the same reviewed granted-execution list; the
+ *  read-only view itself for a role without a live proposal. */
+export function specialistToolRegistry(registry: ToolRegistry, role: SpecialistRole): ToolRegistry {
+  const proposals = roleProposalToolIds(role);
+  if (proposals.length === 0) return readOnlyToolRegistry(registry);
+  let views = specialistRegistries.get(registry);
+  if (!views) {
+    views = new Map();
+    specialistRegistries.set(registry, views);
+  }
+  const key = proposals.join(",");
+  let view = views.get(key);
+  if (!view) {
+    view = new ToolRegistry(registry.list().filter((descriptor) => descriptor.operationClass === "read" || (descriptor.operationClass === "propose" && descriptor.budgetClass !== "long-running" && proposals.includes(descriptor.toolId))), undefined, { grantedExecutionTools: registry.grantedExecutionTools() });
+    views.set(key, view);
+  }
+  return view;
+}
+
+/** [B21 D2] The frame's rules line: B's, verbatim, unless [B21 D2 fix] THIS run offers a live proposal (`offersProposal` over its
+ *  effective set - a proposing role without its sealer's fact, or once the coordinator holds an artifact, is offered none). */
+export function specialistFrameRules(proposing: boolean): string {
+  return !proposing
+    ? "Rules: use only the read tools offered; you cannot propose, execute, approve, bind, qualify, purchase or release anything, and nothing you write has authority - it is evidence the coordinator and the human weigh against deterministic checks. Do not write hidden reasoning into the result."
+    : "Rules: use only the tools offered - reads and this role's reviewed proposal tools; a proposal tool SEALS an inert Tier 2 proposal for the human and changes nothing; you cannot execute, approve, bind, qualify, purchase or release anything, and nothing you write has authority - it is evidence the coordinator and the human weigh against deterministic checks. Do not write hidden reasoning into the result.";
+}
+
+/** [B21 D2] One artifact a specialist run's gateway sealed, captured as plain JSON the moment the run's loop emitted it. */
+export interface SealedInRun { readonly toolId: string; readonly kind: string; readonly payload: Record<string, unknown>; readonly digest: string }
+/** [B21 D2] The collector of a specialist run's seals: every `proposal_ready` / `pcb_proposal_ready` / `layout_candidate_ready` its
+ *  own loop emitted - the loop emits them only for an artifact the GATEWAY returned sealed - captured at once (a later change to
+ *  the emitted object changes nothing collected). An artifact that cannot be captured is not collected. */
+export function sealCollector(): { readonly artifacts: readonly SealedInRun[]; collect(event: AgentRunEvent): void; digests(): string[] } {
+  const artifacts: SealedInRun[] = [];
+  return {
+    artifacts,
+    collect(event) {
+      if (event.type !== "proposal_ready" && event.type !== "pcb_proposal_ready" && event.type !== "layout_candidate_ready") return;
+      try {
+        const payload = JSON.parse(JSON.stringify(event.type === "layout_candidate_ready" ? event.candidate : event.proposal)) as Record<string, unknown>;
+        artifacts.push(Object.freeze({ toolId: event.toolId, kind: String(payload.schema), payload, digest: engineeringDigest(payload) }));
+      } catch {
+        /* not collected: the result then carries nothing of it */
+      }
+    },
+    digests: () => artifacts.map((artifact) => artifact.digest),
+  };
+}
+
+/** [B21 D2] Provenance = the gateway's own seal. Every entry the MODEL wrote in `proposedActions` must EQUAL an artifact its run
+ *  sealed (kind and canonical payload) - otherwise the whole result is refused `proposal_not_sealed_in_run` (dissent `malformed`,
+ *  before the merge). Then the result's `proposedActions` become EXACTLY the sealed artifacts, in seal order, wrapped as A's
+ *  contracts require: the document is validated again, so the digests are recomputed and a sealed artifact the contracts refuse
+ *  (a secret-shaped instruction, say) refuses the result, never a redacted copy. */
+export function attachSealedArtifacts(parsed: ParsedResult, sealed: readonly SealedInRun[]): ParsedResult {
+  if (!parsed.ok) return parsed;
+  const keys = new Set(sealed.map((artifact) => canonicalJson({ kind: artifact.kind, payload: artifact.payload })));
+  const listed = parsed.value.proposedActions;
+  const stray = listed.findIndex((action) => !keys.has(canonicalJson({ kind: action.kind, payload: JSON.parse(JSON.stringify(action.payload)) as unknown })));
+  if (stray >= 0) return { ok: false, reason: `${PROPOSAL_NOT_SEALED_IN_RUN}: proposedActions[${stray}] (${listed[stray]!.kind}, ${listed[stray]!.artifactDigest}) is not an artifact this specialist's own run sealed through its gateway` };
+  if (sealed.length === 0) return parsed;
+  const document = { ...(JSON.parse(JSON.stringify(parsed.value)) as Record<string, unknown>), proposedActions: sealed.map((artifact) => ({ kind: artifact.kind, payload: artifact.payload, artifactDigest: artifact.digest })) };
+  const validated = validateSpecialistResult(document);
+  if (!validated.ok) return { ok: false, reason: `result_refused: ${validated.refusal} at ${validated.path}` };
+  return { ok: true, value: validated.value, digest: validated.digest };
+}
+
+// ─── [B21 D2 fix] The frame follows the run's EFFECTIVE set; one artifact per user message reaches the specialists (review) ───
+
+/** [B21 D2 fix] Whether a run's effective set (its persisted `allowedToolIds`) OFFERS a live specialist proposal - what the frame,
+ *  the objective and the sealed-proposals rule follow (regressions-4): a proposing role without its sealer's fact, or run once the
+ *  coordinator holds an artifact, is offered none and is told B's read-only frame, verbatim. */
+export function offersProposal(allowedToolIds: readonly string[]): boolean {
+  return allowedToolIds.some((toolId) => SPECIALIST_PROPOSAL_TOOL_IDS.includes(toolId));
+}
+/** [B21 D2 fix] A plan role that COULD carry a live proposal (its reviewed row holds one): what the merge's approval rule asks of a
+ *  planned task that never started - such a task could have sealed a competing proposal. */
+export function proposingRole(role: SpecialistRole): boolean {
+  return roleProposalToolIds(role).length > 0;
+}
+/** [B21 D2 fix] The opening line of a run that is offered a live proposal (B's says "read-only", which it no longer is). */
+export const PROPOSING_OPENING = "You are now running as ONE bounded SPECIALIST inside a coordinated run, not as the assistant the user is talking to: you read, and you may seal at most ONE inert proposal for the human; you change nothing.";
+/** [B21 D2 fix] OD-122's `proposal_exists` clause as applied (regressions-2): once the coordinator's own first turn handed the human an
+ *  artifact, no specialist is offered a proposal (each runs over the plain derivation, B's read-only frame) - one line says so. */
+export const COORDINATOR_ARTIFACT_HELD_LINE = "Orchestration: the coordinator's own turn already handed the human an artifact (OD-122: one side-effecting artifact per user message), so no specialist is offered a proposal this run - the specialists read only, and a disagreement can reach the human only as their unverified claims.";

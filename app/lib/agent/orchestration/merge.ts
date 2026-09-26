@@ -7,8 +7,8 @@
  *     stale or expired payload is `malformed` / `stale` / `expired` with the family's code - never merged, never shown for
  *     approval (D21-17: a stale result is a regenerate signal, never a merge input). [B21 D fix] The families' digests are
  *     CHECKSUMS, not signatures, so the merge binds every artifact itself: its family's closed key set, a lifetime inside the
- *     family's TTL and created before the merge's clock, and an authorization binding naming this run's actor; what it cannot
- *     establish (who produced an artifact) is never claimed. A bounded PCB edit is recompiled against the verified board and
+ *     family's TTL and created before the merge's clock, and an authorization binding naming this run's actor; [B21 D2] who
+ *     produced it is the specialist run's own gateway seal (`sealed-in-run`, else refused). A bounded PCB edit is recompiled against the verified board and
  *     byte-matched (its geometry claim, the compiler's own regression rules), a layout candidate is verified by its family's
  *     verifier, which the composition root injects (its module's closure reaches the executor, D21-35), its board is built as the
  *     family's apply builds it and held to the same regression rules, and it is wrapped in the RevisionBoundProjectScope of the
@@ -63,7 +63,7 @@ import type { AgentRunContext } from "../contracts";
 import type { LLMProviderId } from "../../llm/types";
 import { judgeOrchestrationText, type EvidenceReference, type ProposedActionKind, type RevisionBoundProjectScope, type SpecialistRole, type ValidatedSpecialistResult } from "./contracts";
 import type { OrchestrationDecision, OrchestrationRecord, OrchestrationRunEntry, OrchestrationRunScope, OrchestrationRunStore } from "./store";
-import { MERGE_VERDICT_INFIX, requestScope, type SchedulerOutcome, type SpecialistTaskOutcome } from "./scheduler";
+import { MERGE_VERDICT_INFIX, proposingRole, requestScope, type SchedulerOutcome, type SpecialistTaskOutcome } from "./scheduler";
 
 // ─── Vocabularies (data; the page's tables are compared to them) ────────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ export const MERGE_OWN_CODES = Object.freeze([
   { code: "readiness-reference-altered", decision: "malformed", claim: "readiness", when: "a readiness reference names the current report with another digest" },
   { code: "readiness-unresolvable", decision: "stale", claim: "readiness", when: "the merge cannot recompute the current report (no board or no preset)" },
   { code: "qualification-authority-unverified", decision: "stale", claim: "readiness", when: "a qualification-authority reference: no verifier of it is in the merge's closure, so it never satisfies OD-129" },
-  { code: "evidence-namespace-reserved", decision: "malformed", claim: "integrity", when: "a specialist's evidence reference claims an id in the merge's own `merge-verification:` / `merge-candidate:` namespace" },
+  { code: "evidence-namespace-reserved", decision: "malformed", claim: "integrity", when: "a specialist's evidence reference claims an id in the merge's own `merge-verification:` / `merge-candidate:` namespace" }, { code: "proposal-not-sealed-in-run", decision: "malformed", claim: "integrity", when: "[B21 D2] an action is not an artifact its specialist's own run sealed through its gateway (the scheduler refuses a model-written one first; this is the merge's second check)" },
   { code: "conflict:<class>", decision: "contradicted", claim: "the shared identity's", when: "the action's identities overlap another surviving action that makes a DIFFERENT change (one escalation per group)" },
 ] as const);
 
@@ -184,7 +184,7 @@ export interface MergedAction {
    *  candidate carries no tenant/project/branch/lineage of its own); null when that request is not the pinned one */
   readonly scope: RevisionBoundProjectScope | null;
   readonly scopeDigest: string | null;
-  readonly candidateCheck: MergeCandidateCheck | null;
+  readonly candidateCheck: MergeCandidateCheck | null; /** [B21 D2] `sealed-in-run`: sealed by the specialist run's own gateway (null: refused, not sealed in the run) */ readonly provenance: typeof MERGE_ARTIFACT_PROVENANCE | null;
 }
 export type MergeEvidenceStanding = "claimed" | "sourcing-only" | "quarantined" | "verified-current" | "stale" | "unverified";
 export interface MergedTask {
@@ -807,7 +807,7 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
     const requestScopeDigest = requestScopeValue ? engineeringDigest(requestScopeValue) : null;
     const findings: MergeFinding[] = [];
     const actions = result.proposedActions.map((action, index) => {
-      // OD-133: an action is bound to the scope of the request its result answered - it must be the coordinator's pinned scope
+      if (!sealedInRun(task, action)) return notSealedInRun(action, index); // [B21 D2] only the run's own seal, then OD-133: the scope of the request its result answered must be the pinned one
       if (requestScopeDigest !== scopeDigest) {
         const code = requestScopeDigest === null ? "request-missing" : "scope-mismatch";
         return { index, kind: action.kind as ProposedActionKind, family: FAMILY_OF[action.kind as ProposedActionKind], artifactId: null, artifactDigest: action.artifactDigest, findings: [finding("stale", "currency", code, index)], identities: { keys: new Set<string>(), deleted: new Set<string>(), domain: "pcb" as const }, replacement: null, change: null, candidateCheck: null };
@@ -926,7 +926,7 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
     const verifiedText = checks.length > 0 ? `; verified ${checks.join(", ")}` : "";
     const ids = [...new Set(entry.findings.flatMap((item) => item.findingIds))].slice(0, MERGE_BOUNDS.maxFindingIds);
     const reasonText = decision === "accepted"
-      ? `merge accepted: ${entry.actions.length} action(s) passed their families' integrity and currency checks against scope ${scopeDigest}, bound to this run's principal and family lifetime (provenance not established: the digests are checksums, not signatures); ${via}${verifiedText}; result ${entry.resultDigest}`
+      ? `merge accepted: ${entry.actions.length === 0 ? "no proposed action" : `${entry.actions.length} action(s) sealed in the specialist's own run by its gateway (provenance: sealed-in-run), each passing its family's integrity and currency checks against scope ${scopeDigest}, bound to this run's principal and family lifetime`}; ${via}${verifiedText}; result ${entry.resultDigest}`
       : `merge ${decision}: ${codes.join(", ")}; ${via}${verifiedText}; result ${entry.resultDigest}${ids.length > 0 ? ` [${ids.join(", ")}]` : ""}`;
     const reason = judgeOrchestrationText(clip(reasonText, 1_000), 1_000) === null ? clip(reasonText, 1_000) : `merge ${decision}: findings withheld from the record; result ${entry.resultDigest}`;
     // an action's own findings decide it; a sound action of a result that is not accepted is withheld under the result's decision
@@ -938,7 +938,7 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
         identities: [...action.identities.keys].sort(),
         scope: action.family === "layout" && entry.scopeDigest === scopeDigest ? entry.scope : null,
         scopeDigest: entry.scopeDigest,
-        candidateCheck: action.candidateCheck,
+        candidateCheck: action.candidateCheck, provenance: action.findings.some((item) => item.code === MERGE_NOT_SEALED_CODE) ? null : MERGE_ARTIFACT_PROVENANCE,
       };
     });
     return {
@@ -1022,4 +1022,61 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
     evidence: [...verificationList.flatMap((entry) => entry.evidence), ...candidateEvidenceList], sources, records: records.map(({ taskId, judgedTaskId, attempt, kind, decision, subjectDigest }) => ({ taskId, judgedTaskId, attempt, kind, decision, subjectDigest })), lines,
   };
   return { ...view, digest: engineeringDigest(canonicalJsonValue(view)) };
+}
+
+// ─── [B21 D2] Provenance is the run's own seal, and the one proposal a human may be shown (OD-122 amended) ─────────────────
+// Appended on purpose: a function declaration is hoisted and the constants are read only when a merge runs, so nothing the B21-D
+// page cites in this file moves.
+
+/** [B21 D2] What the merge records as an action's provenance: the scheduler hands it only what the specialist's own run's gateway
+ *  sealed (the run's `proposal_ready` / `pcb_proposal_ready` / `layout_candidate_ready`), and the merge checks that set itself. */
+export const MERGE_ARTIFACT_PROVENANCE = "sealed-in-run" as const;
+/** [B21 D2] The merge's own second check (the scheduler's first, before the merge, is `proposal_not_sealed_in_run`). */
+const MERGE_NOT_SEALED_CODE = "proposal-not-sealed-in-run";
+/** [B21 D2] An action is sealed in its task's run when its digest is one the scheduler recorded for that run: the attempt's own
+ *  seals, or - for a replay - the committed result's, attached after that attempt's seal check. Absent: nothing was sealed. */
+function sealedInRun(task: SpecialistTaskOutcome, action: { artifactDigest: string }): boolean {
+  return (task.sealedArtifactDigests ?? []).includes(action.artifactDigest);
+}
+/** [B21 D2] An action outside its task's sealed set: `malformed`, judged no further, never intersected, never accepted. */
+function notSealedInRun(action: ValidatedSpecialistResult["proposedActions"][number], index: number): JudgedAction {
+  const kind = action.kind as ProposedActionKind;
+  const family = FAMILY_OF[kind];
+  return { index, kind, family, artifactId: null, artifactDigest: action.artifactDigest, findings: [finding("malformed", "integrity", MERGE_NOT_SEALED_CODE, index)], identities: { keys: new Set<string>(), deleted: new Set<string>(), domain: family === "tier1" || family === "replacement" ? "schematic" : "pcb" }, replacement: null, change: null, candidateCheck: null };
+}
+
+/** [B21 D2] The closed outcomes of OD-122's rule as amended: `presented` - the one accepted action goes to the human as the run's
+ *  own proposal event - or, decided in this order, why nothing is: the coordinator's first turn already sealed its artifact, an
+ *  escalation, a part review request, a contradicted result, [B21 D2 fix] a competitor the merge could not judge (`incomplete`: a
+ *  sealed proposal that never reached the merge, or a proposing specialist that never ran), no accepted action, or more than one.
+ *  Never by count or majority: agreeing results never promote an artifact (two accepted actions, even two equal edits, present nothing). */
+export const SPECIALIST_APPROVAL_OUTCOMES = Object.freeze(["presented", "coordinator_sealed", "escalated", "review_requested", "contradicted", "incomplete", "none_accepted", "several_accepted"] as const);
+export type SpecialistApprovalOutcome = (typeof SPECIALIST_APPROVAL_OUTCOMES)[number];
+export type SpecialistApprovalDecision = { outcome: "presented"; action: MergedAcceptedAction } | { outcome: Exclude<SpecialistApprovalOutcome, "presented">; action: null };
+/** [B21 D2] The deterministic rule: present exactly one accepted, sealed-in-run action when nothing else competes with it.
+ *  [B21 D2 fix] "Nothing competes" is decided over the SCHEDULER's outcome too (review regressions-3 / security-1): a merged view
+ *  holds only the results the merge judged, so a peer's seal whose result was refused or whose run failed after it, and a planned
+ *  proposing specialist that never started, withhold the presentation (`incomplete`). */
+export function specialistApprovalDecision(merged: Extract<MergeOutcome, { kind: "merged" }>, facts: { coordinatorSealed: boolean; outcome: Extract<SchedulerOutcome, { kind: "ran" }> }): SpecialistApprovalDecision {
+  const withheld = (outcome: Exclude<SpecialistApprovalOutcome, "presented">): SpecialistApprovalDecision => ({ outcome, action: null });
+  if (facts.coordinatorSealed) return withheld("coordinator_sealed");
+  if (merged.escalations.length > 0) return withheld("escalated");
+  if (merged.reviewRequests.length > 0) return withheld("review_requested");
+  if (merged.tasks.some((task) => task.decision === "contradicted")) return withheld("contradicted");
+  const unjudged = unjudgedProposers(merged, facts.outcome);
+  if (unjudged.sealedUnjudged.length > 0 || unjudged.notRun.length > 0) return withheld("incomplete");
+  if (merged.accepted.length === 0) return withheld("none_accepted");
+  if (merged.accepted.length > 1) return withheld("several_accepted");
+  const action = merged.accepted[0]!;
+  return action.provenance === MERGE_ARTIFACT_PROVENANCE ? { outcome: "presented", action } : withheld("none_accepted");
+}
+/** [B21 D2 fix] What keeps "nothing competing" from being established, by task id (plan order): the tasks whose attempt SEALED
+ *  an artifact that no merged task judged - a result refused before the merge (`proposal_not_sealed_in_run`, a malformed document) or
+ *  a run that failed after its seal (max_steps, a deadline, a provider failure, including a failed attempt before its retry) - and the
+ *  planned PROPOSING tasks that never started (a DAG stopped early). A read-only task that never started could have sealed nothing. */
+export function unjudgedProposers(merged: Extract<MergeOutcome, { kind: "merged" }>, outcome: Extract<SchedulerOutcome, { kind: "ran" }>): { sealedUnjudged: string[]; notRun: string[] } {
+  const judged = new Set(merged.tasks.flatMap((task) => task.actions.map((action) => action.artifactDigest)));
+  const sealedUnjudged = [...new Set(outcome.tasks.filter((task) => (task.sealedArtifactDigests ?? []).some((digest) => !judged.has(digest))).map((task) => task.taskId))];
+  const notRun = outcome.notStarted.filter((task) => proposingRole(task.role)).map((task) => task.taskId);
+  return { sealedUnjudged, notRun };
 }

@@ -30,7 +30,7 @@ import { composition, runContext } from "@/app/lib/engineering/__tests__/b18c-ha
 import { specialistResultsEnvelope } from "@/app/api/chat/orchestration-runtime";
 import { ORCHESTRATION_BOUNDS, SPECIALIST_ROLES, type SpecialistRole } from "../contracts";
 import { DurableOrchestrationRunStore, type OrchestrationRunEntry, type OrchestrationRunScope } from "../store";
-import { roleAllowedToolIds } from "../role-tools";
+import { roleAllowedToolIds, roleProposalToolIds } from "../role-tools";
 import { DAG_ROLE_LISTS } from "../router";
 import { ROLE_HAS_NO_TOOLS, SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, planTasks, readOnlySpecialistGateway, readOnlyToolRegistry, requestScope, runSpecialistDag, specialistAllowedToolIds, type CoordinatorRun, type SchedulerDeps, type SchedulerOutcome } from "../scheduler";
 import { ROLE_SCOPE, RoleAdapter, fullContext, grantableContext } from "./_role-fixtures";
@@ -49,6 +49,14 @@ const FULL_CONTEXT_EFFECTIVE: Readonly<Record<SpecialistRole, readonly string[]>
   "verification-critic": ["sirkit.pcb.revision-inspect", "sirkit.pcb.via-inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"],
   "manufacturing-readiness-reviewer": ["sirkit.manufacturing.readiness-inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"],
   "cost-latency-router": [],
+};
+/** [B21 D2] pin move (OD-120 amended): what the SCHEDULER offers each role over `fullContext` - the reads above plus the role's LIVE
+ *  proposals whose sealer's fact the context holds (a head mark, no PCB basis): the Tier 1 edit to the circuit and schematic
+ *  specialists; FULL_CONTEXT_EFFECTIVE stays the read-only derivation's set (a role-less `deriveSpecialistContext`). */
+const FULL_CONTEXT_OFFERED: Readonly<Record<SpecialistRole, readonly string[]>> = {
+  ...FULL_CONTEXT_EFFECTIVE,
+  "circuit-topology": ["sirkit.schematic.inspect", "sirkit.schematic.propose-tier1-edit", "sirkit.selection.inspect", "sirkit.validation.connectivity-verify"],
+  schematic: ["sirkit.schematic.inspect", "sirkit.schematic.propose-tier1-edit"],
 };
 
 interface Rig { deps: SchedulerDeps; adapter: RoleAdapter; events: AgentRunEvent[]; loops: Array<{ runId: string; deps: AgentLoopDeps }>; coordinator: CoordinatorRun; scope: OrchestrationRunScope; store: DurableOrchestrationRunStore }
@@ -99,10 +107,11 @@ describe("[B21 C] least privilege per role", () => {
       for (const start of r.adapter.starts) {
         const role = start.role as SpecialistRole;
         offered.set(role, [...start.tools].sort());
-        expect([...start.tools].sort(), `${role} advertised`).toEqual([...FULL_CONTEXT_EFFECTIVE[role]]);
-        expect([...requests.get(role)!], `${role} persisted`).toEqual([...FULL_CONTEXT_EFFECTIVE[role]]);
+        // [B21 D2] pin move: the scheduler's set is FULL_CONTEXT_OFFERED (the live proposals of a proposing role added)
+        expect([...start.tools].sort(), `${role} advertised`).toEqual([...FULL_CONTEXT_OFFERED[role]]);
+        expect([...requests.get(role)!], `${role} persisted`).toEqual([...FULL_CONTEXT_OFFERED[role]]);
         const loop = r.loops.find((entry) => entry.runId.endsWith(`-${role}`))!;
-        expect(loop.deps.allowedToolIds, `${role} loop input`).toEqual([...FULL_CONTEXT_EFFECTIVE[role]]);
+        expect(loop.deps.allowedToolIds, `${role} loop input`).toEqual([...FULL_CONTEXT_OFFERED[role]]);
       }
       if (index === 1) {
         expect(r.adapter.starts.map((start) => start.role)).toEqual(["pcb-placement-routing", "verification-critic", "manufacturing-readiness-reviewer"]);
@@ -117,8 +126,8 @@ describe("[B21 C] least privilege per role", () => {
       }
     }
     expect([...offered.keys()].sort()).toEqual(SPECIALIST_ROLES.filter((role) => role !== "coordinator" && role !== "cost-latency-router").sort());
-    // no specialist was ever offered anything but a read of its own row
-    for (const [role, tools] of offered) for (const toolId of tools) { expect(registry.get(toolId)!.operationClass, `${role}: ${toolId}`).toBe("read"); expect(roleAllowedToolIds(role), `${role}: ${toolId}`).toContain(toolId); }
+    // no specialist was ever offered anything but a read of its own row - [B21 D2] pin move: or one of its row's LIVE proposals
+    for (const [role, tools] of offered) for (const toolId of tools) { expect(registry.get(toolId)!.operationClass === "read" || roleProposalToolIds(role).includes(toolId), `${role}: ${toolId}`).toBe(true); expect(roleAllowedToolIds(role), `${role}: ${toolId}`).toContain(toolId); }
   });
 
   it("2. the intersection sits AFTER every existing gate and only NARROWS: a listed tool a gate withheld stays withheld (a granted execution for a run without the minter, a view control without a view, a proposal through the read-only view); a subset narrows to exactly its admitted members, as the same declarations the un-narrowed run builds, in the same order; the coordinator's own row (33 ids) is over the A4L bound and approves nothing - so the coordinator never runs under a list", async () => {

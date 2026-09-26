@@ -38,6 +38,7 @@ import { DurableOrchestrationRunStore, ORCHESTRATION_AGGREGATE_TYPE, type Orches
 import { TIER3_REFUSAL_SENTENCE } from "@/app/lib/agent/orchestration/router";
 import { ROLE_HAS_NO_TOOLS, SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, runSpecialistDag, specialistAllowedToolIds, specialistContextClaims, type SchedulerDeps, type SchedulerOutcome, type SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
 import { buildRunToolset, type AgentLoopDeps } from "@/app/lib/agent/loop";
+import { roleProposalToolIds } from "@/app/lib/agent/orchestration/role-tools";
 import type { AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
 import { PCB_BOARD_HIERARCHY_PATH, pcbBoardInstanceId } from "@/app/lib/pcb/board-identity";
 import { FIXTURE_AUTHORITY_VARIANT, matchingAtomicConfirmer, validApprovedAggregate } from "@/app/lib/engineering/__tests__/_authority-fixtures";
@@ -273,11 +274,19 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(followUp.tools.length).toBeGreaterThan(0);
     for (const toolId of followUp.tools) expect(operationClass(toolId), toolId).toBe("read");
     for (const specialist of state.starts.slice(1, 3)) {
-      expect(specialist.system).toContain("read-only");
+      // [B21 D2 fix] pin move (review regressions-4 / tests-2): the frame follows the run's EFFECTIVE set - a specialist OFFERED a live
+      // proposal (the circuit specialist here) is no longer called read-only (it may seal one inert proposal); every other one still is
+      const proposing = specialist.tools.some((toolId) => roleProposalToolIds(specialist.role).includes(toolId));
+      expect(specialist.system).toContain(proposing ? "You are now running as ONE bounded SPECIALIST inside a coordinated run" : "You are now running as ONE bounded read-only SPECIALIST");
+      expect(specialist.system.includes("read-only SPECIALIST"), specialist.role).toBe(!proposing);
       expect(specialist.system).toContain("sirkit.specialist-result.v1");
       expect(specialist.tools.length).toBeGreaterThan(0);
-      for (const toolId of specialist.tools) expect(operationClass(toolId), `${specialist.role}: ${toolId}`).toBe("read");
+      // [B21 D2] pin move (OD-120 amended): a proposing role is also offered its row's LIVE proposal (the circuit specialist the Tier 1
+      // edit, since this request carries a head mark); every other tool it is offered is still a read, and no other role is offered one
+      for (const toolId of specialist.tools) expect(operationClass(toolId) === "read" || roleProposalToolIds(specialist.role).includes(toolId), `${specialist.role}: ${toolId}`).toBe(true);
     }
+    expect(state.starts[1]!.tools).toContain("sirkit.schematic.propose-tier1-edit");
+    expect(state.starts[2]!.tools.filter((toolId) => operationClass(toolId) !== "read")).toEqual([]);
     expect(types(events).filter((type) => type === "run_started")).toHaveLength(1);
     expect(terminals(events)).toEqual(["run_completed"]);
     expect(types(events).at(-1)).toBe("run_completed");

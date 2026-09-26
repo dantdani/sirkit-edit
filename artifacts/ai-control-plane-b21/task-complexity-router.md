@@ -82,6 +82,7 @@ failure is a visible dissent, never a silent switch; degraded mode is a visible 
 outage among the specialists makes no further paid call (C47). The B18 grants, the B19 evidence rules, B20's OD-45/90/91/92 provider
 rules and OD-81's directive matcher stand unchanged (the matcher is neither edited nor reused: it lives in the MCP module the B19-D
 closure gate keeps out of the chat route, section 4).
+[B21 D2, 2026-09-26] Since B21-D2 a proposing role's specialist is also offered its row's live proposals and seals one through that same bare gateway (no minter, no port, no prompt version is needed for it); the follow-up turn stays read-only (`specialist-proposals.md`).
 
 ## 1. The router: the rule table (rule → runbook line → role list)
 
@@ -280,7 +281,7 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   unchanged (the suite asserts it). `readOnlySpecialistGateway` (C12) refuses every invocation whose descriptor is not `read` with
   `role_not_permitted_tool` before the gateway is asked (defense in depth: through the read-only registry no proposal is even
   advertised; a `board-inspect` read passes through and answers); the coordinator's context object is never mutated. In B a specialist
-  can only READ; B21-C narrows the toolset per role (OD-120/121) and proves the gateway refusal of a context that claims grantability.
+  can only READ; B21-C narrows the toolset per role (OD-120/121) and proves the gateway refusal of a context that claims grantability. [B21 D2, 2026-09-26] Since B21-D2 a proposing role may also seal its live proposals (`specialist-proposals.md`).
 - **Warnings**: the run log's `warning` channel carries one plan line ("N specialist(s) scheduled after this turn, one at a time
   (parallelism 1; DAG wall time 300 s; output-token ceiling X reported, not priced) under rule …"), one line per scheduled specialist
   with its outcome, a `… is STALE …` line per stale replay, and — after the review — one bounded line per REFUSED specialist tool call
@@ -510,7 +511,7 @@ applied" texts that replace A's "records; B applies" entries, OD-106 gains B's t
 
 ### OD-122 — The artifact ledger scope for "must not duplicate committed work", as applied (B21-B, 2026-09-26; revised after the review)
 
-- **Applied:** in B a specialist never seals a proposal or mints a grant: its gateway is BUILT by the composition root without the
+- **Applied:** in B a specialist never seals a proposal or mints a grant ([B21 D2, 2026-09-26] since B21-D2 a proposing role's specialist seals a Tier 2 proposal through its own gateway and the one accepted proposal may be presented as the run's own - `specialist-proposals.md`; it still never mints a grant): its gateway is BUILT by the composition root without the
   execution-grant minter, without the external and MCP ports and without the prompt version (a granted execution through it is
   `execution_unavailable`, an external or MCP read `authority_unavailable` — structural, proven by counting the request's gateway
   constructions), wrapped read-only (`role_not_permitted_tool` for every non-read invocation); its context is derived with the three

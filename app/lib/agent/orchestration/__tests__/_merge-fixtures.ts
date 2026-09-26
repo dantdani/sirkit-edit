@@ -36,6 +36,7 @@ import { DurableOrchestrationRunStore, type OrchestrationRunScope } from "../sto
 import { runSpecialistDag, type SchedulerOutcome } from "../scheduler";
 import type { MergeDeps } from "../merge";
 import { PART_PINS, PRINCIPAL, SCOPE, authorityRecord, headMarkFor, pinFacts, replacementState, routedBoard } from "./_sealed-artifacts";
+import { relaySeals } from "./_seal-relay";
 
 export const MERGE_SCOPE = SCOPE;
 /** the artifacts are sealed at T0; the merge's injected clock reads one minute later (every TTL is still open) */
@@ -193,7 +194,10 @@ export const REGISTRY = sirkitToolRegistry();
 export interface DagRun { outcome: Extract<SchedulerOutcome, { kind: "ran" }>; store: DurableOrchestrationRunStore; repository: InMemoryDurableWorkflowRepository; scope: OrchestrationRunScope; context: AgentRunContext; adapter: ScriptedSpecialists; events: AgentRunEvent[] }
 /** [B21 D fix] `adapter` replaces the scripted specialists for one run (a specialist that really calls its reads). */
 
-/** The plan's specialists run by the REAL scheduler over the coordinator's context; every result is committed to the record. */
+/** The plan's specialists run by the REAL scheduler over the coordinator's context; every result is committed to the record.
+ *  [B21 D2] pin move: the loop the scheduler is handed relays the scripted result's artifacts as the run's own seal events
+ *  (`relaySeals`, standing in for the families' sealers) - since D2 a result carries only what its run's gateway sealed, and these
+ *  suites judge artifacts sealed in TEST code (stale, foreign, re-sealed, non-exact) that no gateway would seal for them. */
 export async function runDag(roles: readonly SpecialistRole[], texts: Readonly<Record<string, string>>, over: { context?: AgentRunContext; models?: Readonly<Record<string, string>>; runId?: string; repository?: InMemoryDurableWorkflowRepository; adapter?: ProviderAgentAdapter } = {}): Promise<DagRun> {
   const context = over.context ?? coordinatorContext();
   const repository = over.repository ?? new InMemoryDurableWorkflowRepository();
@@ -202,7 +206,7 @@ export async function runDag(roles: readonly SpecialistRole[], texts: Readonly<R
   const events: AgentRunEvent[] = [];
   const runId = over.runId ?? "run-b21d";
   const outcome = await runSpecialistDag({ roles: ["coordinator", ...roles], rule: "b21-d-fixture" }, { runId, provider: "openai", userMessage: "Replace U1 with the approved lower-power part.", history: [], startedAt: Date.now() }, {
-    store, registry: REGISTRY, context, adapter: over.adapter ?? adapter, gateway: createAgentToolGateway(REGISTRY), system: AGENT_SYSTEM_PROMPT, emit: (event) => events.push(event), runLoop: runAgentLoop, buildToolset: buildRunToolset,
+    store, registry: REGISTRY, context, adapter: over.adapter ?? adapter, gateway: createAgentToolGateway(REGISTRY), system: AGENT_SYSTEM_PROMPT, emit: (event) => events.push(event), runLoop: relaySeals(runAgentLoop), buildToolset: buildRunToolset,
   });
   if (outcome.kind !== "ran") throw new Error(`the fixture DAG must run: ${outcome.reason} ${outcome.detail}`);
   return { outcome, store, repository, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId }, context, adapter, events };

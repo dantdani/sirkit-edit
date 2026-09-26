@@ -144,6 +144,7 @@ jobs:
           app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts
           app/api/chat/__tests__/b21-b-chat-router.test.ts
           app/api/chat/__tests__/b21-d-chat-merge.test.ts
+          app/api/chat/__tests__/b21-d2-chat-proposals.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts

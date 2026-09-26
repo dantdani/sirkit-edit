@@ -524,8 +524,11 @@ describe("[B21 D] the deterministic merge", () => {
     // an accepted verdict claims no provenance the checks cannot establish
     const sound = await runDag(["circuit-topology"], { "circuit-topology": resultText("circuit-topology", { proposedActions: [tier1("10k")] }) });
     const accepted = merged(await mergeSpecialistOutcome({ runId: sound.scope.runId, context: sound.context, outcome: sound.outcome }, mergeDeps(sound.store)));
-    expect(accepted.tasks[0]!.reason).toMatch(/provenance not established/);
-    expect(accepted.tasks[0]!.reason).not.toMatch(/verified by their families|sealed/);
+    // [B21 D2] pin move: provenance IS established since D2 - the scheduler hands the merge only what the specialist's own run's
+    // gateway sealed (here the fixture relays it as that seal), so the verdict records `provenance: sealed-in-run` and never
+    // "provenance not established"; it still never calls the artifact verified by its family
+    expect(accepted.tasks[0]!.reason).toMatch(/provenance: sealed-in-run/);
+    expect(accepted.tasks[0]!.reason).not.toMatch(/provenance not established|verified by their families/);
   });
 
   it("18. [B21 D fix: coverage-10, tests-9] schematic and PCB identities JOIN through a footprint's sync identity: on a board whose r1 is bound to U1, a replacement of U1 (its pin map moves endpoint u1-id::1) and a routing candidate on net 1 (r1's pad 1) are `schematic_vs_pcb`; a Tier 1 delete of U1 and the same routing are `edit_vs_delete`; a Tier 1 value edit of U1 touches no net and does not conflict with it; two whole-board routing candidates that share no object are `unknown_interaction` with `rerun_candidate`", async () => {

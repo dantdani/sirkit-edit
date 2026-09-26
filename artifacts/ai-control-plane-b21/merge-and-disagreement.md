@@ -23,6 +23,7 @@ verifiers.
   deterministic VERIFICATIONS and candidate checks as `EvidenceReference`s, the sources, the records it persisted and one bounded line
   per dissent, escalation and review request - or `refused` (`store_unavailable`, `store_refused`, `store_conflict`) with no view at
   all. **CONFIRMED** by `b21-d-merge.test.ts` (23 cases) and `b21-d-verification-requests.test.ts` (8 cases).
+  [B21 D2, 2026-09-26] Since B21-D2 every accepted action's provenance IS established - it was sealed by the gateway in its specialist's own run (`provenance: sealed-in-run`), the only way an artifact reaches the merge; an action outside a task's sealed set is refused `proposal-not-sealed-in-run` (`specialist-proposals.md`).
 - The runtime wiring, minimal (C27..C31, C72..C74): `runOrchestratedChat` runs the merge after the scheduler's stand-down checks and
   before the envelope; the follow-up turn receives the MERGE's view (`mergedResultsEnvelope`, bounded by staged fallbacks whatever the
   merge holds) instead of the raw outcomes; a merge that cannot record its decisions stands down like B's other stand-downs (the
@@ -48,6 +49,8 @@ is not detected and not escalated: no ERC exists and the merge reads no prose, C
 `base` carries no scope - OD-133's follow-up), **D21-35** (the layout family's module reaches the executor, so its verifier is
 injected) and **D21-36** (B's envelope superseded, pinned by B's and C's suites).
 
+[B21 D2, 2026-09-26] D21-10's escalation is reachable in production since B21-D2: two proposing specialists that seal conflicting proposals in their own runs escalate once through the production POST (`b21-d2-chat-proposals` case 2); the CONFIRMED-unreachable statements below are as of B21-D (`specialist-proposals.md`).
+
 **Zero authority by construction.** The merge mints, seals, applies, binds, qualifies, approves, purchases and releases nothing: it
 reads the verified state, calls verifiers that return verdicts, and writes decision and dissent records to the orchestration record.
 An accepted action is handed to the READ-ONLY follow-up turn as an identified inert artifact - never emitted as `proposal_ready`, never
@@ -58,6 +61,7 @@ specialist gains a tool: the OD-120 proposal ids stay dormant (the merge judges 
 Deterministic validation outranks consensus: agreement changes no decision and yields no evidence, and one provider is ONE source. The
 B18 grants, the B19 evidence rules (used here as the merge's labels, section 4), B20's OD-45/90/91/92 provider rules and OD-81's
 directive matcher stand unchanged.
+[B21 D2, 2026-09-26] Amended by B21-D2: a proposing role IS offered its live proposals (the Tier 1 edit, the bounded PCB edit), WHO produced an artifact IS established (its specialist run's own gateway seal, `sealed-in-run`), and exactly one accepted action with nothing competing and nothing sealed by the coordinator is presented as the run's own proposal event - the merge itself still applies and approves nothing (`specialist-proposals.md`).
 
 ## 1. The merge's rules, in the runbook's order (B21-D :835-843)
 
@@ -154,6 +158,7 @@ verifier could not inspect. Merge case 14 reaches each PCB currency code and `re
 | `readiness-unresolvable` | `stale` | readiness | the merge cannot recompute the current report (no board or no preset) |
 | `qualification-authority-unverified` | `stale` | readiness | a qualification-authority reference: no verifier of it is in the merge's closure, so it never satisfies OD-129 |
 | `evidence-namespace-reserved` | `malformed` | integrity | a specialist's evidence reference claims an id in the merge's own `merge-verification:` / `merge-candidate:` namespace |
+| `proposal-not-sealed-in-run` | `malformed` | integrity | [B21 D2] an action is not an artifact its specialist's own run sealed through its gateway (the scheduler refuses a model-written one first; this is the merge's second check) |
 | `conflict:<class>` | `contradicted` | the shared identity's | the action's identities overlap another surviving action that makes a DIFFERENT change (one escalation per group) |
 
 **What the checksums cannot establish** (C58, merge case 17). A family's digests prove a body was not altered after it was sealed -
@@ -164,6 +169,7 @@ replacement and PCB verifiers close theirs), a lifetime created at or before the
 replacement `authorization`, the PCB `authorizationBinding` and `effectiveActor`; a layout candidate carries none). Everything else
 about provenance is left unclaimed: an accepted verdict says "provenance not established: the digests are checksums, not signatures".
 The refusals: `store_unavailable`, `store_refused`, `store_conflict`.
+[B21 D2, 2026-09-26] Who sealed an artifact IS established since B21-D2: the scheduler hands the merge only what the specialist's own run's gateway sealed and the merge checks that set (`proposal-not-sealed-in-run` otherwise); an accepted verdict says `provenance: sealed-in-run` and no longer "provenance not established" - merge case 17's last assertions moved with that reason (`specialist-proposals.md`).
 
 ## 3. The verifier set: deterministic validation outranks consensus
 
@@ -272,6 +278,7 @@ reference in the view and the envelope.
   layout candidate with its `RevisionBoundProjectScope`, OD-133), the escalations and part review requests with what the human must
   decide, the verifications and the sources. The header says the entries were judged by the deterministic merge, that nothing was
   applied, that provenance is not established, that claims stay the specialists' own unverified claims and that agreement is not proof.
+  [B21 D2, 2026-09-26] The header now says every accepted action was sealed in its specialist's own run and an `approval` block says whether the one accepted action was presented to the human or why not (`specialist-proposals.md`).
   **[B21 D fix] Bounded whatever the merge holds:** five stages are tried in order until the sanitized text fits `MAX_RESULT_CHARS` -
   the whole view, claims cut to summaries, a compact view, ids and decisions only, counts only (constant size) - never a truncated
   document; route case 6 holds a real near-maximal merge (153 813 characters under the unchanged code) and a view inflated past every
@@ -294,13 +301,16 @@ reference in the view and the envelope.
   stay dormant, a specialist's derived context has no head mark and no PCB basis, its registry is read-only) - **CONFIRMED-unreachable**
   (scheduler.ts `deriveSpecialistContext`, `readOnlyToolRegistry`); every escalation proof injects artifacts sealed by test code, as the
   artifacts a proposing role would carry.
+  [B21 D2, 2026-09-26] Reachable since B21-D2: a proposing specialist carries the artifact its own run sealed, so two conflicting seals escalate in production (`specialist-proposals.md`); the B21-D suites now relay their test-sealed artifacts as the runs' own seal events.
 - No provenance of an artifact is established (who sealed it); no mid-DAG commit is seen: the merge judges against the snapshot the
   request assembled - no server-side live head exists to re-read - and every apply re-verifies against the live head.
+  [B21 D2, 2026-09-26] Provenance is established since B21-D2 (`sealed-in-run`); the mid-DAG commit stays B21-E/F's (`specialist-proposals.md`).
 - No model anywhere in the merge; no provider routing, breaker, strict result tool or trace block (B21-E); no evaluations (B21-F).
 - No UI, no new run event, no new route, no new exposed tool, no new discovery channel, no generator input change.
 - No proposal_ready (or any other presentation for approval) of a specialist's artifact: an accepted action reaches the read-only
   follow-up turn as data only (OD-122's one side-effecting artifact per user message stands).
-- No role gains a tool: the OD-120 proposal ids stay dormant; the merge judges every artifact by its family, whatever role carried it.
+  [B21 D2, 2026-09-26] Amended by B21-D2 (OD-122): exactly one accepted action with nothing competing and nothing sealed by the coordinator IS presented as the run's own `proposal_ready` / `pcb_proposal_ready` (`specialist-proposals.md`).
+- No role gains a tool: the OD-120 proposal ids stay dormant; the merge judges every artifact by its family, whatever role carried it. [B21 D2, 2026-09-26] Since B21-D2 the proposing roles are offered their live proposals (`specialist-proposals.md`).
 - No ERC: a topology contradiction between two circuit specialists has no deterministic tie-breaker (D21-14 recorded).
 
 ## 7. Suites, evidence, the review's findings, the pin moves, gates
@@ -464,6 +474,7 @@ discovery closure clauses and the §10 amendment line.
   principal, because the families' digests are checksums, not signatures; who produced an artifact is never claimed. **The owner may
   choose otherwise:** a role-row ceiling in the merge (only a role whose row names the family's proposal tool may carry its action) - a
   one-rule change pinned by a merge case.
+- [B21 D2, 2026-09-26] Amended by B21-D2: the proposing roles' non-long-running proposals are live (the replacement stays dormant: pin-facts reads); a role that is never offered a proposal tool can no longer carry an artifact, since only its run's own seal reaches the merge (`specialist-proposals.md`).
 
 ### The README row (`artifacts/ai-control-plane-b21/README.md`, replacing the planned B21-D row)
 
@@ -538,7 +549,7 @@ BLOCKED-LIVE-QUALIFICATION under LB-9`.
   escalation record goes to the human per conflict group. In production no specialist carries an artifact today (the OD-120 proposal ids
   are dormant, a specialist's context has no head mark and no PCB basis, its registry is read-only), so no conflict reaches the merge and
   no escalation is written - CONFIRMED-unreachable until a role is offered a proposal tool; a disagreement in prose is carried to the
-  follow-up turn as each specialist's unverified claims, never escalated structurally.
+  follow-up turn as each specialist's unverified claims, never escalated structurally. [B21 D2, 2026-09-26] The production half is closed by B21-D2: reachable in production (`specialist-proposals.md`).
 - **D21-11 (provider/model identity not carried by the artifacts)** — the artifact-envelope half CLOSED by B21-D (OD-132): every judged
   result carries the provider it was dispatched through and the model that provider reported, in the merge's view, the follow-up
   envelope and its persisted verdict; one provider = one source (a reported model is never counted as independence) and a replayed
@@ -555,7 +566,7 @@ BLOCKED-LIVE-QUALIFICATION under LB-9`.
   with parity (each a pass only when its check ran); no ERC exists, so a topology contradiction between two circuit specialists has no
   deterministic tie-breaker - and it is not detected and NOT escalated: the merge reads no prose and an escalation needs two artifacts,
   which no specialist carries today; it reaches the human only as each specialist's unverified claims in the follow-up turn, whose
-  header asks it to say what stays unresolved (the earlier wording "an escalation by construction" overstated this).
+  header asks it to say what stays unresolved (the earlier wording "an escalation by construction" overstated this). [B21 D2, 2026-09-26] Since B21-D2 two circuit specialists' conflicting SEALED Tier 1 edits escalate in the full-circuit DAGs (`b21-d2-chat-proposals` case 2); a topology contradiction in prose is still neither detected nor escalated (`specialist-proposals.md`).
 - **D21-15 (a readiness claim has no carrier)** — CLOSED by B21-D (OD-129) for the manufacturing-readiness reviewer, structurally: its
   result must reference the recomputed current ReadinessReport (its frame shows it how), free text from that role is refused, a
   qualification-authority reference is `stale` and never satisfies the rule (`b21-d-merge.test.ts` cases 7, 15, 21 and 22; route

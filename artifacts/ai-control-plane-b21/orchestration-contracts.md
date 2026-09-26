@@ -84,6 +84,7 @@ Field lists exactly as the runbook's (`discovery.md` §1.1 B21-A), as `interface
     sealers' three declared names exempt from the NAME check only — section 4) and `artifactDigest = engineeringDigest(payload)` recomputed
     on validation. The four REAL sealed artifacts, produced by their production sealers, validate wrapped verbatim (case 13). A verifies
     names, strings, structure and digest; B21-D runs each family's own integrity and currency verifiers.
+    [B21 D2, 2026-09-26] Since B21-D2 a result's `proposedActions` are exactly the artifacts its own run's gateway sealed: the scheduler attaches them (wrapped as here, the digest recomputed) and refuses any other entry the model wrote before the merge (`specialist-proposals.md`).
   - **`EvidenceReference`** `{ kind, id, digest, sourceClass, extractionMethod?, reviewed }` with `kind` one of `readiness-report`,
     `qualification-authority`, `atomic-evidence`, `resource-envelope`, `trace-event`; `sourceClass` the atomic catalog's `SourceClass`
     union (C33, twelve members, pinned to that union as text) plus `deterministic_verifier`, the one class only an in-process verifier

@@ -23,7 +23,8 @@ import { buildRunToolset, runAgentLoop, type AgentLoopDeps } from "@/app/lib/age
 import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
 import { SPECIALIST_ROLES, type SpecialistRole } from "../contracts";
 import { DurableOrchestrationRunStore } from "../store";
-import { SPECIALIST_CONTEXT_CLAIMS, SPECIALIST_CONTEXT_REFUSAL_STATUS, SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, readOnlySpecialistGateway, readOnlyToolRegistry, runSpecialistDag, specialistAllowedToolIds, specialistContextClaims, withdrawAuthority, type SchedulerDeps, type SpecialistContextClaim } from "../scheduler";
+import { SPECIALIST_CONTEXT_CLAIMS, SPECIALIST_CONTEXT_REFUSAL_STATUS, SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, readOnlySpecialistGateway, readOnlyToolRegistry, runSpecialistDag, specialistAllowedToolIds, specialistContextClaims, specialistContextFor, specialistToolRegistry, withdrawAuthority, type SchedulerDeps, type SpecialistContextClaim } from "../scheduler";
+import { roleProposalToolIds } from "../role-tools";
 import { EXPLICIT_AUTONOMY, MOVE_R3_ARGS, ROLE_SCOPE, RoleAdapter, fullContext, grantableContext } from "./_role-fixtures";
 
 /** every gateway construction in this file, counted (the scheduler must construct none) */
@@ -235,9 +236,17 @@ describe("[B21 C] no elevation: a specialist can never hold, claim or reach auth
     for (const { runId, deps } of loops) {
       expect("executionGrants" in deps, runId).toBe(false);
       expect(Object.keys(deps).sort(), runId).toEqual(["adapter", "allowedToolIds", "context", "contextWarnings", "emit", "gateway", "registry", "system"]);
-      expect(deps.context, runId).toEqual(derived);
+      // [B21 D2] pin move (OD-109 / OD-120 amended): a PROPOSING role's loop runs over its proposing context (the derived context
+      // plus exactly its sealer's fact - here the head mark) and its 'read + reviewed proposals' view; every other role's is the
+      // read-only derivation and view as before; either way the context claims nothing
+      const role = runId.replace(/^.*:task-\d+-/, "") as SpecialistRole;
+      expect(deps.context, runId).toEqual(specialistContextFor(coordinator, role));
       expect(specialistContextClaims(deps.context), runId).toEqual([]);
-      expect(deps.registry, runId).toBe(readOnlyToolRegistry(registry));
+      expect(deps.registry, runId).toBe(specialistToolRegistry(registry, role));
+      if (roleProposalToolIds(role).length === 0) {
+        expect(deps.context, runId).toEqual(derived);
+        expect(deps.registry, runId).toBe(readOnlyToolRegistry(registry));
+      }
       expect(deps.allowedToolIds!.length, runId).toBeGreaterThan(0);
       // the wrapper delegates a permitted read to the ONE gateway the scheduler was handed, and refuses an execution before it
       const asked = underlying.asked.length;

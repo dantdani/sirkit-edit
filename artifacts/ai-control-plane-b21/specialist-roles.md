@@ -55,6 +55,7 @@ grant or a port (the refusal below), no specialist deps carry the minter (struct
 gateway (the composition root's one bare specialist gateway, C33, is the only one under every wrapper). The B18 grants, the B19
 evidence rules, B20's OD-45/90/91/92 provider rules and OD-81's directive matcher stand unchanged; `verifyAgentContextIntegrity` (C24,
 C25) is untouched - the claim check is a second key in front of it, never a weakening of it.
+[B21 D2, 2026-09-26] Since B21-D2 a proposing role is also offered its row's LIVE proposals (the Tier 1 edit, the bounded PCB edit) through a 'read + the role's reviewed proposals' view, and its context gains exactly its sealer's fact (the head mark or the PCB basis); still no mutation, no view control, no port, no minter and no grant (`specialist-proposals.md`).
 
 ## 1. The roles and their tools (OD-120)
 
@@ -67,6 +68,8 @@ whether a role may produce one), the three external reads (OD-109 keeps the port
 alternative would make them effective) and the history read (the timeline rides the captured view, which a derived context never
 holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `schematic`, `pcb-placement-routing`.
 
+[B21 D2, 2026-09-26] Three of those entries (two distinct ids) are LIVE since B21-D2 and say so in their reason: the Tier 1 edit of the `circuit-topology` and `schematic` rows and the bounded PCB edit of the `pcb-placement-routing` row are offered to that role's specialist when the coordinator's verified context holds the sealer's fact (and, since the D2 review round, only while the coordinator's own turn has handed the human no artifact - OD-122), and sealed by the gateway in the specialist's own run (`specialist-proposals.md`); seven entries (six distinct ids) stay dormant, each saying why - the replacement proposal (its sealer needs the pin-facts reads only the coordinator's gateway holds), the two long-running layout proposals, the three external reads and the history read.
+
 | role | runbook | tool | class | reason |
 |---|---|---|---|---|
 | `coordinator` | `:819` | the exposure list itself | — | The existing single-agent set, unchanged: this row IS INTENTIONAL_AGENT_EXPOSED_TOOL_IDS (the same frozen array, its reasons in agent-exposure.ts), never passed as an allowlist (33 ids, over the A4L bound). |
@@ -75,7 +78,7 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 | `requirements-analyst` | `:820` | `sirkit.project.history-inspect` | read | What the user already changed, so intent is read from the project's own timeline. Dormant in B21-C: the timeline rides the captured view, which a specialist context never holds. |
 | `requirements-analyst` | `:820` | `sirkit.schematic.inspect` | read | The current circuit, so a stated requirement is compared with what the schematic already does. |
 | `circuit-topology` | `:821` | `sirkit.schematic.inspect` | read | The topology under analysis: the components, pins and nets of the verified schematic. |
-| `circuit-topology` | `:821` | `sirkit.schematic.propose-tier1-edit` | propose | The sealed schematic edit proposal: the only way a topology change is ever expressed, an inert artifact a human applies (permission Tier 2, OD-15). Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
+| `circuit-topology` | `:821` | `sirkit.schematic.propose-tier1-edit` | propose | The sealed schematic edit proposal: the only way a topology change is ever expressed, an inert artifact a human applies (permission Tier 2, OD-15). Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run). |
 | `circuit-topology` | `:821` | `sirkit.selection.inspect` | read | The user's current selection, when the question is about the selected parts. |
 | `circuit-topology` | `:821` | `sirkit.validation.connectivity-verify` | read | The deterministic connectivity check a topology claim is tested against: deterministic validation outranks consensus. |
 | `component-sourcing-evidence` | `:822` | `sirkit.component-authority.inspect` | read | The server-owned exact component authority (B13): the only source that may name a replacement target; an inspection, never a binding. |
@@ -83,14 +86,14 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 | `component-sourcing-evidence` | `:822` | `sirkit.parts.evidence-read` | read | The offer cache's missing, conflicting or stale evidence for one exact MPN: evidence that proves nothing (B19). Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective. |
 | `component-sourcing-evidence` | `:822` | `sirkit.parts.external-search` | read | Registered distributor facts for one to five exact MPNs: sourcing evidence, never engineering proof (B19). Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective. |
 | `schematic` | `:823` | `sirkit.schematic.inspect` | read | The verified schematic the two sealed proposals compile against. |
-| `schematic` | `:823` | `sirkit.schematic.propose-component-replacement` | propose | The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
-| `schematic` | `:823` | `sirkit.schematic.propose-tier1-edit` | propose | The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
+| `schematic` | `:823` | `sirkit.schematic.propose-component-replacement` | propose | The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). Dormant for specialists (B21-D2): its sealer needs the server's published pin-facts reads, which only the coordinator's gateway holds - an owner option under OD-120. |
+| `schematic` | `:823` | `sirkit.schematic.propose-tier1-edit` | propose | The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run). |
 | `pcb-placement-routing` | `:824` | `sirkit.pcb.board-inspect` | read | The board the placement and routing question is about. |
 | `pcb-placement-routing` | `:824` | `sirkit.pcb.mechanical-inspect` | read | The board extents and mounting holes: the placement constraints, within the model's result budget. |
-| `pcb-placement-routing` | `:824` | `sirkit.pcb.propose-bounded-edit` | propose | The sealed bounded PCB edit (B15.3): an inert artifact a human applies in the PCB editor. Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
+| `pcb-placement-routing` | `:824` | `sirkit.pcb.propose-bounded-edit` | propose | The sealed bounded PCB edit (B15.3): an inert artifact a human applies in the PCB editor. Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run). |
 | `pcb-placement-routing` | `:824` | `sirkit.pcb.via-inspect` | read | One net's vias and their padstack binding, for a routing question. |
-| `pcb-placement-routing` | `:824` | `sirkit.placement.propose` | propose | The revision-bound placement candidate (B17-F) a human applies in the placement panel. Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
-| `pcb-placement-routing` | `:824` | `sirkit.routing.propose` | propose | The revision-bound routing candidate (B17-F) a human applies in the routing panel. Dormant in B21-C: a specialist reads only (the read-only registry view); B21-D decides whether this role may produce it. |
+| `pcb-placement-routing` | `:824` | `sirkit.placement.propose` | propose | The revision-bound placement candidate (B17-F) a human applies in the placement panel. Dormant for specialists (B21-D2): a long-running engine is never offered to a specialist - an owner option under OD-120. |
+| `pcb-placement-routing` | `:824` | `sirkit.routing.propose` | propose | The revision-bound routing candidate (B17-F) a human applies in the routing panel. Dormant for specialists (B21-D2): a long-running engine is never offered to a specialist - an owner option under OD-120. |
 | `verification-critic` | `:825` | `sirkit.pcb.revision-inspect` | read | The board's semantic content revision: the state a claim was checked against. |
 | `verification-critic` | `:825` | `sirkit.pcb.via-inspect` | read | Via facts by net: a deterministic answer to a routing claim. |
 | `verification-critic` | `:825` | `sirkit.validation.connectivity-verify` | read | The deterministic connectivity verifier over the verified board. |
@@ -184,6 +187,7 @@ What is **structural** (true by how the objects are built, pinned by inspection 
   basis, a captured view) the derived context holds none of it, passes `verifyAgentContextIntegrity`, claims nothing, is idempotent, and
   is offered no view tool, no history read, no proposal, no execution and no external read — while the coordinator's context is
   deep-equal before and after (`b21-c-no-elevation.test.ts` case 2).
+  [B21 D2, 2026-09-26] `deriveSpecialistContext` is unchanged; a proposing role's specialist runs over `specialistContextFor`, which adds exactly its sealer's fact to this derivation and still claims none of the eight elevations (`specialist-proposals.md`).
 - For every role the scheduler builds the specialist's loop deps with a CLOSED key set — `adapter`, `allowedToolIds`, `context`,
   `contextWarnings`, `emit`, `gateway`, `registry`, `system` — and no `executionGrants` key although its own deps carry the
   coordinator's minter; each loop runs over the read-only registry view and the derived context; the scheduler constructs no gateway
@@ -287,7 +291,7 @@ routing") can still select the layout variant. **CONFIRMED** by `b21-b-router.te
 - **D21-31 (RECORDED), OD-123:** `schematic.set-property` and `schematic.move-rotate` are in `EXECUTION_FAMILIES` (C30), the closed
   eight-list the B18-B pin fixes, yet no schematic descriptor is a granted execution and OD-15 defers schematic execution. They stay
   reserved and unchanged; the `schematic` role receives the two sealed Tier 2 proposal tools plus `schematic.inspect` only (both
-  proposals dormant in C).
+  proposals dormant in C). [B21 D2, 2026-09-26] The Tier 1 edit is live for the schematic specialist since D2; the replacement stays dormant (the pin-facts reads) - `specialist-proposals.md`.
 
 ## 6. Suites, evidence, the pin moves, gates
 
@@ -445,6 +449,7 @@ Every text below is as of the review's fix round (2026-09-26).
   never-exposed / Tier 3 id; a proposal only in a proposing role's row; `roleExposureReport` reports drift by role, id and reason. A row
   is a CEILING: ten row entries (nine distinct ids) are DORMANT in B21-C (the six proposal entries — specialists read only; the three
   external reads — OD-109; the history read — no captured view in a specialist context), each saying so in its reason.
+  [B21 D2, 2026-09-26] Amended by B21-D2: the Tier 1 edit (circuit-topology, schematic) and the bounded PCB edit (pcb-placement-routing) are live, the replacement and the two layout proposals dormant with their reasons (`specialist-proposals.md` section 7 carries the amended entry).
 - **Consequence, stated exactly (the review's fix):** under OD-109 the sourcing specialist's only effective read is
   component-authority.inspect, so it runs only when at least one schematic component has a durable binding that loads within the
   route loader's 5 s deadline; without a durable source (the local build), for a project with no binding (every new design), on a
@@ -478,7 +483,7 @@ Every text below is as of the review's fix round (2026-09-26).
 - **Question:** the closed eight-family list declares two schematic Tier 1 families that nothing can route to (D21-31).
 - **Default applied:** recorded as reserved and unchanged (the B18-B pin fixes the list); no schematic descriptor is a granted
   execution; the `schematic` role receives the two sealed Tier 2 proposals and `schematic.inspect` only (OD-15), both proposals dormant
-  while specialists read only.
+  while specialists read only. [B21 D2, 2026-09-26] Since D2 the Tier 1 edit is live for the schematic role and the replacement stays dormant (`specialist-proposals.md`).
 - **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
   schematic execution (reverses OD-15; its own chapter).
 

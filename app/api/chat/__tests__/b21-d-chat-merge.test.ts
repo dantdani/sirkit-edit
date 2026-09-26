@@ -9,6 +9,9 @@
  * production envelope (`mergedResultsEnvelope`, the only one the route builds) is bounded under MAX_RESULT_CHARS whatever the merge
  * holds, sanitized, and marks one provider as one source (case 6); a manufacturing-readiness review runs its reviewer through its
  * real read and the citation form its prompt shows, and the merge accepts the reference (case 7).
+ * [B21 D2, 2026-09-26] Since D2 the artifacts of cases 2-5 reach the merge as the specialists' own seal events (a relay at the
+ * scheduler's loop seam stands in for the sealer: a model-written artifact is refused before the merge), and ONE accepted action
+ * with nothing sealed by the coordinator IS presented as the run's `proposal_ready` (case 3's pin move, OD-122 amended).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -24,7 +27,8 @@ import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/re
 import { DurableOrchestrationRunStore, ORCHESTRATION_AGGREGATE_TYPE, type OrchestrationRunEntry, type OrchestrationRunStore } from "@/app/lib/agent/orchestration/store";
 import { MERGE_TASK_PREFIX, mergeSpecialistOutcome, type MergeOutcome } from "@/app/lib/agent/orchestration/merge";
 import { validateSpecialistResult, type SpecialistRole, type ValidatedSpecialistResult } from "@/app/lib/agent/orchestration/contracts";
-import type { SchedulerOutcome, SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
+import { runSpecialistDag, type SchedulerOutcome, type SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
+import { relaySeals } from "@/app/lib/agent/orchestration/__tests__/_seal-relay";
 import { assembleAgentRunContext } from "@/app/lib/agent/context";
 import { MAX_RESULT_CHARS } from "@/app/lib/agent/loop";
 import { LOCAL_DEV_PRINCIPAL_ID } from "@/app/lib/auth/project-membership";
@@ -75,7 +79,7 @@ vi.mock("@/app/lib/agent/adapters", async () => ({
 }));
 
 import { POST, EDITOR_CONTEXT_SCHEMA } from "../route";
-import { ORCHESTRATION_ENABLED_ENV, mergedResultsEnvelope, resetOrchestrationStoreFactory, setOrchestrationStoreFactory, specialistMergeDeps } from "../orchestration-runtime";
+import { ORCHESTRATION_ENABLED_ENV, mergedResultsEnvelope, resetOrchestrationStoreFactory, resetSpecialistSchedulerFactory, setOrchestrationStoreFactory, setSpecialistSchedulerFactory, specialistMergeDeps } from "../orchestration-runtime";
 
 /** B's request, byte for byte (b21-b-chat-router.test.ts), so the flag-off streams reproduce B's pins recorded from HEAD 4b6d0e2 */
 const SCOPE = { tenantId: "tenant-1", projectId: "project-1", branchId: "main" };
@@ -128,6 +132,12 @@ const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.
 /** a merge record's key with its content hex elided: `<taskId>.merge-*` for a verdict on a task attempt (the scheduler's own dissents keep the task id) */
 const recordsOf = (history: OrchestrationRunEntry[]): string[] => history.filter((entry) => entry.record.kind === "decision" || entry.record.kind === "dissent").map((entry) => `${entry.taskId.startsWith(MERGE_TASK_PREFIX) ? "merge" : entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}:${(entry.record as { decision: string }).decision}`);
 const inMemoryStore = () => { const repository = new InMemoryDurableWorkflowRepository(); return { repository, store: new DurableOrchestrationRunStore(repository) }; };
+/** [B21 D2] pin move: since D2 a specialist's result carries only what its own run's gateway sealed, and a model-written artifact is
+ *  refused before the merge; these cases judge Tier 1 proposals sealed in TEST code (for the circuit specialist and the critic -
+ *  a critic is never offered a proposal tool), so the production scheduler is handed a loop that relays them as the run's own
+ *  seal events (`relaySeals`, standing in for the sealer). The real in-run seal and the real escalation through this POST are
+ *  b21-d2-chat-proposals cases 2 and 3. */
+const relayTestSeals = (): void => setSpecialistSchedulerFactory(() => (plan, coordinator, deps) => runSpecialistDag(plan, coordinator, { ...deps, runLoop: relaySeals(deps.runLoop) }));
 
 describe("[B21 D] the merge through the chat route", () => {
   beforeEach(() => {
@@ -136,6 +146,7 @@ describe("[B21 D] the merge through the chat route", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     resetOrchestrationStoreFactory();
+    resetSpecialistSchedulerFactory(); // [B21 D2] the relay of cases 2-5
     state.starts = [];
     state.results = {};
     state.atFollowUp = null;
@@ -159,6 +170,7 @@ describe("[B21 D] the merge through the chat route", () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
+    relayTestSeals(); // [B21 D2] pin move (see relayTestSeals)
     const ten = tier1("10k");
     const other = tier1("4k7");
     state.results = { "circuit-topology": resultWith("circuit-topology", [ten]), "verification-critic": resultWith("verification-critic", [other]) };
@@ -195,12 +207,18 @@ describe("[B21 D] the merge through the chat route", () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { repository, store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
+    relayTestSeals(); // [B21 D2] pin move (see relayTestSeals)
     const ten = tier1("10k");
     state.results = { "circuit-topology": resultWith("circuit-topology", [ten]) };
     const { runId, events } = await post(BODIES.replacement);
     expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
     expect(warningsOf(events).some((message) => message.startsWith("Orchestration: merge:"))).toBe(false);
-    expect(types(events).filter((type) => type === "proposal_ready")).toEqual([]);
+    // [B21 D2] pin move (OD-122 amended): exactly ONE accepted action and nothing sealed by the coordinator - the runtime now emits it
+    // as the run's own `proposal_ready` for the human's existing review (b21-d2-approval proves it approvable); nothing is applied
+    const ready = events.filter((event) => event.type === "proposal_ready");
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toMatchObject({ runId, toolId: "sirkit.schematic.propose-tier1-edit" });
+    expect(engineeringDigest(JSON.parse(JSON.stringify(ready[0]!.proposal)))).toBe(ten.artifactDigest);
     const envelope = state.starts[3]!.userMessage;
     expect(envelope).toContain('"acceptedActions":[{');
     expect(envelope).toContain(`"artifactId":"${String(ten.payload.proposalId)}"`);
@@ -218,6 +236,7 @@ describe("[B21 D] the merge through the chat route", () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
+    relayTestSeals(); // [B21 D2] pin move (see relayTestSeals)
     state.results = { "circuit-topology": resultWith("circuit-topology", [tier1("10k")]), "verification-critic": resultWith("verification-critic", [tier1("4k7")]) };
     let seen: string[] | null = null;
     state.atFollowUp = async () => {
@@ -241,6 +260,7 @@ describe("[B21 D] the merge through the chat route", () => {
       },
     };
     setOrchestrationStoreFactory(() => failing);
+    relayTestSeals(); // [B21 D2] pin move (see relayTestSeals)
     state.results = { "circuit-topology": resultWith("circuit-topology", [tier1("10k")]) };
     const { events, normalized } = await post(BODIES.replacement);
     expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]);
