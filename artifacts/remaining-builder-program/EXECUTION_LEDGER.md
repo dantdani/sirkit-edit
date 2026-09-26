@@ -2700,3 +2700,69 @@ _(discovery, reproduction and results appended below as they are observed)_
   prose (OD-131, fail closed), and the fixture-runtime binding is DEFERRED to B21-B's `app/api/chat/orchestration-runtime.ts` (the
   lead's decision on coverage-4: the record has no reader in A, and a binder inside the gated prefix would carry the OpenAI SDK, D21-32).
 - Lead gates (2026-09-26, one job at a time): the four A suites, the CI guard and b20-b1 6 files / 72 cases (contracts 14, store 15, import gates 5, page 6, guard 10 runtime tests, b20-b1 22); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254 - no orchestration identifier in the nine scanned files, the provider literal untouched; b04-tool-registry, b17-f-agent-exposure, b18-c-exposure-lift, b18-c-fixture-agent, b20-b2-import-gates, b20-d3-authority-import-gates and app/lib/durable-workflow 8 files / 87 (+1 file / 2 cases skipped by tenant-scope's own pre-existing gate); tsc 0; eslint clean on the ten new and changed TS files; no generator input changed (no descriptor, route or UI), so no generator was re-run and every generated artifact is byte-identical; census 165/162/3/0.
+
+### B21-B — the task-complexity router, the no-provider path, the bounded sequential scheduler, the store binding (2026-09-26 local; increment workflow + adversarial review + lead; this commit)
+
+- Test-first: the four B suites (router 6, scheduler 10, route 7, page 6) and A's extended gate all failed before the code
+  (`b-failing-first.log`: the suites at import — `Cannot find module '../router'` / `'@/app/api/chat/orchestration-runtime'`; the
+  gate's cases 1, 3 and 5 on the absent modules); the flag-off streams were RECORDED from HEAD `4b6d0e2` before the route changed
+  (`b-record-head.log`: digests `eng1-656c2588b836c043`, `eng1-07aaf2589736c9f7`, `eng1-bf8822508f100b13`, `eng1-9fbc41d4ee249877`) and
+  pinned as literals; then green with the code (`b-impl-1.log`). The adversarial review confirmed 28 findings (regressions 1-7, 9-11;
+  security 1-8; coverage 1-10; tests 1-6); every one was fixed test-first — the strengthened and added cases (router 7, scheduler 14,
+  route 15, page 7) ran against the pre-fix code first (`b-fix-failing-first.log`: 23 of 48 failing), then green (`b-fix-green-1.log`,
+  `b-fix-green-2.log`), the four test-strength findings proven by deliberate source breakages restored by hash (`b-fix-mutation.log`,
+  `b-fix-gate-mutation.log`, `b-fix-dburl-proof.log`, `b-fix-dburl-proof-2.log`).
+- Proof order (discovery §9) honoured: the router suite and the route suite show a Tier 0/1 command, a 3D/view request and a Tier 3
+  name each produce today's single-agent run shape or a refusal with no provider call, and the flag-off route is byte-identical to
+  HEAD, before route case 4 runs specialists in a chat.
+- Code: `app/lib/agent/orchestration/router.ts` (the rule table, the five facts, the nine Tier 3 families with the sort-ask
+  narrowing, the four DAG shapes with their role lists, the composer's `REPLACE_PART` imported, the geometry exclusion, the layout
+  nouns narrowed), `app/lib/agent/orchestration/scheduler.ts` (the caps incl. `coordinatorTurns` and `maxRefusalLinesPerAttempt`, the
+  read-only registry view, `withdrawAuthority` / `deriveSpecialistContext`, the read-only gateway wrapper, the metered adapter, the
+  request per task equal to the advertised reads, results before the next task, resume with the scope/revision check and `stale`
+  dissent, the per-task deadline, cancellation, the retry rule, the DAG timer, the token ceiling over both coordinator turns and every
+  attempt, uncommitted results escalated, store details redacted, refused specialist calls as bounded warning lines; the loop by
+  injection), `app/api/chat/orchestration-runtime.ts` (the store binding A deferred, the router and scheduler seams, the flag, the
+  refused run, the DAG driver: the held terminal, the specialist gateway built bare, the stand-down rules incl. no further call after a
+  provider outage and reason-only warnings, the read-only follow-up turn via `followUpDeps`, warning dedupe, the terminal as the run's
+  totals, the envelope with provenance, correlation, the summaries-only fallback and the sanitizer),
+  `app/api/chat/route.ts` (one import, the plan before the adapter, the three-way call site), `app/lib/project/composer-routing.ts`
+  (`REPLACE_PART` exported) and `app/lib/agent/adapters.ts` (`MAX_OUTPUT_TOKENS` exported) — one line each, no behaviour change — the
+  workflow's one explicit entry, A's gate extended in place (entries 5; the loop probe pinned as an invariant; the runtime file's
+  closure). No route, descriptor, UI or generator input changed; census 165/162/3/0; the B04/B20/B17-A artifacts byte-identical.
+- Findings: D21-33 (low): the loop's closure reaches `app/lib/pcb/fab/presets` through the read bindings, so the scheduler takes the
+  loop by injection (measured by the gate's probe). Decision for the owner: the six-specialist full-circuit list versus the cap of four
+  (OD-107). Deviation recorded: OD-108 (the results enter the follow-up turn as its user message, bounded by the read-only follow-up
+  turn, the header, the provenance note and the sanitizer — no content judgement in B, since OD-81's matcher sits behind the B19-D
+  closure gate; B21-E's strict result tool closes it). Deferred and
+  stated: the Tier 0 read-by-grammar answer (OD-110), the route-level resume and the `userMessageDigest` ledger (D21-4 closed at the
+  scheduler only; B21-E with B21-C), proposal-producing specialists (B21-C/D), the breaker and `maxRetries: 0` (B21-E, OD-115), the
+  strict result tool (B21-E).
+- Gates re-run one job at a time (the lead re-runs them): the four B suites and A's five; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` (b09-*, b11-*, b18-*, b20-a4-*); the engineering exposure / tier suites (b04-tool-registry,
+  b17-f-agent-exposure, b18-a-permission-tiers, b18-c-*); the MCP gates (b20-b1, b20-b2, b20-d3); the chat closure ratchets
+  (b18-b-import-gates, b16-0-24 confinement, b20-b2-route-tree); the CI guard; tsc; eslint on every new and changed file — figures in
+  the report.
+- Records: `task-complexity-router.md`; OD-106 (tripwire), OD-107, OD-110, OD-122 as applied, OD-108 as a recorded deviation; D21-5,
+  D21-6 closed, D21-17's wall-time clause closed, D21-4 closed in part (at the scheduler), A's deviation closed, D21-33 found. Live:
+  every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed 27 of the 28 fixes, left regressions-11 partial and raised
+  3 new low issues): (1) a follow-up coordinator turn that fails after recording steps no longer under-reports the run on the stream
+  - the follow-up's recorder meters every step it records, and the stand-down terminal is the first turn's `run_completed` rewritten
+  to the run's totals (route case 15: five adapter starts, one `run_completed`, the stand-down warning naming `provider_network`, the
+  stream's steps equal to the trace's); (2) the follow-up turn's toolset warnings are no longer recorded twice on the TRACE (its recorder
+  skips the first turn's lines; route cases 4 and 15 assert the trace's warnings are unique) and the orchestration's own status and
+  refusal lines take at most `ORCHESTRATION_TRACE_LINES_MAX` (12) of the trace's 32 warning slots, every line still streamed and a
+  stand-down reason always recorded; (3) a stale dissent is keyed by the RESUMING attempt, not by the committed result's, so a second
+  resume under a third scope records its own dissent instead of replaying the first under an identical idempotency key (scheduler case
+  13 extended with a third resume: dissents at attempts 1 and 2, results at 0, 1, 2); (4) A's gate no longer pins how many forbidden
+  members the loop's closure reaches (regressions-11's partial fix): every caught line for the loop probe must run through
+  `app/lib/agent/loop.ts` by a family, and the chain as measured today stays on the page (D21-33). The page's citation lines for the
+  three new modules were re-pinned after the edits (13 rows; page case 7 pins them current). Both code fixes proven revert-sensitive by
+  hash-verified mutation (`b-lead-probe.log`: the old dissent key fails exactly scheduler case 13, an unmetered/unfiltered follow-up
+  recorder fails exactly route cases 4 and 15; sources restored, SHA-256 equal).
+- Lead decisions: the OD-108 deviation stands as recorded (results enter the read-only follow-up turn as its user message; B21-E's
+  strict result tool closes it); the six-specialist full-circuit list versus the cap of four is left to the owner under OD-107 (the
+  safe default refuses, never runs five); the two one-line exports in `composer-routing.ts` and `adapters.ts` are accepted (data only,
+  no behaviour change; the request-shape pins hold).
+- Lead gates (2026-09-26, one job at a time): every B21 suite (A's four, B's four), the route suite and the CI guard 9 files / 94 cases (router 7, scheduler 14, route 16, B page 7, A gate 5 + contracts 14 + store 15 + A page 6, guard 10 runtime tests); `app/api/chat/__tests__` in full 15 files / 94 (the flag-off route byte-identical to HEAD, every pre-existing chat suite green); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254; b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b20-b1-mcp-exposure, b20-b2-import-gates, b20-d3-authority-import-gates, b18-d-composer-routing and the B19-D closure gate 9 files / 110; tsc 0; eslint clean on the eleven new and changed TS files; no generator input changed (no descriptor, route or UI - the flag is an environment variable), every generated artifact byte-identical; census 165/162/3/0.

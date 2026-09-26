@@ -38,7 +38,8 @@ const PCB_NOUN = /\b(?:silk(?:screen)?|vias?|tracks?|traces?|dimensions?|copper|
 const MAKE_PART = /^make\s+(?:r|c|u|d|led|j|sw)\d+\b/;
 // [B18-E E15] scenario 4: a part SWAP is the sealed replacement proposal the assistant owns, not a schematic edit. It is
 // recognised by the pairing — a replace/swap verb anywhere with a word naming the thing being swapped IN.
-const REPLACE_PART = /\b(?:replace|replacing|swap|swapping|substitute)\b[^.!?]*\b(?:parts?|components?|mpns?|alternates?|alternatives?|chips?)\b/;
+// [B21 B] exported: the task-complexity router's replacement rule IS this grammar (one pairing, never a wider copy).
+export const REPLACE_PART = /\b(?:replace|replacing|swap|swapping|substitute)\b[^.!?]*\b(?:parts?|components?|mpns?|alternates?|alternatives?|chips?)\b/;
 const TIER3_WORD = /\b(?:release|publish|order|purchase|buy|qualify|upload|ship)\b/;
 
 export function routeComposerMessage(text: string, hasSchematic: boolean): ComposerRouting {

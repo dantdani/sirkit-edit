@@ -586,7 +586,7 @@ is keyed on userMessageDigest + family + targets within five minutes (`store.ts:
 user message would each be allowed their own artifact. Cancellation is client-side only (no provider cancel endpoint is used; tokens
 of an aborted request are still spent — INFERRED, providers reader; OpenAI documents cancel only for background responses, §1.2).
 Severity high. **CONFIRMED** (INFERRED for the token-spend clause). Closes: B21-A (records) and B21-B (scheduler). Sources: loop D21-3,
-traces D21-22, tools D21-42, tests D21-53, providers D21-18 (resume half).
+traces D21-22, tools D21-42, tests D21-53, providers D21-18 (resume half). — CLOSED IN PART by B21-B, at the scheduler: `scheduler.ts` (`b21-b-scheduler.test.ts` cases 5 and 13): every specialist result is persisted before the next task starts under `orchestration:<runId>:<taskId>:<attempt>:<kind>`; a scheduler started again for the SAME coordinator run id and scope replays a committed result and never calls that task's adapter again, and a committed result from another scope or revision is dissent `stale` and runs again. OPEN at the route: the chat route mints a fresh run id per POST and carries no prior run id, so a human Retry or a re-sent message after an outage is a NEW run whose specialists run and are paid again — the route-level resume (re-attaching a coordinator run id after a refresh or Retry) stays open for B21-E ("resume from immutable trace after refresh"), with the `userMessageDigest` ledger (OD-122) and B21-C's subsets.
 
 **D21-5 — No task-complexity router on the chat path; the only fan-out in the repository is a live model-judged `Promise.all`.**
 Requirement: B21-B "deterministic policy before model judgment" (`:805-811`); mission "Do not create an unconditional swarm. Simple
@@ -597,7 +597,7 @@ beyond `MAX_ITERATIONS = 20` (`:105-118`; `build-loop.ts:90, :131-136`), under p
 identitySource: "body-scope-server-actor" })` (reader `route-policy.ts:219`) and action `schematic.generate` mutate
 (`action-registry.ts:347`), with prompts headed "Multi-agent build" (`prompts.ts:530-532`). It contradicts the pass criteria (bounded,
 auditable DAG) and must be retired, routed through B21-B or explicitly scoped out. Severity high. **CONFIRMED**. Closes: B21-B (needs
-OD-106). Source: loop D21-5; tools fact.
+OD-106). Source: loop D21-5; tools fact. — CLOSED by B21-B: `router.ts` (`b21-b-router.test.ts`, 7 cases) and the flag-gated route wiring (`b21-b-chat-router.test.ts`, 15 cases); `build-multi` scoped out and hash-pinned (OD-106).
 
 **D21-6 — Nothing caps agents, parallelism, tokens or cost; the trace holds 256 events; long-running engines have no concurrency
 cap.** Requirement: B21-B "Cap agents, iterations, tool calls, parallelism, tokens, cost and wall time." (`:813`); pass criteria "bounded
@@ -609,7 +609,7 @@ warnings per document and overflow is a silent diagnostic, not a failure (`trace
 only as per-descriptor `timeoutMs` / `budgetClass` (`tool-registry.ts:86-87`) and `placement.propose` (120 s, blocks the event loop) and
 `routing.propose` (180 s, a FreeRouting child process) have no cap on concurrent engines or processes across sub-runs
 (`tool-catalog.ts:578, :597`; `mcp-exposure-review.ts:34, :36`). The chat wrapper adds no deadline (section 0). Severity high.
-**CONFIRMED**. Closes: B21-B (needs OD-107). Sources: loop D21-1, providers D21-14, traces D21-23, tools D21-47.
+**CONFIRMED**. Closes: B21-B (needs OD-107). Sources: loop D21-1, providers D21-14, traces D21-23, tools D21-47. — CLOSED by B21-B: `SPECIALIST_CAPS` (4 specialists, parallelism 1, 300 000 ms, 2 attempts above the SDK's retries, the token ceiling as the DAG's maximum by construction reported never priced, every attempt metered; scheduler cases 1, 2, 7, 8, 12, 14). Cost stays unpriced by decision (OD-107); the breaker is B21-E (D21-18).
 
 **D21-7 — No per-role tool subset exists on the agent channel, and the discovery vocabulary that would carry one is pinned.**
 Requirement: B21-C "Each role receives a least-privilege tool subset." (`:829`). Finding: discovery has one `assistant-agent` channel per
@@ -727,7 +727,7 @@ deterministically stale.** Requirement: B21-B caps/wall time and resume (`:813`)
 pinned to one head (headMark / pcbRevisionId + historyHead + lineage), so a commit between specialists makes the later result
 stale-head / stale-revision / STALE_REVISION — correct, but the orchestration must treat it as a regenerate signal, never a merge
 input, and nothing ties a task `deadlineAt` to these TTLs. Severity medium. **CONFIRMED**. Closes: B21-D (needs OD-107's wall-time
-clause). Source: authority D21-37.
+clause). Source: authority D21-37. — the wall-time clause CLOSED by B21-B: the DAG wall time 300 000 ms is ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, so nothing the DAG produces expires before the human sees it (OD-107); the stale-as-regenerate-signal clause stays B21-D's (B's scheduler already treats a committed result from a moved revision as `stale` and re-runs it, never as a merge input). - **A's stated deviation (no runtime binds the store in A)** — closed by B21-B: `app/api/chat/orchestration-runtime.ts` binds the production repository (the fixture runtime's in-memory one proven, route case 7); D21-3's "closed in part" is unchanged (tool calls are still not persisted; B21-E — a specialist's refused tool calls are visible as bounded warning lines meanwhile).
 
 **D21-18 — No provider-level circuit breaker, quota or Sirkit-owned retry exists; the only thing preventing a paid retry storm is the
 human not clicking Retry.** Requirement: B21-E "quota/rate-limit circuit breakers; no repeated paid retry storm" (`:853-854`); B21-B
@@ -874,6 +874,8 @@ OD-15 defers schematic execution (`OWNER_DECISIONS.md:21`). A schematic speciali
 Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: tools D21-49.
 
 **D21-32 — The durable-workflow production runtime reaches the OpenAI SDK.** Requirement: the B21-A import gate (no provider SDK in an orchestration module's closure); standing constraint OD-45 (no provider SDK outside the five reviewed modules' purpose). Finding: `app/lib/durable-workflow/runtime.ts` -> `server-repository.ts` -> `app/lib/db/schema.ts` -> `app/lib/embeddings.ts` -> `openai` (a schema constant `EMBEDDING_DIMENSIONS` pulls the SDK). Consequence: an orchestration module gated against provider SDKs cannot resolve the production repository itself; the store takes it by injection and B21-B's runtime file binds it. Severity low. **CONFIRMED** (gate case 3, injected probe, chain quoted). Closes: a follow-up outside B21 (move the constant to a dependency-free module); no owner decision needed. Source: B21-A.
+
+**D21-33 — The loop's own import closure reaches the fab presets.** `app/lib/agent/loop.ts -> app/lib/engineering/tool-bindings-readonly.ts -> app/lib/pcb/ai/snapshot.ts -> app/lib/pcb/fab/presets/index.ts` (measured 2026-09-26; the gate pins the invariant, not the hops), the RELEASE family of A's gate (no preset exemption). Consequence: an orchestration module may never import `runAgentLoop` / `buildRunToolset`; the scheduler takes both by injection from the composition root (`SchedulerDeps.runLoop` / `buildToolset`). Severity low. **CONFIRMED** (gate case 3's `evil-loop` probe). Closes: recorded; no owner decision needed. Source: B21-B. - **§10, B21-B amendment:** OD-107, OD-110, OD-122 applied as this page states and OD-108 recorded as a deviation; the full-circuit list (six specialists) versus the cap of four is an open owner decision under OD-107; the Tier 0 read-by-grammar clause of OD-110 is recorded, not built; the "order … by …" narrowing of the Tier 3 rule is the increment's, revertible; OD-81's matcher is not reused by the orchestration runtime (the B19-D closure gate, `b19-d-external-text-injection-route.test.ts` row 31, forbids `app/lib/mcp/foreign-tools.ts` in the chat route's closure — an attempt during the fix pass tripped it and was withdrawn, the ratchet unchanged); the adversarial review's 28 confirmed findings are fixed test-first (section 6 of the page).
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1176,3 +1178,26 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
 - **Section 6:** OD-106..OD-111, OD-118, OD-124, OD-128 and OD-131 recorded in `OWNER_DECISIONS.md` as the page states them; OD-107 carries the lead's values from section 9 (4 specialists, parallelism 1, DAG wall time 300 s).
 - **Section 7, B21-A:** as built - the idempotency key carries the record kind (`orchestration:<runId>:<taskId>:<attempt>:<kind>`) because one attempt writes its request, its result and a decision; the store never imports the durable runtime (D21-32) and is UNAVAILABLE until B21-B's composition root binds the repository; the adopted contracts suite's spelling scan scrubs the two runbook-mandated literals (`cost-latency-router`, `qualification-authority`); `secret_shaped_text` refuses a credential-shaped VALUE.
 - **Section 8:** LB-9 added to `LIVE_BLOCKERS.md` (OD-128).
+
+### B21-B (recorded by the lead, 2026-09-26)
+
+- **Section 4:** D21-5 and D21-6 closed; D21-17's wall-time clause closed; D21-4 closed in part (at the scheduler: a resumed scheduler
+  replays a committed result of the same scope and re-runs a stale one; the route mints a fresh run id per POST, so the route-level
+  resume and the `userMessageDigest` ledger are B21-E's); A's "no runtime binds the store" deviation closed by
+  `app/api/chat/orchestration-runtime.ts`; D21-33 opened (the loop's closure reaches the fab presets through the read bindings, so
+  the scheduler takes the loop and the toolset builder by injection).
+- **Section 6:** OD-107, OD-110 and OD-122 applied as `task-complexity-router.md` states them (amendments in `OWNER_DECISIONS.md`);
+  OD-108 recorded as a DEVIATION - the specialists' shape-validated results enter the coordinator's follow-up turn as its user message
+  because no tool call exists to attach a result to without a new exposed tool, bounded by a follow-up turn that is read-only by
+  construction (no minter, no ports, the read-only registry view and gateway wrapper, the authority withdrawn); B21-E's strict result
+  tool closes it. Open for the owner under OD-107: the runbook's six-specialist full-circuit list versus the cap of four (the safe
+  default refuses, never runs five). OD-106's tripwire: `build-multi` hash-pinned against HEAD, untouched.
+- **Section 7, B21-B:** as built - the flag `SIRKIT_ORCHESTRATION_ENABLED` (exactly "1", default off; off, the route is byte-identical to
+  HEAD, four streams recorded from HEAD and pinned); the Tier 3 refusal as a zero-step completed run with no provider call; the DAG as
+  the coordinator turn, sequential specialists (at most 4, parallelism 1, DAG wall time 300 s, one retry on a retryable provider
+  failure and never on `insufficient_quota`, every attempt metered) and ONE read-only follow-up turn in one stream with one terminal
+  reporting the run's totals; the Tier 0 read-by-grammar clause of OD-110 recorded, not built; the "order ... by ..." narrowing of the
+  Tier 3 rule; OD-81's matcher not reused (the B19-D closure gate forbids `app/lib/mcp/foreign-tools.ts` in the chat route's closure -
+  an attempt during the fix pass tripped it and was withdrawn, the ratchet unchanged).
+- **Section 8:** the lead's residual fixes (a failed follow-up turn reports the run's totals; trace warnings once and capped at 12
+  orchestration lines; the stale dissent keyed by the resuming attempt; A's gate pins the invariant, not the count).

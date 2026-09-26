@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { agentAdapterFor } from "@/app/lib/agent/adapters";
 import { assembleAgentRunContext, parseSelectionRef } from "@/app/lib/agent/context";
 import { agentStreamRoute } from "@/app/lib/auth/route-handlers";
-import { DEFAULT_AGENT_BUDGET, type AgentRunEvent } from "@/app/lib/agent/contracts";
+import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentRunResult } from "@/app/lib/agent/contracts";
 import { createAgentToolGateway } from "@/app/lib/agent/gateway";
 import { runAgentLoop } from "@/app/lib/agent/loop";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
@@ -32,6 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
+import { emitRefusedRun, planChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single)
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -420,6 +421,9 @@ export const POST = agentStreamRoute(
       return { ok: true, executor: createFreeroutingPassExecutor({ runtimeInfo, deadline: Date.now() + timeoutMs, signal: controller.signal }) };
     },
   });
+  // [B21 B] deterministic policy BEFORE any model judgment (OD-110): the router runs only under SIRKIT_ORCHESTRATION_ENABLED=1;
+  // off, every message is `single` and nothing below changes. A refused plan never invokes the adapter.
+  const plan = planChatRun(userMessage, routerFactsOf(runContext));
   const adapter = agentAdapterFor(provider);
   // [B11] every run produces ONE bounded, redacted, provider-neutral trace.
   // Identity is frozen at construction; the recorder observes normalized
@@ -495,9 +499,14 @@ export const POST = agentStreamRoute(
       try {
         // [B09.1] run_started is emitted FIRST (inside the loop, exactly
         // once); context warnings follow it via contextWarnings.
-        const result = await runAgentLoop(
-          { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal },
-          {
+        // [B21 B] a refused Tier 3 ask answers with NO provider call; a dag plan runs this same coordinator turn, then the
+        // specialists and one follow-up turn (one stream, one terminal); a single plan is exactly the call below.
+        let result: AgentRunResult;
+        if (plan.kind === "refused") {
+          result = emitRefusedRun({ runId, provider, reason: plan.reason, emit, trace: traceRecorder });
+        } else {
+          const request = { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal };
+          const deps = {
             adapter,
             gateway,
             registry,
@@ -507,8 +516,9 @@ export const POST = agentStreamRoute(
             contextWarnings: [...assembly.warnings, ...autonomyWarnings],
             trace: traceRecorder,
             ...(executionGrants ? { executionGrants } : {}),
-          },
-        );
+          };
+          result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now() }) : await runAgentLoop(request, deps);
+        }
         // [B11] finalize + validate the trace. A trace/sink failure is
         // classified inside the recorder and can NEVER emit a second
         // terminal event or change the run's outcome. Normal completion,

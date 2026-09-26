@@ -58,7 +58,8 @@ import { judgeProviderOutput } from "./provider-output-guard"; // [B20 A5] OD-91
 import { fixtureRuntimeEnabled } from "../fixture-runtime/mode"; // [B18-C I10]
 import { FIXTURE_AGENT_ENV, FIXTURE_AGENT_SCRIPTED, FixtureAgentAdapter } from "./fixture-agent-adapter"; // [B18-C I10]
 
-const MAX_OUTPUT_TOKENS = 4096;
+/** [B21 B] exported as data only: the orchestration scheduler's per-step token figure is pinned equal to it (never a request key change) */
+export const MAX_OUTPUT_TOKENS = 4096;
 
 // ─── OpenAI (Responses API, manual conversation state) ───────────────────────
 

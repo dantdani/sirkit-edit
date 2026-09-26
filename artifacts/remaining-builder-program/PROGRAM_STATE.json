@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-A committed on chapter/b21-specialist-orchestration: canonical orchestration contracts, the durable record, the import gate, CI admission, LB-9; next B21-B",
+  "currentCheckpoint": "B21-B committed on chapter/b21-specialist-orchestration: the task-complexity router, the no-provider path, the bounded sequential scheduler, the store binding (flag SIRKIT_ORCHESTRATION_ENABLED=1, default off; flag off byte-identical to HEAD; the follow-up coordinator turn read-only; the adversarial review's 28 findings fixed); next B21-C",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-B test-first: the task-complexity router (a Tier 0/1 command, a 3D/view request and a Tier 3 name each produce today's single-agent run shape or a refusal with no provider call - the proof order of discovery section 9), the no-provider path (OD-110), the sequential scheduler over runAgentLoop with the durable record bound through app/api/chat/orchestration-runtime.ts (OD-107, OD-111, OD-122).",
-  "updatedAt": "2026-09-26T00:42:08-04:00",
+  "nextAction": "B21-C test-first: the nine roles' least-privilege tool subsets (OD-120) intersected in buildRunToolset after every existing gate (OD-121), deriveSpecialistContext hardened and the specialistGateway refusing a context that claims grantability (OD-109), the no-elevation proof; the route-level resume and the userMessageDigest ledger stay B21-E's (OD-122)",
+  "updatedAt": "2026-09-26T03:06:01-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

@@ -64,8 +64,10 @@ function orchestrationReferences(path: string, source: string): string[] {
 }
 
 describe("[B21 A] the orchestration import gate", () => {
-  it("1. the entry set is DERIVED from the tree and pinned to the three modules of this increment; every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => {
-    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
+  it("1. the entry set is DERIVED from the tree and pinned to the modules of the chapter (A's three, B's router and scheduler); every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => {
+    // [B21 B] + router.ts and scheduler.ts; app/api/chat/orchestration-runtime.ts lives OUTSIDE the prefix by design (it binds the durable runtime)
+    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
+    expect(production.has("app/api/chat/orchestration-runtime.ts")).toBe(true);
     const members = (family: Family): string[] => [...production.keys()].filter((path) => familyOf(path) === family).sort();
     expect(members("GRANTS")).toEqual(["app/lib/execution-grant/consume.ts", "app/lib/execution-grant/mint.ts", "app/lib/execution-grant/route-contract.ts", "app/lib/execution-grant/settle.ts", "app/lib/execution-grant/store.ts"]);
     expect(members("REAUTH")).toEqual(["app/lib/project/membership-reauthorization.ts"]);
@@ -135,8 +137,28 @@ describe("[B21 A] the orchestration import gate", () => {
     // a type-only import is erased at run time and is deliberately NOT caught (a value import of the same module is, above)
     injected.set(at("types-only"), 'import type { ExecutionGrantStore } from "../../execution-grant/store";\nimport { type Response } from "openai/resources/responses/responses";\nexport type T = [ExecutionGrantStore, Response];');
     expect(walk(injected, [at("types-only")])).toEqual([]);
+    // [B21 B] the loop's own closure reaches the fab presets (RELEASE, no exemption here) through the read bindings, so an
+    // orchestration module may never import `runAgentLoop` / `buildRunToolset`: the scheduler takes both by INJECTION from the
+    // composition root (app/api/chat/orchestration-runtime.ts, outside the prefix). A type-only import of the loop's types is erased.
+    injected.set(at("evil-loop"), 'import { runAgentLoop } from "../loop";\nexport const x = runAgentLoop;');
+    // [review] the INVARIANT is pinned (a value import of the loop is caught, through the loop, by a family), never the exact
+    // hops below the loop: an unrelated refactor of the read bindings or the snapshot must not fail the orchestration gate.
+    // The chain as measured today is recorded on the page (D21-33), not here.
+    // [B21 B lead] neither the count of caught members nor the reachability itself is pinned (the loop may stop reaching a family,
+    // or reach two files of one, without any orchestration module changing): every caught line runs through the loop, by a family
+    const loopCaught = walk(injected, [at("evil-loop")]);
+    const throughLoop = new RegExp(`^(?:RELEASE|GRANTS|REAUTH|APPROVALS|EXECUTOR|BUILD_MULTI|BUILD_LOOP|API|SDK): ${at("evil-loop").replaceAll(".", "\\.")} -> app/lib/agent/loop\\.ts -> `);
+    for (const line of loopCaught) expect(line).toMatch(throughLoop);
+    injected.set(at("loop-types-only"), 'import type { AgentLoopDeps } from "../loop";\nexport type T = AgentLoopDeps;');
+    expect(walk(injected, [at("loop-types-only")])).toEqual([]);
+    // [B21 B] the runtime file is outside the prefix and DOES bind the durable runtime (the D21-32 chain), which is its job
+    const runtimeClosure = importClosure(production, ["app/api/chat/orchestration-runtime.ts"]);
+    expect(runtimeClosure.has("app/lib/durable-workflow/runtime.ts")).toBe(true);
+    expect(runtimeClosure.has("app/lib/agent/orchestration/scheduler.ts")).toBe(true);
+    expect(runtimeClosure.has("app/lib/agent/orchestration/router.ts")).toBe(true);
+    expect(runtimeClosure.has("app/lib/agent/orchestration/store.ts")).toBe(true);
     // the injected probes never touched the disk: the production entry set is unchanged
-    expect(entriesOf(production)).toHaveLength(3);
+    expect(entriesOf(production)).toHaveLength(5);
   });
 
   it("4. the nine B11-scanned files import nothing under app/lib/agent/orchestration/ by ANY reference kind (a type-only import counts here) and carry no orchestration identifier; an injected copy with an orchestration value import, a type-only import or the identifier text appended is caught; tripwires.ts is the only orchestration module that names those files", { timeout: 180_000 }, () => {
@@ -161,7 +183,7 @@ describe("[B21 A] the orchestration import gate", () => {
 
   it("5. hygiene over the orchestration modules: no opaque module load, no declaration shadowing the loader, no root-escaping import, zero parse diagnostics, and every import is a static string the gate can resolve", { timeout: 180_000 }, () => {
     const scoped = new Map([...production].filter(([path]) => path.startsWith(ORCHESTRATION_MODULE_PREFIX)));
-    expect(scoped.size).toBe(3);
+    expect(scoped.size).toBe(5); // [B21 B] + router.ts, scheduler.ts
     expect(opaqueModuleLoads(scoped)).toEqual([]);
     expect(requireShadowDeclarations(scoped)).toEqual([]);
     expect(rootEscapingImports(scoped)).toEqual([]);
