@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-B committed on chapter/b21-specialist-orchestration: the task-complexity router, the no-provider path, the bounded sequential scheduler, the store binding (flag SIRKIT_ORCHESTRATION_ENABLED=1, default off; flag off byte-identical to HEAD; the follow-up coordinator turn read-only; the adversarial review's 28 findings fixed); next B21-C",
+  "currentCheckpoint": "B21-C committed on chapter/b21-specialist-orchestration: the nine roles' least-privilege tool subsets (OD-120 as data, the intersection after every gate in buildRunToolset, a role with none not run and its missing evidence recorded), the no-elevation proof (the field-by-field specialist context, role_context_elevated in eight ways, the never-execution sweep through the specialist gateway), the full-circuit list trimmed to the cap for a new circuit named from words (OD-107 resolved); the review's 15 findings fixed; next B21-D",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "96a0314",
+  "lastGreenSha": "0396c9e",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-C test-first: the nine roles' least-privilege tool subsets (OD-120) intersected in buildRunToolset after every existing gate (OD-121), deriveSpecialistContext hardened and the specialistGateway refusing a context that claims grantability (OD-109), the no-elevation proof; the route-level resume and the userMessageDigest ledger stay B21-E's (OD-122)",
-  "updatedAt": "2026-09-26T03:06:01-04:00",
+  "nextAction": "B21-D test-first: the deterministic merge layer over the specialists' results - verify every ProposedAction with its family's integrity and currency verifiers, contradiction detection by identity, stale and expired as dissent, a not-run task's role_has_no_tools dissent as missing evidence, deterministic verification requests by binding id, correlated same-source results never independent, decisions and dissent persisted (OD-114, OD-129, OD-130, OD-132, OD-133); whether a role may produce a proposal (the dormant OD-120 ids)",
+  "updatedAt": "2026-09-26T13:39:52-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

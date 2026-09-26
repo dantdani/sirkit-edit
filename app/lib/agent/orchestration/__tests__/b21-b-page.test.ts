@@ -142,4 +142,22 @@ describe("[B21 B] the task-complexity-router page", () => {
     const stale = cited.filter((citation) => !(read(citation.path).split(NEWLINE)[citation.line - 1] ?? "").includes(citation.anchor)).map((citation) => `${citation.id} ${citation.path}:${citation.line}`);
     expect(stale).toEqual([]);
   });
+
+  it("8. [B21 C fix] the run shapes the page states are the ones the route suite pins (review: C moved route case 4 and the page kept B's shape): each \"the record at revision N ... (route case K)\" names the head revision case K asserts; route case 4's title claims no more requests and results than it asserts; the route suite row does not claim a three-specialist run unqualified; C39 names only the caller that uses `withdrawAuthority` in the tree", () => {
+    const page = read(PAGE);
+    const suite = read("app/api/chat/__tests__/b21-b-chat-router.test.ts");
+    const caseBody = (index: string): string => { const start = suite.indexOf(`  it("${index}. `); const next = suite.indexOf(`  it("`, start + 1); return suite.slice(start, next > 0 ? next : undefined); };
+    const claims = [...page.matchAll(/the\s+record\s+at\s+revision\s+(\d+)[^()]*\(route\s+case\s+(\d+)\)/g)].map((match) => ({ revision: Number(match[1]), routeCase: match[2]! }));
+    expect(claims.map((claim) => claim.routeCase).sort()).toEqual(["17", "4"]);
+    for (const claim of claims) expect(caseBody(claim.routeCase), `route case ${claim.routeCase}`).toContain(`map((head) => head.revision)).toEqual([${claim.revision}])`);
+    const title = /^ {2}it\("4\. ([^"]*)"/m.exec(suite)![1]!;
+    expect(title).not.toMatch(/three requests and three results/);
+    expect(title).toMatch(/revision 6/);
+    const row = page.split(NEWLINE).find((line) => line.startsWith("| `app/api/chat/__tests__/b21-b-chat-router.test.ts` |"))!;
+    expect(row).not.toMatch(/the three-specialist DAG in one stream/);
+    const c39 = page.split(NEWLINE).find((line) => line.startsWith("| C39 |"))!;
+    expect(c39).not.toMatch(/specialists and the follow-up turn/);
+    const callers = ["app/lib/agent/orchestration/scheduler.ts", "app/api/chat/orchestration-runtime.ts"].filter((path) => read(path).split(NEWLINE).some((line) => /withdrawAuthority\(/.test(line) && !/export function withdrawAuthority/.test(line)));
+    expect(callers).toEqual(["app/api/chat/orchestration-runtime.ts"]);
+  });
 });

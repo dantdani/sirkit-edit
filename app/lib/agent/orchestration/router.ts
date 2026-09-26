@@ -6,7 +6,8 @@
  *    verbs), a 3D/view control request, a plain question and everything the runbook does not name (runbook :766, :806);
  *  - `refused`: a message whose only ask is a Tier 3 family (release / publish / publication / upload / order / purchase /
  *    qualify / ship / deliver - the tiers' own family pattern, `TIER3_FAMILY_PATTERN`) with NO provider call (:141, :148, :811);
- *  - `dag`: the four complex shapes of runbook B21-B :805-811, each with its role list pinned as data (`DAG_ROLE_LISTS`).
+ *  - `dag`: the four complex shapes of runbook B21-B :805-811, each with its role list pinned as data (`DAG_ROLE_LISTS`);
+ *    [B21 C] the full-circuit list is the runbook's six trimmed to the cap of four by a fixed priority (`FULL_CIRCUIT_TRIM`).
  * The grammar is a closed, documented set of phrase rules over a normalized message (`ROUTER_RULES`, first match wins): no model,
  * no randomness, no clock, no environment read; a message that matches no DAG rule is `single` by construction, so simple work
  * stays direct. The router never widens a role's permissions and never names a tool (B21-C assigns the tool subsets); it decides
@@ -39,14 +40,27 @@ export type RoutePlan =
   | { kind: "refused"; rule: string; reason: string }
   | { kind: "dag"; rule: string; roles: readonly SpecialistRole[] };
 
-/** The five DAG shapes and their role lists, exactly as the runbook and the B21-B task pin them (data; the suite pins them). */
+/** The DAG shapes and their role lists, exactly as the runbook and the B21-B task pin them (data; the suite pins them).
+ *  [B21 C] The two full-circuit lists are the runbook's six trimmed to OD-107's cap of four by FULL_CIRCUIT_TRIM (below). */
 export const DAG_ROLE_LISTS = Object.freeze({
   "bounded-schematic-proposal": Object.freeze(["coordinator", "schematic"] as const),
   "bounded-pcb-proposal": Object.freeze(["coordinator", "pcb-placement-routing"] as const),
   "component-replacement": Object.freeze(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic"] as const),
-  "full-circuit-creation": Object.freeze(["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "pcb-placement-routing", "verification-critic"] as const),
+  "full-circuit-creation": Object.freeze(["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] as const),
+  "full-circuit-layout": Object.freeze(["coordinator", "circuit-topology", "component-sourcing-evidence", "pcb-placement-routing", "verification-critic"] as const),
   "manufacturing-readiness": Object.freeze(["coordinator", "manufacturing-readiness-reviewer"] as const),
 }) satisfies Readonly<Record<string, readonly SpecialistRole[]>>;
+/** [B21 C] Runbook :810 as the runbook names it ("requirements, architecture/circuit, component, schematic, PCB and verifier as
+ *  needed"): six specialists, over OD-107's cap of four - kept as data so the trim below is visible and pinned. */
+export const FULL_CIRCUIT_RUNBOOK_ROLES = Object.freeze(["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "pcb-placement-routing", "verification-critic"] as const);
+/** [B21 C] OD-107's open decision, resolved by the lead: the runbook's list is trimmed "as needed" to the cap of four by a FIXED
+ *  priority - the requirements analysis is folded into the coordinator's own turn, and the PCB specialist runs only when a board
+ *  exists and then replaces the schematic one when the message asks for layout. The owner may still raise the cap (OD-107). */
+export const FULL_CIRCUIT_TRIM = Object.freeze({
+  priority: Object.freeze(["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] as const),
+  foldedIntoCoordinator: Object.freeze(["requirements-analyst"] as const),
+  layoutSwap: Object.freeze({ replaces: "schematic", by: "pcb-placement-routing" } as const),
+});
 export type DagShape = keyof typeof DAG_ROLE_LISTS;
 
 /** The fixed answer of a refused Tier 3 ask: the same sentence the tiers give (permission-tiers.ts, Tier 3 is never agent-executable). */
@@ -85,8 +99,16 @@ export const TIER3_FAMILIES: readonly Tier3Family[] = Object.freeze([
 const EXPLICIT_VERB = headVerb("move|shift|nudge|rotate|turn|flip|put|undo|redo");
 /** runbook :809 - a part SWAP names the thing swapped in: the composer's 5b pairing ITSELF (`REPLACE_PART`, imported - a
  *  generic component type such as "resistor" or "capacitor" is NOT the thing swapped in, so a value change stays single) */
-/** runbook :810 - a circuit to design from words (the composer's generate verbs, rules 3 and 7) */
-const CREATE_VERB = headVerb("design|generate|create|build|make|draw");
+/** runbook :810 - a NEW circuit named from words ([B21 C fix], review: the composer's generate verbs alone recruited four paid
+ *  specialists for "make the LED brighter" or "make the placement more compact"): the verb at the head, an indefinite object
+ *  (a / an, after an optional me / us) and a circuit-kind noun INSIDE that object (before its first preposition or clause word) */
+const CREATE_NEW = new RegExp(`^${POLITE}(?:design|generate|create|build|make|draw)\\s+(?:(?:me|us)\\s+)?(?:a|an)\\s+(.+)$`);
+const OBJECT_END = /\s(?:with|for|and|that|which|to|on|in|of|from|using|around|so|where|while|at|by|into|onto)\s|[,;:(]/;
+const CIRCUIT_KIND = /\b(?:circuits?|schematics?|blinkers?|flashers?|oscillators?|timers?|amplifiers?|preamps?|converters?|regulators?|supply|supplies|filters?|loggers?|drivers?|controllers?|chargers?|detectors?|counters?|generators?|transmitters?|receivers?|inverters?|rectifiers?|alarms?|thermostats?|dimmers?|meters?|monitors?|testers?|mixers?|synth(?:esizer)?s?|interfaces?|sensors?)\b/;
+const circuitFromWords = (message: string): boolean => {
+  const object = CREATE_NEW.exec(message)?.[1];
+  return object !== undefined && new RegExp(`${CIRCUIT_KIND.source}(?:\\s+(?:boards?|modules?|designs?|projects?|kits?|systems?|units?|stages?|sections?|blocks?))*$`).test(` ${object} `.split(OBJECT_END)[0]!.trim().replace(/[.!?]+$/, "")); // [B21 C lead] the circuit kind heads the object, optionally followed by a container noun ("a buck converter board"); "a schematic symbol" is a symbol
+};
 /** the composer's rule 5: a PCB object the schematic editor cannot make is a direct PCB change, never a circuit */
 const PCB_NOUN = /\b(?:silk(?:screen)?|vias?|tracks?|traces?|dimensions?|copper|zones?|pours?|keep-?outs?|courtyards?|drills?|layers?|pcb|drc|board outline)\b/;
 /** [review] a geometry, annotation or size ask ("draw a box around U1", "make the board 50 mm wide") is an edit, never a circuit */
@@ -99,9 +121,13 @@ const REVIEW_WORD = /\b(?:ready|readiness|review\w*|check\w*|assess\w*|audit\w*|
 /** runbook :807 - a layout-quality verb with a LAYOUT noun (placement / routing / layout / traces / footprints / the selection);
  *  the Tier 1 arrange / align / distribute commands are not here, and neither is "improve" (a BOM tidy or a label touch-up
  *  recruits no layout specialist - review) */
-const LAYOUT_VERB = /\b(?:compact\w*|tighten(?:\s+up)?|optimi[sz]e|clean\s+up|tidy(?:\s+up)?|reorgani[sz]e|rearrange|re-?route|autoroute|auto-?place|densify|shrink)\b/;
+const LAYOUT_VERB = /\b(?:compact\w*|tighten(?:\s+up)?|optimi[sz]e|clean\s+up|tidy(?:\s+up)?|tidier|neater|reorgani[sz]e|rearrange|re-?route|autoroute|auto-?place|densify|shrink)\b/;
 const LAYOUT_NOUN = /\b(?:placement|routing|layout|traces?|tracks?|footprints?|selection|selected)\b/;
 const SELECTION_WORD = /\b(?:selection|selected)\b/;
+/** [B21 C fix] the full-circuit layout variant's OWN ask (review: the layout-noun list swapped on "the selected section" or on a
+ *  circuit-sense "routing"): a layout noun after "with" / "and" (with a compact placement, and its layout, with the routing done)
+ *  or "and place / route / lay out it|them" - never a selection word */
+const LAYOUT_ASK = /\b(?:with|and)\s+(?:(?:a|an|the|its|their)\s+)?(?:[a-z0-9-]+\s+)?(?:placement|layout|routing|footprints)\b|\band\s+(?:place|route|lay\s+out)\s+(?:it|them)\b/;
 /** runbook :807 - a circuit-level rework verb at the head with a circuit noun */
 const CIRCUIT_VERB = headVerb("redesign|rework|revise|refactor|simplify|rethink|improve|strengthen|harden");
 const CIRCUIT_NOUN = /\b(?:circuit|stage|network|filter|regulator|supply|section|subcircuit|block|schematic|topology|bias|feedback|decoupling)\b/;
@@ -122,7 +148,8 @@ export const ROUTER_RULES: readonly RouterRule[] = Object.freeze([
   rule("S-explicit", "single", ":806", "a direct Tier 0/1 command: the explicit-request grammars' head verbs (move / shift / nudge / rotate / turn / flip / put / undo / redo) stay one coordinator turn"),
   rule("S-role", "single", ":806, :829", "a role that may not apply a proposal (not pcb_editor or project_admin) never recruits specialists: one coordinator turn answers"),
   rule("D-component-replacement", "dag", ":809", "a part swap that names the thing swapped in (the composer's own pairing), with a schematic present", DAG_ROLE_LISTS["component-replacement"]),
-  rule("D-full-circuit-creation", "dag", ":810", "design / generate / create / build / make / draw a circuit from words (not a PCB object, not a geometry or size ask, not a named part)", DAG_ROLE_LISTS["full-circuit-creation"]),
+  rule("D-full-circuit-layout", "dag", ":810", "[B21 C] a new circuit named from words (as below) with its own layout ask (with / and a placement, layout, routing or footprints - never a selection word), with a board present: the trimmed list with the PCB specialist in place of the schematic one", DAG_ROLE_LISTS["full-circuit-layout"]),
+  rule("D-full-circuit-creation", "dag", ":810", "a NEW circuit named from words: design / generate / create / build / make / draw at the head with an indefinite object (a / an) that names a circuit kind (not a PCB object, not a geometry or size ask, not a named part); [B21 C] the runbook's six trimmed to the cap of four", DAG_ROLE_LISTS["full-circuit-creation"]),
   rule("D-manufacturing-readiness", "dag", ":811", "a manufacturing word with a review word, with a board present: deterministic checks first, then the reviewer - never an autonomous release agent", DAG_ROLE_LISTS["manufacturing-readiness"]),
   rule("D-bounded-pcb-proposal", "dag", ":807", "a layout-quality verb with a layout noun (placement / routing / layout / traces / footprints / the selection), with a board present (a selection-scoped ask needs a selection)", DAG_ROLE_LISTS["bounded-pcb-proposal"]),
   rule("D-bounded-schematic-proposal", "dag", ":807", "a circuit-level rework verb at the head with a circuit noun, with a schematic present", DAG_ROLE_LISTS["bounded-schematic-proposal"]),
@@ -148,7 +175,10 @@ export function routeTaskComplexity(userMessage: string, facts: RouterFacts): Ro
   if (EXPLICIT_VERB.test(message)) return single("S-explicit");
   if (!(TIER1_EXECUTE_ROLES as readonly string[]).includes(facts.actorRole)) return single("S-role");
   if (facts.hasSchematic && REPLACE_PART.test(message)) return dag("D-component-replacement", DAG_ROLE_LISTS["component-replacement"]);
-  if (CREATE_VERB.test(message) && !PCB_NOUN.test(message) && !GEOMETRY_ASK.test(message) && !MAKE_PART.test(message)) return dag("D-full-circuit-creation", DAG_ROLE_LISTS["full-circuit-creation"]);
+  if (circuitFromWords(message) && !PCB_NOUN.test(message) && !GEOMETRY_ASK.test(message) && !MAKE_PART.test(message)) {
+    // [B21 C] the trimmed list (OD-107): the PCB specialist replaces the schematic one only with a board and its own layout ask
+    return facts.hasBoard && LAYOUT_ASK.test(message) ? dag("D-full-circuit-layout", DAG_ROLE_LISTS["full-circuit-layout"]) : dag("D-full-circuit-creation", DAG_ROLE_LISTS["full-circuit-creation"]);
+  }
   if (facts.hasBoard && MANUFACTURING_WORD.test(message) && REVIEW_WORD.test(message)) return dag("D-manufacturing-readiness", DAG_ROLE_LISTS["manufacturing-readiness"]);
   if (facts.hasBoard && LAYOUT_VERB.test(message) && LAYOUT_NOUN.test(message) && (!SELECTION_WORD.test(message) || facts.selectionCount > 0)) return dag("D-bounded-pcb-proposal", DAG_ROLE_LISTS["bounded-pcb-proposal"]);
   if (facts.hasSchematic && CIRCUIT_VERB.test(message) && CIRCUIT_NOUN.test(message)) return dag("D-bounded-schematic-proposal", DAG_ROLE_LISTS["bounded-schematic-proposal"]);

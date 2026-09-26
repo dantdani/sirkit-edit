@@ -26,7 +26,12 @@
  * only through a READ-ONLY REGISTRY VIEW (the persisted `allowedToolIds` IS the advertised set: no proposal, no execution, no
  * view control is ever offered to a specialist's model), over a context derived from the coordinator's whose three
  * availability facts are false, with no head mark, no PCB basis and no view. A refused tool call of a specialist reaches the
- * coordinator's stream as a bounded warning line, so it is never silent. B21-C narrows the toolset per role.
+ * coordinator's stream as a bounded warning line, so it is never silent. [B21 C] Least privilege per role (OD-120, OD-121):
+ * a specialist is offered its role's reviewed row (role-tools.ts) intersected with the reads its derived context admits -
+ * the loop narrows to that list after every gate and the wrapper refuses anything outside it (`role_not_permitted_tool`); a
+ * role whose set is empty is NOT RUN (`role_has_no_tools`, a visible warning; its task records the missing evidence). No
+ * elevation (OD-109): the derived context is built field by field, and the wrapper refuses a context that claims grantability
+ * or a port (`role_context_elevated`) before anything reaches the gateway.
  *
  * The loop (`runAgentLoop`, `buildRunToolset`) is INJECTED by the composition root (app/api/chat/orchestration-runtime.ts):
  * the loop's own import closure reaches the fab presets through the read bindings, which the orchestration import gate forbids
@@ -42,8 +47,10 @@ import { ToolRegistry } from "../../engineering/tool-registry";
 import { engineeringDigest } from "../../engineering/stable";
 import type { LLMProviderId } from "../../llm/types";
 import { isRetryableReason, type LLMProviderFailureReason } from "../../llm/errors";
+import { TIER1_GRANTABLE_CAPABILITIES } from "../../engineering/execution-grant";
 import { SPECIALIST_REQUEST_SCHEMA, SPECIALIST_RESULT_SCHEMA, isOrchestrationDigest, validateSpecialistRequest, validateSpecialistResult, type RequiredOutputName, type RevisionBoundProjectScope, type SpecialistRole, type ValidatedSpecialistResult } from "./contracts";
 import type { OrchestrationDecision, OrchestrationPlanTask, OrchestrationRecord, OrchestrationRunEntry, OrchestrationRunScope, OrchestrationRunStore } from "./store";
+import { roleAllowedToolIds } from "./role-tools";
 
 // ─── The caps (OD-107, the lead's values) and the closed vocabularies ────────────────────────────────────────────────────
 
@@ -67,6 +74,14 @@ export const SPECIALIST_CAPS = Object.freeze({
 });
 /** The read-only narrowing's refusal status (B21-C's per-role wrapper keeps the name). */
 export const SPECIALIST_REFUSAL_STATUS = "role_not_permitted_tool" as const;
+/** [B21 C] The specialist gateway's refusal of a context that claims grantability or a port (OD-109), before any invocation. */
+export const SPECIALIST_CONTEXT_REFUSAL_STATUS = "role_context_elevated" as const;
+/** [B21 C] The ways a specialist context can claim authority, each refused `role_context_elevated`: the six grant claims (which
+ *  the gateway's integrity check accepts whenever they agree with each other) and the two port facts OD-109 withholds. */
+export const SPECIALIST_CONTEXT_CLAIMS = Object.freeze(["executionGrantsAvailable", "grantableCapabilities", "grantLineageId", "riskCeiling", "approvalsAvailable", "actorGrantableCapability", "externalAcquisitionAvailable", "mcpObservationAvailable"] as const);
+export type SpecialistContextClaim = (typeof SPECIALIST_CONTEXT_CLAIMS)[number];
+/** [B21 C] A plan role whose effective tool set is empty is not run, for this reason (its task's dissent): never with the coordinator's set. */
+export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;
 export const SCHEDULER_REFUSALS = Object.freeze(["plan_empty", "plan_exceeds_specialist_cap", "no_verified_state", "dag_deadline_elapsed", "store_unavailable", "store_refused", "store_conflict", "plan_mismatch"] as const);
 export type SchedulerRefusal = (typeof SCHEDULER_REFUSALS)[number];
 export const SCHEDULER_STOPS = Object.freeze(["completed", "cancelled", "deadline", "provider_outage", "store_unavailable", "store_refused", "store_conflict"] as const);
@@ -93,7 +108,7 @@ export interface CoordinatorRun {
   signal?: AbortSignal;
 }
 export type SpecialistLoop = (request: AgentRunRequest, deps: AgentLoopDeps) => Promise<AgentRunResult>;
-export type SpecialistToolsetBuilder = (registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void) => { declarations: readonly ProviderToolDeclaration[] };
+export type SpecialistToolsetBuilder = (registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void, allowedToolIds?: readonly string[]) => { declarations: readonly ProviderToolDeclaration[] };
 export interface SchedulerDeps {
   store: OrchestrationRunStore;
   registry: ToolRegistry;
@@ -170,23 +185,80 @@ export function withdrawAuthority(context: AgentRunContext): AgentRunContext {
     },
   };
 }
-/** A specialist's context, derived from the coordinator's and NARROWED further: the authority withdrawn (above), no head mark
- *  (no schematic proposal), no PCB basis (no bounded PCB proposal), no view (no view control, no editor surface) - and otherwise
- *  the coordinator's verified state, so the gateway's integrity check holds. */
+/** A specialist's context, derived from the coordinator's and NARROWED further: the authority withdrawn (as above), no head mark
+ *  (no schematic proposal), no PCB basis (no bounded PCB proposal), no view (no view control, no editor surface, no timeline) -
+ *  and otherwise the coordinator's verified state, so the gateway's integrity check holds. [B21 C] Hardened (OD-109): built FIELD
+ *  BY FIELD from a closed list, never by spreading the coordinator's context - so a field the coordinator carries that this list
+ *  does not name (a grant field, a port fact, anything added later) never reaches a specialist; the grant and port facts are
+ *  written as their denial; the channel is the agent's. The coordinator's context is read, never written. */
 export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {
-  const withdrawn = withdrawAuthority(context);
+  const discovery = context.discovery;
   return {
-    ...withdrawn,
+    tenantId: context.tenantId,
+    projectId: context.projectId,
+    branchId: context.branchId,
+    actor: context.actor,
+    canonicalRevisionDigest: context.canonicalRevisionDigest,
+    canonicalState: context.canonicalState,
+    schematic: context.schematic,
+    schematicDigest: context.schematicDigest,
     schematicHeadMark: null,
+    discovery: {
+      tenantId: discovery.tenantId,
+      projectId: discovery.projectId,
+      branchId: discovery.branchId,
+      actorId: discovery.actorId,
+      actorRole: discovery.actorRole,
+      grantedCapabilities: discovery.grantedCapabilities,
+      channel: "assistant-agent",
+      currentRevisionDigest: discovery.currentRevisionDigest,
+      lineageId: "",
+      currentEditor: discovery.currentEditor,
+      selectedKinds: discovery.selectedKinds,
+      projectState: discovery.projectState.filter((state) => !state.endsWith("-surface")),
+      availableAuthority: discovery.availableAuthority.filter((authority) => authority !== "external-observation" && authority !== "external-mcp-observation"),
+      providerCapabilities: discovery.providerCapabilities,
+      riskCeiling: "propose",
+      approvalsAvailable: [],
+      enabledFlags: discovery.enabledFlags,
+      requestedCategories: discovery.requestedCategories,
+      ...(discovery.maxSchemaBytes !== undefined ? { maxSchemaBytes: discovery.maxSchemaBytes } : {}),
+    },
+    presetId: context.presetId,
+    selection: context.selection,
+    selectionDigest: context.selectionDigest,
+    netlist: context.netlist,
+    netlistDigest: context.netlistDigest,
+    componentAuthority: context.componentAuthority,
+    componentAuthorityDigest: context.componentAuthorityDigest,
     pcbProposalBasis: null,
     view: null,
     viewDigest: null,
-    discovery: {
-      ...withdrawn.discovery,
-      lineageId: "",
-      projectState: withdrawn.discovery.projectState.filter((state) => !state.endsWith("-surface")),
-    },
+    autonomy: context.autonomy,
+    executionGrantsAvailable: false,
   };
+}
+/** [B21 C] What a context claims that a specialist may never hold (OD-109), in the closed order of SPECIALIST_CONTEXT_CLAIMS:
+ *  the minter's availability, a grantable capability or a grant lineage in discovery, a risk ceiling above `propose`, an approval
+ *  tier, a grantable capability held by the actor, an external or MCP port fact (or its authority). Never throws: a context
+ *  that cannot be read claims everything. */
+export function specialistContextClaims(context: AgentRunContext): SpecialistContextClaim[] {
+  try {
+    const discovery = context.discovery;
+    const grantable = TIER1_GRANTABLE_CAPABILITIES as readonly string[];
+    const claims = new Set<SpecialistContextClaim>();
+    if (context.executionGrantsAvailable !== false) claims.add("executionGrantsAvailable");
+    if (discovery.grantableCapabilities !== undefined) claims.add("grantableCapabilities");
+    if (discovery.grantLineageId !== undefined) claims.add("grantLineageId");
+    if (discovery.riskCeiling !== "propose" && discovery.riskCeiling !== "read") claims.add("riskCeiling");
+    if (!Array.isArray(discovery.approvalsAvailable) || discovery.approvalsAvailable.length > 0) claims.add("approvalsAvailable");
+    if ([...context.actor.grantedCapabilities, ...discovery.grantedCapabilities].some((capability) => grantable.includes(capability))) claims.add("actorGrantableCapability");
+    if ((context.externalAcquisitionAvailable ?? false) !== false || discovery.availableAuthority.includes("external-observation")) claims.add("externalAcquisitionAvailable");
+    if ((context.mcpObservationAvailable ?? false) !== false || discovery.availableAuthority.includes("external-mcp-observation")) claims.add("mcpObservationAvailable");
+    return SPECIALIST_CONTEXT_CLAIMS.filter((claim) => claims.has(claim));
+  } catch {
+    return [...SPECIALIST_CONTEXT_CLAIMS];
+  }
 }
 const readOnlyRegistries = new WeakMap<ToolRegistry, ToolRegistry>();
 /** The READ-ONLY view of a registry (built once per registry): the descriptors of operation class `read` only, validated
@@ -200,21 +272,33 @@ export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {
   }
   return view;
 }
-/** The reads the derived context advertises through the read-only registry, sorted: a specialist's `allowedToolIds` (A4L
- *  semantics; B21-C narrows per role). The class filter stays as defense in depth. */
-export function specialistAllowedToolIds(registry: ToolRegistry, context: AgentRunContext, buildToolset: SpecialistToolsetBuilder): string[] {
+/** [B21 C] A role's effective set (OD-120, OD-121): its reviewed row intersected with the reads the derived context advertises
+ *  through the read-only registry, sorted - the specialist's `allowedToolIds` (A4L semantics), what its loop narrows to and what
+ *  its request persists. The coordinator's row (the whole exposure list) yields every admitted read. The class filter stays as
+ *  defense in depth. */
+export function specialistAllowedToolIds(registry: ToolRegistry, context: AgentRunContext, buildToolset: SpecialistToolsetBuilder, role: SpecialistRole): string[] {
   const view = readOnlyToolRegistry(registry);
+  const row = new Set(roleAllowedToolIds(role));
   const { declarations } = buildToolset(view, context, () => undefined);
-  return declarations.filter((declaration) => view.get(declaration.toolId, declaration.version)?.operationClass === "read").map((declaration) => declaration.toolId).sort();
+  return declarations.filter((declaration) => view.get(declaration.toolId, declaration.version)?.operationClass === "read" && row.has(declaration.toolId)).map((declaration) => declaration.toolId).sort();
 }
 /** The read-only narrowing: a specialist may invoke reads only; a proposal, an execution, a view command or anything else is
- *  refused before the real gateway is asked (B21-C's per-role wrapper refines this). */
-export function readOnlySpecialistGateway(gateway: AgentToolInvocationGateway, registry: ToolRegistry): AgentToolInvocationGateway {
+ *  refused before the real gateway is asked. [B21 C] With the role's list, a read outside it is refused the same way
+ *  (`role_not_permitted_tool`); and FIRST, before any tool is looked at, a context that claims grantability or a port is refused
+ *  `role_context_elevated` (OD-109) - the coordinator cannot elevate a specialist by handing it a wider context. Without a list
+ *  (the follow-up coordinator turn) every read passes. */
+export function readOnlySpecialistGateway(gateway: AgentToolInvocationGateway, registry: ToolRegistry, allowedToolIds?: readonly string[]): AgentToolInvocationGateway {
+  // the list is copied once: a later change to the caller's array widens nothing
+  const allowed = allowedToolIds === undefined ? null : new Set(allowedToolIds);
   return {
     async invoke(input) {
+      const claims = specialistContextClaims(input.context);
+      if (claims.length > 0) {
+        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_CONTEXT_REFUSAL_STATUS, diagnostics: [`A specialist context may claim no authority; this one claims: ${claims.join(", ")}.`] };
+      }
       const descriptor = registry.get(input.toolId, input.version);
-      if (!descriptor || descriptor.operationClass !== "read") {
-        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_REFUSAL_STATUS, diagnostics: ["A specialist may only read in B21-B; proposals, executions and view commands belong to the coordinator."] };
+      if (!descriptor || descriptor.operationClass !== "read" || (allowed !== null && !allowed.has(input.toolId))) {
+        return { kind: "refused", ok: false, toolId: input.toolId, version: input.version, status: SPECIALIST_REFUSAL_STATUS, diagnostics: ["A specialist may only read the tools of its role; proposals, executions and view commands belong to the coordinator."] };
       }
       return gateway.invoke(input);
     },
@@ -311,6 +395,7 @@ const detailOf = (error: unknown): string => renderUnknownError(error, MAX_STORE
 export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[]; rule?: string }, coordinator: CoordinatorRun, deps: SchedulerDeps): Promise<SchedulerOutcome> {
   const now = deps.now ?? ((): number => Date.now());
   const refused = (reason: SchedulerRefusal, detail: string): SchedulerOutcome => ({ kind: "refused", reason, detail });
+  // [B21 C fix] the plan and its task ids come from the plan's roles ONLY, never from this run's resources (a resume replays)
   const tasks = planTasks(plan.roles);
   if (tasks.length === 0) return refused("plan_empty", "the plan names no specialist");
   if (tasks.length > SPECIALIST_CAPS.maxSpecialists) return refused("plan_exceeds_specialist_cap", `the plan names ${tasks.length} specialists; at most ${SPECIALIST_CAPS.maxSpecialists} run per coordinator run (OD-107) - the plan is refused, never truncated`);
@@ -320,6 +405,13 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   if (dagDeadline - now() < SPECIALIST_CAPS.minTaskMs) return refused("dag_deadline_elapsed", `the DAG wall time (${SPECIALIST_CAPS.dagWallTimeMs} ms from the coordinator's start) has elapsed`);
   const scope: OrchestrationRunScope = { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId: coordinator.runId };
   const warn = (message: string): void => deps.emit({ type: "warning", runId: coordinator.runId, message });
+  // [B21 C] every role's effective set, once: its reviewed row intersected with the reads the derived context admits; a role whose
+  // set is empty is NOT RUN (never with the coordinator's set): its task stays in the plan and, at its turn, records the missing
+  // evidence as dissent `escalated` (role_has_no_tools) that the outcome carries on - the DAG continues ([B21 C fix], review)
+  const derived = deriveSpecialistContext(context);
+  const allowedByRole = new Map<SpecialistRole, string[]>(tasks.map((task) => [task.role, specialistAllowedToolIds(deps.registry, derived, deps.buildToolset, task.role)]));
+  const toolless = tasks.filter((task) => allowedByRole.get(task.role)!.length === 0);
+  const notRunLine = (task: OrchestrationPlanTask): string => `Orchestration: specialist ${task.role} not run (${ROLE_HAS_NO_TOOLS}, task ${task.taskId}): its reviewed tools (OD-120) and the reads this run admits have nothing in common, so it never runs with the coordinator's set and the evidence it would gather stays missing.`;
 
   // the record FIRST: a resume reads what was committed and never re-runs it
   let history: OrchestrationRunEntry[];
@@ -347,12 +439,17 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   if (existingPlan) {
     if (existingPlan.record.kind !== "plan" || !samePlan(existingPlan.record.tasks, tasks)) return refused("plan_mismatch", "the record holds a different plan for this coordinator run; a resume replays the committed plan only");
   } else {
-    const written = await write(PLAN_TASK_ID, 0, { kind: "plan", tasks, reason: plan.rule ? `router rule ${plan.rule}` : "the coordinator's plan" });
+    // a fresh plan none of whose roles has a tool runs nothing and writes nothing (a resume of a committed plan still replays)
+    if (toolless.length === tasks.length) {
+      for (const task of toolless) warn(notRunLine(task));
+      return refused("plan_empty", `every specialist of the plan has an empty effective tool set (${ROLE_HAS_NO_TOOLS}): ${toolless.map((task) => task.role).join(", ")}`);
+    }
+    const written = await write(PLAN_TASK_ID, 0, { kind: "plan", tasks, reason: `${plan.rule ? `router rule ${plan.rule}` : "the coordinator's plan"}${toolless.length > 0 ? `; not run (${ROLE_HAS_NO_TOOLS}): ${toolless.map((task) => task.role).join(", ")}` : ""}` });
     if (!written.ok) return refused(written.reason, written.detail);
   }
 
-  const outputTokenCeiling = dagOutputTokenCeiling(tasks.length);
-  warn(`Orchestration: ${tasks.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}.`);
+  const outputTokenCeiling = dagOutputTokenCeiling(tasks.length - toolless.length);
+  warn(`Orchestration: ${tasks.length - toolless.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}${toolless.length > 0 ? `; ${toolless.length} planned specialist(s) with no tools this run (${ROLE_HAS_NO_TOOLS}) will not run` : ""}.`);
   const outcomes: SpecialistTaskOutcome[] = [];
   const notStarted: OrchestrationPlanTask[] = [];
   let stop: SchedulerStop = "completed";
@@ -371,6 +468,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
       const baseAttempt = history.filter((entry) => entry.taskId === task.taskId).reduce((max, entry) => Math.max(max, entry.attempt + 1), 0);
       // resume: the LAST committed result of this task, replayed only when its request was bound to this very scope and revision
       const committed = history.filter((entry) => entry.taskId === task.taskId && entry.record.kind === "result").at(-1);
+      let staleWritten = false;
       if (committed && committed.record.kind === "result") {
         const answered = history.find((entry) => entry.taskId === task.taskId && entry.attempt === committed.attempt && entry.record.kind === "request");
         const committedScopeDigest = answered && answered.record.kind === "request" ? engineeringDigest(answered.record.document.scope) : null;
@@ -383,7 +481,20 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const reason = `stale_scope: committed under scope ${committedScopeDigest ?? "(unknown)"}, resumed under ${currentScopeDigest}`;
         const written = await write(task.taskId, baseAttempt, dissent("stale", reason, committed.record.digest));
         if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
+        staleWritten = true;
         warn(`Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision; the task runs again.`);
+      }
+      // [B21 C fix] no tools this run: the task is not run and records its missing evidence (a dissent of its own key: one past a
+      // stale dissent just written); the outcome carries it, so every planned task is in `tasks` or `notStarted`
+      const allowed = allowedByRole.get(task.role)!;
+      if (allowed.length === 0) {
+        const attempt = baseAttempt + (staleWritten ? 1 : 0);
+        const reason = `${ROLE_HAS_NO_TOOLS}: its reviewed tools (OD-120) and the reads this run admits have nothing in common; the task was not run and its evidence stays missing`;
+        const written = await write(task.taskId, attempt, dissent("escalated", reason));
+        if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
+        outcomes.push({ taskId: task.taskId, role: task.role, attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "escalated", reason, resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
+        warn(notRunLine(task));
+        continue;
       }
       for (let offset = 0; offset < SPECIALIST_CAPS.attemptsPerTask; offset += 1) {
         const attempt = baseAttempt + offset;
@@ -391,12 +502,11 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         if (remainingMs < SPECIALIST_CAPS.minTaskMs) { stop = "deadline"; notStarted.push(task); break; }
         const runId = specialistRunId(coordinator.runId, task.taskId);
         const budget = specialistBudget(deps.budget ?? DEFAULT_AGENT_BUDGET, remainingMs);
-        const derived = deriveSpecialistContext(context);
         const objective = specialistObjective(task.role, coordinator.userMessage);
         const maxOutputTokens = budget.maxModelSteps * SPECIALIST_CAPS.outputTokensPerStep;
         const validated = validateSpecialistRequest({
           schema: SPECIALIST_REQUEST_SCHEMA, taskId: task.taskId, role: task.role, objective, scope: requestScope(context), contextRefs: contextReferences(context),
-          allowedToolIds: specialistAllowedToolIds(deps.registry, derived, deps.buildToolset),
+          allowedToolIds: allowed,
           budget: { ...budget, maxInputTokens: 4 * maxOutputTokens, maxOutputTokens },
           requiredOutputs: [...SPECIALIST_REQUIRED_OUTPUTS],
           deadlineAt: new Date(now() + budget.runDeadlineMs).toISOString(),
@@ -425,9 +535,10 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           { runId, provider: coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },
           {
             adapter: metered.adapter,
-            gateway: readOnlySpecialistGateway(deps.gateway, deps.registry),
+            gateway: readOnlySpecialistGateway(deps.gateway, deps.registry, allowed),
             registry: readOnlyToolRegistry(deps.registry),
             context: derived,
+            allowedToolIds: allowed,
             system: specialistSystemPrompt(deps.system, { role: task.role, taskId: task.taskId, specialistRunId: runId, objective }),
             // nothing of a specialist run reaches the coordinator's stream except a bounded line per REFUSED tool call
             emit: (event) => {

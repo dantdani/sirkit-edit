@@ -11,6 +11,10 @@
  * `build-multi`'s source hash equals HEAD's; the runtime binds the store to the fixture runtime's in-memory repository; the
  * specialist gateway holds no minter and no port; the envelope is bounded, sanitized and withholds directive-looking text.
  * The ambient DATABASE_URL never decides an outcome here (stubbed empty where the production store factory is exercised).
+ * [B21 C] Without a loaded component authority (the suite's default: no durable binding) the sourcing specialist has no tools
+ * and is not run - its task records the missing evidence and the follow-up turn is told; case 16 pins the per-role structure
+ * (the bare gateway by identity, the role's list at the gateway) and case 17 binds a durable authority source, under which all
+ * three specialists run through this POST.
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -32,7 +36,12 @@ import { fixtureRuntimeEnabled } from "@/app/lib/fixture-runtime/mode";
 import { validateSpecialistResult, type SpecialistRole, type ValidatedSpecialistResult } from "@/app/lib/agent/orchestration/contracts";
 import { DurableOrchestrationRunStore, ORCHESTRATION_AGGREGATE_TYPE, type OrchestrationRunEntry, type OrchestrationRunStore } from "@/app/lib/agent/orchestration/store";
 import { TIER3_REFUSAL_SENTENCE } from "@/app/lib/agent/orchestration/router";
-import { SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, runSpecialistDag, type SchedulerDeps, type SchedulerOutcome, type SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
+import { ROLE_HAS_NO_TOOLS, SPECIALIST_REFUSAL_STATUS, deriveSpecialistContext, runSpecialistDag, specialistAllowedToolIds, specialistContextClaims, type SchedulerDeps, type SchedulerOutcome, type SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
+import { buildRunToolset, type AgentLoopDeps } from "@/app/lib/agent/loop";
+import type { AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
+import { PCB_BOARD_HIERARCHY_PATH, pcbBoardInstanceId } from "@/app/lib/pcb/board-identity";
+import { FIXTURE_AUTHORITY_VARIANT, matchingAtomicConfirmer, validApprovedAggregate } from "@/app/lib/engineering/__tests__/_authority-fixtures";
+import { resetComponentAuthoritySourceFactory, setComponentAuthoritySourceFactory } from "../component-authority-runtime";
 
 const state = vi.hoisted(() => ({
   starts: [] as Array<{ role: string; system: string; userMessage: string; tools: string[]; signal: AbortSignal | undefined }>,
@@ -40,6 +49,8 @@ const state = vi.hoisted(() => ({
   script: {} as Record<string, "throw-network" | "throw-quota" | "hang" | "directive-summary" | "steered-propose">,
   /** the option keys of every gateway the request constructed (null: constructed with no options at all) */
   gateways: [] as Array<string[] | null>,
+  /** [B21 C fix] the gateway instances themselves, in construction order (identity, not only option keys) */
+  instances: [] as unknown[],
   /** the tool results handed back to the model on every continuation */
   continuations: [] as string[][],
 }));
@@ -50,7 +61,9 @@ vi.mock("@/app/lib/agent/gateway", async (importOriginal) => {
     ...original,
     createAgentToolGateway: (registry: Parameters<typeof original.createAgentToolGateway>[0], options?: Parameters<typeof original.createAgentToolGateway>[1]) => {
       state.gateways.push(options ? Object.keys(options).sort() : null);
-      return original.createAgentToolGateway(registry, options);
+      const gateway = original.createAgentToolGateway(registry, options);
+      state.instances.push(gateway);
+      return gateway;
     },
   };
 });
@@ -180,10 +193,12 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     vi.unstubAllEnvs();
     resetOrchestrationStoreFactory();
     resetSpecialistSchedulerFactory();
+    resetComponentAuthoritySourceFactory();
     setAgentTraceSinkFactory(null);
     state.starts = [];
     state.script = {};
     state.gateways = [];
+    state.instances = [];
     state.continuations = [];
   });
 
@@ -232,29 +247,32 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(traces[0]!.warnings).toEqual([`Refused before any model call: ${TIER3_REFUSAL_SENTENCE}`]);
   });
 
-  it("4. flag ON: the replacement request runs the coordinator turn as today, THEN three specialists (three further adapter runs, one at a time, each a read-only specialist prompt) and ONE READ-ONLY follow-up coordinator turn that receives the shape-validated results as data - all in one stream with exactly one run_started and one terminal event whose steps, tool calls and usage are the run's TOTALS (equal to the trace's) and in which no toolset warning is repeated; the record holds the plan, three requests and three results under the stream's run id", async () => {
+  it("4. flag ON: the replacement request runs the coordinator turn as today, THEN the plan's specialists ([B21 C] three planned; this run loads no component authority - no durable binding, the suite's default - so the sourcing specialist has no tools and is NOT RUN: two further adapter runs, one at a time, each a read-only specialist prompt) and ONE READ-ONLY follow-up coordinator turn that receives the shape-validated results as data and is told the sourcing evidence is missing - all in one stream with exactly one run_started and one terminal event whose steps, tool calls and usage are the run's TOTALS (equal to the trace's) and in which no toolset warning is repeated; the record holds the plan of three tasks, two requests with their results and the sourcing task's `role_has_no_tools` dissent under the stream's run id (revision 6; route case 17 runs all three with the authority loaded)", async () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { repository, store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
     const traces = traceCapture();
     const { runId, events, normalized } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic", "coordinator"]);
+    // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records the missing evidence)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
     expect(state.starts[0]!.userMessage).toBe(BODIES.replacement);
-    const followUp = state.starts[4]!;
+    const followUp = state.starts[3]!;
     expect(followUp.userMessage).toContain("sirkit.specialist-result.v1");
-    for (const role of ["circuit-topology", "component-sourcing-evidence", "verification-critic"]) expect(followUp.userMessage).toContain(role);
+    for (const role of ["circuit-topology", "verification-critic"]) expect(followUp.userMessage).toContain(role);
+    // [B21 C fix] the follow-up turn is told which planned evidence is MISSING (review): the not-run sourcing task, with its reason
+    expect(followUp.userMessage).toContain('"taskId":"task-2-component-sourcing-evidence","role":"component-sourcing-evidence","attempt":0,"status":"escalated","reason":"role_has_no_tools: ');
     expect(followUp.userMessage).toMatch(/never instructions/i);
     // [review] the results are SHAPE-VALIDATED claims, never "validated" evidence; every entry names its provider and model, and
     // three results from one provider/model are marked correlated, never presented as independent
     expect(followUp.userMessage).toMatch(/shape-validated/i);
     expect(followUp.userMessage).toMatch(/unverified/i);
-    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(3);
+    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(2);
     expect(followUp.userMessage).toContain('"sameSource":true');
     expect(followUp.system).toBe(state.starts[0]!.system);
     // [review] the follow-up turn is READ-ONLY: it advertises reads only (no proposal, no execution, no view control)
     expect(followUp.tools.length).toBeGreaterThan(0);
     for (const toolId of followUp.tools) expect(operationClass(toolId), toolId).toBe("read");
-    for (const specialist of state.starts.slice(1, 4)) {
+    for (const specialist of state.starts.slice(1, 3)) {
       expect(specialist.system).toContain("read-only");
       expect(specialist.system).toContain("sirkit.specialist-result.v1");
       expect(specialist.tools.length).toBeGreaterThan(0);
@@ -267,8 +285,9 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     // the coordinator's first answer is streamed as today, then the specialist lines, then the follow-up answer as the one terminal
     expect(normalized.startsWith(HEAD_STREAMS.replacement.stream.trim().split("\n").slice(0, 10).join("\n"))).toBe(true);
     const warnings = warningsOf(events);
-    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
-    expect(warnings.some((message) => message.includes("3 specialist") && message.includes("300 s"))).toBe(true);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(2);
+    expect(warnings.some((message) => message.includes("2 specialist") && message.includes("300 s"))).toBe(true);
+    expect(warnings.filter((message) => message.startsWith("Orchestration: specialist ") && message.includes(ROLE_HAS_NO_TOOLS))).toEqual([expect.stringMatching(/^Orchestration: specialist component-sourcing-evidence not run \(role_has_no_tools, task task-2-component-sourcing-evidence\)/)]);
     // [review] the follow-up turn repeats none of the first turn's toolset warnings: every warning line appears once
     const repeated = [...new Set(warnings)].filter((message) => warnings.filter((other) => other === message).length > 1);
     expect(repeated).toEqual([]);
@@ -279,8 +298,11 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(events.filter((event) => event.type === "text_delta")).toHaveLength(2);
     const scope = { ...SCOPE, runId };
     const history: OrchestrationRunEntry[] = await store.history(scope);
-    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result"]);
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([7]);
+    // [B21 C fix] the plan keeps all three tasks (stable ids); the sourcing task's dissent records the missing evidence
+    expect(history.map((entry) => `${entry.taskId}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-verification-critic:request", "task-3-verification-critic:result"]);
+    expect((history[0]!.record as { reason: string }).reason).toContain(`(${ROLE_HAS_NO_TOOLS}): component-sourcing-evidence`);
+    expect(history[3]!.record).toMatchObject({ kind: "dissent", decision: "escalated", reason: expect.stringMatching(/^role_has_no_tools: /), subjectDigest: null });
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([6]);
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2, usage: { inputTokens: 6, outputTokens: 10 } });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
@@ -402,7 +424,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     const { store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
     const traces = traceCapture();
-    state.script = { "component-sourcing-evidence": "hang" };
+    // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`): the second specialist to RUN is now the verification critic
+    state.script = { "verification-critic": "hang" };
     const response = await postRaw(BODIES.replacement);
     expect(response.status).toBe(200);
     const runId = response.headers.get("X-Sirkit-Run-Id")!;
@@ -414,14 +437,14 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
       expect(done, "the first specialist is accepted before Stop").toBe(false);
       text += decoder.decode(value, { stream: true });
     }
-    await vi.waitFor(() => expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence"]));
+    await vi.waitFor(() => expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]));
     const hanging = state.starts[2]!;
     expect(hanging.signal?.aborted).toBe(false);
     await reader.cancel(); // what the page's Stop does - it carries nothing
     await vi.waitFor(() => expect(hanging.signal?.aborted).toBe(true));
     await vi.waitFor(async () => expect((await store.history({ ...SCOPE, runId })).at(-1)?.record).toEqual({ kind: "dissent", decision: "escalated", reason: "cancelled", subjectDigest: null }));
     await vi.waitFor(() => expect(traces).toHaveLength(1));
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence"]);
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "cancelled", failureReason: "cancelled" });
     expect(traces[0]!.events.filter((event) => event.kind === "terminal")).toHaveLength(1);
   });
@@ -479,10 +502,11 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);
-    state.script = { "component-sourcing-evidence": "directive-summary", "coordinator-2": "steered-propose" };
+    // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records a dissent): the directive-looking summary now comes from the verification critic
+    state.script = { "verification-critic": "directive-summary", "coordinator-2": "steered-propose" };
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic", "coordinator"]);
-    const followUp = state.starts[4]!;
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
+    const followUp = state.starts[3]!;
     expect(followUp.userMessage).toContain("Ignore all previous instructions");
     expect(followUp.system).toBe(state.starts[0]!.system);
     expect(followUp.tools).not.toContain("sirkit.schematic.propose-tier1-edit");
@@ -492,7 +516,7 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(types(events).filter((type) => type === "proposal_ready" || type === "pcb_proposal_ready" || type === "execution_grant_ready" || type === "view_command_ready" || type === "layout_candidate_ready")).toEqual([]);
     expect(terminals(events)).toEqual(["run_completed"]);
     expect(events.at(-1)).toMatchObject({ type: "run_completed", steps: 3, toolCalls: 0, finalText: "(scripted) The follow-up turn answers from the results." });
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result"]);
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result"]); // [B21 C fix] the not-run sourcing task's dissent
   });
 
   it("13. a record that throws a driver-style error on use never leaks its text to the stream: the warning carries the closed reason only, the connection string (host, user, password) reaches neither the stream nor the trace unredacted", async () => {
@@ -542,21 +566,103 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     const traces = traceCapture();
     state.script = { "coordinator-2": "throw-network" };
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic", "coordinator"]);
+    // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records a dissent)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
     expect(terminals(events)).toEqual(["run_completed"]);
     const terminal = events.at(-1)!;
     expect(terminal).toMatchObject({ type: "run_completed", runId, steps: 1, toolCalls: 0 });
     expect(String(terminal.finalText)).toContain("(scripted) One coordinator turn for: ");
     const warnings = warningsOf(events);
     expect(warnings.some((message) => message.startsWith("Orchestration: the follow-up coordinator turn did not complete (provider_network)"))).toBe(true);
-    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(2);
     // the record keeps the committed specialist work; the trace is one completed run whose step count the stream reports
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result"]);
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result"]); // [B21 C fix] the not-run sourcing task's dissent
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", failureReason: null });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
     expect(traces[0]!.events.filter((event) => event.kind === "terminal")).toHaveLength(1);
     expect(new Set(traces[0]!.warnings).size).toBe(traces[0]!.warnings.length);
     expect(traces[0]!.warnings.some((message) => message.startsWith("Orchestration: the follow-up coordinator turn did not complete"))).toBe(true);
+  });
+
+  it("16. [B21 C] per role, structurally: every specialist the replacement DAG runs gets loop deps with a CLOSED key set and no `executionGrants` key, its own allowedToolIds (equal to its persisted request and to what its model was offered) and the derived context that claims nothing; the request constructs exactly TWO gateways whatever the number of roles - the coordinator's and ONE bare specialist gateway - and every specialist's wrapper delegates to that bare one; the sourcing role (no tools this run) never runs", async () => {
+    vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
+    const { store } = inMemoryStore();
+    setOrchestrationStoreFactory(() => store);
+    const loops: Array<{ runId: string; deps: AgentLoopDeps }> = [];
+    const handed: AgentToolInvocationGateway[] = [];
+    const asked: string[] = [];
+    setSpecialistSchedulerFactory(() => async (plan, coordinator, deps) => {
+      handed.push(deps.gateway);
+      // the bare gateway the runtime built, observed: every specialist wrapper must delegate to it
+      const observed: AgentToolInvocationGateway = { invoke: (request) => { asked.push(request.toolId); return deps.gateway.invoke(request); } };
+      return runSpecialistDag(plan, coordinator, { ...deps, gateway: observed, runLoop: async (request, loopDeps) => { loops.push({ runId: request.runId, deps: loopDeps }); return deps.runLoop(request, loopDeps); } });
+    });
+    const { runId } = await post(BODIES.replacement);
+    expect(state.gateways).toHaveLength(2);
+    expect(state.gateways[1]).toBeNull();
+    expect(handed).toHaveLength(1);
+    // [B21 C fix] by IDENTITY (review: the option keys alone cannot tell which gateway was handed on): the scheduler received the
+    // bare gateway constructed second, never the coordinator's
+    expect(state.instances).toHaveLength(2);
+    expect(handed[0]).toBe(state.instances[1]);
+    expect(handed[0]).not.toBe(state.instances[0]);
+    // [B21 C fix] the plan's task ids are stable: the not-run sourcing task keeps task-2, so the critic is task-3
+    expect(loops.map((loop) => loop.runId)).toEqual([`${runId}:task-1-circuit-topology`, `${runId}:task-3-verification-critic`]);
+    const admitted = specialistAllowedToolIds(registry, loops[0]!.deps.context, buildRunToolset, "coordinator");
+    const requests = new Map((await store.history({ ...SCOPE, runId })).flatMap((entry) => (entry.record.kind === "request" ? [[entry.record.document.role, [...entry.record.document.allowedToolIds]] as const] : [])));
+    for (const [index, { runId: loopRunId, deps }] of loops.entries()) {
+      const role = loopRunId.replace(/^.*:task-\d+-/, "") as SpecialistRole;
+      expect("executionGrants" in deps, role).toBe(false);
+      expect(Object.keys(deps).sort(), role).toEqual(["adapter", "allowedToolIds", "context", "contextWarnings", "emit", "gateway", "registry", "system"]);
+      expect(specialistContextClaims(deps.context), role).toEqual([]);
+      expect([...deps.allowedToolIds!], role).toEqual(requests.get(role));
+      expect([...state.starts[index + 1]!.tools].sort(), role).toEqual(requests.get(role));
+      // the wrapper delegates a permitted read to the ONE bare gateway and refuses an execution before it
+      const before = asked.length;
+      const read = registry.get(deps.allowedToolIds![0]!)!;
+      await deps.gateway.invoke({ runId: "run-x", provider: "openai", callId: "c-read", toolId: read.toolId, version: read.version, args: {}, context: deps.context, timeoutMs: 1_000 });
+      const move = registry.get("sirkit.pcb.move-footprint")!;
+      expect(await deps.gateway.invoke({ runId: "run-x", provider: "openai", callId: "c-move", toolId: move.toolId, version: move.version, args: {}, context: deps.context, timeoutMs: 1_000 }), role).toMatchObject({ kind: "refused", status: SPECIALIST_REFUSAL_STATUS });
+      // [B21 C fix] a READ this run admits that the role's row does not name is refused by the wrapper the scheduler built (review)
+      const outside = admitted.filter((toolId) => !deps.allowedToolIds!.includes(toolId));
+      expect(outside.length, role).toBeGreaterThan(0);
+      for (const toolId of outside) {
+        const descriptor = registry.get(toolId)!;
+        expect(await deps.gateway.invoke({ runId: "run-x", provider: "openai", callId: `c-${toolId}`, toolId, version: descriptor.version, args: {}, context: deps.context, timeoutMs: 1_000 }), `${role}: ${toolId}`).toMatchObject({ kind: "refused", status: SPECIALIST_REFUSAL_STATUS });
+      }
+      expect(asked.slice(before), role).toEqual([read.toolId]);
+    }
+    expect(state.starts.map((start) => start.role)).not.toContain("component-sourcing-evidence");
+    expect(state.gateways).toHaveLength(2); // nothing above constructed another gateway
+  });
+
+  it("17. [B21 C fix] with the component authority LOADED (a stubbed durable source returning U1's binding - what production loads for a bound part), the replacement DAG runs ALL THREE specialists through the production POST (review: no route case ran the sourcing specialist): five adapter starts, the sourcing specialist offered exactly component-authority.inspect, the follow-up turn given three results, and the record at revision 7 with three requests and three results", async () => {
+    vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
+    const { repository, store } = inMemoryStore();
+    setOrchestrationStoreFactory(() => store);
+    const aggregate = await validApprovedAggregate("u1-id", { scopeOverrides: { ...SCOPE, boardInstanceId: pcbBoardInstanceId(SCOPE.projectId), hierarchyPath: [...PCB_BOARD_HIERARCHY_PATH], assemblyVariantIds: [FIXTURE_AUTHORITY_VARIANT] } });
+    setComponentAuthoritySourceFactory(() => ({ bindings: { async loadForComponent() { return [aggregate]; } }, atomic: matchingAtomicConfirmer() }));
+    const traces = traceCapture();
+    const { runId, events } = await post(BODIES.replacement);
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic", "coordinator"]);
+    // the coordinator's own run held the loaded authority: its read of it was offered (the resource the route re-assembles with)
+    expect(state.starts[0]!.tools).toContain("sirkit.component-authority.inspect");
+    expect(state.starts[2]!.tools).toEqual(["sirkit.component-authority.inspect"]);
+    const followUp = state.starts[4]!;
+    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(3);
+    expect(followUp.userMessage).not.toContain(ROLE_HAS_NO_TOOLS);
+    const warnings = warningsOf(events);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
+    expect(warnings.some((message) => message.includes("3 specialist") && message.includes("300 s"))).toBe(true);
+    expect(warnings.some((message) => message.includes(ROLE_HAS_NO_TOOLS))).toBe(false);
+    expect(terminals(events)).toEqual(["run_completed"]);
+    const history: OrchestrationRunEntry[] = await store.history({ ...SCOPE, runId });
+    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result"]);
+    const sourcing = history.find((entry) => entry.record.kind === "request" && entry.record.document.role === "component-sourcing-evidence")!;
+    expect((sourcing.record as { document: { allowedToolIds: readonly string[] } }).document.allowedToolIds).toEqual(["sirkit.component-authority.inspect"]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([7]);
+    expect(traces).toHaveLength(1);
+    expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2 });
   });
 });

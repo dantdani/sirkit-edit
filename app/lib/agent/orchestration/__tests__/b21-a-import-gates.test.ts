@@ -66,7 +66,8 @@ function orchestrationReferences(path: string, source: string): string[] {
 describe("[B21 A] the orchestration import gate", () => {
   it("1. the entry set is DERIVED from the tree and pinned to the modules of the chapter (A's three, B's router and scheduler); every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => {
     // [B21 B] + router.ts and scheduler.ts; app/api/chat/orchestration-runtime.ts lives OUTSIDE the prefix by design (it binds the durable runtime)
-    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
+    // [B21 C] + role-tools.ts (a pin move: the module joins the gate the day it is written; case 6)
+    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/role-tools.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
     expect(production.has("app/api/chat/orchestration-runtime.ts")).toBe(true);
     const members = (family: Family): string[] => [...production.keys()].filter((path) => familyOf(path) === family).sort();
     expect(members("GRANTS")).toEqual(["app/lib/execution-grant/consume.ts", "app/lib/execution-grant/mint.ts", "app/lib/execution-grant/route-contract.ts", "app/lib/execution-grant/settle.ts", "app/lib/execution-grant/store.ts"]);
@@ -158,7 +159,7 @@ describe("[B21 A] the orchestration import gate", () => {
     expect(runtimeClosure.has("app/lib/agent/orchestration/router.ts")).toBe(true);
     expect(runtimeClosure.has("app/lib/agent/orchestration/store.ts")).toBe(true);
     // the injected probes never touched the disk: the production entry set is unchanged
-    expect(entriesOf(production)).toHaveLength(5);
+    expect(entriesOf(production)).toHaveLength(6); // [B21 C] + role-tools.ts
   });
 
   it("4. the nine B11-scanned files import nothing under app/lib/agent/orchestration/ by ANY reference kind (a type-only import counts here) and carry no orchestration identifier; an injected copy with an orchestration value import, a type-only import or the identifier text appended is caught; tripwires.ts is the only orchestration module that names those files", { timeout: 180_000 }, () => {
@@ -183,11 +184,27 @@ describe("[B21 A] the orchestration import gate", () => {
 
   it("5. hygiene over the orchestration modules: no opaque module load, no declaration shadowing the loader, no root-escaping import, zero parse diagnostics, and every import is a static string the gate can resolve", { timeout: 180_000 }, () => {
     const scoped = new Map([...production].filter(([path]) => path.startsWith(ORCHESTRATION_MODULE_PREFIX)));
-    expect(scoped.size).toBe(5); // [B21 B] + router.ts, scheduler.ts
+    expect(scoped.size).toBe(6); // [B21 B] + router.ts, scheduler.ts; [B21 C] + role-tools.ts
     expect(opaqueModuleLoads(scoped)).toEqual([]);
     expect(requireShadowDeclarations(scoped)).toEqual([]);
     expect(rootEscapingImports(scoped)).toEqual([]);
     expect(sourceParseDiagnostics(scoped)).toEqual([]);
     for (const [path, source] of scoped) for (const reference of moduleReferences(path, source)) expect(["static-import", "re-export"], `${path}: ${reference.kind}`).toContain(reference.kind);
+  });
+
+  it("6. [B21 C] role-tools.ts is in the entry set and its whole runtime closure reaches no forbidden family and no provider SDK; it holds the exposure list and the tiers and never enters the tool catalog, the loop, the gateway, the context assembler, the grant contract or the durable substrate (the table is DATA, judged against a registry the caller hands in); the scheduler's closure holds role-tools.ts, and it still enters neither the loop nor the gateway", { timeout: 180_000 }, () => {
+    const roleTools = "app/lib/agent/orchestration/role-tools.ts";
+    expect(entriesOf(production)).toContain(roleTools);
+    const closure = importClosure(production, [roleTools]);
+    expect(walk(production, [roleTools])).toEqual([]);
+    for (const member of ["app/lib/engineering/agent-exposure.ts", "app/lib/engineering/permission-tiers.ts", "app/lib/agent/orchestration/contracts.ts"]) expect(closure.has(member), member).toBe(true);
+    for (const never of ["app/lib/engineering/tool-catalog.ts", "app/lib/agent/loop.ts", "app/lib/agent/gateway.ts", "app/lib/agent/context.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/durable-workflow/stable.ts"]) expect(closure.has(never), never).toBe(false);
+    const scheduler = importClosure(production, ["app/lib/agent/orchestration/scheduler.ts"]);
+    expect(scheduler.has(roleTools)).toBe(true);
+    for (const never of ["app/lib/agent/loop.ts", "app/lib/agent/gateway.ts", "app/lib/engineering/tool-catalog.ts"]) expect(scheduler.has(never), never).toBe(false);
+    // a probe under the prefix importing the tool catalog at load is not a forbidden family, but it is not what role-tools does:
+    // the module's own references are its four imports (b21-c-role-tools case 5 reads them as text)
+    const references = moduleReferences(roleTools, production.get(roleTools)!).map((reference) => reference.specifier).sort();
+    expect(references).toEqual(["../../engineering/agent-exposure", "../../engineering/permission-tiers", "../../engineering/tool-registry", "./contracts"]);
   });
 });

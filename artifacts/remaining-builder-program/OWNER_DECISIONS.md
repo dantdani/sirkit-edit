@@ -901,6 +901,28 @@ Amendments to existing entries:
   Either the owner raises the cap to six for that shape, or the router trims the list "as needed" (runbook :810) once B21-C's roles
   exist (the safe default until then: refuse, never run five).
 
+**Amendment (B21-C, 2026-09-26) — OD-107 — The full-circuit list versus the cap of four, resolved (B21-C, 2026-09-26)**
+
+- **Question (B21-B):** runbook :810 names six specialists for a full circuit ("requirements, architecture/circuit, component, schematic,
+  PCB and verifier as needed"); OD-107's cap is four, so every full-circuit plan was refused `plan_exceeds_specialist_cap`.
+- **Resolution applied (the lead's direction):** the router trims the list "as needed" to the cap by a FIXED priority, as data
+  (`FULL_CIRCUIT_TRIM` in `app/lib/agent/orchestration/router.ts`): `circuit-topology`, `component-sourcing-evidence`, `schematic`,
+  `verification-critic`; the requirements analysis is folded into the coordinator's own turn; `pcb-placement-routing` runs only when a
+  board exists and then replaces `schematic` when the message asks for layout (a second rule, `D-full-circuit-layout`, before
+  `D-full-circuit-creation`). The runbook's six stay as data (`FULL_CIRCUIT_RUNBOOK_ROLES`). A routed plan never exceeds four;
+  `plan_exceeds_specialist_cap` stays the guard for a hand-built plan. Pinned by `b21-b-router.test.ts` cases 8 and 9.
+- **Which messages recruit it (the review's fix):** only a new circuit named from words — the verb at the head (design / generate /
+  create / build / make / draw), an indefinite object (a / an) and a circuit-kind noun from a closed list HEADING that object
+  (optionally followed by a container noun such as board or module; a modifier-position word such as "a schematic symbol" names no
+  circuit — lead correction 2026-09-26) — so an
+  ordinary edit ("Make the LED brighter.", "Make the placement more compact.") never recruits four paid specialists: a layout-quality
+  ask is the bounded PCB proposal (one specialist, runbook :807) and anything else one coordinator turn. The layout variant needs its
+  own layout ask (with / and a placement, layout, routing or footprints), never a selection word. The grammar fails toward one
+  coordinator turn (an unrecognised creation ask stays `single`, as every full-circuit ask effectively was at B's HEAD).
+- **The owner may choose otherwise:** raise the cap (then the router's lists return to the runbook's six by a data change, with the
+  concurrency cap on the long-running engines OD-107 already names); another priority (a data change pinned by the router suite); or a
+  wider or narrower circuit-kind list (a data change pinned by router case 9).
+
 ## OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-A, 2026-09-24)
 
 - **Question:** `AgentRunRequest.history` is plain text; a structured result has no turn kind of its own.
@@ -939,6 +961,26 @@ Amendments to existing entries:
   no capability, actor or authority field at all).
 - **The owner may choose otherwise:** a sourcing specialist that reads through the external port (then `externalAcquisitionAvailable`
   becomes a per-role fact under OD-120's table, still never a grant).
+
+**Amendment (B21-C, 2026-09-26) — OD-109 — Specialists never hold the three availability facts, as applied (B21-C, 2026-09-26)**
+
+- **Question:** `assembleAgentRunContext` takes `executionGrantsAvailable`, `externalAcquisitionAvailable` and `mcpObservationAvailable`
+  as caller flags, and `verifyAgentContextIntegrity` accepts any grant fields that agree with them (D21-8).
+- **Applied:** `deriveSpecialistContext` builds a specialist's context FIELD BY FIELD from a closed list (never by spreading the
+  coordinator's): the three facts denied, no grant field, `riskCeiling` `propose`, `approvalsAvailable` empty, no external authority, no
+  head mark, no PCB basis, no view, the agent channel; the coordinator's context is read, never written. The specialist gateway wrapper
+  refuses `role_context_elevated`, BEFORE anything reaches the underlying gateway, any context that claims grantability or a port in any
+  of eight ways (`SPECIALIST_CONTEXT_CLAIMS`: the minter's availability, grantable capabilities, a grant lineage, a risk ceiling above
+  `propose`, an approval tier, a grantable capability held by the actor, the external port fact, the MCP port fact — each port claim by
+  its flag or by its discovery authority alone); a context that throws while read claims everything. The scheduler builds every
+  specialist's loop deps with a closed key set and no `executionGrants` key, and constructs no gateway: the composition root's one bare
+  specialist gateway (no minter, no port, no prompt version) is under every wrapper — pinned by identity through the production POST.
+  The never-execution sweep re-run through the specialist gateway for all nine roles, with a real minter under it, mints nothing, and
+  nested delegation passed as the arguments of a permitted read is handed on verbatim and refused by the read's own schema.
+  `verifyAgentContextIntegrity` is unchanged. Proven by `b21-c-no-elevation.test.ts` (5 cases) and `b21-b-chat-router.test.ts` case 16.
+- **The owner may choose otherwise:** a sourcing specialist that reads through the external port (then the port fact and the external
+  authority become a per-role fact for that role, the claim check admits them for it alone, and the three external reads in its OD-120
+  row stop being dormant — still never a grant).
 
 ## OD-110 — The deterministic no-provider path (B21-A records; B21-B builds) (2026-09-24)
 
@@ -1057,3 +1099,55 @@ Amendments to existing entries:
   the chat route mints a fresh run id per POST and carries no prior run id, so the human's Retry after an outage is a new run whose
   specialists run again — the `userMessageDigest`-keyed cross-run ledger and the route-level resume are B21-E's (with B21-C's per-role
   subsets); specialists producing proposal artifacts the coordinator merges are B21-C/D's.
+
+## OD-120 — Which of the 33 exposed tools each role may be offered, as applied (B21-C, 2026-09-26)
+
+- **Question:** the per-role least-privilege subsets (runbook :829; D21-7).
+- **Applied:** the discovery's proposal with NO deviation, as data with a reason per id (`ROLE_TOOL_REASONS` /
+  `INTENTIONAL_ROLE_TOOL_IDS` in `app/lib/agent/orchestration/role-tools.ts`, rendered on `specialist-roles.md` section 1): the
+  coordinator's row IS the exposure list (the same array; never passed as an allowlist); `requirements-analyst` board-inspect,
+  canonical-revision-inspect, history-inspect, schematic.inspect; `circuit-topology` schematic.inspect, propose-tier1-edit,
+  selection.inspect, connectivity-verify; `component-sourcing-evidence` component-authority.inspect, mcp.observation-read,
+  parts.evidence-read, parts.external-search; `schematic` schematic.inspect, propose-component-replacement, propose-tier1-edit;
+  `pcb-placement-routing` board-inspect, mechanical-inspect, propose-bounded-edit, via-inspect, placement.propose, routing.propose;
+  `verification-critic` revision-inspect, via-inspect, connectivity-verify, drc-run; `manufacturing-readiness-reviewer`
+  readiness-inspect, connectivity-verify, drc-run; `cost-latency-router` none. No row holds a granted execution, a view control or a
+  never-exposed / Tier 3 id; a proposal only in a proposing role's row; `roleExposureReport` reports drift by role, id and reason. A row
+  is a CEILING: ten row entries (nine distinct ids) are DORMANT in B21-C (the six proposal entries — specialists read only; the three
+  external reads — OD-109; the history read — no captured view in a specialist context), each saying so in its reason.
+- **Consequence, stated exactly (the review's fix):** under OD-109 the sourcing specialist's only effective read is
+  component-authority.inspect, so it runs only when at least one schematic component has a durable binding that loads within the
+  route loader's 5 s deadline; without a durable source (the local build), for a project with no binding (every new design), on a
+  failed load or past the deadline the loader settles null and the role has no tools. A role with no tools is not run, but its task
+  stays in the plan and records the missing evidence as dissent `escalated` (`role_has_no_tools`), which the scheduler's outcome and
+  the follow-up turn's envelope carry — so runbook :809's component specialist and B21-F's "missing component evidence" case run no
+  sourcing model when no binding exists, and the missing evidence is recorded and shown, never invented. The cost/latency policy role
+  is never run until B21-E gives it a policy input.
+- **The owner may choose otherwise:** cut every row to what C can offer (the dormant ids removed; B21-D and an OD-109 change would then
+  re-add them by a reviewed row change); widen a row (a reviewed change of `role-tools.ts` and its page, never of the exposure list) —
+  for instance a read that lets the sourcing specialist run and report the missing binding itself (a new or re-scoped read descriptor:
+  the D21-9 pin move); or accept the recorded dissent as the missing-evidence answer (the default applied).
+
+## OD-121 — How the role allowlist is enforced, as applied (B21-C, 2026-09-26)
+
+- **Question:** a new `DiscoveryContext` field, a new channel value, or a post-discovery intersection.
+- **Applied:** the post-discovery intersection. `buildRunToolset` gains an OPTIONAL `allowedToolIds`, applied AFTER every existing gate
+  (it only narrows; a tool a gate withheld stays withheld); A4L semantics (`approvedRunAllowlist`) — at most 32 ids, strictly ascending,
+  every id exposed and never a never-exposed pattern — and a list that is anything else approves NOTHING: an empty toolset with one
+  warning naming `allowlist_invalid`. The loop reads it from `AgentLoopDeps.allowedToolIds`; absent (every coordinator run) the toolset
+  is byte-identical to HEAD (four digests recorded before the change). The scheduler passes each role's effective set — its row
+  intersected with the reads the derived context admits — to the loop, the request and the gateway wrapper (`role_not_permitted_tool`
+  outside it, proven on the wrapper the scheduler itself builds). A role whose set is empty is not run (`role_has_no_tools`): the plan
+  and its task ids come from the plan's roles alone, the task records a dissent, and a same-scope resume never depends on this run's
+  resources. The context digest, `DISCOVERY_CHANNELS` and the 22 exclusion reasons are untouched.
+- **The owner may choose otherwise:** a discovery-level role field (moves every context digest and the b04 / b17-f / b18-c / b20-b1
+  pins in one reviewed move).
+
+## OD-123 — `schematic.set-property` / `schematic.move-rotate` in `EXECUTION_FAMILIES` (B21-C, 2026-09-26)
+
+- **Question:** the closed eight-family list declares two schematic Tier 1 families that nothing can route to (D21-31).
+- **Default applied:** recorded as reserved and unchanged (the B18-B pin fixes the list); no schematic descriptor is a granted
+  execution; the `schematic` role receives the two sealed Tier 2 proposals and `schematic.inspect` only (OD-15), both proposals dormant
+  while specialists read only.
+- **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
+  schematic execution (reverses OD-15; its own chapter).

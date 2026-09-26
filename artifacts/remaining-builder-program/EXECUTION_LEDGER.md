@@ -2766,3 +2766,47 @@ _(discovery, reproduction and results appended below as they are observed)_
   safe default refuses, never runs five); the two one-line exports in `composer-routing.ts` and `adapters.ts` are accepted (data only,
   no behaviour change; the request-shape pins hold).
 - Lead gates (2026-09-26, one job at a time): every B21 suite (A's four, B's four), the route suite and the CI guard 9 files / 94 cases (router 7, scheduler 14, route 16, B page 7, A gate 5 + contracts 14 + store 15 + A page 6, guard 10 runtime tests); `app/api/chat/__tests__` in full 15 files / 94 (the flag-off route byte-identical to HEAD, every pre-existing chat suite green); the agent tripwires and pins (b09-*, b11-*, b18-b/c/d, b20-a4-*) 16 files / 254; b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b20-b1-mcp-exposure, b20-b2-import-gates, b20-d3-authority-import-gates, b18-d-composer-routing and the B19-D closure gate 9 files / 110; tsc 0; eslint clean on the eleven new and changed TS files; no generator input changed (no descriptor, route or UI - the flag is an environment variable), every generated artifact byte-identical; census 165/162/3/0.
+
+### B21-C — the nine roles, least-privilege tool subsets per role, the no-elevation proof (2026-09-26 local; increment workflow + review fix round + lead; this commit)
+
+- Test-first: the adopted `b21-c-role-tools.test.ts` failed at import (`c-failing-first-adopted.log`); the buildRunToolset digests were
+  RECORDED from HEAD `0396c9e` with a temporary probe before `loop.ts` changed (`c-record-head.log`); every new and changed suite then ran
+  against the unchanged code (`c-failing-first.log`: three C suites at import, 17 cases failing — no-elevation 1-5, router 3 and 8, gate
+  1, 3, 5, 6, scheduler 2, route 4, 11, 12b, 15, 16); then green with the code (`c-green.log`: 13 files, 119 tests).
+- Adversarial review: 15 findings confirmed (3 medium: the full-circuit rule recruiting four paid specialists for ordinary edits, the
+  sourcing specialist's real condition and fixtures production never produces, the scheduler's wrapper list unproven; 12 low). Fixed
+  test-first (`fix/failing-first.log`: 16 cases failing across 6 files before the code; `fix/impl-1.log`: 61 tests green after it);
+  the six test-strength findings proven by deliberate breakages of the source, each caught and restored by sha256
+  (`fix/breakage-*.log`). The fixes: the full-circuit grammar (a new circuit named from words; the layout variant's own ask); a role
+  with no tools not run but kept in the plan with a `role_has_no_tools` dissent carried to the outcome and the follow-up envelope; task
+  ids from the plan's roles only (a same-scope resume no longer refused `plan_mismatch` by this run's resources); loop.ts's line 20
+  back to HEAD's and the exposure import on its own line at the end; `approvedRunAllowlist` exported; fixtures holding what the route's
+  loader produces for U1's binding; route case 17 (all three specialists with the authority loaded); B's page and route case 4's
+  title re-stated; C's own pins added to the D21-9 rule.
+- Code: `app/lib/agent/orchestration/role-tools.ts` (OD-120 as data with a reason per id, the checker, the report);
+  `app/lib/agent/loop.ts` (the optional `allowedToolIds` after every gate with A4L semantics and `allowlist_invalid`; the deps field;
+  edits on existing lines only, line 20 as at HEAD, helpers and one import appended, so no B20 citation moved);
+  `app/lib/agent/orchestration/scheduler.ts` (the per-role effective set, the not-run task with its dissent, stable task ids, the
+  field-by-field `deriveSpecialistContext`, the claim check and `role_context_elevated` in the wrapper, the role's list in the loop,
+  the request and the wrapper); `app/lib/agent/orchestration/router.ts` (the full-circuit trim, its grammar and the layout variant).
+  No route, descriptor, channel, exclusion reason, UI or generator input changed; census 165/162/3/0; the B04/B20/B17-A artifacts
+  byte-identical.
+- Suites: `b21-c-role-tools` 5, `b21-c-least-privilege` 10, `b21-c-no-elevation` 5, `b21-c-page` 7; router cases 8 and 9, gate case
+  6, B page case 8, route cases 16 and 17 added; pin moves with their reasons in the router (case 3), scheduler (the rig's authority;
+  cases 2, 3, 4, 8, 14), gate (cases 1, 3, 5) and route (cases 4, 11, 12b, 15) suites; A's and B's page rows and B's citations re-pinned.
+- Gates re-run one job at a time (the lead re-runs them): the B21 suites, the route suite and the CI guard 13 files / 127 tests; `app/api/chat/__tests__` 15 / 96; `app/lib/agent/__tests__` b09-*, b11-*, b18-*, b20-a4-* 26 / 308; the exposure, tier and discovery pins, the MCP gates and the chat closure ratchets 32 / 282; `app/lib/mcp/__tests__` 26 / 642; tsc 0; eslint clean on every new and changed file; no generator input changed.
+- Records: `specialist-roles.md`; OD-107 resolved; OD-109, OD-120, OD-121 as applied; OD-123; D21-7 and D21-8 closed; D21-9 and D21-31
+  recorded. Consequence recorded (OD-120): the sourcing specialist runs only when a schematic component's durable binding loads; without
+  one its task records the missing evidence. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-ups on the check's residuals (2026-09-26; the checker confirmed all 15 fixes and raised 2 new low issues): (1) the
+  full-circuit grammar accepted a circuit-kind word ANYWHERE in the object, so "Generate a schematic symbol for U1.", "Create a sensor
+  footprint.", "Create a timer part." and "Make a counter-clockwise turn of U1." still recruited four specialists - the circuit kind
+  must now HEAD the object, optionally followed only by a container noun (board, module, design, project, kit, system, unit, stage,
+  section, block), so "Build me a 5V buck converter board." stays a full circuit (router case 9 pins both directions; a first, strictly
+  head-noun version refused that phrasing in router cases 3 and 8 and was widened by the container nouns); (2) the stale-then-no-tools
+  dissent offset had no test - least-privilege case 8 part C resumes a committed run under a moved revision without the authority and
+  proves both records land (`stale` at the resuming attempt, `escalated` / `role_has_no_tools` one past it). Both proven revert-sensitive
+  by hash-verified mutation (`c-lead-probe.log`: the any-position grammar fails exactly router case 9, a missing offset fails exactly
+  least-privilege case 8; sources restored, SHA-256 equal). The C page states both corrections. Records hygiene: B's section-10 bullet
+  had leaked into D21-33's paragraph in `discovery.md` through the records script's clause boundary; removed, and the script fixed.
+- Lead gates (2026-09-26, one job at a time): every B21 suite (A 4, B 4, C 4 suites plus the extended router and gate cases), the route suite and the CI guard 13 files / 127 cases; `app/api/chat/__tests__` in full 15 files / 96; `app/lib/agent/__tests__` in full 36 files / 415; the exposure, tier and discovery pins (b04-tool-registry, b17-f-agent-exposure, b18-a-permission-tiers, b18-c-exposure-lift, b18-c-fixture-agent, b18-c-never-execution-sweep, b20-a4-observation-descriptor, b20-b1-mcp-exposure, b20-b3-mcp-subset-move, b20-c1-three-way-parity), the MCP gates (b20-b2, b20-d3), b18-d-composer-routing and the B19-D closure gate 12 files / 143; `app/lib/mcp/__tests__` in full (every B20 page citation) 26 files / 642 - no cited line moved; tsc 0; eslint clean on every new and changed TS file; no descriptor, discovery channel, exclusion reason, route, UI or generator input changed, the B04/B01 artifacts byte-identical; census 165/162/3/0.

@@ -87,11 +87,14 @@ closure gate keeps out of the chat route, section 4).
 
 The router normalizes the message (one line, collapsed whitespace, lower case, no trailing sentence punctuation) and applies the rules
 below in order; the first match wins (C4). A message that matches no DAG rule is `single` by construction: simple work stays direct.
-The table equals `ROUTER_RULES` (C1) and the role lists equal `DAG_ROLE_LISTS` (C2); `b21-b-page.test.ts` case 2 compares them. The five
+The table equals `ROUTER_RULES` (C1) and the role lists equal `DAG_ROLE_LISTS` (C2); `b21-b-page.test.ts` case 2 compares them. The
 DAG shapes and their lists: `bounded-schematic-proposal` → `coordinator`, `schematic`; `bounded-pcb-proposal` → `coordinator`,
 `pcb-placement-routing`; `component-replacement` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `verification-critic`;
-`full-circuit-creation` → `coordinator`, `requirements-analyst`, `circuit-topology`, `component-sourcing-evidence`, `schematic`,
-`pcb-placement-routing`, `verification-critic`; `manufacturing-readiness` → `coordinator`, `manufacturing-readiness-reviewer`.
+`full-circuit-creation` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic`;
+`full-circuit-layout` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `pcb-placement-routing`, `verification-critic`;
+`manufacturing-readiness` → `coordinator`, `manufacturing-readiness-reviewer`. [B21 C] The two full-circuit lists are the runbook's six
+trimmed to OD-107's cap of four by a fixed priority, and the layout variant is a sixth shape with its own rule
+(`specialist-roles.md` section 4; B built one full-circuit list of six, which the scheduler refused).
 
 | rule | kind | runbook | roles |
 |---|---|---|---|
@@ -107,7 +110,8 @@ DAG shapes and their lists: `bounded-schematic-proposal` → `coordinator`, `sch
 | `S-explicit` | single | :806 | — |
 | `S-role` | single | :806, :829 | — |
 | `D-component-replacement` | dag | :809 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `verification-critic` |
-| `D-full-circuit-creation` | dag | :810 | `coordinator`, `requirements-analyst`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `pcb-placement-routing`, `verification-critic` |
+| `D-full-circuit-layout` | dag | :810 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `pcb-placement-routing`, `verification-critic` |
+| `D-full-circuit-creation` | dag | :810 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic` |
 | `D-manufacturing-readiness` | dag | :811 | `coordinator`, `manufacturing-readiness-reviewer` |
 | `D-bounded-pcb-proposal` | dag | :807 | `coordinator`, `pcb-placement-routing` |
 | `D-bounded-schematic-proposal` | dag | :807 | `coordinator`, `schematic` |
@@ -140,9 +144,17 @@ DAG shapes and their lists: `bounded-schematic-proposal` → `coordinator`, `sch
 - **`D-full-circuit-creation`** (:810): design / generate / create / build / make / draw at the head, NOT naming a PCB object (via,
   track, trace, silkscreen, copper, zone, …, the composer's rule 5), NOT a geometry, annotation or size ask (box, line, label, outline,
   wider, "50 mm", …, C36 — "Make the board 50 mm wide." and "Draw a box around U1." are `single`) and NOT "make <reference designator>"
-  (rule 6). Every phrasing the suite routes here the composer routes to `generate`. **Its list names six specialists** (the runbook's
-  "requirements, architecture/circuit, component, schematic, PCB and verifier as needed"), which exceeds OD-107's cap of four: the
-  scheduler refuses the plan and the coordinator's own answer stands under a visible warning (section 3, section 7 — the lead decides).
+  (rule 6). Every phrasing the suite routes here the composer routes to `generate`. As built in B its list named six specialists (the
+  runbook's "requirements, architecture/circuit, component, schematic, PCB and verifier as needed"), which exceeds OD-107's cap of four,
+  so the scheduler refused the plan (section 7 — the lead decided). [B21 C] **The runbook's six are trimmed to the cap of four** by a
+  fixed priority — `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic`; the requirements analysis
+  folds into the coordinator's own turn; `D-full-circuit-layout` (its own layout ask, with a board) puts `pcb-placement-routing` in
+  place of `schematic` — so a routed plan never exceeds four and `plan_exceeds_specialist_cap` stays a guard (router case 8;
+  `specialist-roles.md` section 4). [B21 C fix] With the list now runnable, the head verb alone no longer recruits it (review: "Make
+  the LED brighter." or "Make the placement more compact." would have run four paid specialists): the rule needs a NEW circuit named
+  from words — an indefinite object (a / an) with a circuit-kind noun inside it — so an ordinary edit is the bounded PCB proposal
+  (a layout-quality ask; `tidier` and `neater` joined its verbs) or one coordinator turn, and the layout variant needs its own layout
+  ask (with / and a placement, layout, routing or footprints), never a selection word (router case 9; `specialist-roles.md` section 4).
 - **`D-manufacturing-readiness`** (:811): a manufacturing word (manufacturing / manufacturability / fabrication / fab / production /
   DFM) with a review word (ready / readiness / review / check / assess / audit / evaluate), with a board present — deterministic checks
   first, then the reviewer, never an autonomous release agent; "Release the board to manufacturing" is `T3-release` first.
@@ -326,8 +338,13 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   no Retry storm), one that is cancelled ends the run `cancelled`. The follow-up turn's toolset warnings are not recorded twice on the
   TRACE either (its recorder skips the first turn's lines; route cases 4 and 15 assert the trace's warnings are unique), and the
   orchestration's own status and refusal lines take at most `ORCHESTRATION_TRACE_LINES_MAX` (12) of the trace's 32 warning slots -
-  every line still reaches the stream, and a stand-down reason is always recorded. Five adapter starts — coordinator, three specialists, coordinator — one `run_started`, one terminal, the
-  record at revision 7, the trace with two steps and one terminal (route case 4). **Degraded mode is visible, never silent.**
+  every line still reaches the stream, and a stand-down reason is always recorded. As B built it: five adapter starts — coordinator,
+  three specialists, coordinator — one `run_started`, one terminal and two trace steps. [B21 C] With the component authority loaded
+  (a durable source returning U1's binding) that shape holds and the record at revision 7 has three requests and three results (route
+  case 17); without it (the route suite's default: no durable binding) the sourcing specialist has no tools and is not run — four
+  adapter starts, one `run_started`, one terminal, two trace steps, and the record at revision 6 with the plan's three tasks, two
+  requests with their results and the sourcing task's `role_has_no_tools` dissent (route case 4). **Degraded mode is visible, never
+  silent.**
 - **The envelope** (`specialistResultsEnvelope`, C45) — **a recorded DEVIATION from OD-108's default** (a redacted TOOL RESULT under
   `MAX_RESULT_CHARS`): B carries the specialists' outcomes in the follow-up turn's USER MESSAGE, because no tool call exists to attach a
   result to without a new exposed tool (B adds none) and a synthetic continuation would be adapter-specific; B21-E's strict result tool
@@ -386,11 +403,11 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 
 | suite | `it(` blocks | what it proves |
 |---|---|---|
-| `app/lib/agent/orchestration/__tests__/b21-b-router.test.ts` | 7 | every runbook branch with three phrasings; the nine Tier 3 families (each word matches the tiers' pattern, every stem covered); a 3D/view request, a plain question and the explicit grammar's examples single; the fact gates; determinism and the module-text scans; the role lists pinned; the review's negatives (a value change, a geometry or size ask, a BOM tidy, a label touch-up, a sort ask); the composer grammar reused, both routers agreeing |
+| `app/lib/agent/orchestration/__tests__/b21-b-router.test.ts` | 9 | every runbook branch with three phrasings; the nine Tier 3 families (each word matches the tiers' pattern, every stem covered); a 3D/view request, a plain question and the explicit grammar's examples single; the fact gates; determinism and the module-text scans; the role lists pinned; the review's negatives (a value change, a geometry or size ask, a BOM tidy, a label touch-up, a sort ask); the composer grammar reused, both routers agreeing; [B21 C] case 8: the full-circuit trim, and case 3's list pinned to it; case 9: the full-circuit grammar (a new circuit named from words; the layout variant's own ask) |
 | `app/lib/agent/orchestration/__tests__/b21-b-scheduler.test.ts` | 14 | sequential order and ids; the caps and the `MAX_OUTPUT_TOKENS` pin; the validated request per task equal to the advertised reads; the derived context and the read-only narrowing; resume after an outage; cancellation mid-DAG; the DAG wall time; the retry rule; malformed results; the store failing closed with a redacted detail; a mid-DAG CAS conflict or store failure; the per-task deadline with time left; the stale replay re-run; the per-attempt meter, provenance and refusal lines |
-| `app/api/chat/__tests__/b21-b-chat-router.test.ts` | 16 | flag off byte-identical to HEAD; flag on: single for the simple and 3D bodies, the refusal with no provider call, the three-specialist DAG in one stream with the run's totals and no repeated warning, reason-only visible degradation, the build-multi hash, the fixture-runtime binding without a connection attempt; a provider outage makes no further call; the follow-up turn narrowed by construction; a failed coordinator turn runs no specialist; Stop mid-DAG; the envelope bounded and sanitized, a steered follow-up turn sealing nothing; a driver error never leaks; the specialist gateway built without the minter and the ports |
-| `app/lib/agent/orchestration/__tests__/b21-b-page.test.ts` | 7 | this page, the cited lines of the new modules current |
-| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 5 | A's gate over the five modules, with B's two probes |
+| `app/api/chat/__tests__/b21-b-chat-router.test.ts` | 18 | flag off byte-identical to HEAD; flag on: single for the simple and 3D bodies, the refusal with no provider call, the replacement DAG in one stream with the run's totals and no repeated warning ([B21 C] the sourcing specialist not run without a loaded component authority, its task's dissent recorded and shown to the follow-up turn), reason-only visible degradation, the build-multi hash, the fixture-runtime binding without a connection attempt; a provider outage makes no further call; the follow-up turn narrowed by construction; a failed coordinator turn runs no specialist; Stop mid-DAG; the envelope bounded and sanitized, a steered follow-up turn sealing nothing; a driver error never leaks; the specialist gateway built without the minter and the ports; [B21 C] case 16: per role, the loop deps' closed key set, no minter key, the role's own list enforced at the gateway, two gateway constructions whatever the roles and the bare one handed to the scheduler by identity; case 17: all three specialists with the component authority loaded (revision 7) |
+| `app/lib/agent/orchestration/__tests__/b21-b-page.test.ts` | 8 | this page, the cited lines of the new modules current; [B21 C] case 8: the run shapes stated here equal the route suite's pins |
+| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 6 | A's gate over the five modules, with B's two probes; [B21 C] six modules, case 6 (role-tools.ts) |
 
 Test-first: every B case failed before the code — the four B suites at import (`Cannot find module '../router'`,
 `'@/app/lib/agent/orchestration/router'`, `'@/app/api/chat/orchestration-runtime'`) and the gate's cases 1, 3 and 5 on the absent
@@ -604,25 +621,25 @@ The anchor is what is checked (it occurs exactly once in its file). For the thre
 file) the line is the CURRENT line and page case 7 checks it; for every other file the line is as of the base for the reader and is
 never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lines in this increment: their cited lines are current too).
 
-| # | file | line as of 4b6d0e2 | within | anchor | what it shows |
+| # | file | line | within | anchor | what it shows |
 |---|---|---|---|---|---|
-| C1 | `app/lib/agent/orchestration/router.ts` | 120 | — | `export const ROUTER_RULES: readonly RouterRule[] = Object.freeze([` | the rule table as data |
-| C2 | `app/lib/agent/orchestration/router.ts` | 43 | — | `export const DAG_ROLE_LISTS = Object.freeze({` | the five role lists as data |
-| C3 | `app/lib/agent/orchestration/router.ts` | 53 | — | `export const TIER3_REFUSAL_SENTENCE = ` | the fixed refusal sentence |
-| C4 | `app/lib/agent/orchestration/router.ts` | 141 | — | `export function routeTaskComplexity(userMessage: string, facts: RouterFacts): RoutePlan {` | the router: first match wins |
-| C5 | `app/lib/agent/orchestration/router.ts` | 148 | — | `if (EXPLICIT_VERB.test(message)) return single("S-explicit");` | a direct Tier 0/1 command stays single before any DAG rule |
+| C1 | `app/lib/agent/orchestration/router.ts` | 146 | — | `export const ROUTER_RULES: readonly RouterRule[] = Object.freeze([` | the rule table as data |
+| C2 | `app/lib/agent/orchestration/router.ts` | 45 | — | `export const DAG_ROLE_LISTS = Object.freeze({` | the role lists as data ([B21 C] six: the full-circuit trim and its layout variant) |
+| C3 | `app/lib/agent/orchestration/router.ts` | 67 | — | `export const TIER3_REFUSAL_SENTENCE = ` | the fixed refusal sentence |
+| C4 | `app/lib/agent/orchestration/router.ts` | 168 | — | `export function routeTaskComplexity(userMessage: string, facts: RouterFacts): RoutePlan {` | the router: first match wins |
+| C5 | `app/lib/agent/orchestration/router.ts` | 175 | — | `if (EXPLICIT_VERB.test(message)) return single("S-explicit");` | a direct Tier 0/1 command stays single before any DAG rule |
 | C6 | `app/lib/engineering/permission-tiers.ts` | 36 | — | `export const TIER3_FAMILY_PATTERN = ` | the tiers' family pattern the Tier 3 rules are pinned to |
 | C7 | `app/lib/engineering/permission-tiers.ts` | 131 | — | `export const TIER1_EXECUTE_ROLES: readonly ProjectRole[] = Object.freeze(["pcb_editor", "project_admin"]);` | the roles that may recruit specialists |
 | C8 | `app/lib/project/composer-routing.ts` | 36 | — | `const EXECUTION_VERB = ` | the composer's explicit verbs the router mirrors |
 | C9 | `app/lib/project/composer-routing.ts` | 42 | — | `export const REPLACE_PART = ` | the composer's replacement pairing, exported for the router (B21-B) |
-| C10 | `app/lib/agent/orchestration/scheduler.ts` | 50 | — | `export const SPECIALIST_CAPS = Object.freeze({` | the caps as data |
-| C11 | `app/lib/agent/orchestration/scheduler.ts` | 176 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the derived, narrowed specialist context |
-| C12 | `app/lib/agent/orchestration/scheduler.ts` | 212 | — | `export function readOnlySpecialistGateway(` | the read-only narrowing |
-| C13 | `app/lib/agent/orchestration/scheduler.ts` | 373 | — | `const committed = history.filter((entry) => entry.taskId === task.taskId && entry.record.kind === "result").at(-1);` | resume: the last committed result of the task |
-| C14 | `app/lib/agent/orchestration/scheduler.ts` | 479 | — | `const retry = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;` | the retry rule |
-| C15 | `app/lib/agent/orchestration/scheduler.ts` | 364 | — | `const dagTimer = setTimeout(() => dagController.abort(), Math.max(0, dagDeadline + SPECIALIST_CAPS.minTaskMs - now()));` | the DAG's own timer |
-| C16 | `app/lib/agent/orchestration/scheduler.ts` | 276 | — | `export function parseSpecialistResult(finalText: string, role: SpecialistRole): ParsedResult {` | B: the final text as one JSON document |
-| C17 | `app/lib/agent/orchestration/scheduler.ts` | 152 | — | `export function dagOutputTokenCeiling(` | the reported token ceiling |
+| C10 | `app/lib/agent/orchestration/scheduler.ts` | 57 | — | `export const SPECIALIST_CAPS = Object.freeze({` | the caps as data |
+| C11 | `app/lib/agent/orchestration/scheduler.ts` | 194 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the derived, narrowed specialist context |
+| C12 | `app/lib/agent/orchestration/scheduler.ts` | 290 | — | `export function readOnlySpecialistGateway(` | the read-only narrowing |
+| C13 | `app/lib/agent/orchestration/scheduler.ts` | 470 | — | `const committed = history.filter((entry) => entry.taskId === task.taskId && entry.record.kind === "result").at(-1);` | resume: the last committed result of the task |
+| C14 | `app/lib/agent/orchestration/scheduler.ts` | 590 | — | `const retry = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;` | the retry rule |
+| C15 | `app/lib/agent/orchestration/scheduler.ts` | 461 | — | `const dagTimer = setTimeout(() => dagController.abort(), Math.max(0, dagDeadline + SPECIALIST_CAPS.minTaskMs - now()));` | the DAG's own timer |
+| C16 | `app/lib/agent/orchestration/scheduler.ts` | 360 | — | `export function parseSpecialistResult(finalText: string, role: SpecialistRole): ParsedResult {` | B: the final text as one JSON document |
+| C17 | `app/lib/agent/orchestration/scheduler.ts` | 167 | — | `export function dagOutputTokenCeiling(` | the reported token ceiling |
 | C18 | `app/api/chat/orchestration-runtime.ts` | 39 | — | `export const ORCHESTRATION_ENABLED_ENV = "SIRKIT_ORCHESTRATION_ENABLED";` | the flag |
 | C19 | `app/api/chat/orchestration-runtime.ts` | 50 | — | `const productionStoreFactory: StoreFactory = () => new DurableOrchestrationRunStore(getDurableWorkflowRepository());` | the binding A deferred |
 | C20 | `app/api/chat/orchestration-runtime.ts` | 132 | — | `export function emitRefusedRun(` | the refused run with no provider call |
@@ -640,15 +657,15 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C32 | `app/lib/llm/errors.ts` | 151 | — | `export function isRetryableReason(reason: LLMProviderFailureReason): boolean {` | the classifier's retryable set |
 | C33 | `app/lib/agent/contracts.ts` | 185 | — | `runDeadlineMs: 120_000,` | the coordinator's 120 s per turn |
 | C34 | `app/lib/engineering/explicit-request.ts` | 35 | — | `const MOVE_PATTERN = ` | the explicit-request grammar the S-explicit rule mirrors |
-| C35 | `app/lib/agent/orchestration/router.ts` | 22 | — | `import { REPLACE_PART } from "../../project/composer-routing";` | the replacement rule IS the composer's pairing |
-| C36 | `app/lib/agent/orchestration/router.ts` | 93 | — | `const GEOMETRY_ASK = ` | a geometry, annotation or size ask is not a circuit |
-| C37 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {` | the read-only registry view: the advertised set is the recorded set |
-| C38 | `app/lib/agent/orchestration/scheduler.ts` | 225 | — | `export function meteredAdapter(` | the per-attempt meter on the adapter |
-| C39 | `app/lib/agent/orchestration/scheduler.ts` | 158 | — | `export function withdrawAuthority(context: AgentRunContext): AgentRunContext {` | the authority withdrawn (specialists and the follow-up turn) |
-| C40 | `app/lib/agent/orchestration/scheduler.ts` | 377 | — | `if (committedScopeDigest === currentScopeDigest) {` | a replay only for the same scope and revision; otherwise `stale` |
-| C41 | `app/lib/agent/orchestration/scheduler.ts` | 474 | — | `if (failure === "cancelled") stop = "cancelled";` | only a cancellation stops the DAG; a deadline is that task's |
-| C42 | `app/lib/agent/orchestration/scheduler.ts` | 307 | — | `const detailOf = (error: unknown): string => renderUnknownError(error, MAX_STORE_DETAIL_CHARS);` | a store failure's detail redacted and bounded |
-| C43 | `app/lib/agent/orchestration/scheduler.ts` | 434 | — | `if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;` | a specialist's refused tool call becomes a bounded warning line |
+| C35 | `app/lib/agent/orchestration/router.ts` | 23 | — | `import { REPLACE_PART } from "../../project/composer-routing";` | the replacement rule IS the composer's pairing |
+| C36 | `app/lib/agent/orchestration/router.ts` | 115 | — | `const GEOMETRY_ASK = ` | a geometry, annotation or size ask is not a circuit |
+| C37 | `app/lib/agent/orchestration/scheduler.ts` | 267 | — | `export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {` | the read-only registry view: the advertised set is the recorded set |
+| C38 | `app/lib/agent/orchestration/scheduler.ts` | 309 | — | `export function meteredAdapter(` | the per-attempt meter on the adapter |
+| C39 | `app/lib/agent/orchestration/scheduler.ts` | 173 | — | `export function withdrawAuthority(context: AgentRunContext): AgentRunContext {` | the authority withdrawn for the follow-up turn ([B21 C] a specialist's context is built field by field, `deriveSpecialistContext`) |
+| C40 | `app/lib/agent/orchestration/scheduler.ts` | 475 | — | `if (committedScopeDigest === currentScopeDigest) {` | a replay only for the same scope and revision; otherwise `stale` |
+| C41 | `app/lib/agent/orchestration/scheduler.ts` | 585 | — | `if (failure === "cancelled") stop = "cancelled";` | only a cancellation stops the DAG; a deadline is that task's |
+| C42 | `app/lib/agent/orchestration/scheduler.ts` | 391 | — | `const detailOf = (error: unknown): string => renderUnknownError(error, MAX_STORE_DETAIL_CHARS);` | a store failure's detail redacted and bounded |
+| C43 | `app/lib/agent/orchestration/scheduler.ts` | 545 | — | `if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;` | a specialist's refused tool call becomes a bounded warning line |
 | C44 | `app/api/chat/orchestration-runtime.ts` | 178 | — | `export function followUpDeps(deps: AgentLoopDeps, specialistGateway: AgentToolInvocationGateway): AgentLoopDeps {` | the follow-up turn narrowed by construction |
 | C45 | `app/api/chat/orchestration-runtime.ts` | 195 | — | `export function specialistResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind: "ran" }>): SpecialistResultsEnvelope {` | the envelope: bounded, sanitized, attributed, withholding |
 | C46 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry);` | the specialist gateway built with no option: no minter, no port, no prompt version |

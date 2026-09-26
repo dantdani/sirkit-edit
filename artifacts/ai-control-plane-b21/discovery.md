@@ -619,7 +619,7 @@ resources; `SpecialistRequest.allowedToolIds` has no counterpart in discovery, l
 (`tool-discovery.ts:246`) and `b20-b1-mcp-exposure.test.ts:441-449` pins `DISCOVERY_CHANNELS` and the 22 `EXCLUSION_REASONS` exactly (in
 CI), so a new channel value or reason is a pin move; no test today pins that an agent-channel allowlist can only narrow the run
 toolset. `assembleAgentRunContext` takes the three availability facts as caller flags (`context.ts:179-186`) — the only narrowing lever
-a caller has. Severity high. **CONFIRMED**. Closes: B21-C (needs OD-120, OD-121). Sources: loop D21-9, tools D21-40, D21-46.
+a caller has. Severity high. **CONFIRMED**. Closes: B21-C (needs OD-120, OD-121). Sources: loop D21-9, tools D21-40, D21-46. — CLOSED by B21-C: `role-tools.ts` (OD-120 as data, `b21-c-role-tools.test.ts`, 5 cases) and the post-discovery intersection in `buildRunToolset` after every gate (OD-121; `b21-c-least-privilege.test.ts`, 10 cases): every specialist is offered its row intersected with the reads its derived context admits, persisted and passed alike and enforced by the wrapper the scheduler builds; an invalid list approves nothing (`allowlist_invalid`); a role with no tool is not run and its task records the missing evidence (`role_has_no_tools`), the task ids coming from the plan's roles alone; `DISCOVERY_CHANNELS`, the exclusion reasons and the context digest untouched.
 
 **D21-8 — Nothing distinguishes a coordinator run from a specialist run; elevation is stopped only by where the minter is built, and
 no layer resolves the role of an approving actor.** Requirement: B21-C "The coordinator cannot elevate a specialist's permissions."
@@ -634,7 +634,7 @@ gate is satisfied by any `approvals[]` entry with `capability === "approve_propo
 session's `reviewProposal` (`collaboration.ts:40`). The agent path never reaches `execute` with approvals (it seals artifacts only), and a
 B21 orchestration must keep that true by construction (a specialist context can never claim grantability; no orchestration module
 imports the executor or constructs approvals). Severity high. **CONFIRMED** (the structural facts; the exploit path is INFERRED —
-no such caller exists). Closes: B21-C (needs OD-109). Sources: tools D21-41, authority D21-38.
+no such caller exists). Closes: B21-C (needs OD-109). Sources: tools D21-41, authority D21-38. — CLOSED by B21-C: `deriveSpecialistContext` built field by field, the specialist gateway's `role_context_elevated` refusal of eight claims before the gateway, the specialist deps closed and minter-free, no gateway constructed by the scheduler and the bare one handed to it by identity, the never-execution sweep re-run through the specialist gateway for all nine roles (`b21-c-no-elevation.test.ts`, 5 cases; route case 16); `verifyAgentContextIntegrity` unchanged. The approver's-role gap below the executor (`executor.ts:421-427`) is unreached by the agent path by construction (no orchestration module imports the executor or constructs an approval; B21-A's gate) and stays recorded.
 
 **D21-9 — Any new agent-exposed descriptor moves at least seven pins and the B04/B01 byte artifacts.** Requirement: standing
 constraint "no test … may be weakened"; B21-C roles "added only when inputs/outputs/tools are distinct and testable" (`:817`).
@@ -645,7 +645,7 @@ counts in `b09-1-boundary.test.ts:256`, `b09-2:76`, `b09-3:164`, `b11-1:597`, `b
 declaration count 12 (`b09-1-boundary.test.ts:286`); the byte-matched `tool-registry.csv`, `non-callable-coverage.csv`,
 `provider-schema-parity.json` and the B01 toolability matrix (`b04-tool-registry.test.ts:465-476`, gated by benchmark-quality, section 0);
 the MCP report would flag an unlisted read `not_mcp_reviewed` (reader `mcp-exposure.ts:62, :147`). Severity medium. **CONFIRMED**.
-Closes: B21-C (recorded as the pin-move rule; the safe plan adds no exposed tool). Source: tools D21-44; loop fact.
+Closes: B21-C (recorded as the pin-move rule; the safe plan adds no exposed tool). Source: tools D21-44; loop fact. — RECORDED by B21-C as the pin-move rule (`specialist-roles.md` section 5, C's own least-privilege pins named); C adds no descriptor.
 
 **D21-10 — No proposal-to-proposal comparison exists; the only comparator is transaction-vs-history in an in-memory session.**
 Requirement: B21-D (`:833-843`). Finding: `conflictForTransaction` intersects an incoming transaction's declared objectIds/netIds/domains
@@ -871,11 +871,11 @@ specialist" (`:823`); standing constraint "Tier 2 stays exact human-approved pro
 session admits editor `schematic` (`:114`), yet no schematic descriptor is a granted execution, the six reviewed rows are all pcb families
 (`granted-execution-families.ts` reader `:26-57`), mint/consume read only `base.pcb` (reader `mint.ts:134-135`; `consume.ts:127-132`), and
 OD-15 defers schematic execution (`OWNER_DECISIONS.md:21`). A schematic specialist can only produce the two sealed Tier 2 proposals.
-Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: tools D21-49.
+Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: tools D21-49. — RECORDED by B21-C as OD-123: reserved and unchanged; the schematic role receives the two sealed proposals and `schematic.inspect` only.
 
 **D21-32 — The durable-workflow production runtime reaches the OpenAI SDK.** Requirement: the B21-A import gate (no provider SDK in an orchestration module's closure); standing constraint OD-45 (no provider SDK outside the five reviewed modules' purpose). Finding: `app/lib/durable-workflow/runtime.ts` -> `server-repository.ts` -> `app/lib/db/schema.ts` -> `app/lib/embeddings.ts` -> `openai` (a schema constant `EMBEDDING_DIMENSIONS` pulls the SDK). Consequence: an orchestration module gated against provider SDKs cannot resolve the production repository itself; the store takes it by injection and B21-B's runtime file binds it. Severity low. **CONFIRMED** (gate case 3, injected probe, chain quoted). Closes: a follow-up outside B21 (move the constant to a dependency-free module); no owner decision needed. Source: B21-A.
 
-**D21-33 — The loop's own import closure reaches the fab presets.** `app/lib/agent/loop.ts -> app/lib/engineering/tool-bindings-readonly.ts -> app/lib/pcb/ai/snapshot.ts -> app/lib/pcb/fab/presets/index.ts` (measured 2026-09-26; the gate pins the invariant, not the hops), the RELEASE family of A's gate (no preset exemption). Consequence: an orchestration module may never import `runAgentLoop` / `buildRunToolset`; the scheduler takes both by injection from the composition root (`SchedulerDeps.runLoop` / `buildToolset`). Severity low. **CONFIRMED** (gate case 3's `evil-loop` probe). Closes: recorded; no owner decision needed. Source: B21-B. - **§10, B21-B amendment:** OD-107, OD-110, OD-122 applied as this page states and OD-108 recorded as a deviation; the full-circuit list (six specialists) versus the cap of four is an open owner decision under OD-107; the Tier 0 read-by-grammar clause of OD-110 is recorded, not built; the "order … by …" narrowing of the Tier 3 rule is the increment's, revertible; OD-81's matcher is not reused by the orchestration runtime (the B19-D closure gate, `b19-d-external-text-injection-route.test.ts` row 31, forbids `app/lib/mcp/foreign-tools.ts` in the chat route's closure — an attempt during the fix pass tripped it and was withdrawn, the ratchet unchanged); the adversarial review's 28 confirmed findings are fixed test-first (section 6 of the page).
+**D21-33 — The loop's own import closure reaches the fab presets.** `app/lib/agent/loop.ts -> app/lib/engineering/tool-bindings-readonly.ts -> app/lib/pcb/ai/snapshot.ts -> app/lib/pcb/fab/presets/index.ts` (measured 2026-09-26; the gate pins the invariant, not the hops), the RELEASE family of A's gate (no preset exemption). Consequence: an orchestration module may never import `runAgentLoop` / `buildRunToolset`; the scheduler takes both by injection from the composition root (`SchedulerDeps.runLoop` / `buildToolset`). Severity low. **CONFIRMED** (gate case 3's `evil-loop` probe). Closes: recorded; no owner decision needed. Source: B21-B.
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1201,3 +1201,23 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
   an attempt during the fix pass tripped it and was withdrawn, the ratchet unchanged).
 - **Section 8:** the lead's residual fixes (a failed follow-up turn reports the run's totals; trace warnings once and capped at 12
   orchestration lines; the stale dissent keyed by the resuming attempt; A's gate pins the invariant, not the count).
+
+### B21-C (recorded by the lead, 2026-09-26)
+
+- **Section 4:** D21-7 and D21-8 closed; D21-9 recorded as the pin-move rule (C adds no descriptor) and D21-31 recorded as OD-123
+  (the two schematic families reserved and unchanged). A records-hygiene correction: B's records run appended B's section-10 bullet
+  to the end of D21-33's paragraph (the clause parser stopped only at the next `D21-` bullet); the leaked text was removed and the
+  parser now stops at any bold bullet or heading.
+- **Section 6:** OD-109, OD-120, OD-121 applied and OD-123 recorded as `specialist-roles.md` states them; OD-107's open decision
+  resolved by the lead's fixed-priority trim (circuit-topology, component-sourcing-evidence, schematic, verification-critic; the PCB
+  specialist replaces the schematic one when a board exists and the message asks for layout). Open for the owner under OD-120: whether
+  the ten row entries C never offers (proposal tools, external reads, the history read) stay in their rows or the rows are cut to what
+  C can offer; nothing in C depends on the answer.
+- **Section 7, B21-C:** as built - the per-role allowlist as data with a reason per id; the post-discovery intersection in
+  `buildRunToolset` after every existing gate (narrows only; an invalid list approves nothing); a role with no tools not run and its
+  missing evidence recorded; `deriveSpecialistContext` built field by field; the specialist gateway refusing eight elevation claims
+  (`role_context_elevated`); the never-execution sweep re-run for all nine roles. One behaviour change: the sourcing specialist runs
+  only when at least one schematic component has a durable authority binding that loads (OD-109: its row is `component-authority.inspect`
+  alone), so the chat route's replacement flow runs two specialists without one.
+- **Section 8:** the lead's residual fixes (the full-circuit grammar requires the circuit kind to head the object, optionally followed
+  by a container noun; the stale-then-no-tools dissent offset is now proven by least-privilege case 8 part C).

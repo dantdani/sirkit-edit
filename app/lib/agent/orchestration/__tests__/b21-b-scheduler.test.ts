@@ -22,12 +22,15 @@ import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { createAgentToolGateway, verifyAgentContextIntegrity } from "@/app/lib/agent/gateway";
 import { buildRunToolset, runAgentLoop } from "@/app/lib/agent/loop";
 import { MAX_OUTPUT_TOKENS } from "@/app/lib/agent/adapters";
-import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunEvent, type AgentStep, type AgentToolResult, type ProviderAgentAdapter, type ProviderToolDeclaration } from "@/app/lib/agent/contracts";
-import { composition, runContext } from "@/app/lib/engineering/__tests__/b18c-harness";
+import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentStep, type AgentToolResult, type ProviderAgentAdapter, type ProviderToolDeclaration } from "@/app/lib/agent/contracts";
+import { assembleAgentRunContext } from "@/app/lib/agent/context";
+import { DEFAULT_PRESET_ID } from "@/app/lib/pcb/drc/presets";
+import { PRINCIPAL, SCOPE as HARNESS_SCOPE, composition, headOf, type Composed } from "@/app/lib/engineering/__tests__/b18c-harness";
 import { validateSpecialistRequest, validateSpecialistResult, type SpecialistRole } from "../contracts";
 import { DurableOrchestrationRunStore, type OrchestrationAppendRequest, type OrchestrationRunEntry, type OrchestrationRunScope, type OrchestrationRunStore } from "../store";
-import { DAG_ROLE_LISTS } from "../router";
+import { DAG_ROLE_LISTS, FULL_CIRCUIT_RUNBOOK_ROLES } from "../router";
 import { SPECIALIST_CAPS, SPECIALIST_REFUSAL_STATUS, dagOutputTokenCeiling, deriveSpecialistContext, planTasks, readOnlySpecialistGateway, readOnlyToolRegistry, runSpecialistDag, specialistAllowedToolIds, specialistRunId, type CoordinatorRun, type SchedulerDeps } from "../scheduler";
+import { ROLE_SCHEMATIC, loadedAuthority } from "./_role-fixtures";
 
 const registry = sirkitToolRegistry();
 /** the specialist gateway as the composition root builds it: NO minter, NO port, NO prompt version - nothing but reads can succeed in it */
@@ -120,10 +123,29 @@ function minterDouble(): AgentExecutionGrantMinter & { calls: string[] } {
   };
 }
 
+/** [B21 C] pin move: the harness's run context PLUS the server-owned component authority - the one thing the sourcing specialist
+ *  can read under OD-109 (its other reviewed reads need the ports a specialist never holds). Without it the sourcing role has no
+ *  tools and B21-C does not run it (`role_has_no_tools`, b21-c-least-privilege case 4); with it, B's DAG proofs keep their three
+ *  specialists. [B21 C fix] (review: an EMPTY record set is a state the route's loader never produces) the authority is what
+ *  production loads for a schematic whose U1 holds one durable binding: the schematic joins the context and the record is U1's,
+ *  loaded by the route's own loader. Still assembled by the production assembler from the live board, as `runContext` does. */
+const RIG_AUTHORITY = await loadedAuthority(HARNESS_SCOPE);
+function rigContext(c: Composed): AgentRunContext {
+  const head = headOf(c);
+  const assembly = assembleAgentRunContext({
+    ...HARNESS_SCOPE, board: JSON.parse(JSON.stringify(c.history.committedPresent)), schematic: ROLE_SCHEMATIC,
+    pcbProposalBasis: { historyHeadSequence: head.headSequence, historyHeadLabel: null, lineageId: head.lineageId, activeDrcPresetId: DEFAULT_PRESET_ID },
+    verifiedActor: { principalId: PRINCIPAL.principalId, actorRole: "pcb_editor", membershipRevision: PRINCIPAL.membershipRevision, authMethod: "local_dev" },
+    executionGrantsAvailable: true, autonomy: c.autonomy, componentAuthority: RIG_AUTHORITY,
+  });
+  if (!assembly.ok) throw new Error(assembly.reason);
+  return assembly.context;
+}
+
 interface Rig { store: OrchestrationRunStore; repository: InMemoryDurableWorkflowRepository; adapter: SpecialistAdapter; events: AgentRunEvent[]; minter: ReturnType<typeof minterDouble>; deps: SchedulerDeps; coordinator: CoordinatorRun; scope: OrchestrationRunScope; controller: AbortController }
 async function rig(script: Record<string, Behaviour>, over: { runId?: string; startedAt?: number; store?: OrchestrationRunStore; repository?: InMemoryDurableWorkflowRepository; adapter?: SpecialistAdapter; onStart?: (role: string) => Promise<void> | void } = {}): Promise<Rig> {
   const c = await composition("proposal_only");
-  const context = runContext(c);
+  const context = rigContext(c);
   const repository = over.repository ?? new InMemoryDurableWorkflowRepository();
   const store = over.store ?? new DurableOrchestrationRunStore(repository);
   const adapter = over.adapter ?? new SpecialistAdapter(script, over.onStart);
@@ -182,7 +204,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     const r = await rig({});
     const five = ["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] as const satisfies readonly SpecialistRole[];
     expect(await runSpecialistDag({ roles: five }, r.coordinator, r.deps)).toEqual({ kind: "refused", reason: "plan_exceeds_specialist_cap", detail: expect.stringContaining("5") });
-    expect(await runSpecialistDag({ roles: DAG_ROLE_LISTS["full-circuit-creation"] }, r.coordinator, r.deps)).toMatchObject({ kind: "refused", reason: "plan_exceeds_specialist_cap" });
+    // [B21 C] pin move: the router's full-circuit list is trimmed to four (OD-107 resolved); the runbook's six stay refused by the cap
+    expect(await runSpecialistDag({ roles: FULL_CIRCUIT_RUNBOOK_ROLES }, r.coordinator, r.deps)).toMatchObject({ kind: "refused", reason: "plan_exceeds_specialist_cap" });
     expect(await runSpecialistDag({ roles: ["coordinator"] }, r.coordinator, r.deps)).toMatchObject({ kind: "refused", reason: "plan_empty" });
     expect(r.adapter.starts).toEqual([]);
     expect(await r.store.history(r.scope)).toEqual([]);
@@ -219,7 +242,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     }
     // the ids the scheduler computes are exactly the reads the derived context advertises through the read-only registry
     const derived = deriveSpecialistContext(r.deps.context);
-    expect(specialistAllowedToolIds(registry, derived, buildRunToolset)).toEqual([...(requests[0]!.record as { document: { allowedToolIds: readonly string[] } }).document.allowedToolIds]);
+    // [B21 C] pin move: the set is per role now (the role's reviewed list intersected with the admitted reads); request 0 is the circuit specialist's
+    expect(specialistAllowedToolIds(registry, derived, buildRunToolset, "circuit-topology")).toEqual([...(requests[0]!.record as { document: { allowedToolIds: readonly string[] } }).document.allowedToolIds]);
     expect(readOnlyToolRegistry(registry).list().map((descriptor) => descriptor.operationClass)).toEqual(readOnlyToolRegistry(registry).list().map(() => "read"));
     expect(readOnlyToolRegistry(registry)).toBe(readOnlyToolRegistry(registry)); // built once per registry
     // and every specialist run advertised reads only: no execution, no view control and no proposal (the layout proposals included)
@@ -231,7 +255,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
   });
 
   it("4. the derived specialist context passes the gateway's integrity check with its three availability facts false, no head mark, no PCB basis and no view, while the coordinator's context is untouched; the read-only narrowing refuses a proposal call as role_not_permitted_tool (defense in depth: with the read-only registry no proposal is even advertised) and passes a read through to the real gateway", async () => {
-    const r = await rig({ "pcb-placement-routing": { kind: "call-then-result", toolId: "sirkit.pcb.board-inspect" }, "verification-critic": { kind: "call-then-result", toolId: "sirkit.pcb.board-inspect" } });
+    // [B21 C] pin move: the verification critic reads within its own row (OD-120: board-inspect is not the critic's tool)
+    const r = await rig({ "pcb-placement-routing": { kind: "call-then-result", toolId: "sirkit.pcb.board-inspect" }, "verification-critic": { kind: "call-then-result", toolId: "sirkit.pcb.revision-inspect" } });
     const coordinator = r.deps.context;
     expect(coordinator.executionGrantsAvailable).toBe(true);
     const derived = deriveSpecialistContext(coordinator);
@@ -261,9 +286,9 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     const placementStart = r.adapter.starts.find((start) => start.role === "pcb-placement-routing")!;
     expect(placementStart.tools).not.toContain("sirkit.placement.propose");
     expect(placementStart.tools).toContain("sirkit.pcb.board-inspect");
-    for (const role of ["pcb-placement-routing", "verification-critic"]) {
+    for (const [role, tool] of [["pcb-placement-routing", "sirkit.pcb.board-inspect"], ["verification-critic", "sirkit.pcb.revision-inspect"]] as const) {
       const inspect = r.adapter.continueInputs.find((input) => input.role === role)!;
-      expect(JSON.parse(inspect.results[0]!.outputText), role).toMatchObject({ ok: true, tool: "sirkit.pcb.board-inspect" });
+      expect(JSON.parse(inspect.results[0]!.outputText), role).toMatchObject({ ok: true, tool });
     }
     expect(outcome.tasks.map((task) => task.result?.proposedActions.length)).toEqual([0, 0]);
     expect(outcome.tasks.map((task) => task.toolCalls)).toEqual([1, 1]);
@@ -353,7 +378,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(retried.stop).toBe("completed");
     expect(retried.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "escalated"], ["circuit-topology", 1, "accepted"], ["component-sourcing-evidence", 0, "accepted"], ["verification-critic", 0, "accepted"]]);
     expect(limited.adapter.count("circuit-topology")).toBe(2);
-    const steps = await rig({ "circuit-topology": { kind: "call-then-result", toolId: "sirkit.pcb.board-inspect" } });
+    // [B21 C] pin move: the circuit specialist calls a read of its own row (OD-120: board-inspect is not its tool)
+    const steps = await rig({ "circuit-topology": { kind: "call-then-result", toolId: "sirkit.validation.connectivity-verify" } });
     const exhausted = await runSpecialistDag({ roles: REPLACEMENT }, steps.coordinator, { ...steps.deps, budget: { ...DEFAULT_AGENT_BUDGET, maxModelSteps: 1 } });
     expect(exhausted.kind).toBe("ran");
     if (exhausted.kind !== "ran") return;
@@ -494,7 +520,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
   });
 
   it("14. every attempt is measured and attributed: steps, tool calls and usage of a FAILED attempt count too (the meter sits on the adapter, not on run_completed), each outcome carries its provider and model, the DAG's used tokens sum every attempt, and a specialist's refused tool call reaches the coordinator's stream as ONE bounded warning line", async () => {
-    const r = await rig({ "circuit-topology": { kind: "call-then-throw", toolId: "sirkit.pcb.board-inspect", reason: "network" }, "component-sourcing-evidence": { kind: "call-unknown" } });
+    // [B21 C] pin move: the circuit specialist calls a read of its own row (OD-120: board-inspect is not its tool)
+    const r = await rig({ "circuit-topology": { kind: "call-then-throw", toolId: "sirkit.validation.connectivity-verify", reason: "network" }, "component-sourcing-evidence": { kind: "call-unknown" } });
     const outcome = await runSpecialistDag({ roles: REPLACEMENT }, r.coordinator, r.deps);
     expect(outcome.kind).toBe("ran");
     if (outcome.kind !== "ran") return;

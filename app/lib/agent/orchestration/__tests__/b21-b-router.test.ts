@@ -11,7 +11,8 @@ import { describe, expect, it } from "vitest";
 import { TIER1_EXECUTE_ROLES, TIER3_FAMILY_PATTERN } from "@/app/lib/engineering/permission-tiers";
 import { routeComposerMessage } from "@/app/lib/project/composer-routing";
 import { SPECIALIST_ROLES } from "../contracts";
-import { DAG_ROLE_LISTS, ROUTER_RULES, TIER3_FAMILIES, TIER3_REFUSAL_SENTENCE, normalizeRouterMessage, routeTaskComplexity, type RouterFacts } from "../router";
+import { DAG_ROLE_LISTS, FULL_CIRCUIT_RUNBOOK_ROLES, FULL_CIRCUIT_TRIM, ROUTER_RULES, TIER3_FAMILIES, TIER3_REFUSAL_SENTENCE, normalizeRouterMessage, routeTaskComplexity, type RouterFacts } from "../router";
+import { SPECIALIST_CAPS } from "../scheduler";
 
 const ROUTER = "app/lib/agent/orchestration/router.ts";
 const FACTS: RouterFacts = Object.freeze({ hasSchematic: true, hasBoard: true, actorRole: "pcb_editor", autonomyMode: "proposal_only", selectionCount: 0 });
@@ -78,7 +79,8 @@ describe("[B21 B] the task-complexity router", () => {
   it("3. the four complex shapes of runbook B21-B :805-811, three phrasings each, with the role lists pinned as data: component replacement, full circuit creation, manufacturing readiness, a bounded PCB proposal, a bounded schematic proposal", () => {
     for (const text of REPLACEMENT_PHRASINGS) expect(route(text), text).toEqual({ kind: "dag", rule: "D-component-replacement", roles: ["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic"] });
     for (const text of FULL_CIRCUIT_PHRASINGS) {
-      expect(route(text), text).toEqual({ kind: "dag", rule: "D-full-circuit-creation", roles: ["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "pcb-placement-routing", "verification-critic"] });
+      // [B21 C] pin move (OD-107 resolved by the lead): the runbook's six specialists are trimmed to the cap of four by a fixed priority (case 8)
+      expect(route(text), text).toEqual({ kind: "dag", rule: "D-full-circuit-creation", roles: ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] });
       expect(routeComposerMessage(text, true).route, text).toBe("generate");
     }
     for (const text of READINESS_PHRASINGS) expect(route(text), text).toEqual({ kind: "dag", rule: "D-manufacturing-readiness", roles: ["coordinator", "manufacturing-readiness-reviewer"] });
@@ -88,7 +90,9 @@ describe("[B21 B] the task-complexity router", () => {
       "bounded-schematic-proposal": ["coordinator", "schematic"],
       "bounded-pcb-proposal": ["coordinator", "pcb-placement-routing"],
       "component-replacement": ["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic"],
-      "full-circuit-creation": ["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "pcb-placement-routing", "verification-critic"],
+      // [B21 C] pin move: the trimmed full-circuit list and its layout variant (case 8); the runbook's six stay as data in FULL_CIRCUIT_RUNBOOK_ROLES
+      "full-circuit-creation": ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"],
+      "full-circuit-layout": ["coordinator", "circuit-topology", "component-sourcing-evidence", "pcb-placement-routing", "verification-critic"],
       "manufacturing-readiness": ["coordinator", "manufacturing-readiness-reviewer"],
     });
     for (const roles of Object.values(DAG_ROLE_LISTS)) {
@@ -164,5 +168,67 @@ describe("[B21 B] the task-complexity router", () => {
     expect(dagRules).toHaveLength(Object.keys(DAG_ROLE_LISTS).length);
     for (const roles of Object.values(DAG_ROLE_LISTS)) expect(dagRules.filter((rule) => JSON.stringify(rule.roles) === JSON.stringify(roles))).toHaveLength(1);
     expect(normalizeRouterMessage("  Please   RELEASE\tthe board!  ")).toBe("please release the board");
+  });
+
+  it("8. [B21 C] the full-circuit list is TRIMMED to the cap of four by a fixed priority (OD-107, resolved by the lead; runbook :810 \"as needed\"): the runbook's six stay as data; the requirements analysis folds into the coordinator's own turn; the PCB specialist runs only with a board and then replaces the schematic one when the message asks for layout; no DAG list exceeds SPECIALIST_CAPS.maxSpecialists, so plan_exceeds_specialist_cap stays a guard that a routed plan never trips", () => {
+    expect(FULL_CIRCUIT_RUNBOOK_ROLES).toEqual(["coordinator", "requirements-analyst", "circuit-topology", "component-sourcing-evidence", "schematic", "pcb-placement-routing", "verification-critic"]);
+    expect(FULL_CIRCUIT_RUNBOOK_ROLES.length - 1).toBeGreaterThan(SPECIALIST_CAPS.maxSpecialists);
+    expect(FULL_CIRCUIT_TRIM).toEqual({ priority: ["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"], foldedIntoCoordinator: ["requirements-analyst"], layoutSwap: { replaces: "schematic", by: "pcb-placement-routing" } });
+    expect(DAG_ROLE_LISTS["full-circuit-creation"]).toEqual(["coordinator", ...FULL_CIRCUIT_TRIM.priority]);
+    expect(DAG_ROLE_LISTS["full-circuit-layout"]).toEqual(["coordinator", ...FULL_CIRCUIT_TRIM.priority.map((role) => (role === FULL_CIRCUIT_TRIM.layoutSwap.replaces ? FULL_CIRCUIT_TRIM.layoutSwap.by : role))]);
+    for (const shape of ["full-circuit-creation", "full-circuit-layout"] as const) {
+      for (const role of DAG_ROLE_LISTS[shape]) expect(FULL_CIRCUIT_RUNBOOK_ROLES, `${shape}: ${role}`).toContain(role);
+      expect(DAG_ROLE_LISTS[shape], shape).not.toContain("requirements-analyst");
+    }
+    for (const roles of Object.values(DAG_ROLE_LISTS)) expect(roles.length - 1, roles.join(",")).toBeLessThanOrEqual(SPECIALIST_CAPS.maxSpecialists);
+    // the layout variant: a creation ask that names a layout noun, with a board; without a board the schematic list stays
+    const LAYOUT_ASKS = ["Design a 555 timer LED blinker with a compact placement.", "Create a USB-powered temperature logger circuit and its layout.", "Build me a 5V buck converter with the routing done."];
+    for (const text of LAYOUT_ASKS) {
+      expect(route(text), text).toEqual({ kind: "dag", rule: "D-full-circuit-layout", roles: DAG_ROLE_LISTS["full-circuit-layout"] });
+      expect(route(text, { hasBoard: false }), text).toEqual({ kind: "dag", rule: "D-full-circuit-creation", roles: DAG_ROLE_LISTS["full-circuit-creation"] });
+    }
+    for (const text of FULL_CIRCUIT_PHRASINGS) expect(route(text, { hasBoard: false }), text).toEqual({ kind: "dag", rule: "D-full-circuit-creation", roles: DAG_ROLE_LISTS["full-circuit-creation"] });
+    // the rule table carries both, in the order the router applies them (the layout variant first), at runbook :810
+    const ids = ROUTER_RULES.map((rule) => rule.id);
+    expect(ids.indexOf("D-full-circuit-layout")).toBe(ids.indexOf("D-full-circuit-creation") - 1);
+    for (const id of ["D-full-circuit-layout", "D-full-circuit-creation"]) expect(ROUTER_RULES.find((rule) => rule.id === id)!.runbook, id).toBe(":810");
+    // every routed plan fits the cap: no phrasing the suite routes to a DAG yields more than four specialists
+    const inputs = [...REPLACEMENT_PHRASINGS, ...FULL_CIRCUIT_PHRASINGS, ...LAYOUT_ASKS, ...READINESS_PHRASINGS, ...PCB_PHRASINGS, ...SCHEMATIC_PHRASINGS];
+    for (const text of inputs) { const plan = route(text); if (plan.kind === "dag") expect(plan.roles.length - 1, text).toBeLessThanOrEqual(SPECIALIST_CAPS.maxSpecialists); }
+  });
+
+  it("9. [B21 C fix] a full circuit is a NEW circuit named from words - the head verb, an indefinite object (a / an) and a circuit-kind noun inside that object (review: any make / build / create / draw edit recruited four paid specialists): an ordinary edit of something that exists recruits no full-circuit DAG (a layout-quality ask reaches the bounded PCB rule, anything else stays single); the layout variant needs its OWN layout ask (with / and a placement, layout, routing or footprints) - a selection word or a circuit-sense 'routing' never swaps the schematic specialist out", () => {
+    const BOUNDED_PCB = { kind: "dag", rule: "D-bounded-pcb-proposal", roles: DAG_ROLE_LISTS["bounded-pcb-proposal"] };
+    const CREATION = { kind: "dag", rule: "D-full-circuit-creation", roles: DAG_ROLE_LISTS["full-circuit-creation"] };
+    // ordinary edits: a layout-quality ask is the bounded PCB proposal (:807); the rest is one coordinator turn
+    expect(route("Make the placement more compact.")).toEqual(BOUNDED_PCB);
+    expect(route("Make the routing tidier.")).toEqual(BOUNDED_PCB);
+    expect(route("Make a compact placement for the regulator circuit.")).toEqual(BOUNDED_PCB);
+    expect(route("Make the placement more compact.", { hasBoard: false })).toEqual({ kind: "single", rule: "S-default" });
+    for (const text of ["Make the LED brighter.", "Build the BOM.", "Make U1 run cooler.", "Draw the power supply section again.", "Create the netlist.", "Make it faster.", "Build it."]) expect(route(text), text).toEqual({ kind: "single", rule: "S-default" });
+    // what the composer sends to `generate` is not by itself a full circuit here: the router needs the circuit named
+    expect(routeComposerMessage("Make the LED brighter.", true).route).toBe("generate");
+    // a new circuit named from words stays a full circuit whatever else the message says
+    expect(route("Generate a schematic for the selected section.", { selectionCount: 2 })).toEqual(CREATION);
+    expect(route("Generate a schematic for the selected section.")).toEqual(CREATION);
+    expect(route("Design an audio signal routing switch circuit.")).toEqual(CREATION);
+    expect(route("Create a filter for the selected footprints.", { selectionCount: 3 })).toEqual(CREATION);
+    expect(route("Please design me an LED driver.")).toEqual(CREATION);
+    expect(route("Design an LED blinker.")).toEqual(CREATION);
+    // [B21 C lead] the circuit kind must be the object's HEAD noun: a circuit-kind word that only MODIFIES another noun (a
+    // schematic symbol, a sensor footprint, a timer part) or sits inside a compound word (counter-clockwise) names no circuit
+    for (const text of ["Generate a schematic symbol for U1.", "Create a sensor footprint.", "Make a driver symbol.", "Create a timer part.", "Make a counter-clockwise turn of U1."]) expect(route(text), text).toEqual({ kind: "single", rule: "S-default" });
+    // ...while a container noun after the circuit kind keeps it the head ("a buck converter board", "an amplifier module")
+    for (const text of ["Build me a 5V buck converter board.", "Design an audio amplifier module.", "Create a sensor interface board."]) expect(route(text), text).toEqual(CREATION);
+    // the layout variant only on its own ask, and only with a board
+    expect(route("Design an LED flasher and its placement.")).toEqual({ kind: "dag", rule: "D-full-circuit-layout", roles: DAG_ROLE_LISTS["full-circuit-layout"] });
+    expect(route("Design an LED flasher and its placement.", { hasBoard: false })).toEqual(CREATION);
+    // the grammar's recorded limits (specialist-roles.md section 4): it fails toward one coordinator turn for a creation ask it does
+    // not recognise, and a circuit-kind word used as a function after "with" still selects the layout variant
+    expect(route("Design the power supply for this board.")).toEqual({ kind: "single", rule: "S-default" });
+    expect(route("Build a 12 V to 5 V buck converter.")).toEqual({ kind: "single", rule: "S-default" });
+    expect(route("Design a mixer with signal routing.").rule).toBe("D-full-circuit-layout");
+    // the full-circuit rule never shadows the rules after it for a message that names no new circuit
+    for (const text of [...READINESS_PHRASINGS, ...PCB_PHRASINGS, ...SCHEMATIC_PHRASINGS]) expect(route(text).rule, text).not.toMatch(/^D-full-circuit/);
   });
 });
