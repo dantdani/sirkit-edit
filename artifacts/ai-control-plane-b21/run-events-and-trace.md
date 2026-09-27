@@ -431,8 +431,9 @@ under LB-9`.
 
 ### Discovery closure clauses (`discovery.md` §4, appended to each defect; §10 gains a B21-E2 amendment)
 
-- **D21-22 (no event for a plan, a specialist, a per-specialist provider/model, a partial result, a budget remaining or a degraded
-  mode)** — CLOSED by B21-E2 (OD-126, OD-127), item by item: a plan is the `plan` event; a specialist is its `specialist_started` and
+- **D21-22 — Every vocabulary a DAG would need is closed and pinned: no event for a plan, a specialist, a per-specialist
+  provider/model, a partial result, a budget remaining or a degraded mode; provider streaming has no production caller.** — CLOSED
+  by B21-E2 (OD-126, OD-127), item by item: a plan is the `plan` event; a specialist is its `specialist_started` and
   `specialist_finished` events (a withheld re-run closed by one final `specialist_finished`); the per-specialist provider/model is on
   every `specialist_started` and every `specialist_finished` of an attempt that ran (null on a replayed or stale result, whose provenance
   the record does not keep - the merge's rule); a partial result is the `partial_result` event (each planned task counted once, a result

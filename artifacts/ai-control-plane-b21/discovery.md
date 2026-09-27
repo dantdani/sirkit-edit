@@ -57,7 +57,10 @@ Reader disagreements and UNKNOWNs resolved by reading the code:
   adds no deadline. The loop's `runDeadlineMs` (120 s) is the only wall-time cap of a chat run. **CONFIRMED**
 - **Unknown NDJSON events** (loop reader UNKNOWN). `reduceRunView` returns the state unchanged on any unknown `type`
   (`app/lib/project/chat-run-view.ts:117-118, :147-148`) and the page's switch has an empty default (`app/page.tsx:4692-4693`), so
-  additive events under protocol v1 change nothing in older reducers. **CONFIRMED**
+  additive events under protocol v1 change nothing in older reducers. **CONFIRMED** [B21 E2, 2026-09-27] Since B21-E2 the reducer's `default` (`chat-run-view.ts:147-148`) hands
+  the five orchestration events to its appended fold and the page's `default` (`page.tsx:4692-4693`) renders their run-log line - no
+  longer empty (`run-events-and-trace.md` C38, C43, C63); every other unknown type still changes nothing, and an older page loses the
+  lines the five carry (OD-126's owner question).
 - **The approver's role** (authority reader UNKNOWN for D21-8). The executor's destructive-tier gate checks only that some entry of
   `approvals[]` has `capability === "approve_proposal"` and an `actorId` different from the requester (`app/lib/engineering/executor.ts:422-423`);
   the transaction service authorizes only `transaction.actor` (`transaction-service.ts:95`) and clones `approvals` (`:53`); the only
