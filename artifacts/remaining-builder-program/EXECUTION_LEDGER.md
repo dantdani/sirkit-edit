@@ -3121,3 +3121,48 @@ _(discovery, reproduction and results appended below as they are observed)_
 - Lead decision on D21-41 / OD-112 (discovery section 10, B21-E2): the per-task trace run id `<runId>:<n>-<role>` and a block carrying
   the task's index and role, never the literal task id - B21-E2 (2/2) applies the held trace block that way before B21-E3.
 - Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 39 files / 352 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 362 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; `app/lib/project/__tests__` and `app/components/chat` in full 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104; `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file but `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors, on the same lines as at HEAD (E2 changed page.tsx in place on three other lines).
+
+### B21-E2 (2/2) — the trace block: one trace document per specialist task (2026-09-27 local; increment workflow + lead; this commit)
+
+- Held work: the E2 run-1 trace-block files verified against `held.sha256` (eight OK) and applied adapted to the lead's reading of OD-112.
+- Test-first: the two new suites and the route suite's two new cases against HEAD 41330e6 with only the tests
+  (`e2b-failing-first-tests-only.log`: three files on the missing module); with the module but the store and runtime at HEAD
+  (`e2b-failing-first-module-no-wiring.log`: 7 of 20 failing on the missing wiring, 13 green by design); then green; the moved pins
+  failing first on their old values (`e2b-green-2-with-A-pins.log`, `b21-all-1.log`); the page suite against the page without E2b's
+  sections (`e2b-page-failing-first.log`: 6 of 7).
+- Code: `trace-attribution.ts` (new: the task identity and its round trip, the closed block and its one rule, the validator, the cascade,
+  the durable trace record, the book), `store.ts` (every durable record binds its trace store on its own repository; the constructor in
+  place, the rest appended), `orchestration-runtime.ts` (the book bound, the injected loop wrapped, every document appended before
+  anything is handed on, an unrecorded document one visible line - four lines in place, one the redaction import the review's fix
+  widened, the helpers appended). No route, descriptor,
+  request key, run-event type, UI or generator input changed; census 165/162/3/0; the nine scanned files and `redaction.ts`
+  byte-identical to HEAD.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5 (trace-attribution.ts in the entry set, 10 -> 11); A's store case 12 (its
+  import list + `./trace-attribution`); the E2 page's case 1 (section 3's heading names the stop and the application); the E2 page's
+  route-suite row (7 -> 10).
+- Review (E2b fix): the adversarial review's 13 confirmed findings answered test-first (`b21/e2b-fix/red-1.log`: 5 of 26 failing on
+  their findings; six deliberate breakages each caught and restored by sha256; `green-1.log` 29 of 29): an attempt on another provider
+  opens the task's next document (reachable - the scheduler routes every attempt again) instead of running untraced; every string of a
+  stored document held to the orchestration string rule (a NUL or lone surrogate no longer fails the jsonb commit); the record bound to
+  its scope; a call refused before it ran one closed line on its task's document (D21-12's addendum); the unrecorded line whole on the
+  coordinator's trace (bounded by construction); the zero-step document's verdict and model claims corrected; eight new trace-attribution
+  cases, one route case, one page case.
+- Gates re-run one job at a time after the review's fixes (the lead re-runs them): every B21 suite with the six route suites (41
+  files, 372 of 372); `app/api/chat/__tests__` (130 of 130); `app/lib/agent/__tests__` (415 of 415); `app/lib/project/__tests__` with
+  `app/components/chat` (312 of 312); the B17-A inventory with the exposure and tier suites (130 of 130); `app/lib/llm` and
+  `app/lib/acquisition` (235 of 235, one opt-in live file skipped); `app/lib/mcp` and `app/api/mcp/__tests__` (920 of 920); tsc 0;
+  eslint clean on the 11 changed and new TypeScript files; the B11, B09 and B17-A generators with zero drift - figures on the page.
+- Records: `run-events-and-trace.md` (section 3.1 to 3.7, E2b's rows and citations, these texts); OD-112 applied under the lead's
+  reading; D21-11's trace half, D21-3's calls half and D21-41 closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check's residuals (2026-09-27; the checker confirmed all 13 fixes fixed and revert-sensitive and raised three
+  low issues): (1) PRE-EXISTING since B21-A - the specialist documents' text rule (`contracts.ts` `FORBIDDEN_TEXT_CHARACTER`) omitted
+  lone surrogates, so an escaped `\ud800` in a result-tool call passed validation and then failed the orchestration record's jsonb
+  commit; the rule now refuses `\p{Cs}` (in place, line-neutral), A's contracts case 15 (four lone surrogates at the middle and the
+  end, one through `JSON.parse`, and two paired astral characters still accepted) failed first on the unchanged rule
+  (`e2b-lead-surrogate-red.log`) and passes with A's page suite, whose count moved 14 -> 15 with a dated note; (2) the refused-call
+  lines share each document's 32-warning bound with the loop's own warnings (an unknown tool costs two lines), so each refused call is
+  persisted within the bound and past it the document carries `trace_event_capacity_reached` - the page now says so (RECORDED);
+  (3) the page and `cleanTraceText`'s JSDoc restated: the trace's string rule is stricter than the orchestration record's (it also
+  refuses TAB and LF), and a replaced string's length never grows (one `?` per character). Every orchestration suite: 32 files / 321
+  tests.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 42 files / 383 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 365 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646 (the b11 and b20-a4 pins among them); `app/lib/project/__tests__` and `app/components/chat` 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104 - its first run passed every test but exited 1 on a vitest worker RPC timeout ("Timeout calling onTaskUpdate") during the CPU-heavy import scans, re-run alone clean (exit 0); `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file.

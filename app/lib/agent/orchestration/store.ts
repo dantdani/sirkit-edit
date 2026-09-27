@@ -265,7 +265,7 @@ function readScope(scope: OrchestrationRunScope): OrchestrationRunScope {
 }
 
 export class DurableOrchestrationRunStore implements OrchestrationRunStore {
-  constructor(private readonly workflow: DurableWorkflowRepository) {}
+  constructor(private readonly workflow: DurableWorkflowRepository) { TRACE_STORES.set(this, new DurableOrchestrationTraceStore(workflow)); } // [B21 E2b] the per-task trace records on the SAME repository (OD-112; appended below)
 
   async revision(scope: OrchestrationRunScope): Promise<number> {
     const run = readScope(scope);
@@ -357,4 +357,18 @@ export function setOrchestrationRunStoreFactory(next: Factory): void {
 }
 export function resetOrchestrationRunStoreFactory(): void {
   factory = unavailableFactory;
+}
+
+// ─── [B21 E2b] The per-task trace records beside the run's (OD-112 as the lead read it; D21-3's calls) ───────────────────────
+// Appended on purpose: an import is hoisted and the map is read only when a store is constructed, so no line cited above moves.
+
+import { DurableOrchestrationTraceStore, type OrchestrationTraceStore } from "./trace-attribution";
+
+/** Every durable record's trace store: the per-task trace documents (trace-attribution) go to their own aggregate type on the SAME
+ *  repository the record is bound to - so they persist wherever the record does, never in the run's own history (its records and
+ *  revisions are unchanged) - and nothing else of the repository is handed out: the trace store appends only a document the
+ *  attribution cascade validated. A store that is not durable (a test double, the unavailable default) has none. */
+const TRACE_STORES = new WeakMap<OrchestrationRunStore, OrchestrationTraceStore>();
+export function orchestrationTraceStoreOf(store: OrchestrationRunStore): OrchestrationTraceStore | null {
+  return TRACE_STORES.get(store) ?? null;
 }

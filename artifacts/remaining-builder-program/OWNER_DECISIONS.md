@@ -1473,3 +1473,30 @@ Amendments to existing entries:
   record key, suite and page moves - not recommended; (D) editing the scanned validator: refused by D21-27 / OD-113.
 - **Recommended by E2:** (B) for E2's next run - the smallest change and no rule narrowed; (A) if the owner also wants the coordinator's
   trace lines legible.
+
+**Amendment (B21-E2 (2/2), 2026-09-27) — OD-112 — Per-specialist provider/model and task identity on the trace, as applied (B21-E2 2/2, 2026-09-27)**
+
+- **Question (as drafted):** widen the trace's provider vocabulary (breaking the b20-a4 / b20-b2 literal pins and OD-72/OD-80), or an
+  optional closed `orchestration` block in a new module outside the nine scanned files, with one trace document per specialist task?
+- **Applied (the default, under the lead's reading of discovery section 10, "B21-E2, run 1 of 2"):** the block, in the new module
+  `app/lib/agent/orchestration/trace-attribution.ts`, with ONE trace document per specialist task. The document's run id is
+  `<runId>:<n>-<role>` - the coordinator's run id, a colon, the task's index and role - and its `parentRunId` the coordinator's run id;
+  the block is `{ taskIndex, role, providerId, modelId, parentRunId, decision? }`: the task's INDEX (1..32, the plan record's bound) and
+  role, never the literal task id `task-<n>-<role>`, which the v1 validator reads as an OpenAI key (D21-41); the task id is
+  reconstructed from index and role (`specialistTaskId`, its inverse `specialistTaskIdentity`; every scheduler task id round-trips).
+  Pattern-bound and denylist-checked by ONE rule the validator and the cascade share (the B20-A4 `external` precedent's shape); the block
+  rides beside the events of an unchanged v1 trace (the v1 contract refuses it inside an event); the schema stays v1 and the
+  coordinator's trace keeps its closed provider literal; the 256-event cap is per document; a retry's attempts on one provider are one
+  document with one terminal and an attempt on another provider opens the task's next document; the specialist's tool calls - and a
+  closed line per call refused before it ran - persist on its own durable trace record `agent.orchestration-trace.v1` beside the
+  orchestration run's aggregate on the same repository, bound to its scope (OD-111's carrier, D21-3's calls). No rule is narrowed: the
+  redaction authority's diagnostic patterns and the nine scanned files are byte-identical to HEAD (OD-113); every string of a stored
+  document is held to the orchestration string rule (a hostile character a `?`). No string of a per-task document holds the literal
+  task id (proven over the whole finalized document of real specialist runs); a document that cannot be recorded is one visible warning
+  line, whole on the coordinator's trace. A document with no step carries no verdict and names no model (none was reported). Proven by
+  `b21-e2b-trace-attribution.test.ts`, `b21-e2b-task-identity.test.ts` and `b21-e2-chat-events.test.ts` cases 8 to 10 (the adversarial
+  review's 13 findings answered test-first, section 5).
+- **The owner may choose otherwise:** (A) anchor the diagnostics' `sk-` key prefix in `redaction.ts` - the coordinator trace's task ids
+  would read legibly instead of `ta[redacted]`, at the cost of narrowing a shared secret check (the per-task documents need none of it);
+  (C) a task-id grammar without `task-` - every B21 record key, suite and page moves, not recommended; (D) editing the scanned validator -
+  refused by D21-27 / OD-113. The lead's reading of (B) stands until the owner says otherwise.

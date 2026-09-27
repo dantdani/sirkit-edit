@@ -199,7 +199,7 @@ const DIGEST_PATTERN = /^eng1-[0-9a-f]{16}$/;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 /** every control, format and line-separator character except LF and TAB (bidirectional overrides and zero-width characters are
  *  hostile in a summary; a soft hyphen or a joiner refuses too - the availability cost is recorded on the page and in OD-131) */
-const FORBIDDEN_TEXT_CHARACTER = /(?![\t\n])[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const FORBIDDEN_TEXT_CHARACTER = /(?![\t\n])[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u; // [B21 E2b lead] + a LONE surrogate (a jsonb commit refuses it; a paired astral character is text)
 const EXPOSED: ReadonlySet<string> = new Set(INTENTIONAL_AGENT_EXPOSED_TOOL_IDS);
 
 /** The id grammar AND no credential-shaped value: the grammar admits a provider key's characters, so every id is scanned too. */

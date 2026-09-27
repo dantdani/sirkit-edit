@@ -31,7 +31,7 @@ import { routeTaskComplexity, type RoutePlan, type RouterFacts } from "@/app/lib
 import { readOnlySpecialistGateway, readOnlyToolRegistry, runSpecialistDag, withdrawAuthority, type SchedulerOutcome, type SpecialistTaskOutcome } from "@/app/lib/agent/orchestration/scheduler";
 import { MAX_RESULT_CHARS, buildRunToolset, runAgentLoop, type AgentLoopDeps } from "@/app/lib/agent/loop";
 import { createAgentToolGateway } from "@/app/lib/agent/gateway";
-import { sanitizeModelBoundText } from "@/app/lib/agent/redaction";
+import { DEFAULT_REDACTION_CHARS, sanitizeModelBoundText } from "@/app/lib/agent/redaction";
 import type { AgentTraceRecorder } from "@/app/lib/agent/trace-recorder";
 import type { AgentRunContext, AgentRunEvent, AgentRunRequest, AgentRunResult, AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
 import type { LLMProviderId } from "@/app/lib/llm/types";
@@ -256,7 +256,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   };
   if (first.status !== "completed") return standDown(null);
 
-  // the SPECIALIST gateway: no minter, no port, no prompt version - nothing but a read or an inert seal can succeed in it (structural, OD-109)
+  const book = specialistTraceBookFor({ request, context: deps.context, plan, ...(deps.now ? { now: deps.now } : {}) }); // [B21 E2b] one trace document per specialist task (OD-112 as the lead read it); the SPECIALIST gateway: no minter, no port, no prompt version - nothing but a read or an inert seal can succeed in it (structural, OD-109)
   const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal)); // [B21 D3] OD-109 amended: the published pin-facts reads (the route's source, this request's signal), nothing else
   const outcome = await resolveSpecialistScheduler()(
     { roles: plan.roles, rule: plan.rule },
@@ -264,10 +264,10 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
     {
       store: resolveOrchestrationStore(), registry: deps.registry, context: deps.context, adapter: deps.adapter, gateway: specialistGateway, system: deps.system,
       emit: (event) => { if (event.type === "warning") warn(event.message); else if (isOrchestrationRunEvent(event)) report(event); }, // [B21 E2] the scheduler's run events streamed, their lines traced as B's warnings were
-      runLoop: runAgentLoop, buildToolset: buildRunToolset, budget: request.budget, ...(deps.now ? { now: deps.now } : {}), ...(input.providers ? { providers: input.providers } : {}), // [B21 E1] OD-115, OD-117
+      runLoop: book ? book.loop(runAgentLoop) : runAgentLoop, buildToolset: buildRunToolset, budget: request.budget, ...(deps.now ? { now: deps.now } : {}), ...(input.providers ? { providers: input.providers } : {}), // [B21 E1] OD-115, OD-117; [B21 E2b] a specialist's loop records into its task's own trace document
     },
   );
-  // the closed reason only ever reaches the stream and the trace: a record failure's detail (a driver message) stays in process
+  const traced = book ? await book.settle(outcome.kind === "ran" ? outcome.tasks : []) : null; if (traced && traced.failures.length > 0) warn(traceUnrecordedLine(traced.failures), true); // [B21 E2b] every specialist's trace document appended before anything is handed on, a failure one visible line (never silent); the closed reason only ever reaches the stream and the trace: a record failure's detail (a driver message) stays in process
   if (outcome.kind === "refused") return standDown(down("no_specialist_ran", `Orchestration: no specialist ran (${outcome.reason}); the assistant's answer above stands.`));
   const answered = outcome.tasks.filter(usable); ranOutcome = outcome; // [B21 E2]
   if (outcome.stop === "cancelled") return cancelled(first.steps, first.toolCalls);
@@ -531,4 +531,36 @@ import type { DegradedReason, OrchestrationRunEvent } from "@/app/lib/agent/cont
 export function partialOutcomeEvent(runId: string, plan: Extract<RoutePlan, { kind: "dag" }>, outcome: Extract<SchedulerOutcome, { kind: "ran" }>, handedOn: boolean, merged: Extract<MergeOutcome, { kind: "merged" }> | null = null): OrchestrationRunEvent | null {
   const withheld = merged ? merged.tasks.filter((task) => task.decision !== "accepted").map((task) => task.taskId) : null;
   return partialResultEvent(runId, { planned: planTasks(plan.roles).length, tasks: outcome.tasks, notStarted: outcome.notStarted, mergeWithheld: withheld, handedOn });
+}
+
+// ─── [B21 E2b] One trace document per specialist task (OD-112 as the lead read it; D21-11's trace half, D21-3's calls) ─────────────
+// Appended on purpose: an import is hoisted, so these declarations move no line cited above (the B21 pages pin this file by line).
+
+import { randomUUID } from "node:crypto";
+import { AGENT_SYSTEM_PROMPT_VERSION } from "@/app/lib/prompts";
+import { orchestrationTraceStoreOf } from "@/app/lib/agent/orchestration/store";
+import { specialistTraceBook, type SpecialistTraceBook } from "@/app/lib/agent/orchestration/trace-attribution";
+
+/** [B21 E2b] The run's trace book (OD-112 as the lead read it): one trace document per specialist task - its run id
+ *  `<runId>:<n>-<role>` (the task's index and role, never the task id: D21-41), its parent the coordinator's run - appended to the
+ *  durable trace aggregate on the SAME repository as the orchestration record (`orchestrationTraceStoreOf`). A record that is not the
+ *  durable store (a test double, the unavailable default) has no trace store: then no book, and the specialists run exactly as
+ *  before. The coordinator's own trace is the route's, unchanged. */
+export function specialistTraceBookFor(input: { request: AgentRunRequest; context: AgentRunContext; plan: Extract<RoutePlan, { kind: "dag" }>; now?: () => number }): SpecialistTraceBook | null {
+  const store = orchestrationTraceStoreOf(resolveOrchestrationStore());
+  if (!store) return null;
+  return specialistTraceBook({
+    coordinatorRunId: input.request.runId, tasks: planTasks(input.plan.roles), scope: { tenantId: input.context.tenantId, projectId: input.context.projectId, branchId: input.context.branchId },
+    systemPromptVersion: AGENT_SYSTEM_PROMPT_VERSION, newTraceId: () => `trace-${randomUUID()}`, ...(input.now ? { now: input.now } : {}), store,
+  });
+}
+/** [B21 E2b] The one line of trace documents that were not recorded: each task by role and index with its closed reason, never a
+ *  driver message; the specialists' results stand - only their calls are missing from the record. [B21 E2b fix: regressions-3] At most
+ *  the recorder's warning bound (`DEFAULT_REDACTION_CHARS`, the trace's 300) BY CONSTRUCTION, so the trace keeps the stream's line
+ *  whole: whole task entries while they fit, the rest counted as `+N more`, the closing clause never cut. */
+export function traceUnrecordedLine(failures: readonly string[]): string {
+  const line = (shown: number): string => `Orchestration: ${failures.length} specialist trace document(s) were not recorded (${[...failures.slice(0, shown), ...(shown < failures.length ? [`+${failures.length - shown} more`] : [])].join("; ")}); the specialists' results stand, but their tool calls are not in the record.`;
+  let shown = failures.length;
+  while (shown > 0 && line(shown).length > DEFAULT_REDACTION_CHARS) shown -= 1;
+  return line(shown);
 }

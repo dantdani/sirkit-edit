@@ -471,4 +471,12 @@ describe("[B21 A] the canonical orchestration contracts", () => {
     // the interior is still bound by the digest: a benign interior with a wrong digest refuses on the digest
     refused(validateSpecialistResult(validResult({ proposedActions: [{ kind: TIER1_KIND, payload: nested({ note: "benign" }), artifactDigest: DIGEST_A }] })), "artifact_digest_mismatch", "$.proposedActions[0].artifactDigest");
   });
+  it("15. [B21 E2b lead] (the check's residual) a LONE surrogate is refused `invalid_text` like a control character - JSON.parse turns an escaped `\\ud800` in a result-tool call into one, and a Postgres jsonb commit of the orchestration record would then fail the durable write - while a properly paired astral character (an emoji, a math letter) is text and still passes", () => {
+    for (const code of [0xd800, 0xdbff, 0xdc00, 0xdfff]) {
+      refused(validateSpecialistResult(validResult({ summary: `lone${String.fromCharCode(code)}surrogate` })), "invalid_text", "$.summary");
+      refused(validateSpecialistResult(validResult({ summary: `ends${String.fromCharCode(code)}` })), "invalid_text", "$.summary");
+    }
+    refused(validateSpecialistResult(validResult({ summary: JSON.parse('"escaped \\ud800 surrogate"') as string })), "invalid_text", "$.summary");
+    for (const summary of [`smile ${String.fromCodePoint(0x1f600)}`, `bold ${String.fromCodePoint(0x1d400)}`]) expect(validateSpecialistResult(validResult({ summary })).ok, summary).toBe(true);
+  });
 });

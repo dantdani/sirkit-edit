@@ -357,7 +357,7 @@ describe("[B21 A] the durable orchestration record", () => {
   it("12. the module read as text: its imports are the durable substrate's pure modules, the engineering digest, the contracts, the capture and the redaction - never the durable runtime (whose production path reaches a provider SDK, D21-32); the commit's outbox is spelled empty and no event type or topic exists; one mismatch sentence, one unavailable sentence, one scope-invalid sentence; no provider SDK; nothing that names a route, an executor, a grant, an approval, a release, a qualification or a minter", () => {
     const source = read(MODULE);
     const imports = [...source.matchAll(/^import .* from "([^"]+)";$/gm)].map((match) => match[1]!).sort();
-    expect(imports).toEqual(["../../durable-workflow/stable", "../../durable-workflow/types", "../../engineering/stable", "../plain-capture", "../redaction", "./contracts"]);
+    expect(imports).toEqual(["../../durable-workflow/stable", "../../durable-workflow/types", "../../engineering/stable", "../plain-capture", "../redaction", "./contracts", "./trace-attribution"]); // [B21 E2b] + ./trace-attribution (a reviewed pin move: every durable record binds the per-task trace store on its own repository; that module reaches no durable runtime - the A gate walks its closure, case 2)
     expect(source).toMatch(/^import type \{[^}]*\} from "\.\.\/\.\.\/durable-workflow\/types";$/m);
     expect(source).not.toContain(["durable-workflow/", "runtime"].join(""));
     expect(source).toContain("outbox: [],");

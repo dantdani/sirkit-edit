@@ -48,7 +48,7 @@ describe("[B21 E2] the run-events-and-trace page", () => {
     expect(page).toMatch(new RegExp(`^## 7\\. Citations, as of base ${BASE}`, "m"));
     for (const label of ["CONFIRMED", "INFERRED", "RECORDED", "UNKNOWN", "BLOCKED-LIVE-QUALIFICATION"]) expect(page, label).toContain(label);
     expect(page).toContain("[B21 E2]");
-    expect(page).toMatch(/^## 3\. The trace block \(OD-112\): STOPPED - D21-41$/m);
+    expect(page).toMatch(/^## 3\. The trace block \(OD-112\): STOPPED - D21-41, then APPLIED \(B21-E2 2\/2\)$/m); // [B21 E2b] pin move: the heading names the stop AND E2's second run's application (the stop's record stays whole below it as 3.1; case 6's claims on it unchanged)
     expect(flat(page)).toContain("the first-turn breaker are B21-E3's (a later run)");
   });
 

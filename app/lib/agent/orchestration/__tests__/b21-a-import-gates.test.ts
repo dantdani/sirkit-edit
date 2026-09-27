@@ -69,8 +69,8 @@ describe("[B21 A] the orchestration import gate", () => {
     // [B21 C] + role-tools.ts (a pin move: the module joins the gate the day it is written; case 6)
     // [B21 D] + merge.ts (a pin move: the merge joins the gate the day it is written; case 7)
     // [B21 E1] + provider-policy.ts and result-tool.ts (a pin move: the provider layer and the strict result tool join the gate the day
-    // they are written; their closures are walked by case 2 and pinned by b21-e1-provider-policy case 6); [B21 E2] + run-events.ts (a pin move: the run events' builders and judge join the gate the day they are written; its closure - the agent contracts, the redactor, the orchestration contracts - is walked by case 2)
-    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/merge.ts", "app/lib/agent/orchestration/provider-policy.ts", "app/lib/agent/orchestration/result-tool.ts", "app/lib/agent/orchestration/role-tools.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/run-events.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/tripwires.ts"]);
+    // they are written; their closures are walked by case 2 and pinned by b21-e1-provider-policy case 6); [B21 E2] + run-events.ts (a pin move: the run events' builders and judge join the gate the day they are written; its closure - the agent contracts, the redactor, the orchestration contracts - is walked by case 2); [B21 E2b] + trace-attribution.ts (a pin move: the trace block's rule, validator, durable trace record and book join the gate the day they are written; its closure - the trace contract and recorder, the capture, the redactor, the durable substrate's pure modules, the orchestration contracts - is walked by case 2)
+    expect(entriesOf(production)).toEqual(["app/lib/agent/orchestration/contracts.ts", "app/lib/agent/orchestration/merge.ts", "app/lib/agent/orchestration/provider-policy.ts", "app/lib/agent/orchestration/result-tool.ts", "app/lib/agent/orchestration/role-tools.ts", "app/lib/agent/orchestration/router.ts", "app/lib/agent/orchestration/run-events.ts", "app/lib/agent/orchestration/scheduler.ts", "app/lib/agent/orchestration/store.ts", "app/lib/agent/orchestration/trace-attribution.ts", "app/lib/agent/orchestration/tripwires.ts"]);
     expect(production.has("app/api/chat/orchestration-runtime.ts")).toBe(true);
     const members = (family: Family): string[] => [...production.keys()].filter((path) => familyOf(path) === family).sort();
     expect(members("GRANTS")).toEqual(["app/lib/execution-grant/consume.ts", "app/lib/execution-grant/mint.ts", "app/lib/execution-grant/route-contract.ts", "app/lib/execution-grant/settle.ts", "app/lib/execution-grant/store.ts"]);
@@ -162,7 +162,7 @@ describe("[B21 A] the orchestration import gate", () => {
     expect(runtimeClosure.has("app/lib/agent/orchestration/router.ts")).toBe(true);
     expect(runtimeClosure.has("app/lib/agent/orchestration/store.ts")).toBe(true);
     // the injected probes never touched the disk: the production entry set is unchanged
-    expect(entriesOf(production)).toHaveLength(10); // [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7); [B21 E1] + provider-policy.ts, result-tool.ts (pin move, case 1); [B21 E2] + run-events.ts (pin move, case 1)
+    expect(entriesOf(production)).toHaveLength(11); // [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7); [B21 E1] + provider-policy.ts, result-tool.ts (pin move, case 1); [B21 E2] + run-events.ts (pin move, case 1); [B21 E2b] + trace-attribution.ts (pin move, case 1)
   });
 
   it("4. the nine B11-scanned files import nothing under app/lib/agent/orchestration/ by ANY reference kind (a type-only import counts here) and carry no orchestration identifier; an injected copy with an orchestration value import, a type-only import or the identifier text appended is caught; tripwires.ts is the only orchestration module that names those files", { timeout: 180_000 }, () => {
@@ -187,7 +187,7 @@ describe("[B21 A] the orchestration import gate", () => {
 
   it("5. hygiene over the orchestration modules: no opaque module load, no declaration shadowing the loader, no root-escaping import, zero parse diagnostics, and every import is a static string the gate can resolve", { timeout: 180_000 }, () => {
     const scoped = new Map([...production].filter(([path]) => path.startsWith(ORCHESTRATION_MODULE_PREFIX)));
-    expect(scoped.size).toBe(10); // [B21 B] + router.ts, scheduler.ts; [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7); [B21 E1] + provider-policy.ts, result-tool.ts (pin move, case 1); [B21 E2] + run-events.ts (pin move, case 1)
+    expect(scoped.size).toBe(11); // [B21 B] + router.ts, scheduler.ts; [B21 C] + role-tools.ts; [B21 D] + merge.ts (pin move, case 7); [B21 E1] + provider-policy.ts, result-tool.ts (pin move, case 1); [B21 E2] + run-events.ts (pin move, case 1); [B21 E2b] + trace-attribution.ts (pin move, case 1)
     expect(opaqueModuleLoads(scoped)).toEqual([]);
     expect(requireShadowDeclarations(scoped)).toEqual([]);
     expect(rootEscapingImports(scoped)).toEqual([]);

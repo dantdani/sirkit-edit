@@ -224,7 +224,9 @@ capsule key below the top level.]
   `invalid_record` with its path; the three store refusals are `stale_revision`, `unvalidated_document`, `invalid_record`.
   **Tool calls are NOT persisted** by A: no record kind carries a call, a tool id, an argument digest or an outcome; the runbook's
   persistence list (:801) names calls, and their carrier is B21-E's per-task trace record on the trace attribution (OD-112) — until then an
-  auditor or a resume cannot recover a specialist's invocations from this record (D21-3 is closed IN PART; review correction).
+  auditor or a resume cannot recover a specialist's invocations from this record (D21-3 is closed IN PART; review correction). [B21 E2b,
+  2026-09-27] The carrier exists since B21-E2 (2/2): each specialist task's calls are on its own per-task trace record
+  (`agent.orchestration-trace.v1`, beside this aggregate on the same repository; `run-events-and-trace.md` 3.5); this record is unchanged.
 - **Bound to the run (review correction).** A stored `request` must name the task and the scope it is appended under (`document.taskId`
   = the append's `taskId`, `document.scope.{tenantId, projectId, branchId}` = the run scope; C49 — `$.record.document.taskId` /
   `$.record.document.scope` otherwise); a stored `result` answers exactly one request of THIS run — the latest `request` record of the same
@@ -329,9 +331,13 @@ capsule key below the top level.]
 
 ## 7. Suites and case counts
 
+[B21 E2b lead, 2026-09-27] Case 15 added: the specialist documents' text rule also refuses a LONE surrogate (`\p{Cs}`) - an
+escaped `\ud800` in a result-tool call becomes one after `JSON.parse`, and a Postgres jsonb commit of the orchestration record refuses
+it - while a paired astral character stays text (the check's residual of B21-E2 (2/2); the case failed first on the unchanged rule).
+
 | suite | `it(` blocks | runtime tests |
 |---|---|---|
-| `app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts` | 14 | 14 |
+| `app/lib/agent/orchestration/__tests__/b21-a-contracts.test.ts` | 15 | 15 |
 | `app/lib/agent/orchestration/__tests__/b21-a-store.test.ts` | 15 | 15 |
 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | 7 |
 | `app/lib/agent/orchestration/__tests__/b21-a-page.test.ts` | 6 | 6 |

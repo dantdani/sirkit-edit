@@ -1,4 +1,4 @@
-# B21-E2 — the additive run events, the status line and the trace block (E2's first run: the events delivered; the trace block STOPPED)
+# B21-E2 — the additive run events, the status line and the trace block (E2's first run: the events delivered, the trace block stopped; E2's second run: the trace block applied)
 
 Labels: **CONFIRMED** (executed and measured, or read at the cited file:line), **INFERRED** (code reading), **PROPOSED** (designed, not
 exercised), **RECORDED** (written down without a claim), **UNKNOWN**, **BLOCKED-LIVE-QUALIFICATION**. Tree
@@ -12,7 +12,11 @@ and, for every file E2 changed, on the line it states; every suite row carries i
 is called in any E2 suite: the scheduler suites run the REAL scheduler, loop, gateway and production registry over scripted adapters,
 the provider-layer cases the REAL adapters over in-process fake clients, the route suite the production POST with the B21-B scripted
 double. [B21 E2 fix, 2026-09-27] The adversarial review's 13 confirmed findings are fixed test-first on this page (section 5, "The
-review's findings"); every `[B21 E2 fix: <id>]` statement names the finding it answers.
+review's findings"); every `[B21 E2 fix: <id>]` statement names the finding it answers. [B21 E2b, 2026-09-27] E2's second run applied
+the trace block under the lead's reading of OD-112 (section 3, from 3.2; its texts for the lead at the end of section 6; its citations
+C67 onward); every `[B21 E2b]` statement is pinned by `b21-e2b-page.test.ts` or by the suite it names. [B21 E2b fix, 2026-09-27] The
+adversarial review's 13 confirmed findings on E2's second run are answered test-first (section 5, "The review's findings (E2b)"; its
+citations C97 onward); every `[B21 E2b fix: <id>]` statement names the finding it answers.
 
 ## 0. What E2's first run delivers, and where it stopped
 
@@ -42,7 +46,18 @@ record, not on provider features" (D21-22), and OD-112's trace block (D21-11's t
   its `sk-<n>-<role>` - the recorder then classifies `trace_validation_failure` and hands the document to no sink (C50). Accepting it
   needs an edit to a scanned file or a narrowing of the shared redaction rule, both outside this run's authority. **CONFIRMED** (a probe
   through the real recorder and validator, section 3). The finding is D21-41; the implementation that stopped is held intact for the
-  lead (section 3), none of it in the tree.
+  lead (section 3), none of it in the tree. [B21 E2b, 2026-09-27] Applied by E2's second run under the lead's reading (the next bullet).
+- **The trace block (OD-112 as the lead read it; section 3.2 onward): APPLIED by E2's second run (B21-E2 2/2).** One trace document per
+  specialist task, its run id `<runId>:<n>-<role>` - the coordinator's run id, a colon, the task's INDEX and role - and the closed block
+  `{ taskIndex, role, providerId, modelId, parentRunId, decision? }` on every step and tool invocation of it, never the literal task id
+  (which the unchanged v1 validator still reads as a key: D21-41 closed with no rule narrowed); ONE rule for the validator and the
+  cascade (the B20-A4 `external` precedent's shape); the specialist's tool calls on its own durable trace record beside the orchestration
+  run's (D21-3's calls; D21-11's trace half); the 256-event cap per document; a retry on ONE provider in one document with one
+  terminal ([B21 E2b fix] an attempt on another provider opens the task's next document); a document that cannot be recorded one
+  visible warning line, whole on the coordinator's trace; [B21 E2b fix] a call refused before it ran one closed line on its task's
+  document, no control, format or separator character or lone surrogate in a stored document, the record bound to its scope; no
+  string of a per-task trace holding `task-<n>-`; the nine scanned files and `redaction.ts` byte-identical. **CONFIRMED** by
+  `b21-e2b-trace-attribution.test.ts` (16 cases), `b21-e2b-task-identity.test.ts` (3) and the route suite's cases 8 to 10.
 
 What E2's first run is NOT: section 4.
 
@@ -162,7 +177,12 @@ before the notes (C44) - two in-place lines, no JSX, no handler, no `disabled` (
 regenerated with zero drift; the B18-D UI gates' wires untouched; no file under `app/components/chat` touched). **CONFIRMED** (run-view
 cases 1 to 7; route case 3 folds the real stream, route case 7 the merge-withheld one).
 
-## 3. The trace block (OD-112): STOPPED - D21-41
+## 3. The trace block (OD-112): STOPPED - D21-41, then APPLIED (B21-E2 2/2)
+
+### 3.1 The stop, as E2's first run recorded it
+
+[B21 E2b, 2026-09-27] This subsection is E2's first run's record, kept whole. E2's second run applied the block under the lead's reading
+of OD-112 (3.2 to 3.7): D21-41's finding stands (the literal task id is still refused, 3.2), its consequence does not.
 
 **What was asked.** A new module `app/lib/agent/orchestration/trace-attribution.ts` with an optional closed `orchestration` block
 `{ taskId, role, providerId, modelId, parentRunId, decision? }`, pattern-bound and denylist-checked, attached to the step and tool events
@@ -199,12 +219,186 @@ task's final `specialist_finished` with the scheduler's verdict), its suite (8 c
 route case, and the probe with its log. Before the stop its suite passed cases 1 (the block and its rule) and 8 (the nine scanned files
 byte-identical to HEAD, the v1 contract refusing a block placed INSIDE an event) and failed cases 2 to 7 on exactly this refusal (their
 fixtures build run ids of the route's shape) - the held code is otherwise **UNVERIFIED**. The events of section 1 need none of it:
-`specialist_started` and `specialist_finished` are the hooks the book reads.
+`specialist_started` and `specialist_finished` are the hooks the book reads. [B21 E2b, 2026-09-27] Applied, adapted and verified by E2's
+second run (3.2 to 3.7): the held files' sha256 verified before use, the run id and the block moved to the task's index and role, and the
+book closing each document with its task's last outcome once the scheduler returns (3.4: the runtime line that streams the events, C31,
+is untouched).
+
+### 3.2 The lead's reading of OD-112 (D21-41) [B21 E2b]
+
+The lead's decision (discovery section 10, "B21-E2, run 1 of 2"): neither narrowing the diagnostics' key pattern (option A - B19-D kept
+it unanchored on purpose) nor editing a scanned file (option D). Option B as E2's first run drafted it would still fail, because the v1
+validator scans EVERY string of a trace, so a block carrying the literal task id `task-<n>-<role>` is refused like the run id. The lead's
+reading, applied here: (1) the per-task trace document's run id is `<runId>:<n>-<role>` - the coordinator's run id, a colon, the task's
+INDEX and role (C72) - and its `parentRunId` is the coordinator's run id; (2) the block carries the task's INDEX (a positive integer) and
+its role, never the literal task id, beside `providerId`, `modelId`, `parentRunId` and the optional `decision`; the task id
+`task-<n>-<role>` is reconstructed from index and role (`specialistTaskId`, C70, 3.3) and every scheduler task id round-trips
+(`b21-e2b-task-identity.test.ts` case 1); (3) no string of a per-task trace holds `task-<index>-` (3.6). So no string of the trace reads
+as a key and no rule is narrowed: through the REAL recorder and validator the literal run id `<runId>:<taskId>` is still
+`trace_validation_failure` for every task of every DAG, and the index-and-role run id validates with no diagnostic (case 2); the
+coordinator trace's task ids keep reading `ta[redacted]` (its lines are diagnostics under the unanchored rule - RECORDED, the lead's
+decision; option A would make them legible and is the owner's). **CONFIRMED**.
+
+### 3.3 The block, its one rule and the task identity
+
+The block (`app/lib/agent/orchestration/trace-attribution.ts`, a NEW module outside the nine scanned files), closed: the five keys below
+required, `decision` optional (C67), attached to `step` and `tool_invocation` only; the index bound is `MAX_TASK_INDEX` (32), the plan
+record's bound on its tasks (C69):
+
+| key | value | the rule |
+|---|---|---|
+| `taskIndex` | the task's index in the plan (`planTasks`' n) | a safe integer 1..32 - never the task id |
+| `role` | the task's specialist role | one of the eight specialist roles, never `coordinator` |
+| `providerId` | the provider the task's attempt ran on | `openai` or `anthropic`, and the trace's own provider |
+| `modelId` | the step's model (a tool invocation: the model of the step that asked for it) | at most 100 characters, no control, format or separator character and no lone surrogate (a `?` in its place), not key-shaped |
+| `parentRunId` | the coordinator's run id | the orchestration id grammar and the v1 trace's own secret rule (C74) |
+| `decision` | the scheduler's verdict on the task's last outcome, on the last attributed event of the task's last document only (a document with no step or tool invocation, or closed at a provider switch, carries none: 3.4) | one of `accepted`, `malformed`, `escalated` (C68; inside OD-114's vocabulary) |
+
+ONE rule, two callers - the B20-A4 `external` precedent's shape: `orchestrationBlockIssue` (C75) judges a block; the validator
+`validateOrchestrationTrace` (C78) and the cascade `attributeSpecialistTrace` (C79) both use it, so the cascade never builds a block the
+validator refuses. The document is `sirkit.orchestration-trace.v1` with exactly `schema`, `trace`, `attribution`: an UNCHANGED v1 trace
+and one `{ seq, orchestration }` entry per step and tool invocation - the block rides BESIDE the events, since the v1 contract refuses an
+unknown key inside an event (`b21-e2b-trace-attribution.test.ts` case 8). The validator captures the document, runs the trace's OWN v1
+validator over the embedded trace, requires its run id to be `<parentRunId>:<n>-<role>` (C76), passes the attribution through the
+trace's secret rule (C77), [B21 E2b fix: security-1] passes every key and string of the WHOLE document - the embedded trace included -
+through the trace's string rule (`forbiddenTextPath`, C98, C103: no control, format or separator character and no lone
+surrogate, `TEXT_FORBIDDEN`, C97 - stricter than the orchestration record's rule, which admits TAB and LF [B21 E2b lead]; the v1 validator checks a trace's strings for length and secret shape only), and requires every
+step and tool invocation attributed exactly once and nothing else, each block naming the
+run id's task (index, role, parent), the trace's provider and its step's model, and the decision on the last attributed event only; it
+never throws on a hostile object. The cascade refuses an identity the rule refuses or one that is not the task of the trace's run id
+(`identity_invalid`, C80) and a trace the v1 validator refuses (`trace_invalid` - a trace recorded under the literal `<runId>:<taskId>`
+among them), drops a decision outside the three or with no event to carry it (`normalized`), [B21 E2b fix: security-1] replaces every
+control, format or separator character and every lone surrogate of every string of the finalized trace with a `?` and adds the
+recorder's own closed diagnostic `trace_input_normalized` (`cleanTraceText`, C99, C104 - one `?` per replaced character, so a string's
+length never grows (an astral format character, two code units, becomes one `?`) and every v1 bound holds [B21 E2b lead]; before the fix a NUL or a lone surrogate in a model id, a requested tool's name or a call id made the durable commit fail, since
+jsonb refuses both, and the book named it `trace_store_unavailable`, while a bidirectional override was persisted verbatim;
+`b21-e2b-trace-attribution.test.ts` case 14 against a repository that refuses what jsonb refuses), and registers only its own
+validated snapshot (a clone is never vouched for).
+
+The task identity (3.2's rule 2): `specialistTaskId` gives `task-<n>-<role>` from an index and a role - exactly what the scheduler's
+`planTasks` mints (C28) - and `specialistTaskIdentity` is its inverse (null for anything else: an index 0, a leading zero, an index over
+32, the coordinator, an unknown role); `specialistTraceRunId` gives `<parentRunId>:<n>-<role>` and `specialistTraceIdentity` is its
+inverse (the parent is everything before the LAST colon and must pass the id grammar and the v1 secret rule). **CONFIRMED** by
+`b21-e2b-trace-attribution.test.ts` cases 1 to 3 and `b21-e2b-task-identity.test.ts` cases 1 and 2.
+
+### 3.4 One trace document per specialist task: the book
+
+`specialistTraceBook` (C85) is bound by the composition root (`specialistTraceBookFor`, C95; the runtime binds it at C92, the E2 fixture
+the same way): it wraps the INJECTED loop (C93 - the scheduler is unchanged), so an attempt whose request run id is the scheduler's
+`<runId>:<taskId>` of a planned task records into that task's own recorder, whose run id is `<runId>:<n>-<role>` (C86), whose provider
+is the attempt's and whose prompt digest is the digest of the specialist's own system text. The recorder handed to the loop HOLDS the
+terminal (C87), so a retry's attempts on ONE provider write ONE document with one `run_started` and ONE terminal (the retry's). [B21
+E2b fix: security-3, coverage-3] An attempt on ANOTHER provider is reachable - the scheduler routes every attempt again (its route is
+decided inside the attempt loop: the compatible fallback while the role's provider is paused, the role's own provider once the pause's
+window has elapsed) - and never joins a one-provider document: that document is closed at the switch with its held terminal and NO
+verdict, and the attempt opens the task's next document under the same per-task run id (C88; the durable record's next revision, 3.5).
+So no attempt runs untraced and no verdict is stamped on another provider's events (`b21-e2b-trace-attribution.test.ts` case 10; the
+text before the fix called this unreachable, ran such an attempt untraced and stamped the task's verdict on the first provider's last
+event). Once the scheduler returns, the runtime settles the book with the scheduler's outcomes (C94, C89): the task's last document is
+closed with the verdict of the task's LAST outcome - the verdict its final `specialist_finished` carries (`accepted`, `malformed` or
+`escalated`) - on its last step or tool invocation. [B21 E2b fix: regressions-1, coverage-1] A document with no step or tool invocation
+(a task that failed before its first step: a provider outage, no credits, a meter refusal) has no event to carry it: it carries no
+verdict and names no model (none was reported; the trace's `model` is empty) - its terminal keeps the failure, the cascade reports the
+dropped verdict as `normalized`, and the orchestration record keeps the verdict as the task's dissent (case 16; the text before the fix
+said every document carries its task's verdict). Each document is attributed, validated and appended to the durable trace record (3.5)
+before anything is handed on. Adapted from the held code, stated: the held book closed a document on the task's final
+`specialist_finished` event, which needed the runtime line that streams the scheduler's events (C31) edited; settling with the outcome
+keeps that line and closes each document with the same verdict. [B21 E2b fix: coverage-2] A call the loop refuses BEFORE it runs
+(`unknown_tool`, `budget_exhausted`, `invalid_input`, `repeated_call`, `proposal_exists`, `execution_exists` - an untraced `tool_refused`
+event, D21-12) is ONE closed line on its task's own document (`refusedCallLine`, C102, C106, C107: the registry's tool id or none, and
+the closed status - never a task id, never the arguments), beside the loop's own unknown-tool line (case 15); the loop is unchanged.
+[B21 E2b lead] These lines share the document's 32-warning bound with the loop's own warnings - an unknown tool costs two lines, the
+loop's and this one - so past the bound a refused call's line is dropped and the document carries `trace_event_capacity_reached`
+(RECORDED; each refused call is persisted within the bound, never silently beyond it).
+The 256-event and 32-warning bounds are PER DOCUMENT (a task that records past them fills only its own document, case 7). A task that
+never ran (no tools, not started, replayed) has no document. A document that cannot be recorded (a cascade refusal, a store refusal, a
+store that throws: case 11) is ONE visible warning line (`traceUnrecordedLine`, C96): each task by role and index with its closed
+reason, never a driver message, ALWAYS recorded on the coordinator's trace (past the 12-line orchestration cap, within the recorder's
+32-warning bound) and WHOLE - [B21 E2b fix: regressions-3, tests-5] at most the recorder's 300-character warning bound
+(`DEFAULT_REDACTION_CHARS`) by construction (C108: whole task entries while they fit, the rest counted as `+N more`, its closing clause
+never cut; the trace holds exactly the stream's line, route case 10) - the specialists' results, the merge and the follow-up turn stand. A
+durable record that is not the durable store (a test double, the unavailable default) has no trace store: then no book, and the
+specialists run exactly as before. The input field `systemPromptVersion` (the trace identity's `promptVersion`) is so named because
+`b21-d3-pin-facts.test.ts` case 1 reads the runtime's text from `specialistGatewayOptions(` to the end of the file and forbids the
+gateway option's name there (the specialist gateway gets no prompt version; the book is no gateway). **CONFIRMED** by
+`b21-e2b-trace-attribution.test.ts` cases 4, 5, 7, 10, 11, 15 and 16 and the route suite's cases 8 to 10.
+
+### 3.5 The durable trace record (D21-3's calls)
+
+`DurableOrchestrationTraceStore` (C82) on the aggregate `agent.orchestration-trace.v1` (C81), one aggregate per per-task trace run id,
+beside the orchestration run's `agent.orchestration-run.v1` on the SAME repository: every `DurableOrchestrationRunStore` binds its trace
+store in its constructor (C90) and hands out that store and nothing else of the repository (`orchestrationTraceStoreOf`, C91; a test
+double or the unavailable default has none). A record is `sirkit.orchestration-trace-record.v1` with exactly the keys `schema`, `runId`,
+`parentRunId`, `taskIndex`, `role`, `traceId`, `revision`, `at`, `digest`, `document` (C83) - the parent run and the task's index and
+role, read from the trace's run id, never the task id. An append is a compare-and-set commit of a document the cascade validated
+(identity-checked; a clone is `unvalidated_document`), idempotent by its trace id (`orchestration-trace:<runId>:<traceId>`), with no
+outbox effect; a re-run of the same task (a resume) appends its next revision, and so does an attempt on another provider (3.4); every
+load recomputes both digests, re-validates the document and refuses any disagreement with the one sentence
+`AGENT_ORCHESTRATION_TRACE_MISMATCH` (C84) - [B21 E2b fix: tests-3] a changed `at`, `traceId`, document digest or record digest is each a
+mismatch though the document itself stays valid (`b21-e2b-trace-attribution.test.ts` case 12). [B21 E2b fix: regressions-2] A record
+is BOUND to its scope, as a stored orchestration request is to its run's (`orchestration-contracts.md`, "Bound to the run"): an append
+whose document's trace names another scope than the one it is appended under is `invalid_record` and writes nothing (C100), and a load
+refuses a record whose document's trace names another scope than the one it is loaded under (C101; `sameTraceScope`, C105) - the
+validated-snapshot map is process-wide, so the store never vouches for another scope's trace (case 13). The orchestration run's own
+history is unchanged (its records and revisions are what they were). So a specialist's tool CALLS - its gateway invocations as every
+trace holds them: call id, tool id and version, operation class, argument and output digests, outcome class, status - and [B21 E2b
+fix: coverage-2] each call refused before it ran as its closed line (3.4) are persisted on its own record: the carrier OD-111 named for
+D21-3's calls half. Retention and access audit stay as OD-111 records them (RECORDED). **CONFIRMED** by
+`b21-e2b-trace-attribution.test.ts` cases 4, 6, 10, 12, 13 and 15 and the route suite's case 8.
+
+### 3.6 No string of a per-task trace holds `task-<n>-`
+
+Proven over the WHOLE finalized document of real specialist runs - the REAL scheduler, loop, gateway, registry, recorder and validator,
+one specialist calling a read and one an unadvertised tool (`b21-e2b-task-identity.test.ts` case 3) - and through the production POST
+over every durable record (route case 8): no string or key holds `task-<n>-`. The specialist's INPUTS do carry the task id - its loop
+request's run id is the scheduler's `<runId>:<taskId>`, and its system text names `Task: <taskId>` and `Task run: <runId>:<taskId>` -
+and none of it reaches the trace but as below; nothing was rewritten, and nothing but the run id and the block is derived for the trace
+(by this module). Where each string of a per-task document comes from:
+
+| field | where it comes from | the task id? |
+|---|---|---|
+| `schema` | the v1 constant | no |
+| `runId` | the book: `<runId>:<n>-<role>` (`specialistTraceRunId`) | no - the task's index and role |
+| `traceId` | the book: a fresh `trace-<uuid>` | no |
+| `provider`, `model` | the attempt's provider; the last step's model as the provider reported it (bounded, redacted; empty when no step was recorded) | no |
+| `promptVersion`, `promptDigest`, `registryDigest` | the system prompt's version; the digest of the specialist's system text - the text naming `Task: <taskId>` enters ONLY as the prompt digest; the role registry's digest | no |
+| `scope`, `contextDigests` | the request's tenant, project and branch; the derived context's digests | no |
+| `startedAt`, `endedAt` | the clock | no |
+| `events` | `run_started`; each step (its model and token counts); each tool invocation (call id, tool id and version, operation class, status, verification and the argument and output DIGESTS - the objective and the tool arguments and results never enter); the terminal | no |
+| `terminal` | the task's one terminal (held across a retry): the outcome, a closed failure reason, the totals | no |
+| `warnings` | the loop's own lines (its toolset lines, an unknown tool's name) and [B21 E2b fix: coverage-2] the book's closed line per call refused before it ran (`refusedCallLine`: the registry's tool id or none, the closed status), each through the recorder's redactor | no |
+| `recorderDiagnostics` | the closed diagnostic vocabulary | no |
+| `attribution` | this module: per step and tool invocation `{ seq, orchestration }` - the index, the role, the provider, the step's model, the parent run id, the verdict | no |
+
+[B21 E2b fix: security-1] Every string of every row is then held to the orchestration string rule: a control, format or separator
+character or a lone surrogate - reachable only through a provider's model id, a requested tool's name or a call id - is a `?` in the
+stored document, with the recorder's own `trace_input_normalized` (3.3; `b21-e2b-trace-attribution.test.ts` case 14).
+A task id could reach a per-task trace only through a string the recorder does not redact; the v1 validator reads any `task-<n>-<role>`
+as a key anyway, so such a document would be refused and never stored. The coordinator's trace, which the scheduler's lines reach, keeps
+reading task ids as `ta[redacted]` (3.2, RECORDED).
+
+### 3.7 What stands unchanged, and the pins that stay green
+
+- The nine B11-scanned files, byte-identical to HEAD 41330e6 (sha256): `app/lib/agent/trace.ts` `ad933eb059dff859cc0fe910aa82d0eb2ef24f14eedab1bef94c510a7dd60ba5`, `app/lib/agent/trace-recorder.ts` `61cff587cea51da0dd343a0dfd8c1171f2503acf57fc278dba3b352e3bea914b`, `app/lib/agent/replay-capsule.ts` `77958c9488b43d490b012aa10638df6b93e1dd2aaf704dee11aac206ea41f1b1`, `app/lib/agent/replay-context.ts` `fcdc9a7d0d6c6f9c09a56732ac643d59503695dc224734a76b030c38261fbbff`, `app/lib/agent/evaluation.ts` `9d948da7726e6ee5ed8dd266f064d5a35cda25f18c337f70d8b740245d1b1b19`, `app/lib/agent/evaluation-cases.ts` `6637099755e2d0a968a15e2b4bc73f12c27f026b721dd087c0acc25c3f1ecc16`, `app/lib/agent/pcb-shape-projection.ts` `e6a58afbd30cb46f9da28b9e43768c7d0a524822adf0b47746eb1fa3ddd44750`, `app/lib/agent/pcb-shape-types.ts` `b46e801bcb00138aaa5d2c0c8de0b092be50cbd48e2eda43699055d2301bd590`, `app/lib/agent/generated/pcb-shape-descriptor.ts` `69dc94fcfc6fb939ce22d8ce5e08739f0be6ab3b192b52a496aa183fa3538cfb`.
+- `app/lib/agent/redaction.ts`, byte-identical to HEAD 41330e6 (sha256 `c42672c6e1d3bfbcf5c1daed611b32a347d06f66b8bc0ef1e7c79f46c782c0e8`): its diagnostic patterns untouched, the
+  unanchored `sk-` pattern kept (C48).
+- The v1 trace contract (its schema, its exact event keys, its closed outcome classes, the provider literal
+  `provider: "openai" | "anthropic";` in the recorder); the coordinator's trace (the route's sink still receives ONE trace per run, the
+  coordinator's); the five pinned run events `plan`, `specialist_started`, `specialist_finished`, `partial_result`, `degraded` and their
+  shapes; the orchestration record's history; protocol version 1 and the flag-off byte identity.
+- The pins that stay green, re-run by E2b: `b20-a4-trace-attribution.test.ts` case 7 (the nine files, `/mcp/i`, the provider literal),
+  `b20-b2-import-gates.test.ts` (the nine files and the literal), `b11-1-trace-integrity.test.ts` and `b11-trace-replay-evaluation.test.ts`
+  (the scanned files' regex, the replay pins), `b18-b-loop-execution.test.ts` (the outcome classes), `b21-a-import-gates.test.ts` case 4
+  (no scanned file imports orchestration; no orchestration module but tripwires names one) and case 2 (the new module's closure reaches
+  no forbidden family and no provider SDK), `b21-d3-pin-facts.test.ts` case 1 (the specialist gateway's text: no prompt version), the
+  A..E2 page suites.
 
 ## 4. What E2's first run does NOT do
 
 - No trace block, no per-task trace document, no durable trace record (section 3: stopped; D21-11's trace half and D21-3's calls stay
   open); no route-level resume or `userMessageDigest` ledger, no composer routing, no first-turn breaker (B21-E3); no evaluations (B21-F).
+  [B21 E2b, 2026-09-27] The trace block, the per-task documents and the durable trace record: applied by E2's second run (3.2 to 3.7);
+  D21-11's trace half and D21-3's calls closed there.
 - No new UI control (two in-place page lines; the B17-A inventory regenerated with zero drift; no B18-D wire); no new route (the census
   stays 165 = 162 canonical + 3 factories + 0 raw); no new exposed tool; no request key; no change to protocol version 1; no new terminal.
 - No edit to the nine B11-scanned files (byte-identical to HEAD); no change to the redaction authority; no change to the coordinator's
@@ -213,6 +407,13 @@ fixtures build run ids of the route's shape) - the held code is otherwise **UNVE
 - No reserved-file edit (their texts are in section 6); no line cited by an A..E1 page moved (every edit to a cited file is in place or
   appended; the A..E1 page suites green); [B21 E2 fix: tests-5] no line the discovery cites in `chat-run-view.ts` moved (the run view's
   additive code appended, page case 10).
+- **What E2's second run does NOT do** ([B21 E2b], 2026-09-27): no edit to the nine B11-scanned files and no change to `redaction.ts`
+  (its diagnostic patterns untouched; both byte-identical to HEAD 41330e6, 3.7); no new run-event type (the five stand) and no change to
+  the coordinator's trace, the stream's events or the orchestration record's history; no UI change (no page line, no control); no
+  route, descriptor or request-key change (the census stays 165 = 162 canonical + 3 factories + 0 raw); no new runtime dependency; no
+  reserved-file edit (the texts are at the end of section 6); no route-level resume, composer routing or first-turn breaker (B21-E3); no
+  retention or access-audit setting for the trace records (OD-111's deferral stands, RECORDED); no line cited by an A..E2 page moved (every
+  edit to a cited file in place or appended; the A..E2 page suites green).
 
 ## 5. Suites, evidence, the pin moves, gates
 
@@ -220,9 +421,9 @@ fixtures build run ids of the route's shape) - the held code is otherwise **UNVE
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-e2-run-events.test.ts` | 16 | the pinned list and the closed statuses, reasons and key sets; every builder bounded and clean (a task id never read as a key); the judge refuses every shape outside the five; the REAL scheduler emits them in place of B's lines, a refused tool call still a warning; the retry, the not-run role, the held artifact, a replay and a stale result as events; the provider layer's paused coordinator and compatible fallback as `degraded` events naming what served; [fix] a withheld re-run closed and counted once (cases 9, 10), an unrecorded provenance named as none (11), an undeclared key's name withheld (12), the budget remaining (13), every other scheduler site pinned by its event type (14, 15) |
 | `app/lib/agent/orchestration/__tests__/b21-e2-run-view.test.ts` | 7 | the counters and the one status line over the REAL scheduler's events; an older reducer ignores the events (every pre-E2 field and the projection but `status` identical); the page's pre-E2 switch has no case for them; an event's run-log line; no new control; [fix] what an older page loses (6), the finished counter on a task's final outcome (7) |
-| `app/lib/agent/orchestration/__tests__/b21-e2-page.test.ts` | 10 | this page; [fix] the A..E1 pages' dated E2 notes (8), the review's facts (9), `chat-run-view.ts` line-neutral where the discovery cites it and no raw control byte (10) |
-| `app/api/chat/__tests__/b21-e2-chat-events.test.ts` | 7 | through the production POST: one stream with the events, B's lines on the coordinator's trace and the record unchanged; a stand-down as `degraded` with the partial result; a refused call still a warning and the page's reducer over the real stream; flag off byte-identical to HEAD (the flag set off by the case); [fix] every runtime stand-down by its reason (5), the trace's 12-line cap and the stand-down past it (6), the partial result counting what the merge withheld (7) |
-| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | A's cases; cases 1, 3 and 5 moved (run-events.ts in the entry set, 9 -> 10) |
+| `app/lib/agent/orchestration/__tests__/b21-e2-page.test.ts` | 10 | this page; [fix] the A..E1 pages' dated E2 notes (8), the review's facts (9), `chat-run-view.ts` line-neutral where the discovery cites it and no raw control byte (10); [E2b] case 1's section-3 heading pin moved (the stop AND the application) |
+| `app/api/chat/__tests__/b21-e2-chat-events.test.ts` | 10 | [E2b] the per-task trace records through the production POST (8), a failed specialist's document and an unrecorded document's one line (9); [E2b fix] that line past the 12-line cap and whole, bounded by construction (10); through the production POST: one stream with the events, B's lines on the coordinator's trace and the record unchanged; a stand-down as `degraded` with the partial result; a refused call still a warning and the page's reducer over the real stream; flag off byte-identical to HEAD (the flag set off by the case); [fix] every runtime stand-down by its reason (5), the trace's 12-line cap and the stand-down past it (6), the partial result counting what the merge withheld (7) |
+| `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | A's cases; cases 1, 3 and 5 moved (run-events.ts in the entry set, 9 -> 10); [E2b] moved again (trace-attribution.ts, 10 -> 11), each in place with its reason |
 | `app/lib/agent/orchestration/__tests__/b21-b-scheduler.test.ts` | 14 | B's cases; the lines helper and cases 1 and 14 moved |
 | `app/lib/agent/orchestration/__tests__/b21-c-least-privilege.test.ts` | 10 | C's cases; the lines helper moved |
 | `app/lib/agent/orchestration/__tests__/b21-d2-approval.test.ts` | 10 | D2's cases; case 8's line moved |
@@ -237,6 +438,10 @@ fixtures build run ids of the route's shape) - the held code is otherwise **UNVE
 | `app/api/chat/__tests__/b21-d2-chat-proposals.test.ts` | 7 | D2's cases; the lines helper moved |
 | `app/api/chat/__tests__/b21-d3-chat-replacement.test.ts` | 7 | D3's cases; the lines helper moved |
 | `app/api/chat/__tests__/b21-e1-chat-provider.test.ts` | 3 | E1's cases; the lines helper moved |
+| `app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts` | 16 | [E2b] the held suite adapted: the block and its one rule (1), the validator (2), the cascade and a literal task id's trace refused (3), the REAL scheduler with the book (4), a retry in one document (5), the durable trace record (6), 256 events per document (7), the nine files byte-identical and the v1 contract unchanged (8); [E2b fix] a specialist on another provider (9), a retry on another provider in the task's next document (10), every unrecorded document named (11), both digests on load (12), the record bound to its scope (13), hostile text cleaned and refused (14), a refused call a line on its task's document (15), the verdict a document carries (16) |
+| `app/lib/agent/orchestration/__tests__/b21-e2b-task-identity.test.ts` | 3 | [E2b] every scheduler task id round-trips through index and role (1); the literal run id still refused and the index-and-role run id accepted through the REAL recorder and validator, `redaction.ts` byte-identical (2); the whole finalized document of real specialist runs and its durable record hold no `task-<n>-` (3; [E2b fix] its warning lines include the book's refused-call line) |
+| `app/lib/agent/orchestration/__tests__/b21-e2b-page.test.ts` | 8 | [E2b] this page's section 3.1 to 3.7, its E2b citations, suites and texts for the lead; [E2b fix] the review's facts (8) |
+| `app/lib/agent/orchestration/__tests__/b21-a-store.test.ts` | 15 | A's cases; [E2b] case 12's import list moved (+ `./trace-attribution`), in place with its reason |
 
 **Test-first.** The three E2 suites ran against the base with only the tests present (`b21/e2/e2-final-failing-first.log`: three files
 failing on the missing module); then with the new module and the contracts in place and the scheduler, the runtime, the run view and
@@ -304,6 +509,82 @@ changed; the nine scanned files byte-identical to HEAD.
 
 Live behaviour with a real model: **BLOCKED-LIVE-QUALIFICATION** (LB-9) - the events are built from the scheduler's own outcomes, never
 from provider output.
+
+**E2's second run** ([B21 E2b], 2026-09-27; logs under the scratchpad's `b21/e2b/`, one heavy job at a time through the lock runner).
+The held work was verified against `held.sha256` (all eight files OK) and applied adapted (3.2 to 3.4).
+
+**Test-first (E2b).** The two new suites and the route suite's two new cases ran against HEAD 41330e6 with only the tests and the
+fixture present (`e2b-failing-first-tests-only.log`: three files failing on the missing module); then with the module in place and the
+store and runtime at HEAD (`e2b-failing-first-module-no-wiring.log`: 7 of 20 failing, each on the missing wiring - the record's trace
+store - and 13 passing by design: the module's own cases, trace-attribution 1 to 3 and task-identity 1 and 2, and the route suite's
+cases 1 to 7); then the wiring (`e2b-green-1.log`: 19 of 20 - the one failure was the new whole-document case's own over-narrow
+expectation of a specialist's warning lines, which also holds the loop's toolset lines: the expectation corrected, never the code);
+then `e2b-green-2-with-A-pins.log` (the three suites 20 of 20; A's gate cases 1, 3 and 5 and A's store case 12 failing on their pins
+before the moves) and `b21-all-1.log` (every B21 suite with the six route suites, 353 of 355: `b21-d3-pin-facts.test.ts` case 1 on the
+book input's field name - renamed `systemPromptVersion`, no pin moved, 3.4 - and E2 page case 5 on this page's route-suite count, 7 ->
+9). The page's suite ran first against the page without E2b's sections (`e2b-page-failing-first.log`: 6 of 7 failing; case 7, the files'
+hygiene, green by design).
+
+**Pin moves (E2b), each with its reason written next to it, each in place (no line added above a cited line).**
+- `b21-a-import-gates.test.ts` cases 1, 3 and 5: `trace-attribution.ts` joins the orchestration gate's entry set (10 -> 11) the day it
+  is written; its closure (the trace contract and recorder, the capture, the redactor, the durable substrate's pure modules, the
+  orchestration contracts) is walked by case 2 and reaches no forbidden family and no provider SDK.
+- `b21-a-store.test.ts` case 12: the store's import list gains `./trace-attribution` (every durable record binds the per-task trace store
+  on its own repository); the rest of the case (no durable runtime, one mismatch sentence, no forbidden subject) unchanged and green.
+- `b21-e2-page.test.ts` case 1: section 3's heading names the stop AND the application (the stop's record stays whole as 3.1; case 6's
+  claims on it unchanged and green).
+- Not pin moves: the route suite gains cases 8 and 9 (its header and describe comments updated, no title changed; its scripted double
+  gains a read-then-result branch); the E2 fixture gains the read-then-result behaviour and the `traced` option (the book bound as the
+  runtime binds it); A's page gains one dated note (the calls' carrier now exists); the rows above.
+
+**Gates (E2b)**, one heavy job at a time through the lock runner (logs under `b21/e2b/`): every B21 suite with the six route suites
+(`gate-b21.log`: 41 files, 362 of 362, every A..E2b page suite included); `app/api/chat/__tests__` in full (20 files, 129 of 129);
+`app/lib/agent/__tests__` in full (36 files, 415 of 415 - the b20-a4 trace attribution case 7, the b11 trace suites and the b18-b loop
+suite among them); `app/lib/project/__tests__` with `app/components/chat` (39 files, 312 of 312 - the B18-D UI gates among them); the
+B17-A control inventory with the engineering exposure and tier suites (10 files, 130 of 130); `app/lib/llm/__tests__` with
+`app/lib/acquisition/__tests__` (22 files, 235 of 235, one opt-in live file skipped as before - the CI job-scope guard among them);
+`app/lib/mcp` with `app/api/mcp/__tests__` (52 files, 920 of 920 - the B20 pages' citations, the b20-b2 nine-file pin); tsc 0
+(`tsc-1.log`, `tsc-2.log` on the finished tree); eslint on the 11 changed and new TypeScript files: clean (`eslint-1.log`). No
+descriptor, route, request key, run-event type, UI line or generator input changed; the nine scanned files and `redaction.ts`
+byte-identical to HEAD.
+
+**The review's findings (E2b)** ([B21 E2b fix], 2026-09-27; the adversarial review of E2's second run: 13 confirmed findings, each
+answered test-first; logs under the scratchpad's `b21/e2b-fix/`). The new cases ran first against the unfixed code (`red-1.log`: 5 of
+26 failing in the trace-attribution and route suites, each on its finding); the test-strength findings were proven by a deliberate
+breakage of the fixed source, run, then restored byte for byte (sha256, `mutate.py`, `mut-*.log`); every fix re-ran green
+(`green-1.log`: 29 of 29 in the two E2b code suites and the route suite).
+
+| finding (severity) | reproducing test | failure observed first | fix | re-run |
+|---|---|---|---|---|
+| `regressions-1`, `coverage-1`, `tests-2` (low, low, low) | trace-attribution case 16 (and case 5's title) | green by design (the code dropped a zero-step document's verdict; the page and case 5's title claimed it); breakage m5 (settle drops `escalated`) fails case 16 | the claims corrected (3.3, 3.4, the D21-11 clause, case 5's title): a document with no step or tool invocation carries no verdict and names no model; case 16 pins `escalated` on a document with a step and the zero-step document's `normalized` | green |
+| `regressions-2` (low) | trace-attribution case 13 | `{ ok: true }` for a document appended under another tenant | the record bound to its scope on append (`invalid_record`) and on load (mismatch): `sameTraceScope` (C100, C101, C105) | green |
+| `regressions-3` (low) | route case 10 | "3 failing: expected 326 to be less than or equal to 300" | `traceUnrecordedLine` bounded to `DEFAULT_REDACTION_CHARS` by construction: whole entries, `+N more` (C108) | green |
+| `security-1` (low) | trace-attribution case 14, against a repository that refuses what jsonb refuses | `{ recorded: 0, failures: ["circuit-topology task 1: trace_store_unavailable"] }` | the whole-document string rule in the validator (C97, C98, C103) and the cascade's `?` with `trace_input_normalized` (C99, C104) | green |
+| `security-3`, `coverage-3` (low, low) | trace-attribution case 10, through the REAL scheduler and provider layer | `failures: ["circuit-topology task 1: provider_switched"]`, `recorded: 1` - attempt 1 WAS routed to anthropic and ran untraced, the accepted verdict on openai's event | the document closed at the switch without a verdict; the attempt opens the task's next document (C88); 3.4's "not reachable" claim corrected | green |
+| `coverage-2` (low) | trace-attribution case 15; task-identity case 3 | the document held only the loop's unknown-tool line (1 of the 4 expected) | `withRefusalLines` and `refusedCallLine` (C102, C106, C107); D21-12's addendum (section 6) | green |
+| `tests-1` (medium) | trace-attribution case 9 | green by design; breakage m1 (a constant provider on the recorder and the handle) fails cases 9 and 10 | the case: a role on anthropic by the server override through the REAL adapters, the other task on openai | green |
+| `tests-3` (low) | trace-attribution case 12 | green by design; breakage m2 (the load's digest check neutralized in place) fails case 12 | the case: four tampers the validator accepts | green |
+| `tests-4` (low) | trace-attribution cases 10 and 11 | case 10 as above; case 11 green by design; breakages m3 (a store refusal recorded nowhere) and m4 (a cascade refusal recorded nowhere) each fail case 11 | the cases; 3.4's reachability claim corrected | green |
+| `tests-5` (low) | route case 10 | green by design for the cap; breakage m6 (the line's `always` dropped) fails it | the case: two specialists fill the 12-line cap with refused calls first | green |
+
+Not pin moves (E2b's own, uncommitted suites): trace-attribution case 5's title no longer claims a verdict it never asserted (the
+earlier title was false, regressions-1); task-identity case 3's warning-line expectation admits the book's refused-call line and its
+title names it (coverage-2); the page's suite rows move with the new cases (16, 10 and 8 `it(` blocks). No A..E2 pin moved; no line
+cited by an A..E2 page moved (`trace-attribution.ts` and `orchestration-runtime.ts` edited in place or appended; the E2b rows C67 to C96
+re-pinned where a cited line changed: C88's anchor, C96's line).
+
+**Gates after the review's fixes (E2b)**, one heavy job at a time through the lock runner (logs under `b21/e2b-fix/`): every B21
+suite with the six route suites (`gate-b21.log`: 41 files, 372 of 372, every A..E2b page suite included); `app/api/chat/__tests__` in
+full (20 files, 130 of 130); `app/lib/agent/__tests__` in full (36 files, 415 of 415 - the b20-a4 trace attribution case 7, the b11
+trace suites and the b18-b loop suite among them); `app/lib/project/__tests__` with `app/components/chat` (39 files, 312 of 312 - the
+B18-D UI gates among them); the B17-A control inventory with the engineering exposure and tier suites (10 files, 130 of 130);
+`app/lib/llm/__tests__` with `app/lib/acquisition/__tests__` (22 files, 235 of 235, one opt-in live file with 2 cases skipped as before -
+the CI job-scope guard among them); `app/lib/mcp` with `app/api/mcp/__tests__` (52 files, 920 of 920 - the B20 pages' citations, the
+b20-b2 nine-file pin); tsc 0 (`tsc.log`); eslint on the 11 changed and new TypeScript files: clean (`eslint.log`). Zero drift, each
+output snapshotted by sha256 first: the B11 generator re-run (19 of 19 cases, 61 of 61 checks; its 21 files byte-identical - it runs
+the loop and the recorder), the B09 agent artifacts re-run (byte-identical) and the B17-A inventory generated into the scratchpad
+(628 controls, both files identical to the committed ones); the tree's status unchanged by the generators. No descriptor, route,
+request key, run-event type, UI line or generator input changed; the nine scanned files and `redaction.ts` byte-identical to HEAD.
 
 ## 6. For the lead — the reserved texts, in full
 
@@ -470,10 +751,142 @@ under LB-9`.
   (`page.tsx:4692-4693`) renders their run-log line - no longer empty (`run-events-and-trace.md` C38, C43, C63); every other unknown type
   still changes nothing, and an older page loses the lines the five carry (OD-126's owner question).
 
+### E2's second run (2/2): the reserved texts
+
+[B21 E2b, 2026-09-27] The texts above are E2's first run's, as the lead applied them (e19033f, 41330e6). E2's second run's texts follow;
+its OD-112 entry REPLACES the stopped one in `OWNER_DECISIONS.md`, and its README row, ledger paragraph, PROGRAM_STATE texts, discovery
+clauses and section-10 lines are new.
+
+### OD-112 — Per-specialist provider/model and task identity on the trace, as applied (B21-E2 2/2, 2026-09-27)
+
+- **Question (as drafted):** widen the trace's provider vocabulary (breaking the b20-a4 / b20-b2 literal pins and OD-72/OD-80), or an
+  optional closed `orchestration` block in a new module outside the nine scanned files, with one trace document per specialist task?
+- **Applied (the default, under the lead's reading of discovery section 10, "B21-E2, run 1 of 2"):** the block, in the new module
+  `app/lib/agent/orchestration/trace-attribution.ts`, with ONE trace document per specialist task. The document's run id is
+  `<runId>:<n>-<role>` - the coordinator's run id, a colon, the task's index and role - and its `parentRunId` the coordinator's run id;
+  the block is `{ taskIndex, role, providerId, modelId, parentRunId, decision? }`: the task's INDEX (1..32, the plan record's bound) and
+  role, never the literal task id `task-<n>-<role>`, which the v1 validator reads as an OpenAI key (D21-41); the task id is
+  reconstructed from index and role (`specialistTaskId`, its inverse `specialistTaskIdentity`; every scheduler task id round-trips).
+  Pattern-bound and denylist-checked by ONE rule the validator and the cascade share (the B20-A4 `external` precedent's shape); the block
+  rides beside the events of an unchanged v1 trace (the v1 contract refuses it inside an event); the schema stays v1 and the
+  coordinator's trace keeps its closed provider literal; the 256-event cap is per document; a retry's attempts on one provider are one
+  document with one terminal and an attempt on another provider opens the task's next document; the specialist's tool calls - and a
+  closed line per call refused before it ran - persist on its own durable trace record `agent.orchestration-trace.v1` beside the
+  orchestration run's aggregate on the same repository, bound to its scope (OD-111's carrier, D21-3's calls). No rule is narrowed: the
+  redaction authority's diagnostic patterns and the nine scanned files are byte-identical to HEAD (OD-113); every string of a stored
+  document is held to the orchestration string rule (a hostile character a `?`). No string of a per-task document holds the literal
+  task id (proven over the whole finalized document of real specialist runs); a document that cannot be recorded is one visible warning
+  line, whole on the coordinator's trace. A document with no step carries no verdict and names no model (none was reported). Proven by
+  `b21-e2b-trace-attribution.test.ts`, `b21-e2b-task-identity.test.ts` and `b21-e2-chat-events.test.ts` cases 8 to 10 (the adversarial
+  review's 13 findings answered test-first, section 5).
+- **The owner may choose otherwise:** (A) anchor the diagnostics' `sk-` key prefix in `redaction.ts` - the coordinator trace's task ids
+  would read legibly instead of `ta[redacted]`, at the cost of narrowing a shared secret check (the per-task documents need none of it);
+  (C) a task-id grammar without `task-` - every B21 record key, suite and page moves, not recommended; (D) editing the scanned validator -
+  refused by D21-27 / OD-113. The lead's reading of (B) stands until the owner says otherwise.
+
+### The README row (2/2) (`artifacts/ai-control-plane-b21/README.md`, a new row "B21-E2 (2/2)" after B21-E2 (1/2))
+
+| B21-E2 (2/2) the trace block: one trace document per specialist task | `run-events-and-trace.md` (section 3.2 onward); code `app/lib/agent/orchestration/trace-attribution.ts` (new), `app/lib/agent/orchestration/store.ts` (every durable record binds its trace store - the constructor in place, the rest appended), `app/api/chat/orchestration-runtime.ts` (the book bound - four lines in place, one of them the redaction import the review's fix widened, the helpers appended) | CONFIRMED (OD-112 applied under the lead's reading: the per-task run id `<runId>:<n>-<role>` and the block carrying the task's index and role, never the task id - D21-41 closed with no rule narrowed; one rule for the validator and the cascade; one document per specialist task with its tool calls on its own durable trace record beside the run's - D21-3's calls and D21-11's trace half closed; a retry on one provider in one document with one terminal, an attempt on another provider in the task's next document; the 256-event cap per document; a failed task's document keeping its failure (no step: no verdict, no model); a call refused before it ran a closed line on its task's document; a hostile character never stored; the record bound to its scope; an unrecorded document one visible line, whole on the coordinator's trace; no string of a per-task trace holding a task id, over the whole document of real runs; the nine scanned files and `redaction.ts` byte-identical; the coordinator's trace, the stream's events and the orchestration record unchanged; 27 new cases in three suites and three route cases, the adversarial review's 13 findings answered test-first; A's gate and store pins and the E2 page's heading pin moved in place with their reasons) |
+
+### The ledger paragraph (2/2) (`artifacts/remaining-builder-program/EXECUTION_LEDGER.md`)
+
+### B21-E2 (2/2) — the trace block: one trace document per specialist task (2026-09-27 local; increment workflow + lead; this commit)
+
+- Held work: the E2 run-1 trace-block files verified against `held.sha256` (eight OK) and applied adapted to the lead's reading of OD-112.
+- Test-first: the two new suites and the route suite's two new cases against HEAD 41330e6 with only the tests
+  (`e2b-failing-first-tests-only.log`: three files on the missing module); with the module but the store and runtime at HEAD
+  (`e2b-failing-first-module-no-wiring.log`: 7 of 20 failing on the missing wiring, 13 green by design); then green; the moved pins
+  failing first on their old values (`e2b-green-2-with-A-pins.log`, `b21-all-1.log`); the page suite against the page without E2b's
+  sections (`e2b-page-failing-first.log`: 6 of 7).
+- Code: `trace-attribution.ts` (new: the task identity and its round trip, the closed block and its one rule, the validator, the cascade,
+  the durable trace record, the book), `store.ts` (every durable record binds its trace store on its own repository; the constructor in
+  place, the rest appended), `orchestration-runtime.ts` (the book bound, the injected loop wrapped, every document appended before
+  anything is handed on, an unrecorded document one visible line - four lines in place, one the redaction import the review's fix
+  widened, the helpers appended). No route, descriptor,
+  request key, run-event type, UI or generator input changed; census 165/162/3/0; the nine scanned files and `redaction.ts`
+  byte-identical to HEAD.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5 (trace-attribution.ts in the entry set, 10 -> 11); A's store case 12 (its
+  import list + `./trace-attribution`); the E2 page's case 1 (section 3's heading names the stop and the application); the E2 page's
+  route-suite row (7 -> 10).
+- Review (E2b fix): the adversarial review's 13 confirmed findings answered test-first (`b21/e2b-fix/red-1.log`: 5 of 26 failing on
+  their findings; six deliberate breakages each caught and restored by sha256; `green-1.log` 29 of 29): an attempt on another provider
+  opens the task's next document (reachable - the scheduler routes every attempt again) instead of running untraced; every string of a
+  stored document held to the orchestration string rule (a NUL or lone surrogate no longer fails the jsonb commit); the record bound to
+  its scope; a call refused before it ran one closed line on its task's document (D21-12's addendum); the unrecorded line whole on the
+  coordinator's trace (bounded by construction); the zero-step document's verdict and model claims corrected; eight new trace-attribution
+  cases, one route case, one page case.
+- Gates re-run one job at a time after the review's fixes (the lead re-runs them): every B21 suite with the six route suites (41
+  files, 372 of 372); `app/api/chat/__tests__` (130 of 130); `app/lib/agent/__tests__` (415 of 415); `app/lib/project/__tests__` with
+  `app/components/chat` (312 of 312); the B17-A inventory with the exposure and tier suites (130 of 130); `app/lib/llm` and
+  `app/lib/acquisition` (235 of 235, one opt-in live file skipped); `app/lib/mcp` and `app/api/mcp/__tests__` (920 of 920); tsc 0;
+  eslint clean on the 11 changed and new TypeScript files; the B11, B09 and B17-A generators with zero drift - figures on the page.
+- Records: `run-events-and-trace.md` (section 3.1 to 3.7, E2b's rows and citations, these texts); OD-112 applied under the lead's
+  reading; D21-11's trace half, D21-3's calls half and D21-41 closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+
+### PROGRAM_STATE.json (2/2) (`artifacts/remaining-builder-program/PROGRAM_STATE.json`)
+
+`currentCheckpoint`: "B21-E2 (2/2) committed on chapter/b21-specialist-orchestration: the trace block under the lead's reading of
+OD-112 - one trace document per specialist task, its run id <runId>:<n>-<role>, the closed block carrying the task's index and role and
+never the task id (D21-41 closed, no rule narrowed), one rule for the validator and the cascade, the specialist's tool calls on its own
+durable trace record beside the orchestration run's (D21-3's calls, D21-11's trace half), a retry on one provider in one document and
+an attempt on another in the task's next, a call refused before it ran a closed line, 256 events per document, an unrecorded document
+one visible line, every stored string held to the orchestration string rule, the nine scanned files and redaction.ts byte-identical;
+the adversarial review's 13 findings answered; next B21-E3".
+`nextAction`: "B21-E3: the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half;
+D21-17's live-head half), the composer's kind swap (D21-38), and the coordinator's first turn behind the breaker (D21-39); OD-126's
+older-page question and OD-112's option A (legible task ids on the coordinator's trace) stay with the owner". The report line for the
+closeout: `MULTI-AGENT STATUS: ...; the additive run events and the status line (B21-E2 1/2) and the per-task trace documents with the
+specialists' tool calls on their own durable records (B21-E2 2/2) delivered offline behind SIRKIT_ORCHESTRATION_ENABLED; the route-level
+resume and evaluations pending (B21-E3..F); live disagreement / fallback / quota BLOCKED-LIVE-QUALIFICATION under LB-9`.
+
+### Discovery closure clauses (2/2) (`discovery.md` §4, appended to each defect; §10 gains a "B21-E2, run 2 of 2" amendment)
+
+- **D21-11 — Provider/model identity is recorded once per run, closed to `openai | anthropic`, pinned literally, and not carried
+  uniformly by the artifacts a merge layer would compare.** — the trace half CLOSED by B21-E2 (2/2) (OD-112 as the lead read it): every
+  specialist task that ran has its own v1 trace document, run id `<runId>:<n>-<role>`, whose provider is the one its attempt ran on and
+  whose every step and tool invocation carries the closed block `{ taskIndex, role, providerId, modelId, parentRunId, decision? }` -
+  the provider and the model per specialist on the trace, linked to the coordinator's run - a specialist on another provider than the
+  coordinator records on its own (case 9), and an attempt on another provider opens the task's next document (case 10); a document with
+  no step or tool invocation names no model and carries no verdict (none was reported: its terminal keeps the failure and the
+  orchestration record the verdict, case 16); the coordinator's trace keeps its closed provider literal (the b20-a4 / b20-b2 pins green,
+  OD-72/OD-80 unchanged) (`b21-e2b-trace-attribution.test.ts` cases 1 to 5, 9, 10 and 16, `b21-e2-chat-events.test.ts` case 8).
+- **D21-3 — No agent-run record is persisted anywhere; there is no "immutable trace" to resume from.** — the calls half CLOSED by
+  B21-E2 (2/2): each specialist task's tool calls (identities and digests, as every trace holds them) and each call its loop refused
+  before it ran (a closed line) are persisted on its own durable trace record `agent.orchestration-trace.v1` beside
+  `agent.orchestration-run.v1` on the same repository - validated, digest-bound, bound to its scope, idempotent by trace id, re-validated
+  on every load, no outbox effect; the run's own record unchanged (`b21-e2b-trace-attribution.test.ts` cases 4, 6, 12, 13 and 15, route
+  case 8). The route-level resume that reads records back after a refresh stays B21-E3's (D21-4).
+- **D21-12 — Pre-invocation refusals are untraced, `verification` is free text, and no traced field carries assumptions, evidence,
+  decisions, dissent or a source/model correlation key.** — addendum by B21-E2 (2/2): a SPECIALIST's pre-invocation refusals are traced
+  now - each call its loop refused before it ran is ONE closed line on its task's own per-task trace document (`refusedCallLine`: the
+  registry's tool id or none and the closed status, never a task id or the arguments; `b21-e2b-trace-attribution.test.ts` case 15),
+  persisted on its durable trace record; the coordinator's own loop's refusals stay untraced `tool_refused` events (`loop.ts` unchanged),
+  `verification` stays free text, and no traced field carries assumptions, evidence, decisions, dissent or a correlation key beyond the
+  block's provider and model per step - those stay open.
+- **D21-41 — The v1 trace contract refuses every per-task run id `<runId>:<taskId>`.** — CLOSED by B21-E2 (2/2) under the lead's
+  reading of option B: the per-task run id is `<runId>:<n>-<role>` and the block carries the task's index and role, never the literal task
+  id, which is reconstructed from them (`specialistTaskId`; every scheduler task id round-trips); no rule narrowed and no scanned file
+  edited - the literal run id is still refused through the real recorder and validator for every task of every DAG and the index-and-role
+  run id accepted, and no string of a real specialist's finalized trace or durable record holds `task-<n>-`
+  (`b21-e2b-task-identity.test.ts` cases 1 to 3). RECORDED: the coordinator trace's task ids still read `ta[redacted]` (option A is the
+  owner's).
+- **§10, "B21-E2, run 2 of 2" (recorded by the lead, 2026-09-27):** Section 4: D21-11's trace half, D21-3's calls half and D21-41 closed.
+  Section 6: OD-112 applied as `run-events-and-trace.md` section 3.2 states it (the lead's reading: the per-task run id
+  `<runId>:<n>-<role>`, the block's index and role). Section 7, B21-E2 (2/2): as built - the held trace block applied adapted
+  (`trace-attribution.ts`; the record's trace store; the book in the runtime, settled with the scheduler's outcome after it returns, so
+  the runtime line that streams the events is untouched); A's gate and store pins and the E2 page's heading pin moved in place with their
+  reasons. Section 8: the book input's `systemPromptVersion` (D3's pin-facts case reads the runtime from `specialistGatewayOptions(` to
+  its end and forbids the gateway option's name there). The adversarial review of E2's second run: 13 confirmed findings answered
+  test-first (`run-events-and-trace.md` section 5, "The review's findings (E2b)") - an attempt on another provider is reachable and
+  opens the task's next document; every stored string held to the orchestration string rule; the trace record bound to its scope; a
+  specialist's pre-invocation refusals traced as closed lines (D21-12's addendum); the unrecorded line whole on the coordinator's trace;
+  a document with no step carries no verdict and names no model.
+
 ## 7. Citations, as of base 3a32317
 
 The anchor is what is checked (it occurs exactly once in its file). For every file E2 changed the line is the CURRENT line and page
-case 5 checks it; for every other file the line is the base's (unchanged by E2).
+case 5 checks it; for every other file the line is the base's (unchanged by E2). [B21 E2b] Rows C67 onward are E2's second run's, their
+lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every production file E2b changed.
 
 | # | file | line | within | anchor | what it shows |
 |---|---|---|---|---|---|
@@ -503,7 +916,7 @@ case 5 checks it; for every other file the line is the base's (unchanged by E2).
 | C24 | `app/lib/agent/orchestration/scheduler.ts` | 548 | — | `report(specialistStartedEvent({ runId: coordinator.runId, taskId: task.taskId,` | one specialist_started per attempt that reaches the provider layer |
 | C25 | `app/lib/agent/orchestration/scheduler.ts` | 562 | — | `refused: ${event.status}.` | a refused tool call of a specialist stays a WARNING line |
 | C26 | `app/lib/agent/orchestration/scheduler.ts` | 631 | — | `, retry));` | a retried attempt: runsAgain |
-| C27 | `app/lib/agent/orchestration/scheduler.ts` | 163 | — | `export function specialistRunId(coordinatorRunId: string, taskId: string): string {` | the specialist run id <coordinatorRunId>:<taskId> (the trace block's mandated run id) |
+| C27 | `app/lib/agent/orchestration/scheduler.ts` | 163 | — | `export function specialistRunId(coordinatorRunId: string, taskId: string): string {` | the specialist run id <coordinatorRunId>:<taskId> (the trace block's mandated run id); [E2b] the per-task TRACE run id is <runId>:<n>-<role> instead (C72) |
 | C28 | `app/lib/agent/orchestration/scheduler.ts` | 161 | — | `return roles.filter((role) => role !== "coordinator").map((role, index) => ({ taskId:` | task ids are task-<n>-<role> |
 | C29 | `app/api/chat/orchestration-runtime.ts` | 221 | — | `let traceLines = 0; const report = (event: OrchestrationRunEvent, always = false): void =>` | the runtime's event channel: the event streamed, its line traced exactly as B's warning was |
 | C30 | `app/api/chat/orchestration-runtime.ts` | 251 | — | `if (reason !== null) report(reason, true); const partial = ranOutcome ?` | a stand-down: its degraded event, then the run's partial result |
@@ -543,3 +956,45 @@ case 5 checks it; for every other file the line is the base's (unchanged by E2).
 | C64 | `app/lib/agent/orchestration/scheduler.ts` | 548 | — | `wallTimeRemainingMs: remainingMs, outputTokensRemaining: Math.max(0, outputTokenCeiling - outputTokensUsed)` | [fix] the budget remaining on every start (D21-22) |
 | C65 | `app/lib/agent/orchestration/run-events.ts` | 151 | — | `const notStarted = new Set(input.notStarted.map((task) => task.taskId).filter((taskId) => !last.has(taskId))).size;` | [fix] a task counted once: not started only when it has no outcome |
 | C66 | `app/lib/agent/orchestration/run-events.ts` | 226 | — | `return "counts: the parts exceed the planned tasks";` | [fix] the judge refuses a partial result whose parts exceed the plan |
+| C67 | `app/lib/agent/orchestration/trace-attribution.ts` | 47 | — | `export const ORCHESTRATION_TRACE_BLOCK_KEYS = Object.freeze(` | [E2b] the block's closed keys: the task's index and role, never its id |
+| C68 | `app/lib/agent/orchestration/trace-attribution.ts` | 50 | — | `export const TRACE_BLOCK_DECISIONS = Object.freeze(` | [E2b] the scheduler's three verdicts a document ends with |
+| C69 | `app/lib/agent/orchestration/trace-attribution.ts` | 63 | — | `export const MAX_TASK_INDEX = ORCHESTRATION_BOUNDS.maxArrayEntries;` | [E2b] the index bound: the plan record's bound on its tasks |
+| C70 | `app/lib/agent/orchestration/trace-attribution.ts` | 84 | — | `export function specialistTaskId(` | [E2b] the task id reconstructed from index and role |
+| C71 | `app/lib/agent/orchestration/trace-attribution.ts` | 89 | — | `export function specialistTaskIdentity(` | [E2b] its inverse: every scheduler task id round-trips |
+| C72 | `app/lib/agent/orchestration/trace-attribution.ts` | 95 | — | `export function specialistTraceRunId(` | [E2b] the per-task trace run id <runId>:<n>-<role> |
+| C73 | `app/lib/agent/orchestration/trace-attribution.ts` | 101 | — | `export function specialistTraceIdentity(` | [E2b] its inverse (the parent before the last colon) |
+| C74 | `app/lib/agent/orchestration/trace-attribution.ts` | 99 | — | `const isParentRunId = ` | [E2b] the parent run id: the id grammar and the v1 trace's own secret rule |
+| C75 | `app/lib/agent/orchestration/trace-attribution.ts` | 123 | — | `export function orchestrationBlockIssue(` | [E2b] the ONE rule the validator and the cascade share |
+| C76 | `app/lib/agent/orchestration/trace-attribution.ts` | 158 | — | `if (!identity) return ["document.trace.runId: is not <parentRunId>:<taskIndex>-<role>"];` | [E2b] the validator: the trace's run id names the task |
+| C77 | `app/lib/agent/orchestration/trace-attribution.ts` | 161 | — | `const secretPath = findSecretShapedPath(attribution, "document.attribution");` | [E2b] the attribution under the trace's own secret rule |
+| C78 | `app/lib/agent/orchestration/trace-attribution.ts` | 204 | — | `export function validateOrchestrationTrace(` | [E2b] the validator |
+| C79 | `app/lib/agent/orchestration/trace-attribution.ts` | 221 | — | `export function attributeSpecialistTrace(` | [E2b] the cascade |
+| C80 | `app/lib/agent/orchestration/trace-attribution.ts` | 226 | — | `if (trace.runId !== specialistTraceRunId(identity.parentRunId, identity.taskIndex, identity.role))` | [E2b] the cascade attributes only the task of the trace's run id |
+| C81 | `app/lib/agent/orchestration/trace-attribution.ts` | 254 | — | `export const ORCHESTRATION_TRACE_AGGREGATE_TYPE = ` | [E2b] the durable trace aggregate |
+| C82 | `app/lib/agent/orchestration/trace-attribution.ts` | 278 | — | `export class DurableOrchestrationTraceStore implements` | [E2b] the durable trace record (D21-3's calls) |
+| C83 | `app/lib/agent/orchestration/trace-attribution.ts` | 293 | — | `const record: OrchestrationTraceRecord = {` | [E2b] a record names the parent run, the task's index and role - never its id |
+| C84 | `app/lib/agent/orchestration/trace-attribution.ts` | 272 | — | `throw new Error("AGENT_ORCHESTRATION_TRACE_MISMATCH");` | [E2b] the one mismatch sentence of a load |
+| C85 | `app/lib/agent/orchestration/trace-attribution.ts` | 349 | — | `export function specialistTraceBook(` | [E2b] the book: one document per specialist task |
+| C86 | `app/lib/agent/orchestration/trace-attribution.ts` | 364 | — | `runId: specialistTraceRunId(input.coordinatorRunId, task.taskIndex, task.role), traceId: input.newTraceId()` | [E2b] a task's own recorder under the per-task run id |
+| C87 | `app/lib/agent/orchestration/trace-attribution.ts` | 374 | — | `if (property === "recordTerminal") return` | [E2b] the held terminal: a retry's attempts in one document |
+| C88 | `app/lib/agent/orchestration/trace-attribution.ts` | 409 | — | `if (handle && handle.provider !== request.provider) { close(handle, undefined); handle = undefined; }` | [E2b; fix: security-3, re-anchored] an attempt on another provider closes the task's document without a verdict and opens its next one |
+| C89 | `app/lib/agent/orchestration/trace-attribution.ts` | 419 | — | `close(handle, status !== undefined` | [E2b] settle: the task's last document closed with its task's last outcome |
+| C90 | `app/lib/agent/orchestration/store.ts` | 268 | — | `constructor(private readonly workflow: DurableWorkflowRepository) { TRACE_STORES.set(this, new DurableOrchestrationTraceStore(workflow)); }` | [E2b] every durable record binds its trace store on the same repository (in place) |
+| C91 | `app/lib/agent/orchestration/store.ts` | 372 | — | `export function orchestrationTraceStoreOf(` | [E2b] the record's trace store, and nothing else of the repository (appended) |
+| C92 | `app/api/chat/orchestration-runtime.ts` | 259 | — | `const book = specialistTraceBookFor({ request, context: deps.context, plan` | [E2b] the runtime binds the book (in place of a comment line) |
+| C93 | `app/api/chat/orchestration-runtime.ts` | 267 | — | `runLoop: book ? book.loop(runAgentLoop) : runAgentLoop` | [E2b] the injected loop wrapped (in place) |
+| C94 | `app/api/chat/orchestration-runtime.ts` | 270 | — | `const traced = book ? await book.settle(outcome.kind === "ran" ? outcome.tasks : []) : null;` | [E2b] every document appended before anything is handed on; a failure one line (in place of a comment line) |
+| C95 | `app/api/chat/orchestration-runtime.ts` | 549 | — | `export function specialistTraceBookFor(` | [E2b] the book on the record's own repository (appended) |
+| C96 | `app/api/chat/orchestration-runtime.ts` | 561 | — | `export function traceUnrecordedLine(` | [E2b] the one line of documents not recorded (appended; [fix] re-pinned: its comment grew) |
+| C97 | `app/lib/agent/orchestration/trace-attribution.ts` | 114 | — | `const TEXT_FORBIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u;` | [E2b fix: security-1] the one text rule: control, format, separator, lone surrogate (in place) |
+| C98 | `app/lib/agent/orchestration/trace-attribution.ts` | 162 | — | `const textPath = forbiddenTextPath(document, "document");` | [E2b fix: security-1] the validator holds the WHOLE document to it (in place) |
+| C99 | `app/lib/agent/orchestration/trace-attribution.ts` | 223 | — | `const trace = cleanTraceText(recorded);` | [E2b fix: security-1] the cascade attributes the cleaned trace (in place) |
+| C100 | `app/lib/agent/orchestration/trace-attribution.ts` | 285 | — | `!sameTraceScope(input.document.trace.scope, scope)` | [E2b fix: regressions-2] an append bound to its scope (in place) |
+| C101 | `app/lib/agent/orchestration/trace-attribution.ts` | 318 | — | `!sameTraceScope(record.document.trace.scope, traceScope(scope))` | [E2b fix: regressions-2] a load bound to its scope (in place) |
+| C102 | `app/lib/agent/orchestration/trace-attribution.ts` | 411 | — | `emit: withRefusalLines(handle.recorder, deps.emit)` | [E2b fix: coverage-2] the attempt's events: a refused call a line on its document (in place) |
+| C103 | `app/lib/agent/orchestration/trace-attribution.ts` | 434 | — | `function forbiddenTextPath(` | [E2b fix: security-1] the first key or string breaking the text rule (appended) |
+| C104 | `app/lib/agent/orchestration/trace-attribution.ts` | 447 | — | `function cleanTraceText(` | [E2b fix: security-1] every such character a `?`, `trace_input_normalized` added (appended) |
+| C105 | `app/lib/agent/orchestration/trace-attribution.ts` | 455 | — | `function sameTraceScope(` | [E2b fix: regressions-2] a trace's scope IS the record's (appended) |
+| C106 | `app/lib/agent/orchestration/trace-attribution.ts` | 464 | — | `export function refusedCallLine(` | [E2b fix: coverage-2] a call refused before it ran: one closed line (appended) |
+| C107 | `app/lib/agent/orchestration/trace-attribution.ts` | 468 | — | `function withRefusalLines(` | [E2b fix: coverage-2] each `tool_refused` recorded as its line, passively (appended) |
+| C108 | `app/api/chat/orchestration-runtime.ts` | 564 | — | `while (shown > 0 && line(shown).length > DEFAULT_REDACTION_CHARS) shown -= 1;` | [E2b fix: regressions-3] the unrecorded line bounded by construction (appended) |

@@ -8,6 +8,10 @@
  * reducer makes of it. Flag OFF the four streams are HEAD's byte for byte (B21-B's recordings). [B21 E2 fix] Cases 5 to 7 answer the
  * adversarial review: every runtime stand-down pinned by its degraded reason (tests-1), the trace's 12-line cap with its stand-down
  * override (tests-3), the partial result counting what the merge withheld (security-1, coverage-1); case 4 sets the flag off itself (tests-7).
+ * [B21 E2b] Cases 8 and 9: every specialist that ran has its OWN trace document on the durable trace record beside the orchestration
+ * run's (run id `<runId>:<n>-<role>`, its tool calls on it, no string holding a task id), a failed specialist's document keeps its
+ * failure, and a trace record that cannot be written is one visible warning line - the route's sink still receives ONE trace.
+ * [B21 E2b fix] Case 10: that line is on the coordinator's trace past the 12-line cap and WHOLE (bounded by construction).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchematicState } from "@/lib/schematic-types";
@@ -18,10 +22,13 @@ import { replacementHeadDigestFor } from "@/app/lib/engineering/replacement-prop
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 import { InMemoryDurableWorkflowRepository } from "@/app/lib/durable-workflow/repository";
 import { InMemoryTraceSink, setAgentTraceSinkFactory } from "@/app/lib/agent/trace-recorder";
-import type { AgentRunTrace } from "@/app/lib/agent/trace";
+import { TRACE_BOUNDS, type AgentRunTrace } from "@/app/lib/agent/trace";
 import { ORCHESTRATION_RUN_EVENT_TYPES, type DegradedReason } from "@/app/lib/agent/contracts";
-import { DurableOrchestrationRunStore, type OrchestrationRunStore } from "@/app/lib/agent/orchestration/store";
+import { DurableOrchestrationRunStore, orchestrationTraceStoreOf, type OrchestrationRunStore } from "@/app/lib/agent/orchestration/store";
 import { RUN_EVENT_TRACE_TYPES, orchestrationRunEventIssue } from "@/app/lib/agent/orchestration/run-events";
+import { ORCHESTRATION_TRACE_AGGREGATE_TYPE, validateOrchestrationTrace } from "@/app/lib/agent/orchestration/trace-attribution";
+import { SPECIALIST_ROLES } from "@/app/lib/agent/orchestration/contracts";
+import type { DurableCommitRequest, DurableCommitResult } from "@/app/lib/durable-workflow/types";
 import { failOnce } from "@/app/lib/agent/orchestration/__tests__/_e1-fixtures";
 import { initialRunView, projectRunView, reduceRunView } from "@/app/lib/project/chat-run-view";
 import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
@@ -30,9 +37,11 @@ import { sanitizeTraceText } from "@/app/lib/agent/redaction";
 const state = vi.hoisted(() => ({
   starts: [] as Array<{ role: string; tools: string[] }>,
   /** per role: what the scripted adapter does ([B21 E2 fix] + six unadvertised calls in one step; a result written as text) */
-  script: {} as Record<string, "throw-quota" | "call-unknown" | "call-unknown-many" | "text-only">,
+  script: {} as Record<string, "throw-quota" | "call-unknown" | "call-unknown-many" | "text-only" | "read-then-result">,
   /** [B21 E2 fix] the coordinator's SECOND turn (the follow-up) fails with a provider network error */
   followUpFails: false,
+  /** [B21 E2b] the read each `read-then-result` specialist called */
+  reads: [] as Array<{ role: string; toolId: string }>,
 }));
 
 vi.mock("@/app/lib/agent/adapters", async (importOriginal) => { // [B21 E2 fix] the original module under the two wrapped factories (the E1 fixture's helpers import its classes)
@@ -51,6 +60,12 @@ vi.mock("@/app/lib/agent/adapters", async (importOriginal) => { // [B21 E2 fix] 
         const behaviour = state.script[role];
         if (behaviour === "throw-quota") throw new LLMProviderError("openai", "insufficient_quota");
         if (behaviour === "text-only") return { text: `(scripted) ${role}: a result written as text.`, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
+        const read = behaviour === "read-then-result" ? input.tools.find((tool) => tool.toolId === "sirkit.validation.connectivity-verify") ?? input.tools.find((tool) => tool.toolId === "sirkit.schematic.inspect") : undefined;
+        if (read) { // [B21 E2b] one offered read first, then the result (the per-task trace records the call)
+          pending = { role, tools: input.tools };
+          state.reads.push({ role, toolId: read.toolId });
+          return { text: "", toolCalls: [{ callId: `call-read-${role}`, providerName: read.providerName, argumentsText: "{}" }], stopReason: "tool_use", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
+        }
         if (behaviour === "call-unknown" || behaviour === "call-unknown-many") {
           pending = { role, tools: input.tools };
           const calls = Array.from({ length: behaviour === "call-unknown" ? 1 : 6 }, (_, index) => ({ callId: `call-unknown-${role}${index === 0 ? "" : `-${index}`}`, providerName: "sirkit_release_now", argumentsText: index === 0 ? "{}" : JSON.stringify({ index }) }));
@@ -71,7 +86,7 @@ vi.mock("@/app/lib/agent/adapters", async (importOriginal) => { // [B21 E2 fix] 
 });
 
 import { POST, EDITOR_CONTEXT_SCHEMA } from "../route";
-import { ORCHESTRATION_ENABLED_ENV, ORCHESTRATION_TRACE_LINES_MAX, orchestrationEnabled, resetOrchestrationStoreFactory, setOrchestrationStoreFactory } from "../orchestration-runtime";
+import { ORCHESTRATION_ENABLED_ENV, ORCHESTRATION_TRACE_LINES_MAX, orchestrationEnabled, resetOrchestrationStoreFactory, setOrchestrationStoreFactory, traceUnrecordedLine } from "../orchestration-runtime";
 
 const SCOPE = { tenantId: "tenant-1", projectId: "project-1", branchId: "main" };
 const SCHEMATIC: SchematicState = {
@@ -153,9 +168,19 @@ afterEach(() => {
   state.starts = [];
   state.script = {};
   state.followUpFails = false;
+  state.reads = [];
 });
+/** [B21 E2b] every string and every key of a JSON value */
+const strings = (value: unknown): string[] => typeof value === "string" ? [value] : value === null || typeof value !== "object" ? [] : Array.isArray(value) ? value.flatMap(strings) : Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => [key, ...strings(item)]);
+/** [B21 E2b] a repository whose trace-record commits fail (a driver message that must never reach the client) */
+class TraceRecordsDown extends InMemoryDurableWorkflowRepository {
+  override async commit<TResult extends object = Record<string, unknown>>(request: DurableCommitRequest<TResult>): Promise<DurableCommitResult<TResult>> {
+    if (request.operations.some((operation) => operation.aggregateType === ORCHESTRATION_TRACE_AGGREGATE_TYPE)) throw new Error("trace driver down: connection to db-internal-7 refused");
+    return super.commit(request);
+  }
+}
 
-describe("[B21 E2] the run events through the production POST", () => { // [B21 E2 fix: tests-7] no per-task trace record exists (the trace block stopped, D21-41)
+describe("[B21 E2] the run events through the production POST", () => { // [B21 E2 fix: tests-7] the events' cases; [B21 E2b] cases 8 and 9 the per-task trace records (the trace block applied, D21-41 closed)
   it("1. flag ON, the replacement DAG: ONE stream (protocol 1, one run_started, one terminal - last) carrying the plan, a started and a finished event per specialist that ran, the not-run role's degraded event and the partial result - each a closed shape the judge accepts, carrying B21-B's sentence; no warning carries a plan or status line; the route's sink receives ONE trace, the coordinator's, whose warnings are B21-B's lines", async () => {
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemory();
@@ -322,5 +347,97 @@ describe("[B21 E2] the run events through the production POST", () => { // [B21 
     expect(partial[0]!.message).toBe("Orchestration: partial result - 0 of 1 planned specialist(s) delivered a usable result (0 escalated or malformed, 1 withheld by the deterministic merge, 0 not started); the follow-up turn used what was committed, and says what stays missing.");
     expect(projectRunView(events.reduce(reduceRunView, initialRunView())).status).toBe("Specialists: 1 scheduled · 1 finished · partial result: 0 of 1 usable");
     expect(types(events).at(-1)).toBe("run_completed");
+  });
+
+  it("8. [B21 E2b] every specialist that ran has its OWN trace document on the durable trace record beside the orchestration run's - run id <runId>:<n>-<role>, the parent the coordinator's run, every block naming the task's index and role and the verdict on the last - the circuit specialist's read call on its own record; the not-run role has none; no string or key of any record holds a task id; the route's sink still receives ONE trace (the coordinator's) and the orchestration run's own history is exactly case 1's", async () => {
+    vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
+    const { repository, store } = inMemory();
+    setOrchestrationStoreFactory(() => store);
+    const traces = traceCapture();
+    state.script = { "circuit-topology": "read-then-result" };
+    const { runId, events } = await post(BODIES.replacement);
+    expect(state.reads.map((read) => read.role)).toEqual(["circuit-topology"]);
+    const traceStore = orchestrationTraceStoreOf(store)!;
+    expect(await repository.listHeads({ aggregateType: ORCHESTRATION_TRACE_AGGREGATE_TYPE, scope: SCOPE })).toHaveLength(3);
+    for (const [taskIndex, role] of [[1, "circuit-topology"], [3, "schematic"], [4, "verification-critic"]] as const) {
+      const history = await traceStore.history(SCOPE, `${runId}:${taskIndex}-${role}`);
+      expect(history, role).toHaveLength(1);
+      const record = history[0]!.record;
+      expect(record, role).toMatchObject({ runId: `${runId}:${taskIndex}-${role}`, parentRunId: runId, taskIndex, role });
+      expect(validateOrchestrationTrace(record.document), role).toEqual([]);
+      expect(record.document.trace.provider, role).toBe("openai");
+      expect(record.document.attribution.length, role).toBeGreaterThan(0);
+      for (const entry of record.document.attribution) expect(entry.orchestration, role).toMatchObject({ taskIndex, role, parentRunId: runId, providerId: "openai", modelId: "scripted" });
+      expect(record.document.attribution.at(-1)!.orchestration.decision, role).toBe("accepted");
+      expect(strings(record).filter((text) => /task-\d+-/.test(text)), role).toEqual([]);
+    }
+    const circuit = (await traceStore.history(SCOPE, `${runId}:1-circuit-topology`))[0]!.record.document;
+    const calls = circuit.trace.events.filter((event) => event.kind === "tool_invocation");
+    expect(calls.map((event) => (event.kind === "tool_invocation" ? event.toolId : null))).toEqual([state.reads[0]!.toolId]);
+    expect(circuit.attribution.find((entry) => entry.seq === calls[0]!.seq)!.orchestration).toEqual({ taskIndex: 1, role: "circuit-topology", providerId: "openai", modelId: "scripted", parentRunId: runId });
+    expect(await traceStore.history(SCOPE, `${runId}:2-component-sourcing-evidence`)).toEqual([]);
+    expect(traces).toHaveLength(1);
+    expect(traces[0]!.runId).toBe(runId);
+    expect(warnings(events).some((line) => line.includes("trace document"))).toBe(false);
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => `${entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-schematic:request", "task-3-schematic:result", "task-4-verification-critic:request", "task-4-verification-critic:result", "task-1-circuit-topology.merge-*:decision", "task-3-schematic.merge-*:decision", "task-4-verification-critic.merge-*:decision"]);
+  });
+
+  it("9. [B21 E2b] a failed specialist's own trace document keeps its failure as its terminal (the provider outage) and a task never started has none; a trace record that cannot be written is ONE visible warning line naming each task by role and index with its closed reason - never silent, never the driver's message - recorded on the coordinator's trace, while everything else stands: the events, the specialists' results, the merge, the follow-up turn, the one terminal and the orchestration run's record", async () => {
+    vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
+    const { store } = inMemory();
+    setOrchestrationStoreFactory(() => store);
+    state.script = { "circuit-topology": "throw-quota" };
+    const failed = await post(BODIES.replacement);
+    const circuit = (await orchestrationTraceStoreOf(store)!.history(SCOPE, `${failed.runId}:1-circuit-topology`))[0]!.record.document;
+    expect(circuit.trace.events.map((event) => event.kind)).toEqual(["run_started", "terminal"]);
+    expect(circuit.trace.terminal).toMatchObject({ outcome: "failed", failureReason: "provider_insufficient_quota" });
+    expect(circuit.attribution).toEqual([]);
+    expect(await orchestrationTraceStoreOf(store)!.history(SCOPE, `${failed.runId}:3-schematic`)).toEqual([]);
+    // the trace records down: the run is otherwise exactly case 1's
+    resetAdmissionControl();
+    state.script = {};
+    state.starts = [];
+    const repository = new TraceRecordsDown();
+    const down = new DurableOrchestrationRunStore(repository);
+    setOrchestrationStoreFactory(() => down);
+    const traces = traceCapture();
+    const { runId, events } = await post(BODIES.replacement);
+    const line = "Orchestration: 3 specialist trace document(s) were not recorded (circuit-topology task 1: trace_store_unavailable; schematic task 3: trace_store_unavailable; verification-critic task 4: trace_store_unavailable); the specialists' results stand, but their tool calls are not in the record.";
+    expect(warnings(events).filter((text) => text.includes("trace document"))).toEqual([line]);
+    expect(events.map((event) => JSON.stringify(event)).join("\n")).not.toContain("db-internal");
+    expect(traces).toHaveLength(1);
+    expect(traces[0]!.warnings).toContain(sanitizeTraceText(line));
+    expect(orchestration(events).map((event) => `${String(event.type)}${event.taskId ? `:${String(event.taskId)}` : ""}`)).toEqual(["plan", "specialist_started:task-1-circuit-topology", "specialist_finished:task-1-circuit-topology", "degraded:task-2-component-sourcing-evidence", "specialist_started:task-3-schematic", "specialist_finished:task-3-schematic", "specialist_started:task-4-verification-critic", "specialist_finished:task-4-verification-critic", "partial_result"]);
+    expect(types(events).filter((type) => type === "run_completed" || type === "run_failed")).toEqual(["run_completed"]);
+    expect(events.at(-1)).toMatchObject({ type: "run_completed", steps: 2 });
+    expect(await repository.listHeads({ aggregateType: ORCHESTRATION_TRACE_AGGREGATE_TYPE, scope: SCOPE })).toEqual([]);
+    expect((await down.history({ ...SCOPE, runId })).map((entry) => `${entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-schematic:request", "task-3-schematic:result", "task-4-verification-critic:request", "task-4-verification-critic:result", "task-1-circuit-topology.merge-*:decision", "task-3-schematic.merge-*:decision", "task-4-verification-critic.merge-*:decision"]);
+  });
+
+  it("10. [B21 E2b fix: tests-5, regressions-3] the unrecorded-trace line is ALWAYS on the coordinator's trace - past the 12-line orchestration cap - and WHOLE: at most the recorder's 300-character warning bound by construction (whole task entries, the rest counted as `+N more`, its closing clause never cut), so the trace holds exactly the stream's line; one to four failing documents of the longest specialist roles at two-digit indices stay within the bound", async () => {
+    const longest = SPECIALIST_ROLES.filter((role) => role !== "coordinator").sort((a, b) => b.length - a.length).slice(0, 4);
+    for (let count = 1; count <= longest.length; count += 1) {
+      const line = traceUnrecordedLine(longest.slice(0, count).map((role, index) => `${role} task ${29 + index}: trace_store_unavailable`));
+      expect(line.length, `${count} failing`).toBeLessThanOrEqual(TRACE_BOUNDS.maxWarningChars);
+      expect(sanitizeTraceText(line), `${count} failing`).toBe(line);
+      expect(line.startsWith(`Orchestration: ${count} specialist trace document(s) were not recorded (${longest[0]} task 29: `), `${count} failing`).toBe(true);
+      expect(line, `${count} failing`).toMatch(/^Orchestration: \d specialist trace document\(s\) were not recorded \([a-z-]+ task \d+: trace_store_unavailable(?:; [a-z-]+ task \d+: trace_store_unavailable)*(?:; \+\d+ more)?\); the specialists' results stand, but their tool calls are not in the record\.$/);
+    }
+    expect(traceUnrecordedLine(longest.map((role, index) => `${role} task ${29 + index}: trace_store_unavailable`))).toMatch(/; \+\d+ more\); the specialists' results stand/);
+    // through the production POST: the trace records down and two specialists filling the 12-line cap with refused calls first
+    vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
+    const down = new DurableOrchestrationRunStore(new TraceRecordsDown());
+    setOrchestrationStoreFactory(() => down);
+    const traces = traceCapture();
+    state.script = { "circuit-topology": "call-unknown-many", schematic: "call-unknown-many" };
+    const { events } = await post(BODIES.replacement);
+    const counted = events.filter((event) => (event.type === "warning" || (RUN_EVENT_TRACE_TYPES as readonly unknown[]).includes(event.type)) && String(event.message).startsWith("Orchestration:")).map((event) => String(event.message));
+    const unrecorded = counted.filter((line) => line.includes("trace document"));
+    expect(unrecorded).toEqual(["Orchestration: 3 specialist trace document(s) were not recorded (circuit-topology task 1: trace_store_unavailable; schematic task 3: trace_store_unavailable; verification-critic task 4: trace_store_unavailable); the specialists' results stand, but their tool calls are not in the record."]);
+    expect(counted.indexOf(unrecorded[0]!)).toBeGreaterThan(ORCHESTRATION_TRACE_LINES_MAX);
+    expect(traces).toHaveLength(1);
+    const traced = traces[0]!.warnings.filter((line) => line.startsWith("Orchestration:"));
+    expect(traced).toEqual([...counted.slice(0, ORCHESTRATION_TRACE_LINES_MAX).map((line) => sanitizeTraceText(line)), unrecorded[0]]);
+    expect(traces[0]!.warnings.length).toBeLessThanOrEqual(TRACE_BOUNDS.maxWarnings);
   });
 });
