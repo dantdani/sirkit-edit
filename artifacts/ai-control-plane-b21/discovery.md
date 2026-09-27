@@ -570,7 +570,7 @@ trace's digest is computed and discarded (`route.ts:454-461`), no `traceId` reac
 (`route.ts:543-551`; traces reader grep), and retention/storage/access/audit were deferred to the owner by B11
 (`trace-recorder.ts:41-46`; `redaction-and-retention-policy.md:41-57`). Only three agent aggregates exist on the durable substrate
 (`autonomy-store.ts:27`; `execution-grant.ts:26-27`); none for runs, plans, requests, results, evidence, decisions or dissent. Severity
-high. **CONFIRMED**. Closes: B21-A (needs OD-111). Source: traces D21-21. — CLOSED IN PART by B21-A: `agent.orchestration-run.v1` (`b21-a-store.test.ts`, 15 cases) persists plans, validated requests, validated results (with their evidence references), decisions and dissent; tool calls are NOT persisted by A (the runbook's list :801 names them; no record kind carries a call) — B21-E's per-task trace record on the trace attribution (OD-112) carries them, and the resume that reads the record back is B21-B (D21-4); no runtime binds the store in A (stated deviation, OD-111).
+high. **CONFIRMED**. Closes: B21-A (needs OD-111). Source: traces D21-21. — CLOSED IN PART by B21-A: `agent.orchestration-run.v1` (`b21-a-store.test.ts`, 15 cases) persists plans, validated requests, validated results (with their evidence references), decisions and dissent; tool calls are NOT persisted by A (the runbook's list :801 names them; no record kind carries a call) — B21-E's per-task trace record on the trace attribution (OD-112) carries them, and the resume that reads the record back is B21-B (D21-4); no runtime binds the store in A (stated deviation, OD-111). — addendum by B21-E2: the calls half stays open - the per-task trace record (OD-111's carrier) stopped with the trace block (D21-41).
 
 **D21-4 — Resume does not exist: a retry is a NEW run that restarts from the user message, so committed specialist work would be
 redone and re-paid; the single-artifact ledger and the mint key are scoped to one runId.** Requirement: B21-B "Cancellation and resume
@@ -668,7 +668,7 @@ proposals record provider + instruction excerpt, no model, no runId (`gateway.ts
 layout candidate records `producer: "agent"` (`layout-candidate.ts:36-37`); transactions record `source: "ai"` (`types.ts:236`). A run in
 which a specialist runs on another provider/model, or two "independent" specialists share a model, cannot be recorded truthfully in
 v1 or detected from artifacts. Severity high. **CONFIRMED**. Closes: B21-D (artifact envelope) and B21-E (trace block; needs OD-112,
-OD-132). Sources: loop D21-7, traces D21-20, authority D21-32. — the artifact-envelope half CLOSED by B21-D (OD-132): every judged result carries the provider it was dispatched through and the model that provider reported, in the merge's view, the follow-up envelope and its persisted verdict; one provider = one source (a reported model is never counted as independence) and a replayed result's provenance is unrecorded, counted with every source; the sealed schemas are unchanged; the trace half stays B21-E's (OD-112).
+OD-132). Sources: loop D21-7, traces D21-20, authority D21-32. — the artifact-envelope half CLOSED by B21-D (OD-132): every judged result carries the provider it was dispatched through and the model that provider reported, in the merge's view, the follow-up envelope and its persisted verdict; one provider = one source (a reported model is never counted as independence) and a replayed result's provenance is unrecorded, counted with every source; the sealed schemas are unchanged; the trace half stays B21-E's (OD-112). — addendum by B21-E2: the trace half is NOT closed - the trace block stopped (D21-41); per-specialist provider and model now reach the STREAM on every `specialist_started` and on every `specialist_finished` of an attempt that ran (a replayed or stale result names none: its provenance is unrecorded), never the trace.
 
 **D21-12 — Pre-invocation refusals are untraced, `verification` is free text, and no traced field carries assumptions, evidence,
 decisions, dissent or a source/model correlation key.** Requirement: B21-D "rejects stale results; requests deterministic verification
@@ -789,7 +789,7 @@ exists in both `LLMProvider` classes but has no production caller and the agent 
 degraded-mode reporting must be built on additive run events and a durable record, not on provider features; unknown events are
 already ignored by the reducers (section 0), and every new visible element is a B17-A rule and, in `app/components/chat`, a B18-D gate
 (`b17-a-control-inventory.test.ts:30-41`; `b18-d-ui-gates.test.ts:12-39`). Severity high. **CONFIRMED**. Closes: B21-E (needs OD-126,
-OD-127). Sources: loop D21-8, tests D21-52, providers D21-18 (streaming/partial half).
+OD-127). Sources: loop D21-8, tests D21-52, providers D21-18 (streaming/partial half). — CLOSED by B21-E2 (OD-126, OD-127), item by item: a plan is the `plan` event; a specialist is its `specialist_started` and `specialist_finished` events (a withheld re-run closed by one final `specialist_finished`); the per-specialist provider/model is on every `specialist_started` and every `specialist_finished` of an attempt that ran (null on a replayed or stale result, whose provenance the record does not keep - the merge's rule); a partial result is the `partial_result` event (each planned task counted once, a result the merge withheld not usable); a budget remaining is `wallTimeRemainingMs` and `outputTokensRemaining` on every `specialist_started` (the DAG wall time left and the output-token ceiling not yet used - reported, never priced or enforced); a degraded mode is the `degraded` event (ten closed reasons). A pinned list, each a closed bounded shape carrying B21-B's sentence, emitted by the scheduler and the runtime in place of B's plan, status and stand-down warning lines (the refusal, merge and approval lines stay warnings); the coordinator's trace B's lines plus a withheld re-run's closing line, the record unchanged; protocol 1, one terminal, flag off byte-identical; `reduceRunView`'s pure counters and ONE status line from `projectRunView`, rendered as run-log rows with no control; older reducers ignore the events - an older PAGE loses the plan, status and stand-down lines (OD-126's owner question) (`b21-e2-run-events.test.ts`, `b21-e2-run-view.test.ts`, `b21-e2-chat-events.test.ts`). RECORDED: provider streaming still has no production caller (the events are built from the scheduler's own outcomes, never from provider output).
 
 **D21-23 — The scripted and fake adapters cannot express the B21-F scenarios.** Requirement: B21-F "offline fake-provider … lower-power
 timer replacement with provider disagreement; … one specialist timeout; provider quota failure; malicious specialist result; human
@@ -890,6 +890,8 @@ Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: too
 **D21-39 — The coordinator's first turn is not gated by the llm-provider breaker.** E1 meters and gates specialist calls and the follow-up turn only; a request made while the coordinator's provider is paused still makes its first turn's call (one paid call per request, never a storm: no Retry is offered for quota or an open breaker). **CONFIRMED** (`b21-e1-chat-provider.test.ts` case 3). Closes: B21-E2 (the route gates the first turn, with a `provider_breaker_open` terminal the card already declines to retry).
 
 **D21-40 — The scripted fixture agent answers no specialist through the result tool.** `FixtureAgentAdapter` (Playwright's scripted agent) plans single-agent instructions only; with orchestration enabled under the fixture runtime every specialist would end `result_tool_not_called`. **INFERRED** (the flag is off in `playwright.config.ts`, so no browser run reaches it). Closes: B21-F (the per-role scripted specialists answer through the tool).
+
+**D21-41 — The v1 trace contract refuses every per-task run id `<runId>:<taskId>`.** The scheduler's task ids are `task-<n>-<role>`; the redaction authority keeps an unanchored OpenAI-key pattern (`sk-` and eight or more key characters) for diagnostics - B19-D anchored it for model-bound text only - and the trace validator applies it to every string, so a trace whose run id carries a task id is `trace_validation_failure` and never reaches a sink; the same pattern already renders every task id in the coordinator's trace warnings as `ta[redacted]` (since B21-B). **CONFIRMED** (the probe through the real recorder and validator, `run-events-and-trace.md` section 3). Blocks OD-112's per-task trace document as drafted. Closes: the owner's OD-112 option (A: anchor the diagnostics' key prefix in `redaction.ts`; B: a per-task trace run id without the `task-` prefix; C: a new task-id grammar - not recommended), then B21-E2 (2/2).
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1336,3 +1338,26 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
   values) and recorded 26 more semantic residues; the regression corpus pins 1007 false DAG phrasings, 194 genuine requests and 46
   recorded semantic residues. The lead stops the sweep here: the remaining residue is semantic by construction (a listed word used in a
   sense only part knowledge could tell), and every such request reaches only zero-authority specialists that find no new part to seal.
+
+### B21-E2, run 1 of 2 (recorded by the lead, 2026-09-27)
+
+- **Section 0 (dated):** the statement that `reduceRunView` and the page's switch ignore every unknown run-event type is superseded for
+  the five orchestration events: since B21-E2 `chat-run-view.ts` reduces them (the counters and the status line) and the page renders
+  their run-log line; every other unknown type is still ignored.
+- **Section 4:** D21-22 closed (the five additive v1 events, the counters and the status line, the budget remaining carried); D21-11's
+  trace half and D21-3's calls half stay OPEN; D21-41 opened (medium). **The lead's decision on D21-41 / OD-112:** neither narrowing
+  the diagnostics' key pattern (option A - B19-D deliberately kept it unanchored) nor editing a scanned file (option D). E2's option B
+  as written would still fail - the v1 validator scans EVERY string of a trace, so a block carrying the literal task id `task-<n>-<role>`
+  is refused like the run id. The lead's reading of B: the per-task trace document's run id is `<runId>:<n>-<role>` and the block
+  carries the task's INDEX and role (the task id `task-<n>-<role>` reconstructed from them, stated beside the shape), so no string of
+  the trace reads as a key and no rule is narrowed. **B21-E2 (2/2)** applies the held trace block that way, test-first, before B21-E3.
+  The coordinator trace's task ids have read `ta[redacted]` since B21-B (the same pattern over its warning lines) - RECORDED: the
+  per-task documents carry the identity legibly; the warning lines are diagnostics and stay under the unanchored rule.
+- **Section 6:** OD-126 and OD-127 applied as `run-events-and-trace.md` states them; OD-126's owner question (an OLDER v1 page drops the
+  lines the events replaced - the warning beside the event, a protocol v2, or neither) keeps the additive default and goes to the B21
+  closeout; OD-112 recorded as stopped, the lead's reading above.
+- **Section 7, B21-E2 (1/2):** as built - `run-events.ts` (the five builders and their one judge), the scheduler and the runtime emitting
+  them in place of B21-B's plan, status and stand-down lines with B's own sentences, refused-call, merge and approval lines still
+  warnings, the coordinator's trace unchanged, the counters and the one status line with no new control.
+- **Section 8:** the lead's residual fix - a refusal PATH in an event's reason or line is kept only when made of the documents' declared
+  key names (`SPECIALIST_DECLARED_KEYS`), any other path withheld whole (a reasoning-shaped key name or a payload key was not).

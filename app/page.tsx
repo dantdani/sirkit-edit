@@ -59,7 +59,7 @@ import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, orchestrationRunLogLine, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -4690,7 +4690,7 @@ export default function Home() {
             return;
           }
           default:
-            return; // run_started / run_completed need no extra UI writes
+            { const line = orchestrationRunLogLine(event); if (line) appendActivityStep(logId, line.text, line.status); return; } // [B21 E2] an orchestration event is a run-log line (OD-127, no control); run_started / run_completed need no extra UI writes
         }
       };
       while (true) {
@@ -4737,7 +4737,7 @@ export default function Home() {
       // [B18-D I6] the run's interim notes are released only now, after the run ended — never in the answer.
       if (scope.isCurrent()) {
         const projected = projectRunView(runView);
-        for (const note of projected.notes) appendActivityStep(logId, note, "done");
+        for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done"); // [B21 E2] the orchestrated run's ONE status line (OD-127), then the notes
         if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
       }
       // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).

@@ -19,7 +19,7 @@ import { createExecutionGrantMinter } from "@/app/lib/execution-grant/mint";
 import { AGENT_SYSTEM_PROMPT_VERSION } from "@/app/lib/prompts";
 import { createAgentToolGateway } from "@/app/lib/agent/gateway";
 import { buildRunToolset } from "@/app/lib/agent/loop";
-import type { AgentExecutionGrantMinter, AgentRunContext, AgentRunEvent, AgentToolInvocationGateway, GatewayInvocationOutcome } from "@/app/lib/agent/contracts";
+import { isOrchestrationRunEventType, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentToolInvocationGateway, type GatewayInvocationOutcome } from "@/app/lib/agent/contracts";
 import { SPECIALIST_ROLES } from "../contracts";
 import { roleProposalToolIds } from "../role-tools";
 import { PROPOSAL_NOT_SEALED_IN_RUN, SEALED_PROPOSALS_RULE, SPECIALIST_CONTEXT_REFUSAL_STATUS, SPECIALIST_REFUSAL_STATUS, attachSealedArtifacts, readOnlySpecialistGateway, specialistAllowedToolIds, specialistContextFor, type SchedulerOutcome, type SpecialistTaskOutcome } from "../scheduler";
@@ -71,7 +71,7 @@ describe("[B21 D2] provenance is the gateway's own seal", () => {
     const committed = (await run.store.history(run.scope)).find((entry) => entry.record.kind === "result")!;
     expect(committed.record.kind === "result" && plain(committed.record.document.proposedActions)).toEqual([plain(attached)]);
     expect(committed.record.kind === "result" && committed.record.digest).toBe(task.resultDigest);
-    expect(run.events.filter((event) => event.type !== "warning")).toEqual([]);
+    expect(run.events.filter((event) => event.type !== "warning" && !isOrchestrationRunEventType(event.type))).toEqual([]); // [B21 E2] pin move (OD-126): the scheduler's own status facts are the additive run events
   });
 
   it("2. a pcb-placement-routing specialist SEALS a real bounded PCB edit the same way: `pcb_proposal_ready` in its own run, the result's proposedActions exactly that artifact, its sealed provenance naming the SPECIALIST's own run id (never the coordinator's), its base the coordinator's verified PCB basis", async () => {

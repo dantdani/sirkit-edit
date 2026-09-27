@@ -12,7 +12,8 @@ its real `it(` count; the A..D3 pages carry their dated E1 notes) or by the suit
 facts in `provider-reference-notes.md` (OD-118) and the installed SDK packages it records there on 2026-09-27 (no page was fetched: the
 run's no-network rule); no model is called in any E1 suite - every provider is an in-process FAKE SDK client injected into the REAL
 adapters (the b09-provider-contracts pattern), so the adapters' own request building, output guard, normalisation and error
-classification run.
+classification run. [B21 E2, 2026-09-27] E2's first run (the additive run events and the status line; the trace block stopped - D21-41) is on
+its own page, `run-events-and-trace.md`; this page keeps the E1 sections.
 
 ## 0. What E1 delivers, and what it is not
 

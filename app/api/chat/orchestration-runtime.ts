@@ -12,7 +12,7 @@
  * as bounded, sanitized DATA in its user message (a recorded DEVIATION from OD-108's tool-result default: no tool call exists
  * to attach a result to without a new exposed tool; B21-E's strict result tool closes it; what bounds a result's text is that
  * the follow-up turn can seal, mint, dispatch and reach nothing) - inside the existing single NDJSON stream with exactly one
- * run_started and ONE terminal event that reports the run's totals, and no new run event (B21-E).
+ * run_started and ONE terminal event that reports the run's totals; [B21 E2] the additive v1 run events carry the plan, status and degraded lines (OD-126).
  *
  * Stand-down rules (degraded mode is visible, never silent, and never a second paid attempt against a provider that is out):
  * a coordinator turn that does not complete runs no specialist; a refused plan, a provider outage among the specialists or a
@@ -218,7 +218,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   const held = trace ? { trace: holdTraceTerminal(trace) } : {};
   // a cancelled stream may refuse a late event; the run's classification never depends on the client still listening
   const emit = (event: AgentRunEvent): void => { try { deps.emit(event); } catch { /* the stream is gone */ } };
-  let traceLines = 0;
+  let traceLines = 0; const report = (event: OrchestrationRunEvent, always = false): void => { emit(event); if (!RUN_EVENT_TRACE_TYPES.includes(event.type) || (!always && traceLines >= ORCHESTRATION_TRACE_LINES_MAX)) return; traceLines += 1; try { trace?.recordWarning(event.message); } catch { /* tracing is passive */ } }; const down = (reason: DegradedReason, message: string): OrchestrationRunEvent => degradedEvent(request.runId, reason, message); // [B21 E2] a run event on the stream; its line on the trace exactly as B's warning was (OD-126)
   /** every line reaches the stream; the trace takes the first ORCHESTRATION_TRACE_LINES_MAX status lines and every stand-down reason */
   const warn = (message: string, always = false): void => {
     emit({ type: "warning", runId: request.runId, message });
@@ -235,7 +235,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
 
   // the coordinator's first turn: its terminal is held, its warnings remembered (the follow-up never repeats one)
   const firstWarnings = new Set<string>(); const firstArtifacts: string[] = []; // [B21 D2] what the coordinator's own first turn sealed or minted
-  let firstTerminal: AgentRunEvent | null = null;
+  let firstTerminal: AgentRunEvent | null = null; let ranOutcome: Extract<SchedulerOutcome, { kind: "ran" }> | null = null; let judged: Extract<MergeOutcome, { kind: "merged" }> | null = null; // [B21 E2] the scheduler's outcome once it ran: a stand-down reports the run's partial result; [B21 E2 fix: security-1] judged by the merge once it recorded
   const first = await runAgentLoop(request, {
     ...deps,
     ...held,
@@ -247,8 +247,8 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   });
   /** the coordinator's own turn stands as the run: its held terminal is emitted, under a warning when there is a reason; a
    *  stand-down after a follow-up turn that recorded steps before failing reports the RUN's totals (what the trace holds) */
-  const standDown = (reason: string | null, totals?: { steps: number; toolCalls: number; usage: { inputTokens: number; outputTokens: number } }): AgentRunResult => {
-    if (reason !== null) warn(reason, true);
+  const standDown = (reason: OrchestrationRunEvent | null, totals?: { steps: number; toolCalls: number; usage: { inputTokens: number; outputTokens: number } }): AgentRunResult => {
+    if (reason !== null) report(reason, true); const partial = ranOutcome ? partialOutcomeEvent(request.runId, plan, ranOutcome, false, judged) : null; if (partial) report(partial); // [B21 E2] the stand-down line as its degraded event, then the run's partial result (OD-126)
     const terminal = firstTerminal as AgentRunEvent | null;
     if (terminal) emit(totals && terminal.type === "run_completed" ? { ...terminal, ...totals } : terminal);
     recordTerminal(first.status === "cancelled" ? "cancelled" : first.status === "failed" ? "failed" : "completed", first.failureReason ?? null);
@@ -263,27 +263,27 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
     { runId: request.runId, provider: request.provider, userMessage: request.userMessage, history: request.history, startedAt: input.startedAt, ...(request.signal ? { signal: request.signal } : {}), ...(firstArtifacts.length > 0 ? { artifactHeld: true } : {}) }, // [B21 D2 fix] OD-122: no specialist proposal beside the coordinator's artifact
     {
       store: resolveOrchestrationStore(), registry: deps.registry, context: deps.context, adapter: deps.adapter, gateway: specialistGateway, system: deps.system,
-      emit: (event) => { if (event.type === "warning") warn(event.message); },
+      emit: (event) => { if (event.type === "warning") warn(event.message); else if (isOrchestrationRunEvent(event)) report(event); }, // [B21 E2] the scheduler's run events streamed, their lines traced as B's warnings were
       runLoop: runAgentLoop, buildToolset: buildRunToolset, budget: request.budget, ...(deps.now ? { now: deps.now } : {}), ...(input.providers ? { providers: input.providers } : {}), // [B21 E1] OD-115, OD-117
     },
   );
   // the closed reason only ever reaches the stream and the trace: a record failure's detail (a driver message) stays in process
-  if (outcome.kind === "refused") return standDown(`Orchestration: no specialist ran (${outcome.reason}); the assistant's answer above stands.`);
-  const answered = outcome.tasks.filter(usable);
+  if (outcome.kind === "refused") return standDown(down("no_specialist_ran", `Orchestration: no specialist ran (${outcome.reason}); the assistant's answer above stands.`));
+  const answered = outcome.tasks.filter(usable); ranOutcome = outcome; // [B21 E2]
   if (outcome.stop === "cancelled") return cancelled(first.steps, first.toolCalls);
-  if (outcome.stop === "provider_paused") return standDown(`Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115) - no further call is made to it, so no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`); // [B21 E1 fix] no call failed: the line above names the pause; a provider that is out gets NO further paid call: the human decides (Retry is a new run); the record keeps what was committed
-  if (outcome.stop === "provider_outage") return standDown(`Orchestration: the provider failed during the specialists (provider_outage); no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`);
-  if (answered.length === 0) return standDown(`Orchestration: no specialist result to hand on (${outcome.stop}); the assistant's answer above stands.`);
+  if (outcome.stop === "provider_paused") return standDown(down("provider_paused", `Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115) - no further call is made to it, so no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`)); // [B21 E1 fix] no call failed: the line above names the pause; a provider that is out gets NO further paid call: the human decides (Retry is a new run); the record keeps what was committed
+  if (outcome.stop === "provider_outage") return standDown(down("provider_outage", `Orchestration: the provider failed during the specialists (provider_outage); no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`));
+  if (answered.length === 0) return standDown(down("no_usable_result", `Orchestration: no specialist result to hand on (${outcome.stop}); the assistant's answer above stands.`));
 
   // ONE follow-up coordinator turn, READ-ONLY: the same run id, the conversation so far, the specialists' outcomes as data
   // [B21 D] the deterministic MERGE runs between the scheduler and the envelope; every decision, dissent and escalation is persisted first
   const merged = await mergeSpecialistOutcome({ runId: request.runId, context: deps.context, outcome }, specialistMergeDeps(deps.context, deps.now));
-  if (merged.kind === "refused") return standDown(`Orchestration: the merge could not record its decisions (${merged.reason}); no follow-up turn was made and the assistant's answer above stands.`);
-  for (const line of merged.lines) warn(line); const approval = presentSpecialistProposal({ runId: request.runId, outcome, merged, coordinatorSealed: firstArtifacts.length > 0, emit, warn }); // [B21 D2] OD-122 amended
+  if (merged.kind === "refused") return standDown(down("merge_unrecorded", `Orchestration: the merge could not record its decisions (${merged.reason}); no follow-up turn was made and the assistant's answer above stands.`));
+  for (const line of merged.lines) warn(line); judged = merged; const approval = presentSpecialistProposal({ runId: request.runId, outcome, merged, coordinatorSealed: firstArtifacts.length > 0, emit, warn }); // [B21 D2] OD-122 amended
   const envelope = mergedResultsEnvelope(outcome, merged, approval);
   // [B21 E1] the follow-up turn is never made against a paused provider (OD-115; no paid call, visibly), and never on another one
   const followUpPause = input.providers ? input.providers.admission.pause(request.provider, undefined, "interactive", (deps.now ?? Date.now)()) : null;
-  if (followUpPause) return standDown(`Orchestration: no follow-up turn was made and the assistant's answer above stands (the coordinator never switches provider mid-run) - its ${followUpPause.message}`);
+  if (followUpPause) return standDown(down("follow_up_paused", `Orchestration: no follow-up turn was made and the assistant's answer above stands (the coordinator never switches provider mid-run) - its ${followUpPause.message}`));
   let followUpTerminal: AgentRunEvent | null = null; const followUpMeters = input.providers ? admittedAdapter(deps.adapter, { provider: request.provider }, input.providers.admission, deps.now ?? Date.now, "interactive") : null; // [B21 E1 fix] the follow-up turn's calls METERED as a person's (OD-115): its 429 opens the breaker too; its SDK retries stay the adapter's (not applied)
   // the follow-up's recorder: the terminal held, the first turn's warnings not repeated on the trace, every step metered
   const followUpMeter = { steps: 0, inputTokens: 0, outputTokens: 0 };
@@ -309,9 +309,9 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   if (followUp.status !== "completed" || completed?.type !== "run_completed") {
     // the first answer stands; the terminal reports the run's totals - the steps the failed follow-up recorded included
     const totals = { steps: first.steps + followUpMeter.steps, toolCalls, usage: { inputTokens: firstUsage.inputTokens + followUpMeter.inputTokens, outputTokens: firstUsage.outputTokens + followUpMeter.outputTokens } };
-    return standDown(`Orchestration: the follow-up coordinator turn did not complete (${followUpMeters?.capture.paused ? `provider_paused: ${followUpMeters.capture.paused.message}` : followUp.failureReason ?? "unknown"}); the assistant's answer above stands.`, totals);
+    return standDown(down("follow_up_failed", `Orchestration: the follow-up coordinator turn did not complete (${followUpMeters?.capture.paused ? `provider_paused: ${followUpMeters.capture.paused.message}` : followUp.failureReason ?? "unknown"}); the assistant's answer above stands.`), totals);
   }
-  const usage = { inputTokens: firstUsage.inputTokens + completed.usage.inputTokens, outputTokens: firstUsage.outputTokens + completed.usage.outputTokens };
+  const usage = { inputTokens: firstUsage.inputTokens + completed.usage.inputTokens, outputTokens: firstUsage.outputTokens + completed.usage.outputTokens }; const partial = partialOutcomeEvent(request.runId, plan, outcome, true, merged); if (partial) report(partial); // [B21 E2] the follow-up turn answered over a partial set: said so before the terminal (OD-126)
   emit({ ...completed, steps, toolCalls, usage });
   recordTerminal("completed", null);
   return { ...followUp, steps, toolCalls };
@@ -515,4 +515,20 @@ import { PROCESS_LLM_PROVIDER_ADMISSION, admittedAdapter, type SpecialistProvide
  *  body's closed key set has no place for one). The coordinator's own adapter stays the route's `agentAdapterFor`. */
 export function productionSpecialistProviders(): SpecialistProviders {
   return { adapterFor: (route) => agentAdapterForRole(route.role, route.provider, route.model), admission: PROCESS_LLM_PROVIDER_ADMISSION, environment: process.env };
+}
+
+// ─── [B21 E2] The additive run events of an orchestrated run (OD-126) ────────────────────────────────────────────────────────────
+// Appended on purpose: an import is hoisted, so these declarations move no line cited above (the B21 pages pin this file by line).
+
+import { RUN_EVENT_TRACE_TYPES, degradedEvent, isOrchestrationRunEvent, partialResultEvent } from "@/app/lib/agent/orchestration/run-events";
+import { planTasks } from "@/app/lib/agent/orchestration/scheduler";
+import type { DegradedReason, OrchestrationRunEvent } from "@/app/lib/agent/contracts";
+
+/** [B21 E2] The run's partial result (OD-126): the plan's tasks against what the scheduler delivered (per task its last attempt, each
+ *  task counted once) and - [B21 E2 fix: security-1] once the deterministic merge judged them (`merged`) - what it ACCEPTED: a result
+ *  it judged malformed, stale, expired or contradicted is withheld, never usable; null when every planned specialist delivered a
+ *  result the merge could use. Before the merge (or when it could not record) the withheld count is null: no merge judged them. */
+export function partialOutcomeEvent(runId: string, plan: Extract<RoutePlan, { kind: "dag" }>, outcome: Extract<SchedulerOutcome, { kind: "ran" }>, handedOn: boolean, merged: Extract<MergeOutcome, { kind: "merged" }> | null = null): OrchestrationRunEvent | null {
+  const withheld = merged ? merged.tasks.filter((task) => task.decision !== "accepted").map((task) => task.taskId) : null;
+  return partialResultEvent(runId, { planned: planTasks(plan.roles).length, tasks: outcome.tasks, notStarted: outcome.notStarted, mergeWithheld: withheld, handedOn });
 }

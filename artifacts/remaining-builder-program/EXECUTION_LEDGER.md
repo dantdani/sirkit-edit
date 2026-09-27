@@ -3072,3 +3072,52 @@ _(discovery, reproduction and results appended below as they are observed)_
   sense - "the ATmega328P oscillator", "an adjustable comparator" - which only part knowledge could tell). Pin moves with their reasons:
   replacement-roles case 9's counts and its hyphenated-modifier row ("free-running" is now excluded for an oscillator). Gates: every B21
   suite with the five route suites and the CI guard 35 files / 312 tests; tsc clean; eslint clean on the changed files.
+
+### B21-E2 (1/2) — the additive run events and the status line; the trace block stopped (2026-09-27 local; increment workflow + lead; this commit)
+
+- Test-first: the three E2 suites against the base with only the tests present (`e2-final-failing-first.log`: three files on the missing
+  module); with the new module and the contracts but the wiring at HEAD (`e2-final-failing-first-wiring.log`: 13 of 17 failing on their
+  assertions, 4 green by design); the moved suites against the E2 code with their HEAD helpers (`b21-all-1.log`: 33 of 315 failing); then
+  green.
+- Code: `run-events.ts` (the bounded builders, the one judge, the traced types, the closing event, the withheld key), the contracts (the
+  pinned list, the statuses, the degraded reasons, the closed shapes; the union widened in place), `scheduler.ts` (the plan, a
+  specialist's start with the budget remaining and its outcome, a stale result, a role with no tools, a fallback, the paused coordinator
+  and the held artifact as events, a withheld re-run closed - in place), `orchestration-runtime.ts` (the events streamed and their lines
+  traced as B's warnings were, every stand-down a `degraded` event, the partial result judged against the merge where it ran),
+  `chat-run-view.ts` (the counters and the one status line, appended; an event's run-log line), `page.tsx` (two in-place lines: the
+  run-log row and the status line; no control), the workflow's one explicit entry. No route, descriptor, UI control, request key or
+  generator input changed; census 165/162/3/0; the nine scanned files byte-identical to HEAD.
+- Adversarial review: 13 confirmed findings fixed test-first (`b21/e2fix/`: the new cases red first on the unfixed code, 14 of 39 in
+  `red-1.log`; the pre-fix partial result reproduced by a probe on the swapped-in pre-fix files, restored by sha256; the shell-flag
+  reproduction of route case 4; breakages m1-m5 of the source each failing its strengthened case, restored by sha256): the partial
+  result counting a task once and what the merge withheld, a withheld re-run closed, an unrecorded provenance named as none, an
+  undeclared key's name withheld, the budget remaining, every scheduler and runtime site pinned by its type and reason, the trace cap
+  proven, the older page's loss recorded (OD-126), `chat-run-view.ts` made line-neutral, the flag-off case independent of the shell, the
+  A..E1 pages' dated notes.
+- Stopped: the trace block (OD-112) - the per-task document's run id `<runId>:<taskId>` is refused by the unchanged v1 trace contract
+  (`trace.runId: contains secret-shaped content`: every task id `task-<n>-<role>` matches the diagnostics' unanchored `sk-` key pattern);
+  the implementation, its suite and the probe held in the scratchpad (`b21/e2/trace-block-held/`, sha256 listed), nothing of it in the
+  tree; D21-41 found with the owner's options.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5 (run-events.ts in the entry set, 9 -> 10); the run-log-lines helpers of
+  B's scheduler, C's least privilege, D2's approval, proposing-roles and provenance, D3's scenario 17, E1's breaker and fixtures and the
+  five route suites (B's lines are now the events' messages; the same sentences asserted); a dated pointer on E1's page; dated E2 notes on
+  the B, C and D2 pages.
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the six route suites; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; `app/lib/project/__tests__` with the B17-A inventory; `app/lib/llm/__tests__` and
+  `app/lib/acquisition/__tests__`; `app/lib/mcp` and `app/api/mcp/__tests__`; the exposure / tier suites; tsc; eslint; the B17-A
+  generator with zero drift - figures on the page.
+- Records: `run-events-and-trace.md`; OD-126 and OD-127 applied (OD-126 with the older page's loss as the owner's question); OD-112 open
+  with the stop; D21-22 closed; D21-41 found. Live: every B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-up on the check's residual (2026-09-27; the checker confirmed 15 of the 17 fixes fixed and revert-sensitive, tests-7 a
+  hermeticity fix a revert exposes only when the shell sets the flag, and security-2 NOT closed): the fix withheld only the literal
+  `result_refused: unknown_key at <path>`, while A refuses a reasoning-shaped key name (`forbidden_key_name`) before an unknown key and
+  reports a key inside an artifact's payload (`invalid_text`) by the same path - both model-chosen names reached the event's reason and
+  line, and the header claimed every other reason was server text. Now a refusal path is kept only when made of the documents' DECLARED
+  key names and array indices (`SPECIALIST_DECLARED_KEYS`, appended to `contracts.ts`; `withoutModelKey` generalized in place plus four
+  lines) and withheld whole otherwise. Run-events case 16 (three hostile paths withheld in the reason and the line, three declared paths
+  kept) failed first on the unknown-key-only rule (`e2-lead-case16-red.log`) and passes with the fix together with A's suites and the E2
+  page (`e2-lead-case16-green.log`); the header and the page restated; the E2 page's twelve `run-events.ts` rows re-pinned by anchor, C57
+  retitled, the suite count (16) and the new-case total (40) updated.
+- Lead decision on D21-41 / OD-112 (discovery section 10, B21-E2): the per-task trace run id `<runId>:<n>-<role>` and a block carrying
+  the task's index and role, never the literal task id - B21-E2 (2/2) applies the held trace block that way before B21-E3.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 39 files / 352 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 362 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; `app/lib/project/__tests__` and `app/components/chat` in full 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104; `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file but `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors, on the same lines as at HEAD (E2 changed page.tsx in place on three other lines).

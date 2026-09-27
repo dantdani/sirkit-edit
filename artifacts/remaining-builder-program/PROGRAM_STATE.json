@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-E1 committed on chapter/b21-specialist-orchestration: the provider layer - every role inheriting the coordinator's provider and its one configured model, server-env overrides only under a closed schema, a model outside the pinned family rules refused until qualified live; specialists on their route's own adapter with maxRetries 0 behind the llm-provider breaker (no credits opens it at once for an hour, a rate limit for a minute; only a call's own breaker generation counts, an abandoned trial never; consulted before every specialist attempt and the follow-up turn, which is metered too; provider_paused when the meters stop the DAG; no Retry for quota or an open breaker, the Switch still re-sending; a routed specialist's seals name its provider); the compatible fallback only when the tools and the result tool render identically, never the coordinator switching; normalized stop reasons with a specialist's output-limit, context-window and refusal stops escalated, never parsed; the strict result tool with tool_choice auto on both providers validated by A, the final-text parse removed; no background or batch; next B21-E2",
+  "currentCheckpoint": "B21-E2 (1/2) committed on chapter/b21-specialist-orchestration: the additive v1 run events - plan, specialist_started, specialist_finished, partial_result, degraded, pinned, each a closed bounded shape carrying B21-B's sentence, emitted in place of B's plan, status and stand-down warning lines (refusal, merge and approval lines stay warnings), a withheld re-run closed by one final event, the budget remaining on every start, the partial result judged against the merge, the coordinator's trace B's lines plus that closing line and the orchestration record unchanged, protocol 1 with one terminal, flag off byte-identical - and the run view's pure counters with ONE status line, no control; an older page's loss of the plan, status and stand-down lines recorded as OD-126's owner question; the adversarial review's 13 findings fixed; the trace block STOPPED (D21-41: the unchanged v1 trace contract reads every task id as an OpenAI key), held; the lead read OD-112 option B as a per-task run id <runId>:<n>-<role> with a block carrying the task's index and role; next B21-E2 (2/2), then B21-E3",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "a4aba95",
+  "lastGreenSha": "3a32317",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-E2 test-first: the additive run events and the status line (OD-126, OD-127), the trace block in a new module (OD-112, D21-11's trace half, D21-3's calls), the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and gating the coordinator's first turn by the breaker (D21-39)",
-  "updatedAt": "2026-09-27T03:23:10-04:00",
+  "nextAction": "B21-E2 (2/2) test-first (the lead's reading of OD-112, discovery section 10 B21-E2): the held trace block applied with the per-task trace run id <runId>:<n>-<role> and a block carrying the task's index and role, never the literal task id (the v1 validator reads 'task-<n>-' as a key, D21-41), no scanned file edited and no redaction rule narrowed - one trace document per specialist task, the specialist's tool calls on its own record (D21-11's trace half, D21-3's calls half); then B21-E3: the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and the coordinator's first turn behind the breaker (D21-39).",
+  "updatedAt": "2026-09-27T05:54:04-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

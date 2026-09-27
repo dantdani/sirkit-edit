@@ -131,7 +131,7 @@ async function post(sentence: string): Promise<{ runId: string; normalized: stri
   return { runId, normalized: text.replaceAll(runId, "<runId>"), events: text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>) };
 }
 const types = (events: Array<Record<string, unknown>>): string[] => events.map((event) => String(event.type));
-const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => event.type === "warning").map((event) => String(event.message));
+const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => (event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded")).map((event) => String(event.message)); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 /** a merge record's key with its content hex elided: `<taskId>.merge-*` for a verdict on a task attempt (the scheduler's own dissents keep the task id) */
 const recordsOf = (history: OrchestrationRunEntry[]): string[] => history.filter((entry) => entry.record.kind === "decision" || entry.record.kind === "dissent").map((entry) => `${entry.taskId.startsWith(MERGE_TASK_PREFIX) ? "merge" : entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}:${(entry.record as { decision: string }).decision}`);
 const inMemoryStore = () => { const repository = new InMemoryDurableWorkflowRepository(); return { repository, store: new DurableOrchestrationRunStore(repository) }; };

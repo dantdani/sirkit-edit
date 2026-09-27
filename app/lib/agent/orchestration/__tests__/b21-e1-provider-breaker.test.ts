@@ -201,7 +201,7 @@ describe("[B21 E1] the llm-provider meters and breaker (OD-115)", () => {
     expect(coordinator.create).toHaveBeenCalledTimes(1); // the first turn only: no follow-up turn
     expect(specialists.create).toHaveBeenCalledTimes(2);
     expect(anthropic.create).not.toHaveBeenCalled(); // never switched
-    const warnings = events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+    const warnings = events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
     expect(warnings.at(-1)).toMatch(/^Orchestration: no follow-up turn was made and the assistant's answer above stands \(the coordinator never switches provider mid-run\) - its LLM provider "openai" is paused \(insufficient_quota\) until .* or until an operator resets it; no call is made to it before then \(OD-115\)\.$/);
     const terminal = events.at(-1)!;
     expect(terminal).toMatchObject({ type: "run_completed", finalText: "(fake) the coordinator's first answer." });
@@ -341,7 +341,7 @@ describe("[B21 E1] the llm-provider meters and breaker (OD-115)", () => {
     expect(result.status).toBe("completed");
     expect(coordinator.create).toHaveBeenCalledTimes(2); // the first turn and the follow-up's one call
     expect(specialists.create).toHaveBeenCalledTimes(1);
-    const warnings = events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+    const warnings = events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
     expect(warnings.at(-1)).toBe("Orchestration: the follow-up coordinator turn did not complete (provider_insufficient_quota); the assistant's answer above stands.");
     expect(currentLlmProviderPause(OPENAI, Date.now(), "agent")).toMatchObject({ reason: "breaker_open" });
     const next = await runE1Dag(["requirements-analyst"], providers, { runId: "run-b21e1-after-follow-up" });

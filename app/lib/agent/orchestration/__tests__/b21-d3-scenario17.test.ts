@@ -78,7 +78,7 @@ async function runScenario(context: AgentRunContext, scripts: Readonly<Record<st
     plan, startedAt: Date.now(),
   });
   const history = await store.history({ tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId });
-  const warnings = events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+  const warnings = events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
   return { runId, events, warnings, history, adapter, followUp: adapter.starts.at(-1)!.userMessage, status: result.status };
 }
 /** The persisted verdicts, readable: `<taskId>[.merge-*]:<kind>:<decision>` (a content key's hex elided; an escalation or part review as `merge`). */

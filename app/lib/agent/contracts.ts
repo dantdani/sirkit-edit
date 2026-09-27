@@ -444,7 +444,7 @@ export type AgentRunEvent =
       toolCalls: number;
       usage: { inputTokens: number; outputTokens: number };
       model: string;
-    };
+    } | OrchestrationRunEvent; /** [B21 E2] the five additive v1 events of an orchestrated run (OD-126, appended below); an older reducer ignores them */
 
 export interface AgentRunResult {
   runId: string;
@@ -464,3 +464,35 @@ export interface AgentRunResult {
  *  text or with tool calls; every other value is a turn that did not complete as asked (`unknown`: a value no fact names). */
 export const STEP_STOPS = Object.freeze(["end_turn", "max_tokens", "refusal", "pause_turn", "context_exceeded", "incomplete", "unknown"] as const);
 export type StepStop = (typeof STEP_STOPS)[number];
+
+// ─── [B21 E2] The additive v1 orchestration run events (OD-126, D21-22) ──────
+// Appended on purpose: a type is hoisted, so no line the B15..B21 pages cite in this file moves; the union above is widened in place.
+
+/** The PINNED list: the five additive protocol-v1 events of an orchestrated (DAG) chat run. The scheduler and the runtime emit them
+ *  in place of B21-B's warning lines for those facts - the plan line, a specialist's status lines, the degraded and stand-down lines -
+ *  each carrying B's sentence as its `message`; a specialist's refused tool call, a merge line and an approval line stay warnings.
+ *  The protocol version stays 1: an older reducer or page ignores an unknown `type` (no v2) - and so an older page LOSES the lines these carry ([B21 E2 fix] RECORDED as OD-126's owner question). */
+export const ORCHESTRATION_RUN_EVENT_TYPES = Object.freeze(["plan", "specialist_started", "specialist_finished", "partial_result", "degraded"] as const);
+export type OrchestrationRunEventType = (typeof ORCHESTRATION_RUN_EVENT_TYPES)[number];
+/** A specialist attempt's outcome as the run log reports it: the scheduler's four task statuses and `stale` (a committed result from
+ *  another scope or revision, or one the merge judged stale or expired - the task runs again). */
+export const SPECIALIST_FINISHED_STATUSES = Object.freeze(["accepted", "malformed", "escalated", "replayed", "stale"] as const);
+export type SpecialistFinishedStatus = (typeof SPECIALIST_FINISHED_STATUSES)[number];
+/** Why a run, or one planned specialist, is degraded (closed): every one is a visible run-log line, never silent. */
+export const DEGRADED_REASONS = Object.freeze([
+  "role_has_no_tools", "compatible_fallback", "coordinator_artifact_held", "provider_paused", "provider_outage",
+  "no_specialist_ran", "no_usable_result", "merge_unrecorded", "follow_up_paused", "follow_up_failed",
+] as const);
+export type DegradedReason = (typeof DEGRADED_REASONS)[number];
+/** Each event is a CLOSED shape - exactly these keys, bounded by the orchestration module that builds them (`role` a specialist role
+ *  id, `message` the run-log line, `attempt` the task attempt); `provider` / `model` name what served the attempt, never a secret ([B21 E2 fix] null on a replayed or stale result: its provenance is unrecorded). */
+export type OrchestrationRunEvent =
+  | { type: "plan"; runId: string; rule: string | null; tasks: Array<{ taskId: string; role: string }>; scheduled: number; notRun: number; parallelism: number; wallTimeMs: number; outputTokenCeiling: number; message: string }
+  | { type: "specialist_started"; runId: string; taskId: string; role: string; provider: LLMProviderId; model: string | null; attempt: number; /** [B21 E2 fix] the budget remaining (D21-22) */ wallTimeRemainingMs: number; outputTokensRemaining: number; message: string }
+  | { type: "specialist_finished"; runId: string; taskId: string; role: string; provider: LLMProviderId | null; model: string | null; attempt: number; status: SpecialistFinishedStatus; reason: string | null; resultDigest: string | null; runsAgain: boolean; message: string }
+  | { type: "partial_result"; runId: string; planned: number; usable: number; unusable: number; /** [B21 E2 fix] results the merge withheld (null: no merge judged them) */ mergeWithheld: number | null; notStarted: number; handedOn: boolean; message: string }
+  | { type: "degraded"; runId: string; reason: DegradedReason; taskId: string | null; role: string | null; provider: LLMProviderId | null; model: string | null; message: string };
+/** Whether a raw event type is one of the five (the run view and the page read it; any other unknown type stays ignored). */
+export function isOrchestrationRunEventType(type: unknown): type is OrchestrationRunEventType {
+  return typeof type === "string" && (ORCHESTRATION_RUN_EVENT_TYPES as readonly string[]).includes(type);
+}

@@ -23,7 +23,7 @@ import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
 import { createAgentToolGateway, verifyAgentContextIntegrity } from "@/app/lib/agent/gateway";
 import { buildRunToolset, runAgentLoop } from "@/app/lib/agent/loop";
 import { MAX_OUTPUT_TOKENS } from "@/app/lib/agent/adapters";
-import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentStep, type AgentToolResult, type ProviderAgentAdapter, type ProviderToolDeclaration } from "@/app/lib/agent/contracts";
+import { DEFAULT_AGENT_BUDGET, isOrchestrationRunEventType, type AgentExecutionGrantMinter, type AgentRunContext, type AgentRunEvent, type AgentStep, type AgentToolResult, type ProviderAgentAdapter, type ProviderToolDeclaration } from "@/app/lib/agent/contracts";
 import { assembleAgentRunContext } from "@/app/lib/agent/context";
 import { DEFAULT_PRESET_ID } from "@/app/lib/pcb/drc/presets";
 import { PRINCIPAL, SCOPE as HARNESS_SCOPE, composition, headOf, type Composed } from "@/app/lib/engineering/__tests__/b18c-harness";
@@ -165,7 +165,7 @@ async function rig(script: Record<string, Behaviour>, over: { runId?: string; st
 }
 const kinds = (history: OrchestrationRunEntry[]): string[] => history.map((entry) => `${entry.taskId}:${entry.attempt}:${entry.record.kind}`);
 const operationClass = (toolId: string): string | undefined => registry.list().find((descriptor) => descriptor.toolId === toolId)?.operationClass;
-const warningsOf = (events: AgentRunEvent[]): string[] => events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+const warningsOf = (events: AgentRunEvent[]): string[] => events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 
 describe("[B21 B] the bounded sequential scheduler", () => {
   it("1. sequential (parallelism 1): three specialists run ONE AT A TIME in plan order as separate loop runs under `<coordinatorRunId>:<taskId>`; the store holds the plan, then per task its request and its result, every result committed BEFORE the next task's adapter is called; one warning line per scheduled specialist; the token ceiling covers both coordinator turns and every attempt (6 x (2 + 2 x specialists) x 4096), reported", async () => {
@@ -200,8 +200,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.outputTokenCeiling).toBe(6 * (2 + 2 * 4) * 4096);
     expect(dagOutputTokenCeiling(4)).toBe(outcome.outputTokenCeiling);
     expect(outcome.outputTokensUsed).toBe(4 * 11);
-    const warnings = r.events.filter((event): event is Extract<AgentRunEvent, { type: "warning" }> => event.type === "warning");
-    expect(r.events.filter((event) => event.type !== "warning")).toEqual([]); // nothing of a specialist run reaches the coordinator's stream
+    const warnings = r.events.filter((event): event is Extract<AgentRunEvent, { type: "warning" | "plan" | "specialist_finished" | "degraded" }> => (event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded")); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
+    expect(r.events.filter((event) => event.type !== "warning" && !isOrchestrationRunEventType(event.type))).toEqual([]); // nothing of a specialist run reaches the coordinator's stream; [B21 E2] pin move (OD-126): the scheduler's own status facts are the additive run events
     for (const role of ["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"]) expect(warnings.some((warning) => warning.message.includes(role) && warning.message.includes("accepted")), role).toBe(true);
     expect(warnings.every((warning) => warning.runId === "run-b21b")).toBe(true);
     for (const task of outcome.tasks) { expect(task.result).not.toBeNull(); expect(task.resultDigest).toMatch(/^eng1-[0-9a-f]{16}$/); }
@@ -553,6 +553,6 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     const warnings = warningsOf(r.events);
     expect(warnings).toContain("Orchestration: specialist component-sourcing-evidence (task task-2-component-sourcing-evidence, attempt 0) tool (unknown) refused: unknown_tool.");
     expect(warnings.filter((message) => / refused: /.test(message))).toHaveLength(1);
-    expect(r.events.filter((event) => event.type !== "warning")).toEqual([]);
+    expect(r.events.filter((event) => event.type !== "warning" && !isOrchestrationRunEventType(event.type))).toEqual([]); // [B21 E2] pin move (OD-126): the scheduler's own status facts are the additive run events
   });
 });

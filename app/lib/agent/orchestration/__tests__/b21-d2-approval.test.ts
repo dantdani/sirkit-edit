@@ -358,7 +358,7 @@ describe("[B21 D2] one artifact per user message: a specialist's sealed proposal
       expect(events.map((event) => event.type).filter((type) => ARTIFACT_EVENTS.has(type)), entry.event).toEqual([entry.event]);
       const specialist = adapter.starts[1]!;
       expect(specialist.tools.filter((toolId) => REGISTRY.get(toolId)?.operationClass !== "read"), entry.event).toEqual([]);
-      expect(events.flatMap((event) => (event.type === "warning" ? [event.message] : [])).filter((message) => message.startsWith("Orchestration: the coordinator's own turn already handed the human an artifact")), entry.event).toHaveLength(1);
+      expect(events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])).filter((message) => message.startsWith("Orchestration: the coordinator's own turn already handed the human an artifact")), entry.event).toHaveLength(1); // [B21 E2] pin move (OD-126): the held-artifact line is now a `degraded` event carrying the same sentence
       expect(adapter.starts[2]!.userMessage, entry.event).toContain('"approval":{"outcome":"coordinator_sealed","presented":null}');
     }
   }, 180_000);

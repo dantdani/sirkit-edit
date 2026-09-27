@@ -289,7 +289,7 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
     }
     expect(run.loops.flatMap((loop) => loop.events).filter((event) => event.type === "proposal_ready" || event.type === "pcb_proposal_ready" || event.type === "layout_candidate_ready")).toEqual([]);
     expect(run.outcome.tasks.map((task) => [task.role, task.status, task.sealedArtifactDigests, task.result?.proposedActions.length])).toEqual([["circuit-topology", "accepted", [], 0], ["schematic", "accepted", [], 0], ["pcb-placement-routing", "accepted", [], 0]]);
-    const warnings = run.events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+    const warnings = run.events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
     expect(warnings.filter((message) => message.startsWith("Orchestration: the coordinator's own turn already handed the human an artifact"))).toHaveLength(1);
   });
 });

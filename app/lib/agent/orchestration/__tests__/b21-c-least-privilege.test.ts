@@ -74,7 +74,7 @@ function rig(context: AgentRunContext, calls: Readonly<Record<string, string>> =
   const coordinator: CoordinatorRun = { runId, provider: "openai", userMessage: "Design a 555 timer LED blinker.", history: [], startedAt: Date.now() };
   return { deps, adapter, events, loops, coordinator, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId }, store };
 }
-const warningsOf = (events: AgentRunEvent[]): string[] => events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+const warningsOf = (events: AgentRunEvent[]): string[] => events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 const requestsOf = (history: OrchestrationRunEntry[]): Map<string, readonly string[]> => new Map(history.flatMap((entry) => (entry.record.kind === "request" ? [[entry.record.document.role, entry.record.document.allowedToolIds] as const] : [])));
 /** [B21 C fix] the not-run line of a role with no tools this run */
 const notRunLine = (role: string, taskId: string): RegExp => new RegExp(`^Orchestration: specialist ${role} not run \\(role_has_no_tools, task ${taskId}\\)`);

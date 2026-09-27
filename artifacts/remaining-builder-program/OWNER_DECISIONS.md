@@ -1417,3 +1417,59 @@ Amendments to existing entries:
   to 24 h (the dated notes). No request carries `background`, and no adapter touches a batch surface - pinned by
   `b21-e1-result-tool.test.ts` case 2 (the pinned key sets; the fake clients' batch, file and beta surfaces throw when touched).
 - **The owner may choose otherwise:** batches for an opt-in offline evaluation at half price (B21-F), never interactive.
+
+## OD-126 — The chat protocol for orchestration events, as applied (B21-E2, 2026-09-27)
+
+- **Question:** how does a DAG run report its plan, its specialists, its partial result and its degraded modes on the chat stream
+  (D21-22)?
+- **Applied:** five events under protocol v1 - `plan`, `specialist_started`, `specialist_finished`, `partial_result`, `degraded` -
+  PINNED as `ORCHESTRATION_RUN_EVENT_TYPES` in the agent contracts beside the other run events, each a CLOSED shape (task id, role,
+  provider, model, attempt, status or reason, the budget remaining on a start, a bounded message) built by `run-events.ts` and judged by
+  one rule; emitted by the scheduler and the runtime IN PLACE of B21-B's warning lines for the plan, a specialist's status and the
+  degraded and stand-down facts, each carrying B's own sentence as its `message` (a specialist's refused tool call, a merge line and an
+  approval line stay warnings); a re-run the scheduler promised (`runsAgain`) and then withheld is closed by one final
+  `specialist_finished`; a replayed or stale result names no provider (its provenance is unrecorded); the partial result counts each
+  planned task once and, once the merge judged them, counts a result the merge withheld as not usable (`mergeWithheld`); a reason never
+  repeats an undeclared key's model-chosen name. The coordinator's trace records the lines it recorded at HEAD, plus a withheld re-run's
+  closing line (`specialist_started` and `partial_result` are stream-only); the closed union widened in place; protocol version 1, one
+  run_started and one terminal, the flag-off stream byte-identical; an older reducer ignores the five. NOT harmless for an OLDER v1 page:
+  a tab still running the pre-E2 bundle against this server renders the refusal, merge and approval warnings but loses the plan, status
+  and stand-down lines it rendered at HEAD (they arrive as types its `default` drops), so degraded mode is silent there and protocol
+  version 1 cannot tell it (RECORDED; `b21-e2-run-view.test.ts` case 6 names the lines lost; the page and the route ship together and
+  the DAG is behind the off-by-default flag, so it needs a version skew with the flag on). Proven by `b21-e2-run-events.test.ts`,
+  `b21-e2-chat-events.test.ts`, `b21-e2-run-view.test.ts`.
+- **The owner may choose otherwise:** the warning beside the event (B's warning line emitted too, the E2 page skipping a warning equal to
+  a message it rendered - an older page keeps every line it showed; the coordinator's trace unchanged); or a protocol v2 with typed
+  events only (the page composes the line; an older client refuses the version instead of dropping lines); or the specialist's started
+  line on the coordinator's trace (it would consume the 12-line orchestration budget).
+
+## OD-127 — UI placement of orchestration status, as applied (B21-E2, 2026-09-27)
+
+- **Question:** where does the page show the DAG's status?
+- **Applied:** run-log lines (each event's own sentence, through the existing run-log step) plus ONE additive status line built by
+  `projectRunView` from pure counters (scheduled; finished, by a task's FINAL outcome - a withheld retry counted once by its closing
+  event, a stale result never run again not finished; the degraded notices; the partial result) and written once, before the notes, when
+  the run ends; null for every run with no orchestration event. The run view's additive code is appended to `chat-run-view.ts` (no line
+  the discovery cites moves). No control: two in-place page lines, no JSX, no handler; the B17-A inventory regenerated with zero drift
+  (628 controls), no B18-D wire, nothing under `app/components/chat`. Proven by `b21-e2-run-view.test.ts`, the route suite's cases 3 and
+  7, the B17-A and B18-D gates.
+- **The owner may choose otherwise:** a specialist panel with per-specialist stop or reject (a B17-A rule, a regenerated inventory and a
+  B18-D gate); a status line that updates while the run streams.
+
+## OD-112 — Per-specialist provider/model and task identity on the trace: NOT applied - stopped (B21-E2, 2026-09-27)
+
+- **Question (as drafted):** widen the trace's provider vocabulary, or an optional closed `orchestration` block in a new module with one
+  trace document per specialist task (run id `<runId>:<taskId>`, linked by `parentRunId`)?
+- **Stopped:** the default cannot be accepted by the UNCHANGED v1 trace contract: every task id `task-<n>-<role>` matches the redaction
+  authority's unanchored OpenAI-key pattern that the trace validator applies to every string, so a per-task document with that run id is
+  `trace_validation_failure` and reaches no sink (D21-41; the probe through the real recorder and validator). The run's stop condition
+  ("if the trace block cannot be accepted without editing one of the nine scanned files") applied; the implementation is held in the
+  scratchpad, none of it in the tree.
+- **The owner decides one of:** (A) anchor the diagnostics' `sk-` key prefix at a token start in `redaction.ts` (the B19-D model-bound
+  form): the nine files untouched, the held implementation applies as written, and the coordinator trace's task ids stop reading
+  `ta[redacted]` - but it narrows a shared secret check (a key embedded after a letter would no longer be flagged in diagnostics);
+  (B) the per-task trace run id `<runId>:<n>-<role>` (the task id without its `task-` prefix) with the block carrying the exact task id:
+  no rule narrowed, OD-112's wording amended, the held code's run-id rule adjusted; (C) a task-id grammar without `task-`: every B21
+  record key, suite and page moves - not recommended; (D) editing the scanned validator: refused by D21-27 / OD-113.
+- **Recommended by E2:** (B) for E2's next run - the smallest change and no rule narrowed; (A) if the owner also wants the coordinator's
+  trace lines legible.

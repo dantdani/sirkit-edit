@@ -172,7 +172,7 @@ as an allowlist (33 ids, over the bound) — the coordinator's run carries none.
   U1's binding (the physical-binding service's aggregate projected by the route's loader), never an empty record set the loader never
   produces. **CONFIRMED**. Consequence, recorded for the owner (OD-120): runbook :809's component specialist and B21-F's "missing
   component evidence" case run no sourcing model when no binding exists; the missing evidence is recorded as dissent and shown to the
-  follow-up turn, never invented.
+  follow-up turn, never invented. [B21 E2, 2026-09-27] Since B21-E2 that visible line is a `degraded` event (`role_has_no_tools`, the same sentence), not a warning (`run-events-and-trace.md`, OD-126).
 - **At the loop and at the gateway.** A call to a tool outside the role's list is never advertised, so the loop refuses it
   `unknown_tool` before it runs (one bounded refusal line on the coordinator's stream); invoked directly, the specialist gateway refuses
   it `role_not_permitted_tool` before the underlying gateway is asked (least-privilege case 5), and so does the wrapper the scheduler

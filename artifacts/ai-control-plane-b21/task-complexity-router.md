@@ -61,7 +61,7 @@ no new exposed tool, no reserved-file edits (their texts are in section 7). **No
 (the flag is an env variable, not a route), no UI control — so the route census stays 165 = 162 canonical + 3 factories + 0 raw and
 every generated artifact (the B04 registry CSVs, the B20 manifests and parity JSON, the B17-A control inventory) is byte-identical; no
 generator was re-run; the B16.1C control-inventory and B18-D UI gates are untouched. **CONFIRMED** (`git status` at the end of the
-increment lists only the files named in section 6).
+increment lists only the files named in section 6). [B21 E2, 2026-09-27] Since B21-E2 the plan line and the status lines are the additive v1 events `plan` and `specialist_finished` carrying the same sentences (a stand-down a `degraded` event); only a refused specialist tool call stays a `warning` line (`run-events-and-trace.md`, OD-126).
 
 **Zero authority by construction.** The router never widens a role's permissions and never names a tool. The specialist gateway is
 BUILT by the composition root with no execution-grant minter, no external port, no MCP port and no prompt version (C46: nothing but a
@@ -82,7 +82,7 @@ failure is a visible dissent, never a silent switch; degraded mode is a visible 
 outage among the specialists makes no further paid call (C47). The B18 grants, the B19 evidence rules, B20's OD-45/90/91/92 provider
 rules and OD-81's directive matcher stand unchanged (the matcher is neither edited nor reused: it lives in the MCP module the B19-D
 closure gate keeps out of the chat route, section 4).
-[B21 D2, 2026-09-26] Since B21-D2 a proposing role's specialist is also offered its row's live proposals and seals one through that same bare gateway (no minter, no port, no prompt version is needed for it); the follow-up turn stays read-only (`specialist-proposals.md`).
+[B21 D2, 2026-09-26] Since B21-D2 a proposing role's specialist is also offered its row's live proposals and seals one through that same bare gateway (no minter, no port, no prompt version is needed for it); the follow-up turn stays read-only (`specialist-proposals.md`). [B21 E2, 2026-09-27] Since B21-E2 degraded mode is a `degraded` event naming its closed reason with the same sentence, not a warning line (`run-events-and-trace.md`, OD-126).
 
 ## 1. The router: the rule table (rule → runbook line → role list)
 
@@ -294,7 +294,7 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   with its outcome, a `… is STALE …` line per stale replay, and — after the review — one bounded line per REFUSED specialist tool call
   ("Orchestration: specialist <role> (task <id>, attempt n) tool <toolId> refused: <status>.", at most four per attempt and then one
   "further refused tool calls are not shown" line, C43; case 14), so a specialist's refused calls are never silent; nothing else of a
-  specialist run reaches the coordinator's stream (case 1). B21-E adds the events and the per-task trace.
+  specialist run reaches the coordinator's stream (case 1). B21-E adds the events and the per-task trace. [B21 E2, 2026-09-27] Since B21-E2 the plan line, the status lines and the STALE line are the additive v1 events `plan` and `specialist_finished` carrying the same sentences, and a re-run the scheduler promised and withheld is closed by one more `specialist_finished`; the refused-call lines stay warnings; the per-task trace STOPPED (D21-41) (`run-events-and-trace.md`, OD-126).
 
 ## 4. The store binding, the flag and the route wiring
 

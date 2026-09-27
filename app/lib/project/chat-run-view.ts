@@ -110,9 +110,9 @@ export interface RunViewState {
   droppedExecutions: number;
   /** [B18-E validation] tool calls that ended without doing anything — refused before running, or finished not-ok. A run
    *  that tried and failed is a run whose answer may claim otherwise, whether or not the model wrote prose beside the call. */
-  failedAttempts: number;
+  failedAttempts: number; /** [B21 E2] (OD-126, OD-127) pure counters over an orchestrated run's additive events (reduceOrchestrationEvent, appended) - display only, never authority */ orchestrated: boolean; specialistsScheduled: number; specialistsFinished: number; specialistsDegraded: number; partialResult: { usable: number; planned: number } | null;
 }
-export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0, failedAttempts: 0 });
+export const initialRunView = (): RunViewState => ({ answer: "", interim: [], pendingExecutions: 0, resolvedExecutions: 0, pendingReviews: 0, terminal: null, failure: null, receivedExecutions: 0, droppedExecutions: 0, failedAttempts: 0, orchestrated: false, specialistsScheduled: 0, specialistsFinished: 0, specialistsDegraded: 0, partialResult: null });
 
 /** Fold one raw run event (as the page receives it) into the run view. Unknown events change nothing. */
 export function reduceRunView(state: RunViewState, event: Record<string, unknown>): RunViewState {
@@ -145,7 +145,7 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
     case "run_failed":
       return { ...state, terminal: "failed", failure: typeof event.message === "string" && event.message.length > 0 ? event.message.slice(0, 500) : "The assistant run failed." };
     default:
-      return state;
+      return isOrchestrationRunEventType(event.type) ? reduceOrchestrationEvent(state, event) : state; // [B21 E2] the additive v1 orchestration events (OD-126): counters only (appended below)
   }
 }
 
@@ -155,7 +155,7 @@ export function reduceRunView(state: RunViewState, event: Record<string, unknown
 export const runViewGrantReceived = (state: RunViewState): RunViewState => ({ ...state, receivedExecutions: state.receivedExecutions + 1 });
 export const runViewGrantDropped = (state: RunViewState): RunViewState => ({ ...state, droppedExecutions: state.droppedExecutions + 1 });
 
-export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null }
+export interface RunViewProjection { answer: string; notes: string[]; label: string | null; historyText: string; failure: string | null; /** [B21 E2] the orchestrated run's one status line (OD-127), or null */ status: string | null }
 
 /** What the page shows and what the next run's history carries. */
 export function projectRunView(state: RunViewState): RunViewProjection {
@@ -180,7 +180,7 @@ export function projectRunView(state: RunViewState): RunViewProjection {
     notes: state.terminal ? state.interim.map((text) => `${NOTE_PREFIX}${text}`) : [],
     label,
     historyText: answer,
-    failure: state.terminal === "failed" ? state.failure : null,
+    failure: state.terminal === "failed" ? state.failure : null, status: orchestrationStatusLine(state), // [B21 E2] the orchestrated run's one status line (OD-127), or null
   };
 }
 
@@ -533,4 +533,57 @@ export function entryStateOfLogMessage(message: { id: string; entries: ReadonlyA
   const index = first.indexOf(STATE_MARK);
   const state = index >= 0 ? first.slice(index + STATE_MARK.length) : "";
   return (["awaiting_confirmation", "issued", "executing", "committed", "not_made", "landed_unverified", "outcome_unknown", "cancelled", "superseded"] as const).find((candidate) => candidate === state) ?? null;
+}
+
+// ─── [B21 E2] The additive v1 orchestration events in the run view (OD-126, OD-127) ─────────────────────────────────────────
+// Appended on purpose: an import is hoisted and a function declaration too, so no line the discovery cites in this file moves.
+
+import { isOrchestrationRunEventType } from "../agent/contracts";
+
+/** a count the stream carries: a small nonnegative integer, or nothing */
+const runCount = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 1_000 ? value : null);
+/** [B21 E2] One additive orchestration event folded into the run view: counters only - the answer, the notes, the label and the history
+ *  are untouched, exactly as a reducer that did not know them. `specialistsFinished` counts a task by its FINAL outcome ([B21 E2 fix:
+ *  tests-2, coverage-6]): an outcome event with no re-run promised (`runsAgain` false) that is not `stale` - a retry closes on its
+ *  retried outcome, a withheld retry on the scheduler's closing event, and a stale result that was never run again is not finished
+ *  (the partial result counts it not started). `specialistsDegraded` counts the degraded NOTICES (run-wide or of one specialist). */
+function reduceOrchestrationEvent(state: RunViewState, event: Record<string, unknown>): RunViewState {
+  switch (event.type) {
+    case "plan":
+      return { ...state, orchestrated: true, specialistsScheduled: runCount(event.scheduled) ?? state.specialistsScheduled };
+    case "specialist_finished":
+      return event.runsAgain === false && event.status !== "stale" ? { ...state, orchestrated: true, specialistsFinished: state.specialistsFinished + 1 } : { ...state, orchestrated: true };
+    case "degraded":
+      return { ...state, orchestrated: true, specialistsDegraded: state.specialistsDegraded + 1 };
+    case "partial_result": {
+      const usable = runCount(event.usable);
+      const planned = runCount(event.planned);
+      return { ...state, orchestrated: true, partialResult: usable !== null && planned !== null && usable < planned ? { usable, planned } : state.partialResult };
+    }
+    default:
+      return { ...state, orchestrated: true };
+  }
+}
+
+/** [B21 E2] The prefix of the run's one additive status line (OD-127). */
+export const ORCHESTRATION_STATUS_PREFIX = "Specialists: ";
+/** [B21 E2] The ONE additive status line of an orchestrated run (OD-127), from the counters alone: what the plan scheduled, how many
+ *  finished, whether the run was degraded (the log above says why) and its partial result - or null for a run that carried no
+ *  orchestration event (every single-agent run: its run log is unchanged). Rendered in the run log as a line, never a control. */
+export function orchestrationStatusLine(state: RunViewState): string | null {
+  if (!state.orchestrated) return null;
+  const parts = [`${state.specialistsScheduled} scheduled`, `${state.specialistsFinished} finished`];
+  if (state.specialistsDegraded > 0) parts.push(`degraded mode (${state.specialistsDegraded} notice${state.specialistsDegraded === 1 ? "" : "s"} in the log above)`);
+  if (state.partialResult) parts.push(`partial result: ${state.partialResult.usable} of ${state.partialResult.planned} usable`);
+  return `${ORCHESTRATION_STATUS_PREFIX}${parts.join(" · ")}`;
+}
+/** [B21 E2] How long a run-log line from an orchestration event may be (the builders bound it at the same figure). */
+export const MAX_ORCHESTRATION_LINE_CHARS = 1_500;
+/** [B21 E2] The run-log line of one additive orchestration event (OD-127: run-log lines, no control): the server's own sentence it
+ *  carries, "running" for a specialist that just started (the next line settles it), "done" otherwise - or null for any other event,
+ *  which the page handles (or ignores) as before. */
+export function orchestrationRunLogLine(event: Record<string, unknown>): { text: string; status: "running" | "done" } | null {
+  if (!isOrchestrationRunEventType(event.type) || typeof event.message !== "string") return null;
+  const text = event.message.trim().slice(0, MAX_ORCHESTRATION_LINE_CHARS);
+  return text ? { text, status: event.type === "specialist_started" ? "running" : "done" } : null;
 }

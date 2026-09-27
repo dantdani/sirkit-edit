@@ -121,8 +121,8 @@ export interface SchedulerDeps {
    *  read can succeed in it); the scheduler wraps it read-only for every invocation - defense in depth, never the only barrier */
   gateway: AgentToolInvocationGateway;
   system: string;
-  /** the coordinator's stream: the scheduler emits warnings only (one plan line, one line per scheduled specialist, a bounded
-   *  line per refused tool call of a specialist) */
+  /** the coordinator's stream: [B21 E2] the plan, a specialist's status and the degraded facts as the additive v1 run events (OD-126,
+   *  run-events.ts, each carrying B's line; [B21 E2 fix] a withheld re-run closed by one final event), and a bounded warning line per refused tool call of a specialist */
   emit(event: AgentRunEvent): void;
   /** injected by the composition root (the loop's closure is outside the gated prefix) */
   runLoop: SpecialistLoop;
@@ -392,7 +392,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   const dagDeadline = coordinator.startedAt + SPECIALIST_CAPS.dagWallTimeMs;
   if (dagDeadline - now() < SPECIALIST_CAPS.minTaskMs) return refused("dag_deadline_elapsed", `the DAG wall time (${SPECIALIST_CAPS.dagWallTimeMs} ms from the coordinator's start) has elapsed`);
   const scope: OrchestrationRunScope = { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId: coordinator.runId };
-  const warn = (message: string): void => deps.emit({ type: "warning", runId: coordinator.runId, message });
+  const warn = (message: string): void => deps.emit({ type: "warning", runId: coordinator.runId, message }); let open: SpecialistFinishedEvent | null = null; const report = (event: OrchestrationRunEvent): void => { deps.emit(event); if (event.type === "specialist_finished" || (event.type === "degraded" && event.reason === ROLE_HAS_NO_TOOLS)) open = event.type === "specialist_finished" && event.runsAgain ? event : null; }; const settle = (why: SchedulerStop): void => { if (open) report(notRunAgainEvent(open, why)); }; // [B21 E2] the plan, status and degraded facts as events (OD-126); refusal lines stay warnings; [B21 E2 fix] a re-run promised (`runsAgain`) and then withheld is CLOSED by one final event (`settle`)
   // [B21 C] every role's effective set, once: its reviewed row intersected with the reads the derived context admits; a role whose
   // set is empty is NOT RUN (never with the coordinator's set): its task stays in the plan and, at its turn, records the missing
   // evidence as dissent `escalated` (role_has_no_tools) that the outcome carries on - the DAG continues ([B21 C fix], review)
@@ -429,7 +429,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   } else {
     // a fresh plan none of whose roles has a tool runs nothing and writes nothing (a resume of a committed plan still replays)
     if (toolless.length === tasks.length) {
-      for (const task of toolless) warn(notRunLine(task));
+      for (const task of toolless) report(degradedEvent(coordinator.runId, "role_has_no_tools", notRunLine(task), { taskId: task.taskId, role: task.role, provider: coordinator.provider, model: null }));
       return refused("plan_empty", `every specialist of the plan has an empty effective tool set (${ROLE_HAS_NO_TOOLS}): ${toolless.map((task) => task.role).join(", ")}`);
     }
     const written = await write(PLAN_TASK_ID, 0, { kind: "plan", tasks, reason: `${plan.rule ? `router rule ${plan.rule}` : "the coordinator's plan"}${toolless.length > 0 ? `; not run (${ROLE_HAS_NO_TOOLS}): ${toolless.map((task) => task.role).join(", ")}` : ""}` });
@@ -437,7 +437,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   }
 
   const outputTokenCeiling = dagOutputTokenCeiling(tasks.length - toolless.length);
-  warn(`Orchestration: ${tasks.length - toolless.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}${toolless.length > 0 ? `; ${toolless.length} planned specialist(s) with no tools this run (${ROLE_HAS_NO_TOOLS}) will not run` : ""}.`); if (coordinator.artifactHeld === true) warn(COORDINATOR_ARTIFACT_HELD_LINE); // [B21 D2 fix] visible, never silent
+  report(planEvent({ runId: coordinator.runId, rule: plan.rule, tasks, scheduled: tasks.length - toolless.length, notRun: toolless.length, parallelism: SPECIALIST_CAPS.parallelism, wallTimeMs: SPECIALIST_CAPS.dagWallTimeMs, outputTokenCeiling, message: `Orchestration: ${tasks.length - toolless.length} specialist(s) scheduled after this turn, one at a time (parallelism ${SPECIALIST_CAPS.parallelism}; DAG wall time ${SPECIALIST_CAPS.dagWallTimeMs / 1_000} s; output-token ceiling ${outputTokenCeiling} reported, not priced)${plan.rule ? ` under rule ${plan.rule}` : ""}${toolless.length > 0 ? `; ${toolless.length} planned specialist(s) with no tools this run (${ROLE_HAS_NO_TOOLS}) will not run` : ""}.` })); if (coordinator.artifactHeld === true) report(degradedEvent(coordinator.runId, "coordinator_artifact_held", COORDINATOR_ARTIFACT_HELD_LINE)); // [B21 D2 fix] visible, never silent; [B21 E2] as the plan and degraded events
   const outcomes: SpecialistTaskOutcome[] = [];
   const notStarted: OrchestrationPlanTask[] = [];
   let stop: SchedulerStop = "completed";
@@ -448,7 +448,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
   const dagController = new AbortController();
   const dagTimer = setTimeout(() => dagController.abort(), Math.max(0, dagDeadline + SPECIALIST_CAPS.minTaskMs - now()));
   try {
-    for (const task of tasks) {
+    for (const task of tasks) { settle(stop); // [B21 E2 fix] the previous task's withheld re-run, closed before anything of this task
       if (stop !== "completed") { notStarted.push(task); continue; }
       if (coordinator.signal?.aborted) { stop = "cancelled"; notStarted.push(task); continue; }
       // the attempt this resume would run at: one past every record of the task (a stale dissent is written UNDER IT, so two
@@ -462,7 +462,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const committedScopeDigest = answered && answered.record.kind === "request" && !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null; // [B21 D fix] the merge's stale / expired verdict is a regenerate signal
         if (committedScopeDigest === currentScopeDigest) {
           outcomes.push({ taskId: task.taskId, role: task.role, attempt: committed.attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "replayed", reason: null, resultDigest: committed.record.digest, result: committed.record.document, sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest), steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
-          warn(`Orchestration: specialist ${task.role} replayed from the record (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}); it did not run again.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} replayed from the record (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}); it did not run again.`));
           continue;
         }
         // the board moved (or the scope differs): the committed result is STALE - dissent, then the task runs again
@@ -470,7 +470,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const written = await write(task.taskId, baseAttempt, dissent("stale", reason, committed.record.digest));
         if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
         staleWritten = true;
-        warn(`Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision, or the merge judged it stale or expired; the task runs again.`);
+        report(staleResultEvent(coordinator.runId, { taskId: task.taskId, role: task.role, attempt: committed.attempt, resultDigest: committed.record.digest, reason }, `Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision, or the merge judged it stale or expired; the task runs again.`));
       }
       // [B21 C fix] no tools this run: the task is not run and records its missing evidence (a dissent of its own key: one past a
       // stale dissent just written); the outcome carries it, so every planned task is in `tasks` or `notStarted`
@@ -481,7 +481,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const written = await write(task.taskId, attempt, dissent("escalated", reason));
         if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
         outcomes.push({ taskId: task.taskId, role: task.role, attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "escalated", reason, resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
-        warn(notRunLine(task));
+        report(degradedEvent(coordinator.runId, "role_has_no_tools", notRunLine(task), { taskId: task.taskId, role: task.role, provider: coordinator.provider, model: null }));
         continue;
       }
       for (let offset = 0; offset < SPECIALIST_CAPS.attemptsPerTask; offset += 1) {
@@ -491,17 +491,17 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         // [B21 E1] the provider layer (OD-115, OD-117): no specialist call while the COORDINATOR's provider is paused (its follow-up turn could
         // not run either, and the coordinator never switches provider), then this attempt's route - the role's, or a compatible fallback
         const routing = deps.providers ? routeAttempt(deps.providers, coordinator.provider, task, now(), () => deps.buildToolset(specialistToolRegistry(deps.registry, task.role), derivedByRole.get(task.role)!, () => undefined, allowed).declarations) : null;
-        if (routing?.kind === "coordinator-paused") { stop = "provider_paused"; if (offset === 0) notStarted.push(task); warn(coordinatorPausedLine(tasks.length - tasks.indexOf(task), routing.pause)); break; }
+        if (routing?.kind === "coordinator-paused") { stop = "provider_paused"; if (offset === 0) notStarted.push(task); report(degradedEvent(coordinator.runId, "provider_paused", coordinatorPausedLine(tasks.length - tasks.indexOf(task), routing.pause))); break; }
         if (routing?.kind === "refused") {
           const reason = `${routing.refusal.code}: ${routing.refusal.detail}`;
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { stop = written.reason; notStarted.push(task); break; }
           outcomes.push({ taskId: task.taskId, role: task.role, attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "escalated", reason: reason.slice(0, 1_000), resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: routing.refusal.provider, model: null });
-          warn(`Orchestration: specialist ${task.role} not run (${routing.refusal.code}, task ${task.taskId}): ${routing.refusal.detail}`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} not run (${routing.refusal.code}, task ${task.taskId}): ${routing.refusal.detail}`));
           break;
         }
         const route = routing?.kind === "run" ? routing.route : null;
-        if (route?.fallbackFrom) warn(`Orchestration: specialist ${task.role} (task ${task.taskId}) runs on ${route.provider} (${route.model}) instead of ${route.fallbackFrom.provider} (${route.fallbackFrom.model}) - ${route.fallbackFrom.pause} Its tools and its result tool render identically on both providers: a compatible fallback, degraded and never silent.`);
+        if (route?.fallbackFrom) report(degradedEvent(coordinator.runId, "compatible_fallback", `Orchestration: specialist ${task.role} (task ${task.taskId}) runs on ${route.provider} (${route.model}) instead of ${route.fallbackFrom.provider} (${route.fallbackFrom.model}) - ${route.fallbackFrom.pause} Its tools and its result tool render identically on both providers: a compatible fallback, degraded and never silent.`, { taskId: task.taskId, role: task.role, provider: route.provider, model: route.model }));
         const runId = specialistRunId(coordinator.runId, task.taskId);
         const budget = specialistBudget(deps.budget ?? DEFAULT_AGENT_BUDGET, remainingMs);
         const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed)); // [B21 D2 fix] the run's effective set
@@ -519,7 +519,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("malformed", reason));
           if (!written.ok) { stop = written.reason; notStarted.push(task); break; } // [B21 D2 lead] never ran: not started, so a proposing peer's presentation is withheld
           outcomes.push(outcome("malformed", reason));
-          warn(`Orchestration: specialist ${task.role} malformed (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} malformed (task ${task.taskId}, attempt ${attempt}): ${reason}.`));
           break;
         }
         const requested = await write(task.taskId, attempt, { kind: "request", document: validated.value });
@@ -540,12 +540,12 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { stop = written.reason; notStarted.push(task); break; }
           outcomes.push(outcome("escalated", reason));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`));
           break;
         }
         const specialist = specialistRunAdapter(admitted?.adapter ?? deps.adapter, specialistResultToolDeclaration(task.role));
         const metered = meteredAdapter(specialist.adapter);
-        let refusalLines = 0; const seals = sealCollector(); // [B21 D2] every artifact this run's gateway seals
+        let refusalLines = 0; const seals = sealCollector(); report(specialistStartedEvent({ runId: coordinator.runId, taskId: task.taskId, role: task.role, provider: route?.provider ?? coordinator.provider, model: route?.model ?? null, attempt, wallTimeRemainingMs: remainingMs, outputTokensRemaining: Math.max(0, outputTokenCeiling - outputTokensUsed) })); // [B21 D2] every artifact this run's gateway seals; [B21 E2] the attempt reaches its provider (OD-126), [B21 E2 fix] with the budget remaining (D21-22)
         const result = await deps.runLoop(
           { runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal }, // [B21 E1 fix] the provider it runs on: its seals' provenance
           {
@@ -572,7 +572,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const uncommitted = (written: Extract<Written, { ok: false }>, kind: string): void => {
           const reason = `${written.reason}: the ${kind} was not committed`;
           outcomes.push(outcome("escalated", reason, measured));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`));
           stop = written.reason;
         };
         if (admitted?.capture.paused) {
@@ -581,7 +581,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { uncommitted(written, "dissent"); break; }
           outcomes.push(outcome("escalated", reason.slice(0, 1_000), measured));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}`));
           if (admitted.capture.paused.reason === "breaker_open" && route?.provider === coordinator.provider) stop = "provider_paused"; // a WINDOW pause is no outage: this task only
           break;
         }
@@ -591,7 +591,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { uncommitted(written, "dissent"); break; }
           outcomes.push(outcome("escalated", reason, measured));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`));
           break;
         }
         if (result.status === "completed") {
@@ -600,12 +600,12 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
             const written = await write(task.taskId, attempt, { kind: "result", document: parsed.value });
             if (!written.ok) { uncommitted(written, "result"); break; }
             outcomes.push(outcome("accepted", null, { ...measured, resultDigest: parsed.digest, result: parsed.value }));
-            warn(`Orchestration: specialist ${task.role} accepted (task ${task.taskId}, attempt ${attempt}, result ${parsed.digest}).`);
+            report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} accepted (task ${task.taskId}, attempt ${attempt}, result ${parsed.digest}).`));
           } else {
             const written = await write(task.taskId, attempt, dissent("malformed", parsed.reason));
             if (!written.ok) { uncommitted(written, "dissent"); break; }
             outcomes.push(outcome("malformed", parsed.reason, measured));
-            warn(`Orchestration: specialist ${task.role} malformed (task ${task.taskId}, attempt ${attempt}): ${parsed.reason}.`);
+            report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} malformed (task ${task.taskId}, attempt ${attempt}): ${parsed.reason}.`));
           }
           break;
         }
@@ -614,7 +614,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("escalated", failure));
           if (!written.ok) { uncommitted(written, "dissent"); break; }
           outcomes.push(outcome("escalated", failure, measured));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${failure}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${failure}.`));
           // cancelled: nothing further runs; deadline: this task only - the next task runs while wall time remains
           if (failure === "cancelled") stop = "cancelled";
           break;
@@ -628,7 +628,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { uncommitted(written, "dissent"); break; }
           outcomes.push(outcome("escalated", reason, measured));
-          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`, retry));
           if (retry) continue;
           if ((!route || route.provider === coordinator.provider) && !(retryable && paused?.reason === "quota_exhausted")) stop = "provider_outage"; // [B21 E1] another provider's outage, [B21 E1 fix] or a retry a WINDOW pause withheld, stops only its task
           break;
@@ -637,14 +637,14 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const written = await write(task.taskId, attempt, dissent("escalated", failure));
         if (!written.ok) { uncommitted(written, "dissent"); break; }
         outcomes.push(outcome("escalated", failure, measured));
-        warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${failure}.`);
+        report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${failure}.`));
         break;
       }
     }
   } finally {
     clearTimeout(dagTimer);
   }
-  return { kind: "ran", tasks: outcomes, notStarted, stop, outputTokenCeiling, outputTokensUsed };
+  settle(stop); return { kind: "ran", tasks: outcomes, notStarted, stop, outputTokenCeiling, outputTokensUsed }; // [B21 E2 fix] the last task's withheld re-run, closed
 }
 
 // ─── [B21 D fix] The merge's verdicts as a resume reads them, and a role's output rules ───────────────────────────────────
@@ -807,3 +807,7 @@ function coordinatorPausedLine(count: number, pause: AdmissionPause): string {
 import { admittedAdapter, decideSpecialistRoute, fallbackCompatibility, type SpecialistProviders, type SpecialistRoute, type SpecialistRouteDecision } from "./provider-policy";
 import { SPECIALIST_STOP_REASONS, specialistResultFromCapture, specialistResultToolDeclaration, specialistResultToolRule, specialistRunAdapter, type SpecialistResultParse } from "./result-tool";
 import type { AdmissionPause } from "../../acquisition/admission-control";
+
+// [B21 E2] on their own lines at the end (an import is hoisted): the additive v1 run events the scheduler emits in place of B's lines (OD-126)
+import { degradedEvent, notRunAgainEvent, planEvent, specialistFinishedEvent, specialistStartedEvent, staleResultEvent, type SpecialistFinishedEvent } from "./run-events";
+import type { OrchestrationRunEvent } from "../contracts";

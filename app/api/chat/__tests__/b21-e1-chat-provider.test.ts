@@ -88,7 +88,7 @@ async function post(sentence: string): Promise<Array<Record<string, unknown>>> {
   expect(response.status).toBe(200);
   return (await response.text()).trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 }
-const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => event.type === "warning").map((event) => String(event.message));
+const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => (event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded")).map((event) => String(event.message)); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 const terminals = (events: Array<Record<string, unknown>>): Array<Record<string, unknown>> => events.filter((event) => event.type === "run_completed" || event.type === "run_failed");
 
 vi.stubGlobal("fetch", () => { throw new Error("no network"); });

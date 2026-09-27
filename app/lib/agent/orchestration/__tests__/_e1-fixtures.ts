@@ -137,7 +137,7 @@ export async function runE1Dag(roles: readonly SpecialistRole[], providers: Spec
     store, registry: REGISTRY, context, adapter: over.adapter ?? COORDINATOR_ONLY, gateway: createAgentToolGateway(REGISTRY), system: AGENT_SYSTEM_PROMPT, emit: (event) => events.push(event),
     runLoop: runAgentLoop, buildToolset: buildRunToolset, budget: over.budget ?? DEFAULT_AGENT_BUDGET, ...(over.now ? { now: over.now } : {}), ...(providers ? { providers } : {}),
   });
-  const warnings = events.flatMap((event) => (event.type === "warning" ? [event.message] : []));
+  const warnings = events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
   return { outcome, ran: outcome.kind === "ran" ? outcome : null, events, warnings, store, repository, scope: { tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId }, context };
 }
 

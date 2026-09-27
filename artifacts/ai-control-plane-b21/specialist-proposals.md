@@ -205,7 +205,7 @@ The coordinator's artifact events (`COORDINATOR_ARTIFACT_EVENTS`, in order): `pr
   **INFERRED** residual: a scheduler-level replay of a result committed earlier still carries its own seal; the route never replays
   (a fresh run id per POST), and the decision is `coordinator_sealed` first either way, so nothing of it is presented. **CONFIRMED** (approval
   case 8 - each of the four events through the REAL runtime, a real Tier 1 seal, a real bounded PCB edit, a routing candidate its
-  family produced and a real execution grant; route case 4 - the same component, R1 3k3 against a scripted 4k7; proposing-roles case 9).
+  family produced and a real execution grant; route case 4 - the same component, R1 3k3 against a scripted 4k7; proposing-roles case 9). [B21 E2, 2026-09-27] Since B21-E2 that one line is a `degraded` event (`coordinator_artifact_held`, the same sentence) (`run-events-and-trace.md`, OD-126).
 
 `presentSpecialistProposal` (C27, called at C31) emits the presented action as the family's OWN event - the shape the coordinator's
 seal emits, under the coordinator's run id, the artifact read back from the run's validated result with its digest re-checked (C26) -

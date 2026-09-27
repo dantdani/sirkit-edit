@@ -555,3 +555,7 @@ export function validatedDigestOf(value: unknown): { schema: OrchestrationSchema
   const known = VALIDATED.get(value);
   return known ? { schema: known.schema, digest: known.digest } : null;
 }
+
+/** [B21 E2 lead] Every key name the specialist documents DECLARE (the request, the result and each nested record): a refusal path made
+ *  only of these names and array indices is server text; a path through any other key is model text (`run-events.ts` withholds it). */
+export const SPECIALIST_DECLARED_KEYS: readonly string[] = Object.freeze([...new Set<string>([...REQUEST_KEYS, ...RESULT_KEYS, ...SCOPE_KEYS, ...SCOPE_OPTIONAL_KEYS, ...HEAD_MARK_KEYS, ...PCB_BASIS_KEYS, ...CONTEXT_REF_KEYS, ...AGENT_BUDGET_KEYS, ...ACTION_KEYS, ...ASSUMPTION_KEYS, ...EVIDENCE_KEYS, ...EVIDENCE_OPTIONAL_KEYS, ...TOOL_REQUEST_KEYS, ...RISK_KEYS, ...QUESTION_KEYS, ...VALIDATION_REQUEST_KEYS])]);

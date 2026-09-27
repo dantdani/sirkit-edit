@@ -162,7 +162,7 @@ async function post(sentence: string): Promise<{ runId: string; normalized: stri
 }
 const types = (events: Array<Record<string, unknown>>): string[] => events.map((event) => String(event.type));
 const terminals = (events: Array<Record<string, unknown>>): string[] => types(events).filter((type) => type === "run_completed" || type === "run_failed");
-const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => event.type === "warning").map((event) => String(event.message));
+const warningsOf = (events: Array<Record<string, unknown>>): string[] => events.filter((event) => (event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded")).map((event) => String(event.message)); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 const inMemoryStore = () => { const repository = new InMemoryDurableWorkflowRepository(); const store = new DurableOrchestrationRunStore(repository); return { repository, store }; };
 function traceCapture(): AgentRunTrace[] {
   const sink = new InMemoryTraceSink();
