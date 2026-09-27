@@ -207,7 +207,7 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 | `maxSpecialists` | 4 | specialists per coordinator run; a longer plan is refused (`plan_exceeds_specialist_cap`), never truncated — scheduler case 2 (a five-specialist plan and the six-specialist full-circuit list) |
 | `parallelism` | 1 | one specialist at a time (scheduler case 1 measures at most one adapter call in flight) |
 | `dagWallTimeMs` | 300 000 | from the coordinator's start (the lead's OD-107 value; ≤ 8 minutes = the 10-minute proposal TTL minus the 2-minute approval window, D21-17) |
-| `attemptsPerTask` | 2 | one attempt plus one retry on a provider failure the classifier marks retryable (C14, C32: `rate_limit`, `overloaded`, `timeout`, `network`), never on `insufficient_quota` — counted ABOVE the adapter's own SDK retries (the coordinator's adapter is reused: `maxRetries: 2` on the OpenAI client, C52, the SDK default 2 on Anthropic), so a retryable failure can cost up to 6 HTTP attempts per step; the breaker and `maxRetries: 0` are B21-E's (OD-115) |
+| `attemptsPerTask` | 2 | one attempt plus one retry on a provider failure the classifier marks retryable (C14, C32: `rate_limit`, `overloaded`, `timeout`, `network`), never on `insufficient_quota` — counted ABOVE the adapter's own SDK retries (the coordinator's adapter is reused: `maxRetries: 2` on the OpenAI client, C52, the SDK default 2 on Anthropic), so a retryable failure can cost up to 6 HTTP attempts per step; the breaker and `maxRetries: 0` are B21-E's (OD-115) [B21 E1, 2026-09-27] Applied since B21-E1 (`provider-routing-and-failure.md`, OD-115): with the provider layer every specialist's adapter is its route's own with `maxRetries: 0`, every call is admitted and recorded by the llm-provider breaker, and the one retry is never made against a provider the breaker paused. |
 | `coordinatorTurns` | 2 | the coordinator's turn before the specialists and its follow-up turn after them: the two loop calls the runtime makes |
 | `outputTokensPerStep` | 4 096 | the adapters' `MAX_OUTPUT_TOKENS` as data, pinned equal to the exported constant (C51, scheduler case 2): the reported per-DAG ceiling is 6 × (2 + 2 × specialists) × 4 096 output tokens (C17) — the DAG's maximum by construction over both coordinator turns and every attempt of every specialist — never priced, never enforced (enforcement would be vacuous: nothing can exceed a maximum by construction) |
 | `minTaskMs` | 1 000 | a task is not started with less wall time than this |
@@ -244,7 +244,11 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   bound to the task's role; accepted → the `result` record (with its whole-body digest); anything else → dissent `malformed` with a
   bounded closed reason (`result_not_json: …`, `result_refused: <refusal> at <path>`, `result_role_mismatch: …`) and the DAG continues
   (case 9: prose, a result naming `sirkit.manufacturing.release` as a tool request, a result for another role). B21-E replaces this
-  with the strict result tool. No decision record is written in B (decisions are B21-D's merge).
+  with the strict result tool. No decision record is written in B (decisions are B21-D's merge). [B21 E1, 2026-09-27] Replaced since
+  B21-E1 (`provider-routing-and-failure.md`): the scheduler reads only the ONE captured call of the strict result tool
+  `sirkit_specialist_result`, whose arguments A's validator judges; the final-text parse is removed (C16 re-pinned to the arguments'
+  parse), and a turn that ends without the call is `result_tool_not_called` - case 9's prose moved to that reason (a reviewed pin move),
+  its other two reasons unchanged.
 - **Failures**: `cancelled` → dissent `escalated` / `cancelled` and nothing further (case 6: aborting the coordinator's signal aborts the
   running specialist's signal; the record's last entry is `{ kind: "dissent", decision: "escalated", reason: "cancelled" }`; the
   coordinator's minter is never called — the scheduler never hands it on, so the cancelled loop had nothing to retire); `deadline` →
@@ -270,7 +274,9 @@ Only then does route case 4 run specialists in a chat (the replacement request u
 - **Refusals before anything runs**: `plan_empty`, `plan_exceeds_specialist_cap`, `no_verified_state` (a specialist needs the
   coordinator's verified canonical state), `dag_deadline_elapsed`, `store_unavailable` (A's UNAVAILABLE store or a repository that
   throws), `store_refused` (a malformed scope, an `invalid_record`), `store_conflict`, `plan_mismatch` (case 10). Stops after a start:
-  `completed`, `cancelled`, `deadline`, `provider_outage`, `store_unavailable`, `store_refused`, `store_conflict`. Task statuses:
+  `completed`, `cancelled`, `deadline`, `provider_outage`, `store_unavailable`, `store_refused`, `store_conflict` ([B21 E1, 2026-09-27] and
+  `provider_paused`: the coordinator's provider paused by the llm-provider meters before or during a specialist call - no call of the run
+  failed; `provider-routing-and-failure.md` section 2). Task statuses:
   `accepted`, `malformed`, `escalated`, `replayed`. **A store failure's detail** (`refused.detail`, a write's `detail`) is rendered
   through the redaction authority `renderUnknownError` (C42, C50: credentials and connection strings redacted, 120 characters at most —
   case 10 proves a driver message carrying a connection string loses it); the runtime never puts even that on the stream (section 4).
@@ -328,7 +334,9 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   answer is the one terminal under "Orchestration: the provider failed during the specialists (provider_outage); no follow-up turn was
   made and the assistant's answer above stands. N specialist result(s) are committed in the record." (route case 8 — before the review
   the runtime made a second paid call against the exhausted provider, whose `run_failed` replaced the completed answer and invited a
-  Retry that re-ran everything); a plan with no accepted or replayed result → the first answer stands under a warning naming the stop.
+  Retry that re-ran everything); [B21 E1, 2026-09-27] a DAG the llm-provider meters stopped (`provider_paused`) stands down the same way
+  under its own line - "the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115)" - never
+  claiming a failure; a plan with no accepted or replayed result → the first answer stands under a warning naming the stop.
   Otherwise ONE follow-up coordinator turn, READ-ONLY by construction (`followUpDeps`, C44: no execution-grant minter, the specialist
   gateway behind the read-only wrapper, the read-only registry view — it advertises reads only, route case 4 — and the coordinator's
   context with its authority withdrawn, C39), under the same run id, with the conversation so far plus the first turn's answer as its
@@ -436,7 +444,8 @@ gate's edits, the workflow's one explicit entry, this page. Gates re-run one job
 the A suites; `app/api/chat/__tests__` in full; `app/lib/agent/__tests__` (b09-*, b11-*, b18-*, b20-a4-*); the engineering exposure /
 tier suites (b04, b17-f, b18-a-permission-tiers, b18-c-*); the MCP gates (b20-b1, b20-b2, b20-d3); the chat closure ratchets; the CI
 guard; tsc; eslint on every new and changed file. Live behaviour with a real model: **BLOCKED-LIVE-QUALIFICATION** (LB-9); **UNKNOWN**:
-how a live model answers the specialist frame with one JSON document (B21-E's strict result tool removes the question); **INFERRED**:
+how a live model answers the specialist frame with one JSON document (B21-E's strict result tool removes the question; [B21 E1, 2026-09-27] it
+does since B21-E1 - whether a live model calls the tool is BLOCKED-LIVE-QUALIFICATION, LB-9); **INFERRED**:
 the up-to-six HTTP attempts per step under a retryable failure (the SDK's `maxRetries` read from the constructor, never exercised live).
 
 ## 7. For the lead — the reserved texts, in full
@@ -640,49 +649,49 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C7 | `app/lib/engineering/permission-tiers.ts` | 131 | — | `export const TIER1_EXECUTE_ROLES: readonly ProjectRole[] = Object.freeze(["pcb_editor", "project_admin"]);` | the roles that may recruit specialists |
 | C8 | `app/lib/project/composer-routing.ts` | 36 | — | `const EXECUTION_VERB = ` | the composer's explicit verbs the router mirrors |
 | C9 | `app/lib/project/composer-routing.ts` | 42 | — | `export const REPLACE_PART = ` | the composer's replacement pairing, exported for the router (B21-B) |
-| C10 | `app/lib/agent/orchestration/scheduler.ts` | 57 | — | `export const SPECIALIST_CAPS = Object.freeze({` | the caps as data |
-| C11 | `app/lib/agent/orchestration/scheduler.ts` | 194 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the derived, narrowed specialist context |
-| C12 | `app/lib/agent/orchestration/scheduler.ts` | 290 | — | `export function readOnlySpecialistGateway(` | the read-only narrowing |
-| C13 | `app/lib/agent/orchestration/scheduler.ts` | 470 | — | `const committed = history.filter((entry) => entry.taskId === task.taskId && entry.record.kind === "result").at(-1);` | resume: the last committed result of the task |
-| C14 | `app/lib/agent/orchestration/scheduler.ts` | 590 | — | `const retry = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;` | the retry rule |
-| C15 | `app/lib/agent/orchestration/scheduler.ts` | 461 | — | `const dagTimer = setTimeout(() => dagController.abort(), Math.max(0, dagDeadline + SPECIALIST_CAPS.minTaskMs - now()));` | the DAG's own timer |
-| C16 | `app/lib/agent/orchestration/scheduler.ts` | 360 | — | `export function parseSpecialistResult(finalText: string, role: SpecialistRole): ParsedResult {` | B: the final text as one JSON document |
-| C17 | `app/lib/agent/orchestration/scheduler.ts` | 167 | — | `export function dagOutputTokenCeiling(` | the reported token ceiling |
+| C10 | `app/lib/agent/orchestration/scheduler.ts` | 58 | — | `export const SPECIALIST_CAPS = Object.freeze({` | the caps as data |
+| C11 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the derived, narrowed specialist context |
+| C12 | `app/lib/agent/orchestration/scheduler.ts` | 291 | — | `export function readOnlySpecialistGateway(` | the read-only narrowing |
+| C13 | `app/lib/agent/orchestration/scheduler.ts` | 458 | — | `const committed = history.filter((entry) => entry.taskId === task.taskId && entry.record.kind === "result").at(-1);` | resume: the last committed result of the task |
+| C14 | `app/lib/agent/orchestration/scheduler.ts` | 624 | — | `const retryable = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;` | the retry rule ([B21 E1] and never against a provider the breaker paused, OD-115) |
+| C15 | `app/lib/agent/orchestration/scheduler.ts` | 449 | — | `const dagTimer = setTimeout(() => dagController.abort(), Math.max(0, dagDeadline + SPECIALIST_CAPS.minTaskMs - now()));` | the DAG's own timer |
+| C16 | `app/lib/agent/orchestration/result-tool.ts` | 138 | — | `export function parseSpecialistResultArguments(argumentsText: string, role: SpecialistRole): SpecialistResultParse {` | [B21 E1] the result tool's arguments as one JSON object, validated by A (B's final-text parse removed, OD-116) |
+| C17 | `app/lib/agent/orchestration/scheduler.ts` | 168 | — | `export function dagOutputTokenCeiling(` | the reported token ceiling |
 | C18 | `app/api/chat/orchestration-runtime.ts` | 39 | — | `export const ORCHESTRATION_ENABLED_ENV = "SIRKIT_ORCHESTRATION_ENABLED";` | the flag |
 | C19 | `app/api/chat/orchestration-runtime.ts` | 50 | — | `const productionStoreFactory: StoreFactory = () => new DurableOrchestrationRunStore(getDurableWorkflowRepository());` | the binding A deferred |
 | C20 | `app/api/chat/orchestration-runtime.ts` | 132 | — | `export function emitRefusedRun(` | the refused run with no provider call |
 | C21 | `app/api/chat/orchestration-runtime.ts` | 215 | — | `export async function runOrchestratedChat(` | the DAG driver |
 | C22 | `app/api/chat/orchestration-runtime.ts` | 146 | — | `export function holdTraceTerminal(` | the trace terminal held for the driver |
 | C23 | `app/api/chat/route.ts` | 426 | — | `const plan = planChatRun(userMessage, routerFactsOf(runContext));` | the plan before the adapter |
-| C24 | `app/api/chat/route.ts` | 520 | — | `result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now() }) : await runAgentLoop(request, deps);` | the three-way call site |
+| C24 | `app/api/chat/route.ts` | 520 | — | `result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now(), providers: productionSpecialistProviders() }) : await runAgentLoop(request, deps);` | the three-way call site ([B21 E1] with the provider layer) |
 | C25 | `app/lib/agent/loop.ts` | 54 | — | `export const MAX_RESULT_CHARS = 60_000;` | the model transfer bound the envelope respects |
 | C26 | `app/lib/agent/loop.ts` | 25 | — | `import { resolveReadBinding } from "../engineering/tool-bindings-readonly";` | D21-33: the first hop of the loop's chain to the fab presets |
 | C27 | `app/api/schematic/build-multi/route.ts` | 73 | — | `export const POST = authenticatedJsonRoute({ maxBytes: 16_000_000, deadlineMs: 45_000 }, async ({ body: rawBody }): Promise<Response> => {` | the untouched route |
 | C28 | `app/lib/durable-workflow/runtime.ts` | 18 | — | `if (fixtureRuntimeEnabled()) return fixtureContainer().durableRepository;` | the fixture runtime's in-memory repository |
 | C29 | `app/lib/agent/orchestration/store.ts` | 348 | — | `export function resolveOrchestrationRunStore(): OrchestrationRunStore {` | A's unavailable default the runtime falls back to |
-| C30 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 145 | — | `injected.set(at("evil-loop"), ` | the gate's loop probe (D21-33), pinned as an invariant |
+| C30 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 147 | — | `injected.set(at("evil-loop"), ` | the gate's loop probe (D21-33), pinned as an invariant |
 | C31 | `.github/workflows/deterministic-manufacturing.yml` | 145 | — | `app/api/chat/__tests__/b21-b-chat-router.test.ts` | the one explicit CI entry |
 | C32 | `app/lib/llm/errors.ts` | 151 | — | `export function isRetryableReason(reason: LLMProviderFailureReason): boolean {` | the classifier's retryable set |
 | C33 | `app/lib/agent/contracts.ts` | 185 | — | `runDeadlineMs: 120_000,` | the coordinator's 120 s per turn |
 | C34 | `app/lib/engineering/explicit-request.ts` | 35 | — | `const MOVE_PATTERN = ` | the explicit-request grammar the S-explicit rule mirrors |
 | C35 | `app/lib/agent/orchestration/router.ts` | 23 | — | `import { REPLACE_PART } from "../../project/composer-routing";` | the replacement rule IS the composer's pairing |
 | C36 | `app/lib/agent/orchestration/router.ts` | 115 | — | `const GEOMETRY_ASK = ` | a geometry, annotation or size ask is not a circuit |
-| C37 | `app/lib/agent/orchestration/scheduler.ts` | 267 | — | `export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {` | the read-only registry view: the advertised set is the recorded set |
-| C38 | `app/lib/agent/orchestration/scheduler.ts` | 309 | — | `export function meteredAdapter(` | the per-attempt meter on the adapter |
-| C39 | `app/lib/agent/orchestration/scheduler.ts` | 173 | — | `export function withdrawAuthority(context: AgentRunContext): AgentRunContext {` | the authority withdrawn for the follow-up turn ([B21 C] a specialist's context is built field by field, `deriveSpecialistContext`) |
-| C40 | `app/lib/agent/orchestration/scheduler.ts` | 475 | — | `if (committedScopeDigest === currentScopeDigest) {` | a replay only for the same scope and revision; otherwise `stale` |
-| C41 | `app/lib/agent/orchestration/scheduler.ts` | 585 | — | `if (failure === "cancelled") stop = "cancelled";` | only a cancellation stops the DAG; a deadline is that task's |
-| C42 | `app/lib/agent/orchestration/scheduler.ts` | 391 | — | `const detailOf = (error: unknown): string => renderUnknownError(error, MAX_STORE_DETAIL_CHARS);` | a store failure's detail redacted and bounded |
-| C43 | `app/lib/agent/orchestration/scheduler.ts` | 545 | — | `if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;` | a specialist's refused tool call becomes a bounded warning line |
+| C37 | `app/lib/agent/orchestration/scheduler.ts` | 268 | — | `export function readOnlyToolRegistry(registry: ToolRegistry): ToolRegistry {` | the read-only registry view: the advertised set is the recorded set |
+| C38 | `app/lib/agent/orchestration/scheduler.ts` | 310 | — | `export function meteredAdapter(` | the per-attempt meter on the adapter |
+| C39 | `app/lib/agent/orchestration/scheduler.ts` | 174 | — | `export function withdrawAuthority(context: AgentRunContext): AgentRunContext {` | the authority withdrawn for the follow-up turn ([B21 C] a specialist's context is built field by field, `deriveSpecialistContext`) |
+| C40 | `app/lib/agent/orchestration/scheduler.ts` | 463 | — | `if (committedScopeDigest === currentScopeDigest) {` | a replay only for the same scope and revision; otherwise `stale` |
+| C41 | `app/lib/agent/orchestration/scheduler.ts` | 619 | — | `if (failure === "cancelled") stop = "cancelled";` | only a cancellation stops the DAG; a deadline is that task's |
+| C42 | `app/lib/agent/orchestration/scheduler.ts` | 379 | — | `const detailOf = (error: unknown): string => renderUnknownError(error, MAX_STORE_DETAIL_CHARS);` | a store failure's detail redacted and bounded |
+| C43 | `app/lib/agent/orchestration/scheduler.ts` | 560 | — | `if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;` | a specialist's refused tool call becomes a bounded warning line |
 | C44 | `app/api/chat/orchestration-runtime.ts` | 178 | — | `export function followUpDeps(deps: AgentLoopDeps, specialistGateway: AgentToolInvocationGateway): AgentLoopDeps {` | the follow-up turn narrowed by construction |
 | C45 | `app/api/chat/orchestration-runtime.ts` | 195 | — | `export function specialistResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind: "ran" }>): SpecialistResultsEnvelope {` | the envelope: bounded, sanitized, attributed, withholding |
 | C46 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the specialist gateway built with no minter, no port, no prompt version; [B21 D3] its one option is the route's published pin-facts reader (anchor re-pinned, line unchanged) |
 | C47 | `app/api/chat/orchestration-runtime.ts` | 275 | — | `if (outcome.stop === "provider_outage") return standDown(` | no further provider call after a provider outage |
-| C48 | `app/api/chat/orchestration-runtime.ts` | 296 | — | `if (event.type === "warning" && firstWarnings.has(event.message)) return;` | the follow-up turn never repeats a warning line |
-| C49 | `app/api/chat/orchestration-runtime.ts` | 312 | — | `emit({ ...completed, steps, toolCalls, usage });` | the one terminal reports the run's totals |
+| C48 | `app/api/chat/orchestration-runtime.ts` | 299 | — | `if (event.type === "warning" && firstWarnings.has(event.message)) return;` | the follow-up turn never repeats a warning line |
+| C49 | `app/api/chat/orchestration-runtime.ts` | 315 | — | `emit({ ...completed, steps, toolCalls, usage });` | the one terminal reports the run's totals |
 | C50 | `app/lib/agent/redaction.ts` | 103 | — | `export function renderUnknownError(value: unknown, maxChars: number = DEFAULT_REDACTION_CHARS): string {` | the redaction authority the store detail is rendered through |
-| C51 | `app/lib/agent/adapters.ts` | 62 | — | `export const MAX_OUTPUT_TOKENS = 4096;` | the per-step figure the caps are pinned to (exported as data, B21-B) |
-| C52 | `app/lib/agent/adapters.ts` | 113 | — | `maxRetries: 2, timeout: 120_000` | the SDK retries under the scheduler's counts |
+| C51 | `app/lib/agent/adapters.ts` | 61 | — | `export const MAX_OUTPUT_TOKENS = 4096;` | the per-step figure the caps are pinned to (exported as data, B21-B) |
+| C52 | `app/lib/agent/adapters.ts` | 112 | — | `maxRetries: this.maxRetries, timeout: 120_000` | the coordinator's SDK retries (2) under the scheduler's counts; [B21 E1] a specialist's adapter is built with 0 (OD-115) |
 | C53 | `app/lib/db/client.ts` | 21 | — | `if (sqlClient) return sqlClient;` | the process-wide SQL client singleton the route suite must never build |
 | C54 | `app/api/chat/route.ts` | 367 | — | `run-${randomUUID()}` | a fresh run id per POST: no route-level resume in B |
 | C55 | `app/lib/agent/run-consumer.ts` | 19 | — | `export function isRecoverableProviderFailure(reason: string): boolean {` | Retry is always a new run |

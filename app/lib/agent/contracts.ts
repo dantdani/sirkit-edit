@@ -228,7 +228,7 @@ export interface ProviderContinuation {
 export interface AgentStep {
   text: string;
   toolCalls: AgentToolCall[];
-  stopReason: string | null;
+  stopReason: string | null; /** [B21 E1] (D21-21) the provider's stop, normalized INSIDE the adapter (the real adapters always set it; a scripted double may not) - read on a SPECIALIST's run path only, never by the coordinator's loop */ stop?: StepStop;
   usage: { inputTokens?: number; outputTokens?: number };
   model: string;
   continuation: ProviderContinuation;
@@ -454,3 +454,13 @@ export interface AgentRunResult {
   toolCalls: number;
   failureReason?: string;
 }
+
+// ─── [B21 E1] Normalized stop reasons (D21-21) ───────────────────────────────
+// Appended on purpose: a type is hoisted, so no line the B15..B21 pages cite in this file moves.
+
+/** The closed, provider-neutral stop vocabulary each real adapter derives from its provider's own field - Anthropic `stop_reason`,
+ *  OpenAI `status` with `incomplete_details` and a `refusal` content part - as the dated facts in
+ *  artifacts/ai-control-plane-b21/provider-reference-notes.md record them. `end_turn`: the provider completed the turn as asked, with
+ *  text or with tool calls; every other value is a turn that did not complete as asked (`unknown`: a value no fact names). */
+export const STEP_STOPS = Object.freeze(["end_turn", "max_tokens", "refusal", "pause_turn", "context_exceeded", "incomplete", "unknown"] as const);
+export type StepStop = (typeof STEP_STOPS)[number];

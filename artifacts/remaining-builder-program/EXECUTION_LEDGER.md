@@ -3003,3 +3003,56 @@ _(discovery, reproduction and results appended below as they are observed)_
   the composer module as one exported predicate beside `REPLACE_PART`); OD-122's open question (a verifier-contradicted loser withholds
   a verified winner's presentation) keeps its conservative default and goes to the B21 closeout.
 - Lead gates (2026-09-27, one job at a time): every B21 suite with the four B21 route suites and the CI guard 27 files / 256 tests; `app/api/chat/__tests__` in full 18 / 117; `app/lib/agent/__tests__` in full 36 / 415; the replacement family and the other proposal families with their approval and reauthorization paths 34 / 513; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.
+
+### B21-E1 — provider routing and failure behaviour: the provider layer (2026-09-27 local; increment workflow + lead; this commit)
+
+- Test-first: the seven E1 suites ran against the base with only the tests present (`e1-failing-first.log`: five on the missing
+  modules, the route's cases 2 and 3 and both retry-card cases on their assertions; route case 1 green by design); the moved suites
+  with their B-era doubles against the E1 code (`e1-moved-failing-first.log`: 98 of 277 failing); then green.
+- Code: `provider-policy.ts` (the role table, the closed env schema, qualification against the rule objects, the fallback rule over
+  both renderers, the meters' port and the admitted adapter, the route decision), `result-tool.ts` (the strict declaration, the
+  specialist's wrapper capturing the one call and the stop, the arguments parse through A, the stop reasons), `scheduler.ts` (per
+  attempt: the coordinator's pause, the route, the chain, the stop and the captured call; no retry against a paused provider; another
+  provider's outage stops only its task; `parseSpecialistResult` removed), `orchestration-runtime.ts` (the providers handed on, the
+  follow-up pause, `productionSpecialistProviders`), `route.ts` (line 520), `adapters.ts` (the stop per step, the retries per adapter,
+  `agentAdapterForRole`), `contracts.ts` (`stop?`, `STEP_STOPS`), `admission-control.ts` (the `llm-provider` kind and meters),
+  `run-consumer.ts` and `ai-preferences.ts` (no Retry for quota or an open breaker on either path of the card, the Switch's new run
+  kept), `page.tsx` (the card's Retry reads the flag, in place), the family rules named once in `openai-config.ts` and the new
+  `anthropic-config.ts`; the workflow's one explicit entry. No route, descriptor, UI control, request key or generator input changed;
+  census 165/162/3/0.
+- Fix round (the adversarial review's 21 confirmed findings, test-first: `fix-red-1.log` 18 of 48 failing, `fix-red-ambient-env.log` 24
+  of 39; green `fix-green-1.log` 82 of 82, `fix-green-ambient-env.log` 42 of 42; five test-strength findings proven by source mutations
+  restored by sha256): the Switch re-sends after a no-credits failure (the closure dispatched with `retryOffered: false`) and the JSON
+  path withholds Retry too; a routed specialist's seals name its provider; `provider_paused` for the coordinator's provider paused by
+  the meters, a window pause mid-run escalating only its task; tickets and breaker generations (no stale outcome moves the breaker, an
+  abandoned trial is not counted); the follow-up turn metered; a key named twice refuses the role map; the merge's source rule re-worded
+  (OD-132's provider-and-model keying re-deferred); the migrated route suites pin the role env; B's C30 re-pinned, D3's C36 re-anchored,
+  the provider notes re-pointed.
+- Pin moves with their reasons: A's gate cases 1, 3 and 5; the scripted doubles through the result tool (the role, merge and D2
+  fixtures, B's scheduler double, D's case 22 double, the four route mocks with `agentAdapterForRole` and the meters reset); B's scheduler
+  case 9 and D2's provenance case 9; B20-A0's key case 1 (an added assertion); B19-D's closure gate (the meters' exemption); B07.5's
+  JSON-path pin (the fix round); B09.2's recovery case 2 moved in the first round and restored to its base text by the fix round; the
+  B..D3 pages' 75 rows into the scheduler and the runtime re-pinned, B's C14, C16, C24, C52 and D2's C17 re-anchored, B's C30 re-pinned
+  and D3's C36 re-anchored, dated notes on B, D and D2.
+- Findings: D21-39 (low: the coordinator's first turn is not gated by the breaker - a request while its provider is paused still makes
+  that one call; for B21-E2), D21-40 (low: the scripted fixture agent answers no specialist through the result tool - with orchestration
+  on under the fixture runtime every specialist would be `malformed`; for B21-F's per-role scripts). RECORDED: OD-108's deviation
+  stands (the result tool is the specialist's channel; the follow-up turn's input is unchanged).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the route suites with the CI guard; `app/api/chat/__tests__`
+  in full; `app/lib/agent/__tests__` in full; `app/lib/llm/__tests__`; `app/lib/acquisition/__tests__`; `app/lib/mcp` and
+  `app/api/mcp/__tests__`; the exposure / tier suites; the B17-A inventory and the B18-D UI gates; tsc; eslint - figures in the report.
+- Records: `provider-routing-and-failure.md` (E1 sections); `provider-reference-notes.md` (the installed packages' facts, 2026-09-27);
+  OD-115, OD-116, OD-117, OD-119 applied; D21-18, D21-19, D21-20 (as policy), D21-21 closed; D21-39, D21-40 found. Live: every B21
+  behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- Lead follow-up on the check's residual (2026-09-27; the checker confirmed all 23 fixes fixed and 22 revert-sensitive - the migrated
+  route suites' ambient-env stub is hygiene, not a behaviour a revert would expose - and raised one new low issue): a rate-limit opening
+  moved the breaker generation, so an `insufficient_quota` answer from a call admitted before it was dropped as stale and a provider that
+  is out of credits stayed paused for the rate-limit minute only, its half-open trial then making another paid-path call. A no-credits
+  answer is a fact about the account: it now still opens the long window from an earlier generation, never shortens a longer opening, and
+  never undoes an operator reset that came after its call's admission (`recordStaleNoCredits` appended; the stale-ticket line and the two
+  reset lines changed in place; no cited line above them moved - the highest outside citation into `admission-control.ts` is line 294).
+  Breaker case 14 failed first on the unfixed breaker (`e1-lead-case14-red.log`: the pause still named the rate-limit minute), passes
+  with the fix together with every acquisition suite (`e1-lead-case14-green.log`, 16 files), and fails again with the reset guard removed
+  (`e1-lead-probe-reset-guard.log`; the source restored, SHA-256 equal). The E1 page states the rule in its ticket paragraph and its
+  OD-115 text, C66's anchor moved with its line, the breaker-suite count (14) and the new-case total (56) updated.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the five B21 route suites and the CI guard 35 files / 312 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` in full 42 files / 355 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; the proposal families and their approval paths 34 / 513; the import gates, chat closure ratchets, route census (165) and route matrices 10 / 104; `app/lib/mcp/__tests__` and `app/api/mcp/__tests__` 33 / 737 (every B20 page citation holds); tsc clean; eslint clean on every changed TypeScript file - `app/page.tsx` carries 14 `react-hooks/refs` errors on lines E1 did not touch, the SAME 14 at HEAD a4aba95 (its HEAD text linted through stdin, `e1-lead-eslint-head-page.log`), pre-existing and outside B21 (CI runs no eslint); flagged as a separate task.

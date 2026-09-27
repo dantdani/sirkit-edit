@@ -8,7 +8,8 @@
  * scope/revision is `stale` and re-run, never replayed; cancellation mid-DAG aborts the running specialist's signal, writes
  * `escalated`/`cancelled`, runs nothing further and touches no grant of the coordinator's; a specialist's own deadline is
  * `deadline` for that task only (the next task runs while wall time remains; the DAG wall time stops everything);
- * `insufficient_quota` is never retried; a malformed final text is dissent `malformed`; every attempt's steps, tool calls,
+ * `insufficient_quota` is never retried; a malformed result is dissent `malformed` ([B21 E1] the specialists answer through the strict
+ * result tool, OD-116: a turn without it is `result_tool_not_called`); every attempt's steps, tool calls,
  * usage, provider and model are measured (a failed attempt counts too) and the token ceiling covers both coordinator turns and
  * every attempt; a mid-DAG store conflict or failure stops the DAG with nothing written over; the derived specialist context
  * passes the gateway's integrity check with its three availability facts false; the read-only narrowing refuses a proposal;
@@ -31,6 +32,7 @@ import { DurableOrchestrationRunStore, type OrchestrationAppendRequest, type Orc
 import { DAG_ROLE_LISTS, FULL_CIRCUIT_RUNBOOK_ROLES } from "../router";
 import { SPECIALIST_CAPS, SPECIALIST_REFUSAL_STATUS, dagOutputTokenCeiling, deriveSpecialistContext, planTasks, readOnlySpecialistGateway, readOnlyToolRegistry, runSpecialistDag, specialistAllowedToolIds, specialistRunId, type CoordinatorRun, type SchedulerDeps } from "../scheduler";
 import { ROLE_SCHEMATIC, loadedAuthority } from "./_role-fixtures";
+import { answer, registryToolIds } from "./_result-tool";
 
 const registry = sirkitToolRegistry();
 /** the specialist gateway as the composition root builds it: NO minter, NO port, NO prompt version - nothing but reads can succeed in it */
@@ -64,6 +66,7 @@ class SpecialistAdapter implements ProviderAgentAdapter {
   private readonly thrown = new Map<string, number>();
   private readonly pendingCalls = new Map<string, string>();
   private readonly throwOnContinue = new Map<string, LLMProviderFailureReason>();
+  private readonly offered = new Map<string, readonly ProviderToolDeclaration[]>();
   constructor(private readonly script: Record<string, Behaviour>, private readonly onStart?: (role: string) => Promise<void> | void) {}
   private step(partial: Partial<AgentStep>): AgentStep {
     return { text: "", toolCalls: [], stopReason: "completed", usage: { inputTokens: 7, outputTokens: 11 }, model: "scripted", continuation: { provider: "openai", state: null }, ...partial };
@@ -73,7 +76,8 @@ class SpecialistAdapter implements ProviderAgentAdapter {
     const role = this.roleOf(input.system);
     this.inFlight += 1;
     this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
-    this.starts.push({ role, runId: /^Task run: (.+)$/m.exec(input.system)?.[1] ?? null, system: input.system, userMessage: input.userMessage, tools: input.tools.map((tool) => tool.toolId), signal: input.signal, at: Date.now() });
+    this.starts.push({ role, runId: /^Task run: (.+)$/m.exec(input.system)?.[1] ?? null, system: input.system, userMessage: input.userMessage, tools: registryToolIds(input.tools), signal: input.signal, at: Date.now() }); // [B21 E1] the synthetic result tool recorded apart
+    this.offered.set(role, input.tools);
     input.signal?.addEventListener("abort", () => this.abortedRoles.push(role), { once: true });
     await this.onStart?.(role);
     try {
@@ -83,7 +87,7 @@ class SpecialistAdapter implements ProviderAgentAdapter {
         const seen = (this.thrown.get(role) ?? 0) + 1;
         this.thrown.set(role, seen);
         if (behaviour.times === undefined || seen <= behaviour.times) throw new LLMProviderError("openai", behaviour.reason);
-        return this.step({ text: resultDocument(role) });
+        return this.step(answer(resultDocument(role), input.tools)); // [B21 E1] pin move (OD-116): through the strict result tool
       }
       if (behaviour.kind === "text") return this.step({ text: behaviour.text });
       if (behaviour.kind === "call-unknown") {
@@ -97,7 +101,7 @@ class SpecialistAdapter implements ProviderAgentAdapter {
         if (behaviour.kind === "call-then-throw" && !this.thrown.has(role)) { this.thrown.set(role, 1); this.throwOnContinue.set(role, behaviour.reason); }
         return this.step({ toolCalls: [{ callId: `call-${role}`, providerName: declaration.providerName, argumentsText: behaviour.kind === "call-then-result" ? (behaviour.args ?? "{}") : "{}" }], stopReason: "tool_use" });
       }
-      return this.step({ text: resultDocument(behaviour.role ?? role, behaviour.extra) });
+      return this.step(answer(resultDocument(behaviour.role ?? role, behaviour.extra), input.tools)); // [B21 E1] pin move (OD-116): through the strict result tool
     } finally {
       this.inFlight -= 1;
     }
@@ -108,7 +112,7 @@ class SpecialistAdapter implements ProviderAgentAdapter {
     this.continueInputs.push({ role, results: input.results });
     const failure = this.throwOnContinue.get(role);
     if (failure) { this.throwOnContinue.delete(role); throw new LLMProviderError("openai", failure); }
-    return this.step({ text: resultDocument(role) });
+    return this.step(answer(resultDocument(role), this.offered.get(role) ?? [])); // [B21 E1] pin move (OD-116): through the strict result tool
   }
   count(role: string): number { return this.starts.filter((start) => start.role === role).length; }
 }
@@ -392,7 +396,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(exhausted.tasks.map((task) => [task.role, task.status, task.reason])).toEqual([["circuit-topology", "escalated", "max_steps"], ["component-sourcing-evidence", "accepted", null], ["schematic", "accepted", null], ["verification-critic", "accepted", null]]);
   });
 
-  it("9. a malformed final text is dissent `malformed` with a bounded reason and the DAG continues: prose, a JSON document the contracts refuse (a release named as a tool request) and a result for another role", async () => {
+  it("9. a malformed final text is dissent `malformed` with a bounded reason and the DAG continues: prose, a JSON document the contracts refuse (a release named as a tool request) and a result for another role", async () => { // [B21 E1] the prose now ENDS the turn without the result tool (the B-era final-text parse is removed): see its reason below
     const r = await rig({
       "circuit-topology": { kind: "text", text: "I looked at the board and I think R1 is fine." },
       "component-sourcing-evidence": { kind: "result", extra: { requiredTools: [{ toolId: "sirkit.manufacturing.release", version: "1.0.0", reason: "ship it" }] } },
@@ -404,7 +408,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.stop).toBe("completed");
     // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig): it answers a well-formed result, the other three stay malformed
     expect(outcome.tasks.map((task) => [task.role, task.status])).toEqual([["circuit-topology", "malformed"], ["component-sourcing-evidence", "malformed"], ["schematic", "accepted"], ["verification-critic", "malformed"]]);
-    expect(outcome.tasks[0]!.reason).toBe("result_not_json: the final text is not one JSON document");
+    // [B21 E1] pin move (OD-116): prose without the strict result tool is `result_tool_not_called` (B's `result_not_json` parse is removed)
+    expect(outcome.tasks[0]!.reason).toBe("result_tool_not_called: the specialist ended its turn without calling sirkit_specialist_result; a result written as text is never parsed");
     expect(outcome.tasks[1]!.reason).toBe("result_refused: tool_request_not_permitted at $.requiredTools[0].toolId");
     expect(outcome.tasks[3]!.reason).toBe("result_role_mismatch: schematic is not verification-critic");
     const dissent = (await r.store.history(r.scope)).filter((entry) => entry.record.kind === "dissent");

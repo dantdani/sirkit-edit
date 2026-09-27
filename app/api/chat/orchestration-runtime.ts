@@ -212,7 +212,7 @@ const usageOf = (event: AgentRunEvent | null): { inputTokens: number; outputToke
 
 /** The DAG path: the coordinator turn as today (its terminal held back), the specialists one at a time, then ONE READ-ONLY
  *  follow-up coordinator turn under the same run id and history; the stream's one terminal reports the run's totals. */
-export async function runOrchestratedChat(input: { request: AgentRunRequest; deps: AgentLoopDeps; plan: Extract<RoutePlan, { kind: "dag" }>; startedAt: number }): Promise<AgentRunResult> {
+export async function runOrchestratedChat(input: { request: AgentRunRequest; deps: AgentLoopDeps; plan: Extract<RoutePlan, { kind: "dag" }>; startedAt: number; /** [B21 E1] the provider layer (the route passes `productionSpecialistProviders()`) */ providers?: SpecialistProviders }): Promise<AgentRunResult> {
   const { request, deps, plan } = input;
   const trace = deps.trace;
   const held = trace ? { trace: holdTraceTerminal(trace) } : {};
@@ -264,14 +264,14 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
     {
       store: resolveOrchestrationStore(), registry: deps.registry, context: deps.context, adapter: deps.adapter, gateway: specialistGateway, system: deps.system,
       emit: (event) => { if (event.type === "warning") warn(event.message); },
-      runLoop: runAgentLoop, buildToolset: buildRunToolset, budget: request.budget, ...(deps.now ? { now: deps.now } : {}),
+      runLoop: runAgentLoop, buildToolset: buildRunToolset, budget: request.budget, ...(deps.now ? { now: deps.now } : {}), ...(input.providers ? { providers: input.providers } : {}), // [B21 E1] OD-115, OD-117
     },
   );
   // the closed reason only ever reaches the stream and the trace: a record failure's detail (a driver message) stays in process
   if (outcome.kind === "refused") return standDown(`Orchestration: no specialist ran (${outcome.reason}); the assistant's answer above stands.`);
   const answered = outcome.tasks.filter(usable);
   if (outcome.stop === "cancelled") return cancelled(first.steps, first.toolCalls);
-  // a provider that is out gets NO further paid call: the human decides (Retry is a new run); the record keeps what was committed
+  if (outcome.stop === "provider_paused") return standDown(`Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115) - no further call is made to it, so no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`); // [B21 E1 fix] no call failed: the line above names the pause; a provider that is out gets NO further paid call: the human decides (Retry is a new run); the record keeps what was committed
   if (outcome.stop === "provider_outage") return standDown(`Orchestration: the provider failed during the specialists (provider_outage); no follow-up turn was made and the assistant's answer above stands. ${answered.length} specialist result(s) are committed in the record.`);
   if (answered.length === 0) return standDown(`Orchestration: no specialist result to hand on (${outcome.stop}); the assistant's answer above stands.`);
 
@@ -281,14 +281,17 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   if (merged.kind === "refused") return standDown(`Orchestration: the merge could not record its decisions (${merged.reason}); no follow-up turn was made and the assistant's answer above stands.`);
   for (const line of merged.lines) warn(line); const approval = presentSpecialistProposal({ runId: request.runId, outcome, merged, coordinatorSealed: firstArtifacts.length > 0, emit, warn }); // [B21 D2] OD-122 amended
   const envelope = mergedResultsEnvelope(outcome, merged, approval);
-  let followUpTerminal: AgentRunEvent | null = null;
+  // [B21 E1] the follow-up turn is never made against a paused provider (OD-115; no paid call, visibly), and never on another one
+  const followUpPause = input.providers ? input.providers.admission.pause(request.provider, undefined, "interactive", (deps.now ?? Date.now)()) : null;
+  if (followUpPause) return standDown(`Orchestration: no follow-up turn was made and the assistant's answer above stands (the coordinator never switches provider mid-run) - its ${followUpPause.message}`);
+  let followUpTerminal: AgentRunEvent | null = null; const followUpMeters = input.providers ? admittedAdapter(deps.adapter, { provider: request.provider }, input.providers.admission, deps.now ?? Date.now, "interactive") : null; // [B21 E1 fix] the follow-up turn's calls METERED as a person's (OD-115): its 429 opens the breaker too; its SDK retries stay the adapter's (not applied)
   // the follow-up's recorder: the terminal held, the first turn's warnings not repeated on the trace, every step metered
   const followUpMeter = { steps: 0, inputTokens: 0, outputTokens: 0 };
   const heldFollowUp = trace ? { trace: holdTraceTerminal(trace, { skipWarnings: firstWarnings, meter: followUpMeter }) } : {};
   const followUp = await runAgentLoop(
     { ...request, history: [...request.history, { role: "user", text: request.userMessage }, { role: "assistant", text: first.finalText }], userMessage: envelope.text },
     {
-      ...followUpDeps(deps, specialistGateway),
+      ...followUpDeps(deps, specialistGateway), ...(followUpMeters ? { adapter: followUpMeters.adapter } : {}), // [B21 E1 fix] behind the meters
       ...heldFollowUp,
       emit: (event) => {
         if (event.type === "run_started") return; // one per run: the first turn's
@@ -306,7 +309,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   if (followUp.status !== "completed" || completed?.type !== "run_completed") {
     // the first answer stands; the terminal reports the run's totals - the steps the failed follow-up recorded included
     const totals = { steps: first.steps + followUpMeter.steps, toolCalls, usage: { inputTokens: firstUsage.inputTokens + followUpMeter.inputTokens, outputTokens: firstUsage.outputTokens + followUpMeter.outputTokens } };
-    return standDown(`Orchestration: the follow-up coordinator turn did not complete (${followUp.failureReason ?? "unknown"}); the assistant's answer above stands.`, totals);
+    return standDown(`Orchestration: the follow-up coordinator turn did not complete (${followUpMeters?.capture.paused ? `provider_paused: ${followUpMeters.capture.paused.message}` : followUp.failureReason ?? "unknown"}); the assistant's answer above stands.`, totals);
   }
   const usage = { inputTokens: firstUsage.inputTokens + completed.usage.inputTokens, outputTokens: firstUsage.outputTokens + completed.usage.outputTokens };
   emit({ ...completed, steps, toolCalls, usage });
@@ -365,7 +368,7 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
         : { index: action.index, kind: action.kind, decision: action.decision, artifactDigest: action.artifactDigest })),
     };
   });
-  // one provider is one source (this run's one adapter per provider); a replayed result's unrecorded provenance counts with every source
+  // one provider is one source whatever model or adapter its specialists ran on ([B21 E1]); a replayed result's unrecorded provenance counts with every source
   const recorded = merged.sources.filter((source) => source.provider !== null);
   const sameSource = merged.tasks.length > 0 && recorded.length <= 1;
   const provenance = {
@@ -498,4 +501,18 @@ export function specialistGatewayOptions(signal?: AbortSignal): Pick<AgentGatewa
   const source = resolveReplacementPinFactsSource();
   if (!source) return undefined;
   return { replacementPinFacts: (atomicPartRevisionId, role) => loadRunReplacementPinFacts(source, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) };
+}
+
+// ─── [B21 E1] The production provider layer (OD-115, OD-117) ─────────────────────────────────────────────────────────────────
+// Appended on purpose: an import is hoisted, so these declarations move no line cited above (the B21 pages pin this file by line).
+
+import { agentAdapterForRole } from "@/app/lib/agent/adapters";
+import { PROCESS_LLM_PROVIDER_ADMISSION, admittedAdapter, type SpecialistProviders } from "@/app/lib/agent/orchestration/provider-policy";
+
+/** [B21 E1] The provider layer the chat route hands the DAG: every specialist's adapter from `agentAdapterForRole` (its route's
+ *  provider and model, its own lazily built SDK client, `maxRetries: 0`), the process's llm-provider meters (the breaker every specialist
+ *  call and the follow-up turn consult), and the SERVER environment as the role policy's only source - never a request field (the
+ *  body's closed key set has no place for one). The coordinator's own adapter stays the route's `agentAdapterFor`. */
+export function productionSpecialistProviders(): SpecialistProviders {
+  return { adapterFor: (route) => agentAdapterForRole(route.role, route.provider, route.model), admission: PROCESS_LLM_PROVIDER_ADMISSION, environment: process.env };
 }

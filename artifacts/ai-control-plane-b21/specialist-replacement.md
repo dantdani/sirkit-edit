@@ -583,12 +583,12 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | # | file | line | within | anchor | what it shows |
 |---|---|---|---|---|---|
 | C1 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the specialist gateway, built over the one option |
-| C2 | `app/api/chat/orchestration-runtime.ts` | 497 | — | `export function specialistGatewayOptions(` | the route's source and reader, nothing else |
+| C2 | `app/api/chat/orchestration-runtime.ts` | 500 | — | `export function specialistGatewayOptions(` | the route's source and reader, nothing else |
 | C3 | `app/api/chat/route.ts` | 407 | — | `loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role)` | the coordinator's reader, unchanged |
 | C4 | `app/lib/agent/orchestration/role-tools.ts` | 244 | — | `export const SPECIALIST_PROPOSAL_TOOL_IDS: readonly string[] = Object.freeze([` | the live proposals, the replacement among them |
 | C5 | `app/lib/agent/orchestration/role-tools.ts` | 251 | — | `is no longer dormant: live for the schematic role` | the dormant list without it |
 | C6 | `app/lib/agent/orchestration/role-tools.ts` | 255 | — | `export function roleProposalToolIds(role: string): readonly string[] {` | a role's live proposals: its row intersected with the live list |
-| C7 | `app/lib/agent/orchestration/scheduler.ts` | 645 | — | `export const SEALER_CONTEXT_FACTS = Object.freeze({` | the replacement's sealer fact: the head mark |
+| C7 | `app/lib/agent/orchestration/scheduler.ts` | 681 | — | `export const SEALER_CONTEXT_FACTS = Object.freeze({` | the replacement's sealer fact: the head mark |
 | C8 | `app/lib/agent/orchestration/role-tools.ts` | 41 | — | `LIVE_PIN_FACTS = "Live since B21-D3:` | the schematic row's reason, live |
 | C9 | `app/lib/agent/orchestration/router.ts` | 48 | — | `"component-replacement": Object.freeze(["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] as const)` | the replacement DAG, two proposing roles |
 | C10 | `app/lib/agent/orchestration/router.ts` | 101 | — | `const PART_KIND_SWAP = ` | [B21 D3 lead] the polite prefix stripped; the replacement forms must match ALL that follows it |
@@ -600,8 +600,8 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C16 | `app/lib/agent/loop.ts` | 219 | — | `if (descriptor.toolId === "sirkit.schematic.propose-component-replacement"` | the replacement's prerequisite: the component authority |
 | C17 | `app/lib/engineering/replacement-proposal-assembler.ts` | 263 | — | `return blocked("current-pin-authority-unavailable",` | an absent source blocks the seal |
 | C18 | `app/lib/agent/gateway.ts` | 494 | — | `const proposalService = options?.proposalService ?? new ProposalInvocationService(registry, options?.now, options?.replacementPinFacts);` | the sealer receives the reader |
-| C19 | `app/lib/agent/orchestration/scheduler.ts` | 655 | — | `export function specialistContextFor(context: AgentRunContext, role: SpecialistRole): AgentRunContext {` | the proposing context: the derivation plus its sealer's fact |
-| C20 | `app/lib/agent/orchestration/scheduler.ts` | 59 | — | `maxSpecialists: 4,` | four specialists, within the cap |
+| C19 | `app/lib/agent/orchestration/scheduler.ts` | 691 | — | `export function specialistContextFor(context: AgentRunContext, role: SpecialistRole): AgentRunContext {` | the proposing context: the derivation plus its sealer's fact |
+| C20 | `app/lib/agent/orchestration/scheduler.ts` | 60 | — | `maxSpecialists: 4,` | four specialists, within the cap |
 | C21 | `app/lib/project/composer-routing.ts` | 34 | — | `const EDIT_VERB = ` | D21-38: the composer's edit verbs, `replace` among them |
 | C22 | `app/lib/engineering/schematic-plans.ts` | 303 | — | `blockers.push({ code: "pins-unavailable",` | the Tier 1 compiler refuses a KiCad delete without published pins |
 | C23 | `app/lib/agent/orchestration/merge.ts` | 823 | — | `else if (!isExactTarget(action.replacement, exact)) findings.push(` | the exact-authority rule (OD-130) |
@@ -614,9 +614,9 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C30 | `app/lib/engineering/approved-replacement-mutations.ts` | 327 | — | `export async function applyApprovedReplacementProposal(input: ApprovedReplacementApplyInput): Promise<ApprovedReplacementApplyOutcome> {` | the apply: fresh facts, recompile, byte match |
 | C31 | `app/lib/agent/gateway.ts` | 395 | — | `targetPinFacts = await this.replacementPinFacts(exact.atomicPartRevisionId, "target");` | the target comes from the authority the context holds |
 | C32 | `.github/workflows/deterministic-manufacturing.yml` | 148 | — | `app/api/chat/__tests__/b21-d3-chat-replacement.test.ts` | the one explicit CI entry |
-| C33 | `app/lib/agent/orchestration/scheduler.ts` | 300 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list |
+| C33 | `app/lib/agent/orchestration/scheduler.ts` | 301 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list |
 | C34 | `app/lib/agent/orchestration/router.ts` | 271 | — | `function partKindSwap(message: string, raw: string): boolean {` | [B21 D3 lead] the three whole-message request shapes with closed vocabularies, anchored at both ends; a part word agrees with the composer's pairing |
-| C35 | `app/lib/agent/orchestration/scheduler.ts` | 505 | — | `const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed));` | [B21 D3 fix] a specialist's objective: the coordinator's user message alone |
-| C36 | `app/lib/agent/orchestration/scheduler.ts` | 535 | — | `{ runId, provider: coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },` | [B21 D3 fix] its loop history is empty: no earlier result reaches it |
+| C35 | `app/lib/agent/orchestration/scheduler.ts` | 507 | — | `const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed));` | [B21 D3 fix] a specialist's objective: the coordinator's user message alone |
+| C36 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },` | [B21 D3 fix] its loop history is empty: no earlier result reaches it ([B21 E1, 2026-09-27] anchor re-pinned, line unchanged: the run carries the provider it runs on, so its seals name it) |
 | C37 | `app/lib/agent/gateway.ts` | 330 | — | `const compilation = compileTier1Proposal(schematic, { ops, pinsByPartId: new Map() });` | [B21 D3 fix] every agent Tier 1 proposal compiles with an empty pin map: any KiCad delete blocks |
 | C38 | `app/api/chat/route.ts` | 367 | — | `run-${randomUUID()}` | [B21 D3 fix] a fresh run id per POST: the route never resumes |

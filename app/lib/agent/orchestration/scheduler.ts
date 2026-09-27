@@ -5,7 +5,8 @@
  * result / dissent to the record BEFORE the next task starts, under the attempt-keyed idempotency key. Caps: at most 4
  * specialists per coordinator run (a plan over the cap is refused, never truncated); one attempt per task plus one retry on a
  * provider failure the classifier marks retryable (never on `insufficient_quota`) - counted ABOVE the adapter's own SDK
- * retries (the coordinator's adapter is reused; OD-115 / B21-E owns the breaker and `maxRetries: 0`); the DAG wall time
+ * retries (B's composition reuses the coordinator's adapter; [B21 E1] the provider layer gives every specialist its route's own adapter,
+ * `maxRetries: 0`, behind the llm-provider breaker - OD-115, OD-117, provider-policy.ts); the DAG wall time
  * 300 000 ms from the coordinator's start (its own timer, composed into every specialist's signal as a backstop; each
  * specialist's own deadline is bounded to the remaining wall time, so a specialist whose deadline passes is `deadline` for
  * THAT TASK ONLY and the next task still runs while wall time remains - the wall time itself stops everything); a per-DAG
@@ -35,9 +36,9 @@
  *
  * The loop (`runAgentLoop`, `buildRunToolset`) is INJECTED by the composition root (app/api/chat/orchestration-runtime.ts):
  * the loop's own import closure reaches the fab presets through the read bindings, which the orchestration import gate forbids
- * (RELEASE family), so this module imports only the loop's types. For B a specialist's result reaches the scheduler as the run's
- * final text, parsed as ONE JSON document and validated by `validateSpecialistResult`; anything else is dissent `malformed` -
- * B21-E replaces this with the strict result tool. No chain of thought is stored: the record holds the validated documents and
+ * (RELEASE family), so this module imports only the loop's types. [B21 E1] A specialist's result reaches the scheduler through the
+ * strict result tool (OD-116, result-tool.ts): its ONE captured call, validated by `validateSpecialistResult`; a turn without it, a
+ * stopped turn or anything else is dissent - the B-era final-text parse is removed. No chain of thought is stored: the record holds the validated documents and
  * closed dissent reasons only. [B21 D2] Its `proposedActions` are exactly what its own run's gateway sealed (see the end).
  */
 import { DEFAULT_AGENT_BUDGET, type AgentExecutionGrantMinter, type AgentRunBudget, type AgentRunContext, type AgentRunEvent, type AgentRunRequest, type AgentRunResult, type AgentStep, type AgentToolInvocationGateway, type ProviderAgentAdapter, type ProviderToolDeclaration } from "../contracts";
@@ -48,7 +49,7 @@ import { canonicalJson, engineeringDigest } from "../../engineering/stable";
 import type { LLMProviderId } from "../../llm/types";
 import { isRetryableReason, type LLMProviderFailureReason } from "../../llm/errors";
 import { TIER1_GRANTABLE_CAPABILITIES } from "../../engineering/execution-grant";
-import { SPECIALIST_REQUEST_SCHEMA, SPECIALIST_RESULT_SCHEMA, isOrchestrationDigest, validateSpecialistRequest, validateSpecialistResult, type RequiredOutputName, type RevisionBoundProjectScope, type SpecialistRole, type ValidatedSpecialistResult } from "./contracts";
+import { SPECIALIST_REQUEST_SCHEMA, isOrchestrationDigest, validateSpecialistRequest, validateSpecialistResult, type RequiredOutputName, type RevisionBoundProjectScope, type SpecialistRole, type ValidatedSpecialistResult } from "./contracts";
 import type { OrchestrationDecision, OrchestrationPlanTask, OrchestrationRecord, OrchestrationRunEntry, OrchestrationRunScope, OrchestrationRunStore } from "./store";
 import { SPECIALIST_PROPOSAL_TOOL_IDS, roleAllowedToolIds, roleProposalToolIds } from "./role-tools";
 
@@ -84,7 +85,7 @@ export type SpecialistContextClaim = (typeof SPECIALIST_CONTEXT_CLAIMS)[number];
 export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;
 export const SCHEDULER_REFUSALS = Object.freeze(["plan_empty", "plan_exceeds_specialist_cap", "no_verified_state", "dag_deadline_elapsed", "store_unavailable", "store_refused", "store_conflict", "plan_mismatch"] as const);
 export type SchedulerRefusal = (typeof SCHEDULER_REFUSALS)[number];
-export const SCHEDULER_STOPS = Object.freeze(["completed", "cancelled", "deadline", "provider_outage", "store_unavailable", "store_refused", "store_conflict"] as const);
+export const SCHEDULER_STOPS = Object.freeze(["completed", "cancelled", "deadline", "provider_outage", "provider_paused", "store_unavailable", "store_refused", "store_conflict"] as const); // [B21 E1 fix] + `provider_paused`: the coordinator's provider paused by the llm-provider meters (no call failed)
 export type SchedulerStop = (typeof SCHEDULER_STOPS)[number];
 export const SPECIALIST_TASK_STATUSES = Object.freeze(["accepted", "malformed", "escalated", "replayed"] as const);
 export type SpecialistTaskStatus = (typeof SPECIALIST_TASK_STATUSES)[number];
@@ -130,7 +131,7 @@ export interface SchedulerDeps {
   /** the coordinator's budget; a specialist never exceeds DEFAULT_AGENT_BUDGET */
   budget?: AgentRunBudget;
   /** the coordinator's minter, when a caller spreads the coordinator's deps here: NEVER read and NEVER handed to a specialist */
-  executionGrants?: AgentExecutionGrantMinter;
+  executionGrants?: AgentExecutionGrantMinter; /** [B21 E1] the provider layer (OD-115, OD-117): each specialist's route, its own adapter (`maxRetries: 0`) and the llm-provider meters - the composition root (the chat route) always passes it; absent (a suite of B, C or D), every specialist runs on `adapter`, unmetered: B's composition */ providers?: SpecialistProviders;
 }
 export interface SpecialistTaskOutcome {
   taskId: string;
@@ -147,7 +148,7 @@ export interface SpecialistTaskOutcome {
   usage: { inputTokens: number; outputTokens: number };
   /** the provider and the model that produced this attempt (the last step's model; null when no step was answered) */
   provider: LLMProviderId;
-  model: string | null; /** [B21 D2] the digests of what this attempt's run SEALED (a replay: its committed result's, attached after that attempt's seal check) */ sealedArtifactDigests?: readonly string[];
+  model: string | null; /** [B21 D2] the digests of what this attempt's run SEALED (a replay: its committed result's, attached after that attempt's seal check) */ sealedArtifactDigests?: readonly string[]; /** [B21 E1] the route this attempt ran on (provider, model, source, SDK retries 0, a fallback's origin); absent without the provider layer, on a replay (its provenance is unrecorded) and when no route was taken */ route?: SpecialistRoute;
 }
 export type SchedulerOutcome =
   | { kind: "refused"; reason: SchedulerRefusal; detail: string }
@@ -329,7 +330,7 @@ export function specialistObjective(role: SpecialistRole, userMessage: string, p
   return proposing ? `As the ${role} specialist, address this request with reads and, only where a change is warranted, ONE sealed proposal of your role (an inert artifact the human reviews), and report structured evidence: ${message}` : `As the ${role} specialist, address this request with reads only and report structured evidence: ${message}`;
 }
 /** The coordinator's system prompt plus the specialist's frame: the role and task lines are machine-readable (the adapters'
- *  scripted doubles read them); the final message must be ONE JSON document of the result schema (B21-E: the strict result tool). */
+ *  scripted doubles read them); [B21 E1] the result is the ONE call of the strict result tool (OD-116), never a final text. */
 export function specialistSystemPrompt(system: string, task: { role: SpecialistRole; taskId: string; specialistRunId: string; objective: string; proposing?: boolean }): string {
   return [
     system,
@@ -340,7 +341,7 @@ export function specialistSystemPrompt(system: string, task: { role: SpecialistR
     `Task run: ${task.specialistRunId}`,
     `Objective: ${task.objective}`,
     specialistFrameRules(task.proposing === true), // [B21 D2 fix] B's rules verbatim unless THIS run offers a live proposal (its effective set, never the role)
-    `Your FINAL message must be exactly ONE JSON document and nothing else, of this shape: {"schema":"${SPECIALIST_RESULT_SCHEMA}","role":"${task.role}","summary":"<at most 4000 characters>","proposedActions":[],"assumptions":[{"id":"<id>","statement":"<text>","evidenceIds":[]}],"evidence":[],"requiredTools":[],"risks":[{"id":"<id>","severity":"low|medium|high","statement":"<text>","mitigation":null}],"unresolvedQuestions":[{"id":"<id>","question":"<text>","blocking":false}],"validationRequests":[],"confidence":"low|medium|high"}`, ...specialistResultRules(task.role), ...(task.proposing === true ? [SEALED_PROPOSALS_RULE] : []),
+    specialistResultToolRule(task.role), ...specialistResultRules(task.role), ...(task.proposing === true ? [SEALED_PROPOSALS_RULE] : []), // [B21 E1] the strict result tool's rule replaces B's "ONE JSON document" line
   ].join("\n");
 }
 /** A specialist's budget: the coordinator's (never over DEFAULT_AGENT_BUDGET) with the run deadline bounded to the remaining wall time. */
@@ -355,20 +356,7 @@ export function specialistBudget(budget: AgentRunBudget, remainingMs: number): A
     executionSettlementTimeoutMs: bounded("executionSettlementTimeoutMs"),
   };
 }
-type ParsedResult = { ok: true; value: ValidatedSpecialistResult; digest: string } | { ok: false; reason: string };
-/** B: the run's final text as ONE JSON document, validated by the contracts and bound to the task's role. */
-export function parseSpecialistResult(finalText: string, role: SpecialistRole): ParsedResult {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(finalText.trim());
-  } catch {
-    return { ok: false, reason: "result_not_json: the final text is not one JSON document" };
-  }
-  const validated = validateSpecialistResult(parsed);
-  if (!validated.ok) return { ok: false, reason: `result_refused: ${validated.refusal} at ${validated.path}` };
-  if (validated.value.role !== role) return { ok: false, reason: `result_role_mismatch: ${validated.value.role} is not ${role}` };
-  return { ok: true, value: validated.value, digest: validated.digest };
-}
+type ParsedResult = SpecialistResultParse; // [B21 E1] the result tool's parse (result-tool.ts); B's final-text parse is removed
 /** The request's scope: the coordinator's verified revision and, as labels only, its head mark and PCB basis. A resume replays a
  *  committed result only when the request it answered carried THIS scope (compared by digest). */
 export function requestScope(context: AgentRunContext): RevisionBoundProjectScope {
@@ -500,6 +488,20 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         const attempt = baseAttempt + (staleWritten ? 1 : 0) + offset; // [B21 D] after a stale dissent the re-run takes its own attempt: its own dissent (malformed, escalated) never shares the stale dissent's key
         const remainingMs = dagDeadline - now();
         if (remainingMs < SPECIALIST_CAPS.minTaskMs) { stop = "deadline"; notStarted.push(task); break; }
+        // [B21 E1] the provider layer (OD-115, OD-117): no specialist call while the COORDINATOR's provider is paused (its follow-up turn could
+        // not run either, and the coordinator never switches provider), then this attempt's route - the role's, or a compatible fallback
+        const routing = deps.providers ? routeAttempt(deps.providers, coordinator.provider, task, now(), () => deps.buildToolset(specialistToolRegistry(deps.registry, task.role), derivedByRole.get(task.role)!, () => undefined, allowed).declarations) : null;
+        if (routing?.kind === "coordinator-paused") { stop = "provider_paused"; if (offset === 0) notStarted.push(task); warn(coordinatorPausedLine(tasks.length - tasks.indexOf(task), routing.pause)); break; }
+        if (routing?.kind === "refused") {
+          const reason = `${routing.refusal.code}: ${routing.refusal.detail}`;
+          const written = await write(task.taskId, attempt, dissent("escalated", reason));
+          if (!written.ok) { stop = written.reason; notStarted.push(task); break; }
+          outcomes.push({ taskId: task.taskId, role: task.role, attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "escalated", reason: reason.slice(0, 1_000), resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: routing.refusal.provider, model: null });
+          warn(`Orchestration: specialist ${task.role} not run (${routing.refusal.code}, task ${task.taskId}): ${routing.refusal.detail}`);
+          break;
+        }
+        const route = routing?.kind === "run" ? routing.route : null;
+        if (route?.fallbackFrom) warn(`Orchestration: specialist ${task.role} (task ${task.taskId}) runs on ${route.provider} (${route.model}) instead of ${route.fallbackFrom.provider} (${route.fallbackFrom.model}) - ${route.fallbackFrom.pause} Its tools and its result tool render identically on both providers: a compatible fallback, degraded and never silent.`);
         const runId = specialistRunId(coordinator.runId, task.taskId);
         const budget = specialistBudget(deps.budget ?? DEFAULT_AGENT_BUDGET, remainingMs);
         const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed)); // [B21 D2 fix] the run's effective set
@@ -511,7 +513,7 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           requiredOutputs: [...SPECIALIST_REQUIRED_OUTPUTS],
           deadlineAt: new Date(now() + budget.runDeadlineMs).toISOString(),
         });
-        const outcome = (status: SpecialistTaskStatus, reason: string | null, extra: Partial<SpecialistTaskOutcome> = {}): SpecialistTaskOutcome => ({ taskId: task.taskId, role: task.role, attempt, specialistRunId: runId, status, reason, resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null, ...extra });
+        const outcome = (status: SpecialistTaskStatus, reason: string | null, extra: Partial<SpecialistTaskOutcome> = {}): SpecialistTaskOutcome => ({ taskId: task.taskId, role: task.role, attempt, specialistRunId: runId, status, reason, resultDigest: null, result: null, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: route?.provider ?? coordinator.provider, model: null, ...(route ? { route } : {}), ...extra }); // [B21 E1] where it ran
         if (!validated.ok) {
           const reason = `request_invalid: ${validated.refusal} at ${validated.path}`;
           const written = await write(task.taskId, attempt, dissent("malformed", reason));
@@ -529,10 +531,23 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           if (source.aborted) controller.abort();
           else source.addEventListener("abort", () => controller.abort(), { once: true });
         }
-        const metered = meteredAdapter(deps.adapter);
+        // [B21 E1] the chain: the route's own adapter behind the meters (with the provider layer), the strict result tool, the meter
+        let admitted: ReturnType<typeof admittedAdapter> | null = null;
+        try {
+          admitted = route && deps.providers ? admittedAdapter(deps.providers.adapterFor(route), route, deps.providers.admission, now) : null;
+        } catch (error) {
+          const reason = `provider_unavailable: the adapter for ${route?.provider ?? coordinator.provider} could not be built (${detailOf(error)})`;
+          const written = await write(task.taskId, attempt, dissent("escalated", reason));
+          if (!written.ok) { stop = written.reason; notStarted.push(task); break; }
+          outcomes.push(outcome("escalated", reason));
+          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          break;
+        }
+        const specialist = specialistRunAdapter(admitted?.adapter ?? deps.adapter, specialistResultToolDeclaration(task.role));
+        const metered = meteredAdapter(specialist.adapter);
         let refusalLines = 0; const seals = sealCollector(); // [B21 D2] every artifact this run's gateway seals
         const result = await deps.runLoop(
-          { runId, provider: coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },
+          { runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal }, // [B21 E1 fix] the provider it runs on: its seals' provenance
           {
             adapter: metered.adapter,
             gateway: readOnlySpecialistGateway(deps.gateway, deps.registry, allowed),
@@ -560,8 +575,27 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
           warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
           stop = written.reason;
         };
+        if (admitted?.capture.paused) {
+          // [B21 E1] a call refused by the meters (never sent) escalates this task, not retried; [B21 E1 fix] the DAG stops only on the coordinator's breaker
+          const reason = `provider_unavailable: ${admitted.capture.paused.message}`;
+          const written = await write(task.taskId, attempt, dissent("escalated", reason));
+          if (!written.ok) { uncommitted(written, "dissent"); break; }
+          outcomes.push(outcome("escalated", reason.slice(0, 1_000), measured));
+          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}`);
+          if (admitted.capture.paused.reason === "breaker_open" && route?.provider === coordinator.provider) stop = "provider_paused"; // a WINDOW pause is no outage: this task only
+          break;
+        }
+        if (result.status === "completed" && specialist.capture.stop !== null) {
+          // [B21 E1] (D21-21) the provider did not complete the turn as asked: escalated with that stop, never parsed, never retried
+          const reason = SPECIALIST_STOP_REASONS[specialist.capture.stop];
+          const written = await write(task.taskId, attempt, dissent("escalated", reason));
+          if (!written.ok) { uncommitted(written, "dissent"); break; }
+          outcomes.push(outcome("escalated", reason, measured));
+          warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
+          break;
+        }
         if (result.status === "completed") {
-          const parsed = attachSealedArtifacts(parseSpecialistResult(result.finalText, task.role), seals.artifacts); // [B21 D2] only what the run sealed
+          const parsed = attachSealedArtifacts(specialistResultFromCapture(specialist.capture, task.role), seals.artifacts); // [B21 D2] only what the run sealed; [B21 E1] from the ONE result call
           if (parsed.ok) {
             const written = await write(task.taskId, attempt, { kind: "result", document: parsed.value });
             if (!written.ok) { uncommitted(written, "result"); break; }
@@ -587,14 +621,16 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
         }
         if (failure.startsWith("provider_")) {
           const providerReason = failure.slice("provider_".length) as LLMProviderFailureReason;
-          const retry = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;
-          const reason = `${failure}: the specialist run failed before a result (${retry ? "retrying once" : "not retryable"})`;
+          const retryable = providerReason !== "insufficient_quota" && isRetryableReason(providerReason) && offset + 1 < SPECIALIST_CAPS.attemptsPerTask;
+          const paused = deps.providers && route ? deps.providers.admission.pause(route.provider, route.model, "agent", now()) : null; // [B21 E1] no paid retry against a paused provider
+          const retry = retryable && paused === null;
+          const reason = `${failure}: the specialist run failed before a result (${retry ? "retrying once" : retryable && paused ? `not retried: ${paused.message}` : "not retryable"})`;
           const written = await write(task.taskId, attempt, dissent("escalated", reason));
           if (!written.ok) { uncommitted(written, "dissent"); break; }
           outcomes.push(outcome("escalated", reason, measured));
           warn(`Orchestration: specialist ${task.role} escalated (task ${task.taskId}, attempt ${attempt}): ${reason}.`);
           if (retry) continue;
-          stop = "provider_outage";
+          if ((!route || route.provider === coordinator.provider) && !(retryable && paused?.reason === "quota_exhausted")) stop = "provider_outage"; // [B21 E1] another provider's outage, [B21 E1 fix] or a retry a WINDOW pause withheld, stops only its task
           break;
         }
         // max_steps, toolset_invalid, internal_error: this task's dissent; the next task still runs
@@ -748,3 +784,26 @@ export const PROPOSING_OPENING = "You are now running as ONE bounded SPECIALIST 
 /** [B21 D2 fix] OD-122's `proposal_exists` clause as applied (regressions-2): once the coordinator's own first turn handed the human an
  *  artifact, no specialist is offered a proposal (each runs over the plain derivation, B's read-only frame) - one line says so. */
 export const COORDINATOR_ARTIFACT_HELD_LINE = "Orchestration: the coordinator's own turn already handed the human an artifact (OD-122: one side-effecting artifact per user message), so no specialist is offered a proposal this run - the specialists read only, and a disagreement can reach the human only as their unverified claims.";
+
+// ─── [B21 E1] The provider layer of an attempt (OD-115, OD-117) and the strict result tool (OD-116) ───────────────────────────
+// Appended on purpose: a function declaration and an import are hoisted, so the lines the B21 pages cite in this file move only where
+// the attempt itself changed (re-pinned on the pages).
+
+type AttemptRouting = { kind: "coordinator-paused"; pause: AdmissionPause } | SpecialistRouteDecision;
+/** [B21 E1] An attempt's routing: stopped while the coordinator's provider is paused (never a fallback in its place - the coordinator
+ *  never switches provider, and its follow-up turn could not run), else the role's route or its compatible fallback over the
+ *  declarations this run would be offered (its role's tools and the strict result tool). */
+function routeAttempt(providers: SpecialistProviders, coordinatorProvider: LLMProviderId, task: OrchestrationPlanTask, now: number, declarations: () => readonly ProviderToolDeclaration[]): AttemptRouting {
+  const pause = providers.admission.pause(coordinatorProvider, undefined, "interactive", now);
+  if (pause !== null) return { kind: "coordinator-paused", pause };
+  return decideSpecialistRoute({ role: task.role, coordinatorProvider, providers, now, compatibility: () => fallbackCompatibility(declarations(), specialistResultToolDeclaration(task.role)) });
+}
+/** [B21 E1] The one line a DAG stopped by the coordinator's paused provider writes (visible degradation, never silent). */
+function coordinatorPausedLine(count: number, pause: AdmissionPause): string {
+  return `Orchestration: ${count} specialist(s) not started and no follow-up turn can run - the coordinator's ${pause.message}`;
+}
+
+// [B21 E1] on their own lines at the end (an import is hoisted): the provider layer, the strict result tool and the pause type
+import { admittedAdapter, decideSpecialistRoute, fallbackCompatibility, type SpecialistProviders, type SpecialistRoute, type SpecialistRouteDecision } from "./provider-policy";
+import { SPECIALIST_STOP_REASONS, specialistResultFromCapture, specialistResultToolDeclaration, specialistResultToolRule, specialistRunAdapter, type SpecialistResultParse } from "./result-tool";
+import type { AdmissionPause } from "../../acquisition/admission-control";

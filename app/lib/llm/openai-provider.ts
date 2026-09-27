@@ -13,7 +13,7 @@ import { composeInstructions } from "./context";
 import { toProviderError } from "./errors";
 import {
   configuredOpenAIModel,
-  configuredOpenAIReasoningEffort,
+  configuredOpenAIReasoningEffort, OPENAI_NO_TEMPERATURE_MODEL_FAMILY, // [B21 E1] the rule, named once in openai-config
   type OpenAIReasoningEffort,
 } from "./openai-config";
 import type {
@@ -158,7 +158,7 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   private baseParams(request: LLMRequest) {
-    const supportsTemperature = !/^(?:gpt-5|o\d)/.test(this.model);
+    const supportsTemperature = !OPENAI_NO_TEMPERATURE_MODEL_FAMILY.test(this.model);
     return {
       model: this.model,
       instructions: composeInstructions(request),

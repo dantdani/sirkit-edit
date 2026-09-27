@@ -32,7 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
-import { emitRefusedRun, planChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single)
+import { emitRefusedRun, planChatRun, productionSpecialistProviders, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -517,7 +517,7 @@ export const POST = agentStreamRoute(
             trace: traceRecorder,
             ...(executionGrants ? { executionGrants } : {}),
           };
-          result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now() }) : await runAgentLoop(request, deps);
+          result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now(), providers: productionSpecialistProviders() }) : await runAgentLoop(request, deps); // [B21 E1] the provider layer (OD-115, OD-117)
         }
         // [B11] finalize + validate the trace. A trace/sink failure is
         // classified inside the recorder and can NEVER emit a second

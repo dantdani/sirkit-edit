@@ -1328,6 +1328,14 @@ Amendments to existing entries:
 - **The owner may choose otherwise:** version the sealed schemas to carry provenance (three sealers, their verifiers and every pinned
   artifact move together), or persist provider and model with each result record (a store schema move) so a replay keeps them.
 
+**Amendment (B21-E1, 2026-09-27) — OD-132 — amendment (B21-E1, 2026-09-27): one bullet appended to the existing OD-132 entry**
+
+- **Amended by B21-E1:** since B21-E1 every specialist runs on its own adapter and a role may run on a routed model of its provider, so
+  "one adapter per provider" no longer holds; the source rule stands, re-worded: one provider is ONE source whatever model or adapter
+  its specialists ran on. "B21-E ... will key sources by the provider and model" is RE-DEFERRED (to the owner, with B21-F's
+  evaluations): E1 keeps the provider as the key - conservative, it never presents two models of one vendor as independent sources. The
+  trace block is B21-E2's (OD-112).
+
 ## OD-133 — Scope on the layout candidate, as applied (B21-D, 2026-09-26)
 
 - **Question:** the layout candidate carries no tenant/project/branch/lineage scope (D21-13).
@@ -1338,3 +1346,74 @@ Amendments to existing entries:
   because the editor's hooks share it - recorded as the follow-up defect D21-34.
 - **The owner may choose otherwise:** a v2 layout candidate carrying its own scope (the editor hooks, the verifier and the candidate
   suites move together).
+
+## OD-115 — Provider spend controls for the DAG, as applied (B21-E1, 2026-09-27)
+
+- **Question:** what stops a paid retry storm against a provider that is out (D21-18)?
+- **Applied:** the admission key gains the `llm-provider` kind (`{ provider, model? }`, a reviewed extension of B20-A0's union) with
+  the process's meters: a minute window per provider and per model, the agent held to its 25% share (OD-40) - 60 calls a minute for the
+  whole process, shared by every user and concurrent request - and a breaker per provider that opens AT ONCE on `insufficient_quota`
+  for an hour (`quotaOpenMs` 3 600 000) unless an operator resets it (`resetLlmProviderBreaker`; a restart resets it too), at once on a
+  rate limit for a minute, and after three consecutive transient failures for a minute, with one half-open trial after the window.
+  Every admitted call carries a ticket (the breaker generation it was admitted under, whether it is the trial): an outcome under an
+  earlier generation never moves the breaker (a late success cannot close an opening) - except a no-credits answer, a fact about the
+  account, which still opens the long window unless an operator reset came after its call's admission ([B21 E1 lead]) - only the
+  trial's own outcome settles the trial,
+  and an abandoned trial (its run's signal aborted first) is not counted - the breaker stays half-open, never re-armed for an hour by a
+  call nobody finished. Every specialist call is admitted and recorded; the pause is consulted before every specialist attempt (the
+  coordinator's provider paused: no specialist call, the DAG stops `provider_paused` visibly, never claiming a failure); a call the
+  meters refuse mid-run escalates its task, and stops the DAG `provider_paused` only on the coordinator's open breaker (a window pause is
+  no outage); before the follow-up coordinator turn (paused: no call, the first answer stands), whose calls are metered as a person's;
+  a retry is never made against a paused provider; the per-DAG attempt ceiling stays B's (2 per task, 4 tasks). Specialist adapters are
+  built with `maxRetries: 0` (`agentAdapterForRole`) inside OD-45's `{ apiKey, maxRetries, timeout }`; the coordinator keeps its SDK
+  retries (OpenAI 2, Anthropic the SDK default 2). The recovery card - on both of its paths, the chat run's settlement and the JSON 503
+  body - withholds Retry for `provider_insufficient_quota` / `insufficient_quota` and `provider_breaker_open` (`retryOffered: false`,
+  its Retry disabled) while its "Use <other> instead" still sends the message again on the other provider. The chat closure's B19-D gate
+  exempts `admission-control.ts` exactly (policy, not vendor data). Proven by `b21-e1-provider-breaker.test.ts`,
+  `b21-e1-retry-card.test.ts`, `b21-e1-chat-provider.test.ts`.
+- **Not applied (recorded):** the coordinator's own first turn is not metered or gated (D21-39, for B21-E2); the coordinator's SDK
+  retries (its first and follow-up turns) re-send a step invisibly to the meters (the follow-up is metered as one admitted call per
+  step); the meters are per process; the agent share has no per-tenant or per-run sub-ceiling (a window pause escalates only the task
+  it refuses).
+- **The owner may choose otherwise:** other window sizes or open durations; a durable shared meter across instances; gating the
+  coordinator's first turn (a route change); a per-tenant or per-run sub-ceiling of the agent share; `maxRetries: 0` for the coordinator
+  too, with Sirkit-owned metered retries.
+
+## OD-116 — The structured-output mechanism for `SpecialistResult`, as applied (B21-E1, 2026-09-27)
+
+- **Question:** how does a specialist return its `SpecialistResult` (D21-20)?
+- **Applied:** ONE strict function tool, `sirkit_specialist_result` - a per-run synthetic declaration, never an exposed tool - whose
+  schema is the result's content keys through `toStrictSchema` inside the wire subset, identical on both providers, advertised beside
+  the role's tools with the adapters' own `tool_choice: auto` (never `required` / `any`); its ONE call is captured by the specialist's
+  wrapper and its arguments validated server-side by A's `validateSpecialistResult` (the server writes the schema id and attaches the
+  run's own seals); a turn without the call is `malformed` (`result_tool_not_called`) - the B-era final-text parse is removed; no
+  `text.format` / `output_config` key (each a reviewed OD-90 pin move E does not make); thinking is never enabled. Proven by
+  `b21-e1-result-tool.test.ts`.
+- **The owner may choose otherwise:** `output_config.format` / `text.format` structured outputs (an OD-90 key-set move per adapter, and
+  per the dated page not documented for `claude-opus-4-7`).
+
+## OD-117 — The per-role provider/model table and its default, as applied (B21-E1, 2026-09-27)
+
+- **Question:** which provider and model does each role run on (D21-19)?
+- **Applied:** `ROLE_PROVIDER_POLICY` is data and every role inherits the coordinator's provider and that provider's one configured model
+  (today's behaviour); overrides come only from the server env `SIRKIT_ORCHESTRATION_ROLE_MODELS` under a closed schema (at most 8 roles,
+  2 048 characters, exactly `provider` / `model` per role), and a refused map approves nothing (`provider_policy_invalid` for every
+  specialist, visibly); never from the request body. A model outside its provider's pinned family rules (read from `openai-config.ts` /
+  `anthropic-config.ts`, where the providers apply them) and not the configured model is refused `model_unqualified` for the role until
+  qualified live (LB-9); a key named twice in the map (however spelled) refuses it too. A provider that is OUT (its breaker open) falls
+  back to the other only when the role's tools and the result tool render identically on both and the other provider is not paused
+  (`provider_unavailable` otherwise; a window pause never falls back); with two providers that other provider is the coordinator's, so
+  only an env-routed role ever falls back; the coordinator never switches provider. Every outcome records its route (provider, model,
+  source, SDK retries 0, a fallback's origin), and a specialist's run carries the provider it runs on, so what it seals names that
+  provider. Proven by `b21-e1-provider-policy.test.ts`, `b21-e1-fallback.test.ts`, `b21-e1-provider-breaker.test.ts` case 6,
+  `b21-e1-chat-provider.test.ts` case 2.
+- **The owner may choose otherwise:** a committed table instead of the env, qualifying a model live (its family rule extended), or
+  letting a policy refusal fall back to inherit.
+
+## OD-119 — OpenAI background mode / Anthropic Message Batches for specialist work, as applied (B21-E1, 2026-09-27)
+
+- **Question:** background mode or batches for interactive specialist work?
+- **Applied:** never: background mode keeps response data about 10 minutes even under `store: false`, and batches are asynchronous up
+  to 24 h (the dated notes). No request carries `background`, and no adapter touches a batch surface - pinned by
+  `b21-e1-result-tool.test.ts` case 2 (the pinned key sets; the fake clients' batch, file and beta surfaces throw when touched).
+- **The owner may choose otherwise:** batches for an opt-in offline evaluation at half price (B21-F), never interactive.

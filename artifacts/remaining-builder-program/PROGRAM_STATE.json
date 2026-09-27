@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-D3 committed on chapter/b21-specialist-orchestration: the specialist gateway holds the published pin-facts reads (the route's own bounded reader) and nothing else, the replacement live for the schematic role, the component-replacement DAG with two proposing roles (coordinator, circuit-topology, component-sourcing-evidence, schematic, verification-critic - a presentation and budget order only) and the runbook's sentence routed to it by ONE strict replacement grammar anchored at both ends (the lead's adversarial phrasing sweep, five rounds, 885 false DAG routes closed - no open token) that keeps simple commands single; scenario 17 structural through the production POST - a party that cannot seal never reaches the merge and the one sealed replacement is presented and approved through the replacement family's existing path, two sealed parties always escalated; OD-130's part review rendered at the route's envelope through the scheduler seam, CONFIRMED-unreachable from a production POST until the route-level resume; next B21-E",
+  "currentCheckpoint": "B21-E1 committed on chapter/b21-specialist-orchestration: the provider layer - every role inheriting the coordinator's provider and its one configured model, server-env overrides only under a closed schema, a model outside the pinned family rules refused until qualified live; specialists on their route's own adapter with maxRetries 0 behind the llm-provider breaker (no credits opens it at once for an hour, a rate limit for a minute; only a call's own breaker generation counts, an abandoned trial never; consulted before every specialist attempt and the follow-up turn, which is metered too; provider_paused when the meters stop the DAG; no Retry for quota or an open breaker, the Switch still re-sending; a routed specialist's seals name its provider); the compatible fallback only when the tools and the result tool render identically, never the coordinator switching; normalized stop reasons with a specialist's output-limit, context-window and refusal stops escalated, never parsed; the strict result tool with tool_choice auto on both providers validated by A, the final-text parse removed; no background or batch; next B21-E2",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "d5d3f05",
+  "lastGreenSha": "a4aba95",
   "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-E test-first: provider routing by role (OD-117, B21-E1 - scenario 17's parties on their own providers), the llm-provider breaker (OD-115), stop-reason normalization, the strict result tool (OD-116), the additive run events and the trace block with the merge's decisions and the presentation (OD-112, OD-114's traced half, OD-126, OD-127), the route-level resume and the userMessageDigest ledger (D21-4, OD-122 - it makes OD-130's part review reachable at the route, D21-16), the mid-DAG commit (D21-17's open clause); and (the lead's assignment, discovery section 10 B21-D3) the composer's own routing of the runbook's scenario-17 sentence - the strict replacement grammar moved into the composer module as one exported predicate beside REPLACE_PART (D21-38, B21-E2).",
-  "updatedAt": "2026-09-27T00:52:11-04:00",
+  "nextAction": "The router grammar's round-6 structural fixes (the lead's follow-up to B21-D3: plural and look-alike designators, the unclosed appositive, a second part number as an MPN suffix, vacuous same-kind swaps with an anchored part, the acronym IT, unbounded and zero values) as their own commit; then B21-E2 test-first: the additive run events and the status line (OD-126, OD-127), the trace block in a new module (OD-112, D21-11's trace half, D21-3's calls), the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and gating the coordinator's first turn by the breaker (D21-39)",
+  "updatedAt": "2026-09-27T03:23:10-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

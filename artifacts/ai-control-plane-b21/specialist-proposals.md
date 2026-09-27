@@ -139,7 +139,7 @@ The ONE fact each live proposal's sealer needs from the coordinator's VERIFIED c
 - **The collector.** For every specialist attempt the scheduler collects, from the run's OWN loop events, every `proposal_ready`,
   `pcb_proposal_ready` and `layout_candidate_ready` (C14, C15) - the loop emits them only for an artifact the GATEWAY returned sealed
   (C38, C39) - captured as plain JSON at once. Nothing of it reaches the coordinator's stream (the scheduler's emit filter is unchanged).
-- **Only the sealed artifacts become `proposedActions`.** `attachSealedArtifacts` (C16), applied to the parsed final text (C17): every
+- **Only the sealed artifacts become `proposedActions`.** `attachSealedArtifacts` (C16), applied to the parsed final text (C17; [B21 E1, 2026-09-27] since B21-E1 the ONE strict result-tool call's arguments, never a final text - C17 re-pinned): every
   entry the MODEL wrote must EQUAL an artifact its run sealed (kind and canonical payload), otherwise the whole result is refused
   `proposal_not_sealed_in_run` (dissent `malformed`, persisted, never judged by the merge); then `proposedActions` become exactly the
   sealed artifacts, in seal order, wrapped as A's contracts require - the document validated again, so `artifactDigest` is recomputed
@@ -547,37 +547,37 @@ the base, for the reader (none of them changed in D2).
 | C2 | `app/lib/agent/orchestration/role-tools.ts` | 248 | — | `export const DORMANT_SPECIALIST_PROPOSALS: Readonly<Record<string, string>> = Object.freeze({` | the dormant ones, each with its reason |
 | C3 | `app/lib/agent/orchestration/role-tools.ts` | 255 | — | `export function roleProposalToolIds(role: string): readonly string[] {` | a role's live proposals: its row intersected with the live list |
 | C4 | `app/lib/agent/orchestration/role-tools.ts` | 41 | — | `const LIVE_PROPOSAL = "Live since B21-D2:` | the row reasons, moved in place (C's table IS these) |
-| C5 | `app/lib/agent/orchestration/scheduler.ts` | 647 | — | `export const PROPOSAL_NOT_SEALED_IN_RUN = "proposal_not_sealed_in_run" as const;` | the scheduler's refusal of a model-written artifact |
-| C6 | `app/lib/agent/orchestration/scheduler.ts` | 329 | — | `ONE sealed proposal of your role (an inert artifact the human reviews)` | a proposing role's objective |
-| C7 | `app/lib/agent/orchestration/scheduler.ts` | 411 | — | `const derivedByRole = new Map<SpecialistRole, AgentRunContext>(` | every role's context, once per run |
-| C8 | `app/lib/agent/orchestration/scheduler.ts` | 645 | — | `export const SEALER_CONTEXT_FACTS = Object.freeze({` | the one fact each live proposal's sealer needs (OD-109 amended) |
-| C9 | `app/lib/agent/orchestration/scheduler.ts` | 655 | — | `export function specialistContextFor(context: AgentRunContext, role: SpecialistRole): AgentRunContext {` | the proposing context: the derivation plus its sealer's fact |
-| C10 | `app/lib/agent/orchestration/scheduler.ts` | 668 | — | `export function specialistToolRegistry(registry: ToolRegistry, role: SpecialistRole): ToolRegistry {` | the 'read + the role's reviewed proposals' view |
-| C11 | `app/lib/agent/orchestration/scheduler.ts` | 283 | — | `(operationClass === "propose" && proposals.has(declaration.toolId))` | the effective set admits the role's live proposals |
-| C12 | `app/lib/agent/orchestration/scheduler.ts` | 300 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list, nothing else but a read |
-| C13 | `app/lib/agent/orchestration/scheduler.ts` | 150 | — | `sealedArtifactDigests?: readonly string[];` | every outcome carries what its run sealed |
-| C14 | `app/lib/agent/orchestration/scheduler.ts` | 698 | — | `export function sealCollector(): {` | the collector of a run's own seal events |
-| C15 | `app/lib/agent/orchestration/scheduler.ts` | 544 | — | `emit: (event) => { seals.collect(event);` | collected in the specialist's run, before the refusal filter |
-| C16 | `app/lib/agent/orchestration/scheduler.ts` | 720 | — | `export function attachSealedArtifacts(parsed: ParsedResult, sealed: readonly SealedInRun[]): ParsedResult {` | only the sealed artifacts become proposedActions; any other entry refused |
-| C17 | `app/lib/agent/orchestration/scheduler.ts` | 564 | — | `const parsed = attachSealedArtifacts(parseSpecialistResult(result.finalText, task.role), seals.artifacts);` | applied to the specialist's final text |
-| C18 | `app/lib/agent/orchestration/scheduler.ts` | 687 | — | `export function specialistFrameRules(proposing: boolean): string {` | the frame's rules line: B's unless the run offers a live proposal |
+| C5 | `app/lib/agent/orchestration/scheduler.ts` | 683 | — | `export const PROPOSAL_NOT_SEALED_IN_RUN = "proposal_not_sealed_in_run" as const;` | the scheduler's refusal of a model-written artifact |
+| C6 | `app/lib/agent/orchestration/scheduler.ts` | 330 | — | `ONE sealed proposal of your role (an inert artifact the human reviews)` | a proposing role's objective |
+| C7 | `app/lib/agent/orchestration/scheduler.ts` | 399 | — | `const derivedByRole = new Map<SpecialistRole, AgentRunContext>(` | every role's context, once per run |
+| C8 | `app/lib/agent/orchestration/scheduler.ts` | 681 | — | `export const SEALER_CONTEXT_FACTS = Object.freeze({` | the one fact each live proposal's sealer needs (OD-109 amended) |
+| C9 | `app/lib/agent/orchestration/scheduler.ts` | 691 | — | `export function specialistContextFor(context: AgentRunContext, role: SpecialistRole): AgentRunContext {` | the proposing context: the derivation plus its sealer's fact |
+| C10 | `app/lib/agent/orchestration/scheduler.ts` | 704 | — | `export function specialistToolRegistry(registry: ToolRegistry, role: SpecialistRole): ToolRegistry {` | the 'read + the role's reviewed proposals' view |
+| C11 | `app/lib/agent/orchestration/scheduler.ts` | 284 | — | `(operationClass === "propose" && proposals.has(declaration.toolId))` | the effective set admits the role's live proposals |
+| C12 | `app/lib/agent/orchestration/scheduler.ts` | 301 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list, nothing else but a read |
+| C13 | `app/lib/agent/orchestration/scheduler.ts` | 151 | — | `sealedArtifactDigests?: readonly string[];` | every outcome carries what its run sealed |
+| C14 | `app/lib/agent/orchestration/scheduler.ts` | 734 | — | `export function sealCollector(): {` | the collector of a run's own seal events |
+| C15 | `app/lib/agent/orchestration/scheduler.ts` | 559 | — | `emit: (event) => { seals.collect(event);` | collected in the specialist's run, before the refusal filter |
+| C16 | `app/lib/agent/orchestration/scheduler.ts` | 756 | — | `export function attachSealedArtifacts(parsed: ParsedResult, sealed: readonly SealedInRun[]): ParsedResult {` | only the sealed artifacts become proposedActions; any other entry refused |
+| C17 | `app/lib/agent/orchestration/scheduler.ts` | 598 | — | `const parsed = attachSealedArtifacts(specialistResultFromCapture(specialist.capture, task.role), seals.artifacts);` | applied to the specialist's ONE result call ([B21 E1]: B's final-text parse removed, OD-116) |
+| C18 | `app/lib/agent/orchestration/scheduler.ts` | 723 | — | `export function specialistFrameRules(proposing: boolean): string {` | the frame's rules line: B's unless the run offers a live proposal |
 | C19 | `app/lib/agent/orchestration/merge.ts` | 810 | — | `if (!sealedInRun(task, action)) return notSealedInRun(action, index);` | the merge's second check, before the scope and the family |
 | C20 | `app/lib/agent/orchestration/merge.ts` | 1033 | — | `export const MERGE_ARTIFACT_PROVENANCE = "sealed-in-run" as const;` | the provenance the merge records |
 | C21 | `app/lib/agent/orchestration/merge.ts` | 941 | — | `provenance: action.findings.some((item) => item.code === MERGE_NOT_SEALED_CODE)` | on every action of the merge's view |
 | C22 | `app/lib/agent/orchestration/merge.ts` | 1042 | — | `function notSealedInRun(action: ValidatedSpecialistResult["proposedActions"][number], index: number): JudgedAction {` | an action outside its task's sealed set: malformed, judged no further |
-| C23 | `app/lib/agent/orchestration/scheduler.ts` | 476 | — | `sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest)` | a replay carries its committed result's seals |
+| C23 | `app/lib/agent/orchestration/scheduler.ts` | 464 | — | `sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest)` | a replay carries its committed result's seals |
 | C24 | `app/lib/agent/orchestration/merge.ts` | 1060 | — | `export function specialistApprovalDecision(` | OD-122's rule, deterministic and ordered |
 | C25 | `app/lib/agent/orchestration/merge.ts` | 1053 | — | `export const SPECIALIST_APPROVAL_OUTCOMES = Object.freeze([` | its closed outcomes |
-| C26 | `app/api/chat/orchestration-runtime.ts` | 443 | — | `export function specialistProposalEvent(` | the accepted action as its family's own event, read back and digest-checked |
-| C27 | `app/api/chat/orchestration-runtime.ts` | 461 | — | `export function presentSpecialistProposal(` | presented, or nothing and why |
-| C28 | `app/api/chat/orchestration-runtime.ts` | 428 | — | `export const SPECIALIST_PROPOSAL_EVENTS = Object.freeze({` | each family's own event and tool |
-| C29 | `app/api/chat/orchestration-runtime.ts` | 426 | — | `export const COORDINATOR_ARTIFACT_EVENTS: readonly string[] = Object.freeze([` | what the coordinator's own turn hands the human |
+| C26 | `app/api/chat/orchestration-runtime.ts` | 446 | — | `export function specialistProposalEvent(` | the accepted action as its family's own event, read back and digest-checked |
+| C27 | `app/api/chat/orchestration-runtime.ts` | 464 | — | `export function presentSpecialistProposal(` | presented, or nothing and why |
+| C28 | `app/api/chat/orchestration-runtime.ts` | 431 | — | `export const SPECIALIST_PROPOSAL_EVENTS = Object.freeze({` | each family's own event and tool |
+| C29 | `app/api/chat/orchestration-runtime.ts` | 429 | — | `export const COORDINATOR_ARTIFACT_EVENTS: readonly string[] = Object.freeze([` | what the coordinator's own turn hands the human |
 | C30 | `app/api/chat/orchestration-runtime.ts` | 244 | — | `else if (COORDINATOR_ARTIFACT_EVENTS.includes(event.type)) firstArtifacts.push(event.type);` | recorded from the first turn's events |
 | C31 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `const approval = presentSpecialistProposal({` | after the merge's lines, before the follow-up turn |
-| C32 | `app/api/chat/orchestration-runtime.ts` | 380 | — | `...(approval ? { approval: { outcome: approval.outcome, presented: approval.presented } } : {})` | the envelope's approval block |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 337 | — | `APPROVAL says whether the one accepted action was handed to the human's existing review` | the envelope's header, amended |
+| C32 | `app/api/chat/orchestration-runtime.ts` | 383 | — | `...(approval ? { approval: { outcome: approval.outcome, presented: approval.presented } } : {})` | the envelope's approval block |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 340 | — | `APPROVAL says whether the one accepted action was handed to the human's existing review` | the envelope's header, amended |
 | C34 | `app/lib/agent/orchestration/merge.ts` | 136 | — | `{ code: "proposal-not-sealed-in-run", decision: "malformed"` | the merge's own code (a row of MERGE_OWN_CODES) |
-| C35 | `app/lib/agent/orchestration/scheduler.ts` | 649 | — | `export const SEALED_PROPOSALS_RULE = ` | the proposing roles' result rule |
+| C35 | `app/lib/agent/orchestration/scheduler.ts` | 685 | — | `export const SEALED_PROPOSALS_RULE = ` | the proposing roles' result rule |
 | C36 | `app/lib/agent/loop.ts` | 177 | — | `if (!context.schematicHeadMark) {` | the schematic proposals' prerequisite, unchanged |
 | C37 | `app/lib/agent/loop.ts` | 170 | — | `if (descriptor.toolId === "sirkit.pcb.propose-bounded-edit") {` | the bounded edit's prerequisite (a board and a basis), unchanged |
 | C38 | `app/lib/agent/loop.ts` | 707 | — | `emitOnce({ type: "proposal_ready", runId: request.runId, toolId: resolved.toolId, proposal: sealedProposal });` | the loop emits a seal event only for a gateway-sealed proposal |
@@ -595,13 +595,13 @@ the base, for the reader (none of them changed in D2).
 | C50 | `.github/workflows/deterministic-manufacturing.yml` | 147 | — | `app/api/chat/__tests__/b21-d2-chat-proposals.test.ts` | the one explicit CI entry |
 | C51 | `app/lib/agent/loop.ts` | 454 | — | `refuse("proposal_exists", proposalIssued ?` | the loop's own single-flight: a second proposal in one run is refused `proposal_exists` (unchanged) |
 | C52 | `app/api/chat/orchestration-runtime.ts` | 172 | — | `export const ORCHESTRATION_TRACE_LINES_MAX = 12;` | the orchestration trace cap an always-recorded line passes |
-| C53 | `app/lib/agent/orchestration/scheduler.ts` | 108 | — | `artifactHeld?: boolean;` | [fix] the coordinator run's fact: its own turn already handed the human an artifact (OD-122) |
-| C54 | `app/lib/agent/orchestration/scheduler.ts` | 411 | — | `coordinator.artifactHeld === true ? deriveSpecialistContext(context) : specialistContextFor(context, task.role)` | [fix] then no sealer fact, so no proposal is offered to any specialist |
+| C53 | `app/lib/agent/orchestration/scheduler.ts` | 109 | — | `artifactHeld?: boolean;` | [fix] the coordinator run's fact: its own turn already handed the human an artifact (OD-122) |
+| C54 | `app/lib/agent/orchestration/scheduler.ts` | 399 | — | `coordinator.artifactHeld === true ? deriveSpecialistContext(context) : specialistContextFor(context, task.role)` | [fix] then no sealer fact, so no proposal is offered to any specialist |
 | C55 | `app/api/chat/orchestration-runtime.ts` | 263 | — | `...(firstArtifacts.length > 0 ? { artifactHeld: true } : {})` | [fix] the runtime hands the scheduler the coordinator's artifact fact |
 | C56 | `app/lib/agent/orchestration/merge.ts` | 1077 | — | `export function unjudgedProposers(` | [fix] a peer's seal no merged task judged; a planned proposing specialist that never started |
 | C57 | `app/lib/agent/orchestration/merge.ts` | 1067 | — | `return withheld("incomplete");` | [fix] `incomplete`: nothing competing cannot be established |
-| C58 | `app/lib/agent/orchestration/scheduler.ts` | 738 | — | `export function offersProposal(` | [fix] whether the run's effective set offers a live proposal |
-| C59 | `app/lib/agent/orchestration/scheduler.ts` | 342 | — | `specialistFrameRules(task.proposing === true),` | [fix] the frame's rules line by the run's effective set |
-| C60 | `app/api/chat/orchestration-runtime.ts` | 472 | — | `- sealed in its specialist's own run and accepted by the merge; the human reviews it like any proposal; nothing was applied.` | [fix] the presented line: kind, artifact id and digest, always recorded on the trace |
-| C61 | `app/lib/agent/orchestration/scheduler.ts` | 750 | — | `export const COORDINATOR_ARTIFACT_HELD_LINE =` | [fix] the one line saying no specialist is offered a proposal |
-| C62 | `app/lib/agent/orchestration/scheduler.ts` | 747 | — | `export const PROPOSING_OPENING =` | [fix] the opening line of a run offered a live proposal |
+| C58 | `app/lib/agent/orchestration/scheduler.ts` | 774 | — | `export function offersProposal(` | [fix] whether the run's effective set offers a live proposal |
+| C59 | `app/lib/agent/orchestration/scheduler.ts` | 343 | — | `specialistFrameRules(task.proposing === true),` | [fix] the frame's rules line by the run's effective set |
+| C60 | `app/api/chat/orchestration-runtime.ts` | 475 | — | `- sealed in its specialist's own run and accepted by the merge; the human reviews it like any proposal; nothing was applied.` | [fix] the presented line: kind, artifact id and digest, always recorded on the trace |
+| C61 | `app/lib/agent/orchestration/scheduler.ts` | 786 | — | `export const COORDINATOR_ARTIFACT_HELD_LINE =` | [fix] the one line saying no specialist is offered a proposal |
+| C62 | `app/lib/agent/orchestration/scheduler.ts` | 783 | — | `export const PROPOSING_OPENING =` | [fix] the opening line of a run offered a live proposal |

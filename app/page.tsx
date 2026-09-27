@@ -143,7 +143,7 @@ type ActivityLogMessage = {
   entries: ActivityLogEntry[];
 };
 type Message = ChatMessage | ActivityLogMessage;
-type AiProviderFailureState = { provider: LLMProviderId };
+type AiProviderFailureState = { provider: LLMProviderId; retryOffered: boolean }; // [B21 E1 fix] false: the Retry is withheld (quota, an open breaker), the Switch still re-sends
 type AiRuntimeProviderInfo = {
   model: string;
   label: string;
@@ -2753,14 +2753,14 @@ export default function Home() {
       }
     };
     const onProviderFailure = (event: Event) => {
-      const detail = (event as CustomEvent<{ provider?: LLMProviderId; retry?: () => void; stillCurrent?: () => boolean }>).detail;
+      const detail = (event as CustomEvent<{ provider?: LLMProviderId; retry?: () => void; retryOffered?: false; stillCurrent?: () => boolean }>).detail;
       // B07.5 — the listener re-checks the event's OWNER: a failure whose
       // originating project/session generation (or component lifetime) has
       // ended must never repopulate the active project's failure state.
       if (detail?.stillCurrent?.() === false) return;
       if (detail?.provider === "openai" || detail?.provider === "anthropic") {
         lastAiRetryRef.current = detail.retry ?? null;
-        setAiProviderFailure({ provider: detail.provider });
+        setAiProviderFailure({ provider: detail.provider, retryOffered: detail.retryOffered !== false });
         setChatOpen(true);
       }
     };
@@ -6856,7 +6856,7 @@ export default function Home() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    disabled={!lastAiRetryRef.current}
+                    disabled={!lastAiRetryRef.current || !aiProviderFailure.retryOffered}
                     onClick={() => {
                       setAiProviderFailure(null);
                       lastAiRetryRef.current?.();

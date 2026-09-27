@@ -16,6 +16,7 @@ import { SPECIALIST_RESULT_SCHEMA, type SpecialistRole } from "../contracts";
 import { DurableOrchestrationRunStore, type OrchestrationRunScope, type OrchestrationRunStore } from "../store";
 import { runSpecialistDag, type SchedulerOutcome, type SpecialistLoop } from "../scheduler";
 import { REGISTRY, coordinatorContext } from "./_merge-fixtures";
+import { answer, registryToolIds } from "./_result-tool";
 
 /** A specialist's result document (the role's own), with overrides. */
 export function specialistResult(role: string, extra: Record<string, unknown> = {}): string {
@@ -74,12 +75,12 @@ export class ToolCallingSpecialists implements ProviderAgentAdapter {
       this.callSequence += 1;
       return this.step({ toolCalls: [{ callId: `call-${task}-${this.callSequence}`, providerName: declaration.providerName, argumentsText: JSON.stringify(call.args) }], stopReason: "tool_use" });
     }
-    return this.step({ text: this.textOf(role, task, results) });
+    return this.step(answer(this.textOf(role, task, results), tools)); // [B21 E1] pin move (OD-116): through the strict result tool when the run offers it
   }
   async start(input: { system: string; userMessage: string; tools: readonly ProviderToolDeclaration[] }): Promise<AgentStep> {
     const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "coordinator";
     const task = /^Task: (\S+)$/m.exec(input.system)?.[1] ?? (role === "coordinator" ? ((this.coordinatorTurns += 1) === 1 ? "coordinator" : "coordinator-2") : "(none)");
-    this.starts.push({ role, task, tools: input.tools.map((tool) => tool.toolId), system: input.system, userMessage: input.userMessage });
+    this.starts.push({ role, task, tools: registryToolIds(input.tools), system: input.system, userMessage: input.userMessage }); // [B21 E1] the synthetic result tool recorded apart
     const attempt = this.attempts.get(task) ?? 0;
     this.attempts.set(task, attempt + 1);
     const script = this.scriptOf(role, task);

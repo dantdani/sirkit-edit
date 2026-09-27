@@ -76,7 +76,7 @@ The table IS `MERGE_RULES` (C7), row for row; every case it names exists (page c
 | D5 | :839 | requests deterministic verification where possible | every validation request runs its verifier with no model against the verified state and records the result digest as a deterministic_verifier evidence reference (evidence about that state, contradicting nobody); what a result proposes is verified on its own candidate | b21-d-verification-requests case 1; b21-d-verification-requests case 2; b21-d-verification-requests case 6 |
 | D6 | :840 | escalates unresolved engineering conflicts to the human | a conflict between surviving actions makes every party contradicted and writes ONE escalation record naming what the human must decide; a non-exact part writes a part review request | b21-d-merge case 2; b21-d-merge case 19; b21-d-chat-merge case 2 |
 | D7 | :841 | never converts majority agreement into proof | agreement changes no decision and yields no evidence - one change carried by several results is no conflict and no proof; the only evidence the merge produces is its own deterministic verification | b21-d-merge case 5; b21-d-merge case 16 |
-| D8 | :842 | prevents correlated same-source/model output from appearing independent | every specialist runs through this run's one adapter per provider, so one provider is ONE source whatever model it reports, and a replayed result's unrecorded provenance counts with every source; no text calls sources independent | b21-d-merge case 5; b21-d-merge case 6; b21-d-merge case 23 |
+| D8 | :842 | prevents correlated same-source/model output from appearing independent | one provider is ONE source whatever model or adapter its specialists ran on (since B21-E1 each runs on its own adapter and a role may run on a routed model of its provider) and whatever model it reports, and a replayed result's unrecorded provenance counts with every source; no text calls sources independent | b21-d-merge case 5; b21-d-merge case 6; b21-d-merge case 23 |
 | D9 | :843 | records which provider/model produced each result without exposing secrets | each judged result carries its provider and reported model in the merge's view, the envelope and its persisted verdict, never in a sealed schema (OD-132); every reason and line is closed codes and ids | b21-d-merge case 1; b21-d-merge case 23 |
 
 The order of judgement for each usable result (accepted or replayed by the scheduler; a `malformed` or `escalated` task was already
@@ -271,6 +271,7 @@ reference in the view and the envelope.
   provider), so the source is the PROVIDER; the model a provider reports is recorded per result, never counted as independence (it is
   provider-controlled text); a replayed result's provider and model are not in the record, so its source is
   `(replayed: provenance not recorded)` and it counts with every other source; no text calls sources independent (merge cases 5, 6, 23).
+  [B21 E1, 2026-09-27] Since B21-E1 every specialist runs on its OWN adapter (`agentAdapterForRole`) and the server env may route a role to another model of its provider, so "one adapter per provider" no longer holds; the rule stands, re-worded in place (C22, the D8 row, the streamed escalation sentence): one provider is ONE source whatever model or adapter its specialists ran on. OD-132's provider-and-model keying is re-deferred (`provider-routing-and-failure.md` section 3).
 - **The envelope** (C31, C72, C73): the follow-up turn's user message carries the MERGE's view instead of the raw outcomes - each entry
   keeps B's leading fields and adds the merge's decision, reason and findings, the retained claims with each evidence reference's
   standing, and its actions (an accepted one identified by kind, artifact id, artifact digest, identities, the pinned scope's digest and
@@ -452,6 +453,7 @@ discovery closure clauses and the §10 amendment line.
   `(replayed: provenance not recorded)` and it counts with every other source. Nothing secret is recorded (closed codes, ids and model
   tokens only; an unrecognizable model string is recorded as `(unrecognized)`). The trace block that records them per step stays
   B21-E's (OD-112), which will key sources by the provider and model its per-role table dispatches with (OD-117).
+- **[B21 E1, 2026-09-27] Amended:** since B21-E1 every specialist runs on its own adapter and a role may run on a routed model of its provider, so "one adapter per provider" no longer holds; the rule is re-worded: one provider is ONE source whatever model or adapter its specialists ran on. Keying sources by provider AND model is RE-DEFERRED (to the owner, with B21-F's evaluations): E1 keeps the provider as the key - conservative, it never presents two models of one vendor as independent sources. The trace block is B21-E2's (OD-112).
 - **The owner may choose otherwise:** version the sealed schemas to carry provenance (three sealers, their verifiers and every pinned
   artifact move together), or persist provider and model with each result record (a store schema move) so a replay keeps them.
 
@@ -643,9 +645,9 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C27 | `app/api/chat/orchestration-runtime.ts` | 280 | — | `const merged = await mergeSpecialistOutcome({ runId: request.runId, context: deps.context, outcome }, specialistMergeDeps(deps.context, deps.now));` | the merge between the scheduler and the envelope |
 | C28 | `app/api/chat/orchestration-runtime.ts` | 281 | — | `if (merged.kind === "refused") return standDown(` | a merge that cannot record stands down |
 | C29 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `for (const line of merged.lines) warn(line);` | one warning line per dissent, escalation and review request |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 327 | — | `export function specialistMergeDeps(context: AgentRunContext, now: () => number = Date.now): MergeDeps {` | the injected verifier and preset, bound outside the prefix |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 352 | — | `export function mergedResultsEnvelope(` | the merge's view for the follow-up turn |
-| C32 | `app/lib/agent/orchestration/scheduler.ts` | 500 | — | `const attempt = baseAttempt + (staleWritten ? 1 : 0) + offset;` | the re-run after a stale dissent at the next attempt |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 330 | — | `export function specialistMergeDeps(context: AgentRunContext, now: () => number = Date.now): MergeDeps {` | the injected verifier and preset, bound outside the prefix |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 355 | — | `export function mergedResultsEnvelope(` | the merge's view for the follow-up turn |
+| C32 | `app/lib/agent/orchestration/scheduler.ts` | 488 | — | `const attempt = baseAttempt + (staleWritten ? 1 : 0) + offset;` | the re-run after a stale dissent at the next attempt |
 | C33 | `app/lib/engineering/schematic-proposals.ts` | 237 | — | `export function verifySealedTier1Proposal(proposal: SealedTier1Proposal, input: {` | the Tier 1 family's verifier |
 | C34 | `app/lib/engineering/replacement-proposals.ts` | 263 | — | `export function verifySealedReplacementProposal(proposal: SealedReplacementProposal, input: {` | the replacement family's verifier |
 | C35 | `app/lib/pcb/proposal/sealed-pcb-edit-proposal.ts` | 238 | — | `export function verifySealedPcbEditProposalIntegrity(candidate: unknown): PcbProposalVerification {` | the PCB family's integrity verifier |
@@ -681,12 +683,12 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C65 | `app/lib/agent/orchestration/merge.ts` | 310 | — | `const sourceOf = (task: SpecialistTaskOutcome): string =>` | one provider = one source; a replay's provenance unrecorded |
 | C66 | `app/lib/agent/orchestration/merge.ts` | 510 | — | `const missing = [...(context.schematic ? [] : ["schematic-unavailable"])` | the canonical verifier never invents a pass |
 | C67 | `app/lib/agent/orchestration/merge.ts` | 493 | — | `const open = [...nets.filter((net) => !net.complete)` | connectivity inconclusive on an open net |
-| C68 | `app/lib/agent/orchestration/scheduler.ts` | 628 | — | `export function mergeJudgedStale(` | D21-17's regenerate signal |
-| C69 | `app/lib/agent/orchestration/scheduler.ts` | 474 | — | `&& !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null;` | a result judged stale or expired is never replayed |
-| C70 | `app/lib/agent/orchestration/scheduler.ts` | 633 | — | `export const READINESS_CITATION_RULE =` | the reviewer's citation form |
-| C71 | `app/lib/agent/orchestration/scheduler.ts` | 343 | — | `...specialistResultRules(task.role),` | a role's output rules in its frame |
-| C72 | `app/api/chat/orchestration-runtime.ts` | 342 | — | `export const MERGED_ENVELOPE_STAGES = Object.freeze([` | the envelope's stages |
-| C73 | `app/api/chat/orchestration-runtime.ts` | 411 | — | `for (const stage of MERGED_ENVELOPE_STAGES) {` | the first stage that fits |
+| C68 | `app/lib/agent/orchestration/scheduler.ts` | 664 | — | `export function mergeJudgedStale(` | D21-17's regenerate signal |
+| C69 | `app/lib/agent/orchestration/scheduler.ts` | 462 | — | `&& !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null;` | a result judged stale or expired is never replayed |
+| C70 | `app/lib/agent/orchestration/scheduler.ts` | 669 | — | `export const READINESS_CITATION_RULE =` | the reviewer's citation form |
+| C71 | `app/lib/agent/orchestration/scheduler.ts` | 344 | — | `...specialistResultRules(task.role),` | a role's output rules in its frame |
+| C72 | `app/api/chat/orchestration-runtime.ts` | 345 | — | `export const MERGED_ENVELOPE_STAGES = Object.freeze([` | the envelope's stages |
+| C73 | `app/api/chat/orchestration-runtime.ts` | 414 | — | `for (const stage of MERGED_ENVELOPE_STAGES) {` | the first stage that fits |
 | C74 | `app/api/chat/orchestration-runtime.ts` | 190 | — | `[B21 D fix] SUPERSEDED since B21-D` | B's envelope superseded (D21-36) |
 | C75 | `app/lib/pcb/proposal/bounded-edit-compiler.ts` | 419 | — | `return refuse("drc-regression",` | the compiler's regression rules the candidate check mirrors |
 | C76 | `app/lib/pcb/candidates/layout-candidate.ts` | 352 | — | `const command = buildAutorouteImportCommand(board, candidate.routes);` | the apply's routing build the candidate check mirrors |

@@ -51,11 +51,13 @@ vi.mock("@/app/lib/agent/gateway", async (importOriginal) => {
   };
 });
 
-vi.mock("@/app/lib/agent/adapters", async () => ({
-  agentAdapterFor: () => {
+vi.mock("@/app/lib/agent/adapters", async () => {
+  const { answer, registryToolIds } = await import("@/app/lib/agent/orchestration/__tests__/_result-tool"); // [B21 E1] pin move: the route binds the provider layer, which builds every specialist's adapter through agentAdapterForRole (the same scripted double here); a specialist answers THROUGH the strict result tool it is offered (OD-116) and the offered tools are recorded without that synthetic declaration
+  const scripted = () => {
     const usage = { inputTokens: 3, outputTokens: 5 };
     const continuation = { provider: "openai" as const, state: null };
     const firsts = new Map<string, string>();
+    const offered = new Map<string, ReadonlyArray<{ toolId: string; providerName: string }>>();
     const textOf = (turn: string, role: string): string => role !== "coordinator"
       ? JSON.stringify({ schema: "sirkit.specialist-result.v1", role, summary: `(scripted) ${role}: read the verified state; nothing changed.`, proposedActions: [], assumptions: [], evidence: [], requiredTools: [], risks: [], unresolvedQuestions: [], validationRequests: [], confidence: "low" })
       : turn === "coordinator-2" ? "(scripted) The follow-up turn answers from the merge." : `(scripted) One coordinator turn for: ${(firsts.get(turn) ?? "").slice(0, 80)}`; // B's coordinator text, so the flag-off streams reproduce B's recorded digests
@@ -63,7 +65,8 @@ vi.mock("@/app/lib/agent/adapters", async () => ({
       provider: "openai",
       async start(input: { system: string; userMessage: string; tools: ReadonlyArray<{ toolId: string; providerName: string }> }) {
         const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "coordinator";
-        state.starts.push({ role, system: input.system, userMessage: input.userMessage, tools: input.tools.map((tool) => tool.toolId) });
+        state.starts.push({ role, system: input.system, userMessage: input.userMessage, tools: registryToolIds(input.tools) });
+        offered.set(role, input.tools);
         const turn = role === "coordinator" && state.starts.filter((start) => start.role === "coordinator").length === 2 ? "coordinator-2" : role;
         firsts.set(turn, input.userMessage);
         const call = state.calls[turn];
@@ -72,18 +75,20 @@ vi.mock("@/app/lib/agent/adapters", async () => ({
           state.pending.push(turn);
           return { text: "", toolCalls: [{ callId: `call-${turn}`, providerName: tool.providerName, argumentsText: JSON.stringify(call!.args) }], stopReason: "tool_use", usage, model: "scripted", continuation };
         }
-        return { text: textOf(turn, role), toolCalls: [], stopReason: "completed", usage, model: "scripted", continuation };
+        return { text: textOf(turn, role), toolCalls: [], stopReason: "completed", usage, model: "scripted", continuation, ...answer(textOf(turn, role), input.tools) };
       },
       async continueWith(input: { results: ReadonlyArray<{ outputText: string }> }) {
         const turn = state.pending.pop() ?? "coordinator";
         state.results[turn] = input.results.map((result) => result.outputText);
-        return { text: textOf(turn, turn === "coordinator-2" ? "coordinator" : turn), toolCalls: [], stopReason: "completed", usage, model: "scripted", continuation };
+        return { text: textOf(turn, turn === "coordinator-2" ? "coordinator" : turn), toolCalls: [], stopReason: "completed", usage, model: "scripted", continuation, ...answer(textOf(turn, turn === "coordinator-2" ? "coordinator" : turn), offered.get(turn === "coordinator-2" ? "coordinator" : turn) ?? []) };
       },
     };
-  },
-}));
+  };
+  return { agentAdapterFor: scripted, agentAdapterForRole: scripted };
+});
 
 import { POST, EDITOR_CONTEXT_SCHEMA } from "../route";
+import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
 import { ORCHESTRATION_ENABLED_ENV, resetOrchestrationStoreFactory, resetSpecialistSchedulerFactory, setOrchestrationStoreFactory, setSpecialistSchedulerFactory } from "../orchestration-runtime";
 
 const SCOPE = { tenantId: "tenant-1", projectId: "project-1", branchId: "main" };
@@ -129,10 +134,13 @@ const REPLACEMENT_DAG = ["coordinator", "circuit-topology", "component-sourcing-
 describe("[B21 D3] scenario 17 through the chat route: the replacement live for specialists, the disagreement structural and deterministically resolved", () => {
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", ""); // the shell never decides an outcome (B's rule)
+    vi.stubEnv("SIRKIT_ORCHESTRATION_ROLE_MODELS", ""); vi.stubEnv("SIRKIT_OPENAI_MODEL", ""); vi.stubEnv("SIRKIT_ANTHROPIC_MODEL", "claude-opus-4-7"); // [B21 E1 fix] the route's provider layer reads the role policy and the configured models from process.env: pinned, so the shell never decides an outcome
+    resetAdmissionControl(); // [B21 E1] the llm-provider meters are the process's own
   });
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+    resetAdmissionControl();
     resetCatalog();
     resetOrchestrationStoreFactory();
     resetSpecialistSchedulerFactory();

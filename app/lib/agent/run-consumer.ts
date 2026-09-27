@@ -12,7 +12,7 @@
  * BEFORE the new run starts.
  */
 
-import { dispatchAiProviderFailure, type AiRequestOwnership } from "../ai-preferences";
+import { dispatchAiProviderFailure, providerRetryWithheld, type AiRequestOwnership } from "../ai-preferences";
 import type { LLMProviderId } from "../llm/types";
 
 /** provider_* reasons are recoverable; cancellation/deadline/etc. are not. */
@@ -39,7 +39,7 @@ export function settleAgentRunFailure(input: {
 }): AgentRunFailureSettlement {
   if (!input.ownership.isCurrent()) return { recovered: false };
   if (!isRecoverableProviderFailure(input.reason)) return { recovered: false };
-  dispatchAiProviderFailure({ provider: input.provider, retry: input.startNewRun, ownership: input.ownership });
+  dispatchAiProviderFailure({ provider: input.provider, retry: input.startNewRun, ownership: input.ownership, ...(providerRetryOffered(input.reason) ? {} : { retryOffered: false as const }) }); // [B21 E1] no Retry for quota or an open breaker; [B21 E1 fix] the Switch's new run kept
   return { recovered: true };
 }
 
@@ -59,4 +59,17 @@ export function performProviderSwitch(failed: LLMProviderId, deps: {
   deps.selectProvider(next);
   deps.startNewRun?.();
   return next;
+}
+
+// ─── [B21 E1] No Retry for a provider out of credits or paused by Sirkit's breaker (D21-18, OD-115) ─────────────
+// Appended on purpose: a function declaration is hoisted and the list is read only when a run fails, so no cited line moves.
+
+/** The provider failures the card never offers Retry for (the ONE list, `ai-preferences.ts`, beside the owned dispatch): the card is
+ *  still shown (`isRecoverableProviderFailure`) and its "Use <other> instead" still sends the message again on the other provider - the
+ *  new-run closure rides along - while its Retry is withheld (`retryOffered: false`, rendered disabled). */
+export { PROVIDER_FAILURES_WITHOUT_RETRY } from "../ai-preferences";
+
+/** Whether the recovery card offers Retry for a run that failed with `reason`. */
+export function providerRetryOffered(reason: string): boolean {
+  return isRecoverableProviderFailure(reason) && !providerRetryWithheld(reason);
 }

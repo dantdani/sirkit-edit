@@ -43,6 +43,7 @@ import type { AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
 import { PCB_BOARD_HIERARCHY_PATH, pcbBoardInstanceId } from "@/app/lib/pcb/board-identity";
 import { FIXTURE_AUTHORITY_VARIANT, matchingAtomicConfirmer, validApprovedAggregate } from "@/app/lib/engineering/__tests__/_authority-fixtures";
 import { resetComponentAuthoritySourceFactory, setComponentAuthoritySourceFactory } from "../component-authority-runtime";
+import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
 
 const state = vi.hoisted(() => ({
   starts: [] as Array<{ role: string; system: string; userMessage: string; tools: string[]; signal: AbortSignal | undefined }>,
@@ -71,12 +72,12 @@ vi.mock("@/app/lib/agent/gateway", async (importOriginal) => {
 
 vi.mock("@/app/lib/agent/adapters", async () => {
   const { LLMProviderError } = await import("@/app/lib/llm/errors");
-  return {
-    agentAdapterFor: () => ({
+  const { answer, registryToolIds } = await import("@/app/lib/agent/orchestration/__tests__/_result-tool"); // [B21 E1] pin move: the route binds the provider layer, which builds every specialist's adapter through agentAdapterForRole (the same scripted double here); a specialist answers THROUGH the strict result tool it is offered (OD-116) and the offered tools are recorded without that synthetic declaration
+  const scripted = () => ({
       provider: "openai",
-      async start(input: { system: string; userMessage: string; tools: ReadonlyArray<{ toolId: string }>; signal?: AbortSignal }) {
+      async start(input: { system: string; userMessage: string; tools: ReadonlyArray<{ toolId: string; providerName: string }>; signal?: AbortSignal }) {
         const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "coordinator";
-        state.starts.push({ role, system: input.system, userMessage: input.userMessage, tools: input.tools.map((tool) => tool.toolId), signal: input.signal });
+        state.starts.push({ role, system: input.system, userMessage: input.userMessage, tools: registryToolIds(input.tools), signal: input.signal });
         const turn = role === "coordinator" && state.starts.filter((start) => start.role === "coordinator").length === 2 ? "coordinator-2" : role;
         const behaviour = state.script[turn];
         if (behaviour === "hang") return new Promise<never>(() => { /* only the signal ends this run */ });
@@ -88,14 +89,14 @@ vi.mock("@/app/lib/agent/adapters", async () => {
         const text = role !== "coordinator"
           ? JSON.stringify({ schema: "sirkit.specialist-result.v1", role, summary, proposedActions: [], assumptions: [], evidence: [], requiredTools: [], risks: [], unresolvedQuestions: [], validationRequests: [], confidence: "low" })
           : `(scripted) One coordinator turn for: ${input.userMessage.slice(0, 80)}`;
-        return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
+        return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null }, ...answer(text, input.tools) };
       },
       async continueWith(input: { results: ReadonlyArray<{ outputText: string }> }) {
         state.continuations.push(input.results.map((result) => result.outputText));
         return { text: "(scripted) The follow-up turn answers from the results.", toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
       },
-    }),
-  };
+    });
+  return { agentAdapterFor: scripted, agentAdapterForRole: scripted };
 });
 
 import { POST, EDITOR_CONTEXT_SCHEMA } from "../route";
@@ -189,9 +190,12 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
   // scheduler's writes of case 5 into that database.
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", "");
+    vi.stubEnv("SIRKIT_ORCHESTRATION_ROLE_MODELS", ""); vi.stubEnv("SIRKIT_OPENAI_MODEL", ""); vi.stubEnv("SIRKIT_ANTHROPIC_MODEL", "claude-opus-4-7"); // [B21 E1 fix] the route's provider layer reads the role policy and the configured models from process.env: pinned, so the shell never decides an outcome
+    resetAdmissionControl(); // [B21 E1] the llm-provider meters are the process's own: a quota case never leaks into the next
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    resetAdmissionControl();
     resetOrchestrationStoreFactory();
     resetSpecialistSchedulerFactory();
     resetComponentAuthoritySourceFactory();

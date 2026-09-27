@@ -39,6 +39,7 @@ import {
   CLEAN_ROUTES, MERGE_BASIS, T0, action, coordinatorContext, mergeBoard, mergeDeps, mergeHeadMark, mergeState, produceRouting, resultText, runDag,
   sealExactReplacement, sealOtherPartReplacement, sealPcbEdit, sealTier1, syncedBoard,
 } from "./_merge-fixtures";
+import { answer } from "./_result-tool";
 import { SCOPE } from "./_sealed-artifacts";
 
 type Merged = Extract<MergeOutcome, { kind: "merged" }>;
@@ -598,7 +599,7 @@ describe("[B21 D] the deterministic merge", () => {
   });
 
   it("22. [B21 D fix: regressions-3] a manufacturing-readiness reviewer that follows its prompt CAN be accepted: the specialist frame shows the reviewer the readiness citation form; a scripted reviewer that reads `sirkit.manufacturing.readiness-inspect` through the real loop and gateway and fills that form from what the read returned (the report's reportId and the read's pinned reportDigest) is accepted, its reference `verified-current` against the report the merge recomputes, and the merge also ran the readiness verification for it", async () => {
-    const step = (text: string): AgentStep => ({ text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 1, outputTokens: 1 }, model: "scripted", continuation: { provider: "openai", state: null } });
+    const step = (text: string, tools: readonly ProviderToolDeclaration[] = []): AgentStep => ({ text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 1, outputTokens: 1 }, model: "scripted", continuation: { provider: "openai", state: null }, ...(tools.length > 0 ? answer(text, tools) : {}) }); // [B21 E1] pin move (OD-116): a result answers through the strict result tool
     const find = (value: unknown): { reportId: string; reportDigest: string } | null => {
       if (!value || typeof value !== "object") return null;
       const record = value as Record<string, unknown>;
@@ -612,17 +613,19 @@ describe("[B21 D] the deterministic merge", () => {
       readonly provider = "openai" as const;
       readonly reads: string[] = [];
       template: string | null = null;
+      offered: readonly ProviderToolDeclaration[] = [];
       async start(input: { system: string; tools: readonly ProviderToolDeclaration[] }): Promise<AgentStep> {
         this.template = /add to "evidence" exactly (\{.*?"reviewed":false\})/.exec(input.system)?.[1] ?? null;
         const read = input.tools.find((tool) => tool.toolId === "sirkit.manufacturing.readiness-inspect");
-        if (!read) return step(resultText("manufacturing-readiness-reviewer"));
+        if (!read) return step(resultText("manufacturing-readiness-reviewer"), input.tools);
+        this.offered = input.tools;
         this.reads.push(read.toolId);
         return { ...step(""), toolCalls: [{ callId: "call-readiness", providerName: read.providerName, argumentsText: "{}" }], stopReason: "tool_use" };
       }
       async continueWith(input: { results: readonly AgentToolResult[] }): Promise<AgentStep> {
         const found = find(JSON.parse(input.results[0]!.outputText));
         const evidence = this.template && found ? [JSON.parse(this.template.replace("<report.reportId>", found.reportId).replace("<pinned.reportDigest>", found.reportDigest))] : [];
-        return step(resultText("manufacturing-readiness-reviewer", { summary: "Read the readiness report: the board is blocked (a short and open nets); nothing is ready.", evidence }));
+        return step(resultText("manufacturing-readiness-reviewer", { summary: "Read the readiness report: the board is blocked (a short and open nets); nothing is ready.", evidence }), this.offered);
       }
     }
     const reviewer = new ReadingReviewer();

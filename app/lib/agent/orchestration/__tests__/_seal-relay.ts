@@ -6,7 +6,9 @@
  * foreign, a re-sealed or a non-exact one - inputs the merge must still judge, defense in depth) can therefore reach the merge only
  * as the run's own seal event. This wrapper around the INJECTED loop (`SchedulerDeps.runLoop`, which the composition root binds
  * to the real `runAgentLoop`) runs the real loop and then relays one family event per entry of the scripted final text's
- * `proposedActions`, standing in for the gateway's seal. It is never a production path: production binds the real loop, whose
+ * `proposedActions`, standing in for the gateway's seal. [B21 E1] The scripted result now arrives through the strict result tool
+ * (OD-116); the specialist's wrapper hands the loop that call's arguments as the closing text, so the run's final text read here
+ * IS the scripted document - the scheduler itself reads only the captured call, never this text. It is never a production path: production binds the real loop, whose
  * seal events only a gateway seal produces (b21-d2-provenance proves that path end to end).
  */
 import type { AgentRunEvent } from "@/app/lib/agent/contracts";

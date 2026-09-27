@@ -9,6 +9,8 @@
  *    `project_admin` on a board that holds R3 (a granted move of R3 really mints through the coordinator's gateway).
  * The adapter reads the role from the specialist frame's `Role:` line and answers with one valid result document, or first
  * calls the provider name it is scripted to call for that role.
+ * [B21 E1] pin move (OD-116): it answers THROUGH the strict result tool its run is offered (`_result-tool.ts`) and records the
+ * offered tools without that synthetic declaration - the B-era final-text parse is removed.
  */
 import type { SchematicState } from "@/lib/schematic-types";
 import { createEmptyBoard } from "@/app/lib/pcb/types";
@@ -25,6 +27,7 @@ import { loadRunComponentAuthority } from "@/app/lib/engineering/component-autho
 import { FIXTURE_AUTHORITY_VARIANT, matchingAtomicConfirmer, validApprovedAggregate } from "@/app/lib/engineering/__tests__/_authority-fixtures";
 import { PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH, pcbBoardInstanceId } from "@/app/lib/pcb/board-identity";
 import { SPECIALIST_RESULT_SCHEMA } from "../contracts";
+import { answer, registryToolIds } from "./_result-tool";
 
 export const ROLE_SCOPE = Object.freeze({ tenantId: "tenant-1", projectId: "project-1", branchId: "main" });
 export const T0 = Date.parse("2026-09-26T12:00:00.000Z");
@@ -102,25 +105,27 @@ export class RoleAdapter implements ProviderAgentAdapter {
   readonly starts: Array<{ role: string; tools: string[] }> = [];
   readonly continued: Array<{ role: string; results: readonly AgentToolResult[] }> = [];
   private pending: string | null = null;
+  private offered: readonly ProviderToolDeclaration[] = [];
   constructor(private readonly calls: Readonly<Record<string, string>> = {}) {}
   private step(partial: Partial<AgentStep>): AgentStep {
     return { text: "", toolCalls: [], stopReason: "completed", usage: { inputTokens: 1, outputTokens: 1 }, model: "scripted", continuation: { provider: "openai", state: null }, ...partial };
   }
   async start(input: { system: string; tools: readonly ProviderToolDeclaration[] }): Promise<AgentStep> {
     const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "(none)";
-    this.starts.push({ role, tools: input.tools.map((tool) => tool.toolId) });
+    this.starts.push({ role, tools: registryToolIds(input.tools) });
+    this.offered = input.tools;
     const providerName = this.calls[role];
     if (providerName?.startsWith("throw:")) throw new LLMProviderError("openai", providerName.slice("throw:".length) as LLMProviderFailureReason);
     if (providerName) {
       this.pending = role;
       return this.step({ toolCalls: [{ callId: `call-${role}`, providerName, argumentsText: "{}" }], stopReason: "tool_use" });
     }
-    return this.step({ text: resultText(role) });
+    return this.step(answer(resultText(role), input.tools));
   }
-  async continueWith(input: { results: readonly AgentToolResult[] }): Promise<AgentStep> {
+  async continueWith(input: { results: readonly AgentToolResult[]; tools?: readonly ProviderToolDeclaration[] }): Promise<AgentStep> {
     const role = this.pending ?? "(none)";
     this.pending = null;
     this.continued.push({ role, results: input.results });
-    return this.step({ text: resultText(role) });
+    return this.step(answer(resultText(role), input.tools ?? this.offered));
   }
 }

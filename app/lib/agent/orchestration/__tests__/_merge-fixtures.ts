@@ -37,6 +37,7 @@ import { runSpecialistDag, type SchedulerOutcome } from "../scheduler";
 import type { MergeDeps } from "../merge";
 import { PART_PINS, PRINCIPAL, SCOPE, authorityRecord, headMarkFor, pinFacts, replacementState, routedBoard } from "./_sealed-artifacts";
 import { relaySeals } from "./_seal-relay";
+import { answer } from "./_result-tool";
 
 export const MERGE_SCOPE = SCOPE;
 /** the artifacts are sealed at T0; the merge's injected clock reads one minute later (every TTL is still open) */
@@ -179,11 +180,12 @@ export class ScriptedSpecialists implements ProviderAgentAdapter {
   readonly provider = "openai" as const;
   readonly starts: string[] = [];
   constructor(private readonly texts: Readonly<Record<string, string>>, private readonly models: Readonly<Record<string, string>> = {}) {}
-  async start(input: { system: string }): Promise<AgentStep> {
+  async start(input: { system: string; tools: readonly { toolId: string; providerName: string }[] }): Promise<AgentStep> {
     const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "(none)";
     const task = /^Task: (\S+)$/m.exec(input.system)?.[1] ?? "(none)";
     this.starts.push(task);
-    return { text: this.texts[task] ?? this.texts[role] ?? resultText(role), toolCalls: [], stopReason: "completed", usage: { inputTokens: 2, outputTokens: 3 }, model: this.models[task] ?? this.models[role] ?? "scripted", continuation: { provider: "openai", state: null } };
+    // [B21 E1] pin move (OD-116): the scripted document is answered THROUGH the strict result tool its run is offered
+    return { text: "", toolCalls: [], ...answer(this.texts[task] ?? this.texts[role] ?? resultText(role), input.tools), stopReason: "completed", usage: { inputTokens: 2, outputTokens: 3 }, model: this.models[task] ?? this.models[role] ?? "scripted", continuation: { provider: "openai", state: null } };
   }
   async continueWith(): Promise<AgentStep> {
     throw new Error("the scripted specialists never call a tool");

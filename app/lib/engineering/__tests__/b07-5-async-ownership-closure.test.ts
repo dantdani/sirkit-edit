@@ -843,7 +843,9 @@ describe("B07.5 §7 — provider-failure events and retries are owned", () => {
     expect(prefs).toContain("if (input.ownership && !input.ownership.isCurrent()) return;");
     expect(prefs).toContain("stillCurrent: () => ownership.isCurrent()");
     expect(prefs).toContain("() => { if (ownership.isCurrent()) input.retry!(); }");
-    expect(prefs).toContain("dispatchAiProviderFailure({ provider: data.provider, retry, ownership });");
+    // [B21 E1 fix] reviewed pin move (tests-retry-card-claim, D21-18): the JSON path's ONE owned dispatch now also withholds the card's
+    // Retry for an out-of-credits body (`retryOffered: false`); provider, retry closure and ownership are passed exactly as before
+    expect(prefs).toContain("dispatchAiProviderFailure({ provider: data.provider, retry, ownership, ...(typeof data.reason === \"string\" && providerRetryWithheld(`provider_${data.reason}`) ? { retryOffered: false as const } : {}) });");
   });
 });
 

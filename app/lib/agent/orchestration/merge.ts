@@ -29,8 +29,8 @@
  *     judges (`<taskId>.merge-<16 hex>`; an escalation or a review request under `merge-<16 hex>`): the same verdict replays, a
  *     changed verdict (a later judgement) is appended as its own record and the latest stands; a store that refuses or throws
  *     yields no merged view at all, and a key already holding another verdict is never written over.
- * Agreement proves nothing: every specialist runs through this run's one adapter per provider, so one provider is ONE source
- * whatever model it reports; a replayed result's provenance is not in the record and counts with every source. No evidence is
+ * Agreement proves nothing: one provider is ONE source whatever model or adapter its specialists ran on ([B21 E1]: each has its own)
+ * and whatever model it reports; a replayed result's provenance is not in the record and counts with every source. No evidence is
  * ever derived from agreement. Provider and model ride per result in the merge's view, never in a sealed schema (OD-132).
  * Nothing here mutates any state.
  */
@@ -156,7 +156,7 @@ export const MERGE_RULES = Object.freeze([
   { id: "D5", runbook: ":839", rule: "requests deterministic verification where possible", merge: "every validation request runs its verifier with no model against the verified state and records the result digest as a deterministic_verifier evidence reference (evidence about that state, contradicting nobody); what a result proposes is verified on its own candidate", proof: "b21-d-verification-requests case 1; b21-d-verification-requests case 2; b21-d-verification-requests case 6" },
   { id: "D6", runbook: ":840", rule: "escalates unresolved engineering conflicts to the human", merge: "a conflict between surviving actions makes every party contradicted and writes ONE escalation record naming what the human must decide; a non-exact part writes a part review request", proof: "b21-d-merge case 2; b21-d-merge case 19; b21-d-chat-merge case 2" },
   { id: "D7", runbook: ":841", rule: "never converts majority agreement into proof", merge: "agreement changes no decision and yields no evidence - one change carried by several results is no conflict and no proof; the only evidence the merge produces is its own deterministic verification", proof: "b21-d-merge case 5; b21-d-merge case 16" },
-  { id: "D8", runbook: ":842", rule: "prevents correlated same-source/model output from appearing independent", merge: "every specialist runs through this run's one adapter per provider, so one provider is ONE source whatever model it reports, and a replayed result's unrecorded provenance counts with every source; no text calls sources independent", proof: "b21-d-merge case 5; b21-d-merge case 6; b21-d-merge case 23" },
+  { id: "D8", runbook: ":842", rule: "prevents correlated same-source/model output from appearing independent", merge: "one provider is ONE source whatever model or adapter its specialists ran on (since B21-E1 each runs on its own adapter and a role may run on a routed model of its provider) and whatever model it reports, and a replayed result's unrecorded provenance counts with every source; no text calls sources independent", proof: "b21-d-merge case 5; b21-d-merge case 6; b21-d-merge case 23" },
   { id: "D9", runbook: ":843", rule: "records which provider/model produced each result without exposing secrets", merge: "each judged result carries its provider and reported model in the merge's view, the envelope and its persisted verdict, never in a sealed schema (OD-132); every reason and line is closed codes and ids", proof: "b21-d-merge case 1; b21-d-merge case 23" },
 ] as const);
 
@@ -196,7 +196,7 @@ export interface MergedTask {
   readonly provider: LLMProviderId | null;
   /** the model the provider REPORTED (recorded, never counted as independence); null when none or replayed */
   readonly model: string | null;
-  /** the source key: the provider (one adapter per provider per run), or UNRECORDED_SOURCE for a replay */
+  /** the source key: the provider (whatever model or adapter a role ran on), or UNRECORDED_SOURCE for a replay */
   readonly source: string;
   readonly decision: MergeDecision;
   readonly reason: string;
@@ -306,7 +306,7 @@ const text = (value: unknown): string | null => (typeof value === "string" && va
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
 const bounded = (ids: readonly string[]): string[] => [...new Set(ids)].sort().slice(0, MERGE_BOUNDS.maxFindingIds);
 const clip = (value: string, max: number): string => (value.length > max ? `${value.slice(0, max - 3)}...` : value);
-/** [B21 D fix] one adapter per provider per run (OD-117: one configured model per provider): the provider IS the source; a replay's is unrecorded */
+/** [B21 D fix] the provider IS the source - [B21 E1] whatever model or adapter its route used (OD-132's provider-and-model key re-deferred); a replay's is unrecorded */
 const sourceOf = (task: SpecialistTaskOutcome): string => (task.status === "replayed" ? UNRECORDED_SOURCE : task.provider);
 /** the model a provider reported, as a closed token (it is provider-controlled text): recorded, never trusted */
 const reportedModel = (task: SpecialistTaskOutcome): string | null => (task.status === "replayed" || task.model === null ? null : /^[A-Za-z0-9._:/-]{1,64}$/.test(task.model) ? task.model : "(unrecognized)");
@@ -902,7 +902,7 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
       `The human must decide: ${parties.length} proposed actions touch the same ${claims.join(", ")} identity (${keys.slice(0, 4).join(", ")}${keys.length > 4 ? ", ..." : ""}) as ${conflictClass}: ${parties.map((party) => `${party.taskId} action ${party.actionIndex} (${party.kind})`).join("; ")}.`,
       `Allowed resolutions: ${allowedResolutions.join(", ")}. Nothing was applied.`,
       ...authorityNotes,
-      `These come from ${sources} source(s): every specialist ran through this run's one adapter per provider, so one provider is one correlated source whatever model it reports, and a replayed result counts with every other source; agreement or number is never proof.`,
+      `These come from ${sources} source(s): one provider is one correlated source whatever model or adapter its specialists ran on and whatever model it reports, and a replayed result counts with every other source; agreement or number is never proof.`,
     ].join(" "), MERGE_BOUNDS.maxEscalationTextChars);
     escalations.push({ escalationId, subjectDigest, conflictClass, allowedResolutions, claims, keys, parties, sources, humanDecision });
     for (const { survivor } of members) survivor.entry.findings.push(finding("contradicted", claims[0] ?? "geometry", `conflict:${conflictClass}`, survivor.action.index, [escalationId]));

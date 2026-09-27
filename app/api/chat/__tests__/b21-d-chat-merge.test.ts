@@ -32,6 +32,7 @@ import { relaySeals } from "@/app/lib/agent/orchestration/__tests__/_seal-relay"
 import { assembleAgentRunContext } from "@/app/lib/agent/context";
 import { MAX_RESULT_CHARS } from "@/app/lib/agent/loop";
 import { LOCAL_DEV_PRINCIPAL_ID } from "@/app/lib/auth/project-membership";
+import { resetAdmissionControl } from "@/app/lib/acquisition/admission-control";
 
 const state = vi.hoisted(() => ({
   starts: [] as Array<{ role: string; userMessage: string }>,
@@ -46,8 +47,9 @@ const state = vi.hoisted(() => ({
   reads: [] as string[],
 }));
 
-vi.mock("@/app/lib/agent/adapters", async () => ({
-  agentAdapterFor: () => ({
+vi.mock("@/app/lib/agent/adapters", async () => {
+  const { answer } = await import("@/app/lib/agent/orchestration/__tests__/_result-tool"); // [B21 E1] pin move: the route binds the provider layer, which builds every specialist's adapter through agentAdapterForRole (the same scripted double here); a specialist answers THROUGH the strict result tool it is offered (OD-116)
+  const scripted = () => ({
     provider: "openai",
     async start(input: { system: string; userMessage: string; tools: ReadonlyArray<{ toolId: string; providerName: string }> }) {
       const role = /^Role: ([a-z-]+)$/m.exec(input.system)?.[1] ?? "coordinator";
@@ -65,18 +67,19 @@ vi.mock("@/app/lib/agent/adapters", async () => ({
       const text = role !== "coordinator"
         ? state.results[role] ?? JSON.stringify({ schema: "sirkit.specialist-result.v1", role, summary: `(scripted) ${role}: nothing found; nothing changed.`, proposedActions: [], assumptions: [], evidence: [], requiredTools: [], risks: [], unresolvedQuestions: [], validationRequests: [], confidence: "low" })
         : followUp ? "(scripted) The follow-up turn answers from the merge." : `(scripted) One coordinator turn for: ${input.userMessage.slice(0, 80)}`;
-      return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
+      return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null }, ...answer(text, input.tools) };
     },
-    async continueWith(input: { results: ReadonlyArray<{ outputText: string }> }) {
+    async continueWith(input: { results: ReadonlyArray<{ outputText: string }>; tools: ReadonlyArray<{ toolId: string; providerName: string }> }) {
       const output = JSON.parse(input.results[0]!.outputText) as { output?: { report?: { reportId?: string }; pinned?: { reportDigest?: string } } };
       const reportId = output.output?.report?.reportId ?? "";
       const digest = output.output?.pinned?.reportDigest ?? "";
       const evidence = state.citation && reportId && digest ? [JSON.parse(state.citation.replace("<report.reportId>", reportId).replace("<pinned.reportDigest>", digest))] : [];
       const text = JSON.stringify({ schema: "sirkit.specialist-result.v1", role: "manufacturing-readiness-reviewer", summary: "(scripted) Read the readiness report and cited it.", proposedActions: [], assumptions: [], evidence, requiredTools: [], risks: [], unresolvedQuestions: [], validationRequests: [], confidence: "medium" });
-      return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null } };
+      return { text, toolCalls: [], stopReason: "completed", usage: { inputTokens: 3, outputTokens: 5 }, model: "scripted", continuation: { provider: "openai", state: null }, ...answer(text, input.tools) };
     },
-  }),
-}));
+  });
+  return { agentAdapterFor: scripted, agentAdapterForRole: scripted };
+});
 
 import { POST, EDITOR_CONTEXT_SCHEMA } from "../route";
 import { ORCHESTRATION_ENABLED_ENV, mergedResultsEnvelope, resetOrchestrationStoreFactory, resetSpecialistSchedulerFactory, setOrchestrationStoreFactory, setSpecialistSchedulerFactory, specialistMergeDeps } from "../orchestration-runtime";
@@ -142,9 +145,12 @@ const relayTestSeals = (): void => setSpecialistSchedulerFactory(() => (plan, co
 describe("[B21 D] the merge through the chat route", () => {
   beforeEach(() => {
     vi.stubEnv("DATABASE_URL", ""); // the shell never decides an outcome (B's rule)
+    vi.stubEnv("SIRKIT_ORCHESTRATION_ROLE_MODELS", ""); vi.stubEnv("SIRKIT_OPENAI_MODEL", ""); vi.stubEnv("SIRKIT_ANTHROPIC_MODEL", "claude-opus-4-7"); // [B21 E1 fix] the route's provider layer reads the role policy and the configured models from process.env: pinned, so the shell never decides an outcome
+    resetAdmissionControl(); // [B21 E1] the llm-provider meters are the process's own
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    resetAdmissionControl();
     resetOrchestrationStoreFactory();
     resetSpecialistSchedulerFactory(); // [B21 D2] the relay of cases 2-5
     state.starts = [];

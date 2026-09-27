@@ -741,7 +741,7 @@ human not clicking Retry.** Requirement: B21-E "quota/rate-limit circuit breaker
 `artifacts/ai-control-plane-b09/fallback-retry-policy.md:3-8, :19-22`). A DAG of N specialists under today's 429 credit state would spend
 N × (1 + SDK retries) attempts per step with nothing to open a breaker after the first `insufficient_quota`. Severity high.
 **CONFIRMED** (live 429 behaviour **BLOCKED-LIVE-QUALIFICATION**). Closes: B21-E (needs OD-115). Sources: loop D21-4, providers D21-10,
-tests D21-54.
+tests D21-54. — CLOSED by B21-E1 (OD-115): the `llm-provider` admission key and breaker (no credits open it at once for an hour, a rate limit for a minute, three transient failures for a minute; one trial after the window; an operator reset), every specialist call admitted under the agent's share and recorded, the pause consulted before every specialist attempt and before the follow-up turn (whose calls are metered too), outcomes counted only under the breaker generation their call was admitted in and an abandoned trial never, a window pause mid-run escalating only its task and the coordinator's paused provider stopping the DAG `provider_paused`, no retry against a paused provider, specialists' SDK retries 0 (every retry the scheduler's own, counted and metered), and no Retry offered for `provider_insufficient_quota` or `provider_breaker_open` on either path of the card while its Switch still re-sends the message (`b21-e1-provider-breaker.test.ts` cases 1 to 13, `b21-e1-retry-card.test.ts` cases 1 to 4, `b21-e1-chat-provider.test.ts` case 3: one paid specialist call after a no-credits 429 through the production POST, none in the next request). RECORDED: the coordinator's own first turn is not gated (D21-39); live 429 behaviour BLOCKED-LIVE-QUALIFICATION.
 
 **D21-19 — No server-owned provider/model-by-role policy; the model-family rules are pinned to gpt-5.x / claude-4.x; fallback after
 the first tool result is forbidden.** Requirement: B21-E "preferred provider/model by role; compatible fallback only when schemas and
@@ -752,7 +752,7 @@ defaulting silently to `openai` (`request.ts:3-5`; `route.ts:147` reader, `:423`
 `/^claude-3-|^claude-(?:sonnet|opus)-4-[0-5]/` (`openai-config.ts:13-38, :44-51`; `openai-provider.ts:161`; `anthropic-provider.ts:105`),
 while the live pages now name `gpt-6-astra` and `claude-opus-5-5` (§1.2); a per-role choice of such a model would fall outside these rules
 with an unqualified live outcome. Severity high. **CONFIRMED** (the model-rule consequence INFERRED). Closes: B21-E (needs OD-117).
-Sources: providers D21-11, D21-17.
+Sources: providers D21-11, D21-17. — CLOSED by B21-E1 (OD-117): `ROLE_PROVIDER_POLICY` inheriting by default, server-env overrides only under a closed schema (a key named twice refuses it), a model outside its provider's pinned family rules (now named once in the config modules the providers apply them from) refused until qualified live, the compatible fallback only when the role's tools and the result tool render identically on both providers, never the coordinator switching, and a routed specialist's seals naming the provider it ran on (`b21-e1-provider-policy.test.ts`, `b21-e1-fallback.test.ts`). The loop's "no fallback here" comment and route.ts:13-15 stand: the coordinator never restarts on another provider.
 
 **D21-20 — The only structured-output mechanism is a forced tool call, and the live Anthropic documentation contradicts the code's
 assumptions for the newest models; the propose routes' strict schemas carry keywords the strict subset lists as unsupported.**
@@ -766,7 +766,7 @@ with `maxLength 4096` in the schema (`b16-0-17-2-adapter-schema-parity.test.ts:1
 unsupported and B09.1 records `minItems`/`maxItems` rejected live (`provider-tools.ts:27-34`) — whether Anthropic 400s such a request
 today is unqualified. The safe path is `tool_choice: auto` + a `strict: true` result tool through `toStrictSchema` with server-side
 validation on both providers; any request-key change is a reviewed OD-90 pin move. Severity high. **BLOCKED-LIVE-QUALIFICATION**
-(the code facts CONFIRMED). Closes: B21-E (needs OD-116). Sources: providers D21-12, D21-16.
+(the code facts CONFIRMED). Closes: B21-E (needs OD-116). Sources: providers D21-12, D21-16. — CLOSED AS POLICY by B21-E1 (OD-116): the strict result tool with `tool_choice: auto` on both providers, validated server-side by A, no `text.format` / `output_config` key (`b21-e1-result-tool.test.ts`). Whether a live model calls it, and whether Anthropic's strict mode accepts the schema live: BLOCKED-LIVE-QUALIFICATION (LB-9).
 
 **D21-21 — Stop reasons are not normalized and the loop ignores them.** Requirement: B21-E "normalize … errors"; "visible
 partial-result and degraded-mode reporting" (`:857`); B21-D "rejects stale results". Finding: `stopReason` is `string | null | undefined`
@@ -774,7 +774,7 @@ partial-result and degraded-mode reporting" (`:857`); B21-D "rejects stale resul
 the adapter caps output at 4096 (`adapters.ts:61`; `:220`); an Anthropic `max_tokens`, `refusal` (documented as not retryable on another
 model), `pause_turn` or `model_context_window_exceeded`, or an OpenAI `incomplete`/`failed` status, presents as malformed tool arguments
 or missing text, and a refusal would be offered Retry/Switch as if transient. Severity medium. **INFERRED**. Closes: B21-E. Source:
-providers D21-13.
+providers D21-13. — CLOSED by B21-E1: the closed `StepStop` derived inside each real adapter (Anthropic's seven stop reasons, OpenAI's status with its incomplete reason and refusal part - the dated notes and the installed packages, 2026-09-27), carried on `AgentStep` as one optional field, read on a specialist's run path only - the output limit and the context window escalated and never parsed, a refusal escalated and never retried - the coordinator's loop unchanged (`b21-e1-stop-reasons.test.ts`).
 
 **D21-22 — Every vocabulary a DAG would need is closed and pinned: no event for a plan, a specialist, a per-specialist provider/model, a
 partial result, a budget remaining or a degraded mode; provider streaming has no production caller.** Requirement: B21-E "streaming
@@ -886,6 +886,10 @@ Severity low. **CONFIRMED**. Closes: B21-C (recorded; needs OD-123). Source: too
 **D21-37 — A specialist cannot seal a component replacement.** The replacement sealer needs the server's published pin-facts reads (`replacementPinFacts`), which the chat route injects into the coordinator's gateway only; the specialist gateway is built with no option (OD-109), so through it the seal always blocks (`current-pin-authority-unavailable`). D2 keeps the replacement dormant for specialists (the stop condition: a specialist seal that would need a composition-root source like a port), so OD-130's part review is not reachable at the route, and runbook scenario 17 (the lower-power timer replacement) routes to the `component-replacement` DAG, whose ONE proposing specialist (circuit-topology, the Tier 1 edit) can disagree with no peer: its disagreement is not structural until this closes - B21-F's "timer replacement with provider disagreement" case depends on it. **CONFIRMED** (`b21-d2-provenance.test.ts` case 6; route case 5; the router's `DAG_ROLE_LISTS`). Closes: an owner decision (OD-109 / OD-120 option: wire the pin-facts reads into the specialist gateway, and a second proposing role in the replacement DAG). Source: B21-D2 and its adversarial review. — CLOSED by B21-D3: the runtime builds the specialist gateway with the route's own published pin-facts reader and nothing else (OD-109 amended; its closure reaches nothing the coordinator's read does not already use), the replacement is live for the schematic role (OD-120 amended), and the component-replacement DAG holds two proposing roles (OD-107 amended), so scenario 17's disagreement is structural: two SEALED parties on U1 are always escalated to the human (both `contradicted`, one escalation citing the exact authority), and a party whose edit cannot seal never reaches the merge (the agent gateway compiles every Tier 1 proposal with an empty pin map, so any KiCad delete blocks `pins-unavailable`, peer or no peer - its task is `accepted` with no action, so the persisted verdicts show no conflict), leaving the one sealed replacement presented and approved through the replacement family's existing path - which of the two outcomes follows the circuit specialist's op choice (`b21-d3-scenario17.test.ts` cases 1, 4 and 7, `b21-d3-chat-replacement.test.ts` cases 3 and 4). RECORDED: a `contradicted` loser beside a presented winner does not exist under OD-122's order - an open OD-122 question. B21-F's "timer replacement with provider disagreement" case runs these parties on two providers once B21-E1 routes by role.
 
 **D21-38 — The composer sends the runbook's scenario-17 sentence to the schematic editor.** `routeComposerMessage`'s rule 8 (`replace` is an edit verb; the 5b pairing names no part kind) routes "Replace the NE555 timer U1 with a lower-power timer." to the schematic editor, so the chat route (and the router's strict replacement grammar - B's router case 7) sees it only when the user overrides the route; and a swap naming only an MPN ("Replace U1 with a TLC555.") stays `single`. **CONFIRMED** (`b21-d3-replacement-roles.test.ts` case 5; B's router case 7). Closes: a UI increment (the composer's 5b pairing extended with the router's strict grammar, the B18-D composer suites moved with it - the lead assigns it to B21-E2).
+
+**D21-39 — The coordinator's first turn is not gated by the llm-provider breaker.** E1 meters and gates specialist calls and the follow-up turn only; a request made while the coordinator's provider is paused still makes its first turn's call (one paid call per request, never a storm: no Retry is offered for quota or an open breaker). **CONFIRMED** (`b21-e1-chat-provider.test.ts` case 3). Closes: B21-E2 (the route gates the first turn, with a `provider_breaker_open` terminal the card already declines to retry).
+
+**D21-40 — The scripted fixture agent answers no specialist through the result tool.** `FixtureAgentAdapter` (Playwright's scripted agent) plans single-agent instructions only; with orchestration enabled under the fixture runtime every specialist would end `result_tool_not_called`. **INFERRED** (the flag is off in `playwright.config.ts`, so no browser run reaches it). Closes: B21-F (the per-role scripted specialists answer through the tool).
 
 Not a defect (recorded to prevent inflation): every specialist invocation would re-run `verifyAgentContextIntegrity` and the fresh
 discovery/role/capability rechecks, so a specialist cannot widen actor, capabilities, authority or revision by construction —
@@ -1303,3 +1307,24 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
   through the production POST.
 - **Section 8:** the lead's residual fix (the kind swap named an existing part, an attribute and a question) and an adversarial phrasing
   sweep of the grammar through the real router (five rounds of three probing agents each through the real router; the grammar rebuilt after rounds 1 to 4 and its five structural root causes of round 5 fixed; 885 false DAG phrasings, 160 genuine requests and 20 recorded semantic residues pinned as the regression corpus; a sixth round runs after the commit).
+
+### B21-E1 (recorded by the lead, 2026-09-27)
+
+- **Section 4:** D21-18, D21-19 and D21-21 closed; D21-20 closed as policy (the strict result tool; no `text.format` / `output_config`
+  request key - the OD-90 pin move E does not make); D21-39 (the coordinator's own first turn not gated by the breaker) and D21-40 (the
+  scripted fixture agent answers no specialist through the result tool) opened, both low - D21-39 is B21-E2's (a route change), D21-40
+  B21-F's (the browser fixture).
+- **Section 6:** OD-115, OD-116, OD-117 and OD-119 applied as `provider-routing-and-failure.md` states them; OD-132 amended. **The
+  lead's reading of two E1 decisions:** (1) the B19-D closure gate now admits `admission-control.ts` into the chat route's closure - it
+  holds counters and breakers, never vendor data, its one runtime import is the source registry the gate already admits, and policy case
+  6 pins that the exemption opens no path to vendor code; the lead accepts it as a reviewed pin move. (2) The breaker is process-wide by
+  provider (OD-40's shares, one account per provider key): one tenant's no-credits answer pauses every tenant's specialists on that
+  provider, which is the truth about a shared account - recorded, not changed.
+- **Section 7, B21-E1:** as built - per-role routing (every role inherits by default; closed server-env overrides; an unqualified model
+  refused), specialists on their route's own adapter with `maxRetries: 0` behind the `llm-provider` breaker, the compatible fallback only
+  when the tools and the result tool render identically, normalized stop reasons for specialist runs, the strict result tool with
+  `tool_choice: auto` validated by A, no background mode or batches, no Retry for quota or an open breaker while the Switch still
+  re-sends.
+- **Section 8:** the lead's residual fix - a no-credits answer from a call admitted under an earlier breaker generation still opens the
+  long window (it never shortens a longer opening and never undoes a later operator reset). The router grammar's sixth sweep round ran
+  beside E1 (read-only); its structural fixes land as their own commit right after this one, before B21-E2.

@@ -72,4 +72,20 @@ Labels as in `README.md`. Copied verbatim from `discovery.md` section 1.2 by the
 
 ## Re-reads
 
-- (none yet; each increment that re-reads a page appends the date, the URL and what changed)
+- (each increment that re-reads a page appends the date, the URL and what changed)
+- **2026-09-27, B21-E1 - the installed SDK packages, read from `node_modules` (NO page fetched: the run's no-network rule; the
+  2026-09-24 pages above stay the dated source).** Read to implement the stop-reason normalization (D21-21) and OD-115 against the
+  wire the adapters actually compile against; every item **RECORDED**:
+  - `@anthropic-ai/sdk` 0.98.0 (`resources/messages/messages.d.ts:962`): `StopReason = 'end_turn' | 'max_tokens' | 'stop_sequence' |
+    'tool_use' | 'pause_turn' | 'refusal'` - six values; the 2026-09-24 stop-reasons page above lists seven, adding
+    `model_context_window_exceeded`. The adapter maps the value, never the SDK type, so the seventh is mapped (`context_exceeded`).
+    `client.js:110`: `this.maxRetries = options.maxRetries ?? 2` (an explicit `undefined` is the default 2).
+  - `openai` 6.48.0 (`resources/responses/responses.d.ts`): `ResponseStatus = 'completed' | 'failed' | 'in_progress' | 'cancelled' |
+    'queued' | 'incomplete'` (:5607); `Response.incomplete_details: { reason?: 'max_output_tokens' | 'content_filter' } | null`
+    (:761, :1003); `ResponseOutputMessage.content: Array<ResponseOutputText | ResponseOutputRefusal>` (:5035) with
+    `ResponseOutputRefusal { refusal: string; type: 'refusal' }` (:5060-5069) - the "refusal field" of the structured-outputs page
+    above. `client.js:173`: `this.maxRetries = options.maxRetries ?? 2`.
+  - Still **UNKNOWN** (no fact in the notes or the packages): an OpenAI context-window stop (no status names one - an overflow is
+    expected as an HTTP error, which `errors.ts` classifies); whether the default `claude-opus-4-7` ever answers
+    `model_context_window_exceeded` or `refusal` live (**BLOCKED-LIVE-QUALIFICATION**, LB-9).
+- [B21 E1, 2026-09-27] Re-pointed: the family rules the entries above cite at `openai-config.ts:47`, `openai-provider.ts:161` and `anthropic-provider.ts` are, since B21-E1, named ONCE as `OPENAI_REASONING_MODEL_FAMILY` and `OPENAI_NO_TEMPERATURE_MODEL_FAMILY` (`app/lib/llm/openai-config.ts:60-61`; applied at `openai-config.ts:47` and `openai-provider.ts:161`) and `ANTHROPIC_TEMPERATURE_MODEL_FAMILY` in the new `app/lib/llm/anthropic-config.ts` (`:11`; applied at `anthropic-provider.ts:105`); the default model `claude-opus-4-7` cited at `anthropic-provider.ts:86` and `adapters.ts:208` is `DEFAULT_ANTHROPIC_MODEL` (`anthropic-config.ts:8`), which those lines now read through `configuredAnthropicModel()`. The dated facts above are unchanged; only where the code holds them moved.

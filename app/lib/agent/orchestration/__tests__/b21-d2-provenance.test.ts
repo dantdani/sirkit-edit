@@ -22,7 +22,8 @@ import { buildRunToolset } from "@/app/lib/agent/loop";
 import type { AgentExecutionGrantMinter, AgentRunContext, AgentRunEvent, AgentToolInvocationGateway, GatewayInvocationOutcome } from "@/app/lib/agent/contracts";
 import { SPECIALIST_ROLES } from "../contracts";
 import { roleProposalToolIds } from "../role-tools";
-import { PROPOSAL_NOT_SEALED_IN_RUN, SEALED_PROPOSALS_RULE, SPECIALIST_CONTEXT_REFUSAL_STATUS, SPECIALIST_REFUSAL_STATUS, attachSealedArtifacts, parseSpecialistResult, readOnlySpecialistGateway, specialistAllowedToolIds, specialistContextFor, type SchedulerOutcome, type SpecialistTaskOutcome } from "../scheduler";
+import { PROPOSAL_NOT_SEALED_IN_RUN, SEALED_PROPOSALS_RULE, SPECIALIST_CONTEXT_REFUSAL_STATUS, SPECIALIST_REFUSAL_STATUS, attachSealedArtifacts, readOnlySpecialistGateway, specialistAllowedToolIds, specialistContextFor, type SchedulerOutcome, type SpecialistTaskOutcome } from "../scheduler";
+import { parseSpecialistResultArguments } from "../result-tool";
 import { mergeSpecialistOutcome, specialistApprovalDecision, type MergeOutcome } from "../merge";
 import { REGISTRY, action, coordinatorContext, mergeDeps, sealTier1 } from "./_merge-fixtures";
 import { pinFacts } from "./_sealed-artifacts";
@@ -227,7 +228,7 @@ describe("[B21 D2] provenance is the gateway's own seal", () => {
     const artifact = plain(sealTier1([{ op: "set-value", target: "U1", value: "10k" }])) as unknown as Record<string, unknown>;
     const tainted: Record<string, unknown> = { ...artifact, proposalId: `${String(artifact.proposalId)}${String.fromCharCode(7)}` };
     const sealedInRun = { toolId: TIER1, kind: String(tainted.schema), payload: tainted, digest: engineeringDigest(tainted) };
-    const parsed = parseSpecialistResult(specialistResult("circuit-topology"), "circuit-topology");
+    const parsed = parseSpecialistResultArguments(specialistResult("circuit-topology"), "circuit-topology"); // [B21 E1] pin move (OD-116): B's final-text parse is removed; the result tool's arguments parse takes the same document
     expect(parsed.ok).toBe(true);
     const attached = attachSealedArtifacts(parsed, [sealedInRun]);
     expect(attached.ok).toBe(false);

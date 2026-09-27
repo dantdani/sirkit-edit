@@ -122,7 +122,7 @@ export interface AiRequestOwnership {
 
 export interface AiProviderFailureDetail {
   provider: LLMProviderId;
-  retry?: () => void;
+  retry?: () => void; /** [B21 E1 fix] false: the card's Retry is WITHHELD (out of credits, Sirkit's breaker open - D21-18); `retry` still starts the "Use <other> instead" run */ retryOffered?: false;
   /** Listener-side re-check: an event whose owner went stale between
    *  dispatch and delivery must be ignored. */
   stillCurrent?: () => boolean;
@@ -137,7 +137,7 @@ export interface AiProviderFailureDetail {
  */
 export function dispatchAiProviderFailure(input: {
   provider: LLMProviderId;
-  retry?: () => void;
+  retry?: () => void; /** [B21 E1 fix] false withholds the card's Retry (the closure still serves its Switch) */ retryOffered?: false;
   ownership?: AiRequestOwnership;
 }): void {
   if (input.ownership && !input.ownership.isCurrent()) return;
@@ -147,7 +147,7 @@ export function dispatchAiProviderFailure(input: {
     : input.retry;
   const detail: AiProviderFailureDetail = {
     provider: input.provider,
-    retry: ownedRetry,
+    retry: ownedRetry, ...(input.retryOffered === false ? { retryOffered: false as const } : {}),
     ...(ownership ? { stillCurrent: () => ownership.isCurrent() } : {}),
   };
   window.dispatchEvent(new CustomEvent("sirkit:ai-provider-failure", { detail }));
@@ -158,7 +158,7 @@ export async function throwAiResponseError(
   retry?: () => void,
   ownership?: AiRequestOwnership,
 ): Promise<never> {
-  let data: { code?: unknown; provider?: unknown; error?: unknown } = {};
+  let data: { code?: unknown; provider?: unknown; error?: unknown; reason?: unknown } = {};
   try {
     data = (await response.json()) as typeof data;
   } catch {
@@ -173,10 +173,26 @@ export async function throwAiResponseError(
     // dispatches no global event (the throw below still lets the
     // originating handler's scoped catch settle its own state).
     // [B09.1] shared owned dispatch path.
-    dispatchAiProviderFailure({ provider: data.provider, retry, ownership });
+    dispatchAiProviderFailure({ provider: data.provider, retry, ownership, ...(typeof data.reason === "string" && providerRetryWithheld(`provider_${data.reason}`) ? { retryOffered: false as const } : {}) }); // [B21 E1 fix] the same rule on the shared card's JSON path
     throw new AiProviderUnavailableError(data.provider, message);
   }
   throw new Error(
     typeof data.error === "string" ? data.error : `AI request failed (${response.status})`,
   );
+}
+
+// ─── [B21 E1] No Retry for a provider out of credits or paused by Sirkit's breaker (D21-18, OD-115) ─────────────────────────
+// Appended on purpose: a declaration read only when a request fails moves no line above. The ONE list, here beside the ONE owned
+// dispatch both card paths use (the chat run's settlement, `run-consumer.ts`, re-exports it; the JSON 503 path above reads it).
+
+/** The provider failures the card never offers Retry for: out of credits (`insufficient_quota` - a retry cannot succeed until someone
+ *  adds credits, and the classifier never marked it retryable) and paused by Sirkit's own llm-provider breaker (`breaker_open` - a retry
+ *  would be refused without a call; no run in B21-E1 ends with it: the coordinator's turn is not gated). The card itself is still shown:
+ *  its "Use <other> instead" is the human's own choice and still sends the message again on the other provider (B09.2); only its Retry
+ *  is withheld (`retryOffered: false`, rendered disabled). */
+export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(["provider_insufficient_quota", "provider_breaker_open"] as const);
+
+/** Whether the card's Retry is withheld for a failure `reason` (the `provider_*` vocabulary of a run's terminal). */
+export function providerRetryWithheld(reason: string): boolean {
+  return (PROVIDER_FAILURES_WITHOUT_RETRY as readonly string[]).includes(reason);
 }

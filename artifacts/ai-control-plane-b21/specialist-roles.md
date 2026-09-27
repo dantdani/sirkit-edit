@@ -590,13 +590,13 @@ the reader otherwise.
 | C11 | `app/lib/agent/loop.ts` | 787 | — | `export const RUN_ALLOWLIST_MAX_IDS = 32;` | the bound |
 | C12 | `app/lib/agent/loop.ts` | 350 | — | `toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }), deps.allowedToolIds);` | the loop passes the role's list |
 | C13 | `app/lib/agent/loop.ts` | 77 | — | `allowedToolIds?: readonly string[];` | the deps field (absent on every coordinator run) |
-| C14 | `app/lib/agent/orchestration/scheduler.ts` | 194 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the specialist context, field by field |
-| C15 | `app/lib/agent/orchestration/scheduler.ts` | 245 | — | `export function specialistContextClaims(context: AgentRunContext): SpecialistContextClaim[] {` | the eight claims |
-| C16 | `app/lib/agent/orchestration/scheduler.ts` | 295 | — | `const claims = specialistContextClaims(input.context);` | checked first, before any tool is looked at |
-| C17 | `app/lib/agent/orchestration/scheduler.ts` | 279 | — | `export function specialistAllowedToolIds(registry: ToolRegistry, context: AgentRunContext, buildToolset: SpecialistToolsetBuilder, role: SpecialistRole): string[] {` | a role's effective set |
-| C18 | `app/lib/agent/orchestration/scheduler.ts` | 413 | — | `const toolless = tasks.filter((task) => allowedByRole.get(task.role)!.length === 0);` | the plan's roles with no tools this run |
-| C19 | `app/lib/agent/orchestration/scheduler.ts` | 538 | — | `gateway: readOnlySpecialistGateway(deps.gateway, deps.registry, allowed),` | the role's list in the wrapper |
-| C20 | `app/lib/agent/orchestration/scheduler.ts` | 81 | — | `export const SPECIALIST_CONTEXT_CLAIMS = Object.freeze([` | the claim vocabulary |
+| C14 | `app/lib/agent/orchestration/scheduler.ts` | 195 | — | `export function deriveSpecialistContext(context: AgentRunContext): AgentRunContext {` | the specialist context, field by field |
+| C15 | `app/lib/agent/orchestration/scheduler.ts` | 246 | — | `export function specialistContextClaims(context: AgentRunContext): SpecialistContextClaim[] {` | the eight claims |
+| C16 | `app/lib/agent/orchestration/scheduler.ts` | 296 | — | `const claims = specialistContextClaims(input.context);` | checked first, before any tool is looked at |
+| C17 | `app/lib/agent/orchestration/scheduler.ts` | 280 | — | `export function specialistAllowedToolIds(registry: ToolRegistry, context: AgentRunContext, buildToolset: SpecialistToolsetBuilder, role: SpecialistRole): string[] {` | a role's effective set |
+| C18 | `app/lib/agent/orchestration/scheduler.ts` | 401 | — | `const toolless = tasks.filter((task) => allowedByRole.get(task.role)!.length === 0);` | the plan's roles with no tools this run |
+| C19 | `app/lib/agent/orchestration/scheduler.ts` | 553 | — | `gateway: readOnlySpecialistGateway(deps.gateway, deps.registry, allowed),` | the role's list in the wrapper |
+| C20 | `app/lib/agent/orchestration/scheduler.ts` | 82 | — | `export const SPECIALIST_CONTEXT_CLAIMS = Object.freeze([` | the claim vocabulary |
 | C21 | `app/lib/agent/orchestration/router.ts` | 59 | — | `export const FULL_CIRCUIT_TRIM = Object.freeze({` | the fixed trim (OD-107 resolved) |
 | C22 | `app/lib/agent/orchestration/router.ts` | 55 | — | `export const FULL_CIRCUIT_RUNBOOK_ROLES = Object.freeze([` | the runbook's six, as data |
 | C23 | `app/lib/agent/orchestration/router.ts` | 180 | — | `return facts.hasBoard && LAYOUT_ASK.test(message) ? dag("D-full-circuit-layout", DAG_ROLE_LISTS["full-circuit-layout"]) : dag("D-full-circuit-creation", DAG_ROLE_LISTS["full-circuit-creation"]);` | the layout variant first |
@@ -612,11 +612,11 @@ the reader otherwise.
 | C33 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the one specialist gateway: no minter, no port, no prompt version; [B21 D3] its one option the route's pin-facts reader (anchor re-pinned, line unchanged) |
 | C34 | `app/lib/engineering/tool-discovery.ts` | 32 | — | `export const DISCOVERY_CHANNELS = ["interactive-ui", "assistant-agent", "automation", "api", "mcp"] as const;` | the channel list, unchanged |
 | C35 | `app/lib/agent/orchestration/contracts.ts` | 77 | — | `maxAllowedToolIds: 32,` | the contracts' A4L bound |
-| C36 | `app/lib/agent/orchestration/scheduler.ts` | 84 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |
-| C37 | `app/lib/agent/orchestration/scheduler.ts` | 78 | — | `export const SPECIALIST_CONTEXT_REFUSAL_STATUS = "role_context_elevated" as const;` | the elevation refusal |
+| C36 | `app/lib/agent/orchestration/scheduler.ts` | 85 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |
+| C37 | `app/lib/agent/orchestration/scheduler.ts` | 79 | — | `export const SPECIALIST_CONTEXT_REFUSAL_STATUS = "role_context_elevated" as const;` | the elevation refusal |
 | C38 | `app/lib/agent/loop.ts` | 796 | — | `export function approvedRunAllowlist(` | A4L: the judgement, its bound and its never-exposed clause |
-| C39 | `app/lib/agent/orchestration/scheduler.ts` | 490 | — | `if (allowed.length === 0) {` | a role with no tools: not run, its task's dissent carried on |
-| C40 | `app/lib/agent/orchestration/scheduler.ts` | 399 | — | `const tasks = planTasks(plan.roles);` | the plan and its task ids from the plan's roles only |
+| C39 | `app/lib/agent/orchestration/scheduler.ts` | 478 | — | `if (allowed.length === 0) {` | a role with no tools: not run, its task's dissent carried on |
+| C40 | `app/lib/agent/orchestration/scheduler.ts` | 387 | — | `const tasks = planTasks(plan.roles);` | the plan and its task ids from the plan's roles only |
 | C41 | `app/lib/agent/orchestration/router.ts` | 105 | — | `const CREATE_NEW = new RegExp(` | a new circuit named from words |
 | C42 | `app/lib/agent/orchestration/router.ts` | 130 | — | `const LAYOUT_ASK = ` | the layout variant's own ask |
 | C43 | `app/lib/agent/loop.ts` | 823 | — | `import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";` | the allowlist's ids, imported on their own line at the end |
