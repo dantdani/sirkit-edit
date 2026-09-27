@@ -21,7 +21,7 @@
  * detail is rendered through the redaction authority, bounded, and never a raw driver message.
  *
  * A specialist has ZERO authority (OD-109, OD-122): the composition root builds its gateway WITHOUT the execution-grant
- * minter, without the external / MCP ports and without the prompt version (no grant, no port, no execution can succeed in it),
+ * minter, without the external / MCP ports and without the prompt version (no grant, no port, no execution can succeed in it; [B21 D3] its one option is the bounded pin-facts reads),
  * this module wraps it (`role_not_permitted_tool` for anything but a read of the role or, [B21 D2], a proposing role's LIVE
  * proposal) and the loop's registry is the role's view (reads + its live proposals; the persisted `allowedToolIds` IS the
  * advertised set: no execution, no view control, no long-running proposal is ever offered to a specialist's model), over a
@@ -641,8 +641,8 @@ export function specialistResultRules(role: SpecialistRole): string[] {
 // B21 page cites in this file moves.
 
 /** [B21 D2] The ONE fact each live proposal's sealer needs from the coordinator's VERIFIED context (OD-109 amended): the Tier 1
- *  sealer scope-seals against the schematic head mark, the bounded PCB edit against the PCB proposal basis. */
-export const SEALER_CONTEXT_FACTS = Object.freeze({ "sirkit.pcb.propose-bounded-edit": "pcbProposalBasis", "sirkit.schematic.propose-tier1-edit": "schematicHeadMark" } as const);
+ *  sealer scope-seals against the schematic head mark, the bounded PCB edit against the PCB proposal basis; [B21 D3] the replacement against the head mark too. */
+export const SEALER_CONTEXT_FACTS = Object.freeze({ "sirkit.pcb.propose-bounded-edit": "pcbProposalBasis", "sirkit.schematic.propose-component-replacement": "schematicHeadMark", "sirkit.schematic.propose-tier1-edit": "schematicHeadMark" } as const); // [B21 D3] the component authority it also reads is already in the derivation
 /** [B21 D2] A model-written `proposedActions` entry that is not an artifact its own run's gateway sealed: the closed reason. */
 export const PROPOSAL_NOT_SEALED_IN_RUN = "proposal_not_sealed_in_run" as const;
 /** [B21 D2] A proposing role's result rule: its sealed artifacts are attached for it - it names them by id, never copies them. */

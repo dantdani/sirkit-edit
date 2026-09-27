@@ -172,11 +172,14 @@ describe("[B21 D2] provenance is the gateway's own seal", () => {
     expect(context.componentAuthority).not.toBeNull();
     const proposing = specialistContextFor(context, "schematic");
     const allowed = specialistAllowedToolIds(registry, proposing, buildRunToolset, "schematic");
-    expect(allowed).toEqual(["sirkit.schematic.inspect", TIER1]);
-    expect(allowed).not.toContain(REPLACEMENT);
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's "stays DORMANT" is D2's, kept for the closeout's retitle
+    // (OD-113's pattern): the schematic specialist IS offered it and the wrapper passes it; a gateway WITHOUT the reads still blocks it
+    expect(allowed).toEqual(["sirkit.schematic.inspect", REPLACEMENT, TIER1]);
     const descriptor = registry.get(REPLACEMENT)!;
     const request = { runId: "run-b21d2-replacement", provider: "openai" as const, callId: "call-replacement", toolId: REPLACEMENT, version: descriptor.version, args: { componentId: "u1-id" }, context: proposing, timeoutMs: 5_000 };
-    expect(await readOnlySpecialistGateway(createAgentToolGateway(registry), registry, allowed).invoke(request)).toMatchObject({ kind: "refused", status: SPECIALIST_REFUSAL_STATUS });
+    const wrapped = await readOnlySpecialistGateway(createAgentToolGateway(registry), registry, allowed).invoke(request);
+    expect(wrapped.kind === "proposal-blocked" && wrapped.blockers.map((blocker) => blocker.code)).toEqual(["current-pin-authority-unavailable"]);
+    expect(SPECIALIST_REFUSAL_STATUS).toBe("role_not_permitted_tool");
     const bare = await createAgentToolGateway(registry).invoke(request);
     expect(bare).toMatchObject({ kind: "proposal-blocked", ok: false });
     expect(bare.kind === "proposal-blocked" && bare.blockers.map((blocker) => blocker.code)).toEqual(["current-pin-authority-unavailable"]);

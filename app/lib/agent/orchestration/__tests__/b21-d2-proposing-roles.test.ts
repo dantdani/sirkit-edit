@@ -37,7 +37,7 @@ const PROPOSING_CONTEXT_OFFERED: Readonly<Record<Exclude<SpecialistRole, "coordi
   "requirements-analyst": ["sirkit.pcb.board-inspect", "sirkit.project.canonical-revision-inspect", "sirkit.schematic.inspect"],
   "circuit-topology": ["sirkit.schematic.inspect", TIER1, "sirkit.selection.inspect", "sirkit.validation.connectivity-verify"],
   "component-sourcing-evidence": ["sirkit.component-authority.inspect"],
-  schematic: ["sirkit.schematic.inspect", TIER1],
+  schematic: ["sirkit.schematic.inspect", REPLACEMENT, TIER1], // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts) (the merge fixture's context holds U1's authority and a head mark)
   "pcb-placement-routing": ["sirkit.pcb.board-inspect", "sirkit.pcb.mechanical-inspect", PCB_EDIT, "sirkit.pcb.via-inspect"],
   "verification-critic": ["sirkit.pcb.revision-inspect", "sirkit.pcb.via-inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"],
   "manufacturing-readiness-reviewer": ["sirkit.manufacturing.readiness-inspect", "sirkit.validation.connectivity-verify", "sirkit.validation.drc-run"],
@@ -73,7 +73,8 @@ function expectFrame(start: { role: string; system: string; userMessage: string 
 
 describe("[B21 D2] the proposing roles are offered their reviewed proposals, nothing more", () => {
   it("1. the live and dormant proposals are DATA: SPECIALIST_PROPOSAL_TOOL_IDS is the Tier 1 edit and the bounded PCB edit - each an exposed, interactive (never long-running) `propose` descriptor in a proposing role's row; the placement and routing proposals (long-running) and the replacement proposal (its sealer needs the coordinator gateway's pin-facts reads) are dormant for specialists, each with its reason; roleProposalToolIds is the row intersected with the live list - the coordinator (never a specialist) and every read-only role get none", () => {
-    expect([...SPECIALIST_PROPOSAL_TOOL_IDS]).toEqual([PCB_EDIT, TIER1]);
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's dormant replacement is D2's, kept for the closeout's retitle (OD-113's pattern)
+    expect([...SPECIALIST_PROPOSAL_TOOL_IDS]).toEqual([PCB_EDIT, REPLACEMENT, TIER1]);
     for (const toolId of SPECIALIST_PROPOSAL_TOOL_IDS) {
       const descriptor = registry.get(toolId)!;
       expect(descriptor.operationClass, toolId).toBe("propose");
@@ -81,17 +82,17 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
       expect(descriptor.budgetClass, toolId).not.toBe("long-running");
       expect(PROPOSING_ROLES.filter((role) => role !== "coordinator" && INTENTIONAL_ROLE_TOOL_IDS[role].includes(toolId)).length, toolId).toBeGreaterThan(0);
     }
-    expect(Object.keys(DORMANT_SPECIALIST_PROPOSALS).sort()).toEqual([...LONG_RUNNING, REPLACEMENT].sort());
+    expect(Object.keys(DORMANT_SPECIALIST_PROPOSALS).sort()).toEqual([...LONG_RUNNING].sort());
     for (const toolId of LONG_RUNNING) {
       expect(registry.get(toolId)!.budgetClass, toolId).toBe("long-running");
       expect(DORMANT_SPECIALIST_PROPOSALS[toolId], toolId).toMatch(/long-running/);
     }
-    expect(DORMANT_SPECIALIST_PROPOSALS[REPLACEMENT]).toMatch(/pin-facts/);
+    expect(DORMANT_SPECIALIST_PROPOSALS).not.toHaveProperty(REPLACEMENT);
     // every proposal a specialist row holds is either live or dormant with a reason - never silently neither
     const rowProposals = [...new Set(SPECIALIST_ROLES.filter((role) => role !== "coordinator").flatMap((role) => INTENTIONAL_ROLE_TOOL_IDS[role].filter((toolId) => classOf(toolId) === "propose")))].sort();
     expect(rowProposals).toEqual([...SPECIALIST_PROPOSAL_TOOL_IDS, ...Object.keys(DORMANT_SPECIALIST_PROPOSALS)].sort());
     expect(Object.fromEntries(SPECIALIST_ROLES.map((role) => [role, [...roleProposalToolIds(role)]]))).toEqual({
-      coordinator: [], "requirements-analyst": [], "circuit-topology": [TIER1], "component-sourcing-evidence": [], schematic: [TIER1],
+      coordinator: [], "requirements-analyst": [], "circuit-topology": [TIER1], "component-sourcing-evidence": [], schematic: [REPLACEMENT, TIER1],
       "pcb-placement-routing": [PCB_EDIT], "verification-critic": [], "manufacturing-readiness-reviewer": [], "cost-latency-router": [],
     });
     expect(roleProposalToolIds("__proto__")).toEqual([]);
@@ -139,20 +140,23 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
         expect(klass === "read" || (klass === "propose" && roleProposalToolIds(role).includes(toolId)), `${role}: ${toolId}`).toBe(true);
       }
       if (!["circuit-topology", "schematic", "pcb-placement-routing"].includes(role)) expect(tools.some((toolId) => classOf(toolId) === "propose"), `${role} reads only`).toBe(false);
-      for (const toolId of [REPLACEMENT, ...LONG_RUNNING]) expect(tools, `${role}: ${toolId}`).not.toContain(toolId);
+      for (const toolId of LONG_RUNNING) expect(tools, `${role}: ${toolId}`).not.toContain(toolId);
+      expect(tools.includes(REPLACEMENT), `${role}: ${REPLACEMENT}`).toBe(role === "schematic"); // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts)
     }
   });
 
   it("4. over the WORST coordinator context (the minter, both ports, a head mark, a PCB basis, a captured view, a project admin): no role is ever offered a granted execution, a view-session control, a Tier 3 or never-exposed id, a long-running proposal or the replacement - not in its view, not in its effective set - and the wrapper the scheduler builds refuses each `role_not_permitted_tool` before the gateway is asked", async () => {
     const worst = grantableContext();
-    const forbidden = (toolId: string): boolean => {
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts): it is forbidden to every role but the schematic one, whose row lists it
+    const forbiddenFor = (role: SpecialistRole) => (toolId: string): boolean => {
       const descriptor = registry.get(toolId);
       return !descriptor || descriptor.operationClass === "mutate" || descriptor.operationClass === "view-session" || descriptor.budgetClass === "long-running"
-        || TIER3_FAMILY_PATTERN.test(toolId) || NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)) || toolId === REPLACEMENT;
+        || TIER3_FAMILY_PATTERN.test(toolId) || NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(toolId)) || (toolId === REPLACEMENT && role !== "schematic");
     };
-    const probes = registry.list().map((descriptor) => descriptor.toolId).filter(forbidden);
-    expect(probes).toEqual(expect.arrayContaining(["sirkit.pcb.move-footprint", "sirkit.view.layers", ...LONG_RUNNING, REPLACEMENT]));
+    expect(registry.list().map((descriptor) => descriptor.toolId).filter(forbiddenFor("circuit-topology"))).toEqual(expect.arrayContaining(["sirkit.pcb.move-footprint", "sirkit.view.layers", ...LONG_RUNNING, REPLACEMENT]));
     for (const role of SPECIALIST_ROLES.filter((entry) => entry !== "coordinator")) {
+      const forbidden = forbiddenFor(role);
+      const probes = registry.list().map((descriptor) => descriptor.toolId).filter(forbidden);
       const context = specialistContextFor(worst, role);
       expect(specialistToolRegistry(registry, role).list().filter((descriptor) => forbidden(descriptor.toolId)).map((descriptor) => descriptor.toolId), role).toEqual([]);
       const allowed = specialistAllowedToolIds(registry, context, buildRunToolset, role);
@@ -257,14 +261,17 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
 
   it("8. the wrapper's own class check is a SECOND line of defense, pinned apart from the list: handed a HAND-BUILT list that names both long-running proposals, the replacement, a granted execution and a view control beside a read and the live Tier 1 edit, it still refuses each of those five `role_not_permitted_tool` before the gateway (spy: never asked) and passes only the read and the live proposal through", async () => {
     const context = specialistContextFor(coordinatorContext(), "schematic");
-    const outside = [...LONG_RUNNING, REPLACEMENT, "sirkit.pcb.move-footprint", "sirkit.view.layers"];
-    expect(outside.map((toolId) => classOf(toolId))).toEqual(["propose", "propose", "propose", "mutate", "view-session"]);
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts): a LIVE proposal the list names now passes the class check, so the hand-built list's refused ids are the
+    // two long-running proposals, the execution and the view control; the replacement passes with the read and the Tier 1 edit (the
+    // title's five refused ids are D2's, kept for the closeout's retitle - that no other role's list ever names it is b21-d3-replacement-roles case 4)
+    const outside = [...LONG_RUNNING, "sirkit.pcb.move-footprint", "sirkit.view.layers"];
+    expect(outside.map((toolId) => classOf(toolId))).toEqual(["propose", "propose", "mutate", "view-session"]);
     const underlying = spy();
-    const wrapper = readOnlySpecialistGateway(underlying, registry, ["sirkit.schematic.inspect", TIER1, ...outside]);
+    const wrapper = readOnlySpecialistGateway(underlying, registry, ["sirkit.schematic.inspect", TIER1, REPLACEMENT, ...outside]);
     for (const toolId of outside) expect(await wrapper.invoke(input(toolId, context)), toolId).toMatchObject({ kind: "refused", ok: false, status: SPECIALIST_REFUSAL_STATUS });
     expect(underlying.asked).toEqual([]);
-    for (const toolId of ["sirkit.schematic.inspect", TIER1]) expect(await wrapper.invoke(input(toolId, context)), toolId).toMatchObject({ status: "spy" });
-    expect(underlying.asked).toEqual(["sirkit.schematic.inspect", TIER1]);
+    for (const toolId of ["sirkit.schematic.inspect", TIER1, REPLACEMENT]) expect(await wrapper.invoke(input(toolId, context)), toolId).toMatchObject({ status: "spy" });
+    expect(underlying.asked).toEqual(["sirkit.schematic.inspect", TIER1, REPLACEMENT]);
   });
 
   it("9. once the coordinator's own turn already holds an artifact (OD-122's `proposal_exists` clause: `artifactHeld`), NO specialist is offered a proposal: the proposing roles run over the plain derivation (no sealer fact), are offered and persist reads only, get B's read-only frame verbatim, and a scripted proposal call is never offered - nothing is sealed; one line on the coordinator's stream says so", async () => {

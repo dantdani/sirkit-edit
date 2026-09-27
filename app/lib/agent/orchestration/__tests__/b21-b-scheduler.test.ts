@@ -35,7 +35,7 @@ import { ROLE_SCHEMATIC, loadedAuthority } from "./_role-fixtures";
 const registry = sirkitToolRegistry();
 /** the specialist gateway as the composition root builds it: NO minter, NO port, NO prompt version - nothing but reads can succeed in it */
 const gateway = createAgentToolGateway(registry);
-const REPLACEMENT = DAG_ROLE_LISTS["component-replacement"];
+const REPLACEMENT = DAG_ROLE_LISTS["component-replacement"]; // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig): every case below that runs it moved with it
 const MESSAGE = "Swap U1 for a lower-power alternative.";
 
 type Behaviour =
@@ -172,30 +172,33 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.kind).toBe("ran");
     if (outcome.kind !== "ran") return;
     expect(outcome.stop).toBe("completed");
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     expect(outcome.tasks.map((task) => [task.taskId, task.role, task.attempt, task.status])).toEqual([
       ["task-1-circuit-topology", "circuit-topology", 0, "accepted"],
       ["task-2-component-sourcing-evidence", "component-sourcing-evidence", 0, "accepted"],
-      ["task-3-verification-critic", "verification-critic", 0, "accepted"],
+      ["task-3-schematic", "schematic", 0, "accepted"],
+      ["task-4-verification-critic", "verification-critic", 0, "accepted"],
     ]);
-    expect(outcome.tasks.map((task) => task.specialistRunId)).toEqual(["run-b21b:task-1-circuit-topology", "run-b21b:task-2-component-sourcing-evidence", "run-b21b:task-3-verification-critic"]);
+    expect(outcome.tasks.map((task) => task.specialistRunId)).toEqual(["run-b21b:task-1-circuit-topology", "run-b21b:task-2-component-sourcing-evidence", "run-b21b:task-3-schematic", "run-b21b:task-4-verification-critic"]);
     expect(specialistRunId("run-b21b", "task-1-circuit-topology")).toBe("run-b21b:task-1-circuit-topology");
-    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "verification-critic"]);
+    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"]);
     expect(r.adapter.starts.map((start) => start.runId)).toEqual(outcome.tasks.map((task) => task.specialistRunId));
     expect(r.adapter.maxInFlight).toBe(1);
     expect(seen).toEqual([
       { role: "circuit-topology", resultsBefore: [] },
       { role: "component-sourcing-evidence", resultsBefore: ["task-1-circuit-topology"] },
-      { role: "verification-critic", resultsBefore: ["task-1-circuit-topology", "task-2-component-sourcing-evidence"] },
+      { role: "schematic", resultsBefore: ["task-1-circuit-topology", "task-2-component-sourcing-evidence"] },
+      { role: "verification-critic", resultsBefore: ["task-1-circuit-topology", "task-2-component-sourcing-evidence", "task-3-schematic"] },
     ]);
     const history = await r.store.history(r.scope);
-    expect(kinds(history)).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:result", "task-2-component-sourcing-evidence:0:request", "task-2-component-sourcing-evidence:0:result", "task-3-verification-critic:0:request", "task-3-verification-critic:0:result"]);
+    expect(kinds(history)).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:result", "task-2-component-sourcing-evidence:0:request", "task-2-component-sourcing-evidence:0:result", "task-3-schematic:0:request", "task-3-schematic:0:result", "task-4-verification-critic:0:request", "task-4-verification-critic:0:result"]);
     expect(history[0]!.record).toMatchObject({ kind: "plan", tasks: planTasks(REPLACEMENT) });
-    expect(outcome.outputTokenCeiling).toBe(6 * (2 + 2 * 3) * 4096);
-    expect(dagOutputTokenCeiling(3)).toBe(outcome.outputTokenCeiling);
-    expect(outcome.outputTokensUsed).toBe(3 * 11);
+    expect(outcome.outputTokenCeiling).toBe(6 * (2 + 2 * 4) * 4096);
+    expect(dagOutputTokenCeiling(4)).toBe(outcome.outputTokenCeiling);
+    expect(outcome.outputTokensUsed).toBe(4 * 11);
     const warnings = r.events.filter((event): event is Extract<AgentRunEvent, { type: "warning" }> => event.type === "warning");
     expect(r.events.filter((event) => event.type !== "warning")).toEqual([]); // nothing of a specialist run reaches the coordinator's stream
-    for (const role of ["circuit-topology", "component-sourcing-evidence", "verification-critic"]) expect(warnings.some((warning) => warning.message.includes(role) && warning.message.includes("accepted")), role).toBe(true);
+    for (const role of ["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"]) expect(warnings.some((warning) => warning.message.includes(role) && warning.message.includes("accepted")), role).toBe(true);
     expect(warnings.every((warning) => warning.runId === "run-b21b")).toBe(true);
     for (const task of outcome.tasks) { expect(task.result).not.toBeNull(); expect(task.resultDigest).toMatch(/^eng1-[0-9a-f]{16}$/); }
   });
@@ -219,7 +222,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     const outcome = await runSpecialistDag({ roles: REPLACEMENT }, r.coordinator, r.deps);
     expect(outcome.kind).toBe("ran");
     const requests = (await r.store.history(r.scope)).filter((entry) => entry.record.kind === "request");
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     for (const [index, entry] of requests.entries()) {
       const record = entry.record;
       if (record.kind !== "request") throw new Error("request expected");
@@ -302,8 +305,9 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome1.stop).toBe("provider_outage");
     expect(outcome1.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "accepted"], ["component-sourcing-evidence", 0, "escalated"], ["component-sourcing-evidence", 1, "escalated"]]);
     expect(outcome1.tasks[1]!.reason).toMatch(/^provider_network/);
-    expect(outcome1.notStarted.map((task) => task.role)).toEqual(["verification-critic"]);
+    expect(outcome1.notStarted.map((task) => task.role)).toEqual(["schematic", "verification-critic"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     expect(first.adapter.count("circuit-topology")).toBe(1);
+    expect(first.adapter.count("schematic")).toBe(0);
     expect(first.adapter.count("component-sourcing-evidence")).toBe(2);
     expect(first.adapter.count("verification-critic")).toBe(0);
     expect(kinds(await first.store.history(first.scope))).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:result", "task-2-component-sourcing-evidence:0:request", "task-2-component-sourcing-evidence:0:dissent", "task-2-component-sourcing-evidence:1:request", "task-2-component-sourcing-evidence:1:dissent"]);
@@ -313,9 +317,9 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome2.kind).toBe("ran");
     if (outcome2.kind !== "ran") return;
     expect(outcome2.stop).toBe("completed");
-    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "replayed"], ["component-sourcing-evidence", 2, "accepted"], ["verification-critic", 0, "accepted"]]);
+    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "replayed"], ["component-sourcing-evidence", 2, "accepted"], ["schematic", 0, "accepted"], ["verification-critic", 0, "accepted"]]);
     expect(second.adapter.count("circuit-topology")).toBe(0);
-    expect(second.adapter.starts.map((start) => start.role)).toEqual(["component-sourcing-evidence", "verification-critic"]);
+    expect(second.adapter.starts.map((start) => start.role)).toEqual(["component-sourcing-evidence", "schematic", "verification-critic"]);
     const history = await second.store.history(second.scope);
     expect(history.filter((entry) => entry.taskId === "task-1-circuit-topology" && entry.record.kind === "result")).toHaveLength(1);
     expect(history.filter((entry) => entry.record.kind === "plan")).toHaveLength(1);
@@ -338,7 +342,8 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.tasks.map((task) => [task.role, task.status, task.reason])).toEqual([["circuit-topology", "accepted", null], ["component-sourcing-evidence", "escalated", "cancelled"]]);
     expect(r.adapter.abortedRoles).toEqual(["component-sourcing-evidence"]);
     expect(r.adapter.count("verification-critic")).toBe(0);
-    expect(outcome.notStarted.map((task) => task.role)).toEqual(["verification-critic"]);
+    expect(r.adapter.count("schematic")).toBe(0);
+    expect(outcome.notStarted.map((task) => task.role)).toEqual(["schematic", "verification-critic"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     const history = await r.store.history(r.scope);
     expect(history.at(-1)!.record).toEqual({ kind: "dissent", decision: "escalated", reason: "cancelled", subjectDigest: null });
     // every specialist run was built without the minter: a cancelled loop that held one would have called retireIssued("run_cancelled", true)
@@ -352,7 +357,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     if (outcome.kind !== "ran") return;
     expect(outcome.stop).toBe("deadline");
     expect(outcome.tasks.map((task) => [task.role, task.status, task.reason])).toEqual([["circuit-topology", "escalated", "deadline"]]);
-    expect(outcome.notStarted.map((task) => task.role)).toEqual(["component-sourcing-evidence", "verification-critic"]);
+    expect(outcome.notStarted.map((task) => task.role)).toEqual(["component-sourcing-evidence", "schematic", "verification-critic"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology"]);
     const requests = (await r.store.history(r.scope)).filter((entry) => entry.record.kind === "request");
     expect(requests).toHaveLength(1);
@@ -376,7 +381,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(retried.kind).toBe("ran");
     if (retried.kind !== "ran") return;
     expect(retried.stop).toBe("completed");
-    expect(retried.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "escalated"], ["circuit-topology", 1, "accepted"], ["component-sourcing-evidence", 0, "accepted"], ["verification-critic", 0, "accepted"]]);
+    expect(retried.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 0, "escalated"], ["circuit-topology", 1, "accepted"], ["component-sourcing-evidence", 0, "accepted"], ["schematic", 0, "accepted"], ["verification-critic", 0, "accepted"]]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
     expect(limited.adapter.count("circuit-topology")).toBe(2);
     // [B21 C] pin move: the circuit specialist calls a read of its own row (OD-120: board-inspect is not its tool)
     const steps = await rig({ "circuit-topology": { kind: "call-then-result", toolId: "sirkit.validation.connectivity-verify" } });
@@ -384,7 +389,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(exhausted.kind).toBe("ran");
     if (exhausted.kind !== "ran") return;
     expect(exhausted.stop).toBe("completed");
-    expect(exhausted.tasks.map((task) => [task.role, task.status, task.reason])).toEqual([["circuit-topology", "escalated", "max_steps"], ["component-sourcing-evidence", "accepted", null], ["verification-critic", "accepted", null]]);
+    expect(exhausted.tasks.map((task) => [task.role, task.status, task.reason])).toEqual([["circuit-topology", "escalated", "max_steps"], ["component-sourcing-evidence", "accepted", null], ["schematic", "accepted", null], ["verification-critic", "accepted", null]]);
   });
 
   it("9. a malformed final text is dissent `malformed` with a bounded reason and the DAG continues: prose, a JSON document the contracts refuse (a release named as a tool request) and a result for another role", async () => {
@@ -397,13 +402,14 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.kind).toBe("ran");
     if (outcome.kind !== "ran") return;
     expect(outcome.stop).toBe("completed");
-    expect(outcome.tasks.map((task) => [task.role, task.status])).toEqual([["circuit-topology", "malformed"], ["component-sourcing-evidence", "malformed"], ["verification-critic", "malformed"]]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig): it answers a well-formed result, the other three stay malformed
+    expect(outcome.tasks.map((task) => [task.role, task.status])).toEqual([["circuit-topology", "malformed"], ["component-sourcing-evidence", "malformed"], ["schematic", "accepted"], ["verification-critic", "malformed"]]);
     expect(outcome.tasks[0]!.reason).toBe("result_not_json: the final text is not one JSON document");
     expect(outcome.tasks[1]!.reason).toBe("result_refused: tool_request_not_permitted at $.requiredTools[0].toolId");
-    expect(outcome.tasks[2]!.reason).toBe("result_role_mismatch: schematic is not verification-critic");
+    expect(outcome.tasks[3]!.reason).toBe("result_role_mismatch: schematic is not verification-critic");
     const dissent = (await r.store.history(r.scope)).filter((entry) => entry.record.kind === "dissent");
     expect(dissent.map((entry) => (entry.record as { decision: string }).decision)).toEqual(["malformed", "malformed", "malformed"]);
-    expect(r.adapter.starts).toHaveLength(3);
+    expect(r.adapter.starts).toHaveLength(4);
     expect(validateSpecialistResult(JSON.parse(resultDocument("schematic"))).ok).toBe(true);
   });
 
@@ -455,7 +461,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
       expect(outcome.stop, expectedStop).toBe(expectedStop);
       expect(outcome.tasks.map((task) => [task.role, task.status]), expectedStop).toEqual([["circuit-topology", "accepted"], ["component-sourcing-evidence", "escalated"]]);
       expect(outcome.tasks[1]!.reason, expectedStop).toMatch(new RegExp(`^${expectedStop}: the result was not committed`));
-      expect(outcome.notStarted.map((task) => task.role), expectedStop).toEqual(["verification-critic"]);
+      expect(outcome.notStarted.map((task) => task.role), expectedStop).toEqual(["schematic", "verification-critic"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
       expect(r.adapter.starts.map((start) => start.role), expectedStop).toEqual(["circuit-topology", "component-sourcing-evidence"]);
       expect(kinds(await base.history(r.scope)), expectedStop).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:result", "task-2-component-sourcing-evidence:0:request"]);
     }
@@ -467,12 +473,13 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.kind).toBe("ran");
     if (outcome.kind !== "ran") return;
     expect(outcome.stop).toBe("completed");
-    expect(outcome.tasks.map((task) => [task.role, task.attempt, task.status, task.reason])).toEqual([["circuit-topology", 0, "escalated", "deadline"], ["component-sourcing-evidence", 0, "accepted", null], ["verification-critic", 0, "accepted", null]]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
+    expect(outcome.tasks.map((task) => [task.role, task.attempt, task.status, task.reason])).toEqual([["circuit-topology", 0, "escalated", "deadline"], ["component-sourcing-evidence", 0, "accepted", null], ["schematic", 0, "accepted", null], ["verification-critic", 0, "accepted", null]]);
     expect(outcome.notStarted).toEqual([]);
     expect(r.adapter.abortedRoles).toEqual(["circuit-topology"]);
-    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "verification-critic"]);
+    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"]);
     const history = await r.store.history(r.scope);
-    expect(kinds(history)).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:dissent", "task-2-component-sourcing-evidence:0:request", "task-2-component-sourcing-evidence:0:result", "task-3-verification-critic:0:request", "task-3-verification-critic:0:result"]);
+    expect(kinds(history)).toEqual(["plan:0:plan", "task-1-circuit-topology:0:request", "task-1-circuit-topology:0:dissent", "task-2-component-sourcing-evidence:0:request", "task-2-component-sourcing-evidence:0:result", "task-3-schematic:0:request", "task-3-schematic:0:result", "task-4-verification-critic:0:request", "task-4-verification-critic:0:result"]);
     expect((history[1]!.record as { document: { budget: { runDeadlineMs: number } } }).document.budget.runDeadlineMs).toBe(200);
     expect(history[2]!.record).toEqual({ kind: "dissent", decision: "escalated", reason: "deadline", subjectDigest: null });
   }, 20_000);
@@ -492,19 +499,20 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome2.stop).toBe("completed");
     // [B21 D] pin move: the re-run takes the attempt AFTER its stale dissent (2), so the merge's verdict on the re-run never shares a key
     // with the stale dissent about the old result (the durable repository replays a repeated key's first commit without comparing payloads)
-    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 2, "accepted"], ["component-sourcing-evidence", 2, "accepted"], ["verification-critic", 2, "accepted"]]);
-    expect(second.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "verification-critic"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
+    expect(outcome2.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 2, "accepted"], ["component-sourcing-evidence", 2, "accepted"], ["schematic", 2, "accepted"], ["verification-critic", 2, "accepted"]]);
+    expect(second.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"]);
     const history = await second.store.history(second.scope);
     const stale = history.filter((entry) => entry.record.kind === "dissent");
     // [B21 B lead] the stale dissent is keyed by the RESUMING attempt (1), not by the committed result's (0): two resumes under two
     // other scopes then record two dissents instead of the second replaying the first under an identical idempotency key
-    expect(stale.map((entry) => [entry.taskId, entry.attempt, (entry.record as { decision: string }).decision])).toEqual([["task-1-circuit-topology", 1, "stale"], ["task-2-component-sourcing-evidence", 1, "stale"], ["task-3-verification-critic", 1, "stale"]]);
+    expect(stale.map((entry) => [entry.taskId, entry.attempt, (entry.record as { decision: string }).decision])).toEqual([["task-1-circuit-topology", 1, "stale"], ["task-2-component-sourcing-evidence", 1, "stale"], ["task-3-schematic", 1, "stale"], ["task-4-verification-critic", 1, "stale"]]);
     expect((stale[0]!.record as { reason: string; subjectDigest: string | null })).toMatchObject({ reason: expect.stringMatching(/^stale_scope: /), subjectDigest: outcome1.tasks[0]!.resultDigest });
-    expect(history.filter((entry) => entry.record.kind === "result").map((entry) => [entry.taskId, entry.attempt])).toEqual([["task-1-circuit-topology", 0], ["task-2-component-sourcing-evidence", 0], ["task-3-verification-critic", 0], ["task-1-circuit-topology", 2], ["task-2-component-sourcing-evidence", 2], ["task-3-verification-critic", 2]]);
-    expect(warningsOf(second.events).filter((message) => /is STALE/.test(message))).toHaveLength(3);
+    expect(history.filter((entry) => entry.record.kind === "result").map((entry) => [entry.taskId, entry.attempt])).toEqual([["task-1-circuit-topology", 0], ["task-2-component-sourcing-evidence", 0], ["task-3-schematic", 0], ["task-4-verification-critic", 0], ["task-1-circuit-topology", 2], ["task-2-component-sourcing-evidence", 2], ["task-3-schematic", 2], ["task-4-verification-critic", 2]]);
+    expect(warningsOf(second.events).filter((message) => /is STALE/.test(message))).toHaveLength(4);
     // the new requests are bound to the moved revision
     const rebound = history.filter((entry) => entry.record.kind === "request" && entry.attempt === 2);
-    expect(rebound).toHaveLength(3);
+    expect(rebound).toHaveLength(4);
     for (const entry of rebound) expect((entry.record as { document: { scope: { canonicalRevisionDigest: string } } }).document.scope.canonicalRevisionDigest).toBe(moved.canonicalRevisionDigest);
     // [B21 B lead] a THIRD resume under a third scope: the attempt-2 results ([B21 D]; attempt 1 before) are stale in turn, the new dissents
     // land under attempt 3 (their own key) and the re-runs at attempt 4, and every earlier record stays - nothing is replayed over
@@ -513,7 +521,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     const outcome3 = await runSpecialistDag({ roles: REPLACEMENT }, third.coordinator, { ...third.deps, context: movedAgain });
     expect(outcome3.kind).toBe("ran");
     if (outcome3.kind !== "ran") return;
-    expect(outcome3.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 4, "accepted"], ["component-sourcing-evidence", 4, "accepted"], ["verification-critic", 4, "accepted"]]);
+    expect(outcome3.tasks.map((task) => [task.role, task.attempt, task.status])).toEqual([["circuit-topology", 4, "accepted"], ["component-sourcing-evidence", 4, "accepted"], ["schematic", 4, "accepted"], ["verification-critic", 4, "accepted"]]);
     const laterHistory = await third.store.history(third.scope);
     const dissents = laterHistory.filter((entry) => entry.record.kind === "dissent" && entry.taskId === "task-1-circuit-topology");
     expect(dissents.map((entry) => entry.attempt)).toEqual([1, 3]);
@@ -533,9 +541,10 @@ describe("[B21 B] the bounded sequential scheduler", () => {
       ["circuit-topology", 0, "escalated", 1, 1, { inputTokens: 7, outputTokens: 11 }, "openai", "scripted"],
       ["circuit-topology", 1, "accepted", 2, 1, { inputTokens: 14, outputTokens: 22 }, "openai", "scripted"],
       ["component-sourcing-evidence", 0, "accepted", 2, 0, { inputTokens: 14, outputTokens: 22 }, "openai", "scripted"],
+      ["schematic", 0, "accepted", 1, 0, { inputTokens: 7, outputTokens: 11 }, "openai", "scripted"], // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, the evidence before the seal; the critic is task 4) - here read-only (no head mark in the rig)
       ["verification-critic", 0, "accepted", 1, 0, { inputTokens: 7, outputTokens: 11 }, "openai", "scripted"],
     ]);
-    expect(outcome.outputTokensUsed).toBe(11 + 22 + 22 + 11);
+    expect(outcome.outputTokensUsed).toBe(11 + 22 + 22 + 11 + 11);
     const warnings = warningsOf(r.events);
     expect(warnings).toContain("Orchestration: specialist component-sourcing-evidence (task task-2-component-sourcing-evidence, attempt 0) tool (unknown) refused: unknown_tool.");
     expect(warnings.filter((message) => / refused: /.test(message))).toHaveLength(1);

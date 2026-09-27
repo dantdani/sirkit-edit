@@ -2924,3 +2924,82 @@ _(discovery, reproduction and results appended below as they are observed)_
   (task: the replacement live for the `schematic` role through the runtime's composition root, `schematic` added to the
   `component-replacement` DAG, scenario 17's disagreement structural and deterministically resolved or escalated) runs before B21-E.
 - Lead gates (2026-09-26, one job at a time): every B21 suite with the three B21 route suites and the CI guard 22 files / 218 tests; `app/api/chat/__tests__` in full 17 / 110; `app/lib/agent/__tests__` in full 36 / 415; the proposal families and their approval paths 27 / 367; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.
+
+### B21-D3 — the replacement live for specialists; scenario 17's disagreement structural and deterministically resolved (2026-09-26 local; increment workflow + lead; this commit)
+
+- Test-first: the five D3 suites and the moved cases ran against HEAD's four production modules restored byte for byte
+  (`d3/ff-1-failing-first.log`: 11 files, 49 of 98 failing, each on its own assertion or the missing export; the reader's closure, the
+  flag-off byte identity and a read-only role's refusal passing before and after by design); then the code; then green.
+- Code: `orchestration-runtime.ts` (the specialist gateway built over `specialistGatewayOptions(request.signal)` - the route's source and
+  `loadRunReplacementPinFacts` under `DEFAULT_PIN_FACTS_DEADLINE_MS`, nothing else; line 260 in place, the function appended),
+  `role-tools.ts` (the replacement moved from the dormant list to the live one, its row reason - in place), `scheduler.ts` (its sealer's
+  fact, the head mark - in place), `router.ts` (the replacement DAG with the schematic specialist; the strict replacement grammar - lines 101
+  and 177 in place, the grammar appended); the workflow's one explicit entry for the route suite. No route, descriptor, UI, request key or generator
+  input changed; census 165/162/3/0.
+- Scenario 17 through the real runtime and the production POST: one party cannot seal (the circuit specialist's delete refused
+  `pins-unavailable` by the agent path's Tier 1 compiler - an empty pin map for every agent proposal, so the same with no peer - never
+  reaching the merge; the replacement accepted by its family's checks, the merge's binding, the exact-authority rule and
+  `sealed-in-run`, presented and approved through the replacement family's existing path with the run's principal); both seal (both
+  verified, `conflict:same_field`, one escalation citing the exact authority - two sealed parties always escalate); OD-130's part review
+  rendered at the route's envelope through the scheduler seam and CONFIRMED-unreachable from a production POST (a fresh run id per POST,
+  no resume); an absent pin-facts source blocking the coordinator's and the specialist's replacement alike.
+- Review round (2026-09-26, eleven confirmed findings, test-first: `d3fix/ff-1-failing-first.log`, 7 of 41 failing over the D3 tree):
+  the kind-swap grammar sent value changes, purposes, negations and questions to the four-specialist DAG (regressions-1, security-1,
+  coverage-1, tests-1 - `router.ts` head-anchored with the object check appended; replacement-roles case 7, B's router case 7 moved,
+  tests-6); three A..D2 statements D3 made untrue got dated notes in their own blocks (regressions-3, security-2, coverage-6 - page case
+  9); the page's resolution, part-review and order claims restated (coverage-2, coverage-3, coverage-5, tests-2, tests-3 - page cases
+  4, 7 and 10; control cases scenario17 7 and 8 and route case 7). Breakages, each restored and verified by hash: the first-with
+  lookahead removed from `router.ts` fails replacement-roles case 7; a pin map given to the agent gateway's Tier 1 compile makes the
+  delete seal and fails scenario17 cases 1, 2 and 7; a fixed run id in `route.ts` fails route case 7.
+- Pin moves with their reasons: B's scheduler (eleven cases), router (cases 3, 6 and, in the review round, 7) and route (cases 4, 11,
+  12b, 15, 16, 17) suites, C's least-privilege cases 1, 8 and 9, D's route cases 2 to 5, D2's proposing-roles cases 1, 3, 4 and 8 and
+  provenance case 6; stale titles kept for the closeout; the A..D2 pages noted; B's C46 and C's C33 re-pinned.
+- Findings: D21-38, low (the composer routes the runbook's scenario-17 sentence to the schematic editor; an MPN-only swap stays single).
+  RECORDED: a `contradicted` loser beside a presented winner does not exist under OD-122's order - two sealed parties always escalate and
+  a party that cannot seal never reaches the merge (an open OD-122 question); OD-130's part review fires only for a seal the authority
+  moved away from (a resume), which a production POST never performs until B21-E.
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite and the CI guard; `app/api/chat/__tests__` in full;
+  `app/lib/agent/__tests__` in full; the replacement family's and the other proposal families' suites and approval paths; the exposure /
+  tier / discovery pins; the import gates, closure ratchets and census; `app/lib/mcp/__tests__` in full; tsc; eslint - figures in the
+  report.
+- Records: `specialist-replacement.md`; OD-107, OD-109, OD-120 amended; D21-37 closed; D21-16's route half recorded (the envelope
+  capability CONFIRMED, CONFIRMED-unreachable from a production POST, open for B21-E); D21-10's addendum; D21-38 found. Live: every
+  B21 behaviour with a real model BLOCKED-LIVE-QUALIFICATION (LB-9).
+- The run was interrupted after the review round (the previous session ended while the fixer started); every changed file predated the
+  fixer's start, so the tree was the implementer's output, and the workflow was resumed from its run record (the implementer, the four
+  reviews and their verifications replayed from cache; the fixer and the checker ran live). The checker confirmed all 13 fixes fixed and
+  revert-sensitive and raised one new low issue: the fixed grammar still sent an exchange of two existing parts, an attribute edit and a
+  question to the four-specialist DAG ("Please swap U1 with the regulator.", "Please swap the pins of U1 with the driver.", "Please
+  replace the value of U1 with timer.", "Replace U1 with a timer? Would that work?").
+- Lead follow-up 1 (2026-09-26): replacement-roles case 8 (twelve phrasings single, six to the DAG) failed first on the fixed grammar
+  (`d3-lead-case8-red.log`, "Please swap the pins of U1 with the driver.: expected dag to equal single"), then the grammar took an
+  indefinite object only, an attribute check on the replaced span and a question check (`d3-lead-case8-green.log`).
+- Lead follow-up 2 - an adversarial phrasing sweep (a workflow of three probing agents, each routing its own phrasings through the REAL
+  router via a probe script under the job lock; `probe/fd.out.json`, `fs.out.json`, `rb.out.json`): 165 false DAG routes remained -
+  follow-up questions and retractions after a comma or full stop, exchanges of existing parts ("with an adjacent op-amp"), attribute,
+  documentation and value edits carrying a purpose phrase, and, through the UNANCHORED composer pairing the router had used since B21-B,
+  prohibitions and "why" questions ("Don't swap parts without asking me first.", "Why did you swap the chip?"). The lead replaced the
+  exclusion-based grammar with ONE strict positive grammar anchored at both ends (`partKindSwap`: three whole-message request shapes,
+  a short tail at most, the replaced part named by designators, MPN-like tokens, kinds or part words, the new part by "a" / "an" / "the
+  approved", at most four modifiers that never point at an existing part, an active kind or a part word that the imported composer
+  pairing must agree with); line 101 and line 177 changed in place, the grammar appended, no cited line moved except the D3 page's own
+  C34 (re-pinned by anchor). Replacement-roles case 9 pins the sweep's corpus (`_d3-router-corpus.ts`: 165 false DAG phrasings not the
+  replacement DAG, 75 genuine requests the DAG); it failed against HEAD's router on "Do not replace any parts." (`d3-lead-case9-red.log`,
+  the router restored by SHA-256), and the sweep's own outputs are its failing-first evidence against the pre-lead grammar. Moved pins,
+  each with its reason: replacement-roles case 7's three recorded limits (now genuine DAG requests) and B's router case 7's source pin.
+  The D3 page's phrasing section, table, OD-107 text, README row, PROGRAM_STATE text, D21-38 clause and C10 / C11 / C34 rows restated;
+  B's page carries a dated note. Rounds 2 to 4 rebuilt the grammar each time (each round's outputs are the failing-first evidence of the
+  next grammar, `probe/*.out.json`): round 2 (306 more - open modifiers and tails) closed the vocabularies; round 3 (166 - an open MPN
+  token, values tied to the wrong kind, same-part swaps, "?!") tied values to their kinds and made the rule read the RAW message's
+  trailing punctuation (line 177 passes `userMessage`, in place); round 4 (180 - MPN-shaped net, laminate, OS and suffix names,
+  unit-less values, passive designators, opinion questions, vacuous swaps) removed every open token: the new part carries no MPN or
+  number, an MPN names only the replaced part from a listed vendor prefix, the replaced designator is an active component's, "would
+  you" is an opinion, "substitute X for Y" in its one correct direction, a bare kind for a bare kind is nothing new. The corpus pins
+  804 false DAG phrasings, 121 genuine requests and 10 RECORDED semantic residues (a listed word in another sense). Pin moves: case 8's
+  "Replace U1 with a timer?" (now a question), case 9 retitled while new, a scenario-17 variant's new part renamed from "a low-power
+  TLC555 timer" to "a low-power CMOS timer" (an MPN in the new part stays single by design), B's case 7 source pins. Round 5, the
+  verification round with every finding classified structural or semantic: 83 structural findings from five root causes - "would you" after another polite word, a vacuous "a timer chip", a BARE prefixed code (a solder alloy, a laminate, an instrument, a standard) or a plural as the replaced part (an MPN is now always anchored by a kind or a designator), a part-number suffix read as a unit (values carry plausible magnitudes), VR as a designator (dropped) - all fixed, and eleven semantic ones recorded (`RECORDED_SEMANTIC`, now twenty); the corpus pins 885 false DAG phrasings, 160 genuine requests and 20 recorded semantic residues; case 7's two bare "the NE555" phrasings moved to single with the reason beside them. A sixth round runs after this commit; anything it finds lands as its own change.
+- Lead decisions: D21-38 (the composer's own routing of the scenario-17 sentence) is assigned to B21-E2 (the strict grammar moves into
+  the composer module as one exported predicate beside `REPLACE_PART`); OD-122's open question (a verifier-contradicted loser withholds
+  a verified winner's presentation) keeps its conservative default and goes to the B21 closeout.
+- Lead gates (2026-09-27, one job at a time): every B21 suite with the four B21 route suites and the CI guard 27 files / 256 tests; `app/api/chat/__tests__` in full 18 / 117; `app/lib/agent/__tests__` in full 36 / 415; the replacement family and the other proposal families with their approval and reauthorization paths 34 / 513; the exposure / tier / discovery pins 25 / 224; the import gates, chat closure ratchets and route census (165) 8 / 86; `app/lib/mcp/__tests__` in full 26 / 642 (every B20 page citation holds); tsc clean; eslint clean on every new and changed TypeScript file. All passed.

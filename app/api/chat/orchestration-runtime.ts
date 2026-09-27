@@ -6,7 +6,7 @@
  * inside the prefix) - and resolves the router and the scheduler in the pattern of the four sibling `*-runtime.ts` files: a
  * production factory, a test setter, a reset, a never-throwing resolve. It also injects the loop into the scheduler (the loop's
  * own closure reaches the fab presets, so the gate keeps it out of the prefix), builds the SPECIALIST gateway with no minter,
- * no port and no prompt version (nothing but reads - and, [B21 D2], a proposing specialist's inert Tier 2 seal - can succeed in it), and drives a chat
+ * no port and no prompt version (nothing but reads - and, [B21 D2], a proposing specialist's inert Tier 2 seal - can succeed in it; [B21 D3] its one option is the route's bounded pin-facts reader), and drives a chat
  * run's two non-single paths: a refused Tier 3 ask answered with NO provider call, and the DAG path - the coordinator turn as
  * today, the specialists one at a time, then ONE READ-ONLY follow-up coordinator turn that receives the shape-validated results
  * as bounded, sanitized DATA in its user message (a recorded DEVIATION from OD-108's tool-result default: no tool call exists
@@ -256,8 +256,8 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   };
   if (first.status !== "completed") return standDown(null);
 
-  // the SPECIALIST gateway: no minter, no port, no prompt version - nothing but a read can succeed in it (structural, OD-109)
-  const specialistGateway = createAgentToolGateway(deps.registry);
+  // the SPECIALIST gateway: no minter, no port, no prompt version - nothing but a read or an inert seal can succeed in it (structural, OD-109)
+  const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal)); // [B21 D3] OD-109 amended: the published pin-facts reads (the route's source, this request's signal), nothing else
   const outcome = await resolveSpecialistScheduler()(
     { roles: plan.roles, rule: plan.rule },
     { runId: request.runId, provider: request.provider, userMessage: request.userMessage, history: request.history, startedAt: input.startedAt, ...(request.signal ? { signal: request.signal } : {}), ...(firstArtifacts.length > 0 ? { artifactHeld: true } : {}) }, // [B21 D2 fix] OD-122: no specialist proposal beside the coordinator's artifact
@@ -480,4 +480,22 @@ function incompleteReason(merged: Extract<MergeOutcome, { kind: "merged" }>, out
     ...(unjudged.notRun.length > 0 ? [`the proposing specialist(s) ${unjudged.notRun.join(", ")} did not run`] : []),
   ];
   return `${parts.join("; ")}, so it cannot be established that nothing competes.`;
+}
+
+// ─── [B21 D3] The published pin-facts reads for a proposing specialist (OD-109 amended) ─────────────────────────────────────────
+// Appended on purpose: an import is hoisted, so these declarations move no line cited above (the B21 pages pin this file by line).
+
+import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
+import type { AgentGatewayOptions } from "@/app/lib/agent/gateway";
+
+/** [B21 D3] The ONE option the specialist gateway is built with (OD-109 amended): the SAME bounded, read-only published pin-facts
+ *  reader the route hands the coordinator's gateway - the route's own source (`resolveReplacementPinFactsSource`), every read
+ *  settled by `loadRunReplacementPinFacts` under this request's signal and DEFAULT_PIN_FACTS_DEADLINE_MS - so the replacement's
+ *  sealer can seal in a specialist run. Facts of the server-owned part catalog, never an execution port: the reader executes,
+ *  mutates, binds, acquires and calls out to nothing. No source (no configured catalog): no option at all, so the seal blocks
+ *  `current-pin-authority-unavailable` exactly as the coordinator's does. Never a minter, a prompt version, a port or an executor. */
+export function specialistGatewayOptions(signal?: AbortSignal): Pick<AgentGatewayOptions, "replacementPinFacts"> | undefined {
+  const source = resolveReplacementPinFactsSource();
+  if (!source) return undefined;
+  return { replacementPinFacts: (atomicPartRevisionId, role) => loadRunReplacementPinFacts(source, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role) };
 }

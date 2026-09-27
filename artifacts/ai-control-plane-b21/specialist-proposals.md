@@ -58,6 +58,7 @@ two full-circuit DAGs). Amends **OD-109**, **OD-120**, **OD-122**; reopens nothi
 cannot seal a component replacement - its sealer needs the server's published pin-facts reads, which only the coordinator's gateway
 holds - so the replacement stays dormant, OD-130's part review is not reachable at the route, and scenario 17's replacement DAG still
 produces no structural disagreement.
+[B21 D3, 2026-09-26] D21-37 is CLOSED by B21-D3: the runtime hands the specialist gateway the route's pin-facts reader, the replacement is live for the schematic role and scenario 17's replacement DAG holds two proposing roles (`specialist-replacement.md`).
 
 **Zero authority by construction.** A specialist still mints, applies, approves, binds, qualifies, purchases and releases nothing. Its
 gateway is still the ONE bare gateway the composition root builds with no option (no minter, no port, no prompt version - C33 of
@@ -67,6 +68,7 @@ and no replacement is ever offered to a specialist; the wrapper refuses everythi
 and every elevated context (`role_context_elevated`) before the gateway. Deterministic validation still outranks consensus: agreeing
 results never promote an artifact (two accepted actions, even two equal edits, present nothing). The B18 grants, the B19 evidence
 rules, B20's OD-45/90/91/92 provider rules and OD-81's directive matcher stand unchanged; `verifyAgentContextIntegrity` is untouched.
+[B21 D3, 2026-09-26] Two statements above no longer hold since B21-D3: the specialist gateway is no longer bare - its ONE option is the route's pin-facts reader (`specialistGatewayOptions`, OD-109 amended; still no minter, no port, no prompt version; C33 and C46 re-pinned by anchor) - and the replacement IS offered to one role, the schematic specialist, whose seal reads those published pin facts (OD-120 amended; `specialist-replacement.md`).
 
 ## 1. The proposals a specialist may be offered (OD-120 amended)
 
@@ -75,10 +77,10 @@ The table IS `SPECIALIST_PROPOSAL_TOOL_IDS` (live, in order) and `DORMANT_SPECIA
 | tool | state | reason |
 |---|---|---|
 | `sirkit.pcb.propose-bounded-edit` | live | the bounded PCB edit, sealed from the verified board and the PCB proposal basis - interactive, nothing but the context needed |
+| `sirkit.schematic.propose-component-replacement` | live | [B21 D3, 2026-09-26] live since B21-D3: sealed from the verified schematic, its head mark, the component authority and the catalog's published pin facts the runtime's reader supplies (D2 kept it dormant: the specialist gateway had no option) |
 | `sirkit.schematic.propose-tier1-edit` | live | the Tier 1 schematic edit, sealed from the verified schematic and its head mark - interactive, nothing but the context needed |
 | `sirkit.placement.propose` | dormant | long-running (budgetClass long-running): the placement engine blocks the event loop 44-104 s per run (B20's measurement), so it is never offered to a specialist |
 | `sirkit.routing.propose` | dormant | long-running (budgetClass long-running): a FreeRouting child process of up to 180 s, so it is never offered to a specialist |
-| `sirkit.schematic.propose-component-replacement` | dormant | its sealer needs the server's published pin-facts reads (replacementPinFacts), which only the coordinator's gateway holds; the specialist gateway is built with no option (OD-109), so through it the seal always blocks |
 
 Per role (the table IS `roleProposalToolIds`, in `SPECIALIST_ROLES` order; the coordinator is never a specialist - its own turn keeps
 the whole exposure list):
@@ -89,7 +91,7 @@ the whole exposure list):
 | `requirements-analyst` | — |
 | `circuit-topology` | `sirkit.schematic.propose-tier1-edit` |
 | `component-sourcing-evidence` | — |
-| `schematic` | `sirkit.schematic.propose-tier1-edit` |
+| `schematic` | `sirkit.schematic.propose-component-replacement`, `sirkit.schematic.propose-tier1-edit` |
 | `pcb-placement-routing` | `sirkit.pcb.propose-bounded-edit` |
 | `verification-critic` | — |
 | `manufacturing-readiness-reviewer` | — |
@@ -100,7 +102,10 @@ The ONE fact each live proposal's sealer needs from the coordinator's VERIFIED c
 | tool | fact |
 |---|---|
 | `sirkit.pcb.propose-bounded-edit` | `pcbProposalBasis` |
+| `sirkit.schematic.propose-component-replacement` | `schematicHeadMark` |
 | `sirkit.schematic.propose-tier1-edit` | `schematicHeadMark` |
+
+[B21 D3, 2026-09-26] The three tables above are the data as B21-D3 left it: the replacement is live for the schematic role (the row that lists it), its sealer's fact is the head mark, and the two long-running proposals stay the only dormant ones (`specialist-replacement.md`).
 
 - **The view.** `specialistToolRegistry(registry, role)` (C10) holds every read and EXACTLY the role's live proposals - never a
   mutation, a view control or a long-running proposal; a role without a live proposal gets the read-only view itself (identity), so
@@ -253,6 +258,7 @@ separate presentation record (B21-E's trace block may carry it).
   the human only as the specialists' unverified claims. **CONFIRMED** (the router's data; B's route case 4 runs the replacement request:
   circuit-topology is the only specialist offered a proposal) - B21-F's "timer replacement with provider disagreement" case inherits
   this gap (D21-37, section 7).
+  [B21 D3, 2026-09-26] Superseded for scenario 17 by B21-D3 (D21-37 CLOSED): the component-replacement DAG holds the schematic specialist too, whose replacement is live, so two SEALED parties can meet on U1 in the merge - and are always escalated; a party whose edit cannot seal (the agent path's KiCad-delete block) never reaches the merge, so scenario 17 presents the one sealed replacement or escalates by the circuit specialist's op choice (`specialist-replacement.md`).
 - **The stop condition, met for the replacement family (D21-37).** "STOP and report if a specialist seal would need the minter, a port
   or a grant." The component-replacement sealer needs the server's published pin-facts reads (`replacementPinFacts`): the chat route
   injects them into the coordinator's gateway only (C47), and the specialist gateway is built with no option at all (OD-109; pinned by
@@ -260,12 +266,14 @@ separate presentation record (B21-E's trace block may carry it).
   `current-pin-authority-unavailable` (C48, C49); through a gateway that holds the reads the same call seals (provenance case 6). D2 does
   NOT hand the specialist gateway that source - a composition-root injection like the ports - so the replacement stays DORMANT for
   specialists, with its reason, as an owner option under OD-120 (section 7). **CONFIRMED**.
+  [B21 D3, 2026-09-26] The owner option was taken by B21-D3: the runtime builds the specialist gateway with the route's own pin-facts reader and nothing else (OD-109 amended), the replacement is live for the schematic role (OD-120 amended) - `specialist-replacement.md`.
 - **OD-130's part review is not reachable at the route.** The family's assembler seals only the server-owned exact target, no specialist
   can seal a replacement at all, and a replacement the MODEL writes - even a real artifact of the family naming another part - is refused
   before the merge (`proposal_not_sealed_in_run`; route case 5: no part review record, no escalation, nothing presented, one malformed
   line). The merge's OD-130 rule stays as defense in depth (D's merge cases 6 and 19 over relayed artifacts); a non-exact target can
   reach it only through a scheduler-level replay whose exact authority moved between attempts, which the route never performs (a fresh
   run id per POST). **INFERRED** for the replay path; **CONFIRMED** for the route.
+  [B21 D3, 2026-09-26] The route statement stands: since B21-D3 a specialist seals real replacements, the replay path is CONFIRMED through the runtime's own resume (scenario17 case 5) and the route's envelope RENDERS the part review through the scheduler seam (route case 5, a test-built resume), but the route never resumes - OD-130's part review is CONFIRMED-unreachable from a production POST until B21-E's route-level resume (route case 7; `specialist-replacement.md`).
 
 ## 5. What D2 does NOT do
 

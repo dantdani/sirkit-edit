@@ -52,11 +52,13 @@ const FULL_CONTEXT_EFFECTIVE: Readonly<Record<SpecialistRole, readonly string[]>
 };
 /** [B21 D2] pin move (OD-120 amended): what the SCHEDULER offers each role over `fullContext` - the reads above plus the role's LIVE
  *  proposals whose sealer's fact the context holds (a head mark, no PCB basis): the Tier 1 edit to the circuit and schematic
- *  specialists; FULL_CONTEXT_EFFECTIVE stays the read-only derivation's set (a role-less `deriveSpecialistContext`). */
+ *  specialists; FULL_CONTEXT_EFFECTIVE stays the read-only derivation's set (a role-less `deriveSpecialistContext`).
+ *  [B21 D3] pin move (OD-120 amended): the replacement is live for the schematic role, and `fullContext` holds U1's loaded authority
+ *  and a head mark (its prerequisites), so the schematic specialist is offered it too. */
 const FULL_CONTEXT_OFFERED: Readonly<Record<SpecialistRole, readonly string[]>> = {
   ...FULL_CONTEXT_EFFECTIVE,
   "circuit-topology": ["sirkit.schematic.inspect", "sirkit.schematic.propose-tier1-edit", "sirkit.selection.inspect", "sirkit.validation.connectivity-verify"],
-  schematic: ["sirkit.schematic.inspect", "sirkit.schematic.propose-tier1-edit"],
+  schematic: ["sirkit.schematic.inspect", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"],
 };
 
 interface Rig { deps: SchedulerDeps; adapter: RoleAdapter; events: AgentRunEvent[]; loops: Array<{ runId: string; deps: AgentLoopDeps }>; coordinator: CoordinatorRun; scope: OrchestrationRunScope; store: DurableOrchestrationRunStore }
@@ -315,9 +317,10 @@ describe("[B21 C] least privilege per role", () => {
     expect(resumedA.kind).toBe("ran");
     if (resumedA.kind !== "ran") return;
     expect(resumedA.stop).toBe("completed");
-    expect(resumedA.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "replayed"], ["task-2-component-sourcing-evidence", 1, "escalated"], ["task-3-verification-critic", 0, "accepted"]]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3; the critic is task 4)
+    expect(resumedA.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "replayed"], ["task-2-component-sourcing-evidence", 1, "escalated"], ["task-3-schematic", 0, "accepted"], ["task-4-verification-critic", 0, "accepted"]]);
     expect(resumedA.tasks[1]!.reason).toMatch(/^role_has_no_tools: /);
-    expect(resumeA.adapter.starts.map((start) => start.role)).toEqual(["verification-critic"]);
+    expect(resumeA.adapter.starts.map((start) => start.role)).toEqual(["schematic", "verification-critic"]);
     expect(coveredTaskIds(resumedA)).toEqual(planned);
     const historyA = await a.store.history(a.scope);
     expect(historyA.filter((entry) => entry.record.kind === "plan")).toHaveLength(1);
@@ -333,13 +336,13 @@ describe("[B21 C] least privilege per role", () => {
     const firstB = await runSpecialistDag({ roles: REPLACEMENT }, b.coordinator, b.deps);
     expect(firstB.kind).toBe("ran");
     if (firstB.kind !== "ran") return;
-    expect(firstB.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "accepted"], ["task-2-component-sourcing-evidence", 0, "escalated"], ["task-3-verification-critic", 0, "accepted"]]);
+    expect(firstB.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "accepted"], ["task-2-component-sourcing-evidence", 0, "escalated"], ["task-3-schematic", 0, "accepted"], ["task-4-verification-critic", 0, "accepted"]]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3; the critic is task 4)
     expect(specialistResultsEnvelope(firstB).text).toContain('"role":"component-sourcing-evidence","attempt":0,"status":"escalated","reason":"role_has_no_tools: ');
     const resumeB = rig(withAuthority, {}, "run-b21c-resume-b", b.store);
     const resumedB = await runSpecialistDag({ roles: REPLACEMENT }, resumeB.coordinator, resumeB.deps);
     expect(resumedB.kind).toBe("ran");
     if (resumedB.kind !== "ran") return;
-    expect(resumedB.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "replayed"], ["task-2-component-sourcing-evidence", 1, "accepted"], ["task-3-verification-critic", 0, "replayed"]]);
+    expect(resumedB.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "replayed"], ["task-2-component-sourcing-evidence", 1, "accepted"], ["task-3-schematic", 0, "replayed"], ["task-4-verification-critic", 0, "replayed"]]);
     expect(resumeB.adapter.starts.map((start) => start.role)).toEqual(["component-sourcing-evidence"]);
     expect((await b.store.history(b.scope)).filter((entry) => entry.record.kind === "plan")).toHaveLength(1);
 
@@ -376,12 +379,14 @@ describe("[B21 C] least privilege per role", () => {
       expect(specialistAllowedToolIds(registry, deriveSpecialistContext(context), buildRunToolset, "component-sourcing-evidence")).toEqual(["sirkit.component-authority.inspect"]);
     }
     // no binding (the loader's null): the replacement DAG runs the circuit specialist and the critic; the sourcing task says why not
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3; the critic is task 4) - it runs too, offered the Tier 1 edit only (the replacement needs the authority this run lacks)
     const r = rig(fullContext({ componentAuthority: undefined }), {}, "run-b21c-unbound");
     const outcome = await runSpecialistDag({ roles: DAG_ROLE_LISTS["component-replacement"], rule: "D-component-replacement" }, r.coordinator, r.deps);
     expect(outcome.kind).toBe("ran");
     if (outcome.kind !== "ran") return;
-    expect(outcome.tasks.map((task) => [task.role, task.status])).toEqual([["circuit-topology", "accepted"], ["component-sourcing-evidence", "escalated"], ["verification-critic", "accepted"]]);
-    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "verification-critic"]);
+    expect(outcome.tasks.map((task) => [task.role, task.status])).toEqual([["circuit-topology", "accepted"], ["component-sourcing-evidence", "escalated"], ["schematic", "accepted"], ["verification-critic", "accepted"]]);
+    expect(r.adapter.starts.map((start) => start.role)).toEqual(["circuit-topology", "schematic", "verification-critic"]);
+    expect(r.adapter.starts.find((start) => start.role === "schematic")!.tools.filter((toolId) => toolId.includes(".propose"))).toEqual(["sirkit.schematic.propose-tier1-edit"]);
     expect(notRunLines(r.events)).toEqual([expect.stringMatching(notRunLine("component-sourcing-evidence", "task-2-component-sourcing-evidence"))]);
   });
 

@@ -3,7 +3,7 @@
  * roles may ever be offered, as DATA with a reason per id, and the report that judges any table against a registry the
  * caller hands in. A role row is a CEILING, never a set of tools a run is offered as such: a specialist is offered its row
  * intersected with the reads its derived context admits (buildRunToolset narrows after every existing gate, OD-121), so an
- * id can sit in a row and stay DORMANT for a run - [B21 D2] a long-running or pin-facts proposal, an external read while OD-109
+ * id can sit in a row and stay DORMANT for a run - [B21 D2] a long-running proposal ([B21 D3] the replacement is live), an external read while OD-109
  * keeps the ports from every specialist, the history read while a specialist holds no captured view (the live proposals: below).
  *
  * The coordinator's row IS the exposure list itself (the same frozen array, never a copy): the existing single-agent set,
@@ -38,7 +38,7 @@ export const ROLE_TOOL_VIOLATIONS = Object.freeze(["not_exposed", "granted_execu
 export type RoleToolViolation = (typeof ROLE_TOOL_VIOLATIONS)[number];
 
 type ToolHoldingRole = Exclude<SpecialistRole, "coordinator" | "cost-latency-router">;
-const LIVE_PROPOSAL = "Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run).", DORMANT_PROPOSAL = "Dormant for specialists (B21-D2): a long-running engine is never offered to a specialist - an owner option under OD-120.", DORMANT_PIN_FACTS = "Dormant for specialists (B21-D2): its sealer needs the server's published pin-facts reads, which only the coordinator's gateway holds - an owner option under OD-120.";
+const LIVE_PROPOSAL = "Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run).", DORMANT_PROPOSAL = "Dormant for specialists (B21-D2): a long-running engine is never offered to a specialist - an owner option under OD-120.", LIVE_PIN_FACTS = "Live since B21-D3: offered to this role's specialist when the coordinator's verified context holds its sealer's fact and the component authority; its sealer reads the published pin facts the composition root hands the specialist gateway (OD-109 amended).";
 const DORMANT_PORT = "Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective.";
 
 /** OD-120's table: per role, every id with the reason it serves that role (sorted by id; the page renders these cells verbatim). */
@@ -63,7 +63,7 @@ export const ROLE_TOOL_REASONS: Readonly<Record<ToolHoldingRole | "cost-latency-
   }),
   schematic: Object.freeze({
     "sirkit.schematic.inspect": "The verified schematic the two sealed proposals compile against.",
-    "sirkit.schematic.propose-component-replacement": `The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). ${DORMANT_PIN_FACTS}`,
+    "sirkit.schematic.propose-component-replacement": `The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). ${LIVE_PIN_FACTS}`,
     "sirkit.schematic.propose-tier1-edit": `The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). ${LIVE_PROPOSAL}`,
   }),
   "pcb-placement-routing": Object.freeze({
@@ -239,16 +239,16 @@ export function roleExposureReport(registry: DescriptorLookup, table: unknown = 
 // Appended on purpose: nothing above moves (the B21 pages pin this file's lines).
 
 /** [B21 D2] The Tier 2 proposals a PROPOSING role's specialist may be offered - its row intersected with this list, nothing more
- *  (sorted): each is interactive (never long-running), is sealed by the gateway in the specialist's own run from the verified
- *  context alone, and needs nothing but that context (no port, nothing the composition root alone holds). */
-export const SPECIALIST_PROPOSAL_TOOL_IDS: readonly string[] = Object.freeze(["sirkit.pcb.propose-bounded-edit", "sirkit.schematic.propose-tier1-edit"]);
+ *  (sorted): each is interactive (never long-running) and is sealed by the gateway in the specialist's own run from the verified
+ *  context - [B21 D3] the replacement also from the published pin-facts reads (bounded, read-only facts of the part catalog). */
+export const SPECIALIST_PROPOSAL_TOOL_IDS: readonly string[] = Object.freeze(["sirkit.pcb.propose-bounded-edit", "sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"]); // [B21 D3] + the replacement (OD-120 amended)
 /** [B21 D2] The row proposals that stay DORMANT for specialists, each with its reason - recorded as owner options under OD-120,
- *  never silently: the two long-running engines, and the replacement, whose sealer needs a server source the bare specialist
- *  gateway never holds. */
+ *  never silently: the two long-running engines ([B21 D3] the replacement left this list: its sealer's pin-facts reads reach the
+ *  specialist gateway from the composition root, OD-109 amended). */
 export const DORMANT_SPECIALIST_PROPOSALS: Readonly<Record<string, string>> = Object.freeze({
   "sirkit.placement.propose": "long-running (budgetClass long-running): the placement engine blocks the event loop 44-104 s per run (B20's measurement), so it is never offered to a specialist",
   "sirkit.routing.propose": "long-running (budgetClass long-running): a FreeRouting child process of up to 180 s, so it is never offered to a specialist",
-  "sirkit.schematic.propose-component-replacement": "its sealer needs the server's published pin-facts reads (replacementPinFacts), which only the coordinator's gateway holds; the specialist gateway is built with no option (OD-109), so through it the seal always blocks",
+  // [B21 D3] "sirkit.schematic.propose-component-replacement" is no longer dormant: live for the schematic role (SPECIALIST_PROPOSAL_TOOL_IDS)
 });
 /** [B21 D2] A role's LIVE proposals: its reviewed row intersected with SPECIALIST_PROPOSAL_TOOL_IDS for a proposing role, none for a
  *  read-only role, and none for the coordinator (its own turn keeps the whole exposure list; it is never a specialist). */

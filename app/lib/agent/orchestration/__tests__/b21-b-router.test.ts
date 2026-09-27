@@ -77,7 +77,8 @@ describe("[B21 B] the task-complexity router", () => {
   });
 
   it("3. the four complex shapes of runbook B21-B :805-811, three phrasings each, with the role lists pinned as data: component replacement, full circuit creation, manufacturing readiness, a bounded PCB proposal, a bounded schematic proposal", () => {
-    for (const text of REPLACEMENT_PHRASINGS) expect(route(text), text).toEqual({ kind: "dag", rule: "D-component-replacement", roles: ["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic"] });
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (a second proposing role) after the sourcing evidence
+    for (const text of REPLACEMENT_PHRASINGS) expect(route(text), text).toEqual({ kind: "dag", rule: "D-component-replacement", roles: ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] });
     for (const text of FULL_CIRCUIT_PHRASINGS) {
       // [B21 C] pin move (OD-107 resolved by the lead): the runbook's six specialists are trimmed to the cap of four by a fixed priority (case 8)
       expect(route(text), text).toEqual({ kind: "dag", rule: "D-full-circuit-creation", roles: ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] });
@@ -89,7 +90,7 @@ describe("[B21 B] the task-complexity router", () => {
     expect(DAG_ROLE_LISTS).toEqual({
       "bounded-schematic-proposal": ["coordinator", "schematic"],
       "bounded-pcb-proposal": ["coordinator", "pcb-placement-routing"],
-      "component-replacement": ["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic"],
+      "component-replacement": ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"], // [B21 D3] pin move (OD-107 amended): + schematic
       // [B21 C] pin move: the trimmed full-circuit list and its layout variant (case 8); the runbook's six stay as data in FULL_CIRCUIT_RUNBOOK_ROLES
       "full-circuit-creation": ["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"],
       "full-circuit-layout": ["coordinator", "circuit-topology", "component-sourcing-evidence", "pcb-placement-routing", "verification-critic"],
@@ -128,6 +129,24 @@ describe("[B21 B] the task-complexity router", () => {
     const source = readFileSync(join(process.cwd(), ROUTER), "utf8");
     expect(source).toMatch(/import \{ REPLACE_PART \} from "\.\.\/\.\.\/project\/composer-routing";/);
     expect(source).not.toMatch(/resistors?\|/);
+    // [B21 D3 fix] reviewed pin move (review tests-6; OD-107 amended by B21-D3): the title's "one grammar" no longer holds - the router's
+    // replacement rule is the composer's pairing (imported, unchanged) OR the kind swap (router.ts `partKindSwap`), a SUPERSET of the
+    // composer's; the title stays for the closeout (the stale-title convention). The divergence is pinned here instead of hidden:
+    // a kind swap the router sends to the DAG the composer sends to the schematic editor (D21-38), and every composer value change
+    // that NAMES an active kind still stays single here
+    for (const text of ["Replace the NE555 timer U1 with a lower-power timer.", "Swap the NE555 (U1) for a lower-power CMOS timer."]) {
+      expect(routeComposerMessage(text, true).route, text).toBe("edit");
+      expect(route(text).rule, text).toBe("D-component-replacement");
+    }
+    for (const text of ["Replace C3 with 10uF for the LDO.", "Replace R1 with 10k for the timer.", "Replace the gate resistor for the MOSFET driver.", "Swap R4 and R5 for the op-amp gain.", "Replace C5 with 10uF near the regulator."]) {
+      expect(routeComposerMessage(text, true).route, text).toBe("edit");
+      expect(route(text), text).toEqual({ kind: "single", rule: "S-default" });
+    }
+    // [B21 D3 lead] reviewed pin move: the rule is ONE strict grammar (`partKindSwap`, anchored at both ends; the lead's adversarial
+    // sweep found the unanchored pairing sending prohibitions and "why" questions to the DAG) - the composer's pairing is still imported
+    // and must agree on every part word the grammar accepts (b21-d3-replacement-roles case 9)
+    expect(source).toMatch(/if \(facts\.hasSchematic && partKindSwap\(message, userMessage\)\) return dag\("D-component-replacement"/);
+    expect(source).toMatch(/if \(!kindForm && !\(partForm && REPLACE_PART\.test\(rest\)\)\) return false;/);
   });
 
   it("5. the run facts gate the shapes: no board - no readiness or PCB DAG; no schematic - no replacement or schematic DAG; a role that may not apply a proposal never recruits specialists; a selection-scoped PCB ask needs a selection", () => {
@@ -163,10 +182,15 @@ describe("[B21 B] the task-complexity router", () => {
       if (rule.kind === "dag") expect(rule.roles?.[0], rule.id).toBe("coordinator");
       else expect(rule.roles, rule.id).toBeNull();
     }
-    // every DAG rule's role list is one of the five pinned lists, and every pinned list is used by exactly one rule
+    // every DAG rule's role list is one of the pinned lists, and every pinned list is used by exactly one rule
+    // [B21 D3] pin move (OD-107 amended): the replacement list now holds the same roles, in the same order, as the full-circuit
+    // creation list (the evidence before the seal), so a rule's list is matched to its shape by IDENTITY - each rule holds its own
+    // shape's frozen array - and the two equal lists are pinned as equal, their rules and grammars distinct
     const dagRules = ROUTER_RULES.filter((rule) => rule.kind === "dag");
     expect(dagRules).toHaveLength(Object.keys(DAG_ROLE_LISTS).length);
-    for (const roles of Object.values(DAG_ROLE_LISTS)) expect(dagRules.filter((rule) => JSON.stringify(rule.roles) === JSON.stringify(roles))).toHaveLength(1);
+    for (const roles of Object.values(DAG_ROLE_LISTS)) expect(dagRules.filter((rule) => rule.roles === roles)).toHaveLength(1);
+    expect(DAG_ROLE_LISTS["component-replacement"]).toEqual(DAG_ROLE_LISTS["full-circuit-creation"]);
+    expect(DAG_ROLE_LISTS["component-replacement"]).not.toBe(DAG_ROLE_LISTS["full-circuit-creation"]);
     expect(normalizeRouterMessage("  Please   RELEASE\tthe board!  ")).toBe("please release the board");
   });
 

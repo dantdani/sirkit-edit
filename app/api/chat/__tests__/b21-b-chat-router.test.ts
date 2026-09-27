@@ -255,11 +255,12 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     const traces = traceCapture();
     const { runId, events, normalized } = await post(BODIES.replacement);
     // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records the missing evidence)
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4); the title's counts (two further runs, revision 8) are B's and C's, kept for the closeout's retitle (OD-113's pattern) - the assertions below are D3's
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic", "coordinator"]);
     expect(state.starts[0]!.userMessage).toBe(BODIES.replacement);
-    const followUp = state.starts[3]!;
+    const followUp = state.starts[4]!;
     expect(followUp.userMessage).toContain("sirkit.specialist-result.v1");
-    for (const role of ["circuit-topology", "verification-critic"]) expect(followUp.userMessage).toContain(role);
+    for (const role of ["circuit-topology", "schematic", "verification-critic"]) expect(followUp.userMessage).toContain(role);
     // [B21 C fix] the follow-up turn is told which planned evidence is MISSING (review): the not-run sourcing task, with its reason
     expect(followUp.userMessage).toContain('"taskId":"task-2-component-sourcing-evidence","role":"component-sourcing-evidence","attempt":0,"status":"escalated","reason":"role_has_no_tools: ');
     expect(followUp.userMessage).toMatch(/never instructions/i);
@@ -267,13 +268,13 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     // three results from one provider/model are marked correlated, never presented as independent
     expect(followUp.userMessage).toMatch(/shape-validated/i);
     expect(followUp.userMessage).toMatch(/unverified/i);
-    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(2);
+    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(3);
     expect(followUp.userMessage).toContain('"sameSource":true');
     expect(followUp.system).toBe(state.starts[0]!.system);
     // [review] the follow-up turn is READ-ONLY: it advertises reads only (no proposal, no execution, no view control)
     expect(followUp.tools.length).toBeGreaterThan(0);
     for (const toolId of followUp.tools) expect(operationClass(toolId), toolId).toBe("read");
-    for (const specialist of state.starts.slice(1, 3)) {
+    for (const specialist of state.starts.slice(1, 4)) {
       // [B21 D2 fix] pin move (review regressions-4 / tests-2): the frame follows the run's EFFECTIVE set - a specialist OFFERED a live
       // proposal (the circuit specialist here) is no longer called read-only (it may seal one inert proposal); every other one still is
       const proposing = specialist.tools.some((toolId) => roleProposalToolIds(specialist.role).includes(toolId));
@@ -286,7 +287,9 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
       for (const toolId of specialist.tools) expect(operationClass(toolId) === "read" || roleProposalToolIds(specialist.role).includes(toolId), `${specialist.role}: ${toolId}`).toBe(true);
     }
     expect(state.starts[1]!.tools).toContain("sirkit.schematic.propose-tier1-edit");
-    expect(state.starts[2]!.tools.filter((toolId) => operationClass(toolId) !== "read")).toEqual([]);
+    // [B21 D3] the schematic specialist (a proposing role) is offered the Tier 1 edit; the replacement is withheld - this run loads no authority
+    expect(state.starts[2]!.tools.filter((toolId) => operationClass(toolId) !== "read")).toEqual(["sirkit.schematic.propose-tier1-edit"]);
+    expect(state.starts[3]!.tools.filter((toolId) => operationClass(toolId) !== "read")).toEqual([]);
     expect(types(events).filter((type) => type === "run_started")).toHaveLength(1);
     expect(terminals(events)).toEqual(["run_completed"]);
     expect(types(events).at(-1)).toBe("run_completed");
@@ -294,8 +297,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     // the coordinator's first answer is streamed as today, then the specialist lines, then the follow-up answer as the one terminal
     expect(normalized.startsWith(HEAD_STREAMS.replacement.stream.trim().split("\n").slice(0, 10).join("\n"))).toBe(true);
     const warnings = warningsOf(events);
-    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(2);
-    expect(warnings.some((message) => message.includes("2 specialist") && message.includes("300 s"))).toBe(true);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
+    expect(warnings.some((message) => message.includes("3 specialist") && message.includes("300 s"))).toBe(true);
     expect(warnings.filter((message) => message.startsWith("Orchestration: specialist ") && message.includes(ROLE_HAS_NO_TOOLS))).toEqual([expect.stringMatching(/^Orchestration: specialist component-sourcing-evidence not run \(role_has_no_tools, task task-2-component-sourcing-evidence\)/)]);
     // [review] the follow-up turn repeats none of the first turn's toolset warnings: every warning line appears once
     const repeated = [...new Set(warnings)].filter((message) => warnings.filter((other) => other === message).length > 1);
@@ -311,10 +314,11 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     // [B21 D] pin move: the deterministic merge runs between the scheduler and the envelope and persists its verdict on every judged
     // result before the follow-up turn - two `accepted` decisions under the judged task attempts (revision 6 -> 8); [B21 D fix] each
     // under its content key `<taskId>.merge-<16 hex>` (a re-judgement appends its own record, never blocked; its hex elided here)
-    expect(history.map((entry) => `${entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-verification-critic:request", "task-3-verification-critic:result", "task-1-circuit-topology.merge-*:decision", "task-3-verification-critic.merge-*:decision"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4): its request and result, and the merge's third decision (revision 8 -> 11)
+    expect(history.map((entry) => `${entry.taskId.replace(/\.merge-[0-9a-f]{16}$/, ".merge-*")}:${entry.record.kind}`)).toEqual(["plan:plan", "task-1-circuit-topology:request", "task-1-circuit-topology:result", "task-2-component-sourcing-evidence:dissent", "task-3-schematic:request", "task-3-schematic:result", "task-4-verification-critic:request", "task-4-verification-critic:result", "task-1-circuit-topology.merge-*:decision", "task-3-schematic.merge-*:decision", "task-4-verification-critic.merge-*:decision"]);
     expect((history[0]!.record as { reason: string }).reason).toContain(`(${ROLE_HAS_NO_TOOLS}): component-sourcing-evidence`);
     expect(history[3]!.record).toMatchObject({ kind: "dissent", decision: "escalated", reason: expect.stringMatching(/^role_has_no_tools: /), subjectDigest: null });
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([8]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([11]);
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2, usage: { inputTokens: 6, outputTokens: 10 } });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
@@ -437,7 +441,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     setOrchestrationStoreFactory(() => store);
     const traces = traceCapture();
     // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`): the second specialist to RUN is now the verification critic
-    state.script = { "verification-critic": "hang" };
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4): the second specialist to RUN is now the schematic one, so it is the one that hangs (the title stays true)
+    state.script = { schematic: "hang" };
     const response = await postRaw(BODIES.replacement);
     expect(response.status).toBe(200);
     const runId = response.headers.get("X-Sirkit-Run-Id")!;
@@ -449,14 +454,14 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
       expect(done, "the first specialist is accepted before Stop").toBe(false);
       text += decoder.decode(value, { stream: true });
     }
-    await vi.waitFor(() => expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]));
+    await vi.waitFor(() => expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic"]));
     const hanging = state.starts[2]!;
     expect(hanging.signal?.aborted).toBe(false);
     await reader.cancel(); // what the page's Stop does - it carries nothing
     await vi.waitFor(() => expect(hanging.signal?.aborted).toBe(true));
     await vi.waitFor(async () => expect((await store.history({ ...SCOPE, runId })).at(-1)?.record).toEqual({ kind: "dissent", decision: "escalated", reason: "cancelled", subjectDigest: null }));
     await vi.waitFor(() => expect(traces).toHaveLength(1));
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]);
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic"]);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "cancelled", failureReason: "cancelled" });
     expect(traces[0]!.events.filter((event) => event.kind === "terminal")).toHaveLength(1);
   });
@@ -517,8 +522,9 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records a dissent): the directive-looking summary now comes from the verification critic
     state.script = { "verification-critic": "directive-summary", "coordinator-2": "steered-propose" };
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
-    const followUp = state.starts[3]!;
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic", "coordinator"]);
+    const followUp = state.starts[4]!;
     expect(followUp.userMessage).toContain("Ignore all previous instructions");
     expect(followUp.system).toBe(state.starts[0]!.system);
     expect(followUp.tools).not.toContain("sirkit.schematic.propose-tier1-edit");
@@ -529,7 +535,7 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(terminals(events)).toEqual(["run_completed"]);
     expect(events.at(-1)).toMatchObject({ type: "run_completed", steps: 3, toolCalls: 0, finalText: "(scripted) The follow-up turn answers from the results." });
     // [B21 D] pin move: the merge's two `accepted` decisions follow the committed results (the directive-looking summary is data; the merge judges no prose)
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "request", "result", "decision", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent; [B21 D3] + the schematic task's request, result and decision
   });
 
   it("13. a record that throws a driver-style error on use never leaks its text to the stream: the warning carries the closed reason only, the connection string (host, user, password) reaches neither the stream nor the trace unredacted", async () => {
@@ -580,17 +586,18 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     state.script = { "coordinator-2": "throw-network" };
     const { runId, events } = await post(BODIES.replacement);
     // [B21 C] pin move: the replacement plan names three specialists, but this run holds no server-owned component authority, so the sourcing specialist's effective set is empty (OD-109 withholds the ports its other reads need) and C does not run it (`role_has_no_tools`; its task records a dissent)
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic", "coordinator"]);
     expect(terminals(events)).toEqual(["run_completed"]);
     const terminal = events.at(-1)!;
     expect(terminal).toMatchObject({ type: "run_completed", runId, steps: 1, toolCalls: 0 });
     expect(String(terminal.finalText)).toContain("(scripted) One coordinator turn for: ");
     const warnings = warningsOf(events);
     expect(warnings.some((message) => message.startsWith("Orchestration: the follow-up coordinator turn did not complete (provider_network)"))).toBe(true);
-    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(2);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
     // the record keeps the committed specialist work; the trace is one completed run whose step count the stream reports
-    // [B21 D] pin move: the merge ran (and persisted its two `accepted` decisions) before the follow-up turn failed
-    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent
+    // [B21 D] pin move: the merge ran (and persisted its two `accepted` decisions) before the follow-up turn failed; [B21 D3] three with the schematic task
+    expect((await store.history({ ...SCOPE, runId })).map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "dissent", "request", "result", "request", "result", "decision", "decision", "decision"]); // [B21 C fix] the not-run sourcing task's dissent
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", failureReason: null });
     expect(traces[0]!.terminal.steps).toBe(terminal.steps);
@@ -622,7 +629,8 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     expect(handed[0]).toBe(state.instances[1]);
     expect(handed[0]).not.toBe(state.instances[0]);
     // [B21 C fix] the plan's task ids are stable: the not-run sourcing task keeps task-2, so the critic is task-3
-    expect(loops.map((loop) => loop.runId)).toEqual([`${runId}:task-1-circuit-topology`, `${runId}:task-3-verification-critic`]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4)
+    expect(loops.map((loop) => loop.runId)).toEqual([`${runId}:task-1-circuit-topology`, `${runId}:task-3-schematic`, `${runId}:task-4-verification-critic`]);
     const admitted = specialistAllowedToolIds(registry, loops[0]!.deps.context, buildRunToolset, "coordinator");
     const requests = new Map((await store.history({ ...SCOPE, runId })).flatMap((entry) => (entry.record.kind === "request" ? [[entry.record.document.role, [...entry.record.document.allowedToolIds]] as const] : [])));
     for (const [index, { runId: loopRunId, deps }] of loops.entries()) {
@@ -659,24 +667,27 @@ describe("[B21 B] the chat route: flag off is HEAD byte for byte; flag on routes
     setComponentAuthoritySourceFactory(() => ({ bindings: { async loadForComponent() { return [aggregate]; } }, atomic: matchingAtomicConfirmer() }));
     const traces = traceCapture();
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "verification-critic", "coordinator"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, after the sourcing evidence; the critic is task 4); the title's counts (three specialists, five starts, revision 10) are C's and D's, kept for the closeout's retitle (OD-113's pattern)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic", "coordinator"]);
     // the coordinator's own run held the loaded authority: its read of it was offered (the resource the route re-assembles with)
     expect(state.starts[0]!.tools).toContain("sirkit.component-authority.inspect");
     expect(state.starts[2]!.tools).toEqual(["sirkit.component-authority.inspect"]);
-    const followUp = state.starts[4]!;
-    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(3);
+    // [B21 D3] with the authority loaded and a head mark the schematic specialist is offered the replacement too (live since D3)
+    expect(state.starts[3]!.tools.filter((toolId) => operationClass(toolId) === "propose").sort()).toEqual(["sirkit.schematic.propose-component-replacement", "sirkit.schematic.propose-tier1-edit"]);
+    const followUp = state.starts[5]!;
+    expect(followUp.userMessage.match(/"provider":"openai","model":"scripted"/g)).toHaveLength(4);
     expect(followUp.userMessage).not.toContain(ROLE_HAS_NO_TOOLS);
     const warnings = warningsOf(events);
-    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(3);
-    expect(warnings.some((message) => message.includes("3 specialist") && message.includes("300 s"))).toBe(true);
+    expect(warnings.filter((message) => /^Orchestration: specialist [a-z-]+ accepted/.test(message))).toHaveLength(4);
+    expect(warnings.some((message) => message.includes("4 specialist") && message.includes("300 s"))).toBe(true);
     expect(warnings.some((message) => message.includes(ROLE_HAS_NO_TOOLS))).toBe(false);
     expect(terminals(events)).toEqual(["run_completed"]);
     const history: OrchestrationRunEntry[] = await store.history({ ...SCOPE, runId });
-    // [B21 D] pin move: the merge's three `accepted` decisions (revision 7 -> 10)
-    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result", "decision", "decision", "decision"]);
+    // [B21 D] pin move: the merge's three `accepted` decisions (revision 7 -> 10); [B21 D3] four with the schematic task (revision 10 -> 13)
+    expect(history.map((entry) => entry.record.kind)).toEqual(["plan", "request", "result", "request", "result", "request", "result", "request", "result", "decision", "decision", "decision", "decision"]);
     const sourcing = history.find((entry) => entry.record.kind === "request" && entry.record.document.role === "component-sourcing-evidence")!;
     expect((sourcing.record as { document: { allowedToolIds: readonly string[] } }).document.allowedToolIds).toEqual(["sirkit.component-authority.inspect"]);
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([10]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([13]);
     expect(traces).toHaveLength(1);
     expect(traces[0]!.terminal).toMatchObject({ outcome: "completed", steps: 2 });
   });

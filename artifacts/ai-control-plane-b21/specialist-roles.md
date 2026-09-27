@@ -56,6 +56,7 @@ gateway (the composition root's one bare specialist gateway, C33, is the only on
 evidence rules, B20's OD-45/90/91/92 provider rules and OD-81's directive matcher stand unchanged; `verifyAgentContextIntegrity` (C24,
 C25) is untouched - the claim check is a second key in front of it, never a weakening of it.
 [B21 D2, 2026-09-26] Since B21-D2 a proposing role is also offered its row's LIVE proposals (the Tier 1 edit, the bounded PCB edit) through a 'read + the role's reviewed proposals' view, and its context gains exactly its sealer's fact (the head mark or the PCB basis); still no mutation, no view control, no port, no minter and no grant (`specialist-proposals.md`).
+[B21 D3, 2026-09-26] Since B21-D3 the one specialist gateway (C33, re-pinned by anchor) is no longer bare: its ONE option is the route's pin-facts reader (`specialistGatewayOptions`, OD-109 amended; still no minter, no port, no prompt version), and the schematic role is offered the replacement, whose sealer reads those published pin facts (`specialist-replacement.md`).
 
 ## 1. The roles and their tools (OD-120)
 
@@ -69,6 +70,8 @@ alternative would make them effective) and the history read (the timeline rides 
 holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `schematic`, `pcb-placement-routing`.
 
 [B21 D2, 2026-09-26] Three of those entries (two distinct ids) are LIVE since B21-D2 and say so in their reason: the Tier 1 edit of the `circuit-topology` and `schematic` rows and the bounded PCB edit of the `pcb-placement-routing` row are offered to that role's specialist when the coordinator's verified context holds the sealer's fact (and, since the D2 review round, only while the coordinator's own turn has handed the human no artifact - OD-122), and sealed by the gateway in the specialist's own run (`specialist-proposals.md`); seven entries (six distinct ids) stay dormant, each saying why - the replacement proposal (its sealer needs the pin-facts reads only the coordinator's gateway holds), the two long-running layout proposals, the three external reads and the history read.
+
+[B21 D3, 2026-09-26] Four of those entries (three distinct ids) are LIVE since B21-D3: the `schematic` row's replacement joins them - its sealer's published pin-facts reads reach the specialist gateway from the runtime (OD-109 amended) - and its reason says so; the two long-running layout proposals, the three external reads and the history read keep their reasons (`specialist-replacement.md`).
 
 | role | runbook | tool | class | reason |
 |---|---|---|---|---|
@@ -86,7 +89,7 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 | `component-sourcing-evidence` | `:822` | `sirkit.parts.evidence-read` | read | The offer cache's missing, conflicting or stale evidence for one exact MPN: evidence that proves nothing (B19). Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective. |
 | `component-sourcing-evidence` | `:822` | `sirkit.parts.external-search` | read | Registered distributor facts for one to five exact MPNs: sourcing evidence, never engineering proof (B19). Dormant in B21-C: OD-109 keeps the ports from every specialist; the owner's OD-109 alternative would make it effective. |
 | `schematic` | `:823` | `sirkit.schematic.inspect` | read | The verified schematic the two sealed proposals compile against. |
-| `schematic` | `:823` | `sirkit.schematic.propose-component-replacement` | propose | The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). Dormant for specialists (B21-D2): its sealer needs the server's published pin-facts reads, which only the coordinator's gateway holds - an owner option under OD-120. |
+| `schematic` | `:823` | `sirkit.schematic.propose-component-replacement` | propose | The sealed replacement proposal (B14): one exact-authority target, an inert artifact a human applies (permission Tier 2, OD-15, OD-123). Live since B21-D3: offered to this role's specialist when the coordinator's verified context holds its sealer's fact and the component authority; its sealer reads the published pin facts the composition root hands the specialist gateway (OD-109 amended). |
 | `schematic` | `:823` | `sirkit.schematic.propose-tier1-edit` | propose | The sealed schematic edit proposal (B09): an inert artifact a human applies exactly (permission Tier 2, OD-15, OD-123). Live since B21-D2: offered to this role's specialist when the coordinator's verified context holds its sealer's fact; the gateway seals it in the specialist's own run, which is its only way into the merge (provenance: sealed-in-run). |
 | `pcb-placement-routing` | `:824` | `sirkit.pcb.board-inspect` | read | The board the placement and routing question is about. |
 | `pcb-placement-routing` | `:824` | `sirkit.pcb.mechanical-inspect` | read | The board extents and mounting holes: the placement constraints, within the model's result budget. |
@@ -197,6 +200,7 @@ What is **structural** (true by how the objects are built, pinned by inspection 
   one, by IDENTITY (the second instance constructed, never the coordinator's), under every specialist's wrapper
   (`b21-b-chat-router.test.ts` case 16, extending case 14; the review showed case 14's probes pass through the coordinator's gateway
   too, so only the identity check tells them apart).
+  [B21 D3, 2026-09-26] Still two gateways per request, the second handed to the scheduler by identity - but since B21-D3 it is built with ONE option, the route's pin-facts reader (C33 re-pinned by anchor; no option at all only when no catalog source is configured), and the schematic role is offered the replacement (`specialist-replacement.md`).
 
 What is **behavioural** (true by what a call does, proven by calling):
 
@@ -291,7 +295,7 @@ routing") can still select the layout variant. **CONFIRMED** by `b21-b-router.te
 - **D21-31 (RECORDED), OD-123:** `schematic.set-property` and `schematic.move-rotate` are in `EXECUTION_FAMILIES` (C30), the closed
   eight-list the B18-B pin fixes, yet no schematic descriptor is a granted execution and OD-15 defers schematic execution. They stay
   reserved and unchanged; the `schematic` role receives the two sealed Tier 2 proposal tools plus `schematic.inspect` only (both
-  proposals dormant in C). [B21 D2, 2026-09-26] The Tier 1 edit is live for the schematic specialist since D2; the replacement stays dormant (the pin-facts reads) - `specialist-proposals.md`.
+  proposals dormant in C). [B21 D2, 2026-09-26] The Tier 1 edit is live for the schematic specialist since D2; the replacement stays dormant (the pin-facts reads) - `specialist-proposals.md`. [B21 D3, 2026-09-26] Since B21-D3 the replacement is live for the schematic specialist too (`specialist-replacement.md`).
 
 ## 6. Suites, evidence, the pin moves, gates
 
@@ -330,7 +334,7 @@ role to `specialistAllowedToolIds`; cases 4, 8 and 14 script reads inside the ca
 or the circuit specialist's tool). `b21-a-import-gates.test.ts` cases 1, 3 and 5 — five modules to six. `b21-b-chat-router.test.ts`
 cases 4, 11, 12b and 15 — the route's context holds no component authority (no durable binding), so the sourcing specialist has no
 tools and is not run: two specialists run, the sourcing task records its `role_has_no_tools` dissent (the record ends at revision 6
-with the plan's three tasks; [B21 D] at revision 8 once the merge records its two decisions), and the hang and the directive-looking summary move to the verification critic (the second specialist to
+with the plan's three tasks; [B21 D] at revision 8 once the merge records its two decisions; [B21 D3, 2026-09-26] at revision 11 since the schematic specialist joined the replacement DAG, `specialist-replacement.md`), and the hang and the directive-looking summary move to the verification critic (the second specialist to
 run); case 4's title now says exactly that. The pages that count these suites (A's §7, B's §6) carry the new `it(` counts; B's page
 gains the `D-full-circuit-layout` row, the trimmed list, the run shapes of route cases 4 and 17, and its citations of `router.ts` and
 `scheduler.ts` are re-pinned to the lines as left (page case 7 checks them).
@@ -449,7 +453,7 @@ Every text below is as of the review's fix round (2026-09-26).
   never-exposed / Tier 3 id; a proposal only in a proposing role's row; `roleExposureReport` reports drift by role, id and reason. A row
   is a CEILING: ten row entries (nine distinct ids) are DORMANT in B21-C (the six proposal entries — specialists read only; the three
   external reads — OD-109; the history read — no captured view in a specialist context), each saying so in its reason.
-  [B21 D2, 2026-09-26] Amended by B21-D2: the Tier 1 edit (circuit-topology, schematic) and the bounded PCB edit (pcb-placement-routing) are live, the replacement and the two layout proposals dormant with their reasons (`specialist-proposals.md` section 7 carries the amended entry).
+  [B21 D2, 2026-09-26] Amended by B21-D2: the Tier 1 edit (circuit-topology, schematic) and the bounded PCB edit (pcb-placement-routing) are live, the replacement and the two layout proposals dormant with their reasons (`specialist-proposals.md` section 7 carries the amended entry). [B21 D3, 2026-09-26] Amended by B21-D3: the replacement is live for the schematic role (`specialist-replacement.md` section 7 carries the amended entry).
 - **Consequence, stated exactly (the review's fix):** under OD-109 the sourcing specialist's only effective read is
   component-authority.inspect, so it runs only when at least one schematic component has a durable binding that loads within the
   route loader's 5 s deadline; without a durable source (the local build), for a project with no binding (every new design), on a
@@ -483,7 +487,7 @@ Every text below is as of the review's fix round (2026-09-26).
 - **Question:** the closed eight-family list declares two schematic Tier 1 families that nothing can route to (D21-31).
 - **Default applied:** recorded as reserved and unchanged (the B18-B pin fixes the list); no schematic descriptor is a granted
   execution; the `schematic` role receives the two sealed Tier 2 proposals and `schematic.inspect` only (OD-15), both proposals dormant
-  while specialists read only. [B21 D2, 2026-09-26] Since D2 the Tier 1 edit is live for the schematic role and the replacement stays dormant (`specialist-proposals.md`).
+  while specialists read only. [B21 D2, 2026-09-26] Since D2 the Tier 1 edit is live for the schematic role and the replacement stays dormant (`specialist-proposals.md`). [B21 D3, 2026-09-26] Since D3 both sealed Tier 2 proposals are live for the schematic role (`specialist-replacement.md`).
 - **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
   schematic execution (reverses OD-15; its own chapter).
 
@@ -605,7 +609,7 @@ the reader otherwise.
 | C30 | `app/lib/engineering/execution-grant.ts` | 32 | — | `export const EXECUTION_FAMILIES = Object.freeze([` | D21-31: the closed eight families |
 | C31 | `app/lib/mcp/agent-port.ts` | 221 | — | `list.length > MCP_AGENT_TOOLS_MAX) return names;` | A4L: an over-long list approves nothing |
 | C32 | `app/lib/engineering/permission-tiers.ts` | 36 | — | `export const TIER3_FAMILY_PATTERN = ` | the Tier 3 family floor |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry);` | the one bare specialist gateway |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the one specialist gateway: no minter, no port, no prompt version; [B21 D3] its one option the route's pin-facts reader (anchor re-pinned, line unchanged) |
 | C34 | `app/lib/engineering/tool-discovery.ts` | 32 | — | `export const DISCOVERY_CHANNELS = ["interactive-ui", "assistant-agent", "automation", "api", "mcp"] as const;` | the channel list, unchanged |
 | C35 | `app/lib/agent/orchestration/contracts.ts` | 77 | — | `maxAllowedToolIds: 32,` | the contracts' A4L bound |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 84 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |

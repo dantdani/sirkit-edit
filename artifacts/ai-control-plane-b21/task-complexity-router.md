@@ -90,7 +90,7 @@ The router normalizes the message (one line, collapsed whitespace, lower case, n
 below in order; the first match wins (C4). A message that matches no DAG rule is `single` by construction: simple work stays direct.
 The table equals `ROUTER_RULES` (C1) and the role lists equal `DAG_ROLE_LISTS` (C2); `b21-b-page.test.ts` case 2 compares them. The
 DAG shapes and their lists: `bounded-schematic-proposal` → `coordinator`, `schematic`; `bounded-pcb-proposal` → `coordinator`,
-`pcb-placement-routing`; `component-replacement` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `verification-critic`;
+`pcb-placement-routing`; `component-replacement` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic` ([B21 D3, 2026-09-26] the schematic specialist added after the sourcing evidence, OD-107 amended - `specialist-replacement.md`);
 `full-circuit-creation` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic`;
 `full-circuit-layout` → `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `pcb-placement-routing`, `verification-critic`;
 `manufacturing-readiness` → `coordinator`, `manufacturing-readiness-reviewer`. [B21 C] The two full-circuit lists are the runbook's six
@@ -110,7 +110,7 @@ trimmed to OD-107's cap of four by a fixed priority, and the layout variant is a
 | `T3-deliver` | refused | :141, :148, :811 | — |
 | `S-explicit` | single | :806 | — |
 | `S-role` | single | :806, :829 | — |
-| `D-component-replacement` | dag | :809 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `verification-critic` |
+| `D-component-replacement` | dag | :809 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic` |
 | `D-full-circuit-layout` | dag | :810 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `pcb-placement-routing`, `verification-critic` |
 | `D-full-circuit-creation` | dag | :810 | `coordinator`, `circuit-topology`, `component-sourcing-evidence`, `schematic`, `verification-critic` |
 | `D-manufacturing-readiness` | dag | :811 | `coordinator`, `manufacturing-readiness-reviewer` |
@@ -134,7 +134,7 @@ trimmed to OD-107's cap of four by a fixed priority, and the layout variant is a
   one coordinator turn, whatever else it says ("Rotate the 3D view to isometric" included).
 - **`S-role`** (C7): a role outside `TIER1_EXECUTE_ROLES` (not `pcb_editor`, not `project_admin`) never recruits specialists: a viewer,
   a commenter or a reviewer asking for a replacement gets one coordinator turn, as today (router case 5).
-- **`D-component-replacement`** (runbook :809; the composer's 5b pairing ITSELF — `REPLACE_PART` is exported from composer-routing.ts
+- **`D-component-replacement`** (runbook :809; the composer's 5b pairing ITSELF — `REPLACE_PART` is exported from composer-routing.ts [B21 D3, 2026-09-26] - since B21-D3 the rule is that pairing OR the router's kind swap, so the runbook's scenario-17 sentence routes here, and its list holds the schematic specialist - see the note closing this bullet (`specialist-replacement.md`)
   (C9) and imported by the router (C35), one grammar, never a wider copy): a replace / swap / substitute verb with, in the same clause,
   a word naming the thing swapped IN (part, component, MPN, alternate, alternative, chip), with a schematic present. "Delete U1 and
   replace it with the approved lower-power part while preserving compatible nets." (scenario 4's sentence) is this shape; "Replace R1
@@ -142,6 +142,7 @@ trimmed to OD-107's cap of four by a fixed priority, and the layout variant is a
   generic component type is not the thing swapped in) and stay `single` — exactly the messages the composer routes to a schematic
   edit (router case 7 pins the two grammars' agreement). Before the review the router carried its own wider noun list (resistors,
   capacitors, timers, …), which recruited three specialists for a value change; that copy is gone.
+  [B21 D3, 2026-09-26] Superseded in part by B21-D3 (OD-107 amended): the rule is now the composer's pairing OR the router's kind swap (`partKindSwap`: a replace / swap / substitute verb at the head, the first with / for / by after it, an ACTIVE part kind - timer, regulator, LDO, op-amp, comparator, microcontroller, oscillator, driver - heading the swapped-in object), a superset of the composer's grammar: "one grammar, never a wider copy" and router case 7's agreement hold for the composer's half only - the scenario-17 sentence routes here while the composer sends it to the schematic editor (D21-38), which router case 7 (moved, its reason written next to it) now pins; no passive type is in the kind list, and a value change, a purpose ("for the LDO"), a negation or a question stays `single` (`specialist-replacement.md`). [B21 D3 lead, 2026-09-26] Superseded again: after an adversarial phrasing sweep found the unanchored pairing and the kind swap sending prohibitions ("Don't swap parts without asking me first."), "why" questions, retractions and exchanges of existing parts to the DAG, the rule is ONE strict grammar with closed vocabularies, anchored at both ends - three whole-message request shapes, the imported pairing kept as the part words' agreement check (`specialist-replacement.md` section 3).
 - **`D-full-circuit-creation`** (:810): design / generate / create / build / make / draw at the head, NOT naming a PCB object (via,
   track, trace, silkscreen, copper, zone, …, the composer's rule 5), NOT a geometry, annotation or size ask (box, line, label, outline,
   wider, "50 mm", …, C36 — "Make the board 50 mm wide." and "Draw a box around U1." are `single`) and NOT "make <reference designator>"
@@ -317,7 +318,7 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   private, so the recorder is wrapped by `holdTraceTerminal` (C22) and the stream's terminal by the emit wrapper) and its warning lines
   remembered; a first turn that does not complete runs NO specialist (its own `run_failed` is the one terminal, the trace fails, the
   record stays empty — route case 10, whose proof deletes the guard and fails). Then the SPECIALIST gateway is built with no option at
-  all (C46) and the scheduler runs (section 3). Then the stand-down rules: a refused plan → the first turn's terminal stands under
+  all (C46) and the scheduler runs (section 3). [B21 D3, 2026-09-26] Since B21-D3 that gateway's ONE option is the route's pin-facts reader (`specialistGatewayOptions`; C46 re-pinned by anchor, still no minter, no port, no prompt version - OD-109 amended) and the schematic role is offered the replacement (`specialist-replacement.md`). Then the stand-down rules: a refused plan → the first turn's terminal stands under
   "Orchestration: no specialist ran (<reason>); the assistant's answer above stands." — the CLOSED REASON ONLY: a record failure's
   driver text (`DATABASE_URL …`, a host, a user, `ECONNREFUSED`) reaches neither the stream nor the trace (route cases 5 and 13; before
   the review the raw `error.message` was interpolated into the client-visible warning); a cancelled DAG → the run ends `run_failed
@@ -342,11 +343,11 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   orchestration's own status and refusal lines take at most `ORCHESTRATION_TRACE_LINES_MAX` (12) of the trace's 32 warning slots -
   every line still reaches the stream, and a stand-down reason is always recorded. As B built it: five adapter starts — coordinator,
   three specialists, coordinator — one `run_started`, one terminal and two trace steps. [B21 C] With the component authority loaded
-  (a durable source returning U1's binding) that shape holds and the record at revision 10 has three requests, three results and, since
-  B21-D, the merge's three `accepted` decisions (route case 17); without it (the route suite's default: no durable binding) the sourcing specialist has no tools and is not run — four
-  adapter starts, one `run_started`, one terminal, two trace steps, and the record at revision 8 with the plan's three tasks, two
-  requests with their results, the sourcing task's `role_has_no_tools` dissent and, since B21-D, the merge's two `accepted` decisions
-  (route case 4). **Degraded mode is visible, never
+  (a durable source returning U1's binding) that shape holds and the record at revision 13 has four requests, four results and, since
+  B21-D, the merge's four `accepted` decisions (route case 17); without it (the route suite's default: no durable binding) the sourcing specialist has no tools and is not run — four
+  adapter starts, one `run_started`, one terminal, two trace steps, and the record at revision 11 with the plan's four tasks, three
+  requests with their results, the sourcing task's `role_has_no_tools` dissent and, since B21-D, the merge's three `accepted` decisions
+  (route case 4). [B21 D3, 2026-09-26] Since B21-D3 the replacement DAG holds the schematic specialist too: six adapter starts with the authority loaded (four specialists), five without it (the sourcing specialist not run); revisions 10 -> 13 and 8 -> 11 (`specialist-replacement.md`). **Degraded mode is visible, never
   silent.**
 - **The envelope** (`specialistResultsEnvelope`, C45) — **a recorded DEVIATION from OD-108's default** (a redacted TOOL RESULT under
   `MAX_RESULT_CHARS`): B carries the specialists' outcomes in the follow-up turn's USER MESSAGE, because no tool call exists to attach a
@@ -675,7 +676,7 @@ never checked (`composer-routing.ts`, `adapters.ts` and the gate test gained lin
 | C43 | `app/lib/agent/orchestration/scheduler.ts` | 545 | — | `if (event.type !== "tool_refused" && !(event.type === "tool_finished" && !event.ok)) return;` | a specialist's refused tool call becomes a bounded warning line |
 | C44 | `app/api/chat/orchestration-runtime.ts` | 178 | — | `export function followUpDeps(deps: AgentLoopDeps, specialistGateway: AgentToolInvocationGateway): AgentLoopDeps {` | the follow-up turn narrowed by construction |
 | C45 | `app/api/chat/orchestration-runtime.ts` | 195 | — | `export function specialistResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind: "ran" }>): SpecialistResultsEnvelope {` | the envelope: bounded, sanitized, attributed, withholding |
-| C46 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry);` | the specialist gateway built with no option: no minter, no port, no prompt version |
+| C46 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the specialist gateway built with no minter, no port, no prompt version; [B21 D3] its one option is the route's published pin-facts reader (anchor re-pinned, line unchanged) |
 | C47 | `app/api/chat/orchestration-runtime.ts` | 275 | — | `if (outcome.stop === "provider_outage") return standDown(` | no further provider call after a provider outage |
 | C48 | `app/api/chat/orchestration-runtime.ts` | 296 | — | `if (event.type === "warning" && firstWarnings.has(event.message)) return;` | the follow-up turn never repeats a warning line |
 | C49 | `app/api/chat/orchestration-runtime.ts` | 312 | — | `emit({ ...completed, steps, toolCalls, usage });` | the one terminal reports the run's totals |

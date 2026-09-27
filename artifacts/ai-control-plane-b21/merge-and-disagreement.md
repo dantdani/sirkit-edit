@@ -475,6 +475,7 @@ discovery closure clauses and the §10 amendment line.
   choose otherwise:** a role-row ceiling in the merge (only a role whose row names the family's proposal tool may carry its action) - a
   one-rule change pinned by a merge case.
 - [B21 D2, 2026-09-26] Amended by B21-D2: the proposing roles' non-long-running proposals are live (the replacement stays dormant: pin-facts reads); a role that is never offered a proposal tool can no longer carry an artifact, since only its run's own seal reaches the merge (`specialist-proposals.md`).
+- [B21 D3, 2026-09-26] Amended by B21-D3: the replacement is live for the schematic role (its sealer's pin-facts reads reach the specialist gateway), the replacement DAG holds two proposing roles, and the route's envelope renders OD-130's part review for a seal the exact authority moved away from - through the scheduler seam only: CONFIRMED-unreachable from a production POST until B21-E's route-level resume (`specialist-replacement.md`).
 
 ### The README row (`artifacts/ai-control-plane-b21/README.md`, replacing the planned B21-D row)
 

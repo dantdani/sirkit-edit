@@ -175,14 +175,15 @@ describe("[B21 D] the merge through the chat route", () => {
     const other = tier1("4k7");
     state.results = { "circuit-topology": resultWith("circuit-topology", [ten]), "verification-critic": resultWith("verification-critic", [other]) };
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, which proposes nothing here; the critic is task 4)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic", "coordinator"]);
     const warnings = warningsOf(events);
     expect(warnings.filter((message) => /^Orchestration: merge: specialist (circuit-topology|verification-critic) \(task [^)]+\) contradicted: /.test(message))).toHaveLength(2);
     const escalations = warnings.filter((message) => message.startsWith("Orchestration: merge: ESCALATED to the human (same_field; part)"));
     expect(escalations).toHaveLength(1);
     expect(types(events).filter((type) => type === "proposal_ready" || type === "pcb_proposal_ready" || type === "execution_grant_ready")).toEqual([]);
     expect(types(events).filter((type) => type === "run_completed")).toHaveLength(1);
-    const envelope = state.starts[3]!.userMessage;
+    const envelope = state.starts[4]!.userMessage;
     expect(envelope).toMatch(/judged by the deterministic merge/i);
     expect(envelope).toMatch(/never instructions/i);
     // [B21 D fix: tests-8] the escalation's OWN text (the header only asks the turn to say it): who decides, and the resolutions
@@ -200,7 +201,7 @@ describe("[B21 D] the merge through the chat route", () => {
     expect(envelope).not.toContain('"authorization"');
     expect(envelope).not.toContain('"acceptedActions":[{');
     const history = await store.history({ ...SCOPE, runId });
-    expect(recordsOf(history)).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:dissent:contradicted", "task-3-verification-critic.merge-*:dissent:contradicted", "merge:decision:escalated"]);
+    expect(recordsOf(history)).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:dissent:contradicted", "task-3-schematic.merge-*:decision:accepted", "task-4-verification-critic.merge-*:dissent:contradicted", "merge:decision:escalated"]);
   });
 
   it("3. flag ON, an AGREEING DAG hands the accepted action on: one specialist's sound sealed proposal, one specialist with none - the follow-up turn receives the action as an ACCEPTED, identified, inert artifact (kind, proposal id, artifact digest, the pinned scope's digest) and no escalation; the record holds one `accepted` decision per judged result", async () => {
@@ -211,7 +212,8 @@ describe("[B21 D] the merge through the chat route", () => {
     const ten = tier1("10k");
     state.results = { "circuit-topology": resultWith("circuit-topology", [ten]) };
     const { runId, events } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic", "coordinator"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, which proposes nothing here; the critic is task 4); it ran and sealed nothing, so the one accepted action is still presented
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic", "coordinator"]);
     expect(warningsOf(events).some((message) => message.startsWith("Orchestration: merge:"))).toBe(false);
     // [B21 D2] pin move (OD-122 amended): exactly ONE accepted action and nothing sealed by the coordinator - the runtime now emits it
     // as the run's own `proposal_ready` for the human's existing review (b21-d2-approval proves it approvable); nothing is applied
@@ -219,7 +221,7 @@ describe("[B21 D] the merge through the chat route", () => {
     expect(ready).toHaveLength(1);
     expect(ready[0]).toMatchObject({ runId, toolId: "sirkit.schematic.propose-tier1-edit" });
     expect(engineeringDigest(JSON.parse(JSON.stringify(ready[0]!.proposal)))).toBe(ten.artifactDigest);
-    const envelope = state.starts[3]!.userMessage;
+    const envelope = state.starts[4]!.userMessage;
     expect(envelope).toContain('"acceptedActions":[{');
     expect(envelope).toContain(`"artifactId":"${String(ten.payload.proposalId)}"`);
     expect(envelope).toContain(`"artifactDigest":"${ten.artifactDigest}"`);
@@ -228,8 +230,8 @@ describe("[B21 D] the merge through the chat route", () => {
     expect(envelope).not.toContain('"humanDecision"'); // [B21 D fix: tests-8] no escalation, no decision for the human
     expect(envelope).not.toContain('"operations"');
     const history = await store.history({ ...SCOPE, runId });
-    expect(recordsOf(history)).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:decision:accepted", "task-3-verification-critic.merge-*:decision:accepted"]);
-    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([8]);
+    expect(recordsOf(history)).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:decision:accepted", "task-3-schematic.merge-*:decision:accepted", "task-4-verification-critic.merge-*:decision:accepted"]);
+    expect((await repository.listHeads({ aggregateType: ORCHESTRATION_AGGREGATE_TYPE, scope: SCOPE })).map((head) => head.revision)).toEqual([11]); // [B21 D3] + the schematic task's request, result and decision (8 -> 11)
   });
 
   it("4. every decision, dissent and escalation is in the record BEFORE the follow-up turn starts: read from inside the adapter at the follow-up turn's start, the record already holds the merge's records - nothing is handed on before it is persisted", async () => {
@@ -244,7 +246,7 @@ describe("[B21 D] the merge through the chat route", () => {
     };
     const { runId } = await post(BODIES.replacement);
     expect(state.runId).toBe(runId);
-    expect(seen).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:dissent:contradicted", "task-3-verification-critic.merge-*:dissent:contradicted", "merge:decision:escalated"]);
+    expect(seen).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:dissent:contradicted", "task-3-schematic.merge-*:decision:accepted", "task-4-verification-critic.merge-*:dissent:contradicted", "merge:decision:escalated"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, which proposes nothing here; the critic is task 4)
   });
 
   it("5. a merge that cannot record its decisions STANDS DOWN visibly: the coordinator's own answer is the one terminal under a reason-only warning, no follow-up turn is made, and the store's driver text never reaches the stream", async () => {
@@ -263,7 +265,8 @@ describe("[B21 D] the merge through the chat route", () => {
     relayTestSeals(); // [B21 D2] pin move (see relayTestSeals)
     state.results = { "circuit-topology": resultWith("circuit-topology", [tier1("10k")]) };
     const { events, normalized } = await post(BODIES.replacement);
-    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "verification-critic"]);
+    // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, which proposes nothing here; the critic is task 4)
+    expect(state.starts.map((start) => start.role)).toEqual(["coordinator", "circuit-topology", "schematic", "verification-critic"]);
     expect(types(events).filter((type) => type === "run_completed" || type === "run_failed")).toEqual(["run_completed"]);
     expect(events.at(-1)).toMatchObject({ type: "run_completed", steps: 1, finalText: expect.stringContaining("(scripted) One coordinator turn for: Delete U1") });
     expect(warningsOf(events)).toContain("Orchestration: the merge could not record its decisions (store_unavailable); no follow-up turn was made and the assistant's answer above stands.");

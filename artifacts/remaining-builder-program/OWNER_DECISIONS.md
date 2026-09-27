@@ -923,6 +923,33 @@ Amendments to existing entries:
   concurrency cap on the long-running engines OD-107 already names); another priority (a data change pinned by the router suite); or a
   wider or narrower circuit-kind list (a data change pinned by router case 9).
 
+**Amendment (B21-D3, 2026-09-27) — OD-107 — DAG caps and the role lists, amended: the replacement DAG holds two proposing roles (B21-D3, 2026-09-26)**
+
+- **Question:** scenario 17's `component-replacement` DAG held one proposing specialist, so its disagreement could not be structural
+  (D21-37), and the runbook's own sentence did not route to it.
+- **Amended:** `DAG_ROLE_LISTS["component-replacement"]` is `coordinator`, `circuit-topology`, `component-sourcing-evidence`,
+  `schematic`, `verification-critic` - four specialists, within the cap of four. The order is a presentation and budget order only: no
+  specialist reads another's result before B21-E (each specialist's objective is the coordinator's user message alone and its loop
+  history is empty; the replacement's target is the verified exact authority of the coordinator's context, never the sourcing
+  evidence). The router's `D-component-replacement` rule is ONE strict replacement grammar ([B21 D3 lead]; section 3): a replace / swap /
+  substitute verb at the HEAD of the message (after a polite prefix), the FIRST `with` / `for` / `by` after it (`for` / `by` only
+  before a / an - "for the LDO" is a purpose), the swapped-in object cut at its first preposition, clause word or sentence end, and an
+  ACTIVE part kind (timer, regulator, LDO, op-amp, comparator, microcontroller, oscillator, driver) heading it after at most three
+  modifiers that start with a letter and are no stop word - as the review round left it; the lead's adversarial sweep then replaced
+  it with three whole-message request shapes anchored at both ends ("replace / swap (out) <part> with / for / by <new part>" or
+  "substitute <part> with / by <new part>", "delete / remove <part> and replace it with <new part>", "substitute <new part> for
+  <part>") in which NO token is open - the replaced part's seven shapes (an active designator, a listed MPN prefix, a listed standard
+  number), a closed spec-word list and each kind's unit-bearing values for the new part (never an MPN or a number), at most one listed
+  tail - ending in an active kind or a part word (which the imported composer pairing must agree with); a bare kind for a bare kind
+  names nothing new, "would you" is an opinion, and the raw trailing punctuation decides a question. A question or retraction after the request, an existing part, an attribute, a documentation or location phrase, a
+  value and a passive type stay `single` (replacement-roles cases 7, 8 and 9 - case 9 the sweep's corpus); the grammar fails toward
+  one coordinator turn. B's router case 7 pins the rule's source (moved). The caps, the wall time and parallelism 1 are
+  unchanged. Proven by `b21-d3-replacement-roles.test.ts` cases 5, 7, 8 and 9, `b21-d3-scenario17.test.ts` case 8 and B's moved router and
+  scheduler cases.
+- **The owner may choose otherwise:** keep the three-specialist list (scenario 17 then disagrees only in prose), route by MPN as well
+  (a catalog lookup the router, a pure function, does not make today), or hand earlier specialists' results to later ones (a data-flow
+  change for B21-E that would make the order load-bearing).
+
 ## OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-A, 2026-09-24)
 
 - **Question:** `AgentRunRequest.history` is plain text; a structured result has no turn kind of its own.
@@ -994,6 +1021,19 @@ Amendments to existing entries:
   gateway is still the bare one (no minter, no port, no prompt version). Proven by `b21-d2-proposing-roles.test.ts` cases 5 and 6.
 - **The owner may choose otherwise:** give the specialist gateway the server's published pin-facts reads (then the replacement proposal
   can seal for the schematic role - a composition-root injection like the ports, which D2 declined as a stop condition).
+
+**Amendment (B21-D3, 2026-09-27) — OD-109 — Specialists never hold the three availability facts; the specialist gateway holds the published pin-facts reads, amended (B21-D3, 2026-09-26)**
+
+- **Question:** the replacement's sealer needs the server's published pin-facts reads, which only the coordinator's gateway received
+  (D21-37).
+- **Amended:** the runtime (`orchestration-runtime.ts`, the specialists' composition root) builds the specialist gateway with ONE option
+  - the route's own source and reader (`loadRunReplacementPinFacts` under the request's signal and `DEFAULT_PIN_FACTS_DEADLINE_MS`):
+  bounded, read-only facts of the part catalog, never a port, a minter, a prompt version or an executor; with no configured source, no
+  option at all (the seal blocks `current-pin-authority-unavailable`, as the coordinator's). The three availability facts stay false; the
+  eight elevation claims stay refused. The reader's closure reaches nothing the coordinator's read does not already use. Proven by
+  `b21-d3-pin-facts.test.ts`.
+- **The owner may choose otherwise:** withdraw the option (the replacement goes dormant again for specialists - one line in the
+  runtime and the live list).
 
 ## OD-110 — The deterministic no-provider path (B21-A records; B21-B builds) (2026-09-24)
 
@@ -1194,6 +1234,15 @@ Amendments to existing entries:
 - **The owner may choose otherwise:** make the layout proposals live for the PCB specialist (with a concurrency cap on the engines,
   OD-107); wire the pin-facts reads into the specialist gateway (OD-109's option) so the replacement is live; or cut the dormant entries
   from the rows.
+
+**Amendment (B21-D3, 2026-09-27) — OD-120 — Which of the 33 exposed tools each role may be offered, amended: the replacement is live for the schematic role (B21-D3, 2026-09-26)**
+
+- **Question:** D2 kept `sirkit.schematic.propose-component-replacement` dormant for specialists (its sealer's pin-facts reads).
+- **Amended:** it is in `SPECIALIST_PROPOSAL_TOOL_IDS`; only the `schematic` row lists it, so it is live for that role alone; its
+  sealer's context fact is the head mark (`SEALER_CONTEXT_FACTS`); the long-running placement and routing proposals stay dormant with
+  their reasons; the wrapper's `role_not_permitted_tool` still covers everything outside the row. Proven by
+  `b21-d3-replacement-roles.test.ts` and `b21-d3-scenario17.test.ts`.
+- **The owner may choose otherwise:** make the replacement live for the circuit specialist too (a row change), or keep it dormant.
 
 ## OD-121 — How the role allowlist is enforced, as applied (B21-C, 2026-09-26)
 
