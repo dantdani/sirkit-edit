@@ -204,21 +204,24 @@ const ACTIVE_KIND = "(?:timer|regulator|ldo|op-?amp|comparator|microcontroller|m
 const PART_WORD = "(?:part|component|chip|alternative|alternate)";
 /** an ACTIVE component's reference designator (U1, IC3, Y1, Q2, K1, PS1, U1A) - never a passive's (a passive change is a value, rating
  *  or package edit; VR is a variable resistor as often as a regulator), never pin3, net5, sheet2, tim2, x86 or C0603 */
-const DESIGNATOR = "(?:u|ic|y|q|k|ps)\\d{1,4}[a-z]?";
+const DESIGNATOR = "(?:u|ic|y|q|k|ps)\\d{1,4}[a-f]?(?![a-z])"; // [B21 D3 lead, round 6] a unit letter a-f only, never a plural ("U1s") or a look-alike ("k8s", "Y2K")
 /** an MPN of the REPLACED part: a listed vendor or family prefix, a digit, at least three digits in the token, an optional numeric suffix
  *  ("-3.3"), never a plural ("NE555s") or a multiplier ("x2") - and only ever ANCHORED by a kind or a designator in `REPLACED` (a bare
  *  prefixed code is as often a solder alloy, a laminate, an instrument, a standard or a serial number) (NE555, LM358, TL072, TLC555,
  *  STM32F030, ATmega328, AMS1117-3.3) */
-const MPN = "(?=(?:[a-z]*\\d){3})(?:ne|sa|se|lm|lmc|lmv|lt|ltc|max|mcp|mic|tl|tlc|tlv|tps|ina|opa|ad|adp|op|ua|ts|tsv|ncp|mc|icm|stm|atmega|attiny|pic|esp|rp|nrf|ams|ld|ap|mp|ir|irs|ucc|drv|uln|bq|lp|isl|xc|cd|sn|ca)\\d[a-z0-9]{0,10}(?<!\\ds)(?<!x\\d{1,2})(?:-\\d+(?:\\.\\d+)?)?";
+const MPN = "(?=(?:[a-z]*\\d){3})(?:ne|sa|se|lm|lmc|lmv|lt|ltc|max|mcp|mic|tl|tlc|tlv|tps|ina|opa|ad|adp|op|ua|ts|tsv|ncp|mc|icm|stm|atmega|attiny|pic|esp|rp|nrf|ams|ld|ap|mp|ir|irs|ucc|drv|uln|bq|lp|isl|xc|cd|sn|ca)\\d[a-z0-9]{0,10}(?<!\\ds)(?<!x\\d{1,2})(?:-\\d{1,2}(?:\\.\\d{1,2})?(?!\\d))?"; // [B21 D3 lead, round 6] the suffix a voltage variant ("-3.3", "-12"), never a second part number ("NE555-556")
 /** a standard part NUMBER that names a part by itself ("the 555 timer", "the 7805 regulator", "the 741 op-amp") - a closed list, never a year,
  *  a net or a value */
 const STANDARD_PART = "(?:555|556|558|7555|741|358|324|339|393|311|317|337|386|7805|7806|7809|7812|7815|7905|7912|1117|4017|4060|4093|40106)";
 /** the REPLACED part, one of seven closed shapes: "it"; a designator ("U1"); "part / IC / chip / component U1"; "the timer" / "the part";
  *  "the NE555 timer [U1 | (U1)]" or "the NE555 U1 | (U1)" - an MPN always anchored by a kind or a designator; "the 555 timer [U1 |
  *  (U1)]" (a listed standard number); "U1, the NE555," - never a list, a plural, a value, a BOM alternate, a bare code or a clause */
-const REPLACED = `(?:it|${DESIGNATOR}|(?:part|ic|chip|component)\\s${DESIGNATOR}|the\\s(?:${ACTIVE_KIND}|part|component|chip)|the\\s(?:(?:${MPN}|${STANDARD_PART})\\s${ACTIVE_KIND}(?:\\s${DESIGNATOR}|\\s\\(${DESIGNATOR}\\))?|${MPN}\\s(?:${DESIGNATOR}|\\(${DESIGNATOR}\\)))|${DESIGNATOR},\\sthe\\s(?:${MPN}|${STANDARD_PART}\\s${ACTIVE_KIND}),?)`;
-/** the replaced part named by a bare kind or part word ("it", "the timer", "the part"): with a bare new part it names nothing new */
-const BARE_REPLACED = `(?:it|the\\s(?:${ACTIVE_KIND}|part|component|chip))`;
+const REPLACED = `(?:it|${DESIGNATOR}|(?:part|ic|chip|component)\\s${DESIGNATOR}|the\\s(?:${ACTIVE_KIND}|part|component|chip)|the\\s(?:(?:${MPN}|${STANDARD_PART})\\s${ACTIVE_KIND}(?:\\s${DESIGNATOR}|\\s\\(${DESIGNATOR}\\))?|${MPN}\\s(?:${DESIGNATOR}|\\(${DESIGNATOR}\\)))|${DESIGNATOR},\\sthe\\s(?:${MPN}|${STANDARD_PART}\\s${ACTIVE_KIND}),)`; // [B21 D3 lead, round 6] the appositive's closing comma required: "U1, the NE555 with" is a two-item list
+/** [B21 D3 lead, round 6] the replaced part NAMED without a kind the grammar can compare ("it", "the part", "the NE555 (U1)", "U1, the
+ *  NE555,"): for it, a bare new part names nothing new */
+const BARE_REPLACED = `(?:it|the\\s(?:part|component|chip)|the\\s${MPN}\\s(?:${DESIGNATOR}|\\(${DESIGNATOR}\\))|${DESIGNATOR},\\sthe\\s(?:${MPN}|${STANDARD_PART}\\s${ACTIVE_KIND}),)`;
+/** [B21 D3 lead, round 6] the kind families a part is named by ("an LDO" is a regulator, "an MCU" a microcontroller) */
+const KIND_FAMILIES: readonly string[] = Object.freeze(["timer", "(?:regulator|ldo)", "op-?amp", "comparator", "(?:microcontroller|mcu)", "oscillator", "driver"]);
 /** the CLOSED list of words that specify a NEW part (power, noise, speed, size, cost, supply, technology, compatibility, sourcing) -
  *  never a value of a passive, a package, a mounting, a placement, a firmware or simulation stand-in, or a pointer at an existing part */
 const SPEC_WORD = "(?:low-power|lower-power|ultra-low-power|micropower|nanopower|low-noise|lower-noise|low-dropout|low-quiescent|low-iq|cmos|cmos-based|bipolar|rail-to-rail|precision|high-speed|faster|fast|smaller|small|cheaper|cheap|low-cost|lower-cost|higher-current|high-current|higher-voltage|high-voltage|wide-input|adjustable|isolated|crystal|canned|gate|motor|stepper|buck|boost|switching|linear|synchronous|dual|quad|single|pin-compatible|drop-in|compatible|free-running|second-source|automotive|industrial|efficient|quieter|quiet|newer|modern|push-pull|open-drain|zero-drift|programmable|low-pin-count|high-side|low-side)";
@@ -230,14 +233,15 @@ const VERSION_WORD = "(?:cmos|bipolar|low-power|lower-power|ultra-low-power|micr
  *  comparator or an op-amp ("a 1 ns comparator"); 555 compatibility for a timer - a timer's or an oscillator's speed, adjustability,
  *  mode or precision is set by R and C, never a new part */
 const KIND_VALUES: ReadonlyArray<readonly [string, string, string?]> = Object.freeze([
-  ["(?:regulator|ldo|driver)", "(?:\\d{1,3}(?:\\.\\d{1,2})?\\s?v|\\d{1,2}(?:\\.\\d{1,2})?\\s?a|\\d{1,4}\\s?(?:ma|ua)|\\d{1,2}v\\d{1,2})"],
-  ["(?:microcontroller|mcu)", "\\d+-(?:bit|pin)"],
-  ["oscillator", "\\d{1,3}(?:\\.\\d{1,3})?\\s?(?:khz|mhz)", "(?:fast|faster|high-speed|adjustable)"],
-  ["(?:op-?amp|comparator)", "\\d{1,3}(?:\\.\\d{1,2})?\\s?(?:ns|us)"],
-  ["timer", "\\d{3,5}-compatible", "(?:fast|faster|high-speed|adjustable|free-running|precision)"],
-] as const);
-/** the NEW part named by a kind: "a" / "an" (or "the approved"), at most four spec words or that kind's values, then the kind */
-const KIND_OBJECTS = KIND_VALUES.map(([kind, value, excluded]) => `(?:an?|the\\sapproved)\\s(?:${excluded ? `(?!${excluded}\\s)` : ""}(?:${SPEC_WORD}|${value})\\s){0,4}${kind}`);
+  ["(?:regulator|ldo|driver)", "(?:\\d{1,3}(?:\\.\\d{1,2})?\\s?v|\\d{1,2}(?:\\.\\d{1,2})?\\s?a|\\d{1,4}\\s?(?:ma|ua)|\\d{1,2}v\\d{1,2})", "(?:crystal|canned|free-running)"],
+  ["(?:microcontroller|mcu)", "(?:(?:4|8|16|32|64)-bit|(?:[6-9]|[1-9]\\d{1,2})-pin)", "(?:adjustable|linear|switching|buck|boost|stepper|motor|gate|crystal|canned|synchronous|programmable|free-running)"],
+  ["oscillator", "\\d{1,3}(?:\\.\\d{1,3})?\\s?(?:khz|mhz)", "(?:fast|faster|high-speed|adjustable|synchronous|linear|switching|buck|boost|stepper|motor|gate|free-running)"],
+  ["(?:op-?amp|comparator)", "\\d{1,3}(?:\\.\\d{1,2})?\\s?(?:ns|us)", "(?:adjustable|linear|synchronous|programmable|switching|buck|boost|stepper|motor|gate|crystal|canned|free-running)"],
+  ["timer", "(?:555|556|558|7555)-compatible", "(?:fast|faster|high-speed|adjustable|free-running|precision|synchronous|linear|switching|buck|boost|stepper|motor|gate|crystal|canned|programmable)"],
+] as const); // [B21 D3 lead, round 6] bounded widths and pin counts, a LISTED timer for compatibility, and each kind's nonsense spec words excluded
+/** the NEW part named by a kind: "a" / "an" (or "the approved"), at most four spec words or that kind's values (never a zero magnitude:
+ *  "0 V", "0v0", "0 kHz", "0-pin"), then the kind */
+const KIND_OBJECTS = KIND_VALUES.map(([kind, value, excluded]) => `(?:an?|the\\sapproved)\\s(?:${excluded ? `(?!${excluded}\\s)` : ""}(?!0+(?:\\.0+)?[\\sa-z-])(?:${SPEC_WORD}|${value})\\s){0,4}${kind}`);
 /** the NEW part named by a part word: at most four spec words or kinds - never a value - then a part word; or "a <technology / grade>
  *  version of the <kind / part>" */
 const PART_OBJECT = `(?:an?|the\\sapproved)\\s(?:(?:(?:${SPEC_WORD}|${ACTIVE_KIND})\\s){0,4}${PART_WORD}|(?:${VERSION_WORD}\\s){1,2}version\\sof\\sthe\\s(?:${ACTIVE_KIND}|${PART_WORD}))`;
@@ -257,8 +261,15 @@ const requestForms = (replaced: string, object: string): RegExp[] => [
 const REPLACEMENT_FORMS: readonly RegExp[] = Object.freeze(KIND_OBJECTS.flatMap((object) => requestForms(REPLACED, object)));
 /** the forms whose new part is named by a part word: the composer's pairing (`REPLACE_PART`, imported) must agree */
 const PART_WORD_FORMS: readonly RegExp[] = Object.freeze(requestForms(REPLACED, PART_OBJECT));
-/** a bare kind or part word for a bare kind or part word ("replace the timer with a timer", "replace it with a part") names nothing new */
-const VACUOUS_FORMS: readonly RegExp[] = Object.freeze(requestForms(BARE_REPLACED, BARE_OBJECT));
+/** a bare new part of the SAME kind family as the named part ("the timer with a timer", "the NE555 timer with a timer chip", "the
+ *  ATmega328P MCU with a microcontroller") names nothing new - "the 4060 timer with a microcontroller" does; a bare new part for a part
+ *  named without a comparable kind ("it with a timer") names nothing new; and a bare part word ("a part", "a chip", "a component") names
+ *  nothing new for ANY part ([B21 D3 lead, round 6]) */
+const VACUOUS_FORMS: readonly RegExp[] = Object.freeze([
+  ...KIND_FAMILIES.flatMap((family) => requestForms(`the\\s(?:(?:${MPN}|${STANDARD_PART})\\s)?${family}(?:\\s${DESIGNATOR}|\\s\\(${DESIGNATOR}\\))?`, `an?\\s${family}(?:\\s${PART_WORD})?`)),
+  ...requestForms(BARE_REPLACED, BARE_OBJECT),
+  ...requestForms(REPLACED, `an?\\s${PART_WORD}`),
+]);
 /** "would you ..." ANYWHERE in the polite prefix asks for an opinion, whatever its punctuation ("first would you", "can you would you") */
 const OPINION = /\bwould\s+you\b/;
 /** a question-form request ("can you replace U1 with a CMOS timer?") asks for the replacement */
@@ -271,6 +282,7 @@ const QUESTION_REQUEST = /^(?:(?:please|now|just|ok|okay)\s+)*(?:can|could|will)
 function partKindSwap(message: string, raw: string): boolean {
   const rest = PART_KIND_SWAP.exec(message.replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[\u2018\u2019]/g, "'"))?.[1];
   if (rest === undefined || OPINION.test(message.slice(0, message.length - rest.length)) || VACUOUS_FORMS.some((form) => form.test(rest))) return false;
+  if (/\bIT\b/.test(raw)) return false; // [B21 D3 lead, round 6] the acronym IT (upper case in the RAW message) is never the pronoun "it"
   const kindForm = REPLACEMENT_FORMS.some((form) => form.test(rest));
   const partForm = PART_WORD_FORMS.some((form) => form.test(rest));
   if (!kindForm && !(partForm && REPLACE_PART.test(rest))) return false;

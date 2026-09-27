@@ -3056,3 +3056,19 @@ _(discovery, reproduction and results appended below as they are observed)_
   (`e1-lead-probe-reset-guard.log`; the source restored, SHA-256 equal). The E1 page states the rule in its ticket paragraph and its
   OD-115 text, C66's anchor moved with its line, the breaker-suite count (14) and the new-case total (56) updated.
 - Lead gates (2026-09-27, one job at a time): every B21 suite with the five B21 route suites and the CI guard 35 files / 312 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` in full 42 files / 355 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646; the proposal families and their approval paths 34 / 513; the import gates, chat closure ratchets, route census (165) and route matrices 10 / 104; `app/lib/mcp/__tests__` and `app/api/mcp/__tests__` 33 / 737 (every B20 page citation holds); tsc clean; eslint clean on every changed TypeScript file - `app/page.tsx` carries 14 `react-hooks/refs` errors on lines E1 did not touch, the SAME 14 at HEAD a4aba95 (its HEAD text linted through stdin, `e1-lead-eslint-head-page.log`), pre-existing and outside B21 (CI runs no eslint); flagged as a separate task.
+
+### B21-D3 follow-up - the router grammar's sixth sweep round (2026-09-27 local; lead; this commit)
+
+- The sixth round of the lead's adversarial phrasing sweep (three probing agents routing their own phrasings through the real router,
+  every finding classed structural or semantic; run beside B21-E1, read-only, its fixes held until E1 was committed) found 104
+  structural false DAG routes from six root causes and 44 semantic ones. Fixed in `router.ts` (the appended grammar only; no cited line
+  above it moved, the D3 page's C34 re-pinned by anchor): a designator's unit letter a-f only (never "U1s", "k8s", "Y2K"); the
+  appositive's closing comma required; an MPN suffix a voltage variant only ("-3.3", never "NE555-556"); a bare new part of the named
+  part's own kind family, or for a part named without a comparable kind, or a bare part word for any part, names nothing new (while "the
+  4060 timer with a microcontroller" still routes); the acronym IT (upper case in the raw message) never the pronoun; widths, pin counts
+  and timer compatibility bounded and listed, never a zero magnitude, and each kind's nonsense spec words excluded. The regression corpus
+  (`_d3-router-corpus.ts`, rebuilt by `probe/make_corpus.py` from all six rounds' outputs, which are the failing-first evidence) pins
+  1007 false DAG phrasings (none routes), 194 genuine requests (all route) and 46 RECORDED semantic residues (a listed word in another
+  sense - "the ATmega328P oscillator", "an adjustable comparator" - which only part knowledge could tell). Pin moves with their reasons:
+  replacement-roles case 9's counts and its hyphenated-modifier row ("free-running" is now excluded for an oscillator). Gates: every B21
+  suite with the five route suites and the CI guard 35 files / 312 tests; tsc clean; eslint clean on the changed files.

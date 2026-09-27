@@ -169,7 +169,7 @@ The list (the DAG IS `DAG_ROLE_LISTS["component-replacement"]`): `coordinator`, 
 - **The phrasing (OD-107 amended; [B21 D3 lead, 2026-09-26/27] restated).** The composer's pairing (`REPLACE_PART`) needs a word
   naming a part, component, MPN, alternate or chip, so the runbook's own sentence did not route (it stayed `single`). The implementer
   added a kind-swap grammar; the review round and the check tightened it; the lead then swept it adversarially - a workflow of three
-  probing agents per round, each routing its own phrasings through this router under the job lock, five rounds - and rebuilt it after
+  probing agents per round, each routing its own phrasings through this router under the job lock, six rounds - and rebuilt it after
   each: round 1 found 165 messages reaching the four-specialist DAG although none asks to replace a part with a new one (follow-up
   questions and retractions, exchanges of existing parts, attribute, documentation and value edits with a purpose phrase, and - through
   the UNANCHORED composer pairing the router had used since B21-B - prohibitions and "why" questions such as "Don't swap parts without
@@ -182,33 +182,42 @@ The list (the DAG IS `DAG_ROLE_LISTS["component-replacement"]`): `coordinator`, 
   finding classed structural or semantic, found five structural root causes - "would you" after another polite word ("First would
   you ..."), a vacuous "a timer chip", a BARE prefixed code ("the Sn63Pb37", "the AD255C", "the TL866", "the TS16949") or a
   plural ("the NE555s") as the replaced part, a part-number suffix read as a unit ("a 7805A regulator"), and VR (as often a variable
-  resistor) - and eleven semantic ones. So NO token is open (`partKindSwap`,
+  resistor) - and eleven semantic ones; round 6, a second verification round after the fix, found six more structural root causes - a plural or look-alike designator
+  ("U1s", "k8s", "Y2K"), an unclosed appositive ("U1, the NE555 with a dual timer" is a list), a second part number read as an MPN
+  suffix ("NE555-556"), a bare new part of the named part's own kind ("the NE555 timer with a timer") or a bare part word ("U1
+  with a chip"), the acronym IT folded into the pronoun, and unbounded or zero values ("a 2024-bit MCU", "a 0 V regulator", "a
+  7805-compatible timer") - all fixed in the follow-up commit, and 26 more semantic ones recorded. So NO token is open (`partKindSwap`,
   C34; the polite prefix, C10; the rule, C11 - it passes the RAW message too): after a polite prefix the WHOLE message is "replace /
   swap (out) <part> with / for / by <new part>" or "substitute <part> with / by <new part>", "delete / remove <part> and replace it with
   <new part>" (B's own scenario sentence) or "substitute <new part> for <part>" (its one correct direction); the replaced part is one of
-  seven closed shapes - "it", an ACTIVE component's designator (U, IC, Y, Q, K, PS), "part / IC U1", "the timer" / "the part", "the
+  seven closed shapes - "it", an ACTIVE component's designator (U, IC, Y, Q, K, PS; a unit letter a-f only), "part / IC U1", "the timer" / "the part", "the
   NE555 timer [U1 | (U1)]" or "the NE555 (U1)" with an MPN from a listed vendor or family prefix and at least three digits, always
   ANCHORED by a kind or a designator, "the 555 timer" with a listed standard part number, "U1, the NE555," - never a passive, a list,
-  a plural, a value, a net, a package, a bare code or a clause; the NEW part takes
+  a plural, a value, a net, a package, a bare code or a clause (the appositive's closing comma required, an MPN suffix a voltage
+  variant only); the NEW part takes
   "a" / "an" (or "the approved") and at most four words from a CLOSED spec list (power, noise, speed, size, cost, supply, technology,
   compatibility, sourcing) or the values that specify THAT kind, always with a unit and a plausible magnitude (so a part-number suffix
   is never a unit: "7805A" is not 7805 amperes) (a supply or current for a regulator, an LDO or a
   driver; a width or pin count for a microcontroller; a kHz or MHz frequency for an oscillator; a speed for a comparator or an op-amp;
-  555 compatibility for a timer - never a timer's or an oscillator's speed, adjustability, mode or precision, which R and C set), then
+  compatibility with a listed standard timer for a timer; widths and pin counts bounded, never a zero magnitude - and never a spec word
+  that means something else on that kind: a timer's or an oscillator's speed, adjustability, mode or precision, which R and C set, or a
+  linear, synchronous or programmable op-amp, comparator or MCU), then
   an ACTIVE part kind (timer, regulator, LDO, op-amp, comparator, microcontroller, oscillator, driver), a part word (part, component,
   chip, alternative, alternate) or "a <technology / grade> version of the <kind / part>" - and NEVER an MPN or a number, whose shape
   cannot be told from a package, a net, a peripheral, a version or a suffix variant of the same part; at most one CLOSED tail
   ("instead", "for the <circuit function> [circuit / rail / stage / supply / section]", "while preserving compatible nets", "while
-  keeping / preserving the (same) footprint / pinout / nets / connections"). A bare kind for a bare kind ("the timer with a timer",
-  "it with a part", "the timer with a timer chip") names nothing new; "would you" anywhere in the polite prefix is an opinion; the RAW message's trailing punctuation decides a question (a run
+  keeping / preserving the (same) footprint / pinout / nets / connections"). A bare new part of the named part's own kind family ("the
+  timer with a timer", "the NE555 timer with a timer chip", "the ATmega328P MCU with a microcontroller"), a bare new part for a part
+  named without a comparable kind ("it with a timer") and a bare part word for any part ("U1 with a chip") name nothing new - "the
+  4060 timer with a microcontroller" does; the acronym IT is never the pronoun; "would you" anywhere in the polite prefix is an opinion; the RAW message's trailing punctuation decides a question (a run
   with "?" is a request only after "can / could / will you" and never with "!"); a new part named by a part word is the composer's own
   pairing too - the router still imports `REPLACE_PART` and requires it to agree. A word the grammar does not list makes the message one
   coordinator turn - the grammar fails toward it, never toward a paid DAG. **CONFIRMED** (replacement-roles case 9 over the sweep's
-  corpus, `_d3-router-corpus.ts`: its 885 false DAG phrasings of the five rounds are not the replacement DAG and its 160 genuine
+  corpus, `_d3-router-corpus.ts`: its 1007 false DAG phrasings of the six rounds are not the replacement DAG and its 194 genuine
   requests are - B's three replacement phrasings, the scenario-17 phrasings, kinds with values, polite and question-form requests,
   unicode dashes and apostrophes; the sweep's own outputs are the failing-first evidence, `probe/*.out.json`; case 8 the check's
   residual). **RECORDED:** what a closed grammar cannot decide - a listed word used in another sense, which only part knowledge could
-  tell - still routes (`RECORDED_SEMANTIC`, twenty phrasings, e.g. "Replace the NE555 timer with a bipolar timer." - the NE555 is already
+  tell - still routes (`RECORDED_SEMANTIC`, forty-six phrasings, e.g. "Replace the NE555 timer with a bipolar timer." - the NE555 is already
   bipolar; "Replace the LM317 regulator with a 3.3 V regulator for the 3V3 rail." - the LM317 is adjustable; "Replace the op-amp with a
   faster op-amp for the blinker." - a rate; "Replace the NE556 timer with a dual timer." - the NE556 is already dual); the specialists
   and the merge then find no new part to seal. Genuine phrasings outside the
@@ -615,7 +624,7 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C31 | `app/lib/agent/gateway.ts` | 395 | — | `targetPinFacts = await this.replacementPinFacts(exact.atomicPartRevisionId, "target");` | the target comes from the authority the context holds |
 | C32 | `.github/workflows/deterministic-manufacturing.yml` | 148 | — | `app/api/chat/__tests__/b21-d3-chat-replacement.test.ts` | the one explicit CI entry |
 | C33 | `app/lib/agent/orchestration/scheduler.ts` | 301 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list |
-| C34 | `app/lib/agent/orchestration/router.ts` | 271 | — | `function partKindSwap(message: string, raw: string): boolean {` | [B21 D3 lead] the three whole-message request shapes with closed vocabularies, anchored at both ends; a part word agrees with the composer's pairing |
+| C34 | `app/lib/agent/orchestration/router.ts` | 282 | — | `function partKindSwap(message: string, raw: string): boolean {` | [B21 D3 lead] the three whole-message request shapes with closed vocabularies, anchored at both ends; a part word agrees with the composer's pairing |
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 507 | — | `const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed));` | [B21 D3 fix] a specialist's objective: the coordinator's user message alone |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },` | [B21 D3 fix] its loop history is empty: no earlier result reaches it ([B21 E1, 2026-09-27] anchor re-pinned, line unchanged: the run carries the provider it runs on, so its seals name it) |
 | C37 | `app/lib/agent/gateway.ts` | 330 | — | `const compilation = compileTier1Proposal(schematic, { ops, pinsByPartId: new Map() });` | [B21 D3 fix] every agent Tier 1 proposal compiles with an empty pin map: any KiCad delete blocks |

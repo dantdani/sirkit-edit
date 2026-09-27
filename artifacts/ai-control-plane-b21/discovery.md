@@ -1328,3 +1328,11 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
 - **Section 8:** the lead's residual fix - a no-credits answer from a call admitted under an earlier breaker generation still opens the
   long window (it never shortens a longer opening and never undoes a later operator reset). The router grammar's sixth sweep round ran
   beside E1 (read-only); its structural fixes land as their own commit right after this one, before B21-E2.
+
+### B21-D3 follow-up (recorded by the lead, 2026-09-27)
+
+- **Section 7, B21-D3:** the router grammar's sixth adversarial sweep round fixed six structural root causes (plural and look-alike
+  designators, the unclosed appositive, a second part number as an MPN suffix, vacuous bare new parts, the acronym IT, unbounded and zero
+  values) and recorded 26 more semantic residues; the regression corpus pins 1007 false DAG phrasings, 194 genuine requests and 46
+  recorded semantic residues. The lead stops the sweep here: the remaining residue is semantic by construction (a listed word used in a
+  sense only part knowledge could tell), and every such request reaches only zero-authority specialists that find no new part to seal.

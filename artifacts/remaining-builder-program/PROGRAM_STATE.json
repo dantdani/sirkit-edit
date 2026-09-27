@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "The router grammar's round-6 structural fixes (the lead's follow-up to B21-D3: plural and look-alike designators, the unclosed appositive, a second part number as an MPN suffix, vacuous same-kind swaps with an anchored part, the acronym IT, unbounded and zero values) as their own commit; then B21-E2 test-first: the additive run events and the status line (OD-126, OD-127), the trace block in a new module (OD-112, D21-11's trace half, D21-3's calls), the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and gating the coordinator's first turn by the breaker (D21-39)",
+  "nextAction": "B21-E2 test-first: the additive run events and the status line (OD-126, OD-127), the trace block in a new module (OD-112, D21-11's trace half, D21-3's calls), the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and gating the coordinator's first turn by the breaker (D21-39)",
   "updatedAt": "2026-09-27T03:23:10-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }
