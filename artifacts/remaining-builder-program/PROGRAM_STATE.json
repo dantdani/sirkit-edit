@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-E4 committed on chapter/b21-specialist-orchestration: the composer reaches the DAG with the runbook's own sentence - B21-D3's strict replacement grammar moved verbatim into composer-routing.ts as ONE exported predicate beside REPLACE_PART, the composer's rule 5b and the router answering with it (the router importing it, its answers byte-identical to HEAD's over the six-round corpus; every scan E4 added to the composer's path linear, B18-E's REPLACE_PART recorded super-linear) - and the coordinator's first turn behind the llm-provider breaker - a paused provider gets NO call on the flag-off and flag-on paths, one run_failed provider_breaker_open without Retry, a half-open breaker's trial in flight never gating it, a resumed request never gated at its replayed first turn, the flag-off stream byte-identical with the breaker closed; the gate only reads the meters (D21-42 opened: on a flag-off process it never fires, and a no-credits account whose first turns fail first never opens the breaker); the adversarial review's seven findings answered test-first; D21-38 and D21-39 closed; B21-E complete; next B21-F",
+  "currentCheckpoint": "B21-F committed on chapter/b21-specialist-orchestration: the twelve runbook evaluations offline through the real runtime (the production POST, the real adapters over fake SDK clients, the scripted fixture agent's per-role specialists answering through the result tool - D21-40 closed), each red under a mutation of its mechanism (seventeen, sources restored by hash); capsule v4 and the orchestration category replayed through the real runtime and pinned, the B11 pins extended and unmoved; the evaluation matrix byte-gated; the model-in-loop track record-only (OD-125), bounded in requests, never run and unable to produce disagreement or fallback; the browser spec STOPPED (D21-43: the orchestration flag is process-wide in the one fixture dev server and turning it on changes B18-E's browser proofs); D21-44 opened (the merge records no evidence gap); the lead decided D21-43 (a second, flag-on Playwright config run after the existing suite) and D21-44 (option a, the merge records the gap); next B21-F2 (the browser spec) and B21-F3 (the merge's evidence gap), then the B21 closeout",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "fafc90e",
+  "lastGreenSha": "d03f182",
   "pullRequest": "draft PR #11 (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-F: the evaluations (offline fake-provider, model-in-loop record-only, browser) with the per-role scripted specialists answering through the result tool (D21-40); then the B21 closeout; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options (record the first turn's no-credits / rate-limit answer - D21-42 - and a per-principal window or a window pause's own reason) stay with the owner",
-  "updatedAt": "2026-09-28T02:54:27-04:00",
+  "nextAction": "B21-F2: the browser spec on its own flag-on Playwright config run after the existing suite, one dev server at a time (D21-43, D21-30's browser half); B21-F3: the merge records the evidence gap (D21-44, option a); then the B21 closeout (commit 1/2 the single-agent statements superseded - with the stale titles `evaluation-matrix.md` section 7 lists - commit 2/2 the records and the verdict; PR #11 undrafted after green CI); the one live run under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner",
+  "updatedAt": "2026-09-28T05:24:10-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

@@ -616,7 +616,7 @@ review the lines are as of the corrected modules.
 | C17 | `app/lib/agent/orchestration/store.ts` | 178 | — | `if (!known || known.schema !== schema) refuse("unvalidated_document", "$.record.document");` | only a validated snapshot is stored |
 | C18 | `app/lib/agent/orchestration/store.ts` | 105 | — | `const aggregateKey = (scope: OrchestrationRunScope): string => durableWorkflowId("agent-orchestration-run",` | keyed by the run id through durableWorkflowId |
 | C19 | `app/lib/agent/orchestration/store.ts` | 43 | — | `export const ORCHESTRATION_DECISIONS = Object.freeze([` | the six-decision vocabulary |
-| C20 | `app/lib/agent/replay-capsule.ts` | 128 | — | `"client", "sdk", "openai", "anthropic",` | the capsule denylist the ten keys are copied from |
+| C20 | `app/lib/agent/replay-capsule.ts` | 154 | — | `"client", "sdk", "openai", "anthropic",` | the capsule denylist the ten keys are copied from ([B21 F, 2026-09-28] re-pinned from 128: the capsule v4 grew the file above it) |
 | C21 | `app/lib/agent/plain-capture.ts` | 287 | — | `export function capturePlainJson(root: unknown, label = "$", maxSerializedChars = 1_000_000): CaptureResult {` | the hook-free capture and its serialized bound |
 | C22 | `app/lib/agent/redaction.ts` | 157 | — | `"reasoning", "thinking", "continuation",` | the shared classifier already carries three of the stems |
 | C23 | `app/lib/agent/redaction.ts` | 166 | — | `export function isCredentialShapedName(name: string): boolean {` | the shared credential-name authority |

@@ -3268,3 +3268,59 @@ _(discovery, reproduction and results appended below as they are observed)_
   737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on every changed and new TypeScript file; the generators
   with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21 files, byte-identical; B17-A 628 controls, CSV
   and summary identical; the tree's status unchanged). Logs under `b21/e4lead/gates/`.
+
+### B21-F — the required evaluations (2026-09-28 local; increment workflow + lead; this commit)
+
+- The twelve runbook evaluations (:863-:874) offline in `b21-f-evaluation.test.ts` (16 cases) through the production POST with the flag
+  on: the real adapter classes over in-process fake SDK clients (`_f-fixture-clients.ts`, recording what each call OFFERED) answering from
+  the scripted fixture agent, whose script table gained per-role specialists answering through the strict result tool and a follow-up turn
+  (D21-40 closed); D21-42's first-turn leg of F10 (case 16); the case table rendered into `evaluation-matrix.{csv,json}` and byte-gated.
+- Failing-first: F adds no production code, so each case was broken by one mutation of the mechanism it names and restored byte for byte -
+  seventeen (HEAD's fixture agent, HEAD's v3 capsule, the router's default, the first-turn gate, the structural tool gate, the deadline
+  rule, the ledger's claim, the replay's scope check, OD-122's held artifact, the role routing, the merge's conflict edges, the envelope's
+  evidence, the tool-less dissent, the follow-up's narrowed deps, the first turn's metering, the live flag check, the live bound) - each
+  failed exactly the cases it should (`evaluation-matrix.md` section 1).
+- Capsule v4 (`sirkit.agent-replay-capsule.v4`: per-task step lists at their plan's indexes, one per role, scripted stalls only there, a
+  task-graph runner injected, never replayed as one loop) in neutral words inside the nine B11 files, line count unchanged by the fixes;
+  the `orchestration` category, its seven capsules and the runner (the REAL `runOrchestratedChat`, refusing an unplanned task, recording the
+  router's answer) outside them (`_f-capsules.ts`); `scripts/generate-b21-artifacts.ts` writes the matrix and `replay-trace-pins-b21.json`
+  (byte-identical across two processes); the B11 pins extended, never moved (19 of 19, 61 of 61).
+- Pin moves with their reasons: B11.3 §D (one line: v4, v3 refused) and B11.4 §G (the capsule id v4), E2b's case 8 and the E2 page's
+  section 3.7 (the replay capsule's hash); dated notes on every stale title, comment and B11 page that said v3; the replay capsule's shifted
+  citations re-pinned on `orchestration-contracts.md` (C20), the B20 connector page and the B18 chat page.
+- Model-in-loop record-only (OD-125): one command behind `SIRKIT_LIVE_ORCHESTRATION_EVALUATION=1` with a bound of 40 requests (SDK retries
+  0 on every live adapter), not a test, never run, able to run four DAG shapes only (no scripted fault, no disagreement, no fallback);
+  OpenAI 429 no-credits (2026-09-24), Anthropic UNKNOWN; LB-9 BLOCKED-LIVE-QUALIFICATION.
+- The adversarial review's eighteen confirmed findings fixed test-first (`evaluation-matrix.md` section 6); D21-44 opened (the merge records
+  no evidence gap).
+- The browser spec STOPPED (D21-43 opened): the orchestration flag is process-wide in the one fixture dev server, turning it on for the
+  suite changes B18-E's scenario-8 and scenario-4 browser proofs, and Next 16's dev lock forbids a second server without a `distDir`
+  change; the full browser suite ran once green with F's fixture changes (48 of 48 in 462 s of OD-30's 30 minutes), the 25
+  evidence PNGs restored by blob hash.
+- Gates, one job at a time: every B21 suite with `app/api/chat` in full (69 files, 586 of 586), `app/lib/agent` with the B17-A inventory
+  and the B18-D UI gates (42 files, 467 of 467), `app/lib/mcp` and `app/api/mcp` (33 files, 737 of 737), `app/lib/mcp/server` (19 files,
+  183 of 183), the import gates and census (5 files, 59 of 59), `app/lib/project` with `app/components/chat` (40 files, 318 of 318);
+  tsc 0; eslint clean; the B11, B09, B17-A and B21 generators with zero drift. Census 165/162/3/0.
+- Records: `evaluation-matrix.md`; OD-125 applied; D21-23, D21-24 and D21-40 closed; D21-25 recorded; D21-30 stays open (the browser
+  half) under D21-43; D21-44 opened. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the eighteen fixes fixed and revert-sensitive and raised two new low
+  documentation issues): F's own new page suite's case 1 was titled "four pages" while asserting ten - retitled now (a new suite, not
+  the closeout's); the page, the capsule runner's header and the live command's header said the live track swaps ONLY the adapters,
+  but an offline replay of a scripted stall (f09) runs under a 2 s per-loop budget and a live run under the production 120 s - stated on
+  each; the page's count of the review's confirmed findings corrected from sixteen to eighteen (it names all eighteen). RECORDED on the
+  page: f09's 2 s per-loop timer also bounds its non-stalled scripted loops (milliseconds each), so only a two-second scheduling pause on a
+  loaded runner could move its pinned digest.
+- Records: F's page case 8 pinned D21-43 and D21-44 as ABSENT from discovery.md, which fails on every tree after the lead applies
+  the records (the post-records run showed it red); the case now accepts a new defect absent before the records and inserted ONCE after,
+  under the title the page states (51 files, 539 of 539 green after the records; tsc 0; eslint clean).
+- Lead decisions: D21-43 -> B21-F2 (a second, flag-on Playwright config run after the existing suite, one dev server at a time; no
+  production or `next.config.ts` change); D21-44 -> B21-F3 (option (a): the merge records the evidence gap, as the runbook line says).
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (55 files, 508 of 508); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183 -
+  the nine-file pin); tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19
+  cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the
+  tree's status unchanged). Logs under `b21/flead/gates/`.

@@ -1,5 +1,11 @@
 # B11 — deterministic replay contract
 
+> **[B21 F, 2026-09-28] SUPERSEDED IN PART BY B21-F.** The statement below that the capsule schema is now v3 is
+> B11.3's: the capsule is now `sirkit.agent-replay-capsule.v4` - its own field set grew (optional per-task step lists
+> of a task graph, each task at its plan's index with one list per role, and a scripted stall only in a task's step
+> list); a capsule with no tasks replays exactly as v3 did and a v3 document is refused explicitly; the context stays
+> `sirkit.agent-replay-context.v2`. See `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2.
+
 > **SUPERSEDED IN PART BY B11.2 AND B11.3.** The capsule schema is now
 > `sirkit.agent-replay-capsule.v3` and its `context` is
 > `sirkit.agent-replay-context.v2` — a versioned contract that is key-exact at

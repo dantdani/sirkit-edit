@@ -39,11 +39,11 @@ import { answer } from "./_result-tool";
 const ROOT = process.cwd();
 const SCOPE = { tenantId: "tenant-e2", projectId: "project-e2", branchId: "main" };
 const AT = "2026-09-27T12:00:00.000Z";
-/** sha256 of the nine B11-scanned files at HEAD 41330e6 (git show HEAD:<path> | sha256sum; identical at 3a32317) - E2b edits none of them */
+/** sha256 of the nine B11-scanned files at HEAD 41330e6 (git show HEAD:<path> | sha256sum; identical at 3a32317) - E2b edits none of them [B21 F, 2026-09-28: B21-F moved ONE entry, the replay capsule's, to F's hash - its reason beside it; the other eight are 41330e6's] */
 const SCANNED_AT_HEAD: Readonly<Record<string, string>> = {
   "app/lib/agent/trace.ts": "ad933eb059dff859cc0fe910aa82d0eb2ef24f14eedab1bef94c510a7dd60ba5",
   "app/lib/agent/trace-recorder.ts": "61cff587cea51da0dd343a0dfd8c1171f2503acf57fc278dba3b352e3bea914b",
-  "app/lib/agent/replay-capsule.ts": "77958c9488b43d490b012aa10638df6b93e1dd2aaf704dee11aac206ea41f1b1",
+  "app/lib/agent/replay-capsule.ts": "7080ecc24ab874889dd9754e17ffc97e65d73d2635cfde3a0d7e7ab29e4039eb", // [B21 F] reviewed pin move: B21-F extended this file to the capsule v4 (per-task step lists, scripted stalls; evaluation-matrix.md section 2) - at 41330e6 it was 77958c9488b43d490b012aa10638df6b93e1dd2aaf704dee11aac206ea41f1b1; it still carries no orchestration identifier and imports nothing under orchestration (asserted below)
   "app/lib/agent/replay-context.ts": "fcdc9a7d0d6c6f9c09a56732ac643d59503695dc224734a76b030c38261fbbff",
   "app/lib/agent/evaluation.ts": "9d948da7726e6ee5ed8dd266f064d5a35cda25f18c337f70d8b740245d1b1b19",
   "app/lib/agent/evaluation-cases.ts": "6637099755e2d0a968a15e2b4bc73f12c27f026b721dd087c0acc25c3f1ecc16",
@@ -305,7 +305,7 @@ describe("[B21 E2b] the trace block: one trace document per specialist task (OD-
     expect(small!.attribution.at(-1)!.orchestration.decision).toBe("malformed");
   });
 
-  it("8. the nine B11-scanned files are byte-identical to HEAD and carry no orchestration identifier; the v1 trace contract is unchanged - a block placed INSIDE an event is refused as an unknown key, the provider literal and the outcome classes stand - so the block can only ride BESIDE the events; no scanned file imports anything under orchestration", () => {
+  it("8. the nine B11-scanned files are byte-identical to HEAD and carry no orchestration identifier; the v1 trace contract is unchanged - a block placed INSIDE an event is refused as an unknown key, the provider literal and the outcome classes stand - so the block can only ride BESIDE the events; no scanned file imports anything under orchestration", () => { // [B21 F, 2026-09-28] E2b's title: since B21-F eight of the nine are byte-identical to HEAD and the replay capsule's hash is F's (SCANNED_AT_HEAD, its reviewed pin move); the closeout retitles it
     expect([...B11_SCANNED_FILES].sort()).toEqual(Object.keys(SCANNED_AT_HEAD).sort());
     for (const file of B11_SCANNED_FILES) {
       const source = readFileSync(join(ROOT, file));

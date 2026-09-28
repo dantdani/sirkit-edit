@@ -1588,3 +1588,26 @@ Amendments to existing entries:
   would read legibly instead of `ta[redacted]`, at the cost of narrowing a shared secret check (the per-task documents need none of it);
   (C) a task-id grammar without `task-` - every B21 record key, suite and page moves, not recommended; (D) editing the scanned validator -
   refused by D21-27 / OD-113. The lead's reading of (B) stands until the owner says otherwise.
+
+## OD-125 — The model-in-loop track, as applied (B21-F, 2026-09-28)
+
+- **Question:** how B21-F evaluates the orchestration with live models while OpenAI answers `429 no credits` and Anthropic's credit state
+  is unrecorded (D21-25).
+- **Default applied:** record-only until credits exist. The offline suites are structured so the four task-graph cases (`f05`, `f09`,
+  `f10`, `f11`) run live by swapping the adapters (and, for `f09`, the run budget: 2 s offline, 120 s live): `runOrchestrationCase(entry, { live })` over the `orchestration`
+  capsules, run by ONE command, `scripts/run-b21-live-orchestration-evaluation.ts`, behind `SIRKIT_LIVE_ORCHESTRATION_EVALUATION=1` (exactly
+  "1"; anything else exits 2 before any adapter is built), with a spend bound of 40 provider REQUESTS - every live adapter, the
+  coordinator's too, built with SDK retries 0, so a counted call is one request (163840 output tokens at most) - recording the closed
+  vocabulary only (never a model's text, a prompt, a credential or an env value) and asserting nothing about a model's answer. What it can
+  evaluate is narrow and stated per row (the matrix's model-in-loop column): it runs every turn on ONE provider from a live model, so it
+  never reproduces a capsule's scripted fault (the stall, the 429 and the hostile results run as their DAG shapes only) and it can produce
+  no provider disagreement and no provider fallback - LB-9's disagreement and fallback stay BLOCKED-LIVE-QUALIFICATION whatever a live run
+  records; eight of the twelve runbook cases have no live path. It is NOT a test: no permanently skipped block is committed (OD-102); no
+  suite, script or CI job runs it. The implementer never ran it. LB-9 stays BLOCKED-LIVE-QUALIFICATION.
+- **Evidence:** `evaluation-matrix.md` section 3; `b21-f-replay-capsule.test.ts` cases 7 (the refusal, no adapter built), 8 (the request
+  bound) and 9 (the column).
+- **The owner may choose otherwise:** supply credits with a spend limit and have the lead run the command once (LB-2 / LB-9) - it records
+  the four DAG shapes, not disagreement or fallback; build a two-provider live capsule for disagreement and fallback (a component-authority
+  catalog in the replay context, per-role routing kept live - a harness change); a flag-gated live block in a suite (a permanently skipped
+  test on every CI run, which OD-102 declined); or a live run under Anthropic's Message Batches at half price (OD-119 declined batches for
+  interactive work; an offline evaluation could use them).

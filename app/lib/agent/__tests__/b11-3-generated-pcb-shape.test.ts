@@ -627,9 +627,9 @@ describe("B11.3 §C — structural exactness and semantic validity stay separate
 // ─── §D — versioning ────────────────────────────────────────────────────────
 
 describe("B11.3 §D — versioning", () => {
-  it("the context is v2 and the capsule v3; older versions refuse EXPLICITLY", () => {
+  it("the context is v2 and the capsule v3; older versions refuse EXPLICITLY", () => { // [B21 F, 2026-09-28] B11.3's title (cited by ai-control-plane-b11-3/regression-matrix.md): since B21-F the capsule is v4 and v3 refuses too (below); the closeout retitles it
     expect(AGENT_REPLAY_CONTEXT_SCHEMA).toBe("sirkit.agent-replay-context.v2");
-    expect(AGENT_REPLAY_CAPSULE_SCHEMA).toBe("sirkit.agent-replay-capsule.v3");
+    expect(AGENT_REPLAY_CAPSULE_SCHEMA).toBe("sirkit.agent-replay-capsule.v4"); expect(validateReplayCapsule({ ...caseCapsule("e03-valid-board"), schema: "sirkit.agent-replay-capsule.v3" } as unknown as ReplayCapsule).length).toBeGreaterThan(0); // [B21 F] reviewed pin move: capsule v4 adds the optional per-task step lists and scripted stalls (the capsule's own field set grew - B11.3 §D's rule), and v3 now refuses explicitly, as v2 does below; one line, so no line the B21 discovery cites in this file moves
     const context = caseCapsule("e03-valid-board").context;
     for (const stale of ["sirkit.agent-replay-context.v1", "sirkit.agent-replay-context.v3"]) {
       const result = validateReplayContext({ ...context, schema: stale });
