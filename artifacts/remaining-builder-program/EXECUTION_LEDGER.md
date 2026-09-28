@@ -3398,3 +3398,74 @@ _(discovery, reproduction and results appended below as they are observed)_
   checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
   unchanged); then the orchestration config once after the port-guard fix (3 of 3, 3.1 min; the page's background schematic review
   answered `missing_credentials` before any request - the fixture server holds no key). Logs under `b21/f2lead/gates/`.
+
+### B21-F3 — the merge records the evidence gap (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-44 as the lead decided it (option (a)): the merge RECORDS the gap - an ACCEPTED result of the evidence-gathering role
+  (`EVIDENCE_GATHERING_ROLES` = `component-sourcing-evidence` alone: its result IS evidence; every other role's result is a claim or a
+  sealed proposal its family verifies, the critic's evidence is the merge's own verification and the readiness reviewer keeps its
+  stricter `readiness-claim-unreferenced`) whose `evidence` list is empty gains ONE closed finding, `evidence-missing` (the last row of
+  `MERGE_OWN_CODES`, decision `accepted`, claim `evidence`, no action, no id), applied once every other finding is known, so the verdict
+  stays accepted; its `decision` record's reason names it (`merge accepted with evidence-missing (no evidence cited): ...`, a withheld
+  reason included) under OD-114's content key, chained, the latest standing; the follow-up's envelope marks the entry `evidenceGap: "no
+  evidence cited"` (every stage; the counts stage counts it) and its header gains one closed sentence; nothing invented;
+  record-and-envelope only; the approval decision unchanged. Code: `merge.ts` (six lines in place, the rule appended),
+  `orchestration-runtime.ts` (six lines in place, the marker, count and sentence appended); no line any page cites moved, so no citation
+  was re-pinned (the D page gains rows C77-C86).
+- What the human sees: the record and the marker are deterministic; whether the coordinator's answer names the gap is model judgment -
+  UNPROVEN offline (the scripted follow-up's answer omits it, F3 case 8) - and a stood-down follow-up (`follow_up_paused`,
+  `follow_up_failed`) shows it nowhere but the record. RECORDED residual for the lead: a deterministic human-facing line for the gap (in
+  a vocabulary the E2 page allows) - not F3's, whose task allowed record-and-envelope only.
+- Adoption: the first F3 implementer run was cut off when the lead's session ended (2026-09-28, about 09:06) with its work unreviewed in
+  the tree and no report; the relaunched run adopted it as the sole writer, reviewed every change against HEAD (in scope, line-neutral
+  above every cited line, no reserved or B11-scanned file touched) and kept it: the rule, the record, the marker and the page section as
+  written; it strengthened the suite (case 3: a scheduler resume replays the result, judged the same way, the next resume still replays;
+  case 9: these reserved texts) and F's case 7 (its closing check made non-vacuous: an envelope must exist); nothing dropped.
+- Failing-first: with HEAD's `merge.ts` and runtime put back (`git diff` empty for both) all eleven F3 cases red and F's case 7 red on
+  its moved assertion; both files restored byte for byte, verified by sha256 (`b21/f3/adopt/` for the first nine, `b21/f3/fix/` on the
+  final suite). Nine mutations of the F3 code, each restored by hash, each red where section 4 says.
+- The adversarial review (six findings, five distinct, all low), each answered test-first (`b21/f3/fix/`): `regressions-2` and
+  `coverage-4`, D's withheld-reason fallback dropped the gap (a key-shaped reported model id makes the text rule refuse the reason):
+  case 10 red, the fallback now keeps the closed clause (in place), green; `coverage-1`, the page and the D21-44 clause stated the
+  answer's content as a guarantee: reworded (model judgment, UNPROVEN offline, the residual above), the page case's wording check red
+  first; `coverage-3`, D21-46's digest consequence misstated: reworded after a three-pass probe, the wording check red first;
+  `tests-01`, case 4 now renders the no-gap run through all five stages (a count written unconditionally is red); `tests-02`, case 11
+  adds malformed, expired and contradicted evidence-free results (the guard widened, and the gap applied before the conflicts, each red).
+- Pins moved (reviewed, reasons beside them): `b21-f-evaluation.test.ts` case 7 (from "accepted, no gap recorded" to "the merge records
+  the gap"); the F7 row and RECORDED note on `evaluation-matrix.md` (dated); the F7 cell (`_f-cases.ts` in place, the B21 generator
+  re-run: `evaluation-matrix.csv` and `.json` moved in that cell only, `replay-trace-pins-b21.json` byte-identical); the D page's own-code
+  table (page case 7 reads it as `MERGE_OWN_CODES`). No other suite enumerates `MERGE_OWN_CODES`; no pinned B21-D digest moved.
+- Findings: D21-46 (new, low) - after a replayed verdict is CHAINED, every later merge pass that finds the same verdict (and writes
+  nothing) reports the unchained content key in its `records`, a key the store does not hold; every later pass that writes nothing
+  agrees with the others, so its view digest differs from the chaining pass's (pre-existing D code; probes through the real scheduler
+  and merge, not kept; not fixed in F3).
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/f3/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (56 files, 524 of 524 -
+  every A..F page suite and the F3 suite's eleven cases included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45
+  files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` in full with the exposure and tier suites, the B11
+  suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318
+  of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the proposal families and approval paths (34
+  files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added);
+  `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the
+  five changed and new TypeScript files; the generators with zero drift beyond the F7 cell (B11 19 of 19 cases and 61 of 61 checks; the
+  B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run - against HEAD only `evaluation-matrix.csv` and `.json` moved,
+  in the F7 cell; B17-A 628 controls, CSV and summary identical; the tree's status and every changed file unchanged during the gates).
+  No browser run: F3 changes nothing the page renders (the marker and the sentence reach only the model-bound envelope).
+- Records: `merge-and-disagreement.md` section 4 (the F3 section) and this section; D21-44 closed; D21-46 found; OD-114's addendum; the
+  human-facing residual RECORDED. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the six fixes fixed and revert-sensitive and raised one new nit):
+  case 11's title claimed the envelope of a non-accepted evidence-free result carries "no count", but the case rendered only the full
+  stage, which never has a count; the envelope's stage helpers moved from case 4 to the suite's module scope (case 4 unchanged) and case 11
+  now also renders each view through the counts stage and asserts no `evidenceGaps` key - red under a mutation counting every evidence-free
+  sourcing task (`b21/f3lead/red-count.log`: case 11 failed on "malformed: another principal (counts)"), green after; the runtime
+  restored by sha256.
+- Lead decision: D21-46 (pre-existing since B21-D, found by F3's review) -> fixed in its own reviewed increment B21-D4 before B21-F2b.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (56 files, 524 of 524); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
+  unchanged). Logs under `b21/f3lead/gates/`.

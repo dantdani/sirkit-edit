@@ -1341,6 +1341,17 @@ Amendments to existing entries:
 - **The owner may choose otherwise:** a separate record kind per merge verdict with a verdict sequence (a store schema move), or the
   traced form first.
 
+**Amendment (B21-F3, 2026-09-28) — OD-114 — addendum (B21-F3, 2026-09-28)**
+
+- [B21 F3, 2026-09-28] Addendum (no shape change): an ACCEPTED verdict may carry ONE non-rejecting closed code, `evidence-missing`
+  (D21-44, the lead's option (a)) - an accepted result of the evidence-gathering role (`component-sourcing-evidence`) that cites no
+  evidence is recorded as `merge accepted with evidence-missing (no evidence cited): ...` in its task attempt's one `decision` record,
+  under the same content key (`<taskId>.merge-<16 hex>`), chained to the verdict it supersedes, the latest standing; when the text rule
+  withholds the reason, D's fallback keeps the clause (`merge accepted with evidence-missing (no evidence cited): findings withheld from
+  the record; result <digest>`). No record kind, key shape or decision value changed; a verdict written before B21-F3 for the same
+  result (no gap) is superseded by a chained record, still `accepted`; a resume still replays an accepted result
+  (`merge-and-disagreement.md` section 4, the F3 section).
+
 ## OD-129 — The only accepted readiness evidence kind, as applied (B21-D, 2026-09-26)
 
 - **Question:** what carries a readiness claim (D21-15)?

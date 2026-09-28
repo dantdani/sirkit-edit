@@ -361,7 +361,7 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
     if (!view) return { ...baseOf(task), merge: null };
     return {
       ...baseOf(task),
-      merge: { decision: view.decision, reason: view.reason, findings: view.findings.map((entry) => ({ code: entry.code, decision: entry.decision, claim: entry.claim, actionIndex: entry.actionIndex, findingIds: entry.findingIds })) },
+      merge: { decision: view.decision, reason: view.reason, findings: view.findings.map((entry) => ({ code: entry.code, decision: entry.decision, claim: entry.claim, actionIndex: entry.actionIndex, findingIds: entry.findingIds })) }, ...evidenceGapMark(view),
       claims: { summary: view.claims.summary, assumptions: view.claims.assumptions, risks: view.claims.risks, unresolvedQuestions: view.claims.unresolvedQuestions, confidence: view.claims.confidence, evidence: view.claims.evidence.map(({ reference, standing }) => ({ kind: reference.kind, id: reference.id, digest: reference.digest, sourceClass: reference.sourceClass, standing })) },
       actions: view.actions.map((action) => (action.decision === "accepted"
         ? { index: action.index, kind: action.kind, decision: action.decision, artifactId: action.artifactId, artifactDigest: action.artifactDigest, identities: action.identities, scopeDigest: action.scopeDigest, candidateCheck: action.candidateCheck ? { outcome: action.candidateCheck.outcome, findingIds: action.candidateCheck.findingIds } : null, provenance: action.provenance }
@@ -390,7 +390,7 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
       specialists: outcome.tasks.map((task) => {
         const view = viewOf(task);
         const codes = view ? [...new Set(view.findings.map((entry) => entry.code))].map((code) => ({ code, count: view.findings.filter((entry) => entry.code === code).length })) : [];
-        return { ...baseOf(task), reason: clipped(task.reason, 300), merge: view ? { decision: view.decision, codes } : null, ...(view ? { summary: view.claims.summary, actions: view.actions.map((action) => ({ index: action.index, kind: action.kind, decision: action.decision, artifactDigest: action.artifactDigest })) } : {}) };
+        return { ...baseOf(task), reason: clipped(task.reason, 300), merge: view ? { decision: view.decision, codes } : null, ...evidenceGapMark(view), ...(view ? { summary: view.claims.summary, actions: view.actions.map((action) => ({ index: action.index, kind: action.kind, decision: action.decision, artifactDigest: action.artifactDigest })) } : {}) };
       }),
       acceptedActions: merged.accepted.map((action) => ({ taskId: action.taskId, index: action.index, kind: action.kind, artifactId: action.artifactId, artifactDigest: action.artifactDigest, scopeDigest: action.scopeDigest })),
       escalations: merged.escalations.map((escalation) => ({ escalationId: escalation.escalationId, conflictClass: escalation.conflictClass, parties: escalation.parties.map((party) => ({ taskId: party.taskId, actionIndex: party.actionIndex })), humanDecision: escalation.humanDecision })),
@@ -399,7 +399,7 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
     }),
     ids: () => ({
       ...head, fallback: `ids: ${FALLBACK_NOTE}`, notStarted: outcome.notStarted.map((task) => task.taskId), provenance: { sameSource },
-      specialists: outcome.tasks.map((task) => ({ taskId: task.taskId, role: task.role, attempt: task.attempt, status: task.status, decision: viewOf(task)?.decision ?? null })),
+      specialists: outcome.tasks.map((task) => ({ taskId: task.taskId, role: task.role, attempt: task.attempt, status: task.status, decision: viewOf(task)?.decision ?? null, ...evidenceGapMark(viewOf(task)) })),
       acceptedActions: merged.accepted.map((action) => ({ taskId: action.taskId, index: action.index, artifactDigest: action.artifactDigest })),
       escalations: merged.escalations.map((escalation) => ({ escalationId: escalation.escalationId, conflictClass: escalation.conflictClass })),
       reviewRequests: merged.reviewRequests.map((review) => review.reviewId),
@@ -407,12 +407,12 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
     }),
     counts: () => ({
       ...head, fallback: `counts: ${FALLBACK_NOTE}`, sameSource,
-      counts: { specialists: outcome.tasks.length, notStarted: outcome.notStarted.length, decisions: decisions(merged.tasks), accepted: merged.accepted.length, escalations: merged.escalations.length, reviewRequests: merged.reviewRequests.length, verifications: merged.verification.length },
+      counts: { specialists: outcome.tasks.length, notStarted: outcome.notStarted.length, decisions: decisions(merged.tasks), accepted: merged.accepted.length, escalations: merged.escalations.length, reviewRequests: merged.reviewRequests.length, verifications: merged.verification.length, ...evidenceGapCount(merged) },
     }),
   };
   let text = "";
   for (const stage of MERGED_ENVELOPE_STAGES) {
-    text = sanitizeModelBoundText(`${MERGED_ENVELOPE_HEADER}\n${JSON.stringify(stages[stage]())}`);
+    text = sanitizeModelBoundText(`${MERGED_ENVELOPE_HEADER}${evidenceGapHeader(merged)}\n${JSON.stringify(stages[stage]())}`);
     if (text.length <= MAX_RESULT_CHARS) break;
   }
   return { text };
@@ -421,7 +421,7 @@ export function mergedResultsEnvelope(outcome: Extract<SchedulerOutcome, { kind:
 // ─── [B21 D2] One side-effecting artifact per user message: the specialists' one accepted proposal, presented (OD-122) ───────
 // Appended on purpose: an import is hoisted, so these declarations move no line cited above (the B21 pages pin this file by line).
 
-import { specialistApprovalDecision, unjudgedProposers, type MergedAcceptedAction, type SpecialistApprovalOutcome } from "@/app/lib/agent/orchestration/merge";
+import { MERGE_EVIDENCE_GAP_MARKER, mergeEvidenceGap, specialistApprovalDecision, unjudgedProposers, type MergedAcceptedAction, type MergedTask, type SpecialistApprovalOutcome } from "@/app/lib/agent/orchestration/merge"; // [B21 F3] the gap's marker
 import { engineeringDigest } from "@/app/lib/engineering/stable";
 
 /** [B21 D2] The events by which the coordinator's own first turn hands the human a side-effecting artifact (a sealed proposal, a
@@ -869,4 +869,25 @@ export function pausedFirstTurn(input: { runId: string; provider: LLMProviderId;
  *  window to come) and a window pause stay the first turn's pause. */
 function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {
   return pause.reason === "breaker_open" && pause.retryAtMs <= at;
+}
+
+// ─── [B21 F3] The envelope names the evidence gap (D21-44) ───────────────────────────────────────────────────────────────────
+// Appended on purpose: declarations hoist, so no line the B21 pages cite in this file moves (the envelope's stages and its header line
+// call these in place). Record-and-envelope only: no run event, no stream line - the follow-up turn is told, the record keeps it.
+
+/** [B21 F3] The closed marker on the entry whose result the merge recorded as citing no evidence (`evidence-missing`) - the merge's own
+ *  words, never the specialist's; absent otherwise, so an envelope without a gap is the one B21-F2's runtime wrote. */
+function evidenceGapMark(view: MergedTask | undefined): { evidenceGap: typeof MERGE_EVIDENCE_GAP_MARKER } | Record<string, never> {
+  return view !== undefined && mergeEvidenceGap(view) ? { evidenceGap: MERGE_EVIDENCE_GAP_MARKER } : {};
+}
+/** [B21 F3] The counts stage's number of such entries (absent when none). */
+function evidenceGapCount(merged: Extract<MergeOutcome, { kind: "merged" }>): { evidenceGaps: number } | Record<string, never> {
+  const gaps = merged.tasks.filter((task) => mergeEvidenceGap(task)).length;
+  return gaps > 0 ? { evidenceGaps: gaps } : {};
+}
+/** [B21 F3] One closed sentence after the header when any entry carries the marker, asking the coordinator not to present such a result's
+ *  claims as evidenced; what its answer says is model judgment ([B21 F3 review: coverage-1]) - the record and the marker are the merge's. */
+export const EVIDENCE_GAP_HEADER_NOTE = ` [B21 F3] An entry marked evidenceGap "${MERGE_EVIDENCE_GAP_MARKER}" is a result of the evidence-gathering role that cites NO evidence: the merge recorded the gap and invented none - never present its claims as evidenced, and say plainly that its evidence is missing.`;
+function evidenceGapHeader(merged: Extract<MergeOutcome, { kind: "merged" }>): string {
+  return merged.tasks.some((task) => mergeEvidenceGap(task)) ? EVIDENCE_GAP_HEADER_NOTE : "";
 }

@@ -310,7 +310,7 @@ describe("[B21 F] the twelve runbook evaluations, offline through the real runti
     expect(second.executed()).toBe(0);
   });
 
-  it("7. missing component evidence (:869): the sourcing specialist reads the authority and returns NO evidence - its result is accepted as its own claim with an empty evidence list and its blocking question, the merge invents none (no evidence reference anywhere in the record or the envelope); and where no component authority binding loads the sourcing specialist is NOT RUN (`role_has_no_tools`): its task records the gap as dissent `escalated` and the partial result counts it", async () => {
+  it("7. missing component evidence (:869): the sourcing specialist reads the authority and returns NO evidence - its result is accepted as its own claim with an empty evidence list and its blocking question, the merge invents none (no evidence reference anywhere in the record or the envelope) and [B21 F3] RECORDS the gap (the accepted `decision` names `evidence-missing`, the envelope marks the entry \"no evidence cited\"); and where no component authority binding loads the sourcing specialist is NOT RUN (`role_has_no_tools`): its task records the gap as dissent `escalated` and the partial result counts it", async () => {
     await installCatalog(SCOPE);
     const editor = await timerEditor(SCOPE);
     const sentence = SCENARIO_17_VARIANTS[1];
@@ -331,6 +331,14 @@ describe("[B21 F] the twelve runbook evaluations, offline through the real runti
     const [sourcingTrace] = await taskTraces(run.runId!, 2, "component-sourcing-evidence");
     expect(sourcingTrace!.events.filter((event) => event.kind === "tool_invocation").map((event) => event.toolId)).toEqual(["sirkit.component-authority.inspect"]);
     expect(state.log!.envelopes.at(-1)).toContain('"unresolvedQuestions":[{"id":"q-evidence-gap"');
+    // [B21 F3, 2026-09-28] reviewed pin move (D21-44, the lead's option (a)): until B21-F3 this case pinned the half the merge owned - it
+    // invents nothing - while the gap stood only as the specialist's own blocking question (RECORDED on F7: the merge had no
+    // evidence-presence rule); since F3 the merge RECORDS it: the sourcing task's accepted `decision` names `evidence-missing` and the
+    // follow-up's envelope marks that entry, and only that entry, "no evidence cited" (b21-f3-evidence-gap.test.ts); nothing else moved
+    const sourcingVerdict = history.find((entry) => entry.taskId.startsWith("task-2-component-sourcing-evidence.merge-"))!.record as { kind: string; decision: string; reason: string };
+    expect(sourcingVerdict).toMatchObject({ kind: "decision", decision: "accepted" });
+    expect(sourcingVerdict.reason).toMatch(/^merge accepted with evidence-missing \(no evidence cited\): /);
+    expect((judgedEnvelope as { specialists: Array<Record<string, unknown>> }).specialists.filter((entry) => "evidenceGap" in entry).map((entry) => [entry.taskId, entry.evidenceGap])).toEqual([["task-2-component-sourcing-evidence", "no evidence cited"]]);
     // no binding at all: the sourcing specialist is not run
     resetCatalog();
     state.log = fixtureClientLog();
@@ -345,6 +353,7 @@ describe("[B21 F] the twelve runbook evaluations, offline through the real runti
     expect(dissent.reason).toMatch(/^role_has_no_tools: .*its evidence stays missing$/);
     expect(of(gap.events, "partial_result").length).toBeGreaterThan(0);
     expect(await taskTraces(gap.runId!, 2, "component-sourcing-evidence")).toEqual([]); // never ran: no trace document
+    expect(state.log!.envelopes.length > 0 && state.log!.envelopes.every((envelope) => !envelope.includes("evidenceGap")), "[B21 F3] a task never run is the scheduler's dissent, never the merge's gap").toBe(true);
   });
 
   it("8. stale revision during parallel specialists (:870): the specialists commit against head H1 and the run stands down (its follow-up turn failed); a commit lands (H2) and the RESUME under the same run id finds every result committed against H1 `stale` - dissent with the committed digest, re-run once under its next attempt against H2 (the merge's scope is H2's) - while the H1 records stay in the append-only record unchanged; a resume at an unmoved head replays instead (never re-run, never re-paid)", async () => {

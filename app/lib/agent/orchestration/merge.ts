@@ -134,7 +134,7 @@ export const MERGE_OWN_CODES = Object.freeze([
   { code: "readiness-unresolvable", decision: "stale", claim: "readiness", when: "the merge cannot recompute the current report (no board or no preset)" },
   { code: "qualification-authority-unverified", decision: "stale", claim: "readiness", when: "a qualification-authority reference: no verifier of it is in the merge's closure, so it never satisfies OD-129" },
   { code: "evidence-namespace-reserved", decision: "malformed", claim: "integrity", when: "a specialist's evidence reference claims an id in the merge's own `merge-verification:` / `merge-candidate:` namespace" }, { code: "proposal-not-sealed-in-run", decision: "malformed", claim: "integrity", when: "[B21 D2] an action is not an artifact its specialist's own run sealed through its gateway (the scheduler refuses a model-written one first; this is the merge's second check)" },
-  { code: "conflict:<class>", decision: "contradicted", claim: "the shared identity's", when: "the action's identities overlap another surviving action that makes a DIFFERENT change (one escalation per group)" },
+  { code: "conflict:<class>", decision: "contradicted", claim: "the shared identity's", when: "the action's identities overlap another surviving action that makes a DIFFERENT change (one escalation per group)" }, { code: "evidence-missing", decision: "accepted", claim: "evidence", when: "[B21 F3] an accepted result of an evidence-gathering role (component-sourcing-evidence) cites no evidence: the gap is named in its decision record and the envelope marks the result no evidence cited; the verdict stays accepted and nothing is invented (D21-44)" },
 ] as const);
 
 /** The deterministic verifiers a ValidationRequest runs, by its binding (A closed the binding to these five; the order is A's). */
@@ -163,8 +163,8 @@ export const MERGE_RULES = Object.freeze([
 // ─── The merge's view ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 export interface MergeFinding {
-  readonly decision: Exclude<MergeDecision, "accepted">;
-  readonly claim: MergeClaimKind | "integrity" | "currency";
+  readonly decision: MergeDecision; // [B21 F3] `accepted` only on the one non-rejecting code, evidence-missing: a gap recorded, never a rejection
+  readonly claim: MergeClaimKind | "integrity" | "currency" | "evidence"; // [B21 F3] `evidence`: the gap's claim (no identity is compared)
   readonly code: string;
   readonly actionIndex: number | null;
   readonly findingIds: readonly string[];
@@ -919,16 +919,16 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
 
   // the merge's view per judged result
   const tasks: MergedTask[] = judged.map((entry) => {
-    const decision = decisionOf(entry.findings);
+    const decision = decisionOf(withEvidenceGap(entry).findings); // [B21 F3] the gap (D21-44) joins an accepted verdict and never changes it
     const codes = [...new Set(entry.findings.map((item) => item.code))];
     const via = `via ${entry.source}${entry.model ? ` (reported model ${entry.model})` : ""}`;
     const checks = [...entry.verified.map((use) => `${use.bindingToolId.split(".").pop()}=${use.outcome}${use.outputDigest ? `@${use.outputDigest}` : ""}`), ...(entry.readinessReportId ? [`readiness report ${entry.readinessReportId}`] : [])];
     const verifiedText = checks.length > 0 ? `; verified ${checks.join(", ")}` : "";
     const ids = [...new Set(entry.findings.flatMap((item) => item.findingIds))].slice(0, MERGE_BOUNDS.maxFindingIds);
     const reasonText = decision === "accepted"
-      ? `merge accepted: ${entry.actions.length === 0 ? "no proposed action" : `${entry.actions.length} action(s) sealed in the specialist's own run by its gateway (provenance: sealed-in-run), each passing its family's integrity and currency checks against scope ${scopeDigest}, bound to this run's principal and family lifetime`}; ${via}${verifiedText}; result ${entry.resultDigest}`
+      ? `merge accepted${evidenceGapReason(entry.findings)}: ${entry.actions.length === 0 ? "no proposed action" : `${entry.actions.length} action(s) sealed in the specialist's own run by its gateway (provenance: sealed-in-run), each passing its family's integrity and currency checks against scope ${scopeDigest}, bound to this run's principal and family lifetime`}; ${via}${verifiedText}; result ${entry.resultDigest}`
       : `merge ${decision}: ${codes.join(", ")}; ${via}${verifiedText}; result ${entry.resultDigest}${ids.length > 0 ? ` [${ids.join(", ")}]` : ""}`;
-    const reason = judgeOrchestrationText(clip(reasonText, 1_000), 1_000) === null ? clip(reasonText, 1_000) : `merge ${decision}: findings withheld from the record; result ${entry.resultDigest}`;
+    const reason = judgeOrchestrationText(clip(reasonText, 1_000), 1_000) === null ? clip(reasonText, 1_000) : `merge ${decision}${evidenceGapReason(entry.findings)}: findings withheld from the record; result ${entry.resultDigest}`; // [B21 F3 review: regressions-2] a withheld reason keeps the gap's closed clause
     // an action's own findings decide it; a sound action of a result that is not accepted is withheld under the result's decision
     const actions: MergedAction[] = entry.actions.map((action) => {
       const own = decisionOf(entry.findings.filter((item) => item.actionIndex === action.index));
@@ -1079,4 +1079,39 @@ export function unjudgedProposers(merged: Extract<MergeOutcome, { kind: "merged"
   const sealedUnjudged = [...new Set(outcome.tasks.filter((task) => (task.sealedArtifactDigests ?? []).some((digest) => !judged.has(digest))).map((task) => task.taskId))];
   const notRun = outcome.notStarted.filter((task) => proposingRole(task.role)).map((task) => task.taskId);
   return { sealedUnjudged, notRun };
+}
+
+// ─── [B21 F3] The evidence gap: the merge records it, nothing is invented (D21-44, the lead's option (a)) ─────────────────────
+// Appended on purpose: function declarations are hoisted and the constants are read only when a merge runs, so no line any B21 page
+// cites in this file moves (in place: the own-code row appended to MERGE_OWN_CODES' last line, the finding's two widened types, the
+// verdict's decision and its accepted reason).
+
+/** [B21 F3] The roles whose result IS evidence: the component/sourcing evidence specialist (runbook :822) - every id of its OD-120 row
+ *  is an evidence read, and its output is evidence plus a request for human review, never a target (OD-130). No other role is one: the
+ *  requirements analyst's, the circuit specialist's, the schematic and the PCB specialist's results are claims or sealed proposals their
+ *  families verify; the verification critic's evidence is the merge's OWN verification of what it requests; the readiness reviewer's
+ *  already has its stricter rule (OD-129, `readiness-claim-unreferenced`, malformed); the cost/latency router holds no tool. */
+export const EVIDENCE_GATHERING_ROLES: readonly SpecialistRole[] = Object.freeze(["component-sourcing-evidence"]);
+/** [B21 F3] The merge's one non-rejecting own code (the LAST row of MERGE_OWN_CODES) and the closed marker the envelope carries. */
+export const MERGE_EVIDENCE_GAP_CODE = "evidence-missing" as const;
+export const MERGE_EVIDENCE_GAP_MARKER = "no evidence cited" as const;
+/** [B21 F3] Whether a judged result carries the recorded gap. */
+export function mergeEvidenceGap(task: Pick<MergedTask, "findings">): boolean {
+  return task.findings.some((item) => item.code === MERGE_EVIDENCE_GAP_CODE);
+}
+/** [B21 F3] The rule (D21-44): an ACCEPTED result of an evidence-gathering role whose `evidence` list is empty gains ONE closed finding -
+ *  decision `accepted` (the least severe, so the verdict it joins stays accepted: the gap is recorded, never a rejection), claim
+ *  `evidence`, no action and no id. Applied once every other finding of the result (its conflicts included) is known, so only an
+ *  accepted verdict gains it. Nothing is invented: no evidence reference, digest or source is added anywhere. A replayed result is
+ *  judged the same (its evidence is the committed result's). */
+function withEvidenceGap(entry: Judged): Judged {
+  if (EVIDENCE_GATHERING_ROLES.includes(entry.task.role) && entry.result.evidence.length === 0 && decisionOf(entry.findings) === "accepted" && !mergeEvidenceGap(entry)) {
+    entry.findings.push(finding("accepted", "evidence", MERGE_EVIDENCE_GAP_CODE, null));
+  }
+  return entry;
+}
+/** [B21 F3] The accepted verdict's reason names the gap - the closed code and the marker, never the specialist's prose - so the
+ *  task attempt's `decision` record carries it under its content key (OD-114: the same verdict replays; a changed one is chained). */
+function evidenceGapReason(findings: readonly MergeFinding[]): string {
+  return mergeEvidenceGap({ findings }) ? ` with ${MERGE_EVIDENCE_GAP_CODE} (${MERGE_EVIDENCE_GAP_MARKER})` : "";
 }

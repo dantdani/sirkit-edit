@@ -160,6 +160,7 @@ verifier could not inspect. Merge case 14 reaches each PCB currency code and `re
 | `evidence-namespace-reserved` | `malformed` | integrity | a specialist's evidence reference claims an id in the merge's own `merge-verification:` / `merge-candidate:` namespace |
 | `proposal-not-sealed-in-run` | `malformed` | integrity | [B21 D2] an action is not an artifact its specialist's own run sealed through its gateway (the scheduler refuses a model-written one first; this is the merge's second check) |
 | `conflict:<class>` | `contradicted` | the shared identity's | the action's identities overlap another surviving action that makes a DIFFERENT change (one escalation per group) |
+| `evidence-missing` | `accepted` | evidence | [B21 F3] an accepted result of an evidence-gathering role (component-sourcing-evidence) cites no evidence: the gap is named in its decision record and the envelope marks the result no evidence cited; the verdict stays accepted and nothing is invented (D21-44) |
 
 **What the checksums cannot establish** (C58, merge case 17). A family's digests prove a body was not altered after it was sealed -
 never who sealed it (`engineeringDigest` is two 32-bit FNV hashes; the PCB verifier says so itself). So the merge binds every artifact
@@ -249,6 +250,116 @@ class, as are the `llm_suggestion`, `ocr_extraction` and `external_mcp_tool` cla
 `merge-candidate:` namespace is `malformed` (`evidence-namespace-reserved`, merge case 20). The standing rides with every retained
 reference in the view and the envelope.
 
+### [B21 F3, 2026-09-28] The evidence gap: the merge records it, nothing is invented (D21-44, the lead's option (a))
+
+Runbook B21-F :869: "missing component evidence (a sourcing specialist returns no evidence -> the merge records the gap, nothing is
+invented)". Until B21-F3 the merge had no evidence-presence rule: a sourcing result citing no evidence was `accepted` silently and the
+gap stood only as the specialist's own blocking question (F's RECORDED note on F7, D21-44). This section is the lead's option (a),
+applied in `merge.ts` and the runtime's envelope and pinned by `b21-f3-evidence-gap.test.ts` (case 9 pins this section and F3's reserved
+texts in section 8). **CONFIRMED**.
+
+- **The rule** (C80, C81, C78). An ACCEPTED result of an evidence-gathering role whose `evidence` list is empty gains ONE closed merge
+  finding: `evidence-missing`, the LAST row of `MERGE_OWN_CODES` (C77, the own-code table in section 2), decision `accepted`, claim
+  `evidence` (not a claim kind of the contradiction taxonomy: no identity is compared), no action index and no id. `accepted` is the
+  least severe decision, so the result's verdict - the most severe of its findings (section 1) - stays what it was: the gap is recorded,
+  never a rejection. It is applied once every other finding of the result is known, its conflicts included (C78), so only an accepted
+  verdict gains it: a stale, expired, contradicted or malformed result keeps its own codes alone (case 1 the stale one; case 11 one
+  bound to another principal, one its run did not seal, one past its family's TTL and one in conflict with another specialist's change,
+  the last pinning the order after the conflicts). A replayed result is judged the same way (its evidence is the committed result's).
+- **Which roles** (`EVIDENCE_GATHERING_ROLES`, C80): exactly `component-sourcing-evidence`, because its result IS evidence - every id of
+  its OD-120 row is an evidence read, and its output is evidence plus a request for human review, never a target (OD-130). No other role
+  is one: the requirements analyst's, the circuit specialist's, the schematic and the PCB specialist's results are claims or sealed
+  proposals their families verify, so an evidence-free one stays accepted with no finding (case 6); the verification critic's evidence is
+  the merge's OWN verification of what it requests (section 3); the manufacturing-readiness reviewer's already has its stricter rule,
+  `readiness-claim-unreferenced` (`malformed`, OD-129, case 6); the cost/latency router holds no tool.
+- **The record (OD-114).** A `decision` record, because the verdict is `accepted` and OD-114 writes an accepted verdict as a decision (a
+  `dissent` is a rejection; the gap is not one) - the task attempt's ONE verdict record, exactly as every other own code rides its
+  verdict's record: its reason names the gap as the closed code and the marker, `merge accepted with evidence-missing (no evidence
+  cited): ...` (C79), never the specialist's prose, under the content key `<taskId>.merge-<16 hex>` of that verdict. The same verdict
+  replays (a re-run of the same attempt writes nothing new); a verdict written before B21-F3 for the same result (no gap) is superseded by
+  a record chained to it (`mergeVerdictTaskId`'s previous) and the latest stands, still `accepted` (case 3). A scheduler resume replays
+  the committed result and the merge judges it the same way - the gap again, its verdict chained only for D's unrecorded replay
+  provenance - and the next resume replays it again: an accepted verdict is never the regenerate signal (case 3). No record kind, key shape or
+  decision value changed and no record is added: the gap rides the verdict's own record, so no revision count moved. The gap's clause
+  survives a withheld reason: when the assembled reason fails the text rule (a provider-reported model id that is key-shaped, which the
+  token rule for reported models admits), D's fallback keeps it - `merge accepted with evidence-missing (no evidence cited): findings
+  withheld from the record; result <digest>` (C86, case 10) - so the record and the envelope's marker never disagree; without a gap D's
+  fallback is byte for byte what it was.
+- **The envelope** (C82, C83, C84). The follow-up turn's entry for that result carries the key `evidenceGap` with the closed value "no
+  evidence cited" beside its merge verdict - the merge's marker, never the specialist's words - in the full, summaries, compact and ids
+  stages; the counts stage counts such entries (`evidenceGaps`); and the header gains ONE closed sentence (`EVIDENCE_GAP_HEADER_NOTE`)
+  telling the coordinator never to present that result's claims as evidenced and to say its evidence is missing (case 4). Without a gap
+  neither the marker, the count nor the sentence is written in any of the five stages (case 4), so every other envelope is the one
+  B21-F2's runtime wrote.
+- **The stream: record-and-envelope only.** There is no new run-event type (the five stand), no warning line (the merge's lines stay one per
+  dissent, escalation and review request, and an accepted verdict writes none), and `specialist_finished` is emitted by the scheduler
+  before the merge runs, so it carries no merge finding. What the merge guarantees is the record and the marker; what the human reads of
+  the gap is the coordinator's answer, and whether that answer names it is model judgment - the header's sentence asks for it, nothing
+  enforces it: UNPROVEN offline (case 8: the scripted follow-up's answer omits it, and nothing on the stream names it). A stood-down
+  follow-up (degraded `follow_up_paused` or `follow_up_failed`) shows the human nothing of the gap: the record alone holds it (INFERRED
+  from the code: the follow-up's envelope is its only carrier besides the record). **RECORDED** residual for the lead: a deterministic
+  human-facing line for the gap (in a vocabulary the E2 page allows) is not F3's - task item 3 allows record-and-envelope only.
+- **Nothing invented.** No evidence reference, digest or source is added anywhere, so nothing is invented: the finding carries no id,
+  the reason no digest but the result's own, the view no evidence and no verification of its own for it, and every `evidence` list of the
+  record and the envelope stays as the specialists cited it (case 5; F's case 7 walks them through the production POST).
+- **The approval decision is unchanged.** `specialistApprovalDecision` reads no finding: the sourcing role proposes nothing, and if it
+  ever could, a gap never presents or blocks a proposal by itself - the decision with and without the gap is the same, `presented` and
+  `escalated` alike (case 7), and the F7 scenario's `none_accepted` through the production POST (case 8).
+- **Two records of a gap, never confused.** A sourcing specialist that is NOT RUN (no tool this run) is the scheduler's dissent
+  `escalated`, `role_has_no_tools` ("its evidence stays missing", C85), and never reaches the merge (no marker: F's case 7); one that RAN
+  and cited nothing is the merge's accepted `decision` with `evidence-missing`.
+
+| suite | `it(` blocks | what it proves |
+|---|---|---|
+| `app/lib/agent/orchestration/__tests__/b21-f3-evidence-gap.test.ts` | 11 | the gap on an accepted evidence-free sourcing result (and never on a stale one); none on an evidenced one; the record keyed and chained (OD-114), a resume's replay judged the same way and replayed again; the envelope's marker in every stage, and without a gap no marker, count or sentence in any stage; nothing invented; the rule's roles; the approval decision unchanged; the F7 scenario through the production POST; this section and F3's reserved texts in section 8; a withheld reason keeping the gap's clause (case 10); a malformed, expired or contradicted evidence-free result keeping its own codes alone (case 11) |
+
+**Failing-first.** The first F3 implementer run wrote the suite first and ran it red against HEAD's merge before any production line
+(its logs in the session's `b21/f3/`); it was cut off before its gates and report, and the relaunched run adopted its work as the sole
+writer and re-established the evidence itself (`b21/f3/adopt/`, nine cases); after the adversarial review the swap was run again on
+the final eleven-case suite (`b21/f3/fix/`): with HEAD's `merge.ts` and runtime put back in place (`git diff` empty for both; then
+restored byte for byte, verified by sha256) all eleven cases are red - case 1 on the own-code list's last row, 2 on the evidence-free
+result's findings, 3 on the replayed result's findings, 4 on the full stage's marker, 5 on the gap finding, 6 on
+`EVIDENCE_GATHERING_ROLES` (not exported), 7 on the judged tasks' codes, 8 on the POST's decision records, 9 on the missing export, 10 on
+the withheld result's findings (no gap), 11 on its control (the evidence-free result proposing nothing carries no gap) - and F's case 7
+red on its moved assertion (the sourcing verdict's reason). Nine mutations of the F3 code on the final suite, each restored by hash: the
+role gate dropped (cases 4, 6, 7, 8 red), the accepted-only guard dropped (cases 1, 10, 11), the gap made a rejection (every case but
+9), the compact stage's marker dropped (case 4), the header sentence made unconditional (cases 2, 4, 11), the reason left silent (cases
+1, 3, 8, 9), the guard widened to every decision but `stale` (case 11), the gap applied before the conflicts (case 11) and the count
+written unconditionally (case 4).
+
+**Pin moves, each with its reason beside it.** `b21-f-evaluation.test.ts` case 7 (reviewed: from "accepted, no gap recorded" to "the
+merge records the gap" - the sourcing task's accepted `decision` names `evidence-missing` and the envelope marks that entry, and a task
+never run carries no marker); `evaluation-matrix.md` (the F7 row and its RECORDED note, dated); the matrix cell (`_f-cases.ts` F7, the
+B21 generator re-run: `evaluation-matrix.csv` and `.json` moved in that cell only, `replay-trace-pins-b21.json` unmoved); this page's
+own-code table (page case 7: it IS `MERGE_OWN_CODES`). No other suite enumerates `MERGE_OWN_CODES`. Every edit above an existing line of
+`merge.ts` and the runtime is in place (the own-code row on the list's last line, the finding's two widened types, the verdict's
+decision, reason and withheld fallback, the envelope's four stage lines, its header line, one import) and the new code is appended, so
+no line any B21 or B20 page cites moved: no citation was re-pinned (C77-C86 are new rows). No new run-event type, route, request key, control or tool; no change to the router,
+the scheduler's replay rule or the approval decision's outcomes; the nine B11-scanned files untouched; no pinned B21-D digest moved.
+
+**The adversarial review's findings (B21-F3, 2026-09-28), each answered test-first.** Six confirmed findings, five distinct, all low:
+
+- `regressions-2` and `coverage-4` (one defect): D's withheld-reason fallback dropped the gap - a provider-reported model id that is
+  key-shaped (the token rule for reported models admits it) makes the text rule refuse the assembled reason, and the `decision` record
+  became `merge accepted: findings withheld from the record; result <digest>` while the envelope still marked the entry. Case 10
+  reproduces it (red: the record's reason had no gap clause); fixed in place on C86's line (the fallback carries the same closed clause;
+  without a gap it is D's text byte for byte); case 10 green.
+- `coverage-1`: this section and the D21-44 closure clause stated what the coordinator's answer says as a guarantee (that the human
+  reads it there; that the answer "cannot present" the claims as evidenced), while only the record and the marker are deterministic.
+  Reworded (the stream bullet above: model judgment, UNPROVEN offline, a stood-down follow-up shows nothing, a RECORDED residual for the
+  lead), with the reserved texts in section 8 and the runtime's comment on the sentence (in place); case 9's wording check was red on
+  both phrases first.
+- `coverage-3`: D21-46's reserved text said the view digest differs between two non-writing passes; a three-pass probe (not
+  kept) shows the pass that chains a verdict reports the chained key (held) and every later pass that writes nothing reports the
+  unchained key (not held), those later passes agreeing with each other - so it is the chaining pass's digest that differs from theirs.
+  Reworded in section 8; case 9's wording check was red on the old phrase first.
+- `tests-01`: case 4 checked the absence of the marker only in the full stage; it now renders the evidenced run through all five stages
+  (no marker, no `evidenceGaps` count, no sentence in any). A mutation that writes the count unconditionally is red on case 4 alone.
+- `tests-02`: only the stale branch of the accepted-only guard was reached; case 11 adds a malformed (another principal; not sealed in
+  its run), an expired and a contradicted evidence-free sourcing result, each keeping its own codes alone in its findings, record, merge
+  line and envelope. The guard widened to every decision but `stale` is red on case 11; the gap applied before the conflicts is red on
+  case 11 (its contradicted result).
+
 ## 5. Persistence, the envelope, the route wiring and the scheduler
 
 - **Persisted before anything is handed on** (C23, C24, C64): per judged result ONE record per merge pass - kind `decision` for
@@ -263,6 +374,7 @@ reference in the view and the envelope.
   its own record and the LATEST verdict of a task attempt stands (merge case 23); a key that holds ANOTHER body than its content says is
   never written over (`store_conflict`, merge case 9); a store that refuses or throws yields `refused` and no view. The outcome's
   `records` are exactly the store's merge records (merge case 9); the follow-up turn starts only after them (route case 4).
+  [B21 F3, 2026-09-28] RECORDED: not once a replayed verdict was CHAINED - a later pass that finds the same verdict writes nothing but names its unchained content key, which the store does not hold (D21-46, new and low, found by F3's review and not fixed in F3; section 8's F3 texts).
 - **The scheduler reads the verdicts** (C68, C69): a resume re-runs a committed result whose latest merge verdict is `stale` or `expired`
   - the regenerate signal - at a new attempt, under a `stale` dissent `stale_verdict: …`, instead of replaying it (merge case 23); any
   other verdict replays (a conflict or a refusal is the human's to decide). The re-run after a stale dissent takes the next attempt
@@ -280,6 +392,7 @@ reference in the view and the envelope.
   decide, the verifications and the sources. The header says the entries were judged by the deterministic merge, that nothing was
   applied, that provenance is not established, that claims stay the specialists' own unverified claims and that agreement is not proof.
   [B21 D2, 2026-09-26] The header now says every accepted action was sealed in its specialist's own run and an `approval` block says whether the one accepted action was presented to the human or why not (`specialist-proposals.md`).
+  [B21 F3, 2026-09-28] An entry whose result the merge recorded as citing no evidence (`evidence-missing`) also carries the closed marker `evidenceGap` in every stage but the counts one (which counts such entries), and the header then carries one closed sentence (C82-C84; section 4's F3 section); every other envelope is unchanged.
   **[B21 D fix] Bounded whatever the merge holds:** five stages are tried in order until the sanitized text fits `MAX_RESULT_CHARS` -
   the whole view, claims cut to summaries, a compact view, ids and decisions only, counts only (constant size) - never a truncated
   document; route case 6 holds a real near-maximal merge (153 813 characters under the unchanged code) and a view inflated past every
@@ -609,6 +722,139 @@ BLOCKED-LIVE-QUALIFICATION under LB-9`.
   merge's closure holds no executor; the lead decides whether injection is the intended reading of that stop condition or the pure
   verifier should first move to a module of its own (section 5, D21-35).
 
+### B21-F3 — the reserved texts, in full (the lead's to apply)
+
+[B21 F3, 2026-09-28] B21-F3 closes D21-44 under the lead's option (a) and adds no owner decision. OD-114's record shape does not change -
+no record kind, key shape, decision value or chaining rule moved: the gap rides the accepted verdict's own `decision` record - so OD-114
+needs no amendment of its shape; the addendum below only records that an accepted verdict may now name one non-rejecting code (the lead
+applies it or leaves it). The adopting run's own review found ONE pre-existing defect in D's code, recorded below as D21-46 (new, low;
+not fixed in F3); the adversarial review then confirmed six findings (five distinct, all low), each fixed test-first (section 4, the F3
+section's findings list), none changing a verdict, an approval outcome or a pinned B21-D digest. One residual is the lead's, RECORDED
+below: no deterministic human-facing surface names the gap. These texts are pinned by `b21-f3-evidence-gap.test.ts` case 9.
+
+#### OD-114 — addendum (B21-F3, 2026-09-28)
+
+- [B21 F3, 2026-09-28] Addendum (no shape change): an ACCEPTED verdict may carry ONE non-rejecting closed code, `evidence-missing`
+  (D21-44, the lead's option (a)) - an accepted result of the evidence-gathering role (`component-sourcing-evidence`) that cites no
+  evidence is recorded as `merge accepted with evidence-missing (no evidence cited): ...` in its task attempt's one `decision` record,
+  under the same content key (`<taskId>.merge-<16 hex>`), chained to the verdict it supersedes, the latest standing; when the text rule
+  withholds the reason, D's fallback keeps the clause (`merge accepted with evidence-missing (no evidence cited): findings withheld from
+  the record; result <digest>`). No record kind, key shape or decision value changed; a verdict written before B21-F3 for the same
+  result (no gap) is superseded by a chained record, still `accepted`; a resume still replays an accepted result
+  (`merge-and-disagreement.md` section 4, the F3 section).
+
+#### The README row (`artifacts/ai-control-plane-b21/README.md`, a new row "B21-F3" after B21-F2)
+
+| B21-F3 the merge records the evidence gap (D21-44, the lead's option (a)) | `merge-and-disagreement.md` section 4 (the dated F3 section and its review findings; the own-code table's last row; citation rows C77-C86), `evaluation-matrix.md` (the F7 row and its RECORDED note, dated), `evaluation-matrix.{csv,json}` (the F7 cell only); code `app/lib/agent/orchestration/merge.ts` (the own-code row on `MERGE_OWN_CODES`' last line, the finding's two widened types, the verdict's decision, its accepted reason and its withheld fallback - six lines in place; the rule appended), `app/api/chat/orchestration-runtime.ts` (the envelope's four stage lines, its header line and one import - six lines in place; the marker, the count and the sentence appended) | CONFIRMED (an accepted result of the evidence-gathering role - `component-sourcing-evidence` alone, the reason no other role is one stated - that cites no evidence gains ONE closed merge finding `evidence-missing`, the last row of `MERGE_OWN_CODES`, decision `accepted`, claim `evidence`, only once every other finding is known (a malformed, stale, expired or contradicted result keeps its own codes): the verdict stays accepted and its task attempt's `decision` record names the gap under OD-114's content-keyed, chained records, a withheld reason included - a re-judgement writes nothing, a resume replays and judges the result the same way; the follow-up turn's envelope marks that entry `evidenceGap: "no evidence cited"` in every stage (the counts stage counts it) under one closed header sentence, and an envelope without a gap is unchanged in every stage; what the human reads of the gap is the coordinator's answer - model judgment, UNPROVEN offline (RECORDED residual: no deterministic human-facing line); nothing is invented - no evidence reference, digest or source anywhere the specialist did not cite; record-and-envelope only - no run-event type, no stream line; the approval decision unchanged (`presented` and `escalated` alike, F7's `none_accepted`); a specialist never run stays the scheduler's `role_has_no_tools` dissent; F7 through the production POST; eleven cases red first against HEAD's merge and runtime and F's case 7 red, nine mutations red, each restored by sha256; the adversarial review's six findings (five distinct) fixed test-first; F's case 7 moved as a reviewed pin; no line any page cites moved; D21-44 closed, D21-46 found) |
+
+#### The ledger paragraph (`artifacts/remaining-builder-program/EXECUTION_LEDGER.md`)
+
+### B21-F3 — the merge records the evidence gap (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-44 as the lead decided it (option (a)): the merge RECORDS the gap - an ACCEPTED result of the evidence-gathering role
+  (`EVIDENCE_GATHERING_ROLES` = `component-sourcing-evidence` alone: its result IS evidence; every other role's result is a claim or a
+  sealed proposal its family verifies, the critic's evidence is the merge's own verification and the readiness reviewer keeps its
+  stricter `readiness-claim-unreferenced`) whose `evidence` list is empty gains ONE closed finding, `evidence-missing` (the last row of
+  `MERGE_OWN_CODES`, decision `accepted`, claim `evidence`, no action, no id), applied once every other finding is known, so the verdict
+  stays accepted; its `decision` record's reason names it (`merge accepted with evidence-missing (no evidence cited): ...`, a withheld
+  reason included) under OD-114's content key, chained, the latest standing; the follow-up's envelope marks the entry `evidenceGap: "no
+  evidence cited"` (every stage; the counts stage counts it) and its header gains one closed sentence; nothing invented;
+  record-and-envelope only; the approval decision unchanged. Code: `merge.ts` (six lines in place, the rule appended),
+  `orchestration-runtime.ts` (six lines in place, the marker, count and sentence appended); no line any page cites moved, so no citation
+  was re-pinned (the D page gains rows C77-C86).
+- What the human sees: the record and the marker are deterministic; whether the coordinator's answer names the gap is model judgment -
+  UNPROVEN offline (the scripted follow-up's answer omits it, F3 case 8) - and a stood-down follow-up (`follow_up_paused`,
+  `follow_up_failed`) shows it nowhere but the record. RECORDED residual for the lead: a deterministic human-facing line for the gap (in
+  a vocabulary the E2 page allows) - not F3's, whose task allowed record-and-envelope only.
+- Adoption: the first F3 implementer run was cut off when the lead's session ended (2026-09-28, about 09:06) with its work unreviewed in
+  the tree and no report; the relaunched run adopted it as the sole writer, reviewed every change against HEAD (in scope, line-neutral
+  above every cited line, no reserved or B11-scanned file touched) and kept it: the rule, the record, the marker and the page section as
+  written; it strengthened the suite (case 3: a scheduler resume replays the result, judged the same way, the next resume still replays;
+  case 9: these reserved texts) and F's case 7 (its closing check made non-vacuous: an envelope must exist); nothing dropped.
+- Failing-first: with HEAD's `merge.ts` and runtime put back (`git diff` empty for both) all eleven F3 cases red and F's case 7 red on
+  its moved assertion; both files restored byte for byte, verified by sha256 (`b21/f3/adopt/` for the first nine, `b21/f3/fix/` on the
+  final suite). Nine mutations of the F3 code, each restored by hash, each red where section 4 says.
+- The adversarial review (six findings, five distinct, all low), each answered test-first (`b21/f3/fix/`): `regressions-2` and
+  `coverage-4`, D's withheld-reason fallback dropped the gap (a key-shaped reported model id makes the text rule refuse the reason):
+  case 10 red, the fallback now keeps the closed clause (in place), green; `coverage-1`, the page and the D21-44 clause stated the
+  answer's content as a guarantee: reworded (model judgment, UNPROVEN offline, the residual above), the page case's wording check red
+  first; `coverage-3`, D21-46's digest consequence misstated: reworded after a three-pass probe, the wording check red first;
+  `tests-01`, case 4 now renders the no-gap run through all five stages (a count written unconditionally is red); `tests-02`, case 11
+  adds malformed, expired and contradicted evidence-free results (the guard widened, and the gap applied before the conflicts, each red).
+- Pins moved (reviewed, reasons beside them): `b21-f-evaluation.test.ts` case 7 (from "accepted, no gap recorded" to "the merge records
+  the gap"); the F7 row and RECORDED note on `evaluation-matrix.md` (dated); the F7 cell (`_f-cases.ts` in place, the B21 generator
+  re-run: `evaluation-matrix.csv` and `.json` moved in that cell only, `replay-trace-pins-b21.json` byte-identical); the D page's own-code
+  table (page case 7 reads it as `MERGE_OWN_CODES`). No other suite enumerates `MERGE_OWN_CODES`; no pinned B21-D digest moved.
+- Findings: D21-46 (new, low) - after a replayed verdict is CHAINED, every later merge pass that finds the same verdict (and writes
+  nothing) reports the unchained content key in its `records`, a key the store does not hold; every later pass that writes nothing
+  agrees with the others, so its view digest differs from the chaining pass's (pre-existing D code; probes through the real scheduler
+  and merge, not kept; not fixed in F3).
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/f3/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (56 files, 524 of 524 -
+  every A..F page suite and the F3 suite's eleven cases included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45
+  files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` in full with the exposure and tier suites, the B11
+  suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318
+  of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the proposal families and approval paths (34
+  files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added);
+  `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the
+  five changed and new TypeScript files; the generators with zero drift beyond the F7 cell (B11 19 of 19 cases and 61 of 61 checks; the
+  B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run - against HEAD only `evaluation-matrix.csv` and `.json` moved,
+  in the F7 cell; B17-A 628 controls, CSV and summary identical; the tree's status and every changed file unchanged during the gates).
+  No browser run: F3 changes nothing the page renders (the marker and the sentence reach only the model-bound envelope).
+- Records: `merge-and-disagreement.md` section 4 (the F3 section) and this section; D21-44 closed; D21-46 found; OD-114's addendum; the
+  human-facing residual RECORDED. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+
+#### PROGRAM_STATE.json (`artifacts/remaining-builder-program/PROGRAM_STATE.json`)
+
+`currentCheckpoint`: "B21-F3 committed on chapter/b21-specialist-orchestration: the merge records the evidence gap (D21-44, the lead's
+option a) - an accepted result of the evidence-gathering role (component-sourcing-evidence) that cites no evidence gains one closed
+finding, evidence-missing (the last own code, decision accepted), named in its decision record under OD-114's content-keyed, chained
+records, a withheld reason included; the follow-up's envelope marks the entry no evidence cited under one closed header sentence;
+nothing invented, record-and-envelope only, the approval decision unchanged; F7 through the production POST; the adversarial review's
+six findings fixed test-first; D21-46 found (low); next B21-F2b (D21-45, option a), then the B21 closeout".
+`nextAction`: "B21-F2b: a scripted follow-up failure keyed on F12's sentence in the fixture agent's per-role script table and a browser
+test on the orchestration config that presents, stands down and resumes (already_presented, one presentation in all) - D21-45 option (a);
+for the lead's decision: D21-46 (a replayed verdict's record reference) and the evidence gap's human-facing line (RECORDED residual:
+only the model's answer can show it); then the B21 closeout (commit 1/2 the single-agent statements superseded, with the stale titles
+`evaluation-matrix.md` section 7 lists; commit 2/2 the records and the verdict; PR #11 undrafted after green CI); the one live run under
+OD-125 if credits exist; the owner questions stay with the owner".
+
+#### The discovery closure clause (`discovery.md` §4, appended to D21-44; D21-46 is a new defect after D21-45; §10 gains a B21-F3 amendment)
+
+- **D21-44 — The merge records no evidence gap: a specialist result that cites no evidence is accepted as its own claim.** — CLOSED by B21-F3 (the lead's option (a)): an ACCEPTED result of the evidence-gathering role (`component-sourcing-evidence`
+  alone - its result IS evidence; no other role is one) whose `evidence` list is empty gains ONE closed merge finding, `evidence-missing`
+  (the last row of `MERGE_OWN_CODES`, decision `accepted`, claim `evidence`, no action, no id), only once every other finding is known:
+  the verdict stays accepted and its task attempt's `decision` record names the gap (`merge accepted with evidence-missing (no evidence
+  cited): ...`, a withheld reason included) under OD-114's content key, chained, the latest standing; the follow-up turn's envelope marks
+  that entry `evidenceGap: "no evidence cited"` in every stage (the counts stage counts it) under one closed header sentence asking the
+  coordinator not to present its claims as evidenced; nothing is invented (every `evidence` list of the record and the envelope stays as
+  cited); record-and-envelope only (no run-event type, no stream line); the approval decision unchanged; a sourcing specialist that is
+  not run stays the scheduler's `role_has_no_tools` dissent (`merge-and-disagreement.md` section 4; `b21-f3-evidence-gap.test.ts` cases
+  1 to 11; `b21-f-evaluation.test.ts` case 7, a reviewed pin move). What the coordinator's answer then says of the gap is model
+  judgment - UNPROVEN offline (the scripted follow-up's answer omits it, case 8) - and a stood-down follow-up shows it nowhere but the
+  record: RECORDED residual, a deterministic human-facing line is the lead's decision.
+- **D21-46 — The merge's view names a record the store does not hold after a replayed verdict.** Requirement: OD-114 as applied ("the
+  outcome's `records` are exactly the store's merge records", section 5; merge case 9). Finding: when a task attempt's latest verdict is a
+  CHAINED record (a replayed result's provenance, an expiry, a new conflict partner), the pass that chains it reports the chained key,
+  but every later pass that writes nothing (it finds the same verdict) reports, in the view's `records`, the verdict's UNCHAINED content
+  key - a key the store does not hold - so `records` is not the store's records; every later pass that writes nothing agrees with the
+  others, so the view's digest (carried in the envelope's head) of a resume that writes nothing differs from the chaining pass's; no
+  production code reads `records` beyond that digest. Severity low. **CONFIRMED** (probes through the real scheduler and merge on a
+  circuit specialist's result, independent of F3: the store held `.merge-97ec...` and the chained `.merge-8ec4...`, which the chaining
+  pass reported (the store's revision 4 to 5); the two passes after it wrote nothing and each reported `.merge-6507...` under the same
+  digest, which differs from the chaining pass's; `b21/f3/adopt/probe-records.log`, `b21/f3/fix/probe-d46-three-passes.log`; the probes
+  not kept). Closes: a follow-up in the merge's persistence loop (a skipped verdict reports the latest record's key), with its
+  digest-bearing cases moved as reviewed pins. Source: B21-F3's review.
+- **§10, B21-F3 (recorded by the lead, 2026-09-28):** Section 4: D21-44 closed (the lead's option (a)); D21-46 opened (low: a replayed
+  verdict's record reference). Section 6: OD-114's addendum (an accepted verdict may name one non-rejecting code, a withheld reason
+  included; no shape change). Section 7, B21-F: amended - the merge records the evidence gap (B21-F3: the rule, the `decision` record,
+  the envelope's marker; no run event, no approval change; the human-facing line a RECORDED residual); F7's RECORDED note superseded.
+  Section 8: the first F3 implementer run was cut off with the lead's session; the relaunched run adopted its partial work, reviewed it
+  against HEAD and re-established its failing-first (eleven cases red against HEAD's merge and runtime, F's case 7 red, nine mutations
+  red, each restored by sha256); the adversarial review's six findings (five distinct, all low) fixed test-first - the withheld reason
+  keeps the gap's clause, the page states the answer as model judgment, D21-46's digest restated, the no-gap envelope checked in every
+  stage, every non-accepted branch of the guard reached.
+
 ## 9. Citations, as of base 5f1b498
 
 The anchor is what is checked (it occurs exactly once in its file). For `merge.ts` (new), `orchestration-runtime.ts` and `scheduler.ts`
@@ -692,3 +938,13 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C74 | `app/api/chat/orchestration-runtime.ts` | 190 | — | `[B21 D fix] SUPERSEDED since B21-D` | B's envelope superseded (D21-36) |
 | C75 | `app/lib/pcb/proposal/bounded-edit-compiler.ts` | 419 | — | `return refuse("drc-regression",` | the compiler's regression rules the candidate check mirrors |
 | C76 | `app/lib/pcb/candidates/layout-candidate.ts` | 352 | — | `const command = buildAutorouteImportCommand(board, candidate.routes);` | the apply's routing build the candidate check mirrors |
+| C77 | `app/lib/agent/orchestration/merge.ts` | 137 | — | `{ code: "evidence-missing", decision: "accepted"` | [B21 F3] the gap's own code, the LAST row of MERGE_OWN_CODES |
+| C78 | `app/lib/agent/orchestration/merge.ts` | 922 | — | `decisionOf(withEvidenceGap(entry).findings)` | [B21 F3] the gap joins a verdict once every other finding is known, never changing it |
+| C79 | `app/lib/agent/orchestration/merge.ts` | 929 | — | `merge accepted${evidenceGapReason(entry.findings)}` | [B21 F3] the accepted decision record's reason names the gap |
+| C80 | `app/lib/agent/orchestration/merge.ts` | 1094 | — | `export const EVIDENCE_GATHERING_ROLES` | [B21 F3] the evidence-gathering roles: the sourcing specialist alone |
+| C81 | `app/lib/agent/orchestration/merge.ts` | 1107 | — | `function withEvidenceGap(` | [B21 F3] the rule: an accepted, evidence-free result of such a role gains ONE finding |
+| C82 | `app/api/chat/orchestration-runtime.ts` | 880 | — | `function evidenceGapMark(` | [B21 F3] the envelope's closed marker on that entry |
+| C83 | `app/api/chat/orchestration-runtime.ts` | 890 | — | `export const EVIDENCE_GAP_HEADER_NOTE` | [B21 F3] the header's one closed sentence |
+| C84 | `app/api/chat/orchestration-runtime.ts` | 415 | — | `${MERGED_ENVELOPE_HEADER}${evidenceGapHeader(merged)}` | [B21 F3] the sentence only when an entry carries the marker |
+| C85 | `app/lib/agent/orchestration/scheduler.ts` | 480 | — | `its evidence stays missing` | the tool-less task: the scheduler's dissent, never the merge's gap |
+| C86 | `app/lib/agent/orchestration/merge.ts` | 931 | — | `${evidenceGapReason(entry.findings)}: findings withheld from the record` | [B21 F3 review: regressions-2] a withheld reason keeps the gap's closed clause |
