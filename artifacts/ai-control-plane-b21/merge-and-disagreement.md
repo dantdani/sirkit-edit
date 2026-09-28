@@ -38,7 +38,7 @@ verifiers.
   scheduler case 13 carries the reviewed pin move).
 - The import gate extended by case 7 (merge.ts in the entry set; its closure reaches no forbidden family, not even the fab preset data;
   it imports the layout apply's pure board builders, never the layout family's module).
-- This page, pinned by `b21-d-page.test.ts` (7 cases), with the reserved texts written out in section 8.
+- This page, pinned by `b21-d-page.test.ts` (7 cases; 9 since B21-D4), with the reserved texts written out in section 8.
 
 Closes **D21-10** (a proposal-to-proposal comparison, as a capability: in production no specialist carries an artifact today, so no
 artifact conflict reaches it - CONFIRMED-unreachable, section 6), **D21-11**'s artifact-envelope half (provider and reported model per
@@ -375,6 +375,7 @@ the scheduler's replay rule or the approval decision's outcomes; the nine B11-sc
   never written over (`store_conflict`, merge case 9); a store that refuses or throws yields `refused` and no view. The outcome's
   `records` are exactly the store's merge records (merge case 9); the follow-up turn starts only after them (route case 4).
   [B21 F3, 2026-09-28] RECORDED: not once a replayed verdict was CHAINED - a later pass that finds the same verdict writes nothing but names its unchained content key, which the store does not hold (D21-46, new and low, found by F3's review and not fixed in F3; section 8's F3 texts).
+  [B21 D4, 2026-09-28] D21-46 closed by B21-D4: a pass that writes nothing because the attempt's LATEST verdict is the same verdict now names THAT latest record's key in `records` (C87), chained or not, exactly as a replay of an existing key does - so the outcome's `records` are the store's merge records again, and two passes that find the same stored verdicts report the same view digest; nothing written changed (the B21-D4 subsection at the end of this section).
 - **The scheduler reads the verdicts** (C68, C69): a resume re-runs a committed result whose latest merge verdict is `stale` or `expired`
   - the regenerate signal - at a new attempt, under a `stale` dissent `stale_verdict: …`, instead of replaying it (merge case 23); any
   other verdict replays (a conflict or a refusal is the human's to decide). The re-run after a stale dissent takes the next attempt
@@ -405,6 +406,53 @@ the scheduler's replay rule or the approval decision's outcomes; the nine B11-sc
   hoisted), so B's citations of this file moved only below line 279 (C48, C49 of B's page, re-pinned); the fix pass changed only the
   five doc lines of B's envelope in place and the appended section.
 
+### [B21 D4, 2026-09-28] The merge's view names the records the store holds (D21-46)
+
+D21-46 (found by B21-F3's review; pre-existing since B21-D): OD-114 as applied says the outcome's `records` are exactly the store's
+merge records (merge case 9), but a pass that wrote nothing because a task attempt's LATEST verdict was the same verdict skipped it
+before replacing its planned entry - so when that latest verdict was a CHAINED record (its content key names the verdict it superseded:
+a replayed result's provenance, an expiry, another judgement in between) the view named the verdict's UNCHAINED content key, a key the
+store does not hold (after A, B, A: the first A's key, a record the store holds but not the attempt's latest), and the view's digest -
+carried in the follow-up envelope's head (C31) - was not the chaining pass's. B21-D4 closes it; this subsection is pinned by
+`b21-d-page.test.ts` case 8 and the behaviour by the suite below. **CONFIRMED**.
+
+- **The fix** (C87, in place on the persistence loop's skip line - no line moved): a pass that writes nothing because the attempt's
+  latest verdict is the same verdict now puts THAT latest record's key, kind and record in its planned entry before it moves on, exactly
+  as a replay of an existing key already did (the `existing` check beside C23: "a replay writes nothing"). So `records` names, for every
+  judged attempt, the store's latest verdict record - chained or not - and two passes that find the same stored verdicts report the same
+  records and the same view digest: the pass that chains a verdict and every later pass that writes nothing now agree.
+- **What does not change.** Nothing is written that was not written before, and a pass that wrote nothing still writes nothing: no key
+  shape, record kind, decision, reason or chaining rule moved (OD-114 unchanged; `mergeVerdictTaskId`, `sameVerdict` and
+  `latestVerdictOf` untouched), and no verdict, approval outcome, run event, stream line or route changed. In production `records` is read
+  only through the view digest the follow-up envelope's head carries (`mergedResultsEnvelope`, C31). A pass over unchained verdicts is
+  byte for byte what it was (its planned key already was the stored one; case 2's control).
+- **The consequence, stated once:** after a verdict is chained (a scheduler resume's replay, an expiry, a verdict returning A, B, A), the
+  follow-up envelope of a later resume that writes nothing carries the chaining pass's merge digest - before B21-D4 it carried another
+  one, the same for every such later pass.
+
+| suite | `it(` blocks | what it proves |
+|---|---|---|
+| `app/lib/agent/orchestration/__tests__/b21-d4-merge-records.test.ts` | 4 | a chained verdict (an expiry) and two passes that write nothing: every reference held by the store (read back), the later passes naming the chained key, the three views equal (digest and all); the unchained case unchanged (a first verdict and its replay: the same key, nothing written) beside a chained sibling; A, B, A still recorded under the key chained to B and the next pass naming it; a scheduler resume through the real scheduler and merge whose replayed verdict is chained - later resumes write nothing, name the stored key and carry the chaining resume's envelope head |
+
+**Failing-first.** The suite was written first and run against HEAD's unchanged `merge.ts` (`b21/d4/d4-failing-first.log`): all four
+cases red on their key assertions - case 1 on the later pass's reference (the unchained key), case 2 on the chained sibling's key, case
+3 on the next pass's key (the first A's), case 4 on the second resume's key. A digest-only copy of the suite (its key assertions
+removed; a scratch probe, not kept, `b21/d4/d4-failing-first-digests-probe.log`) was red on all four digest assertions - the view
+digests of cases 1 to 3 and case 4's envelope head. Then the one-line fix (C87): green, 4 of 4.
+
+**Pin moves: none.** No suite pins a merge view digest across a chained verdict and a later pass that writes nothing: merge case 10,
+verification case 4 and F3 case 3 compare an unchained first pass with its replay or with a fresh record (unmoved); F3 case 3's pass
+after its chaining resume reads the reason and the revision only (unmoved); merge cases 9, 9b and 23 read keys only of passes that
+write (9b's last pass reads the revision only; unmoved); no suite or artifact pins a literal merge digest; the B21 replay pins (`replay-trace-pins-b21.json`) and the evaluation
+matrix did not move (the generators re-run with zero drift). No line any page cites moved; C87 is a new row.
+
+**Review.** The adversarial review's two confirmed findings (both low, both in the reserved texts of section 8; no code, record, digest
+or pin affected) were fixed test-first through `b21-d-page.test.ts` case 9, red first on both (`b21/d4/fix/d4fix-failing-first.log`):
+`coverage-1`, D4's reserved PROGRAM_STATE `nextAction` was built from F3's reserved draft, not from the nextAction the lead applied: it
+is now the applied one with only its leading B21-D4 clause removed, word for word (the D21-36 retirement, the tripwire, the four
+validation artifacts, a normal merge and each owner question by number kept); `coverage-2`, D4's section-10 line had no Section 7 clause:
+it now records `Section 7, B21-D: amended` between its Section 6 and Section 8 clauses, as every section-10 entry does.
+
 ## 6. What D does NOT do
 
 - No content judgement of prose: a summary, an assumption or a risk is never read for meaning (a directive-looking summary stays data
@@ -433,7 +481,7 @@ the scheduler's replay rule or the approval decision's outcomes; the nine B11-sc
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-d-merge.test.ts` | 25 | accepted real artifacts with provenance, the layout scope wrap and the candidate check; `same_field` with one escalation; foreign scope; the families' stale and expired codes; one source per provider whatever model it reports, no agreement evidence; disagreeing part claims and the exact-authority citation; readiness free text, stale and current references; malicious results never reached, a re-sealed forgery refused; persistence before hand-on, content keys, fail-closed stores, no mutation; determinism; the re-run attempt after a stale resume; cross-family classes and the artifact-not-messenger rule; and cases 13-23 for the review's findings (section below) |
 | `app/lib/agent/orchestration/__tests__/b21-d-verification-requests.test.ts` | 8 | the five verifiers executed with literal outcomes and recorded as `deterministic_verifier` evidence; base-state evidence contradicting nobody and a candidate's own board contradicted; a binding outside the five never reaches the merge; no network or clock; a stale base not run, readiness unavailable never a pass; every outcome reached on a fixture built for it; repeated requests one verification; the evidence persisted in the verdict |
-| `app/lib/agent/orchestration/__tests__/b21-d-page.test.ts` | 7 | this page |
+| `app/lib/agent/orchestration/__tests__/b21-d-page.test.ts` | 9 | this page; [B21 D4] case 8: section 5's D4 note and subsection, C87 and D4's reserved texts in section 8; [B21 D4 review] case 9: D4's reserved nextAction (the applied one without its B21-D4 clause) and the section-10 lines' Section 7 clauses |
 | `app/api/chat/__tests__/b21-d-chat-merge.test.ts` | 7 | flag off byte-identical to HEAD (B's four recorded digests); a disagreeing DAG's dissent and escalation lines and the merge's view with the escalation's own decision text and without raw actions; an agreeing DAG hands the accepted action on; the record holds the decisions before the follow-up turn; a merge that cannot record stands down; the production envelope bounded, sanitized and one source per provider; the readiness plan through the route |
 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | A's gate; [B21 D] case 7: merge.ts's closure and its references (the layout apply's pure board builders included), the layout module caught through the commit gateway |
 | `app/lib/agent/orchestration/__tests__/b21-b-scheduler.test.ts` | 14 | B's cases; [B21 D] case 13's pin move (the re-run attempt) |
@@ -855,6 +903,89 @@ OD-125 if credits exist; the owner questions stay with the owner".
   keeps the gap's clause, the page states the answer as model judgment, D21-46's digest restated, the no-gap envelope checked in every
   stage, every non-accepted branch of the guard reached.
 
+### B21-D4 — the reserved texts, in full (the lead's to apply)
+
+[B21 D4, 2026-09-28] B21-D4 closes D21-46 (low; found by B21-F3's review, pre-existing since B21-D) with a one-line production fix
+in the merge's persistence loop and adds no owner decision. OD-114's shape does not change - no record kind, key shape, decision
+value, reason or chaining rule moved, and nothing is written that was not written before - so OD-114 needs no amendment. These texts
+are pinned by `b21-d-page.test.ts` cases 8 and 9.
+
+#### The README row (`artifacts/ai-control-plane-b21/README.md`, a new row "B21-D4" after B21-F3)
+
+| B21-D4 the merge's view names the records the store holds (D21-46) | `merge-and-disagreement.md` section 5 (the dated D4 note and subsection; citation row C87; D4's reserved texts in section 8); code `app/lib/agent/orchestration/merge.ts` (the persistence loop's skip line, in place - no line moved) | CONFIRMED (a merge pass that writes nothing because a task attempt's latest verdict is the same verdict now names that latest record's key, kind and record in the view's `records`, chained or not, exactly as a replay of an existing key does: `records` is the store's merge records for the judged attempts, and the pass that chains a verdict and every later pass that writes nothing report the same records and the same view digest - the digest the follow-up envelope's head carries; nothing is written that was not written before, OD-114 unchanged, no verdict, approval outcome, run event or route changed; four cases red first against HEAD's merge on their key assertions and, through a digest-only probe, on their digest assertions; no pin moved; the adversarial review's two findings (low, in the reserved texts) fixed test-first, D page case 9 red first; D21-46 closed) |
+
+#### The ledger paragraph (`artifacts/remaining-builder-program/EXECUTION_LEDGER.md`)
+
+### B21-D4 — the merge's view names the records the store holds (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-46 (low; found by B21-F3's review, pre-existing since B21-D): after a task attempt's verdict was CHAINED (a replayed result's
+  provenance, an expiry, a verdict returning A, B, A), every later merge pass that found the same verdict wrote nothing but named, in
+  the view's `records`, the verdict's UNCHAINED content key - one the store does not hold (after A, B, A the first A's, held but not
+  the latest) - so `records` was not the store's records and the view digest the follow-up envelope's head carries was not the
+  chaining pass's. The fix, in place on the persistence loop's skip line (`merge.ts`, C87): such a pass puts the latest record's key,
+  kind and record in its planned entry before it moves on, as a replay of an existing key already did. Nothing written changes;
+  OD-114's shape, `mergeVerdictTaskId`, `sameVerdict` and `latestVerdictOf` untouched; no verdict, approval outcome, run event, stream
+  line or route changed; no line any page cites moved.
+- Test-first: `b21-d4-merge-records.test.ts` (4 cases: an expiry chained, then two passes that write nothing; the unchained case
+  unchanged beside a chained sibling; A, B, A; a scheduler resume through the real scheduler and merge, with the follow-up envelope's
+  head) ran red against HEAD's merge - all four on their key assertions (`b21/d4/d4-failing-first.log`), and all four on their digest
+  assertions through a digest-only copy of the suite, not kept (`b21/d4/d4-failing-first-digests-probe.log`); green after the fix.
+- Pins: none moved - no suite pins a merge view digest across a chained verdict and a later pass that writes nothing (merge case 10,
+  verification case 4 and F3 case 3 compare unchained passes; F3 case 3's pass after its chaining resume reads the reason and the
+  revision only); the B21 replay pins and the evaluation matrix unmoved. The D page gains cases 8 and 9, section 5's dated note and
+  subsection, citation row C87 and these texts; its own suite row moved 7 -> 9 (case 9 is the review's).
+- Review: the adversarial review's two confirmed findings (both low, both in these reserved texts; no code, record, digest or pin
+  affected) fixed test-first through D page case 9, red first on both (`b21/d4/fix/d4fix-failing-first.log`): `coverage-1` - the
+  PROGRAM_STATE `nextAction` below was built from F3's reserved draft, not from the nextAction the lead applied; it is now the applied
+  one with only its leading B21-D4 clause removed, word for word (the D21-36 retirement, the tripwire, the four validation artifacts, a
+  normal merge and each owner question by number kept; the evidence gap's "lead's decision" clause not brought back); `coverage-2` - the
+  section-10 line had no Section 7 clause; it now records `Section 7, B21-D: amended`.
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/d4/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (57 files, 530 of 530 -
+  the D4 suite's four cases and the D page's nine included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as
+  before); `app/lib/agent` in full with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the proposal families and approval paths (34 files, 513 of 513); the import gates, census
+  ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with `app/api/mcp` (33 files,
+  737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the three changed and new TypeScript files; the
+  generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical - the B21
+  replay pins and the evaluation matrix included; B17-A 628 controls, CSV and summary identical; the tree's status and every changed
+  file unchanged during the gates). No browser run: D4 changes nothing the page renders.
+- Records: `merge-and-disagreement.md` section 5 (the D4 subsection) and these texts; D21-46 closed. Live: BLOCKED-LIVE-QUALIFICATION
+  (LB-9) - no model is called.
+
+#### PROGRAM_STATE.json (`artifacts/remaining-builder-program/PROGRAM_STATE.json`)
+
+`currentCheckpoint`: "B21-D4 committed on chapter/b21-specialist-orchestration: the merge's view names the records the store holds
+(D21-46 closed) - a merge pass that writes nothing because a task attempt's latest verdict is the same verdict names that latest
+record's key (chained or not), so the outcome's records are the store's merge records and the pass that chains a verdict and every later
+pass that writes nothing carry the same view digest; one line in place in merge.ts, nothing written changed, OD-114 unchanged; the
+adversarial review's two findings (the reserved texts) fixed test-first; next B21-F2b (D21-45, option a), then the B21 closeout".
+`nextAction`: "B21-F2b: the browser half of human rejection and resume (D21-45, option a); then the B21 closeout (commit 1/2: the
+single-agent statements superseded, the stale titles retitled, B's specialistResultsEnvelope retired (D21-36), a tripwire; commit 2/2:
+the four validation artifacts, the verdict, README, ledger and state; PR #11 undrafted, green CI, a normal merge); the one live run
+under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact
+options, OD-111's retention question and OD-115's first-turn options stay with the owner".
+
+#### The discovery closure clause (`discovery.md` §4, appended to D21-46; §10 gains a B21-D4 amendment)
+
+- **D21-46 — The merge's view names a record the store does not hold after a replayed verdict.** — CLOSED by B21-D4: a merge pass that
+  writes nothing because a task attempt's LATEST verdict is the same verdict now names THAT latest record's key (and its record) in the
+  view's `records`, chained or not, exactly as a replay of an existing key does (`merge.ts`, the persistence loop's skip line, in place;
+  `merge-and-disagreement.md` section 5, C87) - so `records` is always the store's merge records for the judged attempts, and the pass
+  that chains a verdict and every later pass that writes nothing report the same records and the same view digest (the one the
+  follow-up envelope's head carries). Nothing written changed: no key shape, record kind, decision, reason or chaining rule (OD-114
+  unchanged), no verdict, approval outcome, run event or route (`b21-d4-merge-records.test.ts` cases 1 to 4, red first against HEAD's
+  merge; no pin moved).
+- **§10, B21-D4 (recorded by the lead, 2026-09-28):** Section 4: D21-46 closed (a merge pass that writes nothing names the latest
+  record's key; one line in place in `merge.ts`). Section 6: no owner decision; OD-114 unchanged (no shape change, nothing written
+  changed). Section 7, B21-D: amended - a merge pass that writes nothing because the attempt's latest verdict is the same verdict names
+  that latest record's key, kind and record in the view's `records`, chained or not (B21-D4, `merge.ts` C87; nothing written changed,
+  OD-114 unchanged). Section 8: failing-first - the D4 suite's four cases red against HEAD's merge on their key assertions and, through
+  a digest-only probe, on their digest assertions; no pin moved; the D page gains cases 8 and 9, a dated section-5 note and subsection
+  and citation row C87; the adversarial review's two findings (both low, the reserved texts) fixed test-first - the reserved nextAction
+  rebuilt from the applied state, this line's Section 7 clause added (page case 9 red first).
+
 ## 9. Citations, as of base 5f1b498
 
 The anchor is what is checked (it occurs exactly once in its file). For `merge.ts` (new), `orchestration-runtime.ts` and `scheduler.ts`
@@ -948,3 +1079,4 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C84 | `app/api/chat/orchestration-runtime.ts` | 415 | — | `${MERGED_ENVELOPE_HEADER}${evidenceGapHeader(merged)}` | [B21 F3] the sentence only when an entry carries the marker |
 | C85 | `app/lib/agent/orchestration/scheduler.ts` | 480 | — | `its evidence stays missing` | the tool-less task: the scheduler's dissent, never the merge's gap |
 | C86 | `app/lib/agent/orchestration/merge.ts` | 931 | — | `${evidenceGapReason(entry.findings)}: findings withheld from the record` | [B21 F3 review: regressions-2] a withheld reason keeps the gap's closed clause |
+| C87 | `app/lib/agent/orchestration/merge.ts` | 992 | — | `records[records.indexOf(planned)] = { ...entry, taskId: latest.taskId,` | [B21 D4] D21-46: a pass that writes nothing names the attempt's LATEST verdict record (chained or not) in `records` |

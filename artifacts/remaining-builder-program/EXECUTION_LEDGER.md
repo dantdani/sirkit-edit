@@ -3469,3 +3469,53 @@ _(discovery, reproduction and results appended below as they are observed)_
   tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19 cases and 61 of 61
   checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
   unchanged). Logs under `b21/f3lead/gates/`.
+
+### B21-D4 — the merge's view names the records the store holds (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-46 (low; found by B21-F3's review, pre-existing since B21-D): after a task attempt's verdict was CHAINED (a replayed result's
+  provenance, an expiry, a verdict returning A, B, A), every later merge pass that found the same verdict wrote nothing but named, in
+  the view's `records`, the verdict's UNCHAINED content key - one the store does not hold (after A, B, A the first A's, held but not
+  the latest) - so `records` was not the store's records and the view digest the follow-up envelope's head carries was not the
+  chaining pass's. The fix, in place on the persistence loop's skip line (`merge.ts`, C87): such a pass puts the latest record's key,
+  kind and record in its planned entry before it moves on, as a replay of an existing key already did. Nothing written changes;
+  OD-114's shape, `mergeVerdictTaskId`, `sameVerdict` and `latestVerdictOf` untouched; no verdict, approval outcome, run event, stream
+  line or route changed; no line any page cites moved.
+- Test-first: `b21-d4-merge-records.test.ts` (4 cases: an expiry chained, then two passes that write nothing; the unchained case
+  unchanged beside a chained sibling; A, B, A; a scheduler resume through the real scheduler and merge, with the follow-up envelope's
+  head) ran red against HEAD's merge - all four on their key assertions (`b21/d4/d4-failing-first.log`), and all four on their digest
+  assertions through a digest-only copy of the suite, not kept (`b21/d4/d4-failing-first-digests-probe.log`); green after the fix.
+- Pins: none moved - no suite pins a merge view digest across a chained verdict and a later pass that writes nothing (merge case 10,
+  verification case 4 and F3 case 3 compare unchained passes; F3 case 3's pass after its chaining resume reads the reason and the
+  revision only); the B21 replay pins and the evaluation matrix unmoved. The D page gains cases 8 and 9, section 5's dated note and
+  subsection, citation row C87 and these texts; its own suite row moved 7 -> 9 (case 9 is the review's).
+- Review: the adversarial review's two confirmed findings (both low, both in these reserved texts; no code, record, digest or pin
+  affected) fixed test-first through D page case 9, red first on both (`b21/d4/fix/d4fix-failing-first.log`): `coverage-1` - the
+  PROGRAM_STATE `nextAction` below was built from F3's reserved draft, not from the nextAction the lead applied; it is now the applied
+  one with only its leading B21-D4 clause removed, word for word (the D21-36 retirement, the tripwire, the four validation artifacts, a
+  normal merge and each owner question by number kept; the evidence gap's "lead's decision" clause not brought back); `coverage-2` - the
+  section-10 line had no Section 7 clause; it now records `Section 7, B21-D: amended`.
+- Gates, one heavy job at a time through the lock runner, re-run in full on the final tree after the review's fixes
+  (`b21/d4/fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (57 files, 530 of 530 -
+  the D4 suite's four cases and the D page's nine included); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as
+  before); `app/lib/agent` in full with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the proposal families and approval paths (34 files, 513 of 513); the import gates, census
+  ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with `app/api/mcp` (33 files,
+  737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the three changed and new TypeScript files; the
+  generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical - the B21
+  replay pins and the evaluation matrix included; B17-A 628 controls, CSV and summary identical; the tree's status and every changed
+  file unchanged during the gates). No browser run: D4 changes nothing the page renders.
+- Records: `merge-and-disagreement.md` section 5 (the D4 subsection) and these texts; D21-46 closed. Live: BLOCKED-LIVE-QUALIFICATION
+  (LB-9) - no model is called.
+- Lead review (2026-09-28): three of the four review lenses found nothing and the coverage lens two low documentation findings (the
+  reserved nextAction drafted from F3's reserved text rather than the state the lead applied; the section-10 line without its Section 7
+  clause), both fixed and confirmed by the check with no new issue; the lead re-ran every gate; the README row placed after B21-F3 as the
+  reserved text states (the records tool places a sub-increment after its base letter's rows).
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (57 files, 530 of 530); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (the B09, B11 and B21 outputs, 24
+  files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged). Logs under `b21/d4lead/gates/`.

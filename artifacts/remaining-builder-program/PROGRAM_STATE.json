@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-F3 committed on chapter/b21-specialist-orchestration: the merge records the evidence gap (D21-44, the lead's option a) - an accepted result of the evidence-gathering role (component-sourcing-evidence) that cites no evidence gains one closed finding, evidence-missing (the last own code, decision accepted), named in its decision record under OD-114's content-keyed, chained records, a withheld reason included; the follow-up's envelope marks the entry no evidence cited under one closed header sentence; nothing invented, record-and-envelope only, the approval decision unchanged; F7 through the production POST; the adversarial review's six findings fixed test-first; D21-46 found (low); next B21-F2b (D21-45, option a), then the B21 closeout",
+  "currentCheckpoint": "B21-D4 committed on chapter/b21-specialist-orchestration: the merge's view names the records the store holds (D21-46 closed) - a merge pass that writes nothing because a task attempt's latest verdict is the same verdict names that latest record's key (chained or not), so the outcome's records are the store's merge records and the pass that chains a verdict and every later pass that writes nothing carry the same view digest; one line in place in merge.ts, nothing written changed, OD-114 unchanged; the adversarial review's two findings (the reserved texts) fixed test-first; next B21-F2b (D21-45, option a), then the B21 closeout",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "3cd7e0a",
+  "lastGreenSha": "9d2014a",
   "pullRequest": "draft PR #11 (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-D4: the merge's view names the records the store holds (D21-46, pre-existing since B21-D, found by F3's review); then B21-F2b: the browser half of human rejection and resume (D21-45, option a); then the B21 closeout (commit 1/2: the single-agent statements superseded, the stale titles retitled, B's specialistResultsEnvelope retired (D21-36), a tripwire; commit 2/2: the four validation artifacts, the verdict, README, ledger and state; PR #11 undrafted, green CI, a normal merge); the one live run under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner",
-  "updatedAt": "2026-09-28T10:53:27-04:00",
+  "nextAction": "B21-F2b: the browser half of human rejection and resume (D21-45, option a); then the B21 closeout (commit 1/2: the single-agent statements superseded, the stale titles retitled, B's specialistResultsEnvelope retired (D21-36), a tripwire; commit 2/2: the four validation artifacts, the verdict, README, ledger and state; PR #11 undrafted, green CI, a normal merge); the one live run under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner",
+  "updatedAt": "2026-09-28T12:29:19-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

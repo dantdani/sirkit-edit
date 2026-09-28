@@ -8,6 +8,8 @@
  * `MERGE_OWN_CODES`, every one of the adversarial review's confirmed findings is listed with the cases that reproduce it (and they
  * exist), and the closure clauses say what the tree does in production - no escalation "by construction", D21-17 against the
  * request-time snapshot only.
+ * [B21 D4] Case 8: D21-46 closed - section 5's dated note and subsection, the fix's citation (C87) and D4's reserved texts.
+ * [B21 D4 review] Case 9: D4's reserved nextAction is the applied one without its B21-D4 clause; each section-10 line has its Section 7.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -152,5 +154,71 @@ describe("[B21 D] the merge-and-disagreement page", () => {
         expect(read(suite!), `${row[1]}: ${reference}`).toMatch(new RegExp(`^ {2}it\\("${match![2]}\\. `, "m"));
       }
     }
+  });
+
+  it("8. [B21 D4] D21-46 closed: section 5 carries ONE dated D4 note and ONE D4 subsection - the fix on the persistence loop's own line (C87, current: the skip names the latest record's key), nothing written changed (OD-114 unchanged), the suite's row with its real `it(` count, its failing-first and no pin move - beside F3's RECORDED line, which stays; section 8 holds D4's reserved texts once (the README row, the ledger paragraph, PROGRAM_STATE, the D21-46 closure clause under its discovery title quoted exactly, the section-10 line), none claiming a record, OD-114 or a pinned replay digest moved", () => {
+    const D4_SUITE = "app/lib/agent/orchestration/__tests__/b21-d4-merge-records.test.ts";
+    const page = read(PAGE);
+    const five = section(page, 5);
+    expect(five).toContain("[B21 F3, 2026-09-28] RECORDED: not once a replayed verdict was CHAINED");
+    expect(five.split("[B21 D4, 2026-09-28] D21-46 closed by B21-D4").length - 1).toBe(1);
+    expect(page.split("### [B21 D4, 2026-09-28] ").length - 1).toBe(1);
+    expect(five.indexOf("### [B21 D4, 2026-09-28] ")).toBeGreaterThan(0);
+    const sub = five.slice(five.indexOf("### [B21 D4, 2026-09-28] ")).replace(/\s+/g, " ");
+    for (const claim of ["D21-46", "OD-114", "(C87,", "`records`", "LATEST", "CHAINED", "UNCHAINED", "Nothing is written that was not written before", "a pass that wrote nothing still writes nothing", "`mergedResultsEnvelope`", "**Failing-first.**", "**Pin moves: none.**", "`replay-trace-pins-b21.json`", "**CONFIRMED**"]) expect(sub, claim).toContain(claim);
+    const rows = [...sub.matchAll(/\| `((?:app|e2e)\/[^`]+\.(?:test|spec)\.ts)` \| (\d+) \|/g)];
+    expect(rows.map((row) => row[1])).toEqual([D4_SUITE]);
+    expect((read(D4_SUITE).match(/^\s*it\(/gm) ?? []).length).toBe(Number(rows[0]![2]));
+    // C87: the fix is the skip line itself - a pass that finds the same latest verdict names that record's key, then writes nothing
+    const c87 = pageCitations(page).find((citation) => citation.id === "C87");
+    expect(c87).toMatchObject({ path: "app/lib/agent/orchestration/merge.ts" });
+    const line = read(c87!.path).split(NEWLINE)[c87!.line - 1] ?? "";
+    for (const part of [c87!.anchor, "sameVerdict(latest.record, entry.record)", "taskId: latest.taskId", "record: latest.record", "continue;", "[B21 D4]"]) expect(line, part).toContain(part);
+    expect(anchorOccurrences(ROOT, c87!)).toBe(1);
+    // the reserved texts (the lead's to apply): once, at the end of section 8, each named; D21-46's clause quotes the discovery's title exactly
+    const eight = section(page, 8);
+    const HEADING = "### B21-D4 — the reserved texts, in full (the lead's to apply)";
+    expect(page.split(HEADING).length - 1).toBe(1);
+    expect(eight.indexOf(HEADING)).toBeGreaterThan(eight.indexOf("### B21-F3 — the reserved texts, in full (the lead's to apply)"));
+    const lead = eight.slice(eight.indexOf(HEADING));
+    for (const heading of ["#### The README row", "#### The ledger paragraph", "### B21-D4 — the merge's view names the records the store holds", "#### PROGRAM_STATE.json", "#### The discovery closure clause", "**§10, B21-D4"]) expect(lead, heading).toContain(heading);
+    expect(lead).toMatch(/^\| B21-D4 /m);
+    const title = /\*\*D21-46 — [^*]+\*\*/.exec(read("artifacts/ai-control-plane-b21/discovery.md"))![0].replace(/\s+/g, " ");
+    const flat = lead.replace(/\s+/g, " ");
+    expect(flat).toContain(`- ${title} — CLOSED by B21-D4`);
+    for (const overclaim of [/\brecords? (?:was|were) (?:re)?written\b/i, /\breplay (?:pin|digest)s? (?:moved|changed)\b/i, /\bOD-114 (?:is )?(?:amended|changed)\b/i, /\bdiffers between two passes that write nothing\b/i]) expect(`${sub} ${flat}`).not.toMatch(overclaim);
+  });
+
+  it("9. [B21 D4 review: coverage-1, coverage-2] D4's reserved PROGRAM_STATE `nextAction` is the one the lead applied with only its leading B21-D4 clause removed, word for word (the D21-36 retirement, the tripwire, the four validation artifacts, a normal merge and each owner question by number kept; the evidence gap's \"lead's decision\" clause not brought back); and every reserved section-10 increment line on this page (F3's, D4's) records the plan's amendment - a `Section 7, B21-<X>:` clause between its Section 6 (or 4) and Section 8 clauses - D4's naming the merge's `records` fix (C87) with nothing written changed", () => {
+    const eight = section(read(PAGE), 8);
+    const lead = eight.slice(eight.indexOf("### B21-D4 — the reserved texts, in full (the lead's to apply)"));
+    const issues: string[] = [];
+    // coverage-1: the reserved nextAction is built from the APPLIED state (the lead's PROGRAM_STATE.json), never from F3's reserved draft
+    const reserved = (/`nextAction`: "([^"]+)"/.exec(lead)?.[1] ?? "").replace(/\s+/g, " ");
+    const applied = String((JSON.parse(read("artifacts/remaining-builder-program/PROGRAM_STATE.json")) as { nextAction?: unknown }).nextAction ?? "");
+    const D4_CLAUSE = /^B21-D4: [^;]+; then /; // present until the lead applies D4's texts; afterwards the applied nextAction IS D4's (or a later one)
+    if (D4_CLAUSE.test(applied) && reserved !== applied.replace(D4_CLAUSE, "")) issues.push(`coverage-1: the reserved nextAction is not the applied one without its B21-D4 clause: ${reserved}`);
+    for (const kept of ["B21-F2b: the browser half of human rejection and resume (D21-45, option a)", "B's specialistResultsEnvelope retired (D21-36), a tripwire", "commit 2/2: the four validation artifacts, the verdict, README, ledger and state", "PR #11 undrafted, green CI, a normal merge", "the one live run under OD-125 if credits exist", "OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner"]) {
+      if (!reserved.includes(kept)) issues.push(`coverage-1: the reserved nextAction drops: ${kept}`);
+    }
+    if (/lead's decision|B21-D4/.test(reserved)) issues.push("coverage-1: the reserved nextAction brings back a clause the lead removed");
+    // coverage-2: each reserved section-10 increment line carries its Section 7 clause, in order, as every section-10 entry of discovery.md does
+    const tenLine = (id: string): string => {
+      const start = eight.indexOf(`- **§10, ${id} (recorded by the lead, `);
+      if (start < 0) return "";
+      const ends = [eight.indexOf(`${NEWLINE}${NEWLINE}`, start), eight.indexOf(`${NEWLINE}- `, start)].filter((index) => index > 0);
+      return eight.slice(start, ends.length > 0 ? Math.min(...ends) : undefined).replace(/\s+/g, " ");
+    };
+    for (const [id, plan] of [["B21-F3", "Section 7, B21-F: amended - "], ["B21-D4", "Section 7, B21-D: amended - "]] as const) {
+      const line = tenLine(id);
+      const at = (label: string): number => line.indexOf(label);
+      if (line === "") issues.push(`coverage-2: no section-10 line for ${id}`);
+      else if (at(plan) < 0) issues.push(`coverage-2: ${id}'s section-10 line has no "${plan.trim()}" clause`);
+      else if (!(Math.max(at("Section 4: "), at("Section 6: ")) < at(plan) && at(plan) < at("Section 8: "))) issues.push(`coverage-2: ${id}'s Section 7 clause is out of order`);
+    }
+    const d4Line = tenLine("B21-D4");
+    const d4Plan = d4Line.indexOf("Section 7, B21-D: amended - ") < 0 ? "" : d4Line.slice(d4Line.indexOf("Section 7, B21-D: amended - "), d4Line.indexOf("Section 8: "));
+    for (const part of ["`records`", "C87", "nothing written changed", "OD-114 unchanged"]) if (!d4Plan.includes(part)) issues.push(`coverage-2: D4's Section 7 clause does not name ${part}`);
+    expect(issues).toEqual([]);
   });
 });

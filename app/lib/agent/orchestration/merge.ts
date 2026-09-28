@@ -989,7 +989,7 @@ export async function mergeSpecialistOutcome(input: MergeInput, deps: MergeDeps)
     let entry = planned;
     if (entry.judgedTaskId !== null) {
       const latest = latestVerdictOf(entry.judgedTaskId, entry.attempt);
-      if (latest && (latest.record.kind === "decision" || latest.record.kind === "dissent") && sameVerdict(latest.record, entry.record)) continue;
+      if (latest && (latest.record.kind === "decision" || latest.record.kind === "dissent") && sameVerdict(latest.record, entry.record)) { records[records.indexOf(planned)] = { ...entry, taskId: latest.taskId, kind: latest.record.kind, record: latest.record }; continue; } // [B21 D4] D21-46: nothing written - the view names the LATEST record's key (chained or not), as a replay of an existing key does
       if (latest) {
         entry = { ...entry, taskId: mergeVerdictTaskId(entry.judgedTaskId, entry.attempt, entry.record, latest.taskId) };
         records[records.indexOf(planned)] = entry;
