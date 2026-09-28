@@ -53,6 +53,11 @@ after an outage is a NEW run whose specialists run (and are paid) again — the 
 closes A's deviation (the store is bound by the composition root); finds **D21-33** (section 5): the loop's own import closure reaches
 `app/lib/pcb/fab/presets` through the read bindings, so the scheduler takes the loop by injection.
 
+[B21 E3, 2026-09-27] The route-level resume is on its own page, `route-resume.md`: under the flag a chat request may carry `resumeRunId` (the run id
+the route issued), the route authorizes it against the run's resume record and REUSES the run id, so a resumed run's committed
+specialists are replayed while still current (one whose design, selection or seal lifetime moved runs again) - D21-4 closed at the route. B's statement above (a fresh run id per POST, a Retry
+always a NEW run) holds for a request without the key.
+
 **Not in B** (the B21-B task; the increment plan §7): no per-role tool subset and no `deriveSpecialistContext` hardening beyond the
 scheduler's own narrowing (B21-C — in B a specialist can only READ), no merge or comparator (B21-D), no provider routing, no breaker,
 no strict result tool, no new run events and no trace block (B21-E — here the run log's `warning` channel carries one line per
@@ -271,6 +276,8 @@ Only then does route case 4 run specialists in a chat (the replacement request u
   runs the specialists again; the scheduler-level replay is reachable today only by a direct `runSpecialistDag` caller (B21-C/D) — the
   route-level resume is B21-E's ("resume from immutable trace after refresh"). The record keeps what was committed; nothing is written
   over.
+  [B21 E3, 2026-09-27] The route-level resume now exists (`route-resume.md`): a request carrying `resumeRunId` reuses the run id and the scheduler
+  replays what was committed; a request without it is still a new record, as stated above.
 - **Refusals before anything runs**: `plan_empty`, `plan_exceeds_specialist_cap`, `no_verified_state` (a specialist needs the
   coordinator's verified canonical state), `dag_deadline_elapsed`, `store_unavailable` (A's UNAVAILABLE store or a repository that
   throws), `store_refused` (a malformed scope, an `invalid_record`), `store_conflict`, `plan_mismatch` (case 10). Stops after a start:

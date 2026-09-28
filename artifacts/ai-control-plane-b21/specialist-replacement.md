@@ -40,6 +40,8 @@ fact the sourcing specialist already reads through `sirkit.component-authority.i
   seal, they are always escalated to the human; OD-130's part review renders at the route's envelope through the scheduler seam and
   is CONFIRMED-unreachable from a production POST until B21-E's route-level resume. **CONFIRMED** by `b21-d3-scenario17.test.ts` (8
   cases) and `app/api/chat/__tests__/b21-d3-chat-replacement.test.ts` (7 cases).
+  [B21 E3, 2026-09-27] Superseded for the route half: OD-130's part review is REACHABLE from a production POST through the route-level resume
+  (`route-resume.md`; `b21-e3-chat-resume.test.ts` case 8) - D21-16's route half closed.
 - This page, pinned by `b21-d3-page.test.ts` (10 cases), with the reserved texts written out in section 7.
 
 Closes **D21-37** (two sealed parties are always escalated; a party whose edit cannot seal never reaches the merge); records
@@ -324,6 +326,8 @@ server's catalog decides the target, the model never does.
   (D21-4). **CONFIRMED** (route case 5: the envelope, through the seam; route case 7: two production POSTs are two runs - every
   specialist runs again, nothing is replayed, each seal targets the exact authority and is accepted and presented, no part review in
   either; scenario17 case 5: the runtime's resume).
+  [B21 E3, 2026-09-27] The route now performs that resume: a POST carrying `resumeRunId` reuses the run id and replays the committed seal, and
+  the merge asks for the part review (`route-resume.md`, route case 8); route case 7 above still holds for two POSTs without the key.
 - **Providers.** The parties' PROVIDER is the coordinator's until B21-E1's per-role routing (the scheduler reuses the coordinator's
   adapter): every escalation above counts ONE source. The resolution rule is provider-blind - one provider is one source and agreement
   is never proof - and B21-F's "timer replacement with provider disagreement" case runs these same parties on two providers.

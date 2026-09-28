@@ -18,8 +18,8 @@
  * a coordinator turn that does not complete runs no specialist; a refused plan, a provider outage among the specialists or a
  * plan that produced no usable result leaves the coordinator's own completed answer as the one terminal under a warning that
  * names the closed reason only (a record failure's detail never reaches the client); a cancelled DAG ends the run `cancelled`;
- * a follow-up turn that fails leaves the first answer standing (no Retry storm: the human's Retry starts a NEW run, whose
- * record is a new coordinator run - the route-level resume is B21-E's). The follow-up turn's warnings never repeat the first
+ * a follow-up turn that fails leaves the first answer standing (no Retry storm: the human's re-send is a new request - [B21 E3] it
+ * RESUMES this run under its own id when it carries `resumeRunId`, else starts a new record). The follow-up turn's warnings never repeat the first
  * turn's, and text that originated in a specialist can reach no proposal seal, grant, view command or port.
  *
  * The flag: `SIRKIT_ORCHESTRATION_ENABLED` exactly "1" (default off). Off, `planChatRun` answers `single` for every message
@@ -212,7 +212,7 @@ const usageOf = (event: AgentRunEvent | null): { inputTokens: number; outputToke
 
 /** The DAG path: the coordinator turn as today (its terminal held back), the specialists one at a time, then ONE READ-ONLY
  *  follow-up coordinator turn under the same run id and history; the stream's one terminal reports the run's totals. */
-export async function runOrchestratedChat(input: { request: AgentRunRequest; deps: AgentLoopDeps; plan: Extract<RoutePlan, { kind: "dag" }>; startedAt: number; /** [B21 E1] the provider layer (the route passes `productionSpecialistProviders()`) */ providers?: SpecialistProviders }): Promise<AgentRunResult> {
+export async function runOrchestratedChat(input: OrchestratedChatInput): Promise<AgentRunResult> { return settledOnThrow(input, orchestratedChat); } async function orchestratedChat(input: OrchestratedChatInput, onStart: (settle: () => Promise<string | null>) => void): Promise<AgentRunResult> { // [B21 E3 fix: regressions-2] a start on the resume record is settled even when something throws (`settledOnThrow`, appended)
   const { request, deps, plan } = input;
   const trace = deps.trace;
   const held = trace ? { trace: holdTraceTerminal(trace) } : {};
@@ -227,16 +227,16 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
     try { trace?.recordWarning(message); } catch { /* tracing is passive */ }
   };
   const recordTerminal = (outcome: "completed" | "failed" | "cancelled", reason: string | null): void => { try { trace?.recordTerminal(outcome, reason); } catch { /* tracing is passive */ } };
-  const cancelled = (steps: number, toolCalls: number): AgentRunResult => {
+  const cancelled = async (steps: number, toolCalls: number): Promise<AgentRunResult> => { const unsettled = await settleStarted(); if (unsettled) warn(unsettled, true); // [B21 E3] this request's start settled BEFORE its terminal
     emit({ type: "run_failed", runId: request.runId, reason: "cancelled", message: "The run was cancelled." });
     recordTerminal("cancelled", "cancelled");
     return { runId: request.runId, status: "cancelled", finalText: "", steps, toolCalls, failureReason: "cancelled" };
   };
 
   // the coordinator's first turn: its terminal is held, its warnings remembered (the follow-up never repeats one)
-  const firstWarnings = new Set<string>(); const firstArtifacts: string[] = []; // [B21 D2] what the coordinator's own first turn sealed or minted
+  const firstWarnings = new Set<string>(); const firstArtifacts: string[] = []; let started: number | null = null; let presented = false; const record = { request, context: deps.context, ...(deps.now ? { now: deps.now } : {}), ...(input.recordDeadlineMs !== undefined ? { deadlineMs: input.recordDeadlineMs } : {}) }; const settleStarted = (): Promise<string | null> => (started === null ? Promise.resolve(null) : settleChatRequest({ ...record, ordinal: started, presented })); onStart(settleStarted); // [B21 D2] what the coordinator's own first turn sealed or minted; [B21 E3] this request's start on the resume record, settled at every end but the follow-up's answer - [B21 E3 fix: coverage-5] saying whether THIS request presented the message's artifact; [B21 E3 fix: regressions-2] also when something throws
   let firstTerminal: AgentRunEvent | null = null; let ranOutcome: Extract<SchedulerOutcome, { kind: "ran" }> | null = null; let judged: Extract<MergeOutcome, { kind: "merged" }> | null = null; // [B21 E2] the scheduler's outcome once it ran: a stand-down reports the run's partial result; [B21 E2 fix: security-1] judged by the merge once it recorded
-  const first = await runAgentLoop(request, {
+  const replayed = chatResumeOf(request); if (replayed) { firstArtifacts.push(...replayed.artifacts); started = replayed.ordinal; } const first = replayed ? replayFirstTurn({ grant: replayed, request, deps, emit, hold: (terminal) => { firstTerminal = terminal; } }) : await runAgentLoop(request, { // [B21 E3] a resumed run's first turn REPLAYED from the record, never re-run (OD-122, D21-4)
     ...deps,
     ...held,
     emit: (event) => {
@@ -247,20 +247,20 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   });
   /** the coordinator's own turn stands as the run: its held terminal is emitted, under a warning when there is a reason; a
    *  stand-down after a follow-up turn that recorded steps before failing reports the RUN's totals (what the trace holds) */
-  const standDown = (reason: OrchestrationRunEvent | null, totals?: { steps: number; toolCalls: number; usage: { inputTokens: number; outputTokens: number } }): AgentRunResult => {
+  const standDown = async (reason: OrchestrationRunEvent | null, totals?: { steps: number; toolCalls: number; usage: { inputTokens: number; outputTokens: number } }): Promise<AgentRunResult> => {
     if (reason !== null) report(reason, true); const partial = ranOutcome ? partialOutcomeEvent(request.runId, plan, ranOutcome, false, judged) : null; if (partial) report(partial); // [B21 E2] the stand-down line as its degraded event, then the run's partial result (OD-126)
-    const terminal = firstTerminal as AgentRunEvent | null;
+    const unsettled = await settleStarted(); if (unsettled) warn(unsettled, true); const terminal = firstTerminal as AgentRunEvent | null; // [B21 E3] this request's start settled BEFORE its terminal (the run can then be resumed at once)
     if (terminal) emit(totals && terminal.type === "run_completed" ? { ...terminal, ...totals } : terminal);
     recordTerminal(first.status === "cancelled" ? "cancelled" : first.status === "failed" ? "failed" : "completed", first.failureReason ?? null);
     return totals ? { ...first, steps: totals.steps, toolCalls: totals.toolCalls } : first;
   };
   if (first.status !== "completed") return standDown(null);
-
+  const recorded = replayed ? null : await recordCoordinatorTurn({ ...record, plan, first, artifacts: firstArtifacts }); if (recorded !== null && !recorded.ok) return standDown(down(RECORD_UNWRITTEN, recorded.line)); if (recorded?.ok) started = 0; // [B21 E3] the resume record's coordinator turn - the first request's start - before any specialist: a run that could never be resumed runs none
   const book = specialistTraceBookFor({ request, context: deps.context, plan, ...(deps.now ? { now: deps.now } : {}) }); // [B21 E2b] one trace document per specialist task (OD-112 as the lead read it); the SPECIALIST gateway: no minter, no port, no prompt version - nothing but a read or an inert seal can succeed in it (structural, OD-109)
   const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal)); // [B21 D3] OD-109 amended: the published pin-facts reads (the route's source, this request's signal), nothing else
   const outcome = await resolveSpecialistScheduler()(
     { roles: plan.roles, rule: plan.rule },
-    { runId: request.runId, provider: request.provider, userMessage: request.userMessage, history: request.history, startedAt: input.startedAt, ...(request.signal ? { signal: request.signal } : {}), ...(firstArtifacts.length > 0 ? { artifactHeld: true } : {}) }, // [B21 D2 fix] OD-122: no specialist proposal beside the coordinator's artifact
+    { runId: request.runId, provider: request.provider, userMessage: request.userMessage, history: request.history, startedAt: input.startedAt, ...(request.signal ? { signal: request.signal } : {}), ...(firstArtifacts.length > 0 ? { artifactHeld: true } : {}), ...(replayed ? { resumed: true } : {}) }, // [B21 D2 fix] OD-122: no specialist proposal beside the coordinator's artifact; [B21 E3 fix: security-2, coverage-2] a route-level resume's replay rule
     {
       store: resolveOrchestrationStore(), registry: deps.registry, context: deps.context, adapter: deps.adapter, gateway: specialistGateway, system: deps.system,
       emit: (event) => { if (event.type === "warning") warn(event.message); else if (isOrchestrationRunEvent(event)) report(event); }, // [B21 E2] the scheduler's run events streamed, their lines traced as B's warnings were
@@ -279,7 +279,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
   // [B21 D] the deterministic MERGE runs between the scheduler and the envelope; every decision, dissent and escalation is persisted first
   const merged = await mergeSpecialistOutcome({ runId: request.runId, context: deps.context, outcome }, specialistMergeDeps(deps.context, deps.now));
   if (merged.kind === "refused") return standDown(down("merge_unrecorded", `Orchestration: the merge could not record its decisions (${merged.reason}); no follow-up turn was made and the assistant's answer above stands.`));
-  for (const line of merged.lines) warn(line); judged = merged; const approval = presentSpecialistProposal({ runId: request.runId, outcome, merged, coordinatorSealed: firstArtifacts.length > 0, emit, warn }); // [B21 D2] OD-122 amended
+  for (const line of merged.lines) warn(line); judged = merged; const ledger = await claimMessageArtifact({ ...record, merged, outcome, coordinatorSealed: firstArtifacts.length > 0, ordinal: started ?? 0 }); if (!ledger.ok) return standDown(down("merge_unrecorded", ledger.line)); const approval = presentSpecialistProposal({ runId: request.runId, outcome, merged, coordinatorSealed: firstArtifacts.length > 0, alreadyPresented: ledger.alreadyPresented, emit, warn }); presented = approval.outcome === "presented"; // [B21 D2] OD-122 amended; [B21 E3] OD-122's ledger: one artifact per user message across resumes - [B21 E3 fix: regressions-1] claimed once the merge's verdicts and lines stand
   const envelope = mergedResultsEnvelope(outcome, merged, approval);
   // [B21 E1] the follow-up turn is never made against a paused provider (OD-115; no paid call, visibly), and never on another one
   const followUpPause = input.providers ? input.providers.admission.pause(request.provider, undefined, "interactive", (deps.now ?? Date.now)()) : null;
@@ -311,7 +311,7 @@ export async function runOrchestratedChat(input: { request: AgentRunRequest; dep
     const totals = { steps: first.steps + followUpMeter.steps, toolCalls, usage: { inputTokens: firstUsage.inputTokens + followUpMeter.inputTokens, outputTokens: firstUsage.outputTokens + followUpMeter.outputTokens } };
     return standDown(down("follow_up_failed", `Orchestration: the follow-up coordinator turn did not complete (${followUpMeters?.capture.paused ? `provider_paused: ${followUpMeters.capture.paused.message}` : followUp.failureReason ?? "unknown"}); the assistant's answer above stands.`), totals);
   }
-  const usage = { inputTokens: firstUsage.inputTokens + completed.usage.inputTokens, outputTokens: firstUsage.outputTokens + completed.usage.outputTokens }; const partial = partialOutcomeEvent(request.runId, plan, outcome, true, merged); if (partial) report(partial); // [B21 E2] the follow-up turn answered over a partial set: said so before the terminal (OD-126)
+  const usage = { inputTokens: firstUsage.inputTokens + completed.usage.inputTokens, outputTokens: firstUsage.outputTokens + completed.usage.outputTokens }; const partial = partialOutcomeEvent(request.runId, plan, outcome, true, merged); if (partial) report(partial); await recordFollowUpAnswered({ ...record, answer: completed.finalText, warn, settle: settleStarted }); // [B21 E3] the run is finished: a resume of it is refused; [B21 E2] the follow-up turn answered over a partial set: said so before the terminal (OD-126)
   emit({ ...completed, steps, toolCalls, usage });
   recordTerminal("completed", null);
   return { ...followUp, steps, toolCalls };
@@ -461,13 +461,13 @@ export function specialistProposalEvent(runId: string, outcome: Extract<Schedule
  *  (one line whenever an accepted action exists). Never by count or majority. [B21 D2 fix] That one line is ALWAYS recorded on the
  *  run's trace (`warn(line, true)`: past the 12-line cap, within the recorder's 32-warning bound), with the artifact's kind, id, digest
  *  (review regressions-1), and "nothing competing" is decided over the scheduler's outcome too (`incomplete`, regressions-3). */
-export function presentSpecialistProposal(input: { runId: string; outcome: Extract<SchedulerOutcome, { kind: "ran" }>; merged: Extract<MergeOutcome, { kind: "merged" }>; coordinatorSealed: boolean; emit(event: AgentRunEvent): void; warn(line: string, always?: boolean): void }): SpecialistApprovalSummary {
-  const decision = specialistApprovalDecision(input.merged, { coordinatorSealed: input.coordinatorSealed, outcome: input.outcome });
+export function presentSpecialistProposal(input: { runId: string; outcome: Extract<SchedulerOutcome, { kind: "ran" }>; merged: Extract<MergeOutcome, { kind: "merged" }>; coordinatorSealed: boolean; /** [B21 E3] the ledger holds this message's artifact */ alreadyPresented?: boolean; emit(event: AgentRunEvent): void; warn(line: string, always?: boolean): void }): SpecialistApprovalSummary {
+  const decision = specialistApprovalDecision(input.merged, { coordinatorSealed: input.coordinatorSealed, alreadyPresented: input.alreadyPresented === true, outcome: input.outcome });
   const withheld = (outcome: Exclude<SpecialistApprovalOutcome, "presented">, why: string): SpecialistApprovalSummary => {
     if (input.merged.accepted.length > 0) input.warn(`Orchestration: nothing from the specialists is presented for approval (${outcome}): ${why} ${input.merged.accepted.length} accepted action(s) stay listed for the human, who decides; nothing was applied.`, true);
     return { outcome, presented: null };
   };
-  if (decision.outcome !== "presented") return withheld(decision.outcome, decision.outcome === "coordinator_sealed" ? "this run's own proposal is its one artifact." : decision.outcome === "incomplete" ? incompleteReason(input.merged, input.outcome) : "exactly one accepted action with nothing competing is required.");
+  if (decision.outcome !== "presented") return withheld(decision.outcome, decision.outcome === "coordinator_sealed" ? "this run's own proposal is its one artifact." : decision.outcome === "already_presented" ? "an earlier request of this run presented this user message's one artifact, or its end is not recorded (OD-122's ledger presents at most once), so nothing is presented twice." : decision.outcome === "incomplete" ? incompleteReason(input.merged, input.outcome) : "exactly one accepted action with nothing competing is required.");
   const event = specialistProposalEvent(input.runId, input.outcome, decision.action);
   if (!event) return withheld("none_accepted", "the accepted artifact could not be read back from its committed result.");
   input.emit(event);
@@ -563,4 +563,266 @@ export function traceUnrecordedLine(failures: readonly string[]): string {
   let shown = failures.length;
   while (shown > 0 && line(shown).length > DEFAULT_REDACTION_CHARS) shown -= 1;
   return line(shown);
+}
+
+// ─── [B21 E3] The route-level resume and the userMessageDigest ledger (OD-122; D21-4 at the route; D21-17's live-head half) ───────────
+// Appended on purpose: an import and a function declaration are hoisted and the constants are read only when a request runs, so no line
+// cited above moves (the four edits above are made in place: the replayed first turn, its record, the ledger's claim, the follow-up's).
+
+import { userInstructionDigest } from "@/app/lib/engineering/execution-grant";
+import { orchestrationResumeAnswerDigest, orchestrationResumeStoreOf, type OrchestrationResumeAppendResult, type OrchestrationResumeRecordEntry, type OrchestrationResumeStore, type OrchestrationRunScope } from "@/app/lib/agent/orchestration/store";
+
+/** [B21 E3] The ONE body key the resume adds to the chat request's closed set - admitted only under the orchestration flag, so a
+ *  flag-off request is refused exactly as HEAD refuses it (the route's `ALLOWED_BODY_KEYS` itself is unchanged). */
+export const CHAT_RESUME_BODY_KEY = "resumeRunId" as const;
+export function chatResumeBodyKeyAdmitted(key: string, environment: Record<string, string | undefined> = process.env): boolean {
+  return key === CHAT_RESUME_BODY_KEY && orchestrationEnabled(environment);
+}
+/** The run ids the chat route issues (`run-${randomUUID()}`, `X-Sirkit-Run-Id`): nothing else is a resumable id. */
+export const CHAT_RUN_ID_PATTERN = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** [B21 E3] The resume's closed refusals, decided in THIS order after the wrapper's identity, membership, role and CSRF checks and
+ *  before any provider call - each a JSON answer with no stream: the id, the record (for now, or [B21 E3 fix: coverage-7] for good), its
+ *  owner, its message and provider, its plan, its end, and whether another request of the run still holds it (one request at a time). */
+export const CHAT_RESUME_REFUSALS = Object.freeze({
+  resume_malformed: { status: 400, error: "resumeRunId must be the run id this server issued in X-Sirkit-Run-Id (run-<uuid>)" },
+  resume_unavailable: { status: 503, error: "the orchestration record could not be reached, so the run cannot be resumed now; nothing was run - send the same message again to try again" },
+  resume_unusable: { status: 409, error: "the run's orchestration record cannot be used for a resume (it failed verification, no durable record is bound, or the run reached its bound of requests); nothing was run - send the message again as a new run" },
+  resume_unknown: { status: 404, error: "no resumable orchestrated run with this id exists in this project and branch" },
+  resume_foreign: { status: 403, error: "the run belongs to another principal: only the principal who started a run may resume it" },
+  resume_mismatch: { status: 409, error: "a resume carries the same user message on the same provider as the run it resumes (the coordinator never switches provider mid-run)" },
+  resume_plan_changed: { status: 409, error: "this message no longer routes to the run's specialist plan under the design this request carries; send it as a new message" },
+  resume_completed: { status: 409, error: "the run's follow-up turn already answered, so the run is finished; send the message again as a new run" },
+  resume_in_progress: { status: 409, error: "another request of this run is still running (one request of a run at a time); nothing was run - resume it once that request has ended" },
+} as const);
+export type ChatResumeRefusal = keyof typeof CHAT_RESUME_REFUSALS;
+/** What the route hands the runtime for ONE request: the recorded first turn (its answer, or why it was withheld), the artifacts the
+ *  coordinator's own first turn handed the human, the user message's digest, and the ordinal of this request's claimed start. */
+export interface ChatResumeGrant { runId: string; answer: string | null; answerWithheld: string | null; artifacts: readonly string[]; userMessageDigest: string; ordinal: number }
+/** [B21 E3] How long an UNSETTLED start holds its run: a request of a DAG run lasts at most the DAG wall time from its start (300 s,
+ *  OD-107 - the first turn inside it) plus the follow-up turn's own deadline (120 s) plus its bounded record writes; a start older than
+ *  this is taken as a request that died without settling (a crashed process), and the run can be resumed again. */
+export const RESUME_LEASE_MS = 600_000;
+export type ChatResume = { kind: "fresh" } | { kind: "resume"; runId: string; grant: ChatResumeGrant } | { kind: "refused"; code: ChatResumeRefusal; status: number; error: string };
+/** Every read and write of the resume record is bounded (a hanging repository never stalls the request past this). */
+export const RESUME_RECORD_DEADLINE_MS = 10_000;
+/** [B21 E3] One call to the record, bounded by the deadline and (for the route's read) the request's signal: its value, or a closed
+ *  reason - a driver's message never leaves this function; [B21 E3 fix: coverage-7] a record that failed the store's verification is
+ *  `record_mismatch` (for good), anything else that failed `record_unavailable`. A timed-out call is UNKNOWN: it may still land. */
+export async function boundedRecordCall<T>(work: () => Promise<T>, signal?: AbortSignal, deadlineMs: number = RESUME_RECORD_DEADLINE_MS): Promise<{ ok: true; value: T } | { ok: false; reason: "record_timeout" | "record_aborted" | "record_unavailable" | "record_mismatch" }> {
+  if (signal?.aborted) return { ok: false, reason: "record_aborted" };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
+  try {
+    return await new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ ok: false, reason: "record_timeout" }), deadlineMs);
+      onAbort = () => resolve({ ok: false, reason: "record_aborted" });
+      signal?.addEventListener("abort", onAbort, { once: true });
+      let pending: Promise<T>;
+      try { pending = work(); } catch { resolve({ ok: false, reason: "record_unavailable" }); return; }
+      pending.then((value) => resolve({ ok: true, value }), (error: unknown) => resolve({ ok: false, reason: error instanceof Error && error.message === "AGENT_ORCHESTRATION_RESUME_MISMATCH" ? "record_mismatch" : "record_unavailable" }));
+    });
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+  }
+}
+/** The run's owner as the record binds it: the verified principal and the project scope the wrapper authorized (a digest). */
+export function resumeOwnerDigest(context: AgentRunContext): string {
+  return engineeringDigest({ schema: "sirkit.orchestration-resume-owner.v1", principalId: context.actor.actorId, tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId });
+}
+export function resumePlanDigest(plan: Extract<RoutePlan, { kind: "dag" }>): string {
+  return engineeringDigest({ schema: "sirkit.orchestration-resume-plan.v1", tasks: planTasks(plan.roles) });
+}
+const resumeRunScope = (context: AgentRunContext, runId: string): OrchestrationRunScope => ({ tenantId: context.tenantId, projectId: context.projectId, branchId: context.branchId, runId });
+const resumeStore = (): OrchestrationResumeStore | null => orchestrationResumeStoreOf(resolveOrchestrationStore());
+
+/** [B21 E3] The route's resume check (OD-122; D21-4 at the route): the body's optional `resumeRunId` judged against the run's resume
+ *  record, AFTER the wrapper authorized the principal for this project (the lookup is scoped to it). Flag off, or no key: a fresh run. */
+export async function resolveChatResume(input: { body: Record<string, unknown>; context: AgentRunContext; userMessage: string; provider: LLMProviderId; signal?: AbortSignal; environment?: Record<string, string | undefined>; deadlineMs?: number; now?: () => number }): Promise<ChatResume> {
+  const environment = input.environment ?? process.env;
+  const raw = Object.hasOwn(input.body, CHAT_RESUME_BODY_KEY) ? input.body[CHAT_RESUME_BODY_KEY] : undefined;
+  if (!orchestrationEnabled(environment) || raw === undefined || raw === null) return { kind: "fresh" };
+  const refused = (code: ChatResumeRefusal): ChatResume => ({ kind: "refused", code, ...CHAT_RESUME_REFUSALS[code] });
+  if (typeof raw !== "string" || !CHAT_RUN_ID_PATTERN.test(raw)) return refused("resume_malformed");
+  const store = resumeStore();
+  if (!store) return refused("resume_unusable"); // [B21 E3 fix: coverage-7] no durable record bound: for good, never "for now"
+  const read = await boundedRecordCall(() => store.history(resumeRunScope(input.context, raw)), input.signal, input.deadlineMs);
+  if (!read.ok) return refused(read.reason === "record_mismatch" ? "resume_unusable" : "resume_unavailable");
+  const turn = read.value.map((entry) => entry.entry).find((entry) => entry.kind === "coordinator");
+  if (!turn || turn.kind !== "coordinator") return refused("resume_unknown");
+  if (turn.ownerDigest !== resumeOwnerDigest(input.context)) return refused("resume_foreign");
+  if (turn.userMessageDigest !== userInstructionDigest(input.userMessage) || turn.provider !== input.provider) return refused("resume_mismatch");
+  const plan = planChatRun(input.userMessage, routerFactsOf(input.context), environment);
+  if (plan.kind !== "dag" || turn.planDigest !== resumePlanDigest(plan)) return refused("resume_plan_changed");
+  if (read.value.some((entry) => entry.entry.kind === "follow-up")) return refused("resume_completed");
+  // one request of a run at a time: the latest start (the coordinator entry is the first request's, ordinal 0) must have SETTLED, or be
+  // older than the lease; this request's start is then CLAIMED by compare-and-set against the head just read - a request that read the
+  // same head and claimed first wins, and this one is in progress (a lost claim writes nothing)
+  const starts = read.value.flatMap((entry) => (entry.entry.kind === "coordinator" ? [{ ordinal: 0, at: entry.at }] : entry.entry.kind === "resume" ? [{ ordinal: entry.entry.ordinal, at: entry.at }] : []));
+  const latest = starts.at(-1)!;
+  const settled = read.value.some((entry) => entry.entry.kind === "settled" && entry.entry.ordinal === latest.ordinal);
+  if (!settled && (input.now ?? Date.now)() - Date.parse(latest.at) < RESUME_LEASE_MS) return refused("resume_in_progress");
+  const ordinal = Math.max(...starts.map((start) => start.ordinal), ...read.value.flatMap((entry) => (entry.entry.kind === "settled" ? [entry.entry.ordinal] : []))) + 1; // [B21 E3 fix: coverage-5] past every end too: an ordinal whose end was marked is never claimed again
+  const claim = resumeClaimId(); const claimed = await boundedRecordCall(() => store.append({ scope: resumeRunScope(input.context, raw), at: isoAt(input.now), entry: { kind: "resume", ordinal, claim }, expectedRevision: read.value.at(-1)!.revision }), undefined, input.deadlineMs); // never the request's signal: whether the claim landed must be known (an aborted request still runs, cancels and settles it)
+  if (!claimed.ok) { await markUnknownClaim({ store, scope: resumeRunScope(input.context, raw), ordinal, claim, now: input.now, deadlineMs: input.deadlineMs }); return refused("resume_unavailable"); } // [B21 E3 fix: coverage-5] a claim whose outcome is UNKNOWN (it may land late): its end is marked, so a late claim never holds the run - [B21 E3 lead] only THIS claim's (`markUnknownClaim`, appended)
+  if (!claimed.value.ok && claimed.value.code === "invalid_record") return refused("resume_unusable"); // [B21 E3 fix: coverage-7] the record refuses the start (the run's bound of requests): for good
+  if (!claimed.value.ok || claimed.value.replayed) return refused("resume_in_progress");
+  return { kind: "resume", runId: raw, grant: { runId: raw, answer: turn.answer, answerWithheld: turn.answerWithheld, artifacts: [...turn.artifacts], userMessageDigest: turn.userMessageDigest, ordinal } };
+}
+const RESUMED_REQUESTS = new WeakMap<AgentRunRequest, ChatResumeGrant>();
+/** [B21 E3] The route hands a resume's grant to the runtime for THAT request object (never a module-wide id: two requests never share one). */
+export function resumeChatRun(request: AgentRunRequest, resume: ChatResume): void {
+  if (resume.kind === "resume" && resume.grant.runId === request.runId) RESUMED_REQUESTS.set(request, resume.grant);
+}
+export function chatResumeOf(request: AgentRunRequest): ChatResumeGrant | null {
+  const grant = RESUMED_REQUESTS.get(request);
+  return grant && grant.runId === request.runId ? grant : null;
+}
+/** [B21 E3] The resumed run's line (a run-log line, on the coordinator's trace whole: at most its 300-character warning bound). */
+export function resumedRunLine(runId: string, grant: Pick<ChatResumeGrant, "answer" | "answerWithheld">): string {
+  return `Orchestration: resumed run ${runId}: ${grant.answer === null ? `the first answer is not replayed (${grant.answerWithheld ?? "unrecorded"})` : "the first answer is replayed from the record"}, no model call; each committed specialist result still current is replayed, one whose design, selection or seal lifetime moved runs again; the follow-up turn runs once.`;
+}
+/** The closed text the follow-up turn's conversation carries when the first answer was not recorded (never the text itself). */
+export function unrecordedFirstAnswer(withheld: string | null): string {
+  return `(The coordinator's first answer of this run was not recorded (${withheld ?? "unrecorded"}) and is not replayed.)`;
+}
+/** [B21 E3] A resumed run's first turn, REPLAYED from the record - never re-run, no model call: run_started, the request's context
+ *  warnings (as the loop emits them), the resumed line, the recorded answer as ONE final text, the terminal held for the runtime. The
+ *  coordinator's own first-turn artifact is NOT re-emitted (the human received it once). */
+function replayFirstTurn(input: { grant: ChatResumeGrant; request: AgentRunRequest; deps: AgentLoopDeps; emit(event: AgentRunEvent): void; hold(terminal: AgentRunEvent): void }): AgentRunResult {
+  const { grant, request, deps } = input;
+  const line = (message: string): void => {
+    input.emit({ type: "warning", runId: request.runId, message });
+    try { deps.trace?.recordWarning(message); } catch { /* tracing is passive */ }
+  };
+  input.emit({ type: "run_started", runId: request.runId, provider: request.provider });
+  try { deps.trace?.recordRunStarted(); } catch { /* tracing is passive */ }
+  for (const message of deps.contextWarnings ?? []) line(message);
+  line(resumedRunLine(request.runId, grant));
+  if (grant.answer !== null && grant.answer.length > 0) input.emit({ type: "text_delta", runId: request.runId, text: grant.answer, phase: "final" });
+  const finalText = grant.answer ?? unrecordedFirstAnswer(grant.answerWithheld);
+  input.hold({ type: "run_completed", runId: request.runId, finalText, steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, model: "" });
+  return { runId: request.runId, status: "completed", finalText, steps: 0, toolCalls: 0 };
+}
+const isoAt = (now?: () => number): string => new Date((now ?? Date.now)()).toISOString();
+/** A resume-record write that did not land, in the scheduler's closed store vocabulary (`SCHEDULER_REFUSALS`): never a driver's message. */
+function storeReasonOf(written: { ok: true; value: OrchestrationResumeAppendResult } | { ok: false; reason: string }): "store_unavailable" | "store_conflict" | "store_refused" {
+  if (!written.ok) return "store_unavailable";
+  return written.value.ok ? "store_unavailable" : written.value.code === "stale_revision" ? "store_conflict" : "store_refused";
+}
+/** The stand-down of a fresh run whose coordinator turn could not be recorded: no specialist ran (the degraded reason of a scheduler refusal). */
+const RECORD_UNWRITTEN: DegradedReason = "no_specialist_ran";
+/** [B21 E3] A fresh run's coordinator turn on the resume record, BEFORE any specialist is planned: the binding (the owner, the message,
+ *  the provider and the plan as digests), its final text and the artifacts it handed the human. No resume store (a store double, the
+ *  unavailable default): nothing is recorded and nothing changes. A write that fails: a closed line the runtime stands down with. */
+async function recordCoordinatorTurn(input: RecordWrite & { plan: Extract<RoutePlan, { kind: "dag" }>; first: AgentRunResult; artifacts: readonly string[] }): Promise<{ ok: true } | { ok: false; line: string } | null> {
+  const store = resumeStore();
+  if (!store) return null;
+  const artifacts = [...new Set(input.artifacts)].filter((event) => COORDINATOR_ARTIFACT_EVENTS.includes(event));
+  const written = await boundedRecordCall(() => store.append({ scope: resumeRunScope(input.context, input.request.runId), at: isoAt(input.now), entry: { kind: "coordinator", ownerDigest: resumeOwnerDigest(input.context), userMessageDigest: userInstructionDigest(input.request.userMessage), provider: input.request.provider, planDigest: resumePlanDigest(input.plan), answer: input.first.finalText, artifacts } }), undefined, input.deadlineMs);
+  if (written.ok && written.value.ok) return { ok: true };
+  return { ok: false, line: `Orchestration: no specialist ran (${storeReasonOf(written)}); the assistant's answer above stands.` }; // B21-B's sentence and the scheduler's store vocabulary: the record was not written, so nothing runs
+}
+/** [B21 E3] OD-122's ledger at presentation: when the merge's rule would PRESENT a specialist's action, the message's one artifact slot is
+ *  claimed on the resume record first - the durable idempotency key `artifact:<userMessageDigest>` commits once per run and user
+ *  message. Nothing to present, or no resume store: nothing is claimed (D2's rule within the request). A claim that cannot be written:
+ *  a closed line of its own the runtime stands down with (nothing is presented unrecorded - a resume could otherwise present it again).
+ *  [B21 E3 fix: coverage-5] The claim carries THIS request's ordinal; a claim that reads back as a replay is `already_presented` unless
+ *  it is VOID - every request since the claiming one (this one aside) recorded an end that presented nothing (a claim that timed out
+ *  but landed): then this request presents it. An end that is not recorded, or a record that cannot be read, counts as presented. */
+async function claimMessageArtifact(input: RecordWrite & { merged: Extract<MergeOutcome, { kind: "merged" }>; outcome: Extract<SchedulerOutcome, { kind: "ran" }>; coordinatorSealed: boolean; ordinal: number }): Promise<{ ok: true; alreadyPresented: boolean } | { ok: false; line: string }> {
+  const store = resumeStore();
+  const decision = specialistApprovalDecision(input.merged, { coordinatorSealed: input.coordinatorSealed, outcome: input.outcome });
+  if (!store || decision.outcome !== "presented") return { ok: true, alreadyPresented: false };
+  const action = decision.action;
+  const scope = resumeRunScope(input.context, input.request.runId);
+  const userMessageDigest = userInstructionDigest(input.request.userMessage);
+  const written = await boundedRecordCall(() => store.append({ scope, at: isoAt(input.now), entry: { kind: "artifact", userMessageDigest, taskId: action.taskId, attempt: action.attempt, actionIndex: action.index, artifactKind: action.kind, artifactDigest: action.artifactDigest, ordinal: input.ordinal } }), undefined, input.deadlineMs);
+  if (!written.ok || !written.value.ok) return { ok: false, line: `Orchestration: the user message's one artifact could not be claimed on the run's resume record (${storeReasonOf(written)}); nothing was presented, no follow-up turn was made and the assistant's answer above stands.` };
+  if (!written.value.replayed) return { ok: true, alreadyPresented: false };
+  const read = await boundedRecordCall(() => store.history(scope), undefined, input.deadlineMs);
+  return { ok: true, alreadyPresented: !read.ok || !voidClaim(read.value, userMessageDigest, input.ordinal) };
+}
+/** [B21 E3 fix: coverage-5] A claim no request presented: every request whose start is at or after the claim's ordinal (the asking one
+ *  aside) has a recorded end saying it presented nothing. A request that died unsettled, or whose end did not land, may have presented. */
+function voidClaim(entries: readonly OrchestrationResumeRecordEntry[], userMessageDigest: string, self: number): boolean {
+  const claim = entries.map((entry) => entry.entry).find((entry) => entry.kind === "artifact" && entry.userMessageDigest === userMessageDigest);
+  if (!claim || claim.kind !== "artifact") return false;
+  const ends = new Map(entries.flatMap((entry) => (entry.entry.kind === "settled" ? [[entry.entry.ordinal, entry.entry.presented] as const] : [])));
+  const starts = entries.flatMap((entry) => (entry.entry.kind === "coordinator" ? [0] : entry.entry.kind === "resume" ? [entry.entry.ordinal] : []));
+  return starts.filter((ordinal) => ordinal >= claim.ordinal && ordinal !== self).every((ordinal) => ends.get(ordinal) === false);
+}
+/** [B21 E3] The follow-up turn answered: recorded, so the run is finished and a resume of it is refused `resume_completed` (the follow-up
+ *  turn runs once). A write that fails is one line on the stream and the trace - a later resume could then answer again (a read-only
+ *  turn - no artifact, no grant) - and the request's start is settled instead, so that resume is not held off. */
+async function recordFollowUpAnswered(input: RecordWrite & { answer: string; warn(line: string, always?: boolean): void; settle(): Promise<string | null> }): Promise<void> {
+  const store = resumeStore();
+  if (!store) return;
+  const written = await boundedRecordCall(() => store.append({ scope: resumeRunScope(input.context, input.request.runId), at: isoAt(input.now), entry: { kind: "follow-up", answerDigest: orchestrationResumeAnswerDigest(input.answer) } }), undefined, input.deadlineMs);
+  if (written.ok && written.value.ok) return;
+  input.warn(`Orchestration: the follow-up turn's answer could not be recorded (${storeReasonOf(written)}); a resume of this run would answer again.`, true);
+  const unsettled = await input.settle();
+  if (unsettled) input.warn(unsettled, true);
+}
+/** [B21 E3] A request of the run ENDED without the follow-up's answer (a stand-down, a cancellation, [B21 E3 fix: regressions-2] a throw):
+ *  its start is SETTLED on the resume record before its terminal is emitted, so the run can be resumed at once - [B21 E3 fix:
+ *  coverage-5] with whether this request presented the message's artifact. Null when it landed (or no resume store); else the closed
+ *  line the request ends with - its start then holds the run until the lease has passed (`resume_in_progress` meanwhile). */
+async function settleChatRequest(input: RecordWrite & { ordinal: number; presented: boolean }): Promise<string | null> {
+  const store = resumeStore();
+  if (!store) return null;
+  const written = await boundedRecordCall(() => store.append({ scope: resumeRunScope(input.context, input.request.runId), at: isoAt(input.now), entry: { kind: "settled", ordinal: input.ordinal, presented: input.presented } }), undefined, input.deadlineMs);
+  if (written.ok && written.value.ok) return null;
+  return `Orchestration: the end of this request could not be recorded (${storeReasonOf(written)}); the run can be resumed once this request's start is ${RESUME_LEASE_MS / 60_000} minutes old.`;
+}
+
+// ─── [B21 E3 fix: regressions-2, tests-2] The DAG path's input and its guard ───────────────────────────────────────────────────────
+// Appended on purpose: a type and a function declaration are hoisted, so no line cited above moves (`runOrchestratedChat`'s line is
+// replaced in place by the guard and the body it runs).
+
+/** The DAG path's input (as the route passes it). */
+export interface OrchestratedChatInput {
+  request: AgentRunRequest; deps: AgentLoopDeps; plan: Extract<RoutePlan, { kind: "dag" }>; startedAt: number;
+  /** [B21 E1] the provider layer (the route passes `productionSpecialistProviders()`) */
+  providers?: SpecialistProviders;
+  /** [B21 E3 fix: tests-2] a test seam: the deadline of this request's writes to the resume record (default RESUME_RECORD_DEADLINE_MS); the route never sets it */
+  recordDeadlineMs?: number;
+}
+/** What every write to the resume record of ONE request shares. */
+type RecordWrite = { request: AgentRunRequest; context: AgentRunContext; now?: () => number; deadlineMs?: number };
+/** [B21 E3 fix: regressions-2] The DAG path under one guard: when anything throws past the runtime (the route's catch then answers
+ *  `stream_error`), a request whose start is on the resume record SETTLES it first - bounded like every record write, best effort - so
+ *  its run can be resumed at once instead of being held for the lease by a live process that failed. The error is rethrown unchanged. */
+async function settledOnThrow(input: OrchestratedChatInput, body: (input: OrchestratedChatInput, onStart: (settle: () => Promise<string | null>) => void) => Promise<AgentRunResult>): Promise<AgentRunResult> {
+  const settle: { current: (() => Promise<string | null>) | null } = { current: null };
+  try {
+    return await body(input, (settleStarted) => { settle.current = settleStarted; });
+  } catch (error) {
+    if (settle.current) await settle.current().catch(() => null);
+    throw error;
+  }
+}
+
+// ─── [B21 E3 lead] A start claim of unknown outcome: only its own end is marked ─────────────────────────────────────────────────────
+// Appended on purpose (function declarations are hoisted): the resolution's line calls it in place, so no cited line moves.
+
+/** A request's own claim id: a digest of a fresh nonce, carried on its `resume` entry. */
+function resumeClaimId(): string {
+  return engineeringDigest({ schema: "sirkit.orchestration-resume-claim.v1", nonce: randomUUID() });
+}
+/** The end of a start claim whose write timed out, was aborted or failed (it may have landed, or still land): re-read the record and
+ *  mark `settled` for this ordinal ONLY when no start of it is there or the start there is THIS claim - never another request's (two
+ *  requests that read the same head claim the same ordinal; a marker keyed by the ordinal alone would settle the winner's running
+ *  start and swallow its real end). The mark is a compare-and-set against the head re-read, so a claim still in flight can never land
+ *  after it; a claim that lands between the re-read and the mark is re-read once more. A mark that cannot be made leaves the start to
+ *  the lease (`resume_in_progress` until it has passed): never presented twice, never run beside another request. */
+async function markUnknownClaim(input: { store: OrchestrationResumeStore; scope: OrchestrationRunScope; ordinal: number; claim: string; now?: () => number; deadlineMs?: number }): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const read = await boundedRecordCall(() => input.store.history(input.scope), undefined, input.deadlineMs);
+    if (!read.ok || read.value.length === 0) return;
+    const start = read.value.map((entry) => entry.entry).find((entry) => entry.kind === "resume" && entry.ordinal === input.ordinal);
+    if (start && (start.kind !== "resume" || start.claim !== input.claim)) return; // another request's start: never settled from here
+    const marked = await boundedRecordCall(() => input.store.append({ scope: input.scope, at: isoAt(input.now), entry: { kind: "settled", ordinal: input.ordinal, presented: false }, expectedRevision: read.value.at(-1)!.revision }), undefined, input.deadlineMs);
+    if (!marked.ok || marked.value.ok || marked.value.code !== "stale_revision") return;
+  }
 }

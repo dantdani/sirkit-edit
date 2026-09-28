@@ -59,7 +59,7 @@ import { receiveLayoutCandidateEvent } from "@/app/lib/project/layout-candidate-
 import { receiveExecutionGrantReadyEvent, receiveExecutionSettledEvent, type ReceivedExecutionGrant } from "@/app/lib/project/execution-grant-events"; // [B18-B]
 import { COMPOSER_ROUTE_LABELS, routeComposerMessage, type ComposerRoute } from "@/app/lib/project/composer-routing"; // [B18-D I1]
 import { layoutCandidateChatLine } from "@/app/lib/agent/layout-report"; // [B18-E E17]
-import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, initialRunView, markGrantLineDropped, orchestrationRunLogLine, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
+import { EXECUTION_ENTRY_ID_PREFIX, editProposalMessages, editRouteProvenanceNote, entryAttemptRefused, entryCancelled, entryEditorOutcome, entryExecuting, entryFromGrant, entryRecovery, entrySettled, entryStateOfLogMessage, entrySuperseded, entryToLogMessage, entryUndoAvailability, entryUndoResult, chatResumeFor, chatResumeKeptAfter, chatResumeOfferLine, initialChatResumeObservation, initialRunView, markGrantLineDropped, observeChatResume, orchestrationRunLogLine, resumableChatRun, restoredChatResume, projectRunView, replacementChatLines, reduceRunView, refusedLineLabel, restoredEntryLog, runViewGrantDropped, runViewGrantReceived, toolLineLabel, type ExecutionEntry, type ResumableChatRun } from "@/app/lib/project/chat-run-view"; // [B18-D I6]
 import { ExecutionEntryActions } from "@/app/components/chat/ExecutionEntryActions"; // [B18-D I8]
 import { AutonomyModeControl } from "@/app/components/chat/AutonomyModeControl"; // [B18-D I11]
 import type { LayoutCandidate } from "@/app/lib/pcb/candidates/layout-candidate"; // [B17-F]
@@ -2564,7 +2564,7 @@ export default function Home() {
   const aiBrainRef = useRef<LLMProviderId>("openai");
   const [aiRuntime, setAiRuntime] = useState<AiRuntimeInfo | null>(null);
   const [aiProviderFailure, setAiProviderFailure] = useState<AiProviderFailureState | null>(null);
-  const lastAiRetryRef = useRef<(() => void) | null>(null);
+  const lastAiRetryRef = useRef<(() => void) | null>(null); const resumableChatRunRef = useRef<ResumableChatRun | null>(null); // [B21 E3] the last orchestrated run a send of its message may resume (a run-log line offers it; no control)
 
   // Schematic state
   const [tool, setTool]       = useState<Tool>("select");
@@ -3100,7 +3100,7 @@ export default function Home() {
     setSuggestionsMinimized(false);
     setGenError(null);                  // provider errors never cross projects
     setAiProviderFailure(null);
-    lastAiRetryRef.current = null;      // retries never replay across projects
+    lastAiRetryRef.current = null; resumableChatRunRef.current = null; // retries (and, [B21 E3], a resume) never replay across projects
     setIsGenerating(false); activeGenerationRef.current = null;
     setIsEditing(false); activeEditRef.current = null;
     setIsReviewing(false); activeReviewRef.current = null;
@@ -4447,7 +4447,7 @@ export default function Home() {
     // message ids, an abortable fetch, stream chunks/errors gated on the
     // captured scope, and request-owned busy state.
     const scope = projectScopeRegistryRef.current!.capture();
-    const runProvider = aiBrainRef.current; // the run's provider, pinned at submission
+    const runProvider = aiBrainRef.current; const offeredResume = resumableChatRunRef.current ?? restoredChatResume(messages, { projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); const chatResume = chatResumeFor(offeredResume, { text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = null; // the run's provider, pinned at submission; [B21 E3] a send of the offered run's message resumes it, and every send spends the offer - [B21 E3 fix: coverage-1] held in memory, or read back from the saved run log after a reload
     const userMsg: ChatMessage  = { id: crypto.randomUUID(), role: "user", content: text };
     const logId                 = crypto.randomUUID();
     const logMsg: ActivityLogMessage = {
@@ -4470,7 +4470,7 @@ export default function Home() {
     lastAiRetryRef.current = () => void send(text);
 
     try {
-      appendActivityStep(logId, "Calling assistant");
+      if (chatResume) appendActivityStep(logId, chatResume.line, "done"); appendActivityStep(logId, "Calling assistant"); // [B21 E3] a resume says so first
       const apiMessages = chatHistoryForModel([...messages, userMsg]); // [B19-D I5e row 32] advisory output is not replayed
       // B07.3 — chat context is ONE immutable authoritative snapshot (never
       // the visible arrays, which may be showing a gesture preview), and it
@@ -4516,12 +4516,12 @@ export default function Home() {
           // B09.1 — the ready session's head mark is a scope LABEL for
           // proposal sealing (verified at apply against the CURRENT
           // session); absent ⇒ the proposal tool is unavailable server-side.
-          ...(schematicSessionRef.current?.headMark() ? { schematicHeadMark: schematicSessionRef.current.headMark() } : {}),
+          ...(schematicSessionRef.current?.headMark() ? { schematicHeadMark: schematicSessionRef.current.headMark() } : {}), ...(chatResume ? { resumeRunId: chatResume.runId } : {}), // [B21 E3] the run id the route issued, only for a resume
         }),
         signal: scope.signal,
       });
-      if (!res.ok) await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() });
-      if (!res.body) throw new Error("No response body");
+      if (!res.ok) { if (chatResume && scope.isCurrent()) { resumableChatRunRef.current = chatResumeKeptAfter(await res.clone().json().catch(() => null), offeredResume); if (resumableChatRunRef.current) appendActivityStep(logId, chatResumeOfferLine(resumableChatRunRef.current.runId, resumableChatRunRef.current.provider), "done"); } await throwAiResponseError(res, lastAiRetryRef.current ?? undefined, { isCurrent: () => scope.isCurrent() }); } // [B21 E3] a resume refused only for now keeps its offer - [B21 E3 fix: coverage-1] and says so in this send's log (a reload reads it back)
+      if (!res.body) throw new Error("No response body"); const streamRunId = res.headers.get("X-Sirkit-Run-Id"); let resumeObservation = initialChatResumeObservation(); // [B21 E3] the run id the route issued and what the stream says about resuming it
       const reader = res.body.getReader();
       chatRun.reader = reader; // [B18-D I9] Stop cancels this reader (a Stop pressed before the response arrived cancels it now)
       if (chatRun.stopped) void reader.cancel().catch(() => undefined);
@@ -4541,7 +4541,7 @@ export default function Home() {
       const refOf = (objectId: string): string | null => boardForRefs?.footprints.find((footprint) => footprint.id === objectId)?.ref ?? null;
       const applyAgentEvent = (event: Record<string, unknown>): void => {
         if (!scope.isCurrent()) return;
-        runView = reduceRunView(runView, event);
+        runView = reduceRunView(runView, event); resumeObservation = observeChatResume(resumeObservation, event); // [B21 E3]
         switch (event.type) {
           case "text_delta": {
             const answer = projectRunView(runView).answer;
@@ -4738,7 +4738,7 @@ export default function Home() {
       if (scope.isCurrent()) {
         const projected = projectRunView(runView);
         for (const note of [...(projected.status ? [projected.status] : []), ...projected.notes]) appendActivityStep(logId, note, "done"); // [B21 E2] the orchestrated run's ONE status line (OD-127), then the notes
-        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m)));
+        if (projected.answer) setMessages((prev) => prev.map((m) => (m.role === "assistant" && m.id === assistantId ? { ...m, content: projected.answer } : m))); const resumable = resumableChatRun(resumeObservation, { terminal: runView.terminal, runId: streamRunId, text, provider: runProvider, projectId: projectScopeRegistryRef.current?.current.projectId ?? "local", branchId: projectScopeRegistryRef.current?.current.branchId ?? "local" }); resumableChatRunRef.current = resumable; if (resumable) appendActivityStep(logId, chatResumeOfferLine(resumable.runId, resumable.provider), "done"); // [B21 E3] the resume offer, a run-log line (OD-127: no control)
       }
       // [B18-D I9, review] a run stopped before it ended says so (a Stop pressed after the run had already ended claims nothing).
       // An AI change already sent to the editor is reported in its entry either way — made, or not made: a grant not yet consumed

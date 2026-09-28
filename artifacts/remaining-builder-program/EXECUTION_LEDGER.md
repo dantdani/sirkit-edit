@@ -3166,3 +3166,57 @@ _(discovery, reproduction and results appended below as they are observed)_
   refuses TAB and LF), and a replaced string's length never grows (one `?` per character). Every orchestration suite: 32 files / 321
   tests.
 - Lead gates (2026-09-27, one job at a time): every B21 suite with the six B21 route suites and the CI guard 42 files / 383 tests; `app/api/chat/__tests__`, `app/lib/llm/__tests__` and `app/lib/acquisition/__tests__` 43 files / 365 tests (2 skipped: the opt-in live contract suite); `app/lib/agent/__tests__` with the engineering exposure / tier suites, the B17-A control inventory and the B18-D UI gates 63 / 646 (the b11 and b20-a4 pins among them); `app/lib/project/__tests__` and `app/components/chat` 39 / 312; the proposal families 34 / 513; the import gates, census (165) and route matrices 10 / 104 - its first run passed every test but exited 1 on a vitest worker RPC timeout ("Timeout calling onTaskUpdate") during the CPU-heavy import scans, re-run alone clean (exit 0); `app/lib/mcp` and `app/api/mcp` 33 / 737; tsc clean; eslint clean on every changed file.
+
+### B21-E3 — the route-level resume and the userMessageDigest ledger (2026-09-27/28 local; increment workflow + lead; this commit)
+
+- Adopted: a previous E3 run was cut off by a power outage (about 09:06) with partial, unreviewed work in the tree; the adopting run
+  verified every changed file against HEAD b4a0ec5 (hashes as found in `e3adopt/start.sha256`), kept most of it, changed what was wrong
+  or missing (one request of a run at a time; the store's load bound to its scope; a transient refusal keeping the page's offer) and
+  finished the page, the cases and the gates.
+- Reviewed: an adversarial review CONFIRMED twenty findings; each fixed test-first (`route-resume.md` section 8, "Review fixes"): the
+  claim after the merge judged, with its own line (regressions-1); a throw settles the start (regressions-2); the trace bound stated
+  (regressions-4); the record's own credential shapes (security-1); a route-level resume bound to the selection, netlist and schematic,
+  the authority deliberately not (security-2); the offer read back after a reload (coverage-1); a replayed seal outliving the approval
+  window (coverage-2); true offer lines (coverage-4); a timed-out write unknown, a void claim (coverage-5); the page's counts (coverage-6);
+  `resume_unusable` for good (coverage-7, tests-5); every record write bounded and injectable, the compare-and-set, the owner first, the
+  load's re-judgement, the moved head, the page's wiring and control scan pinned (tests-1..4, 6, 8..10).
+- Test-first: the adopted run's red against HEAD (`e3adopt/red-1-head.log`: 39 of 48 failing) and its mutations (`red-2-mutated.log`: 6
+  of 30); the review fixes' red against the adopted code (`e3fix/red-1.log`: 22 of 55 failing; `red-2-prefix.log`: 19 of 45 against the
+  adopted production files swapped back in; `red-3`, `red-4`) and eleven mutations each caught (one more proven harmless); then green.
+- Code: `route.ts` (the key beside the closed set, the resume judged after the wrapper, the run id reused, the grant handed over - in
+  place), `orchestration-runtime.ts` (the guard, the replayed first turn, the coordinator's record, the ledger's claim, the follow-up's
+  entry, every request's settled end - in place; the resolution, the record writes, the void claim, the replay and the guard appended),
+  `store.ts` (the resume record and its credential shapes, appended), `scheduler.ts` (a route-level resume's blocker: four lines in place,
+  the rest appended), `merge.ts` (`already_presented`, in place), `chat-run-view.ts` (the offer and its restore, appended), `page.tsx`
+  (ten lines in place, no control), the workflow's one explicit entry. No route, descriptor, run-event type, control or generator input
+  changed; census 165/162/3/0; the nine scanned files and `redaction.ts` byte-identical to HEAD.
+- Pin move with its reason: D2's approval case 6 (`already_presented` appended).
+- Gates re-run one job at a time (the lead re-runs them): every B21 suite with the seven route suites and the CI guard (47 files,
+  438); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (376 passed, one opt-in live file skipped); `app/lib/agent` with the
+  exposure and tier suites, the B17-A inventory and the B18-D UI gates (646 of 646); `app/lib/project` with `app/components/chat` (312
+  of 312); the proposal families (513 of 513); the import gates and census (104 of 104); `app/lib/mcp` and `app/api/mcp` (737 of 737)
+  and `app/lib/mcp/server` (183 of 183); tsc 0; eslint clean on E3's lines (page.tsx's 14 pre-existing errors elsewhere); the B11, B09
+  and B17-A generators with zero drift - figures on the page.
+- Records: `route-resume.md`; OD-122 applied across resumes; OD-111 and OD-107 amended; D21-4 closed at the route, D21-16's route half
+  and D21-17's live-head half closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed 18 of the 20 fixes fixed and revert-sensitive and raised two new low
+  issues and five residuals): (1) the route's end marker for a start claim of unknown outcome was keyed by the ordinal alone - two
+  requests that read one head claim one ordinal, so a loser whose write failed could settle the WINNER's running start and swallow its
+  real end (its `presented` lost, the next resume free to run beside it); every `resume` entry now carries its request's claim id (a
+  digest of a fresh nonce, refused when absent) and `markUnknownClaim` re-reads and settles by compare-and-set only when no start of
+  the ordinal is there or the start there is this claim's (runtime case 19); (2) a replayed seal's approval window was measured when
+  the replay is decided, not at the resumed DAG's deadline - a seal with six minutes left could be presented with less than the 2-minute
+  window after the DAG's remaining wall time; now `Math.max(now, dagDeadline)` (runtime case 20; case 17's in-time contrast moved to
+  three minutes left at the deadline); (3) the PEM shape also matches a PGP private key block (record case 8); (4) the offer and
+  resuming lines say the first answer is replayed unless the record withheld it (offer case 7); (5) route case 8 and the page name the
+  catalog's authority, never the editor selection, as what moved. Each fix reverted alone turned its case red (`e3lead/prove.py`: 5 of
+  5) and was restored by sha256. Recorded on the page (section 7): the offer kept while the record is unreachable, the selection
+  binding's re-pay, the credential denylist, the synchronous-throw window.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the seven route suites and the CI guard (47 files, 440 of 440); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (44 files: 376 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (39
+  files, 312 of 312); the proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route
+  matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server`
+  (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on E3's ten lines),
+  every other changed file clean; the generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21
+  files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged).

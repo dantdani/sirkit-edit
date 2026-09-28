@@ -2,12 +2,12 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-E2 (2/2) committed on chapter/b21-specialist-orchestration: the trace block under the lead's reading of OD-112 - one trace document per specialist task, its run id <runId>:<n>-<role>, the closed block carrying the task's index and role and never the task id (D21-41 closed, no rule narrowed), one rule for the validator and the cascade, the specialist's tool calls on its own durable trace record beside the orchestration run's (D21-3's calls, D21-11's trace half), a retry on one provider in one document and an attempt on another in the task's next, a call refused before it ran a closed line, 256 events per document, an unrecorded document one visible line, every stored string held to the orchestration string rule, the nine scanned files and redaction.ts byte-identical; the adversarial review's 13 findings answered; next B21-E3",
+  "currentCheckpoint": "B21-E3 committed on chapter/b21-specialist-orchestration: the route-level resume - the chat body's optional resumeRunId under the flag, authorized by the record's owner, message, provider and plan with nine closed refusals, the run id reused, the coordinator's first turn replayed from the record, the scheduler replaying what is still current against the LIVE head the resuming request carries (its selection and netlist, seals outliving the approval window), the follow-up turn once, one request of a run at a time - and the userMessageDigest ledger across resumes (a specialist proposal never presented twice, already_presented, a void claim presented once); OD-130's part review reachable from a production POST; Resume a run-log line, read back after a reload; twenty review findings fixed; D21-4 closed at the route, D21-16's route half and D21-17's live-head half closed; next B21-E4",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "41330e6",
-  "pullRequest": "to be opened as a draft after the discovery commit (every increment gets CI; not to be merged before the B21 validation checkpoint)",
+  "lastGreenSha": "b4a0ec5",
+  "pullRequest": "draft PR #11 (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-E3: the route-level resume with the userMessageDigest ledger (OD-122, D21-4 at the route; D21-16's route half; D21-17's live-head half), the composer's kind swap (D21-38), and the coordinator's first turn behind the breaker (D21-39); OD-126's older-page question and OD-112's option A (legible task ids on the coordinator's trace) stay with the owner",
-  "updatedAt": "2026-09-27T07:57:18-04:00",
+  "nextAction": "B21-E4: the composer's kind swap (D21-38) and the coordinator's first turn behind the breaker (D21-39); then B21-F (evaluations); OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options and OD-111's retention question stay with the owner",
+  "updatedAt": "2026-09-28T00:58:31-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

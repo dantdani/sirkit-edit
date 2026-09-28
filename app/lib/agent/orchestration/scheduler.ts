@@ -106,7 +106,7 @@ export interface CoordinatorRun {
   /** the coordinator's start (ms since the epoch): the DAG wall time counts from here */
   startedAt: number;
   /** the coordinator's composed signal; every specialist's signal derives from it */
-  signal?: AbortSignal; /** [B21 D2 fix] OD-122: the coordinator's own turn already handed the human an artifact - no specialist is then offered a proposal */ artifactHeld?: boolean;
+  signal?: AbortSignal; /** [B21 D2 fix] OD-122: the coordinator's own turn already handed the human an artifact - no specialist is then offered a proposal */ artifactHeld?: boolean; /** [B21 E3 fix: security-2, coverage-2] a ROUTE-LEVEL resume (the runtime sets it for a request carrying the route's grant): a committed result is replayed only while it is also bound to this request's schematic, selection and netlist and its seals outlive the approval window (`resumeReplayBlocker`) */ resumed?: boolean;
 }
 export type SpecialistLoop = (request: AgentRunRequest, deps: AgentLoopDeps) => Promise<AgentRunResult>;
 export type SpecialistToolsetBuilder = (registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void, allowedToolIds?: readonly string[]) => { declarations: readonly ProviderToolDeclaration[] };
@@ -459,18 +459,18 @@ export async function runSpecialistDag(plan: { roles: readonly SpecialistRole[];
       let staleWritten = false;
       if (committed && committed.record.kind === "result") {
         const answered = history.find((entry) => entry.taskId === task.taskId && entry.attempt === committed.attempt && entry.record.kind === "request");
-        const committedScopeDigest = answered && answered.record.kind === "request" && !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null; // [B21 D fix] the merge's stale / expired verdict is a regenerate signal
+        const blocker = coordinator.resumed === true && answered !== undefined && answered.record.kind === "request" && engineeringDigest(answered.record.document.scope) === currentScopeDigest ? resumeReplayBlocker(answered.record.document, committed.record.document, context, Math.max(now(), dagDeadline)) : null; const committedScopeDigest = answered && answered.record.kind === "request" && blocker === null && !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null; // [B21 D fix] the merge's stale / expired verdict is a regenerate signal; [B21 E3 fix: security-2, coverage-2] so is a route-level resume's blocker
         if (committedScopeDigest === currentScopeDigest) {
           outcomes.push({ taskId: task.taskId, role: task.role, attempt: committed.attempt, specialistRunId: specialistRunId(coordinator.runId, task.taskId), status: "replayed", reason: null, resultDigest: committed.record.digest, result: committed.record.document, sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest), steps: 0, toolCalls: 0, usage: { inputTokens: 0, outputTokens: 0 }, provider: coordinator.provider, model: null });
           report(specialistFinishedEvent(coordinator.runId, outcomes.at(-1)!, `Orchestration: specialist ${task.role} replayed from the record (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}); it did not run again.`));
           continue;
         }
         // the board moved (or the scope differs): the committed result is STALE - dissent, then the task runs again
-        const reason = mergeJudgedStale(history, task.taskId, committed.attempt) ? `stale_verdict: the merge judged the committed result ${latestMergeVerdict(history, task.taskId, committed.attempt)?.decision} (a regenerate signal, D21-17)` : `stale_scope: committed under scope ${committedScopeDigest ?? "(unknown)"}, resumed under ${currentScopeDigest}`;
+        const reason = mergeJudgedStale(history, task.taskId, committed.attempt) ? `stale_verdict: the merge judged the committed result ${latestMergeVerdict(history, task.taskId, committed.attempt)?.decision} (a regenerate signal, D21-17)` : blocker ? blocker.reason : `stale_scope: committed under scope ${committedScopeDigest ?? "(unknown)"}, resumed under ${currentScopeDigest}`;
         const written = await write(task.taskId, baseAttempt, dissent("stale", reason, committed.record.digest));
         if (!written.ok) { stop = written.reason; notStarted.push(task); continue; }
         staleWritten = true;
-        report(staleResultEvent(coordinator.runId, { taskId: task.taskId, role: task.role, attempt: committed.attempt, resultDigest: committed.record.digest, reason }, `Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - it was produced against another scope or revision, or the merge judged it stale or expired; the task runs again.`));
+        report(staleResultEvent(coordinator.runId, { taskId: task.taskId, role: task.role, attempt: committed.attempt, resultDigest: committed.record.digest, reason }, `Orchestration: specialist ${task.role} committed result (task ${task.taskId}, attempt ${committed.attempt}, result ${committed.record.digest}) is STALE - ${blocker && !mergeJudgedStale(history, task.taskId, committed.attempt) ? blocker.why : "it was produced against another scope or revision, or the merge judged it stale or expired"}; the task runs again.`));
       }
       // [B21 C fix] no tools this run: the task is not run and records its missing evidence (a dissent of its own key: one past a
       // stale dissent just written); the outcome carries it, so every planned task is in `tasks` or `notStarted`
@@ -811,3 +811,36 @@ import type { AdmissionPause } from "../../acquisition/admission-control";
 // [B21 E2] on their own lines at the end (an import is hoisted): the additive v1 run events the scheduler emits in place of B's lines (OD-126)
 import { degradedEvent, notRunAgainEvent, planEvent, specialistFinishedEvent, specialistStartedEvent, staleResultEvent, type SpecialistFinishedEvent } from "./run-events";
 import type { OrchestrationRunEvent } from "../contracts";
+
+// ─── [B21 E3 fix: security-2, coverage-2] A route-level resume's replay rule ─────────────────────────────────────────────────
+// Appended on purpose: a function declaration is hoisted and the constants are read only when a resume runs, so every anchor the B21
+// pages cite in this file stays on its line (the edits above are made in place: the coordinator run's fact, the replay check, the stale
+// reason and line). A scheduler-level resume (B's seam, the suites that call the scheduler directly) keeps B's rule unchanged.
+
+/** [B21 E3 fix: coverage-2] OD-107's approval window: the DAG wall time stays inside a proposal's 10-minute TTL minus these 2 minutes, so
+ *  nothing the DAG seals expires before the human sees it. A resume restarts the wall time, so a REPLAYED seal is held to the same
+ *  bound AT THE DAG'S DEADLINE [B21 E3 lead]: one with less than this left then is not replayed - its specialist runs again. */
+export const RESUME_REPLAY_APPROVAL_WINDOW_MS = 120_000;
+/** [B21 E3 fix: security-2] The context references a route-level resume binds a replay to beyond `requestScope`: the schematic, the
+ *  selection and the netlist the specialist was handed. The component authority is deliberately NOT one (OD-130, D21-16's route half):
+ *  a replayed seal is re-judged by the merge against the authority the RESUMING request loaded, and a part review is asked for when it
+ *  moved; a result's claims about parts stay its specialist's own unverified claims (the envelope says so). */
+export const RESUME_REPLAY_CONTEXT_REFS = Object.freeze(["schematic", "selection", "netlist"] as const);
+/** [B21 E3 fix: security-2, coverage-2] Why a committed result bound to THIS request's scope is still not replayed on a route-level
+ *  resume, or null: a context reference moved, or one of its seals expires within the approval window of `until` - the later of the
+ *  scheduler's clock and the DAG's deadline, when the merge may judge it at the latest [B21 E3 lead]. */ function resumeReplayBlocker(request: { contextRefs: ReadonlyArray<{ id: string; digest: string }> }, result: ValidatedSpecialistResult, context: AgentRunContext, until: number): { reason: string; why: string } | null {
+  const current = new Map(contextReferences(context).map((reference) => [reference.id, reference.digest]));
+  const committed = new Map(request.contextRefs.map((reference) => [reference.id, reference.digest]));
+  const moved = RESUME_REPLAY_CONTEXT_REFS.filter((id) => (committed.get(id) ?? null) !== (current.get(id) ?? null));
+  if (moved.length > 0) return { reason: `stale_context: committed under another ${moved.join(", ")} than this request carries`, why: `it was produced for another ${moved.join(", ")} than this request carries` };
+  const left = Math.min(...result.proposedActions.map((action) => sealExpiresAt(action.payload) - until));
+  if (left < RESUME_REPLAY_APPROVAL_WINDOW_MS) return { reason: `stale_lifetime: a sealed artifact of the committed result expires within the approval window (${Math.max(0, Math.floor(left / 1_000))} s left at the DAG's deadline, ${RESUME_REPLAY_APPROVAL_WINDOW_MS / 1_000} s needed - OD-107)`, why: `a sealed artifact of it expires within the approval window (OD-107: the human needs ${RESUME_REPLAY_APPROVAL_WINDOW_MS / 1_000} s to review it)` };
+  return null;
+}
+/** A sealed payload's `expiresAt` (epoch ms, or an ISO time for a layout candidate); an unreadable one is the merge's to judge
+ *  (`lifetime-invalid`), never a replay blocker. */
+function sealExpiresAt(payload: unknown): number {
+  const raw = typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>).expiresAt : undefined;
+  const at = typeof raw === "number" ? raw : typeof raw === "string" ? (/^\d+$/.test(raw) ? Number(raw) : Date.parse(raw)) : Number.NaN;
+  return Number.isFinite(at) ? at : Number.POSITIVE_INFINITY;
+}

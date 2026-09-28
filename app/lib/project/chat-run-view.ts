@@ -587,3 +587,78 @@ export function orchestrationRunLogLine(event: Record<string, unknown>): { text:
   const text = event.message.trim().slice(0, MAX_ORCHESTRATION_LINE_CHARS);
   return text ? { text, status: event.type === "specialist_started" ? "running" : "done" } : null;
 }
+
+// ─── [B21 E3] The route-level resume, offered as a run-log line (OD-127: no control) ─────────────────────────────────────────────
+// Appended on purpose: a function declaration is hoisted and the constants are read only when a run ends, so no line cited above moves.
+
+/** [B21 E3] The degraded reasons with which an orchestrated run STANDS DOWN - the coordinator's answer stands and no follow-up turn
+ *  answered (`runOrchestratedChat`'s `down(...)` calls): its record can be resumed. A notice that does not end the run is not one. */
+export const CHAT_RESUME_STAND_DOWN_REASONS = Object.freeze(["follow_up_failed", "follow_up_paused", "merge_unrecorded", "no_specialist_ran", "no_usable_result", "provider_outage", "provider_paused"] as const);
+/** The run ids the chat route issues in `X-Sirkit-Run-Id` (the route's own pattern): nothing else is ever offered or sent. */
+const CHAT_RESUME_RUN_ID = /^run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** What the page learns from a run's stream for the resume: a plan was recorded (the scheduler writes the plan before its event) and
+ *  the run stood down. Display facts only - the route decides every resume against the record. */
+export interface ChatResumeObservation { planned: boolean; stoodDown: boolean }
+export const initialChatResumeObservation = (): ChatResumeObservation => ({ planned: false, stoodDown: false });
+export function observeChatResume(state: ChatResumeObservation, event: Record<string, unknown>): ChatResumeObservation {
+  if (event.type === "plan") return state.planned ? state : { ...state, planned: true };
+  if (event.type === "degraded" && typeof event.reason === "string" && (CHAT_RESUME_STAND_DOWN_REASONS as readonly string[]).includes(event.reason)) return state.stoodDown ? state : { ...state, stoodDown: true };
+  return state;
+}
+/** [B21 E3] The run a later send may resume: an orchestrated run (a plan was recorded) that ended WITHOUT its follow-up's answer - stood
+ *  down, stopped, cut or cancelled - under a run id the route issued; bound to the message, provider, project and branch it was sent with. */
+export interface ResumableChatRun { runId: string; text: string; provider: string; projectId: string; branchId: string }
+export function resumableChatRun(observation: ChatResumeObservation, ending: { terminal: "completed" | "failed" | null; runId: string | null } & Omit<ResumableChatRun, "runId">): ResumableChatRun | null {
+  if (!observation.planned || ending.runId === null || !CHAT_RESUME_RUN_ID.test(ending.runId)) return null;
+  if (ending.terminal === "completed" && !observation.stoodDown) return null; // the follow-up turn answered: the run is finished
+  return { runId: ending.runId, text: ending.text, provider: ending.provider, projectId: ending.projectId, branchId: ending.branchId };
+}
+/** [B21 E3] The next send resumes the offered run only when it is the SAME message on the SAME provider in the SAME project and branch
+ *  (the composer's send or the recovery card's Retry - the same `send(text)`); anything else is a new run. */
+export function chatResumeFor(resumable: ResumableChatRun | null, next: Omit<ResumableChatRun, "runId">): { runId: string; line: string } | null {
+  if (!resumable || resumable.text !== next.text || resumable.provider !== next.provider || resumable.projectId !== next.projectId || resumable.branchId !== next.branchId) return null;
+  return { runId: resumable.runId, line: chatResumingLine(resumable.runId) };
+}
+/** [B21 E3] The offer, a run-log line of the run that can be resumed (never a control). [B21 E3 fix: coverage-1] It names the provider the
+ *  run is bound to, so a reloaded page reads the offer back from its saved log (`restoredChatResume`); [B21 E3 fix: coverage-4] it
+ *  promises only what every resume keeps - a committed result is replayed while it is still current, else its specialist runs again. */
+export function chatResumeOfferLine(runId: string, provider: string): string {
+  return `Resume: send the same message again on ${provider} to resume run ${runId} - its first answer is replayed from the record unless the record withheld it, and so is each committed specialist result that is still current; one whose design, selection or seal lifetime moved runs again (paid), as does one that did not finish.`;
+}
+/** [B21 E3] The first run-log line of a send that resumes ([B21 E3 fix: coverage-4] as conditional as the offer). */
+export function chatResumingLine(runId: string): string {
+  return `Resuming run ${runId}: its first answer is replayed from the record unless the record withheld it, and so is each committed specialist result that is still current; one whose design, selection or seal lifetime moved runs again (paid), as does one that did not finish.`;
+}
+/** [B21 E3] The route's refusals of a resume that hold only for now: another request of the run still holds it, or its record could
+ *  not be read. They KEEP the offer, so the next send of the same message tries the resume again; every other refusal (and a body that
+ *  names no such code) spends it - the next send is a new run, as the refusal's own message says. */
+export const CHAT_RESUME_TRANSIENT_REFUSALS = Object.freeze(["resume_in_progress", "resume_unavailable"] as const);
+export function chatResumeKeptAfter(refusal: unknown, offered: ResumableChatRun | null): ResumableChatRun | null {
+  const code = typeof refusal === "object" && refusal !== null && !Array.isArray(refusal) ? (refusal as { code?: unknown }).code : undefined;
+  return offered !== null && typeof code === "string" && (CHAT_RESUME_TRANSIENT_REFUSALS as readonly string[]).includes(code) ? offered : null;
+}
+
+// ─── [B21 E3 fix: coverage-1] The offer read back from the saved run log (a reload, a project switched back to) ──────────────────────
+// Appended on purpose: a function declaration is hoisted and the constants are read only when a send runs, so no line cited above moves.
+
+/** The first step of a chat send's run log (`send` in the page): what marks a log as a chat send's. */
+export const CHAT_SEND_FIRST_STEP = "Submitting message";
+/** The offer line's own grammar (`chatResumeOfferLine`): the provider and a run id the route could have issued, nothing else. */
+const CHAT_RESUME_OFFER_LINE = /^Resume: send the same message again on ([a-z][a-z0-9-]{0,31}) to resume run (run-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) - /;
+/** [B21 E3 fix: coverage-1] The offer a page that holds none in memory can still take: the run log is saved with the project and
+ *  restored on a reload or when the project is opened again, so the LATEST chat send's log is read back - its offer line names the run
+ *  id and provider, the user message before that log is the text, and the project and branch are the log's own. A later chat send
+ *  (whatever its outcome) spends it, exactly as a send spends the offer held in memory; another kind of log does not. Display facts
+ *  only: the route decides every resume against the record. */
+export function restoredChatResume(messages: ReadonlyArray<{ role: string; content?: unknown; entries?: ReadonlyArray<{ text?: unknown }> }>, scope: { projectId: string; branchId: string }): ResumableChatRun | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const log = messages[index]!;
+    if (log.role !== "log" || log.entries?.[0]?.text !== CHAT_SEND_FIRST_STEP) continue;
+    let offer: RegExpExecArray | null = null;
+    for (const entry of log.entries) if (typeof entry.text === "string") offer = CHAT_RESUME_OFFER_LINE.exec(entry.text) ?? offer;
+    const user = messages[index - 1];
+    if (!offer || user?.role !== "user" || typeof user.content !== "string") return null;
+    return { runId: offer[2]!, text: user.content, provider: offer[1]!, projectId: scope.projectId, branchId: scope.branchId };
+  }
+  return null;
+}

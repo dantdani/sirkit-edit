@@ -32,7 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
-import { emitRefusedRun, planChatRun, productionSpecialistProviders, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer
+import { chatResumeBodyKeyAdmitted, emitRefusedRun, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -137,7 +137,7 @@ export const POST = agentStreamRoute(
   // authority/actor/role/capability/approval/idempotency claim refuse
   // EXPLICITLY (bounded key echo only; never the body).
   for (const key of Object.keys(parsedBody)) {
-    if (!ALLOWED_BODY_KEYS.has(key)) {
+    if (!ALLOWED_BODY_KEYS.has(key) && !chatResumeBodyKeyAdmitted(key)) { // [B21 E3] + `resumeRunId`, flag on only: a flag-off request is refused exactly as before
       const detail = key === "boardState"
         ? "the top-level boardState contract is obsolete — supply the versioned atomic editorContext instead"
         : `unexpected request key "${key.slice(0, 40)}" (authority, actor, role, capability, approval, durable-board, release, and idempotency claims are refused)`;
@@ -363,8 +363,8 @@ export const POST = agentStreamRoute(
       }
     }
   }
-
-  const runId = `run-${randomUUID()}`;
+  const resume = await resolveChatResume({ body: parsedBody, context: runContext, userMessage, provider, signal }); if (resume.kind === "refused") return Response.json({ ok: false, error: resume.error, code: resume.code }, { status: resume.status }); // [B21 E3] OD-122, D21-4 at the route: the resume authorized by its record's owner (this principal, this project), message, provider and plan - a closed refusal before any provider call
+  const runId = resume.kind === "resume" ? resume.runId : `run-${randomUUID()}`; // [B21 E3] a resume reuses its run id
   const registry = sirkitToolRegistry();
   // [B18-B] the execution-grant MINTER — the only place a grant is created —
   // is built HERE from the trusted request context (verified principal, role,
@@ -505,7 +505,7 @@ export const POST = agentStreamRoute(
         if (plan.kind === "refused") {
           result = emitRefusedRun({ runId, provider, reason: plan.reason, emit, trace: traceRecorder });
         } else {
-          const request = { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal };
+          const request = { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal }; resumeChatRun(request, resume); // [B21 E3] the grant for THIS request: a resumed run's first turn is replayed, never re-run
           const deps = {
             adapter,
             gateway,

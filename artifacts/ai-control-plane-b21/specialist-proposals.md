@@ -187,6 +187,7 @@ and otherwise `presented`. The table IS `SPECIALIST_APPROVAL_OUTCOMES` (C25):
 | `incomplete` | 6 | a task's attempt sealed an artifact no merged task judged (its result was refused, or its run failed after the seal - a failed attempt before a retry included), or a planned proposing specialist never started: nothing competing cannot be established |
 | `none_accepted` | 7 | no accepted action (or its artifact could not be read back from the committed result) |
 | `several_accepted` | 8 | more than one accepted action - agreement never promotes one; the human decides between them |
+| `already_presented` | 9 | [B21 E3] the one action `presented` would hand over, when the userMessageDigest ledger already holds this user message's artifact (an earlier request of the same run presented it, or its end is not recorded - at most once; a claim whose request recorded that it presented nothing is void): decided LAST, in `presented`'s place only - never a second artifact across resumes (`route-resume.md`) |
 
 The coordinator's artifact events (`COORDINATOR_ARTIFACT_EVENTS`, in order): `proposal_ready`, `pcb_proposal_ready`, `layout_candidate_ready`, `execution_grant_ready`.
 
@@ -431,6 +432,10 @@ paragraph, the PROGRAM_STATE texts, the discovery closure clauses and the §10 a
   principal reauthorized by the real apply-authorization route (`b21-d2-approval.test.ts` cases 1 and 2; route case 3); the clause by
   approval case 8 (each of the four events through the real runtime) and route case 4; `incomplete` by approval case 7 and route case 7;
   the trace line by route case 6. The route-level resume and the `userMessageDigest` cross-run ledger stay B21-E's.
+  [B21 E3, 2026-09-27] The route-level resume exists now and the ledger holds across the resumes of a run (`route-resume.md`): it claims the user
+  message's one artifact on the run's resume record before a specialist's action is presented, so a resume never presents a second one
+  (`already_presented`, the table's last row); the INFERRED clause above is CONFIRMED - a replayed result keeps its seal and the ledger
+  decides. A message sent again without `resumeRunId` is a new run with its own ledger (no cross-run ledger, RECORDED).
 - **The owner may choose otherwise:** present several accepted actions for the human to pick one (a UI change), or never present a
   specialist's artifact (every accepted action listed as data only - the B21-D behaviour); or let the specialists seal beside the
   coordinator's artifact and hand that artifact to the merge as an escalation party (a coordinator-vs-specialist conflict then escalates

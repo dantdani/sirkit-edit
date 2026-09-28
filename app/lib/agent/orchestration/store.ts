@@ -31,7 +31,7 @@ import { durableAggregateIdentity, durableScopeKey, durableWorkflowId } from "..
 import type { DurableAggregateIdentity, DurableAggregateRecord, DurableWorkflowRepository, DurableWorkflowScope } from "../../durable-workflow/types";
 import { engineeringDigest } from "../../engineering/stable";
 import { capturePlainJson, type PlainJsonValue } from "../plain-capture";
-import { redactPathSegment } from "../redaction";
+import { containsTokenAnchoredSecretShapedText, redactPathSegment } from "../redaction";
 import { ORCHESTRATION_BOUNDS, SPECIALIST_REQUEST_SCHEMA, SPECIALIST_RESULT_SCHEMA, SPECIALIST_ROLES, isForbiddenOrchestrationKeyName, isOrchestrationDigest, isOrchestrationId, isOrchestrationTimestamp, judgeOrchestrationText, validatedDigestOf, type SpecialistRole, type ValidatedSpecialistRequest, type ValidatedSpecialistResult } from "./contracts";
 
 export const ORCHESTRATION_AGGREGATE_TYPE = "agent.orchestration-run.v1" as const;
@@ -371,4 +371,276 @@ import { DurableOrchestrationTraceStore, type OrchestrationTraceStore } from "./
 const TRACE_STORES = new WeakMap<OrchestrationRunStore, OrchestrationTraceStore>();
 export function orchestrationTraceStoreOf(store: OrchestrationRunStore): OrchestrationTraceStore | null {
   return TRACE_STORES.get(store) ?? null;
+}
+
+// ─── [B21 E3] The chat resume's record, beside the run's (OD-122's userMessageDigest ledger; D21-4 at the chat surface) ─────────────
+// Appended on purpose: the class and map below are read only when a resume store is resolved, so no line cited above moves - the
+// constructor line is E2b's C90, so the resume store is derived from the durable record LAZILY, never in it (and the one import it
+// adds, the redaction authority's secret rule, joins the module's existing import of that authority in place).
+
+/** [B21 E3] The resume record: its OWN aggregate type on the SAME repository as the run's record (E2b's trace-record precedent), so the
+ *  run's history - which the scheduler resumes from, the merge chains its verdicts in and B, D, D2 and D3 pin - is untouched. */
+export const ORCHESTRATION_RESUME_AGGREGATE_TYPE = "agent.orchestration-resume.v1" as const;
+export const ORCHESTRATION_RESUME_RECORD_SCHEMA = "sirkit.orchestration-resume-record.v1" as const;
+/** The closed entries: the coordinator's first turn (the resume binding and its answer - also the START of the run's first request,
+ *  ordinal 0), ONE specialist artifact per userMessageDigest (the idempotency key IS the ledger), the follow-up turn's answer (a run
+ *  whose follow-up answered is finished), a resumed request's START (`resume`, ordinal 1, 2, ...: claimed by compare-and-set against
+ *  the head its caller read, so two requests never hold one run) and a request's END without the follow-up's answer (`settled`). */
+export const ORCHESTRATION_RESUME_KINDS = Object.freeze(["coordinator", "artifact", "follow-up", "resume", "settled"] as const);
+export type OrchestrationResumeKind = (typeof ORCHESTRATION_RESUME_KINDS)[number];
+/** The shape of an artifact event a coordinator's first turn handed the human, as the record holds it: a closed event name (the
+ *  runtime writes only its own `COORDINATOR_ARTIFACT_EVENTS` and reads back only those - an unknown name can only keep specialists
+ *  read-only, never widen anything). */
+export const ORCHESTRATION_RESUME_EVENT_NAME = /^[a-z][a-z_]{0,39}$/;
+/** Why a coordinator's answer is not stored (it is then replayed as a closed placeholder): over the bound, or refused by the text rule. */
+export const ORCHESTRATION_RESUME_ANSWER_WITHHELD = Object.freeze(["answer_too_long", "answer_refused"] as const);
+export type OrchestrationResumeAnswerWithheld = (typeof ORCHESTRATION_RESUME_ANSWER_WITHHELD)[number];
+export const ORCHESTRATION_RESUME_BOUNDS = Object.freeze({ maxAnswerChars: 60_000, maxArtifacts: 4, maxActionIndex: ORCHESTRATION_BOUNDS.maxArrayEntries - 1, maxOrdinal: ORCHESTRATION_STORE_BOUNDS.maxAttempt });
+type ResumeProvider = "openai" | "anthropic";
+/** What a caller appends: the coordinator's RAW final text (the store encodes and judges it). */
+export type OrchestrationResumeInput =
+  | { kind: "coordinator"; ownerDigest: string; userMessageDigest: string; provider: ResumeProvider; planDigest: string; answer: string; artifacts: readonly string[] }
+  | { kind: "artifact"; userMessageDigest: string; taskId: string; attempt: number; actionIndex: number; artifactKind: string; artifactDigest: string; /** [B21 E3 fix: coverage-5] the claiming request's ordinal */ ordinal: number }
+  | { kind: "follow-up"; answerDigest: string }
+  | { kind: "resume"; ordinal: number; /** [B21 E3 lead] the claiming request's own id (a digest of a fresh nonce): only the request that made a claim marks its end when the claim's outcome is unknown */ claim: string }
+  | { kind: "settled"; ordinal: number; /** [B21 E3 fix: coverage-5] whether THIS request presented the message's artifact */ presented: boolean };
+/** What a load returns: the coordinator's answer DECODED (null when withheld), its digest always. */
+export type OrchestrationResumeEntry =
+  | { kind: "coordinator"; ownerDigest: string; userMessageDigest: string; provider: ResumeProvider; planDigest: string; answer: string | null; answerDigest: string; answerWithheld: OrchestrationResumeAnswerWithheld | null; artifacts: readonly string[] }
+  | Exclude<OrchestrationResumeInput, { kind: "coordinator" }>;
+export interface OrchestrationResumeRecordEntry { revision: number; at: string; recordDigest: string; entry: OrchestrationResumeEntry }
+export type OrchestrationResumeAppendResult = { ok: true; revision: number; recordDigest: string; replayed: boolean } | { ok: false; code: "stale_revision" | "invalid_record"; message: string };
+export interface OrchestrationResumeStore {
+  /** the run's resume entries in revision order, every record digest-verified and re-judged */
+  history(scope: OrchestrationRunScope): Promise<OrchestrationResumeRecordEntry[]>;
+  /** `expectedRevision`: the head the caller READ (compare-and-set against it); absent, the head at the time of the write */
+  append(input: { scope: OrchestrationRunScope; entry: OrchestrationResumeInput; at: string; expectedRevision?: number }): Promise<OrchestrationResumeAppendResult>;
+}
+/** The stored form: a coordinator's answer ENCODED (`encodeResumeAnswer`), or null when withheld. */
+type StoredResumeEntry = OrchestrationResumeEntry;
+interface StoredResumePayload { schema: typeof ORCHESTRATION_RESUME_RECORD_SCHEMA; runId: string; revision: number; at: string; entry: StoredResumeEntry }
+
+/** [B21 E3] The key of an entry: the coordinator's and the follow-up's once per run, an artifact once per run AND user message, a
+ *  request's start and its end once per run AND ordinal. */
+export function orchestrationResumeIdempotencyKey(runId: string, entry: { kind: OrchestrationResumeKind; userMessageDigest?: string; ordinal?: number }): string {
+  if (entry.kind === "artifact") return `orchestration-resume:${runId}:artifact:${entry.userMessageDigest ?? ""}`;
+  return entry.kind === "resume" || entry.kind === "settled" ? `orchestration-resume:${runId}:${entry.kind}:${entry.ordinal ?? ""}` : `orchestration-resume:${runId}:${entry.kind}`;
+}
+export function orchestrationResumeAnswerDigest(text: string): string {
+  return engineeringDigest({ schema: "sirkit.orchestration-resume-answer.v1", text });
+}
+const BACKSLASH_U = `${String.fromCharCode(92)}u`;
+const hex4 = (code: number): string => `${BACKSLASH_U}${code.toString(16).padStart(4, "0")}`;
+const UNSAFE_CHARACTER = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+/** [B21 E3] The answer as stored: its JSON text (a NUL, the C0 controls and a lone surrogate are escapes there) with every remaining
+ *  control, format and separator character written as an escape too - so the stored string passes the orchestration text rule and a
+ *  jsonb column, and `decodeResumeAnswer` gives the answer back EXACTLY (an astral format character as its surrogate pair). */
+export function encodeResumeAnswer(text: string): string {
+  return JSON.stringify(text).replace(UNSAFE_CHARACTER, (character) => {
+    const code = character.codePointAt(0)!;
+    if (code <= 0xffff) return hex4(code);
+    const offset = code - 0x10000;
+    return `${hex4(0xd800 + (offset >> 10))}${hex4(0xdc00 + (offset & 0x3ff))}`;
+  });
+}
+export function decodeResumeAnswer(encoded: string): string | null {
+  try {
+    const decoded: unknown = JSON.parse(encoded);
+    return typeof decoded === "string" ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+const resumeScope = (scope: OrchestrationRunScope): DurableWorkflowScope => ({ tenantId: scope.tenantId, projectId: scope.projectId, branchId: scope.branchId });
+const resumeAggregateKey = (scope: OrchestrationRunScope): string => durableWorkflowId("agent-orchestration-resume", { ...resumeScope(scope), runId: scope.runId });
+const resumeIdentity = (scope: OrchestrationRunScope): DurableAggregateIdentity => durableAggregateIdentity(resumeScope(scope), ORCHESTRATION_RESUME_AGGREGATE_TYPE, resumeAggregateKey(scope));
+export const orchestrationResumeRecordDigest = (payload: StoredResumePayload): string => engineeringDigest({ schema: ORCHESTRATION_RESUME_AGGREGATE_TYPE, payload });
+function resumeMismatch(): never {
+  throw new Error("AGENT_ORCHESTRATION_RESUME_MISMATCH");
+}
+const RESUME_KEYS: Readonly<Record<OrchestrationResumeKind, readonly string[]>> = Object.freeze({
+  coordinator: ["kind", "ownerDigest", "userMessageDigest", "provider", "planDigest", "answer", "artifacts"],
+  artifact: ["kind", "userMessageDigest", "taskId", "attempt", "actionIndex", "artifactKind", "artifactDigest", "ordinal"],
+  "follow-up": ["kind", "answerDigest"],
+  resume: ["kind", "ordinal", "claim"],
+  settled: ["kind", "ordinal", "presented"],
+});
+const STORED_COORDINATOR_KEYS = ["kind", "ownerDigest", "userMessageDigest", "provider", "planDigest", "answer", "answerDigest", "answerWithheld", "artifacts"] as const;
+const boundedInteger = (value: unknown, max: number): boolean => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= max;
+/** The closed judgement of an entry's fields other than a coordinator's answer (the input's and the stored form's alike). */
+function judgeResumeFields(entry: PlainRecord, path: string): void {
+  switch (entry.kind) {
+    case "coordinator": {
+      for (const key of ["ownerDigest", "userMessageDigest", "planDigest"] as const) if (!isOrchestrationDigest(entry[key])) refuse("invalid_record", at(path, key));
+      if (entry.provider !== "openai" && entry.provider !== "anthropic") refuse("invalid_record", at(path, "provider"));
+      const artifacts = entry.artifacts;
+      if (!Array.isArray(artifacts) || artifacts.length > ORCHESTRATION_RESUME_BOUNDS.maxArtifacts || !artifacts.every((event) => typeof event === "string" && ORCHESTRATION_RESUME_EVENT_NAME.test(event))) refuse("invalid_record", at(path, "artifacts"));
+      return;
+    }
+    case "artifact":
+      for (const key of ["userMessageDigest", "artifactDigest"] as const) if (!isOrchestrationDigest(entry[key])) refuse("invalid_record", at(path, key));
+      for (const key of ["taskId", "artifactKind"] as const) if (!isOrchestrationId(entry[key])) refuse("invalid_record", at(path, key));
+      if (!boundedInteger(entry.attempt, ORCHESTRATION_STORE_BOUNDS.maxAttempt)) refuse("invalid_record", at(path, "attempt"));
+      if (!boundedInteger(entry.actionIndex, ORCHESTRATION_RESUME_BOUNDS.maxActionIndex)) refuse("invalid_record", at(path, "actionIndex")); if (!boundedInteger(entry.ordinal, ORCHESTRATION_RESUME_BOUNDS.maxOrdinal)) refuse("invalid_record", at(path, "ordinal"));
+      return;
+    case "follow-up":
+      if (!isOrchestrationDigest(entry.answerDigest)) refuse("invalid_record", at(path, "answerDigest"));
+      return;
+    case "resume": // a resumed request's start: ordinal 1 and up (0 is the first request's, whose start is the coordinator entry)
+    case "settled":
+      if (!boundedInteger(entry.ordinal, ORCHESTRATION_RESUME_BOUNDS.maxOrdinal) || (entry.kind === "resume" && entry.ordinal === 0)) refuse("invalid_record", at(path, "ordinal")); if (entry.kind === "settled" && typeof entry.presented !== "boolean") refuse("invalid_record", at(path, "presented")); if (entry.kind === "resume" && !isOrchestrationDigest(entry.claim)) refuse("invalid_record", at(path, "claim")); // [B21 E3 lead]
+      return;
+    default:
+      refuse("invalid_record", at(path, "kind"));
+  }
+}
+/** [B21 E3] An input judged into its stored form: the entry is read through its OWN data descriptors (an accessor, a symbol key or a
+ *  Proxy trap is refused), the fields other than the answer captured as plain data under a small bound and judged closed; a
+ *  coordinator's answer - a string of any length - is encoded, bounded and judged by the orchestration text rule (a credential-shaped
+ *  value in the answer or its encoding WITHHOLDS it: never stored). Throws the store's closed refusal only. */
+function storedResumeEntry(raw: unknown): StoredResumeEntry {
+  if (!isRecord(raw)) refuse("invalid_record", "$.entry");
+  const fields: Record<string, unknown> = {};
+  let answer: unknown;
+  let answered = false;
+  for (const key of Reflect.ownKeys(raw)) {
+    const descriptor = typeof key === "string" ? Reflect.getOwnPropertyDescriptor(raw, key) : undefined;
+    if (typeof key !== "string" || !descriptor || !("value" in descriptor)) refuse("invalid_record", "$.entry");
+    if (key === "answer") { answer = descriptor.value; answered = true; } else fields[key] = descriptor.value;
+  }
+  const captured = capturePlainJson(fields, "$.entry", 16_384);
+  if (!captured.ok) refuse("invalid_record", issuePath(captured.issues, "$.entry"));
+  const entry = captured.value;
+  if (!isRecord(entry)) refuse("invalid_record", "$.entry");
+  const kind = entry.kind;
+  if (typeof kind !== "string" || !(ORCHESTRATION_RESUME_KINDS as readonly string[]).includes(kind)) refuse("invalid_record", "$.entry.kind");
+  closedKeyList([...Object.keys(entry), ...(answered ? ["answer"] : [])], "$.entry", RESUME_KEYS[kind as OrchestrationResumeKind]);
+  judgeResumeFields(entry, "$.entry");
+  if (kind !== "coordinator") return entry as unknown as StoredResumeEntry;
+  if (typeof answer !== "string") refuse("invalid_record", "$.entry.answer");
+  const encoded = encodeResumeAnswer(answer);
+  const withheld: OrchestrationResumeAnswerWithheld | null = encoded.length > ORCHESTRATION_RESUME_BOUNDS.maxAnswerChars ? "answer_too_long"
+    : containsTokenAnchoredSecretShapedText(answer) || resumeAnswerCredentialShape(answer) !== null || judgeOrchestrationText(encoded, ORCHESTRATION_RESUME_BOUNDS.maxAnswerChars) !== null ? "answer_refused" : null; // [B21 E3 fix: security-1] + the resume record's own shapes
+  const coordinator = entry as unknown as Omit<Extract<OrchestrationResumeInput, { kind: "coordinator" }>, "answer">;
+  return { kind: "coordinator", ownerDigest: coordinator.ownerDigest, userMessageDigest: coordinator.userMessageDigest, provider: coordinator.provider, planDigest: coordinator.planDigest, answer: withheld === null ? encoded : null, answerDigest: orchestrationResumeAnswerDigest(answer), answerWithheld: withheld, artifacts: [...coordinator.artifacts] };
+}
+/** [B21 E3] A stored entry re-judged on load and returned DECODED; anything that does not hold is the one mismatch sentence. */
+function loadedResumeEntry(raw: unknown): OrchestrationResumeEntry {
+  try {
+    if (!isRecord(raw)) resumeMismatch();
+    const kind = raw.kind;
+    if (kind === "coordinator") {
+      closedKeyList(Object.keys(raw), "$.entry", STORED_COORDINATOR_KEYS);
+      judgeResumeFields(raw, "$.entry");
+      if (!isOrchestrationDigest(raw.answerDigest)) resumeMismatch();
+      const withheld = raw.answerWithheld;
+      if (withheld !== null && !(ORCHESTRATION_RESUME_ANSWER_WITHHELD as readonly unknown[]).includes(withheld)) resumeMismatch();
+      let answer: string | null = null;
+      if (withheld === null) {
+        if (typeof raw.answer !== "string" || judgeOrchestrationText(raw.answer, ORCHESTRATION_RESUME_BOUNDS.maxAnswerChars) !== null) resumeMismatch();
+        answer = decodeResumeAnswer(raw.answer);
+        if (answer === null || orchestrationResumeAnswerDigest(answer) !== raw.answerDigest || encodeResumeAnswer(answer) !== raw.answer) resumeMismatch();
+      } else if (raw.answer !== null) resumeMismatch();
+      return { kind, ownerDigest: raw.ownerDigest as string, userMessageDigest: raw.userMessageDigest as string, provider: raw.provider as ResumeProvider, planDigest: raw.planDigest as string, answer, answerDigest: raw.answerDigest, answerWithheld: withheld as OrchestrationResumeAnswerWithheld | null, artifacts: [...(raw.artifacts as string[])] };
+    }
+    if (kind !== "artifact" && kind !== "follow-up" && kind !== "resume" && kind !== "settled") resumeMismatch();
+    closedKeyList(Object.keys(raw), "$.entry", RESUME_KEYS[kind]);
+    judgeResumeFields(raw, "$.entry");
+    return structuredClone(raw) as unknown as OrchestrationResumeEntry;
+  } catch (error) {
+    if (error instanceof Refusal) resumeMismatch();
+    throw error;
+  }
+}
+
+/** [B21 E3] The durable resume record: one aggregate per coordinator run, every append a compare-and-set commit of an entry judged
+ *  closed - against the head its caller READ when it names one (a request's start), else the head at the time of the write -
+ *  idempotent by its entry's key (a second coordinator entry, a second artifact for the same user message, a second follow-up, a second
+ *  start or end of one ordinal write NOTHING and read back as a replay), no outbox effect; every load recomputes the record digest,
+ *  checks the aggregate and scope it was read under and re-judges the entry. */
+export class DurableOrchestrationResumeStore implements OrchestrationResumeStore {
+  constructor(private readonly workflow: DurableWorkflowRepository) {}
+
+  async append(input: { scope: OrchestrationRunScope; entry: OrchestrationResumeInput; at: string; expectedRevision?: number }): Promise<OrchestrationResumeAppendResult> {
+    let judged: { scope: OrchestrationRunScope; at: string; entry: StoredResumeEntry; expectedRevision: number | null };
+    try {
+      if (!isRecord(input as unknown)) refuse("invalid_record", "$");
+      const own = (key: string): unknown => Reflect.getOwnPropertyDescriptor(input, key)?.value;
+      const envelope = capturePlainJson({ scope: own("scope"), at: own("at"), expectedRevision: own("expectedRevision") ?? null }, "$", 4_096);
+      if (!envelope.ok) refuse("invalid_record", issuePath(envelope.issues, "$"));
+      const value = envelope.value;
+      if (!isRecord(value)) refuse("invalid_record", "$");
+      const scope = scopeOf(value.scope);
+      if (!isOrchestrationTimestamp(value.at)) refuse("invalid_record", "$.at");
+      if (value.expectedRevision !== null && !boundedInteger(value.expectedRevision, Number.MAX_SAFE_INTEGER - 1)) refuse("invalid_record", "$.expectedRevision");
+      judged = { scope, at: value.at, entry: storedResumeEntry(own("entry")), expectedRevision: value.expectedRevision as number | null };
+    } catch (error) {
+      const outcome = refused(error);
+      return { ok: false, code: "invalid_record", message: outcome ? outcome.message : "The resume entry could not be judged (a hostile object); nothing was written." };
+    }
+    const { scope, entry } = judged;
+    const identity = resumeIdentity(scope);
+    const expectedRevision = judged.expectedRevision ?? (await this.workflow.loadHead<StoredResumePayload>(identity))?.revision ?? 0;
+    const payload: StoredResumePayload = { schema: ORCHESTRATION_RESUME_RECORD_SCHEMA, runId: scope.runId, revision: expectedRevision + 1, at: judged.at, entry };
+    const recordDigest = orchestrationResumeRecordDigest(payload);
+    try {
+      const committed = await this.workflow.commit<{ revision: number; recordDigest: string }>({
+        scope: resumeScope(scope), scopeKey: durableScopeKey(resumeScope(scope), `agent-orchestration-resume:${scope.runId}`), idempotencyKey: orchestrationResumeIdempotencyKey(scope.runId, entry),
+        operations: [{ aggregateType: ORCHESTRATION_RESUME_AGGREGATE_TYPE, aggregateKey: identity.aggregateKey, expectedRevision, payload, recordDigest }],
+        result: { revision: payload.revision, recordDigest }, committedAt: judged.at, outbox: [] /* no outbox effect (D21-28) */,
+      });
+      return { ok: true, revision: committed.result.revision, recordDigest: committed.result.recordDigest, replayed: committed.idempotent };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/REVISION|CONFLICT|STALE/i.test(message)) return { ok: false, code: "stale_revision", message: "The resume record moved while this write was in flight; nothing was written over." };
+      throw error;
+    }
+  }
+
+  async history(scope: OrchestrationRunScope): Promise<OrchestrationResumeRecordEntry[]> {
+    const run = readScope(scope);
+    const identity = resumeIdentity(run);
+    const records = await this.workflow.history<StoredResumePayload>(identity);
+    return [...records].sort((a, b) => a.revision - b.revision).map((raw, index) => {
+      const payload = raw.payload;
+      if (raw.aggregateType !== ORCHESTRATION_RESUME_AGGREGATE_TYPE || raw.aggregateKey !== identity.aggregateKey || raw.scope?.tenantId !== identity.scope.tenantId || raw.scope.projectId !== identity.scope.projectId || raw.scope.branchId !== identity.scope.branchId) resumeMismatch();
+      if (raw.revision !== index + 1 || !isRecord(payload as unknown) || payload.schema !== ORCHESTRATION_RESUME_RECORD_SCHEMA || payload.runId !== run.runId || payload.revision !== raw.revision) resumeMismatch();
+      if (Object.keys(payload).sort().join(",") !== "at,entry,revision,runId,schema" || !isOrchestrationTimestamp(payload.at) || orchestrationResumeRecordDigest(payload) !== raw.recordDigest) resumeMismatch();
+      return { revision: raw.revision, at: payload.at, recordDigest: raw.recordDigest, entry: loadedResumeEntry(payload.entry) };
+    });
+  }
+}
+
+const RESUME_STORES = new WeakMap<OrchestrationRunStore, OrchestrationResumeStore>();
+/** [B21 E3] The durable record's resume store, on the SAME repository (one per record); a store that is not the durable one (a test
+ *  double, the unavailable default) has none - its runs are then never recorded for a resume and a resume of them is unavailable. The
+ *  repository is the record's own private field, read here by name because the constructor line is pinned (E2b's C90). */
+export function orchestrationResumeStoreOf(store: OrchestrationRunStore): OrchestrationResumeStore | null {
+  if (!(store instanceof DurableOrchestrationRunStore)) return null;
+  const known = RESUME_STORES.get(store);
+  if (known) return known;
+  const bound = new DurableOrchestrationResumeStore(store["workflow"]);
+  RESUME_STORES.set(store, bound);
+  return bound;
+}
+
+// ─── [B21 E3 fix: security-1] The credential shapes the resume record withholds an answer for ───────────────────────────────────────
+// Appended on purpose: the list is read only when an answer is stored, so no line cited above moves. The shared rule of the redaction
+// authority (`containsTokenAnchoredSecretShapedText`, unchanged) knows the model keys, bearer tokens and upper-case `KEY=value` dumps;
+// the coordinator's answer is the one text E3 persists whole, so the record refuses these further shapes as well - a false positive
+// only replays the closed placeholder instead of the answer (never a leak), a false negative would persist a credential.
+
+/** [B21 E3 fix: security-1] Each shape by name; an answer matching any is WITHHELD (`answer_refused`, its digest kept), never stored. */
+export const ORCHESTRATION_RESUME_CREDENTIAL_SHAPES: ReadonlyArray<{ name: string; pattern: RegExp }> = Object.freeze([ // every quantifier bounded: linear on a 60 000-character answer
+  { name: "pem-private-key", pattern: /-{5}BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY(?: BLOCK)?-{5}/ }, // [B21 E3 lead] a PGP private key block too
+  { name: "aws-key-id", pattern: /\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[0-9A-Z]{16}\b/ },
+  { name: "github-token", pattern: /\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]{20}/ },
+  { name: "slack-token", pattern: /\bxox[abposr]-[A-Za-z0-9-]{10}/ },
+  { name: "jwt", pattern: /\beyJ[A-Za-z0-9_-]{8,1024}\.eyJ[A-Za-z0-9_-]{8,1024}\.[A-Za-z0-9_-]{8}/ },
+  { name: "url-password", pattern: /\b[a-z][a-z0-9+.-]{0,30}:\/\/[^\s/:@]{1,256}:[^\s/@]{6,256}@/i },
+  { name: "secret-pair", pattern: /\b[a-z0-9_.-]{0,40}(?:secret|token|passw(?:or)?d|pwd|api[_-]?key|private[_-]?key|access[_-]?key|credential)[a-z0-9_.-]{0,40}["']?\s{0,8}[:=]\s{0,8}["']?[^\s"',;]{8}/i },
+]);
+/** [B21 E3 fix: security-1] The first credential shape an answer holds, by name, or null. */
+export function resumeAnswerCredentialShape(text: string): string | null {
+  return ORCHESTRATION_RESUME_CREDENTIAL_SHAPES.find((shape) => shape.pattern.test(text))?.name ?? null;
 }

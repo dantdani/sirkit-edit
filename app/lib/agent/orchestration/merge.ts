@@ -1049,15 +1049,15 @@ function notSealedInRun(action: ValidatedSpecialistResult["proposedActions"][num
  *  own proposal event - or, decided in this order, why nothing is: the coordinator's first turn already sealed its artifact, an
  *  escalation, a part review request, a contradicted result, [B21 D2 fix] a competitor the merge could not judge (`incomplete`: a
  *  sealed proposal that never reached the merge, or a proposing specialist that never ran), no accepted action, or more than one.
- *  Never by count or majority: agreeing results never promote an artifact (two accepted actions, even two equal edits, present nothing). */
-export const SPECIALIST_APPROVAL_OUTCOMES = Object.freeze(["presented", "coordinator_sealed", "escalated", "review_requested", "contradicted", "incomplete", "none_accepted", "several_accepted"] as const);
+ *  Never by count or majority: agreeing results never promote an artifact (two accepted actions, even two equal edits, present nothing). [B21 E3] `already_presented` (appended, OD-122's ledger): that one action, when the userMessageDigest ledger already holds the message's artifact - decided LAST, in `presented`'s place only. */
+export const SPECIALIST_APPROVAL_OUTCOMES = Object.freeze(["presented", "coordinator_sealed", "escalated", "review_requested", "contradicted", "incomplete", "none_accepted", "several_accepted", "already_presented"] as const);
 export type SpecialistApprovalOutcome = (typeof SPECIALIST_APPROVAL_OUTCOMES)[number];
 export type SpecialistApprovalDecision = { outcome: "presented"; action: MergedAcceptedAction } | { outcome: Exclude<SpecialistApprovalOutcome, "presented">; action: null };
 /** [B21 D2] The deterministic rule: present exactly one accepted, sealed-in-run action when nothing else competes with it.
  *  [B21 D2 fix] "Nothing competes" is decided over the SCHEDULER's outcome too (review regressions-3 / security-1): a merged view
  *  holds only the results the merge judged, so a peer's seal whose result was refused or whose run failed after it, and a planned
  *  proposing specialist that never started, withhold the presentation (`incomplete`). */
-export function specialistApprovalDecision(merged: Extract<MergeOutcome, { kind: "merged" }>, facts: { coordinatorSealed: boolean; outcome: Extract<SchedulerOutcome, { kind: "ran" }> }): SpecialistApprovalDecision {
+export function specialistApprovalDecision(merged: Extract<MergeOutcome, { kind: "merged" }>, facts: { coordinatorSealed: boolean; /** [B21 E3] the ledger holds this message's artifact (an earlier request of the run presented one) */ alreadyPresented?: boolean; outcome: Extract<SchedulerOutcome, { kind: "ran" }> }): SpecialistApprovalDecision {
   const withheld = (outcome: Exclude<SpecialistApprovalOutcome, "presented">): SpecialistApprovalDecision => ({ outcome, action: null });
   if (facts.coordinatorSealed) return withheld("coordinator_sealed");
   if (merged.escalations.length > 0) return withheld("escalated");
@@ -1068,7 +1068,7 @@ export function specialistApprovalDecision(merged: Extract<MergeOutcome, { kind:
   if (merged.accepted.length === 0) return withheld("none_accepted");
   if (merged.accepted.length > 1) return withheld("several_accepted");
   const action = merged.accepted[0]!;
-  return action.provenance === MERGE_ARTIFACT_PROVENANCE ? { outcome: "presented", action } : withheld("none_accepted");
+  return action.provenance === MERGE_ARTIFACT_PROVENANCE ? (facts.alreadyPresented === true ? withheld("already_presented") : { outcome: "presented", action }) : withheld("none_accepted"); // [B21 E3] never a second artifact for one user message
 }
 /** [B21 D2 fix] What keeps "nothing competing" from being established, by task id (plan order): the tasks whose attempt SEALED
  *  an artifact that no merged task judged - a result refused before the merge (`proposal_not_sealed_in_run`, a malformed document) or

@@ -950,6 +950,15 @@ Amendments to existing entries:
   (a catalog lookup the router, a pure function, does not make today), or hand earlier specialists' results to later ones (a data-flow
   change for B21-E that would make the order load-bearing).
 
+**Amendment (B21-E3, 2026-09-28) — OD-107 — DAG caps, amended: the approval window across resumes (B21-E3, 2026-09-28)**
+
+- **Amended:** the wall-time clause (the DAG inside the 10-minute proposal TTL minus the 2-minute approval window, so nothing the DAG
+  seals expires before the human sees it) holds across a route-level resume: a resume restarts the DAG wall time, and a REPLAYED seal is
+  held to the same bound at the resumed DAG's deadline - one with less than `RESUME_REPLAY_APPROVAL_WINDOW_MS` (120 000 ms) left then is not replayed; its specialist runs
+  again and seals afresh (`stale_lifetime`).
+- **The owner may choose otherwise:** bound the resume itself to the TTL minus the window after the first seal (a coarser rule: every
+  specialist re-run and re-paid in a new run).
+
 ## OD-108 — How a `SpecialistResult` enters the coordinator's provider conversation (B21-A, 2026-09-24)
 
 - **Question:** `AgentRunRequest.history` is plain text; a structured result has no turn kind of its own.
@@ -1087,6 +1096,24 @@ Amendments to existing entries:
   a shorter retention with a purge job (then the outbox needs a handled topic, or a scheduled purge outside it); an access audit now; a
   sixth record kind `call` persisted by the scheduler (then B21-B carries it, with its own idempotency segment per call).
 
+**Amendment (B21-E3, 2026-09-28) — OD-111 — The durable orchestration record, amended: the resume record (B21-E3, 2026-09-27)**
+
+- **Amended:** a sibling aggregate `agent.orchestration-resume.v1` on the same repository and scope as `agent.orchestration-run.v1`,
+  one per coordinator run, holding the resume binding (owner, message, provider and plan as digests), the coordinator's first-turn FINAL
+  TEXT - provider text, persisted so a resume replays it instead of paying for the turn again: bounded to 60 000 characters, encoded
+  exactly, withheld (null, a closed reason, its digest kept) when over the bound or credential-shaped - the redaction authority's shared
+  rule plus the record's own shapes (a PEM private key, an AWS key id, a GitHub or Slack token, a JWT, a URL with a password, a lower-case
+  `*_secret=` / `*_token=` / `password=` pair; every quantifier bounded); never reasoning, never provider state - the one-artifact claim
+  per message with its request's ordinal, the follow-up's answer digest, and each request's start and end (with whether it presented);
+  every write a compare-and-set commit, idempotent by its entry's key, no outbox topic; every load verified. Retention and access audit
+  stay deferred (RECORDED), as for the run's record.
+- **Open for the owner:** a retention bound for this record - it is the one orchestration record that holds model text whole; PROPOSED
+  default: no longer than the run record's retention once one is set, and the answer purged once the run is finished (`follow-up`
+  recorded). RECORDED: the shared redaction rule the rest of the orchestration record relies on (a specialist request's objective, a
+  result's text) does not know the record's own shapes; widening it is a cross-cutting change outside E3.
+- **The owner may choose otherwise:** replay no text (only the digest) - a resume would then replay a closed placeholder and the
+  follow-up turn would answer without the first answer; or a retention shorter than the run record's.
+
 ## OD-118 — The official documentation hosts for execution-time re-checks (B21-A, 2026-09-24)
 
 - **Question:** the hosts the runbook and the task name (`platform.openai.com/docs`, `docs.anthropic.com`) redirect or answer 403 (D21-29).
@@ -1180,6 +1207,34 @@ Amendments to existing entries:
   specialist's artifact (every accepted action listed as data only - the B21-D behaviour); or let the specialists seal beside the
   coordinator's artifact and hand that artifact to the merge as an escalation party (a coordinator-vs-specialist conflict then escalates
   instead of never arising).
+
+**Amendment (B21-E3, 2026-09-28) — OD-122 — The artifact ledger scope, the ledger across resumes as applied (B21-E3, 2026-09-27)**
+
+- **Question:** with a route-level resume, how is "one side-effecting artifact per user message" kept across the requests of one run?
+- **Applied:** keyed by `userMessageDigest` on the run's resume record `agent.orchestration-resume.v1` (beside the run's own record, the
+  same repository): (1) the coordinator's first-turn artifact events are recorded with its turn, and a resume hands them to the scheduler
+  (`artifactHeld`), so no specialist is offered a proposal and the decision is `coordinator_sealed` - the artifact itself is never
+  re-emitted; (2) when the merge's rule would present one specialist action, the runtime claims `orchestration-resume:<runId>:artifact:
+  <userMessageDigest>` first (with the claiming request's ordinal), once the merge's verdicts stand: a claim that reads back as a replay
+  withholds it as `already_presented` (appended last to the approval outcomes, decided in `presented`'s place only) unless it is VOID -
+  every request since the claiming one recorded an end that presented nothing (a claim that timed out but landed) - and a claim that
+  cannot be written stands the run down with its own line before anything is presented. A specialist proposal is never presented twice
+  for one message in one run. The resume itself: the chat body's optional `resumeRunId` (admitted beside `ALLOWED_BODY_KEYS` under the
+  orchestration flag only), authorized after the wrapper's checks by the record's owner (principal and scope, decided first), message,
+  provider and plan, with nine closed refusals (`resume_unavailable` for now, `resume_unusable` for good); the run id reused; the first
+  turn replayed from the record; the scheduler replaying what was committed against the LIVE head the resuming request carries - bound
+  also to its schematic, selection and netlist, with seals that outlive the approval window; the follow-up turn once; one request of a run
+  at a time (a compare-and-set start, a settled end - also on a throw - before the terminal, a 10-minute lease). The D2 amendment's
+  INFERRED clause (a replayed result keeps its seal) is now CONFIRMED: the ledger decides.
+- **Scope, stated:** per run and message - a message sent again without `resumeRunId` is a new run with its own ledger; at most once to
+  the human - a stream cut between the claim and the event, or a presenting request whose end is not recorded, loses that presentation
+  for the run; after a moved head the first artifact stays the message's one (stale against the new head, its apply refused by its
+  family's currency check).
+- **The owner may choose otherwise:** a ledger across runs keyed by the message digest alone within a window (as B18's retry guard does
+  for grants - it would refuse a deliberate re-ask of the same words); or at-least-once presentation - a resume re-emits exactly the
+  claimed artifact (the claim holds its kind, task, attempt, index and digest) when it is still accepted; or present again when the
+  presented artifact is stale against the live head; or a shorter lease than 10 minutes (it bounds how long a crashed request holds its
+  run).
 
 ## OD-120 — Which of the 33 exposed tools each role may be offered, as applied (B21-C, 2026-09-26)
 

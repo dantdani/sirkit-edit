@@ -257,7 +257,7 @@ describe("[B21 D2] one artifact per user message: a specialist's sealed proposal
   });
 
   it("6. the decision is deterministic and ORDERED, never by count or majority: its closed vocabulary; over one real merge and its crafted variants, coordinator_sealed outranks escalated, which outranks review_requested, then contradicted, then ([B21 D2 fix]) incomplete, then none_accepted and several_accepted - `presented` only with exactly one accepted action and nothing else in the way; the same input always yields the same decision", async () => {
-    expect([...SPECIALIST_APPROVAL_OUTCOMES]).toEqual(["presented", "coordinator_sealed", "escalated", "review_requested", "contradicted", "incomplete", "none_accepted", "several_accepted"]);
+    expect([...SPECIALIST_APPROVAL_OUTCOMES]).toEqual(["presented", "coordinator_sealed", "escalated", "review_requested", "contradicted", "incomplete", "none_accepted", "several_accepted", "already_presented"]); // [B21 E3] pin move (OD-122's ledger across resumes): `already_presented` appended - decided last, only in `presented`'s place (b21-e3-resume-runtime case 4)
     const run = await runProposingDag(["circuit-topology"], { "circuit-topology": { call: { toolId: TIER1, args: TIER1_ARGS("10k") } } });
     const base = merged(await mergeSpecialistOutcome({ runId: run.scope.runId, context: run.context, outcome: run.outcome }, mergeDeps(run.store, { now: () => Date.now() })));
     const escalation = { escalationId: "merge-0000000000000001", subjectDigest: "eng1-0000000000000001", conflictClass: "same_field" as const, allowedResolutions: ["keep_head" as const], claims: ["part" as const], keys: ["component:u1-id"], parties: [], sources: 1, humanDecision: "The human must decide." };
