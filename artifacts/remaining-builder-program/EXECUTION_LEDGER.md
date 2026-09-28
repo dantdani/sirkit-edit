@@ -3324,3 +3324,77 @@ _(discovery, reproduction and results appended below as they are observed)_
   the nine-file pin); tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19
   cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the
   tree's status unchanged). Logs under `b21/flead/gates/`.
+
+### B21-F2 — the browser spec on its own flag-on Playwright config (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-43 as the lead decided it: `playwright.orchestration.config.ts` runs the base config's fixture web server - imported, its whole
+  environment spread and its command derived from the base's with only the port moved (a base command without its port flag refuses to
+  load) - plus `SIRKIT_ORCHESTRATION_ENABLED=1` and `SIRKIT_ORCHESTRATION_ROLE_MODELS` routing the circuit specialist to anthropic (F6's
+  two parties on two providers, as case 6 routes them; set explicitly against a developer's `.env.local`) on its own port (3101),
+  `reuseExistingServer: false`, its own `testDir` (`./e2e-orchestration`) and report/output folders (git-ignored), workers 1, retries 0,
+  the base's per-test timeout; the two configs run one after the other (locally through the lead's lock script; in CI one extra
+  `page-browser-e2e` step after `pnpm exec playwright test`, the upload carrying both report folders). No production file,
+  `playwright.config.ts`, `e2e/`, `next.config.ts` or B18-E evidence changed.
+- `e2e-orchestration/specialist-orchestration.spec.ts` (namespace `b21f2000`, the fixture journey's bootstrap, the case table's sentences,
+  evidence under `artifacts/ai-control-plane-b21/evidence/`, what the page received read from the intercepted body and a pull-through
+  stream observer that keeps Stop's cancellation): F4 PROVEN (one coordinator turn for a 3D request, the router live - D21-30's browser
+  half); F6 in part (each role's provider, the E2 status line; presented once where a verifier decides; the escalation line counting two
+  sources and nothing presented where both parties seal - the principal's approval and the escalation's exact-authority citation stay
+  offline, case 6); F12 in part (E3's offer after a Stop during F9's scripted stall, the resume under the same run id, the first answer
+  replayed, the stalled specialist started again until its own deadline, one follow-up, nothing presented; the rejected presentation and
+  `already_presented` stay offline - the scripted follow-up never fails - and are D21-45).
+- Failing-first: five red runs, the spec restored by sha256 after each mutation - a flag-off server (tests 1 and 3), a DAG sentence for
+  the 3D request, an unscripted disagreement sentence, a different second message.
+- The adversarial review's six confirmed findings, fixed test-first (`b21/f2fix/`): F6's browser cell said PROVEN while the browser ran
+  one provider and cancelled the review (security-1, coverage-1, tests-01) - the config routes the circuit specialist to anthropic, test 2
+  asserts every role's provider and `2 source(s)` (red first against the blank override), F6 is PROVEN IN PART with its own class naming
+  what stays offline (page case 12, red first); F12's browser remainder untracked once D21-43 closed (coverage-2) - D21-45 opened (page case
+  14, red first); test 3 pinned the resumed specialist only by status and attempt (tests-02) - it asserts the resumed `specialist_started`
+  and the `deadline` reason (a scheduler mutation closing the unfinished task unrun kept F2's test 3 green and turns the strengthened one
+  red; `scheduler.ts` restored, sha256 and blob hash equal to HEAD's); the config re-templated the base command (tests-05) - it derives it
+  (page case 13 loads both configs: a change to the base command reaches the orchestration server; red first).
+- Budget (OD-30): the existing suite 48 of 48 in 769 s of wall time and the orchestration config 3 of 3 in 182 s, one after the
+  other: 951 s, about 15.9 of OD-30's 30 minutes (about 14.1 minutes of headroom, above the five-minute split rule); the
+  25 evidence PNGs the existing suite rewrote restored from HEAD by blob hash (F2's first measurement: 807 s and 180 s).
+- Pins moved (reviewed, reasons beside them): `b21-f-page.test.ts` case 2's browser-cell mapping (BLOCKED -> the delivered classes) and
+  case 10's role-override line (`""` -> the circuit specialist on anthropic) and F6 mapping (PROVEN -> PROVEN IN PART); the matrix's F4,
+  F6 and F12 browser cells (`_f-cases.ts`, in place, its line count unchanged so C19-C21 hold; the generator re-run, only those three cells
+  moved and `replay-trace-pins-b21.json` byte-identical); the page's C49 anchor (`- run: pnpm exec playwright test`: F2's step line
+  contains the old anchor) and C83-C86 and C92 re-pinned; cases 10 to 14 added.
+- Findings (RECORDED): the lead's `pw.sh` stops any process whose command line matches `playwright`, including a shell handed `-c
+  playwright.orchestration.config.ts` (the first run killed its own caller before printing the wall time); the runs source `pw.sh`
+  unchanged from a wrapper that assembles the config name at run time. DevTools does not keep a long streamed response body, so the spec
+  reads the stream in the page.
+- Gates, one heavy job at a time through the lock runner (`b21/f2fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (55 files, 513 of 513 - every A..F page suite
+  included, the F page's 14 cases); `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2
+  skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0,
+  no route added); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0;
+  eslint clean on the four changed and new TypeScript files; the generators with zero drift beyond the three browser cells (B11 19 of 19
+  cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run; B17-A 628 controls, CSV and
+  summary identical; the tree's status unchanged); the browser: the existing suite 48 of 48 and the orchestration config 3 of 3 one
+  after the other, after the fixes (769 s + 182 s).
+- Records: `evaluation-matrix.md` section 4 (DELIVERED); D21-30's browser half and D21-43 closed; D21-40's browser clause met; D21-45
+  opened (low). Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed the six fixes fixed and revert-sensitive and raised one new low
+  issue): the orchestration config derived its port flag from `new URL(base.url).port`, which is EMPTY for a default port - with
+  `SIRKIT_E2E_PORT=80` the guard passed on "--port " and the command became "--port 310180"; the guard now takes the default port
+  (80 / 443) when the URL omits it and matches the flag with a digit boundary (never a prefix of a longer port); page case 13 gained the
+  default-port assertions (red on the old guard, green after; the config restored by sha256), and C99 re-anchored.
+- Records: the lead's records tool read a new title-form defect only when its bold title shared a line with its body; D21-45's
+  title ends its line, so the tool skipped it silently - the lead inserted it into discovery.md by hand from the page's text (the same
+  form the tool writes) and fixed the tool.
+- Lead decision: D21-45 -> option (a) - a scripted follow-up failure in the fixture agent's script table and a browser test that
+  presents a proposal, stands down and resumes (B21-F2b, after B21-F3), because the runbook asks for browser tests of "human rejection
+  and resume".
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites and the CI guard (55 files, 513 of 513); `app/api/chat`, `app/lib/llm` and
+  `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of
+  104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183);
+  tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status
+  unchanged); then the orchestration config once after the port-guard fix (3 of 3, 3.1 min; the page's background schematic review
+  answered `missing_credentials` before any request - the fixture server holds no key). Logs under `b21/f2lead/gates/`.

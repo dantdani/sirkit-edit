@@ -19,6 +19,15 @@ its real `it(` count) or by the suite it names. No model is called anywhere in F
 over an in-process fake SDK client that answers from the scripted fixture agent, and the capsule replays run scripted adapters over the
 real runtime.
 
+**[B21 F2, 2026-09-28]** The browser spec this page recorded as STOPPED (D21-43) was delivered by B21-F2 on its own flag-on Playwright
+config, run after the existing suite, one `next dev` at a time (the lead's decision): section 4 is rewritten as delivered, the matrix's
+F4, F6 and F12 browser cells moved (F4 PROVEN; F6 and F12 PROVEN IN PART - F6's since B21-F2's adversarial review: the principal's
+approval and the escalation's exact-authority citation stay offline), section 6 records the two browser runs and the review's fixes,
+section 7 holds B21-F2's reserved texts (D21-45 new) and section 8 its citations (C82-C104, C49 and C83-C86 and C92 re-pinned); every
+statement below that said the spec is stopped carries this note. B21-F2 changed no production file, no `playwright.config.ts`, nothing
+under `e2e/`, no `next.config.ts` and no B18-E evidence; `b21-f-page.test.ts` pins its statements (cases 10 to 14, and case 2's moved
+browser mapping).
+
 ## 0. What F delivers, and what it is not
 
 - **The twelve runbook evaluations, offline through the REAL runtime (section 1).** One suite, `b21-f-evaluation.test.ts`, one case per
@@ -50,13 +59,14 @@ real runtime.
 - **What it is not:** no production behaviour change (the scripted agent and the replay capsule are the evaluation harness, reachable in
   no production path); no browser spec - STOPPED (section 4, D21-43): the fixture dev server runs one process for every spec, the
   orchestration flag is process-wide, and turning it on changes B18-E's browser proofs; no new control, route, run-event type, request key
-  or reason; no live call; no reserved-file edit.
+  or reason; no live call; no reserved-file edit. **[B21 F2, 2026-09-28]** The browser spec is delivered since, by B21-F2, on its own
+  flag-on config (section 4): F4 in the browser, F6 and F12 in part (section 1's class note).
 
 ## 1. The twelve runbook evaluations
 
 Each row is `_f-cases.ts` `B21_F_CASES` (C19) - the CSV and JSON are its rendering (C20, C21), byte-gated by case 14. The class
 columns: **offline** (the deterministic suite case through the production POST - every row PROVEN), **browser** (required by the task for
-the three rows marked; STOPPED, section 4), **model-in-loop** (record-only, OD-125: what the one live command CAN run for the row -
+the three rows marked; STOPPED, section 4 - **[B21 F2, 2026-09-28]** delivered since: F4 PROVEN, F6 and F12 PROVEN IN PART - a cell is PROVEN only where the page shows the row's item as the offline case asserts it for the page; what only the server holds (the record, the trace documents, the follow-up's envelope) stays with the offline case for every row), **model-in-loop** (record-only, OD-125: what the one live command CAN run for the row -
 `b21-f-replay-capsule.test.ts` case 9 derives every cell from the command's own case list and the capsules' scripted faults: a live DAG, the
 DAG's shape only with its scripted fault not reproduced, or no live path). The pins name the `orchestration` capsules that cover the same
 runbook line through the capsule runtime (section 2); a row with none is proven only through the POST (its scenario needs the
@@ -67,15 +77,15 @@ component-authority catalog or a second request, which a replay context does not
 | F1 | :863 | delete/replace component | dag `D-component-replacement` | PROVEN | not required | NO LIVE PATH | `1. delete/replace component` | the coordinator's own first turn reads the schematic and seals the server-chosen replacement (one `proposal_ready`); OD-122 keeps the four specialists read-only - none is even OFFERED a proposal (`coordinator_artifact_held`); the envelope's approval `coordinator_sealed`; four accepted results in the record; the coordinator's trace holds the read and the seal | (none) |
 | F2 | :864 | via changes | single `S-default` | PROVEN | not required | NO LIVE PATH | `2. via changes` | one coordinator turn, no plan or specialist event, nothing in the orchestration record; the via read before any answer, on the trace; the capsule replay checks the router's `single` first | `f02-vias-single` |
 | F3 | :865 | dimensions | single `S-default` | PROVEN | not required | NO LIVE PATH | `3. dimensions` | one coordinator turn, nothing in the record; the bounded mechanical read before any plan; one trace step per provider call; the capsule replay checks the router's `single` first | `f03-dimensions-single` |
-| F4 | :866 | 3D control request routed directly without a swarm | single `S-default` | PROVEN | BLOCKED (section 4) | NO LIVE PATH | `4. 3D control request routed directly without a swarm` | the router answers `single` before any model call; exactly ONE provider call, zero specialists, the coordinator's adapter the only one built; the stream `run_started`, `text_delta`, `run_completed` beside the context's own warnings, no orchestration event or line; nothing in the record; one trace document of one step; the capsule replay checks the router's `single` first | `f04-view3d-single` |
+| F4 | :866 | 3D control request routed directly without a swarm | single `S-default` | PROVEN | PROVEN (section 4) | NO LIVE PATH | `4. 3D control request routed directly without a swarm` | the router answers `single` before any model call; exactly ONE provider call, zero specialists, the coordinator's adapter the only one built; the stream `run_started`, `text_delta`, `run_completed` beside the context's own warnings, no orchestration event or line; nothing in the record; one trace document of one step; the capsule replay checks the router's `single` first | `f04-view3d-single` |
 | F5 | :867 | compact placement/routing | dag `D-bounded-pcb-proposal` (the runbook's scenario-5 sentence stays single) | PROVEN | not required | RECORDED (OD-125): live DAG | `5. compact placement/routing` | the scenario-5 sentence routes `single` (no layout noun); the DAG phrasing runs the coordinator, the PCB specialist and the follow-up turn; the specialist reads the board and is accepted; its per-task trace document holds its read | `f05-compact-dag` |
-| F6 | :868 | lower-power timer replacement with provider disagreement | dag `D-component-replacement` | PROVEN | BLOCKED (section 4) | NO LIVE PATH | `6. lower-power timer replacement with provider disagreement` | the circuit specialist on anthropic, the schematic specialist on openai (server-env routing, OD-117), each its own real adapter and trace document; a verifier decides: the Tier 1 compiler refuses the delete of U1, the exact replacement seals, is presented once and APPROVED by the run's principal through the family's existing path; both seal: both `contradicted`, ONE escalation citing the server-owned exact authority, nothing presented; no live path can produce the disagreement (the record-only command runs one provider for every turn) | (none) |
+| F6 | :868 | lower-power timer replacement with provider disagreement | dag `D-component-replacement` | PROVEN | PROVEN IN PART (section 4) | NO LIVE PATH | `6. lower-power timer replacement with provider disagreement` | the circuit specialist on anthropic, the schematic specialist on openai (server-env routing, OD-117), each its own real adapter and trace document; a verifier decides: the Tier 1 compiler refuses the delete of U1, the exact replacement seals, is presented once and APPROVED by the run's principal through the family's existing path; both seal: both `contradicted`, ONE escalation citing the server-owned exact authority, nothing presented; no live path can produce the disagreement (the record-only command runs one provider for every turn) | (none) |
 | F7 | :869 | missing component evidence | dag `D-component-replacement` | PROVEN | not required | NO LIVE PATH | `7. missing component evidence` | the sourcing specialist reads the authority and returns NO evidence and a blocking question: accepted as its own claim; no evidence reference anywhere in the record or the follow-up's envelope (the merge invents none); the merge has no evidence-presence rule - the gap is the specialist's own question (RECORDED, D21-44); with no authority binding the sourcing specialist is not run (`role_has_no_tools`), its task records the gap as dissent `escalated` and has no trace document | (none) |
 | F8 | :870 | stale revision during parallel specialists | dag `D-component-replacement` | PROVEN | not required | NO LIVE PATH | `8. stale revision during parallel specialists` | the four results committed against H1 and the run stood down; the resume at H2 marks each `stale` (dissent carrying the committed result's digest) and re-runs it once under its next attempt; the H1 records stay byte-identical in the append-only record; a resume at an unmoved head replays all four | (none) |
 | F9 | :871 | one specialist timeout | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `9. one specialist timeout` | the stalled specialist's own deadline ends it: `escalated` `deadline` for that task only (its trace `failed`, `deadline`); every later specialist runs; the follow-up turn answers over the partial set (`partial_result` 3 of 4); one terminal | `f09-timeout-dag` |
 | F10 | :872 | provider quota failure | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `10. provider quota failure` | a specialist's (metered) `429 insufficient_quota` opens the breaker at once; no further paid call (two calls in all); degraded `provider_outage`; the task's dissent and its trace `provider_insufficient_quota`; no Retry offered; the next request makes no call - one `run_failed` `provider_breaker_open`; case 16, D21-42's limit: a 429 on the coordinator's first turn (gated, not metered) fails the request `provider_insufficient_quota`, the breaker stays closed and the next request pays its one call again | `f10-quota-dag` |
 | F11 | :873 | malicious specialist result | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `11. malicious specialist result` | a release tool, an approval claim and a smuggled secret refused by A's gate before content (`tool_request_not_permitted`, `unknown_key`, `secret_shaped_text`), never handed on; a directive in prose stays the specialist's unverified claim inside the envelope that says it is data, never instructions, in a turn OFFERED reads only (the first turn was offered proposals); nothing sealed, presented or applied | `f11-malicious-dag` |
-| F12 | :874 | human rejection and resume | dag `D-component-replacement` | PROVEN | BLOCKED (section 4) | NO LIVE PATH | `12. human rejection and resume` | the first request presents the replacement and stands down (its follow-up turn failed); the human rejects it (nothing applied); the resume replays the first turn (no step) and the four committed specialists, presents nothing again (`already_presented`, one claim) and makes the follow-up turn ONCE; a second resume is `resume_completed` | (none) |
+| F12 | :874 | human rejection and resume | dag `D-component-replacement` | PROVEN | PROVEN IN PART (section 4) | NO LIVE PATH | `12. human rejection and resume` | the first request presents the replacement and stands down (its follow-up turn failed); the human rejects it (nothing applied); the resume replays the first turn (no step) and the four committed specialists, presents nothing again (`already_presented`, one claim) and makes the follow-up turn ONCE; a second resume is `resume_completed` | (none) |
 
 **RECORDED on F8.** The runbook names parallel specialists; OD-107 runs them one at a time, and every specialist of ONE request is bound
 to that request's snapshot (the chat path has no server-side live head: D21-17's recorded clause). So a commit landing between two
@@ -252,31 +262,127 @@ SIRKIT_LIVE_ORCHESTRATION_EVALUATION=1 [SIRKIT_LIVE_ORCHESTRATION_PROVIDER=anthr
 under the owner's authorization of 2026-09-24, and records here the date, the provider, the requests used against the bound, the JSON
 document's per-case summary and the verdict in the closed vocabulary.]**
 
-## 4. The browser spec - STOPPED (D21-43)
+## 4. The browser spec - DELIVERED by B21-F2 on its own flag-on config (D21-43 decided)
 
-The task asks for `e2e/specialist-orchestration.spec.ts`: a 3D request's one-coordinator-turn shape, a routed replacement's E2 status line
-and escalation line, and a rejected-then-resumed run, riding `page-browser-e2e` by `testDir` (C48, C49). Each needs the chat route's
-orchestration flag ON in the dev server Playwright starts. It was not written, for these reasons, each read at its source:
+**[B21 F2, 2026-09-28]** B21-F stopped here (D21-43); the lead decided it and B21-F2 delivered the spec. The three browser scenarios
+(F4, F6, F12) run in `e2e-orchestration/specialist-orchestration.spec.ts` (C87-C92, C101-C104) against the REAL application with the orchestration
+flag ON, on a SECOND Playwright config, `playwright.orchestration.config.ts` (C82-C86, C97-C100), run AFTER the existing suite - locally through the
+lead's lock script, in CI as ONE extra step of `page-browser-e2e` (C93) whose upload carries both report folders (C94). No production
+file, `playwright.config.ts`, `e2e/`, `next.config.ts` or B18-E evidence changed. **CONFIRMED** (the runs below; logs under the
+scratchpad's `b21/f2/` and, for the adversarial review's fixes (section 6), `b21/f2fix/`).
 
-- **The flag is process-wide.** `orchestrationEnabled` reads the server's environment (C22); Playwright starts ONE `next dev` for every
-  spec with ONE environment (`playwright.config.ts`, C50, which sets no orchestration flag), and no request or cookie can turn it on for one
-  spec without a production-side seam. **CONFIRMED.**
+**Why a second config - F's findings, still true of the existing config.**
+
+- **The flag is process-wide.** `orchestrationEnabled` reads the server's environment (C22) at REQUEST time; Playwright starts ONE
+  `next dev` for every spec of a config, with ONE environment (`playwright.config.ts`, C50, which sets no orchestration flag), and no
+  request or cookie can turn it on for one spec without a production-side seam. **CONFIRMED.**
 - **Turning it on for the whole suite changes B18-E's browser proofs.** With the flag on, "Release the board." - sent by
   `agent-execution.spec.ts` (C51) to prove that a FORGED Tier 3 call is refused by the loop (`unknown_tool`) and that the page contradicts
-  the assistant's interim claim - is refused by the router BEFORE any model call (C52: rule `T3-release`), so neither the forged call nor
-  the claim exists; the spec's reply wait and its assertions fail, and so does the B18-D S5 case that counts that run's
-  "nothing was changed" line. Scenario 4's sentence (C53, C54) becomes a replacement DAG whose follow-up turn answers last. Moving those
-  proofs is a change to another chapter's browser evidence, which F may not make. **CONFIRMED** (the router's answers,
-  `b21-f-page.test.ts` case 5).
-- **A second dev server cannot start beside the first.** Next 16.2.6 locks its dist dir for `next dev` by default (`lockDistDir: true` in
-  the installed `next/dist/server/config-shared.js`; a second server prints "Another next dev server is already running." and exits), so a
-  second Playwright web server with the flag on needs a distinct `distDir` - a change to `next.config.ts` - and a second cold compile and
-  its memory inside the 16 GB machine and OD-30's 30-minute job. **CONFIRMED** (the installed package, read 2026-09-28).
+  the assistant's interim claim - is refused by the router BEFORE any model call (C52: rule `T3-release`), and scenario 4's sentence (C53,
+  C54) becomes a replacement DAG. **CONFIRMED** (the router's answers, `b21-f-page.test.ts` case 5; in the browser, failing-first run (1)
+  below shows the flag-off server's forged call where the flag-on server refuses).
+- **Two dev servers cannot share the dist dir.** Next 16.2.6 locks it for `next dev` by default (`lockDistDir: true` in the installed
+  `next/dist/server/config-shared.js`; a second server prints "Another next dev server is already running." and exits). **CONFIRMED.**
 
-What stands instead: the three browser scenarios are proven offline through the production POST (F4, F6, F12), and the scripted
-vocabulary the spec would use is the one the route cases use (section 2) - a browser run with the flag on would reach the same scripts.
-The full browser suite was run once at the end with F's fixture changes in place, to show the extended script table leaves every existing
-browser proof green and to measure the budget (section 6). The options are the lead's (section 7, D21-43).
+**The lead's decision, as built.** The flag is read at request time, so the flag-on server needs no second dist dir as long as it never
+runs BESIDE the flag-off one:
+
+- `playwright.orchestration.config.ts` imports the base config (C82) and runs ITS web server - the WHOLE environment spread (C85) and
+  the command DERIVED from the base's with only its port moved (C97, C98; a base command without its `--port` flag refuses to load, C99),
+  so a change to the base command reaches this server (`b21-f-page.test.ts` case 13 loads both configs and proves it) - plus
+  `SIRKIT_ORCHESTRATION_ENABLED=1` (C86), on its own port (3101) with `SIRKIT_EXPECTED_ORIGIN` its own origin, and
+  `SIRKIT_ORCHESTRATION_ROLE_MODELS` routing the circuit specialist to anthropic (C100: F6's two parties on two providers, as case 6
+  routes them - every other role inherits the page's openai, and the scripted agent serves both providers offline; set explicitly, so a
+  developer's `.env.local` never re-routes a role in the proof - the base config's own `DATABASE_URL` rule); `reuseExistingServer: false`
+  (C84: it never attaches to a running flag-off server - a busy port fails the run); its own `testDir`, `./e2e-orchestration` (C83),
+  outside `./e2e`, so the existing suite and B18-E's proofs never see the flag; its own report and output folders,
+  `playwright-report-orchestration` and `test-results-orchestration`, ignored by git like the existing ones (C95, C96); workers 1,
+  retries 0 and the base's per-test timeout (180 s; the spec raises its own to 300 s for its stall, as B18-E's and B17's specs do).
+- The two configs run ONE AFTER THE OTHER: the CI step follows `pnpm exec playwright test` (C49, C93) - one `next dev` at a time, no second
+  dist dir, no double memory, no `next.config.ts` change. The flag-on server started every time after the flag-off one had stopped (the
+  budget run below): the task's stop condition did not arise.
+
+**The spec.** The fixture journey's bootstrap imported from `../e2e/fixture-journey.ts` under its own UUID namespace, `b21f2000` (C87);
+evidence PNGs to `artifacts/ai-control-plane-b21/evidence/`; the sentences are the case table's (`B21_F_SENTENCES`, imported) and the lines
+it expects are the page's own builders (`orchestrationStatusLine`, `chatResumeOfferLine`, `chatResumingLine`), never copies. What the page
+received is read two ways, never from a clock: the `/api/chat` request body (the network request, intercepted) and the NDJSON stream the
+page's reader pulled - a PULL-THROUGH body installed before the page loads (C88, B18-D review 2's technique) that hands the page the same
+bytes and whose cancel cancels the source (C89), so Stop still closes the connection (a tee would keep it open). Playwright's own response
+body is NOT used: DevTools does not keep a streamed body reliably ("No data found for resource with given identifier" on the two-minute
+resumed run, and once on a DAG run of well under a second - RECORDED).
+
+1. **F4 / D21-30's browser half** (C90). The router is live in THIS server: "Release the board." is refused before any model call (the
+   stream `run_started`, one `warning`, `run_completed` with 0 steps, 0 tool calls and the Tier 3 sentence as its answer). Then the 3D
+   sentence: its body carries it as the user's last message and no `resumeRunId`; the stream has ONE `run_started`, ONE terminal
+   (`run_completed`, 1 step, 0 tool calls), NO orchestration event (no `plan`, `specialist_started`, `specialist_finished`,
+   `partial_result` or `degraded`) and no `Orchestration:` line; the page shows the scripted reply and no `Specialists:` or
+   `Orchestration:` line anywhere in the chat.
+2. **F6, in part** (C91). The composer shows "ask the assistant" for the runbook's scenario-17 sentence (E4, D21-38); the request carries
+   the page's default provider, openai, and every `specialist_started` names its role's provider - the circuit specialist on anthropic
+   (the config's override, C100), the other three on openai (C102). (a) A verifier decides: ONE `plan` (`D-component-replacement`, 4
+   scheduled), the four roles started in order, the circuit specialist's `sirkit.schematic.propose-tier1-edit` refused (its delete of U1
+   never seals), ONE `proposal_ready` and ONE "presented for approval" line, ONE follow-up answer ("approval: presented."), the page's
+   status line `Specialists: 4 scheduled · 4 finished` and the exact replacement's own review dialog - cancelled, nothing changed. (b) Both
+   scripted parties seal and disagree on U1, on two providers: no presenting event and no presented line, ONE `ESCALATED to the human`
+   line counting `2 source(s)` (C101: one provider is one source, so the two parties are two sources, never more) and two `contradicted`
+   lines, the partial result 2 of 4 (the merge withheld both), ONE follow-up answer told "1 escalation(s)"; the page shows the escalation
+   line and `Specialists: 4 scheduled · 4 finished · partial result: 2 of 4 usable`, and no review opens. **F6 in part (RECORDED):** the
+   principal's approval of the presented replacement stays offline - the browser cancels the review (B18-E's E16 applies an exact
+   replacement through the same dialog, flag off) and case 6 approves it through the family's path, checking the receipt's principal and
+   origin run; and the escalation's exact-authority citation lives in the follow-up turn's envelope, which the page never receives (case 6
+   reads it there). So F6's browser cell is PROVEN IN PART (C19's row).
+3. **F12's browser half** (C92). F9's scripted stall, "Design a 555 timer LED blinker." (the composer's `generate` overridden to the
+   assistant with the page's own control): the coordinator answers, the plan is recorded, the stalled circuit specialist runs - and the
+   human presses Stop. The stream ends `cancelled` with no terminal, one `plan` (4 scheduled), one `specialist_started`, no presenting
+   event; the page shows `Specialists: 4 scheduled · 0 finished`, "Stopped by you" and E3's offer line, exactly
+   `chatResumeOfferLine(<runId>, <provider>)`. The same message sent again carries `resumeRunId` = that run id; the page's log opens with
+   `chatResumingLine(<runId>)`; the route answers under the SAME run id (`X-Sirkit-Run-Id`); the stream carries "Orchestration: resumed run
+   <runId>: the first answer is replayed from the record, no model call; ..." and the recorded first answer verbatim; the stalled
+   specialist STARTS again (its `specialist_started` at attempt 1, C103) until its OWN deadline ends it (`escalated`, reason `deadline`,
+   C104), the other three are `accepted`, the partial result 3 of
+   4, ONE follow-up answer and ONE terminal; nothing is presented in either request; no second offer line (the run finished).
+
+**F12 in part (RECORDED).** F12's POST case presents the schematic specialist's replacement, the human rejects it and the run stands down
+because its FOLLOW-UP turn failed (the fake SDK client's 529); the resume then presents nothing again (`already_presented`). In the browser
+every turn is the scripted fixture agent, whose follow-up turn always answers, and the one interruption its per-role table offers is F9's
+stall, BEFORE anything is presented. So the browser proves E3's resume on the chat surface - the offer, the same message, the resuming
+line, the replayed first answer, one follow-up, nothing presented - but not the rejection of a presented proposal or `already_presented`:
+those stay proven offline (case 12). A browser stand-down after a presentation needs a fixture change (a scripted follow-up failure), which
+F2 does not make (no production change). Test 3's nothing-presented checks therefore cannot see a second presentation or a missing
+`already_presented` (nothing is presented before the Stop). **[B21 F2 fix: coverage-2]** That remainder stays OPEN as D21-45 (new, low;
+section 7), with its options for the lead - it is not closed with D21-43.
+
+**Failing-first.** Each test red first, through the lead's lock script, the spec restored by sha256 after each mutation (logs
+`b21/f2/ff-*.log`): (1) against a flag-OFF server (the same config with the flag "0", a scratchpad config) test 1 fails at the router
+witness - the scripted agent receives "Release the board." and the stream carries its forged call's `tool_refused` (B18-E scenario 8's
+shape); (2) with the 3D sentence swapped for a DAG phrasing test 1 fails at "no plan, no specialist_started / finished" (`plan`,
+`specialist_started` and `specialist_finished` received); (3) with the disagreement sentence swapped for an unscripted variant ("Swap the
+NE555 (U1) for a low-power CMOS timer.": no per-role script, so nobody seals) test 2 passes its verifier-decides half and fails at "ONE
+escalation" (none); (4) against the flag-OFF server test 3 fails waiting for the stalled specialist's line (the sentence is one
+coordinator turn there); (5) with the second send a different message test 3 fails at "the resume names the offered run" (no
+`resumeRunId`: the page offers a resume only for the same message). **[B21 F2 fix]** The adversarial review's fixes, red first too (logs
+`b21/f2fix/pw-r*.log`): (6) the strengthened test 2 against the unfixed config (the role override blank) fails at "each role on its
+routed provider" (the circuit specialist on openai); (7) under a deliberate mutation of `scheduler.ts` - a resume that closes the
+unfinished stalled task at its next attempt WITHOUT running it, reason `deadline` - F2's test 3 PASSED (the finding reproduced) and the
+strengthened test 3 fails at "the stalled specialist starts again in the resumed run, at attempt 1"; `scheduler.ts` restored, its sha256
+and blob hash equal to HEAD's.
+
+**The budget (OD-30).** One after the other through the lead's lock script, on this machine, after the adversarial review's fixes: the
+existing suite 48 of 48 in 769 s of wall time (Playwright's own count 12.8 min; F's run measured 462 s and F2's first 807 s - the same
+suite, the machine's load differs, and the B21 discovery recorded 818 s once) and the orchestration config 3 of 3 in 182 s (3.0 min; test 3
+waits for the stalled specialist's own 120 s deadline, the production `runDeadlineMs`): 951 s, about 15.9 minutes of OD-30's
+30-minute job, leaving about 14.1 minutes before the job's timeout for CI's install steps and the spread between machines - above
+OD-30's five-minute split rule (F2's first measurement, before the fixes: 807 s and 180 s, 987 s). The 25 evidence PNGs the existing
+suite rewrote were restored from HEAD by blob hash (`git show HEAD:<path>`, `git hash-object` equal to `git ls-tree HEAD`, 25 of
+25). The five F2 evidence PNGs are this orchestration run's.
+
+**Findings on the way (RECORDED).** (a) The lead's `pw.sh` stops every process whose command line matches `playwright` after a run -
+including a shell that handed it `-c playwright.orchestration.config.ts`: the first local run killed its own shell and its caller before
+printing the wall time (the Playwright run itself had finished). The runs above source `pw.sh` unchanged from a wrapper that assembles the
+config name at run time (`b21/f2/src-run.sh`); CI is unaffected. (b) Once, while Playwright stopped a green run's server, `next dev`
+printed "Found a change in next.config.ts. Restarting the server"; `next.config.ts` was unchanged (git clean, its mtime 2026-09-17) - no
+result depended on it. (c) In the fixes' run the same stop took a shell whose own command line named the config (a `grep`
+beside the call) - after the run had printed its result (RECORDED; the wrapper is the way to call it).
 
 ## 5. What F does NOT do
 
@@ -289,7 +395,8 @@ browser proof green and to measure the budget (section 6). The options are the l
   or request key; no change to the v1 trace contract; `trace.ts`, `trace-recorder.ts`, `replay-context.ts`, `evaluation.ts`,
   `evaluation-cases.ts` and the three pcb-shape files untouched.
 - No live call and no credential read; no browser spec (section 4); no new runtime dependency; no reserved-file edit (their texts are in
-  section 7).
+  section 7). **[B21 F2, 2026-09-28]** B21-F2 delivered the browser spec on its own flag-on config (section 4) - with no production
+  change, no new control and no new runtime dependency.
 
 
 ## 6. Suites, gates, the browser run
@@ -298,7 +405,8 @@ browser proof green and to measure the budget (section 6). The options are the l
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts` | 16 | the twelve runbook evaluations through the production POST (fake SDK clients, the scripted per-role specialists), D21-40 through the fixture gate (case 13), the matrix byte-gate (case 14), the v4 pins with each capsule's route (case 15), D21-42's first-turn leg of F10 (case 16) |
 | `app/lib/agent/orchestration/__tests__/b21-f-replay-capsule.test.ts` | 10 | capsule v4: the id and v3 refused, the task lists validated exactly (plan indexes, one list per role), stalls only in a task's list, no task graph as one loop, the category's replays deterministic under their budgets, the nine files neutral, the live command refusing without its flag (injected throwing factories, no network), its request bound (retries 0, one counter), the matrix's model-in-loop column, the runner refusing an unplanned task |
-| `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 9 | this page, and (case 9) the dated notes on every stale v3 statement and the discovery's b11-3 citations unmoved |
+| `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 14 | this page, and (case 9) the dated notes on every stale v3 statement and the discovery's b11-3 citations unmoved; [B21 F2, 2026-09-28] cases 10 and 11 added (section 4 delivered: the orchestration config, the spec, the CI step, the matrix's browser cells; every stopped statement noted, F2's reserved texts), case 2's browser mapping moved (BLOCKED to the delivered classes); [B21 F2 fix] cases 12 to 14 added (F6's two providers and its PROVEN IN PART class, the derived command - both configs loaded, `@playwright/test` stubbed - and D21-45), case 10's role-override line and F6 mapping moved |
+| `e2e-orchestration/specialist-orchestration.spec.ts` | 3 | [B21 F2] `test(` blocks, run by `playwright.orchestration.config.ts` (the flag on) after the existing suite: F4 / D21-30's browser half, F6, F12's browser half (section 4) |
 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 34 | B11.3's cases; §D's capsule id moved to v4 and v3 refused, on one line |
 | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 17 | B11.4's cases; §G's capsule id moved to v4 |
 | `app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts` | 16 | E2b's cases; case 8's replay-capsule hash moved |
@@ -321,6 +429,11 @@ TypeScript file (14 files; the script again after its fix). Zero drift: the B21 
 two processes; the B11 generator (19 of 19 cases, 61 of 61 checks) and the B09 agent generator left the tree unchanged; the B17-A inventory
 generated into the scratchpad (628 controls) is identical to the committed CSV and summary. After the tsc fix (a type argument, no
 behaviour) the three F suites and both E2b suites were run again (`gates/rerun.log`: 5 files, 59 of 59).
+
+**[B21 F2, 2026-09-28] The browser runs since.** The existing suite and the orchestration config ran one after the other through the
+lead's lock script: 48 of 48 in 807 s, then 3 of 3 in 180 s - 987 s of OD-30's 30 minutes (`b21/f2/budget-*.log`); after the adversarial
+review's fixes, again: 48 of 48 in 769 s, then 3 of 3 in 182 s - 951 s (section 4, the budget; `b21/f2fix/budget-*.log`); each
+time the evidence PNGs the existing suite rewrote were restored from HEAD by blob hash (25 of 25 the second time).
 
 **The browser run.** The FULL browser suite ran once at the end of F's first run through the lead's lock script with F's fixture changes in
 place (no new spec, the flag off as committed): 48 of 48 passed in 462 s of wall time (Playwright's own count 7.7 min), inside OD-30's
@@ -361,6 +474,35 @@ for a test-strength finding, the strengthened test shown red under a deliberate 
   plan's (C66), one list per role (C65), the runner refuses an unplanned task before it runs (C67) - capsule cases 2 and 10 (red first).
 - **tests-03** (the single capsules never met the router): every replay records the router's answer (C68) and every case checks it (C70) -
   case 15 (red first: no route); M3 now also turns case 15 red.
+
+### [B21 F2, 2026-09-28] B21-F2's adversarial review, fixed
+
+B21-F2's review confirmed six findings (one of them three times); each was fixed test-first - the reproducing test red on the unfixed
+tree, or, for a test-strength finding, the strengthened test red under a deliberate mutation of the source, restored by hash - then
+re-run:
+
+- **security-1, coverage-1, tests-01** (F6's browser cell said PROVEN while the browser ran every role on one provider - the escalation
+  counted one source - and cancelled the review): the config routes the circuit specialist to anthropic (C100), test 2 asserts every
+  role's provider (C102) and `2 source(s)` (C101) - red first against the blank override (section 4, failing-first 6) - and F6's cell is
+  its own PROVEN IN PART class naming what stays offline (the principal's approval, the escalation's exact-authority citation in the
+  envelope); page case 12 (red first: the override parsed to no route).
+- **coverage-2** (F12's browser remainder left untracked once D21-43 closes): D21-45 opened (section 7), named by D21-43's closure, the §10
+  line, PROGRAM_STATE's `nextAction`, section 4 and F12's cell; page case 14 (red first: no D21-45).
+- **tests-02** (the resumed stalled specialist pinned only by status and attempt): test 3 asserts its resumed `specialist_started` at
+  attempt 1 (C103) and the `deadline` reason (C104); a scheduler mutation closing the unfinished task unrun kept F2's test 3 green and
+  turns the strengthened test red (section 4, failing-first 7).
+- **tests-05** (the config re-templated the base command, so the "never copied" claim was false for it and a base change would not reach
+  the orchestration server): the command is derived from the base's with only the port moved (C97-C99); page case 13 loads both configs
+  with `@playwright/test` stubbed and a probe appended to the base command (red first: the orchestration command lacked it).
+
+Gates after the fixes (one heavy job at a time through the lock runner; `b21/f2fix/gates/`): every B21 suite with the route suites, the E4
+composer suite and the CI job-scope guard (`gates/gate-1-b21.log`: 55 files, 513 of 513); `app/api/chat` and `app/lib/acquisition` in
+full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the B17-A inventory and the B18-D UI gates
+(63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and the B18-C/B18-E suites
+(16 files, 108 of 108); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp`
+with `app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2
+nine-file pin); tsc 0; eslint clean on the four changed and new TypeScript files; the B09, B11, B21 and B17-A generators with zero drift
+(24 files byte-identical on the re-run, 628 controls identical, the tree's status unchanged); the browser pair above (48 of 48, then 3 of 3).
 
 ## 7. For the lead — the reserved texts, in full
 
@@ -535,6 +677,137 @@ The stale test titles the closeout retitles with OD-113's set (each carries its 
 files are byte-identical to HEAD ..."; `b21-e2b-page.test.ts` case 4 "... (byte-identical to HEAD 41330e6) ..." (`b21-f-page.test.ts` case 1, F's own new suite, was
 retitled "ten pages" by the lead before the commit).
 
+### B21-F2 — the reserved texts, in full (the lead's to apply)
+
+B21-F2 adds no owner decision (the lead decided D21-43; OD-30's rule is applied, not changed); it opens ONE new defect, D21-45 (low),
+for the lead (its adversarial review's coverage-2). Its texts for the lead's files:
+
+#### The README rows (`artifacts/ai-control-plane-b21/README.md`)
+
+In the B21-F row, the clause "the browser spec STOPPED - the orchestration flag is process-wide in the one fixture dev server and turning
+it on changes B18-E's browser proofs (D21-43, the lead's decision)" gains, after it: "; [B21 F2] delivered by B21-F2 (the row below)".
+A new row after B21-F:
+
+| B21-F2 the browser spec on its own flag-on Playwright config, run after the existing suite | `evaluation-matrix.md` section 4 (and the matrix's F4, F6 and F12 browser cells), `evaluation-matrix.{csv,json}`, `evidence/f4-view3d-one-coordinator-turn.png`, `evidence/f6-verifier-decides-presented-once.png`, `evidence/f6-disagreement-escalated-nothing-presented.png`, `evidence/f12-resume-offer-after-stop.png`, `evidence/f12-resumed-run-finished.png`; code (no production file) `playwright.orchestration.config.ts` (the base config's web server imported - its environment spread, its command derived with only the port moved - plus `SIRKIT_ORCHESTRATION_ENABLED=1` and the circuit specialist routed to anthropic, its own port, test dir and folders, never reusing a server), `e2e-orchestration/specialist-orchestration.spec.ts` (three tests), one `page-browser-e2e` step and the upload's two folders, `.gitignore` | CONFIRMED (the flag-on browser proof, run AFTER the existing suite, one `next dev` at a time - no second dist dir, no `next.config.ts`, `playwright.config.ts`, `e2e/` or B18-E evidence change; F4 PROVEN: a 3D control request is one coordinator turn - one `run_started`, one terminal, no orchestration event, no specialist line - with the router live in that server (D21-30's browser half closed); F6 in part: the scenario-17 sentence from the composer, each role on its routed provider (the circuit specialist on anthropic, the others on the page's openai), the E2 status line, the one sealed replacement presented once where a verifier decides (the review cancelled), and where both scripted parties seal the escalation line counting two sources with nothing presented - the principal's approval and the escalation's exact-authority citation stay offline (case 6); F12 in part: E3's offer after the human's Stop during F9's scripted stall, the same message resumed under the same run id with the first answer replayed, the stalled specialist started again until its own deadline, one follow-up, nothing presented - the rejected presentation and `already_presented` stay offline (case 12: the scripted follow-up never fails in the browser), tracked as D21-45; each test red first (a flag-off server, a DAG sentence, an unscripted disagreement, a different second message) and the adversarial review's six findings fixed test-first (a blank role override and a scheduler mutation red in the browser, three page cases red); both runs 769 s (48 of 48) and 182 s (3 of 3) one after the other, 951 s of OD-30's 30 minutes; D21-43 closed, D21-45 opened) |
+
+#### The ledger paragraph (`artifacts/remaining-builder-program/EXECUTION_LEDGER.md`)
+
+### B21-F2 — the browser spec on its own flag-on Playwright config (2026-09-28 local; increment workflow + lead; this commit)
+
+- D21-43 as the lead decided it: `playwright.orchestration.config.ts` runs the base config's fixture web server - imported, its whole
+  environment spread and its command derived from the base's with only the port moved (a base command without its port flag refuses to
+  load) - plus `SIRKIT_ORCHESTRATION_ENABLED=1` and `SIRKIT_ORCHESTRATION_ROLE_MODELS` routing the circuit specialist to anthropic (F6's
+  two parties on two providers, as case 6 routes them; set explicitly against a developer's `.env.local`) on its own port (3101),
+  `reuseExistingServer: false`, its own `testDir` (`./e2e-orchestration`) and report/output folders (git-ignored), workers 1, retries 0,
+  the base's per-test timeout; the two configs run one after the other (locally through the lead's lock script; in CI one extra
+  `page-browser-e2e` step after `pnpm exec playwright test`, the upload carrying both report folders). No production file,
+  `playwright.config.ts`, `e2e/`, `next.config.ts` or B18-E evidence changed.
+- `e2e-orchestration/specialist-orchestration.spec.ts` (namespace `b21f2000`, the fixture journey's bootstrap, the case table's sentences,
+  evidence under `artifacts/ai-control-plane-b21/evidence/`, what the page received read from the intercepted body and a pull-through
+  stream observer that keeps Stop's cancellation): F4 PROVEN (one coordinator turn for a 3D request, the router live - D21-30's browser
+  half); F6 in part (each role's provider, the E2 status line; presented once where a verifier decides; the escalation line counting two
+  sources and nothing presented where both parties seal - the principal's approval and the escalation's exact-authority citation stay
+  offline, case 6); F12 in part (E3's offer after a Stop during F9's scripted stall, the resume under the same run id, the first answer
+  replayed, the stalled specialist started again until its own deadline, one follow-up, nothing presented; the rejected presentation and
+  `already_presented` stay offline - the scripted follow-up never fails - and are D21-45).
+- Failing-first: five red runs, the spec restored by sha256 after each mutation - a flag-off server (tests 1 and 3), a DAG sentence for
+  the 3D request, an unscripted disagreement sentence, a different second message.
+- The adversarial review's six confirmed findings, fixed test-first (`b21/f2fix/`): F6's browser cell said PROVEN while the browser ran
+  one provider and cancelled the review (security-1, coverage-1, tests-01) - the config routes the circuit specialist to anthropic, test 2
+  asserts every role's provider and `2 source(s)` (red first against the blank override), F6 is PROVEN IN PART with its own class naming
+  what stays offline (page case 12, red first); F12's browser remainder untracked once D21-43 closed (coverage-2) - D21-45 opened (page case
+  14, red first); test 3 pinned the resumed specialist only by status and attempt (tests-02) - it asserts the resumed `specialist_started`
+  and the `deadline` reason (a scheduler mutation closing the unfinished task unrun kept F2's test 3 green and turns the strengthened one
+  red; `scheduler.ts` restored, sha256 and blob hash equal to HEAD's); the config re-templated the base command (tests-05) - it derives it
+  (page case 13 loads both configs: a change to the base command reaches the orchestration server; red first).
+- Budget (OD-30): the existing suite 48 of 48 in 769 s of wall time and the orchestration config 3 of 3 in 182 s, one after the
+  other: 951 s, about 15.9 of OD-30's 30 minutes (about 14.1 minutes of headroom, above the five-minute split rule); the
+  25 evidence PNGs the existing suite rewrote restored from HEAD by blob hash (F2's first measurement: 807 s and 180 s).
+- Pins moved (reviewed, reasons beside them): `b21-f-page.test.ts` case 2's browser-cell mapping (BLOCKED -> the delivered classes) and
+  case 10's role-override line (`""` -> the circuit specialist on anthropic) and F6 mapping (PROVEN -> PROVEN IN PART); the matrix's F4,
+  F6 and F12 browser cells (`_f-cases.ts`, in place, its line count unchanged so C19-C21 hold; the generator re-run, only those three cells
+  moved and `replay-trace-pins-b21.json` byte-identical); the page's C49 anchor (`- run: pnpm exec playwright test`: F2's step line
+  contains the old anchor) and C83-C86 and C92 re-pinned; cases 10 to 14 added.
+- Findings (RECORDED): the lead's `pw.sh` stops any process whose command line matches `playwright`, including a shell handed `-c
+  playwright.orchestration.config.ts` (the first run killed its own caller before printing the wall time); the runs source `pw.sh`
+  unchanged from a wrapper that assembles the config name at run time. DevTools does not keep a long streamed response body, so the spec
+  reads the stream in the page.
+- Gates, one heavy job at a time through the lock runner (`b21/f2fix/gates/`): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (55 files, 513 of 513 - every A..F page suite
+  included, the F page's 14 cases); `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2
+  skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63
+  files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E
+  scenario suite (16 files, 108 of 108); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0,
+  no route added); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0;
+  eslint clean on the four changed and new TypeScript files; the generators with zero drift beyond the three browser cells (B11 19 of 19
+  cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run; B17-A 628 controls, CSV and
+  summary identical; the tree's status unchanged); the browser: the existing suite 48 of 48 and the orchestration config 3 of 3 one
+  after the other, after the fixes (769 s + 182 s).
+- Records: `evaluation-matrix.md` section 4 (DELIVERED); D21-30's browser half and D21-43 closed; D21-40's browser clause met; D21-45
+  opened (low). Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+
+#### PROGRAM_STATE.json (`artifacts/remaining-builder-program/PROGRAM_STATE.json`)
+
+`currentCheckpoint`: "B21-F2 committed on chapter/b21-specialist-orchestration: the browser spec on its own flag-on Playwright config
+(`playwright.orchestration.config.ts`, the base web server - its command derived, its environment spread - plus the orchestration flag
+and the circuit specialist routed to anthropic, its own port, test dir and folders), run after the existing suite, one next dev at a time
+(D21-43 closed): F4 PROVEN, a 3D request is one coordinator turn with the router live (D21-30's browser half closed); F6 in part, each role
+on its routed provider, the status line, presented once where a verifier decides and the escalation line counting two sources with
+nothing presented where both parties seal (the approval and the exact-authority citation offline); F12 in part (E3's resume on the chat
+surface after a Stop during the scripted stall, the stalled specialist started again until its own deadline; the rejected presentation
+and already_presented stay offline: D21-45 opened, low); each test red first and the adversarial review's six findings fixed test-first;
+both browser runs 951 s (769 + 182) of OD-30's 30 minutes; next B21-F3 (the merge's evidence gap, D21-44), then the B21
+closeout".
+`nextAction`: "B21-F3: the merge records the evidence gap (D21-44, option a); D21-45 (F12's browser remainder: a presented run that stands
+down and resumes in the browser) for the lead's decision - (a) a scripted follow-up failure in the fixture agent's script table and a
+browser test, or (b) recorded as met by E3's browser resume and case 12; then the B21 closeout (commit 1/2 the single-agent statements
+superseded - with the stale titles `evaluation-matrix.md` section 7 lists - commit 2/2 the records and the verdict; PR #11 undrafted after
+green CI); the one live run under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs,
+at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner".
+
+#### Discovery closure clauses (`discovery.md` §4, appended to each defect; D21-45 is a new defect after D21-44; §10 gains a B21-F2 amendment)
+
+- **D21-30 — No browser observable proves that a direct Tier 0/1 command never recruits specialists.** — CLOSED by B21-F2 (the browser half): `e2e-orchestration/specialist-orchestration.spec.ts` test 1, on the flag-on config,
+  observes a 3D control request as ONE coordinator turn - the `/api/chat` body intercepted; the stream the page received with one
+  `run_started`, one terminal and no orchestration event (no `plan`, no `specialist_started`); no specialist or orchestration line in
+  the run log - with the router live in that server (a Tier 3 ask refused before any model call); red first against a flag-off server
+  and with the sentence swapped for a DAG phrasing (`evaluation-matrix.md` section 4). The offline half stays `b21-f-evaluation.test.ts`
+  case 4 and the `f04-view3d-single` capsule.
+- **D21-40 — The scripted fixture agent answers no specialist through the result tool.** — addendum by B21-F2: the browser run reaches it - under the flag-on config every specialist of the F6 and F12 scenarios that
+  answers does so through the result tool, from the scripted agent's per-role table, on either provider (`accepted` in the stream the
+  page received; the circuit specialist on anthropic through the config's role override; the stalled one is ended by its own deadline)
+  (`evaluation-matrix.md` section 4).
+- **D21-43 — The fixture browser server cannot observe an orchestrated run: the orchestration flag is process-wide, and turning it on for the suite changes B18-E's browser proofs.** — CLOSED by B21-F2 (the lead's decision, none of the three listed options): a SECOND Playwright config,
+  `playwright.orchestration.config.ts`, runs the same fixture web server (the base config's, imported; its command derived with only the
+  port moved) with `SIRKIT_ORCHESTRATION_ENABLED=1` on its own port, never reusing a server, with its own `testDir`
+  (`./e2e-orchestration`) and report and output folders; it runs AFTER the existing suite, one `next dev` at a time (locally through the
+  lead's lock script; in CI one extra `page-browser-e2e` step, the upload carrying both folders) - no production, `playwright.config.ts`,
+  `e2e/`, `next.config.ts` or B18-E evidence change; the flag-on server started after the flag-off one had stopped; F4 PROVEN in the
+  browser, F6 and F12 in part (F6: the principal's approval and the escalation's exact-authority citation stay offline, case 6); the
+  existing suite unchanged (48 of 48); both runs 951 s (769 + 182) of OD-30's 30 minutes. RECORDED: F12's rejected
+  presentation and `already_presented` stay offline (case 12) - the scripted follow-up turn never fails in the browser, so a run that
+  presented cannot stand down there without a fixture change; that remainder is D21-45 (new, open), not closed here.
+- **D21-45 — No browser run presents a proposal and then stands down: the scripted follow-up turn never fails, so F12's rejected presentation and already_presented are observed only offline.**
+  Requirement: B21-F "human rejection and resume" (`:874`) and "browser tests" (`:861`); task-F.md item 3's "a rejected-then-resumed
+  run" and task-F2's "nothing presented twice" in the browser. Finding: the scripted fixture agent's follow-up turn always answers
+  (`followUpAnswer`) and its per-role table's one interruption is F9's stall, BEFORE anything is presented; so the browser's resume
+  (`specialist-orchestration.spec.ts` test 3) presents nothing in either request, its nothing-presented checks cannot see a second
+  presentation or a missing `already_presented`, and a presented-then-stood-down run - the human's rejection, then a resume that presents
+  nothing again - is proven only through the production POST (`b21-f-evaluation.test.ts` case 12, where the fake SDK client fails the
+  follow-up turn). Severity low (case 12 proves OD-122's ledger across resumes offline; the browser proves E3's resume on the chat
+  surface). **CONFIRMED** (`evaluation-matrix.md` section 4, F12 in part; `b21-f-page.test.ts` case 14). Closes: the lead's decision - (a)
+  a scripted follow-up failure keyed on F12's sentence in the fixture agent's per-role script table (B21-F's harness scope behind
+  `SIRKIT_FIXTURE_AGENT=scripted`; a change to `fixture-agent-adapter.ts`, which B21-F2's task did not allow), then a browser test that
+  presents, rejects in the review, stands down and resumes, asserting `already_presented` and one presentation in all; or (b) runbook
+  :874's browser half recorded as met by E3's resume on the chat surface and case 12 offline. Source: B21-F2's adversarial review
+  (coverage-2).
+- **§10, B21-F2 (recorded by the lead, 2026-09-28):** Section 4: D21-43 closed; D21-30's browser half closed (D21-30 closed); D21-40's
+  browser clause met; D21-45 opened (low: no browser run presents a proposal and then stands down). Section 7, B21-F: amended - the
+  browser spec delivered by B21-F2 on its own flag-on Playwright config after the existing suite (F4; F6 and F12 in part), no production
+  change; the B21-F bullet's `e2e/specialist-orchestration.spec.ts` is `e2e-orchestration/specialist-orchestration.spec.ts` (its own test
+  dir, the lead's decision). Section 8: F2's failing-first is five red browser runs (a flag-off server twice, three spec mutations, the
+  spec restored by sha256); its adversarial review's six confirmed findings fixed test-first (two more red browser runs - a blank role
+  override, a scheduler mutation restored by hash - and three red page cases); the budget measured one run after the other.
+
 ## 8. Citations, as of base d03f182
 
 The anchor is what the tests check - it occurs exactly once in its file - and the line stated is the CURRENT line for every row (page
@@ -590,7 +863,7 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C46 | `scripts/run-b21-live-orchestration-evaluation.ts` | 54 | — | `export function boundedLiveAdapters(` | every live call counted |
 | C47 | `scripts/run-b21-live-orchestration-evaluation.ts` | 58 | — | `if (calls >= bound) throw new LLMProviderError(adapter.provider, "unknown");` | the call past the bound is never sent |
 | C48 | `playwright.config.ts` | 20 | — | `testDir: "./e2e",` | the browser suite's one test dir |
-| C49 | `.github/workflows/deterministic-manufacturing.yml` | 329 | — | `run: pnpm exec playwright test` | `page-browser-e2e` runs every spec under one config |
+| C49 | `.github/workflows/deterministic-manufacturing.yml` | 329 | — | `- run: pnpm exec playwright test` | `page-browser-e2e`'s existing step: every spec of `playwright.config.ts` under one config ([B21 F2, 2026-09-28] re-pinned: F2's step line, C93, contains the old anchor `run: pnpm exec playwright test`; the orchestration config runs after this step) |
 | C50 | `playwright.config.ts` | 58 | — | `SIRKIT_FIXTURE_AGENT: "scripted",` | the one web server's environment: the scripted agent, no orchestration flag |
 | C51 | `e2e/agent-execution.spec.ts` | 776 | — | `await chat("Release the board.");` | B18-E scenario 8's forged Tier 3 call |
 | C52 | `app/lib/agent/orchestration/router.ts` | 83 | — | `{ family: "release", words: ["release"], aliases: [], pattern: headVerb("release") },` | with the flag on, refused before any model call |
@@ -623,3 +896,26 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C79 | `app/api/chat/orchestration-runtime.ts` | 287 | — | `const followUpMeters = input.providers ? admittedAdapter(` | only a specialist's or the follow-up's call is metered (D21-42; M15) |
 | C80 | `app/lib/agent/orchestration/merge.ts` | 869 | — | `if (shared.length > 0) edges.push(` | two different changes to one identity escalate (F6; M11) |
 | C81 | `app/lib/agent/orchestration/provider-policy.ts` | 110 | — | `const choice = override ?? ROLE_PROVIDER_POLICY[role];` | the server env routes a role to its provider (F6; M10) |
+| C82 | `playwright.orchestration.config.ts` | 15 | — | `import base from "./playwright.config";` | [B21 F2] the base config imported: its web server, never copied |
+| C83 | `playwright.orchestration.config.ts` | 26 | — | `testDir: "./e2e-orchestration",` | [B21 F2] its own test dir, outside `./e2e` |
+| C84 | `playwright.orchestration.config.ts` | 42 | — | `reuseExistingServer: false,` | [B21 F2] never attaches to a running (flag-off) server |
+| C85 | `playwright.orchestration.config.ts` | 44 | — | `...baseServer.env,` | [B21 F2] the base web server's whole environment, spread ([B21 F2 fix] C83-C86 re-pinned: three lines above them derive the command) |
+| C86 | `playwright.orchestration.config.ts` | 48 | — | `SIRKIT_ORCHESTRATION_ENABLED: "1",` | [B21 F2] the flag on |
+| C87 | `e2e-orchestration/specialist-orchestration.spec.ts` | 32 | — | `const UUID_NAMESPACE = "b21f2000";` | [B21 F2] the spec's own id namespace |
+| C88 | `e2e-orchestration/specialist-orchestration.spec.ts` | 124 | — | `return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });` | [B21 F2] the pull-through body: the stream the page's reader pulled, observed |
+| C89 | `e2e-orchestration/specialist-orchestration.spec.ts` | 120 | — | `finish("cancelled");` | [B21 F2] its cancel cancels the source: Stop still closes the connection |
+| C90 | `e2e-orchestration/specialist-orchestration.spec.ts` | 174 | — | `test("[B21 F2] F4 / D21-30:` | [B21 F2] test 1: one coordinator turn for a 3D request (D21-30's browser half) |
+| C91 | `e2e-orchestration/specialist-orchestration.spec.ts` | 203 | — | `test("[B21 F2] F6:` | [B21 F2] test 2: the status line; presented once; escalated, nothing presented |
+| C92 | `e2e-orchestration/specialist-orchestration.spec.ts` | 254 | — | `test("[B21 F2] F12's browser half:` | [B21 F2] test 3: E3's offer, the resume under the same run id, nothing presented ([B21 F2 fix] re-pinned: test 2 gained six lines) |
+| C93 | `.github/workflows/deterministic-manufacturing.yml` | 332 | — | `run: pnpm exec playwright test -c playwright.orchestration.config.ts` | [B21 F2] the one extra `page-browser-e2e` step, after the existing one (C49) |
+| C94 | `.github/workflows/deterministic-manufacturing.yml` | 341 | — | `playwright-report-orchestration` | [B21 F2] the upload carries the new report folder |
+| C95 | `.gitignore` | 65 | — | `/playwright-report-orchestration/` | [B21 F2] the new report folder, ignored by git |
+| C96 | `.gitignore` | 66 | — | `/test-results-orchestration/` | [B21 F2] the new output folder, ignored by git |
+| C97 | `playwright.orchestration.config.ts` | 22 | — | `const BASE_URL = new URL(String(baseServer.url));` | [B21 F2 fix: tests-05] the base's readiness url and its port flag, read from the base |
+| C98 | `playwright.orchestration.config.ts` | 40 | — | `command: baseServer.command.replace(BASE_PORT_FLAG,` | [B21 F2 fix: tests-05] the base's command, only its port moved |
+| C99 | `playwright.orchestration.config.ts` | 23 | — | `!BASE_PORT_FLAG.test(baseServer.command)) throw new Error(` | [B21 F2 fix: tests-05] a base command without its port flag refuses to load ([B21 F2 lead] a default port included, never a prefix of a longer one) |
+| C100 | `playwright.orchestration.config.ts` | 50 | — | `SIRKIT_ORCHESTRATION_ROLE_MODELS: JSON.stringify({ "circuit-topology": { provider: "anthropic", model: "inherit" } }),` | [B21 F2 fix: security-1] F6's two parties on two providers, as case 6 routes them |
+| C101 | `e2e-orchestration/specialist-orchestration.spec.ts` | 242 | — | `toContain("; 2 source(s);")` | [B21 F2 fix: security-1] the escalation counts two sources |
+| C102 | `e2e-orchestration/specialist-orchestration.spec.ts` | 207 | — | `const providers = [["circuit-topology", "anthropic"],` | [B21 F2 fix: tests-01] each role's provider, asserted in both requests |
+| C103 | `e2e-orchestration/specialist-orchestration.spec.ts` | 302 | — | `event.role === "circuit-topology").map((event) => event.attempt)` | [B21 F2 fix: tests-02] the stalled specialist STARTS again on the resume, at attempt 1 |
+| C104 | `e2e-orchestration/specialist-orchestration.spec.ts` | 304 | — | `[event.status, event.attempt, event.reason]` | [B21 F2 fix: tests-02] and its own deadline ends it (`deadline`) |

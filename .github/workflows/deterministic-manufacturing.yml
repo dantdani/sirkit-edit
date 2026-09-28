@@ -327,6 +327,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
+      # [B21 F2] D21-43: the orchestration spec on its own config and flag-on server, AFTER the step above - one next dev at a time
+      - name: Orchestration browser proof (B21 F2)
+        run: pnpm exec playwright test -c playwright.orchestration.config.ts
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -335,5 +338,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            playwright-report-orchestration
+            test-results-orchestration
           if-no-files-found: ignore
           retention-days: 14

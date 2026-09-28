@@ -7,17 +7,18 @@
  * files are the hashes the E2 page states; and the "For the lead" texts are all present, the discovery titles quoted exactly.
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { anchorOccurrences, pageCitations } from "@/app/lib/mcp/server/__tests__/_citations";
 import { FIXTURE_RESULT_TOOL_NAME, FIXTURE_ROLE_SCRIPTS } from "@/app/lib/agent/fixture-agent-adapter";
 import { AGENT_REPLAY_CAPSULE_SCHEMA } from "@/app/lib/agent/replay-capsule";
 import { ORCHESTRATION_ENABLED_ENV } from "@/app/api/chat/orchestration-runtime";
 import { SPECIALIST_RESULT_TOOL_NAME } from "../result-tool";
+import { ROLE_MODELS_ENV, parseRoleModelOverrides } from "../provider-policy";
 import { routeTaskComplexity } from "../router";
 import { B11_SCANNED_FILES } from "../tripwires";
-import { B21_F_CASES, B21_F_SENTENCES, BROWSER_BLOCKED, MODEL_IN_LOOP_LIVE_DAG, MODEL_IN_LOOP_NO_PATH, MODEL_IN_LOOP_SHAPE_ONLY } from "./_f-cases";
+import { B21_F_CASES, B21_F_SENTENCES, BROWSER_PROVEN, BROWSER_PROVEN_IN_PART_F6, BROWSER_PROVEN_IN_PART_F12, MODEL_IN_LOOP_LIVE_DAG, MODEL_IN_LOOP_NO_PATH, MODEL_IN_LOOP_SHAPE_ONLY } from "./_f-cases";
 import { B21_REPLAY_PINS_SCHEMA, ORCHESTRATION_EVALUATION_CATEGORY, buildOrchestrationEvaluationCases } from "./_f-capsules";
 
 const ROOT = process.cwd();
@@ -35,6 +36,33 @@ const NOTED_PAGES = ["artifacts/ai-control-plane-b21/run-events-and-trace.md", "
 /** [B21 F fix: coverage-1] the matrix's model-in-loop cell per class */
 const MODEL_IN_LOOP_LABELS: Readonly<Record<string, string>> = { [MODEL_IN_LOOP_LIVE_DAG]: "| RECORDED (OD-125): live DAG |", [MODEL_IN_LOOP_SHAPE_ONLY]: "| RECORDED (OD-125): DAG shape only |", [MODEL_IN_LOOP_NO_PATH]: "| NO LIVE PATH |" };
 const FACTS = { hasSchematic: true, hasBoard: true, actorRole: "pcb_editor" as const, autonomyMode: "proposal_only" as const, selectionCount: 0 };
+/** [B21 F2] the browser proof's own config and spec (D21-43 decided), and the matrix's browser cell per class */
+const ORCHESTRATION_CONFIG = "playwright.orchestration.config.ts";
+const BROWSER_SPEC = "e2e-orchestration/specialist-orchestration.spec.ts";
+const BROWSER_LABELS: Readonly<Record<string, string>> = { [BROWSER_PROVEN]: "| PROVEN (section 4) |", [BROWSER_PROVEN_IN_PART_F6]: "| PROVEN IN PART (section 4) |", [BROWSER_PROVEN_IN_PART_F12]: "| PROVEN IN PART (section 4) |", "not required": "| not required |" };
+/** [B21 F2 fix: tests-05, security-1] One web server of the two Playwright configs, as Playwright loads it: only the fields the cases
+ *  compare - never its environment, which spreads this process's own. */
+interface LoadedServer { readonly command: string; readonly url: string; readonly roleModels: string | undefined }
+const CONFIG_MODULE = "../../../../../playwright.config";
+const ORCHESTRATION_CONFIG_MODULE = "../../../../../playwright.orchestration.config";
+/** Loads both configs with `@playwright/test` stubbed (the runner is never loaded inside vitest) and, when `baseCommand` is given, the
+ *  base config's web-server command changed first - so a case sees what the orchestration config makes of the base it imports. */
+async function loadWebServers(baseCommand?: (command: string) => string): Promise<{ base: LoadedServer; orchestration: LoadedServer }> {
+  type Server = { command: string; url?: string; env?: Record<string, string | undefined> };
+  const serverOf = (config: unknown): LoadedServer => { const web = (config as { webServer: Server }).webServer; return { command: web.command, url: String(web.url), roleModels: web.env?.[ROLE_MODELS_ENV] }; };
+  vi.resetModules();
+  vi.doMock("@playwright/test", () => ({ defineConfig: (config: unknown) => config, devices: { "Desktop Chrome": {} } }));
+  if (baseCommand) vi.doMock(CONFIG_MODULE, async () => { const actual = (await vi.importActual<{ default: { webServer: Server } }>(CONFIG_MODULE)).default; return { default: { ...actual, webServer: { ...actual.webServer, command: baseCommand(actual.webServer.command) } } }; });
+  try {
+    const base = serverOf(((await import(CONFIG_MODULE)) as { default: unknown }).default);
+    const orchestration = serverOf(((await import(ORCHESTRATION_CONFIG_MODULE)) as { default: unknown }).default);
+    return { base, orchestration };
+  } finally {
+    vi.doUnmock("@playwright/test");
+    vi.doUnmock(CONFIG_MODULE);
+    vi.resetModules();
+  }
+}
 
 describe("[B21 F] the evaluation-matrix page", () => {
   it("1. the page exists with its sections in order, its labels, its base and its tag; it is ONE new page and names the ten pages that carry its dated notes, each of which carries one", () => { // [B21 F fix] ten pages since the review's fixes; [B21 F lead] retitled (a new suite) (the B11 contract page, B11.4's ownership page and four B11 READMEs added)
@@ -61,7 +89,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
       expect(row[3]!.trim(), entry.id).toBe(entry.item);
       const rest = row[4]!;
       expect(rest, entry.id).toContain(`| ${entry.offline} |`);
-      expect(rest, entry.id).toContain(entry.browser === BROWSER_BLOCKED ? "| BLOCKED (section 4) |" : "| not required |");
+      expect(rest, entry.id).toContain(BROWSER_LABELS[entry.browser]!); // [B21 F2, 2026-09-28] reviewed pin move: B21-F wrote F4, F6 and F12 as "| BLOCKED (section 4) |"; B21-F2 delivered the browser spec on its own flag-on config, so the three cells are the delivered classes (F4 PROVEN; [B21 F2 fix: security-1] F6 and F12 PROVEN IN PART)
       expect(rest, entry.id).toContain(MODEL_IN_LOOP_LABELS[entry.modelInLoop]!); // [B21 F fix: coverage-1] what the record-only command can run, row by row
       expect(rest, entry.id).toContain(`\`${entry.suiteCase}\``);
       expect(rest.trim().endsWith(entry.pins.length > 0 ? `${entry.pins.map((pin) => `\`${pin}\``).join(", ")} |` : "(none) |"), entry.id).toBe(true);
@@ -196,5 +224,126 @@ describe("[B21 F] the evaluation-matrix page", () => {
     expect(b113[740], "b11-3:741").toContain("INTENTIONAL_AGENT_EXPOSED_TOOL_IDS.length");
     expect(b113[742], "b11-3:743").toContain('for (const file of ["pcb-shape-projection.ts", "pcb-shape-types.ts", "replay-context.ts", "generated/pcb-shape-descriptor.ts"])');
     expect(b113[744], "b11-3:745").toContain(".not.toMatch(/modelcontextprotocol|mcpServer|spawnAgent|multiAgent/i)");
+  });
+
+  it("10. [B21 F2] section 4 IS the delivered browser proof (D21-43 decided): the orchestration config runs the base config's web server (imported, its environment spread) with the flag on its own origin and nothing else changed but the blanked role-model override, never reusing a server, with its own test dir, report and output folders (ignored by git), workers 1, retries 0 and the base's per-test timeout; the base config and e2e/ carry no flag; the spec's three tests send the case table's sentences under their own namespace; the CI job runs it AFTER the existing suite and uploads both folders; the matrix's browser cells are the delivered classes", () => {
+    const config = read(ORCHESTRATION_CONFIG);
+    for (const line of ['import base from "./playwright.config";', 'testDir: "./e2e-orchestration",', "workers: 1,", "retries: 0,", "timeout: base.timeout,", 'outputDir: "test-results-orchestration",', 'outputFolder: "playwright-report-orchestration"', "reuseExistingServer: false,", "...baseServer,", "...baseServer.env,", `${ORCHESTRATION_ENABLED_ENV}: "1",`, `${ROLE_MODELS_ENV}: JSON.stringify({ "circuit-topology": { provider: "anthropic", model: "inherit" } }),`]) expect(config, line).toContain(line); // [B21 F2 fix: security-1] reviewed pin move: the role-model override was blanked ("") - one provider, one source; F6's two parties now run on two providers (case 12)
+    const env = config.slice(config.indexOf("...baseServer.env,"), config.indexOf("},", config.indexOf("...baseServer.env,")));
+    expect([...env.matchAll(/^\s+([A-Z][A-Z0-9_]+):/gm)].map((match) => match[1]), "the only keys over the base environment").toEqual(["SIRKIT_EXPECTED_ORIGIN", ORCHESTRATION_ENABLED_ENV, ROLE_MODELS_ENV]);
+    expect(read("playwright.config.ts")).toContain('testDir: "./e2e",');
+    for (const file of readdirSync(join(ROOT, "e2e")).filter((name) => name.endsWith(".ts"))) expect(read(`e2e/${file}`), file).not.toContain(ORCHESTRATION_ENABLED_ENV);
+    const ignored = read(".gitignore").split(NEWLINE);
+    for (const folder of ["/playwright-report/", "/test-results/", "/playwright-report-orchestration/", "/test-results-orchestration/"]) expect(ignored, folder).toContain(folder);
+    const spec = read(BROWSER_SPEC);
+    expect(spec.match(/^test\(/gm) ?? []).toHaveLength(3);
+    expect(spec).toContain('from "../e2e/fixture-journey";');
+    expect(spec).toContain('const EVIDENCE = "artifacts/ai-control-plane-b21/evidence";');
+    const namespace = /const UUID_NAMESPACE = "([0-9a-f]{8})";/.exec(spec)?.[1];
+    expect(namespace).toBeDefined();
+    for (const file of readdirSync(join(ROOT, "e2e")).filter((name) => name.endsWith(".ts"))) expect(read(`e2e/${file}`), file).not.toContain(namespace!);
+    for (const key of ["view3d", "timer", "timerBothSeal", "timeout"] as const) expect(spec, key).toContain(`B21_F_SENTENCES.${key}`);
+    const workflow = read(".github/workflows/deterministic-manufacturing.yml").split(NEWLINE);
+    const job = workflow.indexOf("  page-browser-e2e:");
+    const existing = workflow.indexOf("      - run: pnpm exec playwright test");
+    const orchestration = workflow.indexOf(`        run: pnpm exec playwright test -c ${ORCHESTRATION_CONFIG}`);
+    const upload = workflow.indexOf("      - name: Upload browser evidence");
+    expect(job).toBeGreaterThan(0);
+    expect([existing > job, orchestration > existing, upload > orchestration]).toEqual([true, true, true]);
+    expect(workflow.filter((line) => line.includes("playwright test")), "two browser runs, one after the other").toHaveLength(2);
+    for (const folder of ["playwright-report", "test-results", "playwright-report-orchestration", "test-results-orchestration"]) expect(workflow.slice(upload), folder).toContain(`            ${folder}`);
+    expect(B21_F_CASES.filter((entry) => entry.browser !== "not required").map((entry) => [entry.id, entry.browser])).toEqual([["F4", BROWSER_PROVEN], ["F6", BROWSER_PROVEN_IN_PART_F6], ["F12", BROWSER_PROVEN_IN_PART_F12]]); // [B21 F2 fix: security-1] reviewed pin move: F6 was BROWSER_PROVEN, but the browser cancels its review and never receives the envelope (case 12)
+    const four = flat(section(read(PAGE), 4));
+    for (const claim of ["[B21 F2, 2026-09-28]", "DELIVERED by B21-F2", "`e2e-orchestration/specialist-orchestration.spec.ts`", `\`${ORCHESTRATION_CONFIG}\``, "`reuseExistingServer: false`", "one `next dev` at a time", "PULL-THROUGH", "F12 in part", "`already_presented`", "stay proven offline (case 12)", "Failing-first", "The budget (OD-30)"]) expect(four, claim).toContain(claim);
+  });
+
+  it("11. [B21 F2] no statement of the page is left saying the browser spec is stopped: the head, section 0's 'what it is not', section 1's class note and section 5 carry the dated F2 note; section 6 names the spec with its real test( count; section 7 holds F2's reserved texts in full - the README rows, the ledger paragraph, PROGRAM_STATE, D21-30 and D21-43 CLOSED quoting discovery's titles exactly, D21-40's browser clause and the §10 line", () => {
+    const page = read(PAGE);
+    const NOTE = "[B21 F2, 2026-09-28]";
+    expect(page.slice(0, page.indexOf("## 0. ")), "the head").toContain(NOTE);
+    const zero = section(page, 0);
+    expect(zero.slice(zero.indexOf("- **What it is not:**")), "section 0").toContain(NOTE);
+    const one = section(page, 1);
+    expect(one.slice(0, one.indexOf("| id | runbook |")), "section 1's class note").toContain(NOTE);
+    expect(section(page, 5), "section 5").toContain(NOTE);
+    const row = new RegExp(`^\\| \`${BROWSER_SPEC}\` \\| (\\d+) \\|`, "m").exec(section(page, 6));
+    expect(row, "section 6 names the browser spec").not.toBeNull();
+    expect((read(BROWSER_SPEC).match(/^test\(/gm) ?? []).length).toBe(Number(row![1]));
+    const lead = section(page, 7);
+    const f2 = lead.slice(lead.indexOf("### B21-F2 — "));
+    expect(lead.indexOf("### B21-F2 — "), "F2's reserved texts").toBeGreaterThan(0);
+    for (const heading of ["README row", "ledger paragraph", "PROGRAM_STATE", "Discovery closure", "§10, B21-F2"]) expect(f2, heading).toContain(heading);
+    expect(f2).toMatch(/^\| B21-F2 /m);
+    expect(f2).toMatch(/^### B21-F2 — the browser spec/m);
+    const discovery = read("artifacts/ai-control-plane-b21/discovery.md");
+    for (const [defect, closure] of [["D21-30", "CLOSED by B21-F2 (the browser half)"], ["D21-43", "CLOSED by B21-F2"], ["D21-40", "addendum by B21-F2"]] as const) {
+      const title = new RegExp(`\\*\\*${defect} — [^*]+\\*\\*`).exec(discovery)![0].replace(/\s+/g, " ");
+      expect(flat(f2), defect).toContain(`- ${title} — ${closure}`);
+    }
+  });
+
+  it("12. [B21 F2 fix: security-1, coverage-1, tests-01] F6's browser cell claims no more than the browser shows: the orchestration config routes the circuit specialist to the provider the page does not default to - two sources, as case 6 runs them - the spec asserts every role's provider and the escalation's two sources, and the cell is PROVEN IN PART naming what stays offline (the principal's approval: the browser cancels the review; the escalation's exact-authority citation: the follow-up's envelope, which the page never receives); no statement says F6 is PROVEN in the browser", async () => {
+    const pageDefault = /const \[aiBrain, setAiBrain\] = useState<LLMProviderId>\("(openai|anthropic)"\);/.exec(read("app/page.tsx"))?.[1];
+    expect(pageDefault, "the page's default provider: the coordinator's and every inheriting role's").toBeDefined();
+    const other = pageDefault === "openai" ? "anthropic" : "openai";
+    const { orchestration } = await loadWebServers();
+    const routed = parseRoleModelOverrides(orchestration.roleModels);
+    expect(routed, "the config's role override parses (a refused map approves nothing)").toMatchObject({ ok: true });
+    expect(routed.ok ? routed.overrides : null, "ONE role routed: the circuit specialist on the OTHER provider; the schematic specialist inherits the page's").toEqual({ "circuit-topology": { provider: other, model: "inherit" } });
+    const spec = read(BROWSER_SPEC);
+    const two = spec.slice(spec.indexOf('test("[B21 F2] F6:'), spec.indexOf("test(\"[B21 F2] F12's"));
+    expect(two, "the escalation counts two sources").toContain('"; 2 source(s);"');
+    expect(spec, "never one").not.toContain("; 1 source(s);");
+    expect(two.match(/\[event\.role, event\.provider\]/g) ?? [], "both requests' specialist_started providers asserted, role by role").toHaveLength(2);
+    expect(two, "the page's own provider asserted").toContain(`.body.provider, "the page's default provider").toBe("${pageDefault}")`);
+    const f6 = B21_F_CASES.find((entry) => entry.id === "F6")!;
+    expect(f6.browser.startsWith("PROVEN IN PART: "), "F6 is PROVEN IN PART in the browser").toBe(true);
+    for (const named of ["2 source(s)", "approval", "exact authority", "case 6"]) expect(f6.browser, named).toContain(named);
+    const page = read(PAGE);
+    for (const overclaim of ["F4 and F6 PROVEN", "F4 and F6 in the browser", "(F4, F6; F12 in part)"]) expect(flat(page), overclaim).not.toContain(overclaim);
+    const four = flat(section(page, 4));
+    for (const claim of ["F6 in part", "2 source(s)", "the principal's approval", "never receives"]) expect(four, claim).toContain(claim);
+  });
+
+  it("13. [B21 F2 fix: tests-05] the orchestration server's command IS the base config's: derived from the base web server's command with only its port moved to this config's, never a command of its own - a change to the base command reaches the orchestration server, and a base command without its port flag refuses to load", async () => {
+    const normalized = (server: LoadedServer): string => server.command.replaceAll(`--port ${new URL(server.url).port}`, "--port <PORT>");
+    const plain = await loadWebServers();
+    expect(new URL(plain.orchestration.url).port, "its own port").not.toBe(new URL(plain.base.url).port);
+    expect(new URL(plain.orchestration.url).pathname, "the base's readiness url, on its own origin").toBe(new URL(plain.base.url).pathname);
+    expect(normalized(plain.orchestration), "the base's command, its port moved").toBe(normalized(plain.base));
+    const probe = "--b21-f2-probe";
+    const changed = await loadWebServers((command) => `${command} ${probe}`);
+    expect(changed.base.command).toContain(probe);
+    expect(changed.orchestration.command, "a change to the base command reaches the orchestration server").toContain(probe);
+    expect(normalized(changed.orchestration)).toBe(normalized(changed.base));
+    await expect(loadWebServers(() => "pnpm exec next dev"), "no port flag to move: the orchestration config refuses to load").rejects.toThrow(/--port/);
+    // [B21 F2 lead] a DEFAULT base port (the URL omits it) still moves whole: never "--port 310180"
+    const savedPort = process.env.SIRKIT_E2E_PORT; process.env.SIRKIT_E2E_PORT = "80";
+    try {
+      const onDefault = await loadWebServers();
+      expect(onDefault.base.command).toContain("--port 80");
+      expect(onDefault.orchestration.command, "the default port moved, never garbled").toBe(onDefault.base.command.replace("--port 80", `--port ${new URL(onDefault.orchestration.url).port}`));
+      expect(onDefault.orchestration.command).not.toMatch(/--port \d*80(?![0-9])/);
+    } finally { if (savedPort === undefined) delete process.env.SIRKIT_E2E_PORT; else process.env.SIRKIT_E2E_PORT = savedPort; }
+    expect(read(ORCHESTRATION_CONFIG), "no command literal of its own").not.toMatch(/command:\s*[`"']/);
+  });
+
+  it("14. [B21 F2 fix: coverage-2] F12's browser remainder stays tracked once D21-43 closes: F2's reserved texts open D21-45 (new, low: no browser run presents a proposal and then stands down, so the rejected presentation and already_presented are observed only offline and test 3's nothing-presented checks cannot see a second presentation) with its options - absent from discovery.md or inserted there once under the title the page states; D21-43's closure, the §10 line, PROGRAM_STATE's nextAction, section 4 and F12's browser cell name it", () => {
+    const page = read(PAGE);
+    const lead = section(page, 7);
+    const f2 = flat(lead.slice(lead.indexOf("### B21-F2 — ")));
+    const clause = f2.slice(f2.indexOf("- **D21-45 — "), f2.indexOf("- **§10, B21-F2"));
+    expect(f2.indexOf("- **D21-45 — "), "D21-45 opened among F2's discovery clauses").toBeGreaterThan(0);
+    expect(f2.indexOf("- **D21-45 — "), "before the §10 line").toBeLessThan(f2.indexOf("- **§10, B21-F2"));
+    for (const claim of ["Requirement:", "`:874`", "Finding:", "Severity low", "**CONFIRMED**", "Closes: the lead's decision - (a)", "(b)", "Source: B21-F2's adversarial review (coverage-2)"]) expect(clause, claim).toContain(claim);
+    const discovery = read("artifacts/ai-control-plane-b21/discovery.md");
+    const inserted = discovery.split("**D21-45 — ").length - 1;
+    expect(inserted, "D21-45 is inserted into discovery.md at most once").toBeLessThanOrEqual(1);
+    if (inserted === 1) expect(f2, "the title the page states").toContain(`- ${/\*\*D21-45 — [^*]+\*\*/.exec(discovery)![0].replace(/\s+/g, " ")}`);
+    expect(f2.slice(f2.indexOf("- **D21-43 — "), f2.indexOf("- **D21-45 — ")), "D21-43's closure hands F12's browser remainder to D21-45").toContain("D21-45");
+    expect(f2.slice(f2.indexOf("- **§10, B21-F2")), "the §10 line opens it").toContain("D21-45 opened (low");
+    expect(f2.slice(f2.indexOf("`nextAction`:"), f2.indexOf("#### Discovery closure")), "PROGRAM_STATE's nextAction carries it").toContain("D21-45");
+    expect(flat(section(page, 4)), "section 4 names it").toContain("D21-45");
+    expect(B21_F_CASES.find((entry) => entry.id === "F12")!.browser, "F12's browser cell names where its remainder is tracked").toContain("D21-45");
   });
 });
