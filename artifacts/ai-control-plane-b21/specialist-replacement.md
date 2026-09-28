@@ -213,7 +213,7 @@ The list (the DAG IS `DAG_ROLE_LISTS["component-replacement"]`): `coordinator`, 
   named without a comparable kind ("it with a timer") and a bare part word for any part ("U1 with a chip") name nothing new - "the
   4060 timer with a microcontroller" does; the acronym IT is never the pronoun; "would you" anywhere in the polite prefix is an opinion; the RAW message's trailing punctuation decides a question (a run
   with "?" is a request only after "can / could / will you" and never with "!"); a new part named by a part word is the composer's own
-  pairing too - the router still imports `REPLACE_PART` and requires it to agree. A word the grammar does not list makes the message one
+  pairing too - the router still imports `REPLACE_PART` and requires it to agree. [B21 E4, 2026-09-28] Superseded: since B21-E4 the router no longer imports `REPLACE_PART` - the grammar itself (C10, C34 re-pinned) moved into composer-routing.ts beside it, where the agreement check (`REPLACE_PART.test(rest)`) now runs, and the router imports `partKindSwap` and `POLITE` from there; the composer's rule 5b calls the same predicate (D21-38, `composer-and-first-turn.md`). A word the grammar does not list makes the message one
   coordinator turn - the grammar fails toward it, never toward a paid DAG. **CONFIRMED** (replacement-roles case 9 over the sweep's
   corpus, `_d3-router-corpus.ts`: its 1007 false DAG phrasings of the six rounds are not the replacement DAG and its 194 genuine
   requests are - B's three replacement phrasings, the scenario-17 phrasings, kinds with values, polite and question-form requests,
@@ -277,7 +277,7 @@ The list (the DAG IS `DAG_ROLE_LISTS["component-replacement"]`): `coordinator`, 
 - **RECORDED (D21-38, low):** "Replace U1 with a TLC555." (an MPN alone) stays `single` - the grammar names kinds, never parts; and the
   composer (a UI surface D3 does not change) routes the runbook's sentence to the schematic editor by its rule 8 (C21: `replace` is an
   edit verb and the 5b pairing names no kind), so in the application the sentence reaches the chat route only when the user overrides
-  the composer's route. **CONFIRMED** (replacement-roles case 5 pins both facts).
+  the composer's route. **CONFIRMED** (replacement-roles case 5 pins both facts). [B21 E4, 2026-09-28] The composer half CLOSED by B21-E4 (D21-38): the grammar moved into the composer module and its rule 5b uses it, so the runbook sentence reaches the assistant from the UI (replacement-roles case 5 moved, its reason next to it); the MPN-only swap stays `single` in the router and an edit in the composer - the grammar names kinds, never parts (`composer-and-first-turn.md`).
 
 ## 4. Scenario 17: the disagreement is structural - two sealed parties escalate, a party that cannot seal never reaches the merge
 
@@ -604,7 +604,7 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C7 | `app/lib/agent/orchestration/scheduler.ts` | 681 | — | `export const SEALER_CONTEXT_FACTS = Object.freeze({` | the replacement's sealer fact: the head mark |
 | C8 | `app/lib/agent/orchestration/role-tools.ts` | 41 | — | `LIVE_PIN_FACTS = "Live since B21-D3:` | the schematic row's reason, live |
 | C9 | `app/lib/agent/orchestration/router.ts` | 48 | — | `"component-replacement": Object.freeze(["coordinator", "circuit-topology", "component-sourcing-evidence", "schematic", "verification-critic"] as const)` | the replacement DAG, two proposing roles |
-| C10 | `app/lib/agent/orchestration/router.ts` | 101 | — | `const PART_KIND_SWAP = ` | [B21 D3 lead] the polite prefix stripped; the replacement forms must match ALL that follows it |
+| C10 | `app/lib/project/composer-routing.ts` | 79 | — | `const PART_KIND_SWAP = ` | [B21 D3 lead] the polite prefix stripped; the replacement forms must match ALL that follows it ([B21 E4, 2026-09-28] re-pinned: moved verbatim with the grammar from `router.ts:101` into the composer module, D21-38 - `composer-and-first-turn.md`) |
 | C11 | `app/lib/agent/orchestration/router.ts` | 177 | — | `if (facts.hasSchematic && partKindSwap(message, userMessage)) return dag("D-component-replacement"` | the rule: ONE strict grammar ([B21 D3 lead] anchor re-pinned: the unanchored pairing is no longer the rule) |
 | C12 | `app/api/chat/route.ts` | 397 | — | `const replacementFactsSource = resolveReplacementPinFactsSource();` | the route's source, the one the runtime resolves too |
 | C13 | `app/api/chat/replacement-facts-runtime.ts` | 67 | — | `export const DEFAULT_PIN_FACTS_DEADLINE_MS = 5_000;` | the deadline |
@@ -628,7 +628,7 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C31 | `app/lib/agent/gateway.ts` | 395 | — | `targetPinFacts = await this.replacementPinFacts(exact.atomicPartRevisionId, "target");` | the target comes from the authority the context holds |
 | C32 | `.github/workflows/deterministic-manufacturing.yml` | 148 | — | `app/api/chat/__tests__/b21-d3-chat-replacement.test.ts` | the one explicit CI entry |
 | C33 | `app/lib/agent/orchestration/scheduler.ts` | 301 | — | `SPECIALIST_PROPOSAL_TOOL_IDS.includes(input.toolId)` | the wrapper admits a live proposal of the role's list |
-| C34 | `app/lib/agent/orchestration/router.ts` | 282 | — | `function partKindSwap(message: string, raw: string): boolean {` | [B21 D3 lead] the three whole-message request shapes with closed vocabularies, anchored at both ends; a part word agrees with the composer's pairing |
+| C34 | `app/lib/project/composer-routing.ts` | 161 | — | `function partKindSwap(message: string, raw: string): boolean {` | [B21 D3 lead] the three whole-message request shapes with closed vocabularies, anchored at both ends; a part word agrees with the composer's pairing ([B21 E4, 2026-09-28] re-pinned: moved verbatim from `router.ts:282` and exported - the ONE predicate the composer's rule 5b and the router's rule (C11) call, D21-38) |
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 507 | — | `const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed));` | [B21 D3 fix] a specialist's objective: the coordinator's user message alone |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },` | [B21 D3 fix] its loop history is empty: no earlier result reaches it ([B21 E1, 2026-09-27] anchor re-pinned, line unchanged: the run carries the provider it runs on, so its seals name it) |
 | C37 | `app/lib/agent/gateway.ts` | 330 | — | `const compilation = compileTier1Proposal(schematic, { ops, pinsByPartId: new Map() });` | [B21 D3 fix] every agent Tier 1 proposal compiles with an empty pin map: any KiCad delete blocks |

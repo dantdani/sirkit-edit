@@ -3220,3 +3220,51 @@ _(discovery, reproduction and results appended below as they are observed)_
   (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on E3's ten lines),
   every other changed file clean; the generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21
   files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged).
+
+### B21-E4 — the composer's kind swap and the coordinator's first turn behind the breaker (2026-09-28 local; increment workflow + lead; this commit)
+
+- Test-first: HEAD fafc90e's router answers (five fact sets), composer routes and grammar code lines recorded from the HEAD modules
+  (`e4/head-probe.json`); the new suites red against HEAD (`e4/ff-1-failing-first.log`: 16 of 19 failing), the moved pins and the route
+  suite red against HEAD's production code (`e4/ff-2-moved-pins-at-head.log`: 5 of 36 failing); then green.
+- Code: `composer-routing.ts` (B21-D3's replacement grammar moved in verbatim as ONE exported predicate beside `REPLACE_PART`, with
+  `POLITE`; rule 5b uses it), `router.ts` (imports the predicate and the prefix on its old import line; two comment pairs in place; the
+  appended grammar removed - every cited line kept), `route.ts` (three lines in place: the first-turn gate before the coordinator's first
+  turn on every plan that is not refused), `orchestration-runtime.ts` (`pausedFirstTurn`, appended), `ai-preferences.ts` (one stale
+  comment in place), the workflow's two explicit entries. No route, descriptor, run-event type, control, request key, reason or
+  generator input changed; census 165/162/3/0; the nine scanned files byte-identical to HEAD.
+- The adversarial review (seven confirmed findings, each answered test-first - `composer-and-first-turn.md` section 4, logs
+  `e4fix/`): a half-open breaker's trial in flight gated every chat request on that provider "until" its own instant - now it never
+  gates a first turn (`halfOpenTrialInFlight`, gate case 6, route case 6); the composer's new path scanned trailing punctuation
+  quadratically on its unbounded text (60 808 to 100 759 ms at 150 000 characters) - the two normalization lines and the predicate's
+  trailing run now start from the run's start (composer case 6, the router's answers unchanged); E2's route case 5 carries E1's
+  exactly-once pins again (proven by two deliberate breakages, the sources restored by hash); the process-wide window, the gate's
+  inertness on a flag-off process and the one-window limit under persistent no-credits RECORDED and pinned (gate case 7, route cases 7
+  and 8; D21-42 opened); the D3 page's stale "the router still imports `REPLACE_PART`" superseded in words.
+- Pin moves with their reasons: B's router case 7, D3's replacement-roles case 5, E1's route case 3, E2's route case 5 (and its
+  exactly-once pins restored), the grammar suite's case 2 (the one line rewritten linear); D3's page C10 and C34 and B's page C35
+  re-pinned; dated E4 notes on the D3, B and E1 pages.
+- Gates after the review fixes, one job at a time (the lead re-runs them): every B21 suite - the orchestration directory, every A..E4 page
+  suite included - with the E4 composer suite and the CI guard (44 files, 402 of 402); `app/api/chat` in full with `app/lib/llm` and
+  `app/lib/acquisition` (45 files, 384 passed, the one opt-in live file's 2 cases skipped as before); `app/lib/agent` with the exposure
+  and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40
+  files, 318 of 318); the proposal families (34 files, 513 of 513); the import gates and census (10 files, 104 of 104); `app/lib/mcp`
+  and `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on the 14 changed and
+  new TypeScript files; the B11 (19 of 19 cases, 61 of 61 checks) and B09 generators (their 21 artifact files byte-identical by sha256) and the
+  B17-A generator (628 controls, CSV and summary identical) with zero drift and the tree's status unchanged - figures on the page.
+- Records: `composer-and-first-turn.md`; OD-115 amended; D21-38 and D21-39 closed; D21-42 opened (medium, the owner's OD-115 option);
+  D21-18's first-turn clause narrowed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+- Lead follow-up on the check (2026-09-28; the checker confirmed six of the seven fixes fixed and revert-sensitive - security-1 fixed
+  only in part by design: the process-wide window stays, recorded as the owner's question - and raised one new low documentation
+  issue): the page, its README row, ledger paragraph, PROGRAM_STATE checkpoint, D21-38 clause and section-10 line said "every scan on
+  the composer's path is linear", but B18-E's `REPLACE_PART` at rule 5b stays super-linear on a self-pasted run (the page's own
+  section 1 records it); each claim now reads "every scan E4 added" with `REPLACE_PART` recorded, and composer case 6's title says the
+  same. The lead's records tool gained the title-form NEW-defect bullet (D21-42 is written "- **D21-42 — Title.** Requirement: ..."),
+  which it would otherwise have skipped silently. D3's replacement-roles case 5 keeps its stale title for the closeout.
+- Lead gates (2026-09-28, one job at a time): every B21 suite with the eight route suites, the composer suite and the CI guard (52 files, 473 of 473); `app/api/chat`,
+  `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent`
+  with the exposure and tier suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with
+  `app/components/chat` (40 files, 318 of 318); the proposal families and approval paths (34 files, 513 of 513); the import gates,
+  census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of
+  737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint clean on every changed and new TypeScript file; the generators
+  with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09 and B11 outputs, 21 files, byte-identical; B17-A 628 controls, CSV
+  and summary identical; the tree's status unchanged). Logs under `b21/e4lead/gates/`.

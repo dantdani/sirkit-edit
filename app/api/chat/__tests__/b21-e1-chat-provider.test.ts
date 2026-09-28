@@ -158,12 +158,14 @@ describe("[B21 E1] the provider layer through the production POST", () => {
     expect(state.openai.map(roleOf)).toEqual(["coordinator", "circuit-topology"]);
     expect(currentLlmProviderPause({ kind: "llm-provider", provider: "openai" }, Date.now(), "agent")).toMatchObject({ reason: "breaker_open" });
     const second = await post(REPLACEMENT);
-    expect(terminals(second)).toEqual([expect.objectContaining({ type: "run_completed", finalText: "(fake) the coordinator's answer." })]);
-    expect(state.openai.map(roleOf)).toEqual(["coordinator", "circuit-topology", "coordinator"]); // no specialist call, no follow-up
-    expect(warningsOf(second).filter((line) => /not started and no follow-up turn can run - the coordinator's LLM provider "openai" is paused \(insufficient_quota\)/.test(line))).toHaveLength(1);
-    // [B21 E1 fix: regressions-3] the second request was stopped by the meters before any call: its stand-down says so, never that the provider failed
-    expect(warningsOf(second).filter((line) => line.startsWith("Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115)"))).toHaveLength(1);
-    expect(warningsOf(second).some((line) => line.includes("failed during the specialists"))).toBe(false);
+    // [B21 E4] reviewed pin move (D21-39 closed): the route gates the coordinator's FIRST turn behind the same pause, so the next request
+    // makes no call at all - not even the coordinator's - and answers ONE run_failed `provider_breaker_open` (the card withholds its Retry)
+    // carrying the meters' pause sentence, with no orchestration line; the runtime's `provider_paused` stand-down is still reached when the
+    // breaker opens DURING a request (b21-e2-chat-events case 5)
+    expect(terminals(second)).toEqual([expect.objectContaining({ type: "run_failed", reason: "provider_breaker_open", message: expect.stringMatching(/^No model call was made for this message: LLM provider "openai" is paused \(insufficient_quota\)/) })]);
+    expect(state.openai.map(roleOf)).toEqual(["coordinator", "circuit-topology"]); // no call at all: no coordinator turn, no specialist, no follow-up
+    expect(second.map((event) => event.type)).toEqual(["run_started", "run_failed"]);
+    expect(warningsOf(second)).toEqual([]);
     expect(state.anthropic).toEqual([]);
   });
 });

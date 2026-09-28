@@ -826,3 +826,47 @@ async function markUnknownClaim(input: { store: OrchestrationResumeStore; scope:
     if (!marked.ok || marked.value.ok || marked.value.code !== "stale_revision") return;
   }
 }
+
+// ─── [B21 E4] The coordinator's first turn behind the llm-provider breaker (D21-39) ────────────────────────────────────────────────────
+// Appended on purpose: imports and function declarations are hoisted, so no line cited above moves (the route calls it in place).
+
+import type { AdmissionPause } from "@/app/lib/acquisition/admission-control";
+import type { LlmProviderAdmissionPort } from "@/app/lib/agent/orchestration/provider-policy";
+
+/** [B21 E4] The one terminal reason of a first turn the breaker stood down: the code the card never offers Retry for
+ *  (`PROVIDER_FAILURES_WITHOUT_RETRY`, E1) - the card keeps its Switch, whose new run is on the other provider. */
+export const FIRST_TURN_PAUSED_REASON = "provider_breaker_open" as const;
+/** [B21 E4] The stood-down first turn's line: the meters' own pause sentence (the provider, the cause or the window, and until when). */
+export function firstTurnPausedLine(pause: AdmissionPause): string {
+  return `No model call was made for this message: ${pause.message}`;
+}
+/** [B21 E4] D21-39: the coordinator's first turn behind the SAME pause E1's runtime consults before the follow-up turn - the process's
+ *  llm-provider meters (`PROCESS_LLM_PROVIDER_ADMISSION`, i.e. `currentLlmProviderPause`), the `interactive` purpose (the whole PROCESS-WIDE
+ *  window - [B21 E4 fix: security-1] every principal's metered calls fill it), the coordinator's provider with no model key - consulted by
+ *  the route before the first turn of EVERY plan that is not refused, the flag-off single path included. Paused (its breaker open - no
+ *  credits, a rate limit, repeated failures - or the provider's minute used up): NO call - `run_started`, then ONE `run_failed`
+ *  FIRST_TURN_PAUSED_REASON carrying `firstTurnPausedLine` (the card: its Switch, never Retry - E1's `providerRetryOffered`), the line on the
+ *  trace; nothing planned, run or written to the record. Not paused: null - nothing emitted or recorded (the flag-off stream byte-identical
+ *  to HEAD's). A RESUMED request is never gated here: its first turn is REPLAYED (no call); its specialists and follow-up consult the breaker
+ *  themselves (E1) and their stand-down settles its claimed start (`settleStarted`). Gated, not metered (RECORDED): the gate only READS the
+ *  meters, so the first turn opens, re-opens and settles nothing - a half-open breaker's trial in flight is not its pause
+ *  (`halfOpenTrialInFlight`), and a process that meters no call (the flag off) never pauses a provider at all (D21-42). */
+export function pausedFirstTurn(input: { runId: string; provider: LLMProviderId; resume: ChatResume; emit(event: AgentRunEvent): void; trace?: AgentTraceRecorder; admission?: LlmProviderAdmissionPort; now?: () => number }): AgentRunResult | null {
+  if (input.resume.kind === "resume") return null; const at = (input.now ?? Date.now)(); // [B21 E4 fix: regressions-1] one clock read: the pause and the trial test agree
+  const pause = (input.admission ?? PROCESS_LLM_PROVIDER_ADMISSION).pause(input.provider, undefined, "interactive", at);
+  if (pause === null || halfOpenTrialInFlight(pause, at)) return null; // [B21 E4 fix: regressions-1] a trial in flight is the metered calls' pause, never the first turn's
+  const line = firstTurnPausedLine(pause);
+  input.emit({ type: "run_started", runId: input.runId, provider: input.provider });
+  try { input.trace?.recordWarning(line); } catch { /* tracing is passive */ }
+  input.emit({ type: "run_failed", runId: input.runId, reason: FIRST_TURN_PAUSED_REASON, message: line });
+  return { runId: input.runId, status: "failed", finalText: "", steps: 0, toolCalls: 0, failureReason: FIRST_TURN_PAUSED_REASON };
+}
+
+/** [B21 E4 fix: regressions-1] A half-open breaker whose ONE trial call is in flight: the meters answer it as a breaker pause whose instant
+ *  has already come (admission-control.ts `breakerPause`: `retryAtMs = max(openUntil, now)`, and `openUntil` has passed) - a pause for the
+ *  METERED calls (one trial at a time), never for the first turn, which takes no trial and settles none: before the trial is taken the same
+ *  half-open breaker lets it go (`halfOpenAdmits`), and it goes the same while the trial is out. A breaker still open (the end of its
+ *  window to come) and a window pause stay the first turn's pause. */
+function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {
+  return pause.reason === "breaker_open" && pause.retryAtMs <= at;
+}

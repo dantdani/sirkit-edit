@@ -187,7 +187,7 @@ export async function throwAiResponseError(
 
 /** The provider failures the card never offers Retry for: out of credits (`insufficient_quota` - a retry cannot succeed until someone
  *  adds credits, and the classifier never marked it retryable) and paused by Sirkit's own llm-provider breaker (`breaker_open` - a retry
- *  would be refused without a call; no run in B21-E1 ends with it: the coordinator's turn is not gated). The card itself is still shown:
+ *  would be refused without a call; no run in B21-E1 ended with it - [B21 E4] since D21-39 a request whose coordinator provider is paused ends with it, no call made). The card itself is still shown:
  *  its "Use <other> instead" is the human's own choice and still sends the message again on the other provider (B09.2); only its Retry
  *  is withheld (`retryOffered: false`, rendered disabled). */
 export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(["provider_insufficient_quota", "provider_breaker_open"] as const);

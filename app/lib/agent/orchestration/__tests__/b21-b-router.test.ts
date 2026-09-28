@@ -127,7 +127,10 @@ describe("[B21 B] the task-complexity router", () => {
       expect(route(text).kind, text).toBe("single");
     }
     const source = readFileSync(join(process.cwd(), ROUTER), "utf8");
-    expect(source).toMatch(/import \{ REPLACE_PART \} from "\.\.\/\.\.\/project\/composer-routing";/);
+    // [B21 E4] reviewed pin move (D21-38): the router's replacement grammar moved into composer-routing.ts beside `REPLACE_PART` as ONE
+    // exported predicate, so the router imports that predicate and its polite prefix on the line that imported the pairing - the title's
+    // "one grammar, imported" holds again (the composer's rule 5b uses the same predicate)
+    expect(source).toMatch(/import \{ POLITE, partKindSwap \} from "\.\.\/\.\.\/project\/composer-routing";/);
     expect(source).not.toMatch(/resistors?\|/);
     // [B21 D3 fix] reviewed pin move (review tests-6; OD-107 amended by B21-D3): the title's "one grammar" no longer holds - the router's
     // replacement rule is the composer's pairing (imported, unchanged) OR the kind swap (router.ts `partKindSwap`), a SUPERSET of the
@@ -135,7 +138,7 @@ describe("[B21 B] the task-complexity router", () => {
     // a kind swap the router sends to the DAG the composer sends to the schematic editor (D21-38), and every composer value change
     // that NAMES an active kind still stays single here
     for (const text of ["Replace the NE555 timer U1 with a lower-power timer.", "Swap the NE555 (U1) for a lower-power CMOS timer."]) {
-      expect(routeComposerMessage(text, true).route, text).toBe("edit");
+      expect(routeComposerMessage(text, true).route, text).toBe("ask"); // [B21 E4] reviewed pin move (D21-38 closed): the divergence is gone - the composer's rule 5b uses the same predicate, so the kind swap the router sends to the DAG reaches the assistant
       expect(route(text).rule, text).toBe("D-component-replacement");
     }
     for (const text of ["Replace C3 with 10uF for the LDO.", "Replace R1 with 10k for the timer.", "Replace the gate resistor for the MOSFET driver.", "Swap R4 and R5 for the op-amp gain.", "Replace C5 with 10uF near the regulator."]) {
@@ -146,7 +149,8 @@ describe("[B21 B] the task-complexity router", () => {
     // sweep found the unanchored pairing sending prohibitions and "why" questions to the DAG) - the composer's pairing is still imported
     // and must agree on every part word the grammar accepts (b21-d3-replacement-roles case 9)
     expect(source).toMatch(/if \(facts\.hasSchematic && partKindSwap\(message, userMessage\)\) return dag\("D-component-replacement"/);
-    expect(source).toMatch(/if \(!kindForm && !\(partForm && REPLACE_PART\.test\(rest\)\)\) return false;/);
+    // [B21 E4] reviewed pin move (D21-38): the predicate's body moved verbatim into composer-routing.ts, where the pairing it requires lives
+    expect(readFileSync(join(process.cwd(), "app/lib/project/composer-routing.ts"), "utf8")).toMatch(/if \(!kindForm && !\(partForm && REPLACE_PART\.test\(rest\)\)\) return false;/);
   });
 
   it("5. the run facts gate the shapes: no board - no readiness or PCB DAG; no schematic - no replacement or schematic DAG; a role that may not apply a proposal never recruits specialists; a selection-scoped PCB ask needs a selection", () => {

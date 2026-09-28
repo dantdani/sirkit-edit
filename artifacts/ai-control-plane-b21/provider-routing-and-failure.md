@@ -166,13 +166,21 @@ under the stand-down line - and the turn never runs on another provider; the fol
 (`interactive`, C69), so its 429 opens the breaker for the next request too (before the fix the follow-up was gated but never
 recorded). The per-DAG attempt ceiling stays B's: two attempts per task, at most four tasks. **CONFIRMED** (breaker cases 3 to 7 and 10
 to 13; route case 3 through the production POST: ONE paid specialist call after the 429, no follow-up turn, and the NEXT request's
-specialists make no call at all under the `provider_paused` line).
+specialists make no call at all under the `provider_paused` line). [B21 E4, 2026-09-28] Since D21-39 the NEXT request makes no call at
+all - its first turn included - and answers ONE `run_failed` `provider_breaker_open` (route case 3 moved, its reason next to it); the
+`provider_paused` line is reached when the breaker opens during a request (`b21-e2-chat-events` case 5 moved; `composer-and-first-turn.md`).
 
 **Not the coordinator's first turn (RECORDED).** E1 meters and gates specialist calls, and gates and meters the follow-up turn; the
 coordinator's own first turn of a request is today's path, untouched (a request while the provider is paused still makes that one call -
 the human's Retry is no longer offered for it, below). Gating it is a route change for B21-E2 (D21-39). The coordinator's SDK retries
 (OpenAI 2, Anthropic the SDK default 2) stay inside its adapter: the follow-up turn is metered as ONE admitted call per model step, and
-the SDK's own re-sends of that step are invisible to the meters (RECORDED, OD-115 "not applied").
+the SDK's own re-sends of that step are invisible to the meters (RECORDED, OD-115 "not applied"). [B21 E4, 2026-09-28] The first turn
+is GATED since B21-E4 (D21-39 closed): the route consults this same pause (`interactive`, the coordinator's provider) before it on the
+flag-off and flag-on paths, and a paused provider gets NO call - `run_started` and ONE `run_failed` `provider_breaker_open`, no Retry; a
+resumed request's first turn is replayed, never gated. It is gated, not metered: its own outcome still never reaches the breaker
+(`composer-and-first-turn.md`) - so the gate never fires on a flag-off process (which meters no call), a no-credits account whose first
+turn fails first never opens the breaker, and once opened it holds one window when no metered call follows (D21-42, recorded by the E4
+review); a half-open breaker's one trial in flight never gates a first turn (the trial is the metered calls').
 
 **No Retry for quota or an open breaker** (C53-C55, C61, C62). `PROVIDER_FAILURES_WITHOUT_RETRY` = `provider_insufficient_quota`,
 `provider_breaker_open` - the ONE list, beside the ONE owned dispatch both paths of the shared card use (`ai-preferences.ts`; the chat

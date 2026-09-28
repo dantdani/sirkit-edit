@@ -149,6 +149,8 @@ jobs:
           app/api/chat/__tests__/b21-e1-chat-provider.test.ts
           app/api/chat/__tests__/b21-e2-chat-events.test.ts
           app/api/chat/__tests__/b21-e3-chat-resume.test.ts
+          app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts
+          app/lib/project/__tests__/b21-e4-composer-routing.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts

@@ -32,7 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
-import { chatResumeBodyKeyAdmitted, emitRefusedRun, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume
+import { chatResumeBodyKeyAdmitted, emitRefusedRun, pausedFirstTurn, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume; [B21 E4] + the first turn behind the breaker
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -501,10 +501,10 @@ export const POST = agentStreamRoute(
         // once); context warnings follow it via contextWarnings.
         // [B21 B] a refused Tier 3 ask answers with NO provider call; a dag plan runs this same coordinator turn, then the
         // specialists and one follow-up turn (one stream, one terminal); a single plan is exactly the call below.
-        let result: AgentRunResult;
+        let result: AgentRunResult; const paused = plan.kind === "refused" ? null : pausedFirstTurn({ runId, provider, resume, emit, trace: traceRecorder }); // [B21 E4] D21-39: a coordinator provider paused by the llm-provider meters gets NO call on either path - run_started and ONE run_failed `provider_breaker_open` (no Retry); a resumed first turn is replayed, never gated; not paused, nothing changes
         if (plan.kind === "refused") {
           result = emitRefusedRun({ runId, provider, reason: plan.reason, emit, trace: traceRecorder });
-        } else {
+        } else if (paused) { result = paused; } else { // [B21 E4] the first turn below runs only when the gate above stood nothing down
           const request = { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal }; resumeChatRun(request, resume); // [B21 E3] the grant for THIS request: a resumed run's first turn is replayed, never re-run
           const deps = {
             adapter,

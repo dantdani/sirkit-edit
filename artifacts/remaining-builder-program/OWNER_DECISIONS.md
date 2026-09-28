@@ -1434,6 +1434,39 @@ Amendments to existing entries:
   coordinator's first turn (a route change); a per-tenant or per-run sub-ceiling of the agent share; `maxRetries: 0` for the coordinator
   too, with Sirkit-owned metered retries.
 
+**Amendment (B21-E4, 2026-09-28) — OD-115 — Provider spend controls for the DAG, amended: the coordinator's first turn behind the breaker (B21-E4, 2026-09-28)**
+
+- **Question:** B21-E1 applied OD-115 to every specialist call and the follow-up turn and recorded the coordinator's own first turn as
+  "not applied" (D21-39): a request made while the coordinator's provider was paused still made that one call.
+- **Applied:** the chat route consults the SAME pause before the coordinator's first turn - `currentLlmProviderPause` through
+  `PROCESS_LLM_PROVIDER_ADMISSION`, the `interactive` purpose (the whole process-wide window), the coordinator's provider with no model
+  key (as the follow-up turn) - on the flag-off single path and on both flag-on paths. Paused: NO call - `run_started`, then ONE
+  `run_failed` `provider_breaker_open` carrying the meters' own pause sentence, the card showing its Switch without Retry (E1's
+  `providerRetryOffered` rule), nothing planned, run or written to the orchestration record. A Tier 3 ask is refused before the gate (no
+  call either way). A resumed request's first turn is replayed from the record and never gated: its specialists and its follow-up turn
+  consult the breaker, and their stand-down settles its claimed start. Not paused: the route is unchanged (the flag-off stream
+  byte-identical to HEAD's). A half-open breaker whose one trial call is in flight is NOT a pause for the first turn (the adversarial
+  review, regressions-1): the first turn takes no trial and settles none, so it goes, as it does before the trial is taken.
+- **Not applied (recorded):** the first turn is gated, not metered - the gate only reads the meters, and the first turn's own outcome
+  never reaches the breaker: a coordinator's 429 opens nothing. Hence (D21-42): the gate never fires on a flag-off process (no call there
+  is metered, so no provider is ever paused); on a flag-on process the breaker opens only on a specialist's or a follow-up turn's answer,
+  so a no-credits account whose first turns fail first never opens it, and once opened for no credits it holds at most ONE window when no
+  metered call follows (every first turn after the hour goes and fails; the half-open trial waits for a metered call). The coordinator's
+  SDK retries stay inside its adapter. A window pause answers the same no-Retry code as an open breaker, its sentence naming the window.
+  The window and the breaker are PROCESS-WIDE by provider (no principal or tenant in the meters): one principal's metered calls - 60
+  specialist calls at most, the rest follow-up turns - can use up the provider's minute, and one tenant's no-credits answer or three
+  transient failures of any principal's specialist calls open the breaker; either now stands down every tenant's first turn on that
+  provider (a window pause until the minute ends), with no Retry and the Switch kept.
+- **Evidence:** `composer-and-first-turn.md` section 2 and section 4's "The review's findings (E4)"; `b21-e4-first-turn.test.ts` (7
+  cases: 6 the trial in flight, 7 the recorded limits), `b21-e4-chat-first-turn.test.ts` (8 cases: 6 the trial in flight through the
+  POST, 7 and 8 a no-credits account on a flag-off process and on a flag-on DAG); E1's route case 3 and E2's route case 5 moved with
+  their reasons (E2's exactly-once pins restored).
+- **Owner options:** record the first turn's no-credits and rate-limit answers to the breaker without reserving the window (closes
+  D21-42: the flag-off path and a no-credits account would then open and re-open it - and one tenant's transient billing answer would
+  pause every tenant's chat on that provider for the long window, the trade the owner decides); bound the window per principal before it
+  may gate other principals' first turns, or answer a window pause with its own reason, whose Retry is offered once the minute has passed
+  (a move of OD-40's shares or of E1's closed `PROVIDER_FAILURES_WITHOUT_RETRY` list).
+
 ## OD-116 — The structured-output mechanism for `SpecialistResult`, as applied (B21-E1, 2026-09-27)
 
 - **Question:** how does a specialist return its `SpecialistResult` (D21-20)?

@@ -208,7 +208,9 @@ describe("[B21 D3] the replacement is live for the schematic role; the replaceme
       expect(routeTaskComplexity(text, facts).kind, text).toBe("single");
     }
     // RECORDED (a UI gap outside D3, no UI change here): the composer's rule 8 routes the runbook sentence to the schematic editor
-    expect(routeComposerMessage(SCENARIO_17, true).route).toBe("edit");
+    // [B21 E4] reviewed pin move (D21-38 closed): the grammar moved into the composer module and its rule 5b uses it, so the runbook
+    // sentence reaches the assistant (the router's answers above unchanged; b21-e4-composer-routing runs the corpus through the composer)
+    expect(routeComposerMessage(SCENARIO_17, true).route).toBe("ask");
     expect(routeComposerMessage("Swap U1 for a lower-power alternative.", true).route).toBe("ask");
   });
 

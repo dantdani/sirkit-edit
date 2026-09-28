@@ -278,7 +278,10 @@ describe("[B21 E2] the run events through the production POST", () => { // [B21 
     const pass = (base: DurableOrchestrationRunStore): OrchestrationRunStore => base;
     const scenarios: Scenario[] = [
       { reason: "no_specialist_ran", sentence: /^Orchestration: no specialist ran \(store_unavailable\); the assistant's answer above stands\.$/, partial: null, prepare: (base) => ({ revision: (scope) => base.revision(scope), history: async () => { throw new Error("the store is down"); }, append: (request) => base.append(request) }) },
-      { reason: "provider_paused", sentence: /^Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters \(provider_paused, OD-115\) - no further call is made to it/, partial: { planned: 4, usable: 0, unusable: 0, mergeWithheld: null, notStarted: 4, handedOn: false }, prepare: pass },
+      // [B21 E4] reviewed pin move (D21-39 closed): a request made while the provider is ALREADY paused now makes no call at all (the route
+      // gates the coordinator's first turn - b21-e4-chat-first-turn), so the runtime's `provider_paused` stand-down is reached when the breaker
+      // opens DURING the request: here as the scheduler writes the plan, after the first turn and before any specialist
+      { reason: "provider_paused", sentence: /^Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters \(provider_paused, OD-115\) - no further call is made to it/, partial: { planned: 4, usable: 0, unusable: 0, mergeWithheld: null, notStarted: 4, handedOn: false }, prepare: (base) => { let opened = false; return { revision: (scope) => base.revision(scope), history: (scope) => base.history(scope), append: async (request) => { if (!opened && request.taskId === "plan") { opened = true; await failOnce("openai", "insufficient_quota", Date.now()); } return base.append(request); } }; } },
       { reason: "no_usable_result", sentence: /^Orchestration: no specialist result to hand on \(completed\); the assistant's answer above stands\.$/, partial: { planned: 4, usable: 0, unusable: 4, mergeWithheld: null, notStarted: 0, handedOn: false }, prepare: pass },
       { reason: "merge_unrecorded", sentence: /^Orchestration: the merge could not record its decisions \(store_unavailable\); no follow-up turn was made and the assistant's answer above stands\.$/, partial: { planned: 4, usable: 3, unusable: 1, mergeWithheld: null, notStarted: 0, handedOn: false }, prepare: (base) => ({ revision: (scope) => base.revision(scope), history: (scope) => base.history(scope), append: async (request) => { if (request.taskId.includes(".merge-") || request.taskId.startsWith("merge-")) throw new Error("the store is down"); return base.append(request); } }) },
       { reason: "follow_up_paused", sentence: /^Orchestration: no follow-up turn was made and the assistant's answer above stands \(the coordinator never switches provider mid-run\) - its LLM provider "openai" is paused \(insufficient_quota\)/, partial: { planned: 4, usable: 3, unusable: 1, mergeWithheld: 0, notStarted: 0, handedOn: false }, prepare: (base) => { let opened = false; return { revision: (scope) => base.revision(scope), history: (scope) => base.history(scope), append: async (request) => { if (!opened && request.taskId.includes(".merge-")) { opened = true; await failOnce("openai", "insufficient_quota", Date.now()); } return base.append(request); } }; } },
@@ -289,8 +292,7 @@ describe("[B21 E2] the run events through the production POST", () => { // [B21 
       state.starts = [];
       state.script = scenario.reason === "no_usable_result" ? { "circuit-topology": "text-only", schematic: "text-only", "verification-critic": "text-only" } : {};
       state.followUpFails = scenario.reason === "follow_up_failed";
-      if (scenario.reason === "provider_paused") await failOnce("openai", "insufficient_quota", Date.now());
-      const { store } = inMemory();
+      const { store } = inMemory(); // [B21 E4] the provider_paused scenario's breaker opens inside the request (its `prepare`), no longer before it
       const wrapped = scenario.prepare(store);
       setOrchestrationStoreFactory(() => wrapped);
       const traces = traceCapture();
@@ -300,6 +302,14 @@ describe("[B21 E2] the run events through the production POST", () => { // [B21 
       const down = downs.at(-1)!;
       expect(down, label).toMatchObject({ type: "degraded", reason: scenario.reason, taskId: null, role: null, provider: null, model: null });
       expect(String(down.message), label).toMatch(scenario.sentence);
+      if (scenario.reason === "provider_paused") { // [B21 E4] E1's route case 3 pinned these through the POST (regressions-3); the paused provider is named, no call is said to have failed
+        // [B21 E4 fix: tests-1] E1's pins were EXACTLY ONCE (`toHaveLength(1)`), and are again: the scheduler's not-started line and the
+        // runtime's `provider_paused` stand-down each appear once on the whole stream (a second report of either fails here)
+        expect(events.filter((event) => /not started and no follow-up turn can run - the coordinator's LLM provider "openai" is paused \(insufficient_quota\)/.test(String(event.message ?? ""))), label).toHaveLength(1);
+        expect(events.filter((event) => String(event.message ?? "").startsWith("Orchestration: the coordinator's LLM provider is paused by Sirkit's own llm-provider meters (provider_paused, OD-115)")), label).toHaveLength(1);
+        expect(events.some((event) => String(event.message ?? "").includes("failed during the specialists")), label).toBe(false);
+        expect(state.starts.map((start) => start.role), label).toEqual(["coordinator"]);
+      }
       expect(orchestrationRunEventIssue(Object.fromEntries(Object.entries(down).filter(([key]) => key !== "v" && key !== "seq"))), label).toBeNull();
       expect(warnings(events), label).not.toContain(String(down.message));
       expect(warnings(events).filter((line) => STATUS_LINE.test(line)), label).toEqual([]);

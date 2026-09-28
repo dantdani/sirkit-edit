@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-E3 committed on chapter/b21-specialist-orchestration: the route-level resume - the chat body's optional resumeRunId under the flag, authorized by the record's owner, message, provider and plan with nine closed refusals, the run id reused, the coordinator's first turn replayed from the record, the scheduler replaying what is still current against the LIVE head the resuming request carries (its selection and netlist, seals outliving the approval window), the follow-up turn once, one request of a run at a time - and the userMessageDigest ledger across resumes (a specialist proposal never presented twice, already_presented, a void claim presented once); OD-130's part review reachable from a production POST; Resume a run-log line, read back after a reload; twenty review findings fixed; D21-4 closed at the route, D21-16's route half and D21-17's live-head half closed; next B21-E4",
+  "currentCheckpoint": "B21-E4 committed on chapter/b21-specialist-orchestration: the composer reaches the DAG with the runbook's own sentence - B21-D3's strict replacement grammar moved verbatim into composer-routing.ts as ONE exported predicate beside REPLACE_PART, the composer's rule 5b and the router answering with it (the router importing it, its answers byte-identical to HEAD's over the six-round corpus; every scan E4 added to the composer's path linear, B18-E's REPLACE_PART recorded super-linear) - and the coordinator's first turn behind the llm-provider breaker - a paused provider gets NO call on the flag-off and flag-on paths, one run_failed provider_breaker_open without Retry, a half-open breaker's trial in flight never gating it, a resumed request never gated at its replayed first turn, the flag-off stream byte-identical with the breaker closed; the gate only reads the meters (D21-42 opened: on a flag-off process it never fires, and a no-credits account whose first turns fail first never opens the breaker); the adversarial review's seven findings answered test-first; D21-38 and D21-39 closed; B21-E complete; next B21-F",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "b4a0ec5",
+  "lastGreenSha": "fafc90e",
   "pullRequest": "draft PR #11 (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B21-E4: the composer's kind swap (D21-38) and the coordinator's first turn behind the breaker (D21-39); then B21-F (evaluations); OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options and OD-111's retention question stay with the owner",
-  "updatedAt": "2026-09-28T00:58:31-04:00",
+  "nextAction": "B21-F: the evaluations (offline fake-provider, model-in-loop record-only, browser) with the per-role scripted specialists answering through the result tool (D21-40); then the B21 closeout; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options (record the first turn's no-credits / rate-limit answer - D21-42 - and a per-principal window or a window pause's own reason) stay with the owner",
+  "updatedAt": "2026-09-28T02:54:27-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }
