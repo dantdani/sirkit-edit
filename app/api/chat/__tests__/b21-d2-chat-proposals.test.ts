@@ -7,7 +7,7 @@
  * the coordinator is emitted as the run's own `proposal_ready` and is APPROVED through the product's existing Tier 1 path with the
  * run's principal reauthorized by the real apply-authorization route; a coordinator that sealed its own proposal keeps it the run's
  * one artifact; and a non-exact replacement target (OD-130) never reaches the merge at the route - the model-written artifact is
- * refused before it (`proposal_not_sealed_in_run`) and no specialist is offered the replacement tool (dormant: pin facts).
+ * refused before it (`proposal_not_sealed_in_run`) and no specialist is offered the replacement tool (dormant: pin facts [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the replacement is live for the schematic role; in this suite it is withheld because no component authority is loaded, case 5]).
  * [B21 D2 fix] Once the coordinator sealed its own proposal the specialists are offered none (OD-122's `proposal_exists` clause), so a
  * same-component disagreement can never be listed as an accepted specialist action; the presentation is ALWAYS on the finalized trace
  * with its artifact id and digest, past the 12-line cap; and a peer whose conflicting seal never reached the merge withholds it.
@@ -294,7 +294,7 @@ describe("[B21 D2] specialists propose through their existing tools, through the
     expect(state.starts[2]!.userMessage).not.toContain("4k7");
   });
 
-  it("5. flag ON, a NON-EXACT replacement target (OD-130) never reaches the merge at the route: the schematic specialist is not offered the replacement tool (dormant: its sealer needs the pin-facts reads only the coordinator's gateway holds) and the replacement its MODEL writes - a real artifact of the family naming another part - is refused BEFORE the merge (`proposal_not_sealed_in_run`, dissent malformed): no part review record, no escalation, nothing presented, one malformed line on the stream", async () => {
+  it("5. flag ON, a NON-EXACT replacement target (OD-130) never reaches the merge at the route: the schematic specialist is not offered the replacement tool (dormant when written - its sealer needed the pin-facts reads; live for the schematic role since B21-D3, and not offered here because this run loads no component authority) and the replacement its MODEL writes - a real artifact of the family naming another part - is refused BEFORE the merge (`proposal_not_sealed_in_run`, dissent malformed): no part review record, no escalation, nothing presented, one malformed line on the stream", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replacement live for the schematic role since B21-D3, withheld here for want of a loaded authority; assertions unchanged
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemoryStore();
     setOrchestrationStoreFactory(() => store);

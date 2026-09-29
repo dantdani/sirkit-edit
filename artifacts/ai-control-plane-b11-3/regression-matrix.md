@@ -105,7 +105,7 @@ Targeted proofs sit alongside the sweep for the shapes the stage calls out:
 | --- | --- |
 | `e04-invalid-board` remains valid replay transport while `validatePcbBoardStructure` calls it invalid; withholding unchanged | §C "e04-invalid-board is valid replay TRANSPORT while the PCB validator calls it invalid" |
 | The PCB structural validator was not weakened | §C "the PCB structural validator was not weakened to preserve the fixture" |
-| Context v2 / capsule v3; older versions refuse explicitly | §D "the context is v2 and the capsule v3; older versions refuse EXPLICITLY" |
+| Context v2 / capsule v3; older versions refuse explicitly [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): true for B11.3's own stage; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2] | §D "the context is v2 and the capsule v4 (v3 when written; B21-F grew the capsule's own field set - a reviewed bump); older versions, v3 among them, refuse EXPLICITLY" (retitled by the B21 closeout, 2026-09-29; assertions unchanged) |
 | Every committed capsule carries the current versions and its pinned digest | §D "every committed capsule carries the current versions and its pinned digest" (19 capsules) |
 
 ## Surrounding invariants

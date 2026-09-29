@@ -139,9 +139,9 @@ describe("[B21 D3] the specialist-replacement page", () => {
     for (const path of ["task-complexity-router.md", "specialist-roles.md", "merge-and-disagreement.md", "specialist-proposals.md"]) expect(read(`artifacts/ai-control-plane-b21/${path}`), path).toMatch(note);
     const roles = read("artifacts/ai-control-plane-b21/specialist-roles.md");
     expect(roles).toMatch(/\[B21 D3, 2026-09-26\] Four of those entries \(three distinct ids\) are LIVE since B21-D3/);
-    expect(roles).toMatch(/^\| C33 \| `app\/api\/chat\/orchestration-runtime\.ts` \| 260 \| — \| `const specialistGateway = createAgentToolGateway\(deps\.registry, specialistGatewayOptions\(request\.signal\)\);` \| [^\n]*\[B21 D3\]/m);
+    expect(roles).toMatch(/^\| C33 \| `app\/api\/chat\/orchestration-runtime\.ts` \| 240 \| — \| `const specialistGateway = createAgentToolGateway\(deps\.registry, specialistGatewayOptions\(request\.signal\)\);` \| [^\n]*\[B21 D3\]/m); // [B21 closeout, 2026-09-29] reviewed pin move 260 -> 240: the D21-36 retirement deleted B's envelope (20 lines) above the anchor
     const router = read("artifacts/ai-control-plane-b21/task-complexity-router.md");
-    expect(router).toMatch(/^\| C46 \| `app\/api\/chat\/orchestration-runtime\.ts` \| 260 \| — \| `const specialistGateway = createAgentToolGateway\(deps\.registry, specialistGatewayOptions\(request\.signal\)\);` \| [^\n]*\[B21 D3\]/m);
+    expect(router).toMatch(/^\| C46 \| `app\/api\/chat\/orchestration-runtime\.ts` \| 240 \| — \| `const specialistGateway = createAgentToolGateway\(deps\.registry, specialistGatewayOptions\(request\.signal\)\);` \| [^\n]*\[B21 D3\]/m); // [B21 closeout, 2026-09-29] reviewed pin move 260 -> 240: the D21-36 retirement deleted B's envelope (20 lines) above the anchor
     expect(router).toMatch(/`D-component-replacement`[^\n]*\[B21 D3, 2026-09-26\]/);
     const proposals = read("artifacts/ai-control-plane-b21/specialist-proposals.md");
     const scenario = section(proposals, 4);

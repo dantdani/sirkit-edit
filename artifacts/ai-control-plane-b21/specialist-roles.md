@@ -106,6 +106,8 @@ holds). The proposing roles (OD-120) are `coordinator`, `circuit-topology`, `sch
 | `manufacturing-readiness-reviewer` | `:826` | `sirkit.validation.drc-run` | read | The deterministic design rule check the readiness review starts from. |
 | `cost-latency-router` | `:827` | — | — | A policy role over the plan's caps and provider choice: it reads no project state, so it holds no tool, and a plan that names it does not run it (role_has_no_tools: its task records the dissent) until B21-E gives it a policy input. |
 
+> [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the `cost-latency-router` row's "until B21-E gives it a policy input" is `ROLE_NOTES`' own text (`role-tools.ts`, pinned equal to this cell), kept verbatim: B21-E (E1..E4) gave the role no policy input - E1's role table routes it inherit/inherit and it still holds no tool, so a plan naming it still records `role_has_no_tools`, a `degraded` event since B21-E2]
+
 The checker's closed vocabulary (C6), in the order a violation list is written: `not_exposed` (an id outside the 33 or a descriptor not
 agent-exposed), `granted_execution` (a `mutate` descriptor in a specialist row), `view_control` (a `view-session` descriptor in a
 specialist row), `never_exposed_pattern` (a never-exposed pattern, a Tier 3 family name, or a class the exposure rule never admits),
@@ -155,20 +157,20 @@ as an allowlist (33 ids, over the bound) — the coordinator's run carries none.
   step, and one visible warning names it (`Orchestration: specialist <role> not run (role_has_no_tools, task <taskId>): …`); the
   plan record's reason names every such role and the scheduled line counts only the roles that run. So every planned task is in the
   outcome's `tasks` or `notStarted`, and the follow-up coordinator turn's envelope (`specialistResultsEnvelope`; [B21 D fix] superseded
-  in production by the merge's `mergedResultsEnvelope`, which carries the not-run task the same way - D's route case 6, D21-36) carries the not-run
+  in production by the merge's `mergedResultsEnvelope`, which carries the not-run task the same way - D's route case 6, D21-36; [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B's function retired, D21-36 - its name kept here as the record's, the runtime naming it only in a one-line tombstone]) carries the not-run
   task with its reason — the model is told which evidence is missing, never handed a "completed" plan without it (least-privilege
   cases 4 and 8; route case 4). A resume for the same coordinator run and scope therefore never meets `plan_mismatch` because a
   resource loaded or failed to load this time: a committed result replays whatever the role's tools now, and a role that now has
   tools runs at its next attempt (least-privilege case 8, both directions). A FRESH plan none of whose roles has a tool is refused
   `plan_empty` with nothing written and no adapter call (case 4). The cost/latency policy role is never run (it holds no tool until
-  B21-E gives it a policy input). **The sourcing specialist, stated exactly:** its only read a specialist can hold under OD-109 is
+  B21-E gives it a policy input) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B21-E closed without giving it one - E1's role table routes it inherit/inherit - and it still holds no tool]. **The sourcing specialist, stated exactly:** its only read a specialist can hold under OD-109 is
   `component-authority.inspect`, which needs the server-owned component authority, and the route's loader (`loadRunComponentAuthority`)
   settles that authority NULL without a durable source (the local build), for a project where no schematic component has a durable
   binding (every new design), on a failed load and past its 5 s deadline — so the role runs only when
   at least one schematic component has a durable binding that loads within that deadline (least-privilege case 9, over the
   loader itself). Without it the replacement DAG runs two specialists and the sourcing task records its missing evidence (route
   case 4, the suite's default); with a durable source returning U1's binding all three run through the production POST (route
-  case 17). The suites' contexts hold what production loads for
+  case 17) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the replacement DAG holds the schematic specialist too, so three specialists run without the authority and all four with it - `specialist-replacement.md` section 3; B's route cases 4 and 17 moved]. The suites' contexts hold what production loads for
   U1's binding (the physical-binding service's aggregate projected by the route's loader), never an empty record set the loader never
   produces. **CONFIRMED**. Consequence, recorded for the owner (OD-120): runbook :809's component specialist and B21-F's "missing
   component evidence" case run no sourcing model when no binding exists; the missing evidence is recorded as dissent and shown to the
@@ -200,7 +202,7 @@ What is **structural** (true by how the objects are built, pinned by inspection 
   one, by IDENTITY (the second instance constructed, never the coordinator's), under every specialist's wrapper
   (`b21-b-chat-router.test.ts` case 16, extending case 14; the review showed case 14's probes pass through the coordinator's gateway
   too, so only the identity check tells them apart).
-  [B21 D3, 2026-09-26] Still two gateways per request, the second handed to the scheduler by identity - but since B21-D3 it is built with ONE option, the route's pin-facts reader (C33 re-pinned by anchor; no option at all only when no catalog source is configured), and the schematic role is offered the replacement (`specialist-replacement.md`).
+  [B21 D3, 2026-09-26] Still two gateways per request, the second handed to the scheduler by identity - but since B21-D3 it is built with ONE option, the route's pin-facts reader (C33 re-pinned by anchor; no option at all only when no catalog source is configured), and the schematic role is offered the replacement (`specialist-replacement.md`). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D2 a proposing role's loop runs over `specialistContextFor` and the 'read + reviewed proposals' view, not the read-only view and the derived context - no-elevation case 4, retitled]
 
 What is **behavioural** (true by what a call does, proven by calling):
 
@@ -302,7 +304,7 @@ routing") can still select the layout variant. **CONFIRMED** by `b21-b-router.te
 | suite | `it(` blocks | what it proves |
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-c-role-tools.test.ts` | 5 | the report clean; every row a sorted, duplicate-free subset of the 33 within 32, no execution, view control, never-exposed or Tier 3 id, a proposal only in a proposing row, the coordinator's row the exposure list itself, the cost/latency role none, OD-120's table exactly, a reason per id as data; every violation reason from a crafted table, a hostile table never thrown; the table equals this page's; the module names no route, executor, grant or approval |
-| `app/lib/agent/orchestration/__tests__/b21-c-least-privilege.test.ts` | 10 | every role offered exactly its row intersected with the admitted reads, persisted and passed the same; the intersection after every gate, narrowing only; A4L refusals approve nothing with `allowlist_invalid`; a role with no tools not run, its task kept with its dissent (`role_has_no_tools`); `unknown_tool` at the loop and `role_not_permitted_tool` at the gateway; byte-identical to HEAD without the input; [fix] the 32-id bound and the never-exposed clause live; stable task ids and a same-scope resume across the authority's presence, the envelope naming the missing evidence; the sourcing specialist only with a loaded durable binding; loop.ts's imports visible to a line-anchored gate |
+| `app/lib/agent/orchestration/__tests__/b21-c-least-privilege.test.ts` | 10 | every role offered exactly its row intersected with the admitted reads, persisted and passed the same; the intersection after every gate, narrowing only; A4L refusals approve nothing with `allowlist_invalid`; a role with no tools not run, its task kept with its dissent (`role_has_no_tools`); `unknown_tool` at the loop and `role_not_permitted_tool` at the gateway; byte-identical to HEAD without the input; [fix] the 32-id bound and the never-exposed clause live; stable task ids and a same-scope resume across the authority's presence, the envelope naming the missing evidence ([superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the outcome names it; the envelope's carriage is route case 4 and D's route case 6 since the D21-36 retirement]); the sourcing specialist only with a loaded durable binding; loop.ts's imports visible to a line-anchored gate |
 | `app/lib/agent/orchestration/__tests__/b21-c-no-elevation.test.ts` | 5 | the eight claims refused `role_context_elevated` before the gateway (each port claim by its flag and by its authority alone); the hardened derivation; the never-execution sweep for all nine roles mints nothing, nested payloads through a permitted read handed on verbatim; the specialist deps closed and minter-free, no gateway constructed, the role's list enforced by the wrapper the scheduler built; the follow-up turn not elevatable |
 | `app/lib/agent/orchestration/__tests__/b21-c-page.test.ts` | 7 | this page |
 | `app/lib/agent/orchestration/__tests__/b21-b-router.test.ts` | 9 | B's seven cases, case 3's full-circuit pins moved; case 8 the trim; case 9 the full-circuit grammar (a new circuit named from words; the layout variant's own ask) |
@@ -388,7 +390,7 @@ logs are `c-*.log`, these are `fix/gate-*.log`):
 - tsc: 0 errors (`fix/tsc.log`). eslint on the fourteen new and changed code files: clean (`fix/eslint.log`). No control byte and no CRLF in any of the seventeen new or changed files. No generator input changed (no descriptor, route, UI control or request key), so no generator was re-run: the B04/B01 byte artifacts are byte-identical (b04-tool-registry, gate 4) and `git status` lists only the files of section 6. **CONFIRMED**
 
 Live behaviour with a real model: **BLOCKED-LIVE-QUALIFICATION** (LB-9). **UNKNOWN**: whether the owner keeps the ten dormant row entries in
-their rows (OD-120 as proposed) or prefers the rows cut to what C can offer; nothing in C depends on the answer.
+their rows (OD-120 as proposed) or prefers the rows cut to what C can offer; nothing in C depends on the answer. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D2 and D3 four of the ten are live - section 1's notes - and the owner's question stands for the six still dormant]
 
 ## 7. For the lead — the reserved texts, in full
 
@@ -609,7 +611,7 @@ the reader otherwise.
 | C30 | `app/lib/engineering/execution-grant.ts` | 32 | — | `export const EXECUTION_FAMILIES = Object.freeze([` | D21-31: the closed eight families |
 | C31 | `app/lib/mcp/agent-port.ts` | 221 | — | `list.length > MCP_AGENT_TOOLS_MAX) return names;` | A4L: an over-long list approves nothing |
 | C32 | `app/lib/engineering/permission-tiers.ts` | 36 | — | `export const TIER3_FAMILY_PATTERN = ` | the Tier 3 family floor |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the one specialist gateway: no minter, no port, no prompt version; [B21 D3] its one option the route's pin-facts reader (anchor re-pinned, line unchanged) |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 240 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the one specialist gateway: no minter, no port, no prompt version; [B21 D3] its one option the route's pin-facts reader (anchor re-pinned, line unchanged); [B21 closeout, 2026-09-29] re-pinned 260 -> 240 by the D21-36 retirement |
 | C34 | `app/lib/engineering/tool-discovery.ts` | 32 | — | `export const DISCOVERY_CHANNELS = ["interactive-ui", "assistant-agent", "automation", "api", "mcp"] as const;` | the channel list, unchanged |
 | C35 | `app/lib/agent/orchestration/contracts.ts` | 77 | — | `maxAllowedToolIds: 32,` | the contracts' A4L bound |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 85 | — | `export const ROLE_HAS_NO_TOOLS = "role_has_no_tools" as const;` | the drop's reason |

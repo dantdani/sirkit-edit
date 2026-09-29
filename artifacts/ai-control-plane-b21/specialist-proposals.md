@@ -126,7 +126,7 @@ The ONE fact each live proposal's sealer needs from the coordinator's VERIFIED c
   execution, a view control, a Tier 3 or never-exposed id, a long-running proposal or the replacement. **CONFIRMED** (proposing-roles
   case 4). [B21 D2 fix] The wrapper's own class check is pinned apart from the list: handed a HAND-BUILT list naming both long-running
   proposals, the replacement, a granted execution and a view control beside the live Tier 1 edit, it still refuses those five before
-  the gateway and passes only the read and the live proposal. **CONFIRMED** (proposing-roles case 8).
+  the gateway and passes only the read and the live proposal. **CONFIRMED** (proposing-roles case 8). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the replacement is live for the schematic role: no role but the schematic one is offered it - proposing-roles case 4 - and the wrapper refuses four and passes the read, the Tier 1 edit and the replacement - proposing-roles case 8, both retitled]
 - **The frame follows the run's EFFECTIVE set, never the role alone ([B21 D2 fix], review regressions-4 / tests-2).** Whether THIS run
   is offered a live proposal (`offersProposal` over its persisted `allowedToolIds`, C58) decides the opening line (`PROPOSING_OPENING`,
   C62, instead of B's "read-only" one), the rules line (`specialistFrameRules(proposing)`, C18, C59), the sealed-proposals result rule
@@ -206,7 +206,7 @@ The coordinator's artifact events (`COORDINATOR_ARTIFACT_EVENTS`, in order): `pr
   **INFERRED** residual: a scheduler-level replay of a result committed earlier still carries its own seal; the route never replays
   (a fresh run id per POST), and the decision is `coordinator_sealed` first either way, so nothing of it is presented. **CONFIRMED** (approval
   case 8 - each of the four events through the REAL runtime, a real Tier 1 seal, a real bounded PCB edit, a routing candidate its
-  family produced and a real execution grant; route case 4 - the same component, R1 3k3 against a scripted 4k7; proposing-roles case 9). [B21 E2, 2026-09-27] Since B21-E2 that one line is a `degraded` event (`coordinator_artifact_held`, the same sentence) (`run-events-and-trace.md`, OD-126).
+  family produced and a real execution grant; route case 4 - the same component, R1 3k3 against a scripted 4k7; proposing-roles case 9). [B21 E2, 2026-09-27] Since B21-E2 that one line is a `degraded` event (`coordinator_artifact_held`, the same sentence) (`run-events-and-trace.md`, OD-126). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E3 the route replays on a resume (`resumeRunId`): a replayed result keeps its seal, and the userMessageDigest ledger decides whether it is presented - CONFIRMED, E3's runtime case 4; `route-resume.md` section 4]
 
 `presentSpecialistProposal` (C27, called at C31) emits the presented action as the family's OWN event - the shape the coordinator's
 seal emits, under the coordinator's run id, the artifact read back from the run's validated result with its digest re-checked (C26) -
@@ -274,7 +274,7 @@ separate presentation record (B21-E's trace block may carry it).
   line). The merge's OD-130 rule stays as defense in depth (D's merge cases 6 and 19 over relayed artifacts); a non-exact target can
   reach it only through a scheduler-level replay whose exact authority moved between attempts, which the route never performs (a fresh
   run id per POST). **INFERRED** for the replay path; **CONFIRMED** for the route.
-  [B21 D3, 2026-09-26] The route statement stands: since B21-D3 a specialist seals real replacements, the replay path is CONFIRMED through the runtime's own resume (scenario17 case 5) and the route's envelope RENDERS the part review through the scheduler seam (route case 5, a test-built resume), but the route never resumes - OD-130's part review is CONFIRMED-unreachable from a production POST until B21-E's route-level resume (route case 7; `specialist-replacement.md`).
+  [B21 D3, 2026-09-26] The route statement stands: since B21-D3 a specialist seals real replacements, the replay path is CONFIRMED through the runtime's own resume (scenario17 case 5) and the route's envelope RENDERS the part review through the scheduler seam (route case 5, a test-built resume), but the route never resumes - OD-130's part review is CONFIRMED-unreachable from a production POST until B21-E's route-level resume (route case 7; `specialist-replacement.md`). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E3 it is REACHABLE from a production POST through the route-level resume: a replayed seal is re-judged against the authority loaded for the resuming request - `route-resume.md` section 5; D21-16 closed at the route by B21-E3]
 
 ## 5. What D2 does NOT do
 
@@ -339,7 +339,7 @@ the source restored byte for byte and verified by sha256 (`d2fix/mutations.summa
   test code. No case assertion of `b21-d-verification-requests.test.ts` or of `b21-d-merge.test.ts` cases 1..16 and 18..23 moved.
 - `b21-d-merge.test.ts` case 17: the accepted verdict now says `provenance: sealed-in-run` and never "provenance not established"
   (it still never says "verified by their families"); its title's "never calls its artifacts ... sealed" is stale - retitled at the
-  closeout (the OD-113 pattern), assertions as moved here.
+  closeout (the OD-113 pattern), assertions as moved here. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled; assertions unchanged]
 - `b21-d-chat-merge.test.ts`: cases 2..5 relay their test seals through the scheduler seam (`setSpecialistSchedulerFactory`, reset
   after each case); case 3 - exactly one accepted action and nothing sealed by the coordinator - now asserts the ONE `proposal_ready`
   the runtime emits (its artifact digest the relayed proposal's) where it asserted none (OD-122 amended).
@@ -358,7 +358,7 @@ the source restored byte for byte and verified by sha256 (`d2fix/mutations.summa
 - `b21-c-no-elevation.test.ts` case 4: a proposing role's loop runs over `specialistContextFor` and `specialistToolRegistry`; a read-only
   role's over the derivation and the read-only view as before; either way the context claims nothing.
 - Stale titles kept (retitled at the closeout, OD-113's pattern): D's merge case 12 ("the dormant OD-120 proposal tools stay dormant: no
-  role gains a tool") and C's no-elevation case 4 ("each loop runs over the read-only registry"); D's route suite header noted in place.
+  role gains a tool") and C's no-elevation case 4 ("each loop runs over the read-only registry"); D's route suite header noted in place. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): both retitled; assertions unchanged]
 - Pages: the A..D pages carry dated `[B21 D2, 2026-09-26]` notes where D2 changed what they state; C's role table and D's own-code
   table move with the data they are (C's six proposal reason cells, D's new `proposal-not-sealed-in-run` row).
 
@@ -573,14 +573,14 @@ the base, for the reader (none of them changed in D2).
 | C23 | `app/lib/agent/orchestration/scheduler.ts` | 464 | — | `sealedArtifactDigests: committed.record.document.proposedActions.map((action) => action.artifactDigest)` | a replay carries its committed result's seals |
 | C24 | `app/lib/agent/orchestration/merge.ts` | 1060 | — | `export function specialistApprovalDecision(` | OD-122's rule, deterministic and ordered |
 | C25 | `app/lib/agent/orchestration/merge.ts` | 1053 | — | `export const SPECIALIST_APPROVAL_OUTCOMES = Object.freeze([` | its closed outcomes |
-| C26 | `app/api/chat/orchestration-runtime.ts` | 446 | — | `export function specialistProposalEvent(` | the accepted action as its family's own event, read back and digest-checked |
-| C27 | `app/api/chat/orchestration-runtime.ts` | 464 | — | `export function presentSpecialistProposal(` | presented, or nothing and why |
-| C28 | `app/api/chat/orchestration-runtime.ts` | 431 | — | `export const SPECIALIST_PROPOSAL_EVENTS = Object.freeze({` | each family's own event and tool |
-| C29 | `app/api/chat/orchestration-runtime.ts` | 429 | — | `export const COORDINATOR_ARTIFACT_EVENTS: readonly string[] = Object.freeze([` | what the coordinator's own turn hands the human |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 244 | — | `else if (COORDINATOR_ARTIFACT_EVENTS.includes(event.type)) firstArtifacts.push(event.type);` | recorded from the first turn's events |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `const approval = presentSpecialistProposal({` | after the merge's lines, before the follow-up turn |
-| C32 | `app/api/chat/orchestration-runtime.ts` | 383 | — | `...(approval ? { approval: { outcome: approval.outcome, presented: approval.presented } } : {})` | the envelope's approval block |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 340 | — | `APPROVAL says whether the one accepted action was handed to the human's existing review` | the envelope's header, amended |
+| C26 | `app/api/chat/orchestration-runtime.ts` | 426 | — | `export function specialistProposalEvent(` | the accepted action as its family's own event, read back and digest-checked |
+| C27 | `app/api/chat/orchestration-runtime.ts` | 444 | — | `export function presentSpecialistProposal(` | presented, or nothing and why |
+| C28 | `app/api/chat/orchestration-runtime.ts` | 411 | — | `export const SPECIALIST_PROPOSAL_EVENTS = Object.freeze({` | each family's own event and tool |
+| C29 | `app/api/chat/orchestration-runtime.ts` | 409 | — | `export const COORDINATOR_ARTIFACT_EVENTS: readonly string[] = Object.freeze([` | what the coordinator's own turn hands the human |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 224 | — | `else if (COORDINATOR_ARTIFACT_EVENTS.includes(event.type)) firstArtifacts.push(event.type);` | recorded from the first turn's events |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `const approval = presentSpecialistProposal({` | after the merge's lines, before the follow-up turn |
+| C32 | `app/api/chat/orchestration-runtime.ts` | 363 | — | `...(approval ? { approval: { outcome: approval.outcome, presented: approval.presented } } : {})` | the envelope's approval block |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 320 | — | `APPROVAL says whether the one accepted action was handed to the human's existing review` | the envelope's header, amended |
 | C34 | `app/lib/agent/orchestration/merge.ts` | 136 | — | `{ code: "proposal-not-sealed-in-run", decision: "malformed"` | the merge's own code (a row of MERGE_OWN_CODES) |
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 685 | — | `export const SEALED_PROPOSALS_RULE = ` | the proposing roles' result rule |
 | C36 | `app/lib/agent/loop.ts` | 177 | — | `if (!context.schematicHeadMark) {` | the schematic proposals' prerequisite, unchanged |
@@ -602,11 +602,11 @@ the base, for the reader (none of them changed in D2).
 | C52 | `app/api/chat/orchestration-runtime.ts` | 172 | — | `export const ORCHESTRATION_TRACE_LINES_MAX = 12;` | the orchestration trace cap an always-recorded line passes |
 | C53 | `app/lib/agent/orchestration/scheduler.ts` | 109 | — | `artifactHeld?: boolean;` | [fix] the coordinator run's fact: its own turn already handed the human an artifact (OD-122) |
 | C54 | `app/lib/agent/orchestration/scheduler.ts` | 399 | — | `coordinator.artifactHeld === true ? deriveSpecialistContext(context) : specialistContextFor(context, task.role)` | [fix] then no sealer fact, so no proposal is offered to any specialist |
-| C55 | `app/api/chat/orchestration-runtime.ts` | 263 | — | `...(firstArtifacts.length > 0 ? { artifactHeld: true } : {})` | [fix] the runtime hands the scheduler the coordinator's artifact fact |
+| C55 | `app/api/chat/orchestration-runtime.ts` | 243 | — | `...(firstArtifacts.length > 0 ? { artifactHeld: true } : {})` | [fix] the runtime hands the scheduler the coordinator's artifact fact |
 | C56 | `app/lib/agent/orchestration/merge.ts` | 1077 | — | `export function unjudgedProposers(` | [fix] a peer's seal no merged task judged; a planned proposing specialist that never started |
 | C57 | `app/lib/agent/orchestration/merge.ts` | 1067 | — | `return withheld("incomplete");` | [fix] `incomplete`: nothing competing cannot be established |
 | C58 | `app/lib/agent/orchestration/scheduler.ts` | 774 | — | `export function offersProposal(` | [fix] whether the run's effective set offers a live proposal |
 | C59 | `app/lib/agent/orchestration/scheduler.ts` | 343 | — | `specialistFrameRules(task.proposing === true),` | [fix] the frame's rules line by the run's effective set |
-| C60 | `app/api/chat/orchestration-runtime.ts` | 475 | — | `- sealed in its specialist's own run and accepted by the merge; the human reviews it like any proposal; nothing was applied.` | [fix] the presented line: kind, artifact id and digest, always recorded on the trace |
+| C60 | `app/api/chat/orchestration-runtime.ts` | 455 | — | `- sealed in its specialist's own run and accepted by the merge; the human reviews it like any proposal; nothing was applied.` | [fix] the presented line: kind, artifact id and digest, always recorded on the trace |
 | C61 | `app/lib/agent/orchestration/scheduler.ts` | 786 | — | `export const COORDINATOR_ARTIFACT_HELD_LINE =` | [fix] the one line saying no specialist is offered a proposal |
 | C62 | `app/lib/agent/orchestration/scheduler.ts` | 783 | — | `export const PROPOSING_OPENING =` | [fix] the opening line of a run offered a live proposal |

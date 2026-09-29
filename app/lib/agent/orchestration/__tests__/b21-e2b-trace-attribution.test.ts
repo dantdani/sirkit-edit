@@ -5,7 +5,7 @@
  * block `{ taskIndex, role, providerId, modelId, parentRunId, decision? }` to every step and tool invocation by sequence number: one
  * rule shared by the validator and the attribution cascade (the B20-A4 `external` precedent's shape), pattern-bound and
  * denylist-checked; the task's tool CALLS persisted on its own durable trace record beside the orchestration run's (its history
- * unchanged); a retry's attempts in one document with one terminal; the nine B11-scanned files byte-identical to HEAD, the trace
+ * unchanged); a retry's attempts in one document with one terminal; the nine B11-scanned files byte-identical to HEAD [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-F eight of the nine are, the replay capsule pinned at F's reviewed v4 hash, case 8], the trace
  * contract refusing a block placed INSIDE an event (the v1 contract is unchanged: the block rides beside), the coordinator's closed
  * provider literal kept. The held E2 run-1 suite (8 cases), adapted to the lead's reading. REAL scheduler, loop, gateway, registry
  * and recorder; the in-memory durable repository; no network, no model.
@@ -305,7 +305,7 @@ describe("[B21 E2b] the trace block: one trace document per specialist task (OD-
     expect(small!.attribution.at(-1)!.orchestration.decision).toBe("malformed");
   });
 
-  it("8. the nine B11-scanned files are byte-identical to HEAD and carry no orchestration identifier; the v1 trace contract is unchanged - a block placed INSIDE an event is refused as an unknown key, the provider literal and the outcome classes stand - so the block can only ride BESIDE the events; no scanned file imports anything under orchestration", () => { // [B21 F, 2026-09-28] E2b's title: since B21-F eight of the nine are byte-identical to HEAD and the replay capsule's hash is F's (SCANNED_AT_HEAD, its reviewed pin move); the closeout retitles it
+  it("8. the nine B11-scanned files hash to their pinned digests (eight byte-identical to HEAD 41330e6; the replay capsule at B21-F's reviewed v4 hash) and carry no orchestration identifier; the v1 trace contract is unchanged - a block placed INSIDE an event is refused as an unknown key, the provider literal and the outcome classes stand - so the block can only ride BESIDE the events; no scanned file imports anything under orchestration", () => { // [B21 F, 2026-09-28] E2b's title: since B21-F eight of the nine are byte-identical to HEAD and the replay capsule's hash is F's (SCANNED_AT_HEAD, its reviewed pin move); the closeout retitles it; [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replay capsule's hash is B21-F's; assertions unchanged
     expect([...B11_SCANNED_FILES].sort()).toEqual(Object.keys(SCANNED_AT_HEAD).sort());
     for (const file of B11_SCANNED_FILES) {
       const source = readFileSync(join(ROOT, file));

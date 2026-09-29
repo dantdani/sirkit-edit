@@ -1,5 +1,5 @@
 /**
- * B09 — provider-neutral single-agent tool-loop contracts.
+ * B09 — provider-neutral single-agent tool-loop contracts [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the same loop contracts also drive the flag-gated orchestrated run (SIRKIT_ORCHESTRATION_ENABLED=1, off by default: off, every message is the single-agent loop exactly as before) - the coordinator's and each zero-authority specialist's loop run, the normalized step stop (B21-E1) and the five additive orchestration run events appended at the end of this file (B21-E2, OD-126); the orchestration contracts themselves live in ./orchestration/contracts.ts].
  *
  * NOTHING in this module (or anything the loop/registry/gateway exchanges)
  * carries provider SDK types. Provider request/response translation and

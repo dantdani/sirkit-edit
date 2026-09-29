@@ -249,7 +249,7 @@ and 5). HEAD's router answers, composer routes and grammar code lines were recor
   imported" holds again); the predicate's `REPLACE_PART` agreement line is read from composer-routing.ts.
 - `b21-d3-replacement-roles.test.ts` case 5: the composer's route for the runbook sentence is `ask` (D21-38 closed); its router assertions
   unchanged. Its title keeps "RECORDED: the composer sends the runbook sentence to the schematic editor" for the closeout (the stale-title
-  convention).
+  convention) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled - the composer sends it to the assistant since B21-E4; assertions unchanged].
 - `b21-e1-chat-provider.test.ts` case 3: the NEXT request after the no-credits 429 makes no call at all - its first turn included - and
   answers ONE `run_failed` `provider_breaker_open` with no orchestration line (D21-39 closed).
 - `b21-e2-chat-events.test.ts` case 5: the `provider_paused` scenario's breaker opens as the scheduler writes the plan (after the first
@@ -501,12 +501,12 @@ added by the review fixes ([B21 E4 fix]).
 | C18 | `app/api/chat/route.ts` | 520 | — | `result = plan.kind === "dag" ? await runOrchestratedChat(` | the first turn's call site, unchanged |
 | C19 | `app/api/chat/route.ts` | 366 | — | `const resume = await resolveChatResume(` | the resume judged first: a refused resume never reaches the gate |
 | C20 | `app/api/chat/route.ts` | 527 | — | `finalizeTrace(result.status, result.failureReason ?? null);` | the gated request's failed terminal recorded |
-| C21 | `app/api/chat/orchestration-runtime.ts` | 838 | — | `export const FIRST_TURN_PAUSED_REASON = "provider_breaker_open" as const;` | the one terminal reason: E1's no-Retry code |
-| C22 | `app/api/chat/orchestration-runtime.ts` | 840 | — | `export function firstTurnPausedLine(pause: AdmissionPause): string {` | the line: the meters' own pause sentence |
-| C23 | `app/api/chat/orchestration-runtime.ts` | 854 | — | `export function pausedFirstTurn(` | the gate |
-| C24 | `app/api/chat/orchestration-runtime.ts` | 855 | — | `if (input.resume.kind === "resume") return null;` | a resumed request's replayed first turn is never gated |
-| C25 | `app/api/chat/orchestration-runtime.ts` | 856 | — | `const pause = (input.admission ?? PROCESS_LLM_PROVIDER_ADMISSION).pause(input.provider, undefined, "interactive"` | the same pause as the follow-up turn's |
-| C26 | `app/api/chat/orchestration-runtime.ts` | 285 | — | `const followUpPause = input.providers ? input.providers.admission.pause(request.provider, undefined, "interactive"` | E1's follow-up gate, the precedent |
+| C21 | `app/api/chat/orchestration-runtime.ts` | 818 | — | `export const FIRST_TURN_PAUSED_REASON = "provider_breaker_open" as const;` | the one terminal reason: E1's no-Retry code |
+| C22 | `app/api/chat/orchestration-runtime.ts` | 820 | — | `export function firstTurnPausedLine(pause: AdmissionPause): string {` | the line: the meters' own pause sentence |
+| C23 | `app/api/chat/orchestration-runtime.ts` | 834 | — | `export function pausedFirstTurn(` | the gate |
+| C24 | `app/api/chat/orchestration-runtime.ts` | 835 | — | `if (input.resume.kind === "resume") return null;` | a resumed request's replayed first turn is never gated |
+| C25 | `app/api/chat/orchestration-runtime.ts` | 836 | — | `const pause = (input.admission ?? PROCESS_LLM_PROVIDER_ADMISSION).pause(input.provider, undefined, "interactive"` | the same pause as the follow-up turn's |
+| C26 | `app/api/chat/orchestration-runtime.ts` | 265 | — | `const followUpPause = input.providers ? input.providers.admission.pause(request.provider, undefined, "interactive"` | E1's follow-up gate, the precedent |
 | C27 | `app/lib/agent/orchestration/provider-policy.ts` | 151 | — | `pause: (provider, model, purpose, now) => currentLlmProviderPause(keyOf(provider, model), now, purpose),` | the process's meters |
 | C28 | `app/lib/acquisition/admission-control.ts` | 406 | — | `export function currentLlmProviderPause(` | the pause, per purpose, reserving nothing |
 | C29 | `app/lib/acquisition/admission-control.ts` | 37 | — | `export const PURPOSE_QUOTA_SHARE` | the `interactive` purpose may use the whole window, the agent a quarter ([B21 E4 fix: security-1] the window is process-wide, never one person's) |
@@ -517,7 +517,7 @@ added by the review fixes ([B21 E4 fix]).
 | C34 | `.github/workflows/deterministic-manufacturing.yml` | 153 | — | `app/lib/project/__tests__/b21-e4-composer-routing.test.ts` | the composer suite's one explicit CI entry |
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 494 | — | `if (routing?.kind === "coordinator-paused") { stop = "provider_paused";` | a resumed request's specialists consult the breaker (E1) |
 | C36 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the route header stands: a gated request never switches provider |
-| C37 | `app/api/chat/orchestration-runtime.ts` | 870 | — | `function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {` | [B21 E4 fix: regressions-1] a half-open breaker's trial in flight is the metered calls' pause, never the first turn's |
+| C37 | `app/api/chat/orchestration-runtime.ts` | 850 | — | `function halfOpenTrialInFlight(pause: AdmissionPause, at: number): boolean {` | [B21 E4 fix: regressions-1] a half-open breaker's trial in flight is the metered calls' pause, never the first turn's |
 | C38 | `app/lib/project/composer-routing.ts` | 168 | — | `const trailing = /(?<![.!?\s])[.!?\s]*$/.exec(raw.trim())?.[0] ?? "";` | [B21 E4 fix: security-3] the raw message's trailing run found from its start: the one moved line rewritten |
 | C39 | `app/lib/project/composer-routing.ts` | 176 | — | `.toLowerCase().replace(/(?<![.!?])[.!?]+$/, "").trim();` | [B21 E4 fix: security-3] the composer's normalization, linear |
 | C40 | `app/lib/agent/orchestration/router.ts` | 161 | — | `.toLowerCase().replace(/(?<![.!?])[.!?]+$/, "").trim();` | [B21 E4 fix: security-3] the router's normalization, the same line |

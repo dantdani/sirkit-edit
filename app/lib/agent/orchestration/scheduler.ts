@@ -30,7 +30,7 @@
  * coordinator's stream as a bounded warning line, so it is never silent. [B21 C] Least privilege per role (OD-120, OD-121):
  * a specialist is offered its role's reviewed row (role-tools.ts) intersected with the reads its derived context admits -
  * the loop narrows to that list after every gate and the wrapper refuses anything outside it (`role_not_permitted_tool`); a
- * role whose set is empty is NOT RUN (`role_has_no_tools`, a visible warning; its task records the missing evidence). No
+ * role whose set is empty is NOT RUN (`role_has_no_tools`, a visible warning [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E2 a `degraded` event carrying the same line, OD-126]; its task records the missing evidence). No
  * elevation (OD-109): the derived context is built field by field, and the wrapper refuses a context that claims grantability
  * or a port (`role_context_elevated`) before anything reaches the gateway.
  *

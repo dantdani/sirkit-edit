@@ -16,7 +16,7 @@
  * window, so the agent can never starve a person of a source's quota.
  *
  * [B20 A0] GENERALISED KEY: the meters are keyed by an `AdmissionKey` — a distributor source (exactly as before), an MCP
- * server, or one tool of an MCP server (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
+ * server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider with an optional model - the llm-provider kind below, OD-115] (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
  * `limits.perTool[tool].requestsPerMinute`, `limits.breaker`). An MCP call (`requestMcpAdmission`) is admitted only when
  * the server's window AND, where the row names the tool, the tool's window both admit it; a refusal by either reserves
  * nothing in the other. The breaker is per server — a tool never has one, and an open server breaker refuses every tool.
@@ -44,7 +44,7 @@ export type RequestOutcome = "success" | "failure" | "rate_limited" | "neutral";
  */
 export type McpRequestOutcome = RequestOutcome | "inconclusive";
 
-/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server. */
+/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. */
 export type AdmissionKey =
   | { kind: "acquisition-source"; id: AcquisitionSourceId }
   | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union

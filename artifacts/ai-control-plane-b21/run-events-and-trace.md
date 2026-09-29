@@ -5,7 +5,7 @@ exercised), **RECORDED** (written down without a claim), **UNKNOWN**, **BLOCKED-
 `chapter/b21-specialist-orchestration`, base `3a32317` (the B21-D3 follow-up commit, after B21-E1 `deac588`); written 2026-09-27. This is
 a NEW page for B21-E2's first run (items 1 and 2 of the lead's E2 task); `provider-routing-and-failure.md` keeps the E1 sections only (its
 suite pins its ten headings), with a dated pointer here. The route-level resume, the composer's routing and the first-turn breaker are
-B21-E3's (a later run). Every `[B21 E2]` statement below is pinned by `b21-e2-page.test.ts` (the event table IS
+B21-E3's (a later run) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the resume landed in B21-E3 (`route-resume.md`), the composer's routing and the first-turn breaker in B21-E4 (`composer-and-first-turn.md`)]. Every `[B21 E2]` statement below is pinned by `b21-e2-page.test.ts` (the event table IS
 `ORCHESTRATION_RUN_EVENT_TYPES` with `RUN_EVENT_KEYS`; the statuses, the degraded reasons and the traced types ARE the code's lists; the
 status line quoted IS `orchestrationStatusLine`'s; the bounds ARE `RUN_EVENT_BOUNDS`; every citation resolves by content exactly once
 and, for every file E2 changed, on the line it states; every suite row carries its real `it(` count) or by the suite it names. No model
@@ -396,7 +396,7 @@ reading task ids as `ta[redacted]` (3.2, RECORDED).
 ## 4. What E2's first run does NOT do
 
 - No trace block, no per-task trace document, no durable trace record (section 3: stopped; D21-11's trace half and D21-3's calls stay
-  open); no route-level resume or `userMessageDigest` ledger, no composer routing, no first-turn breaker (B21-E3); no evaluations (B21-F).
+  open); no route-level resume or `userMessageDigest` ledger, no composer routing, no first-turn breaker (B21-E3); no evaluations (B21-F). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the composer routing and the first-turn breaker are B21-E4's (`composer-and-first-turn.md`), the resume and the ledger B21-E3's]
   [B21 E2b, 2026-09-27] The trace block, the per-task documents and the durable trace record: applied by E2's second run (3.2 to 3.7);
   D21-11's trace half and D21-3's calls closed there.
 - No new UI control (two in-place page lines; the B17-A inventory regenerated with zero drift; no B18-D wire); no new route (the census
@@ -411,7 +411,7 @@ reading task ids as `ta[redacted]` (3.2, RECORDED).
   (its diagnostic patterns untouched; both byte-identical to HEAD 41330e6, 3.7); no new run-event type (the five stand) and no change to
   the coordinator's trace, the stream's events or the orchestration record's history; no UI change (no page line, no control); no
   route, descriptor or request-key change (the census stays 165 = 162 canonical + 3 factories + 0 raw); no new runtime dependency; no
-  reserved-file edit (the texts are at the end of section 6); no route-level resume, composer routing or first-turn breaker (B21-E3); no
+  reserved-file edit (the texts are at the end of section 6); no route-level resume, composer routing or first-turn breaker (B21-E3 [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the composer routing and the first-turn breaker are B21-E4's, the resume B21-E3's]); no
   retention or access-audit setting for the trace records (OD-111's deferral stands, RECORDED); no line cited by an A..E2 page moved (every
   edit to a cited file in place or appended; the A..E2 page suites green).
 
@@ -918,15 +918,15 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C26 | `app/lib/agent/orchestration/scheduler.ts` | 631 | — | `, retry));` | a retried attempt: runsAgain |
 | C27 | `app/lib/agent/orchestration/scheduler.ts` | 163 | — | `export function specialistRunId(coordinatorRunId: string, taskId: string): string {` | the specialist run id <coordinatorRunId>:<taskId> (the trace block's mandated run id); [E2b] the per-task TRACE run id is <runId>:<n>-<role> instead (C72) |
 | C28 | `app/lib/agent/orchestration/scheduler.ts` | 161 | — | `return roles.filter((role) => role !== "coordinator").map((role, index) => ({ taskId:` | task ids are task-<n>-<role> |
-| C29 | `app/api/chat/orchestration-runtime.ts` | 221 | — | `let traceLines = 0; const report = (event: OrchestrationRunEvent, always = false): void =>` | the runtime's event channel: the event streamed, its line traced exactly as B's warning was |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 251 | — | `if (reason !== null) report(reason, true); const partial = ranOutcome ?` | a stand-down: its degraded event, then the run's partial result |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 266 | — | `else if (isOrchestrationRunEvent(event)) report(event);` | the scheduler's events streamed through the runtime |
-| C32 | `app/api/chat/orchestration-runtime.ts` | 271 | — | `return standDown(down("no_specialist_ran",` | no specialist ran: degraded |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 275 | — | `return standDown(down("provider_outage",` | a provider outage: degraded |
-| C34 | `app/api/chat/orchestration-runtime.ts` | 312 | — | `return standDown(down("follow_up_failed",` | the follow-up turn failed: degraded |
-| C35 | `app/api/chat/orchestration-runtime.ts` | 314 | — | `const partial = partialOutcomeEvent(request.runId, plan, outcome, true, merged); if (partial) report(partial);` | the follow-up answered over a partial set: said so before the terminal |
-| C36 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `for (const line of merged.lines) warn(line);` | a merge line stays a warning |
-| C37 | `app/api/chat/orchestration-runtime.ts` | 531 | — | `export function partialOutcomeEvent(` | the partial result against the plan's tasks, judged against the merge's decisions where it ran |
+| C29 | `app/api/chat/orchestration-runtime.ts` | 201 | — | `let traceLines = 0; const report = (event: OrchestrationRunEvent, always = false): void =>` | the runtime's event channel: the event streamed, its line traced exactly as B's warning was |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 231 | — | `if (reason !== null) report(reason, true); const partial = ranOutcome ?` | a stand-down: its degraded event, then the run's partial result |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 246 | — | `else if (isOrchestrationRunEvent(event)) report(event);` | the scheduler's events streamed through the runtime |
+| C32 | `app/api/chat/orchestration-runtime.ts` | 251 | — | `return standDown(down("no_specialist_ran",` | no specialist ran: degraded |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 255 | — | `return standDown(down("provider_outage",` | a provider outage: degraded |
+| C34 | `app/api/chat/orchestration-runtime.ts` | 292 | — | `return standDown(down("follow_up_failed",` | the follow-up turn failed: degraded |
+| C35 | `app/api/chat/orchestration-runtime.ts` | 294 | — | `const partial = partialOutcomeEvent(request.runId, plan, outcome, true, merged); if (partial) report(partial);` | the follow-up answered over a partial set: said so before the terminal |
+| C36 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `for (const line of merged.lines) warn(line);` | a merge line stays a warning |
+| C37 | `app/api/chat/orchestration-runtime.ts` | 511 | — | `export function partialOutcomeEvent(` | the partial result against the plan's tasks, judged against the merge's decisions where it ran |
 | C38 | `app/lib/project/chat-run-view.ts` | 148 | — | `// [B21 E2] the additive v1 orchestration events (OD-126): counters only` | the reducer's default hands the five to the appended fold (C63) |
 | C39 | `app/lib/project/chat-run-view.ts` | 555 | — | `return event.runsAgain === false && event.status !== "stale" ?` | finished counts a task by its FINAL outcome (a stale result never run again is not finished) |
 | C40 | `app/lib/project/chat-run-view.ts` | 573 | — | `export function orchestrationStatusLine(state: RunViewState)` | the ONE status line (OD-127) |
@@ -947,9 +947,9 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C55 | `app/lib/agent/orchestration/scheduler.ts` | 647 | — | `settle(stop); return { kind: "ran", tasks: outcomes,` | [fix] the last task's withheld re-run closed before the outcome returns |
 | C56 | `app/lib/agent/orchestration/run-events.ts` | 52 | — | `export const UNDECLARED_KEY_WITHHELD =` | [fix] what an undeclared key's path reads in a reason and a line |
 | C57 | `app/lib/agent/orchestration/run-events.ts` | 71 | — | `function withoutModelKey(text: string): string {` | [fix; lead] a refusal path not made only of declared key names replaced whole (a model-chosen key name never repeated) |
-| C58 | `app/api/chat/orchestration-runtime.ts` | 238 | — | `let judged: Extract<MergeOutcome, { kind: "merged" }>` | [fix] the merge's outcome once it recorded (the post-merge stand-downs read it) |
-| C59 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `for (const line of merged.lines) warn(line); judged = merged;` | [fix] set where the merge recorded its decisions |
-| C60 | `app/api/chat/orchestration-runtime.ts` | 532 | — | `const withheld = merged ? merged.tasks.filter((task) => task.decision !== "accepted")` | [fix] a result the merge did not accept is withheld, never usable |
+| C58 | `app/api/chat/orchestration-runtime.ts` | 218 | — | `let judged: Extract<MergeOutcome, { kind: "merged" }>` | [fix] the merge's outcome once it recorded (the post-merge stand-downs read it) |
+| C59 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `for (const line of merged.lines) warn(line); judged = merged;` | [fix] set where the merge recorded its decisions |
+| C60 | `app/api/chat/orchestration-runtime.ts` | 512 | — | `const withheld = merged ? merged.tasks.filter((task) => task.decision !== "accepted")` | [fix] a result the merge did not accept is withheld, never usable |
 | C61 | `app/lib/agent/orchestration/merge.ts` | 945 | — | `provider: entry.task.status === "replayed" ? null : entry.task.provider` | the merge's rule: a replayed result's provider is unrecorded (null) |
 | C62 | `app/lib/agent/orchestration/run-events.ts` | 207 | — | `const unrecorded = type === "specialist_finished" && (record.status === "replayed"` | [fix] the judge: no provider for an unrecorded provenance, a provider for an attempt that ran |
 | C63 | `app/lib/project/chat-run-view.ts` | 550 | — | `function reduceOrchestrationEvent(state: RunViewState, event: Record<string, unknown>): RunViewState {` | [fix] the run view's orchestration fold, appended (no discovery-cited line moves) |
@@ -981,11 +981,11 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C89 | `app/lib/agent/orchestration/trace-attribution.ts` | 419 | — | `close(handle, status !== undefined` | [E2b] settle: the task's last document closed with its task's last outcome |
 | C90 | `app/lib/agent/orchestration/store.ts` | 268 | — | `constructor(private readonly workflow: DurableWorkflowRepository) { TRACE_STORES.set(this, new DurableOrchestrationTraceStore(workflow)); }` | [E2b] every durable record binds its trace store on the same repository (in place) |
 | C91 | `app/lib/agent/orchestration/store.ts` | 372 | — | `export function orchestrationTraceStoreOf(` | [E2b] the record's trace store, and nothing else of the repository (appended) |
-| C92 | `app/api/chat/orchestration-runtime.ts` | 259 | — | `const book = specialistTraceBookFor({ request, context: deps.context, plan` | [E2b] the runtime binds the book (in place of a comment line) |
-| C93 | `app/api/chat/orchestration-runtime.ts` | 267 | — | `runLoop: book ? book.loop(runAgentLoop) : runAgentLoop` | [E2b] the injected loop wrapped (in place) |
-| C94 | `app/api/chat/orchestration-runtime.ts` | 270 | — | `const traced = book ? await book.settle(outcome.kind === "ran" ? outcome.tasks : []) : null;` | [E2b] every document appended before anything is handed on; a failure one line (in place of a comment line) |
-| C95 | `app/api/chat/orchestration-runtime.ts` | 549 | — | `export function specialistTraceBookFor(` | [E2b] the book on the record's own repository (appended) |
-| C96 | `app/api/chat/orchestration-runtime.ts` | 561 | — | `export function traceUnrecordedLine(` | [E2b] the one line of documents not recorded (appended; [fix] re-pinned: its comment grew) |
+| C92 | `app/api/chat/orchestration-runtime.ts` | 239 | — | `const book = specialistTraceBookFor({ request, context: deps.context, plan` | [E2b] the runtime binds the book (in place of a comment line) |
+| C93 | `app/api/chat/orchestration-runtime.ts` | 247 | — | `runLoop: book ? book.loop(runAgentLoop) : runAgentLoop` | [E2b] the injected loop wrapped (in place) |
+| C94 | `app/api/chat/orchestration-runtime.ts` | 250 | — | `const traced = book ? await book.settle(outcome.kind === "ran" ? outcome.tasks : []) : null;` | [E2b] every document appended before anything is handed on; a failure one line (in place of a comment line) |
+| C95 | `app/api/chat/orchestration-runtime.ts` | 529 | — | `export function specialistTraceBookFor(` | [E2b] the book on the record's own repository (appended) |
+| C96 | `app/api/chat/orchestration-runtime.ts` | 541 | — | `export function traceUnrecordedLine(` | [E2b] the one line of documents not recorded (appended; [fix] re-pinned: its comment grew) |
 | C97 | `app/lib/agent/orchestration/trace-attribution.ts` | 114 | — | `const TEXT_FORBIDDEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/u;` | [E2b fix: security-1] the one text rule: control, format, separator, lone surrogate (in place) |
 | C98 | `app/lib/agent/orchestration/trace-attribution.ts` | 162 | — | `const textPath = forbiddenTextPath(document, "document");` | [E2b fix: security-1] the validator holds the WHOLE document to it (in place) |
 | C99 | `app/lib/agent/orchestration/trace-attribution.ts` | 223 | — | `const trace = cleanTraceText(recorded);` | [E2b fix: security-1] the cascade attributes the cleaned trace (in place) |
@@ -997,4 +997,4 @@ lines current in E2b's tree; `b21-e2b-page.test.ts` case 5 checks them for every
 | C105 | `app/lib/agent/orchestration/trace-attribution.ts` | 455 | — | `function sameTraceScope(` | [E2b fix: regressions-2] a trace's scope IS the record's (appended) |
 | C106 | `app/lib/agent/orchestration/trace-attribution.ts` | 464 | — | `export function refusedCallLine(` | [E2b fix: coverage-2] a call refused before it ran: one closed line (appended) |
 | C107 | `app/lib/agent/orchestration/trace-attribution.ts` | 468 | — | `function withRefusalLines(` | [E2b fix: coverage-2] each `tool_refused` recorded as its line, passively (appended) |
-| C108 | `app/api/chat/orchestration-runtime.ts` | 564 | — | `while (shown > 0 && line(shown).length > DEFAULT_REDACTION_CHARS) shown -= 1;` | [E2b fix: regressions-3] the unrecorded line bounded by construction (appended) |
+| C108 | `app/api/chat/orchestration-runtime.ts` | 544 | — | `while (shown > 0 && line(shown).length > DEFAULT_REDACTION_CHARS) shown -= 1;` | [E2b fix: regressions-3] the unrecorded line bounded by construction (appended) |

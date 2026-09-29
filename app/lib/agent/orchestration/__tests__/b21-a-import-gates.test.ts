@@ -64,7 +64,7 @@ function orchestrationReferences(path: string, source: string): string[] {
 }
 
 describe("[B21 A] the orchestration import gate", () => {
-  it("1. the entry set is DERIVED from the tree and pinned to the modules of the chapter (A's three, B's router and scheduler); every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => {
+  it("1. the entry set is DERIVED from the tree and pinned to the modules of the chapter (A's three and B's router and scheduler when written; since then C's role-tools, D's merge, E1's provider-policy and result-tool, E2's run-events and E2b's trace-attribution - eleven); every forbidden family resolves to real files today, so no case below is vacuous; the nine scanned files exist; the provider SDK importers of the whole tree are the five recorded ones", { timeout: 180_000 }, () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the entry set grew to eleven modules by reviewed pin moves (C..E2b); assertions unchanged
     // [B21 B] + router.ts and scheduler.ts; app/api/chat/orchestration-runtime.ts lives OUTSIDE the prefix by design (it binds the durable runtime)
     // [B21 C] + role-tools.ts (a pin move: the module joins the gate the day it is written; case 6)
     // [B21 D] + merge.ts (a pin move: the merge joins the gate the day it is written; case 7)

@@ -207,7 +207,7 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
   });
 
-  it("[B21 A] the B21 suites ride ONE directory filter (OD-124): app/lib/agent/orchestration/__tests__ is a prompt-to-gerber filter, every b21- suite is selected by exactly one filter of that job, none starts PGlite, and no explicit entry under that directory is listed (the redundancy rule below would refuse it)", () => {
+  it("[B21 A] every B21 suite is selected by exactly ONE filter of prompt-to-gerber (OD-124): the orchestration suites by the app/lib/agent/orchestration/__tests__ directory filter, with no explicit entry under that directory (the redundancy rule below would refuse it), each B21 route suite by its own explicit entry; none starts PGlite", () => { // [B21 closeout, 2026-09-29] retitled: the B21 route suites (since B21-B) ride explicit entries, not the directory filter; the assertions are unchanged
     const filters = jobFilters("prompt-to-gerber");
     expect(filters).toContain("app/lib/agent/orchestration/__tests__");
     expect(filters.filter((filter) => filter.startsWith("app/lib/agent/orchestration/__tests__/"))).toEqual([]);

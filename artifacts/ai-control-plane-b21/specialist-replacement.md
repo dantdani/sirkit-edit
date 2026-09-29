@@ -167,7 +167,7 @@ The list (the DAG IS `DAG_ROLE_LISTS["component-replacement"]`): `coordinator`, 
   case 6 matches a rule to its shape by identity since D3). **CONFIRMED** (replacement-roles case 5; scenario17 case 8: the sourcing
   specialist's evidence reaches neither the schematic specialist nor the critic, the critic never sees the sealed replacement's id, and
   the evidence reaches the follow-up turn). Passing earlier results to later tasks is a data-flow design change for B21-E (OD-107's
-  owner option).
+  owner option) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B21-E added no such data flow: no specialist reads another's result - the loop history is still empty, C36 - and passing results on stays OD-107's owner option beyond B21].
 - **The phrasing (OD-107 amended; [B21 D3 lead, 2026-09-26/27] restated).** The composer's pairing (`REPLACE_PART`) needs a word
   naming a part, component, MPN, alternate or chip, so the runbook's own sentence did not route (it stayed `single`). The implementer
   added a kind-swap grammar; the review round and the check tightened it; the lead then swept it adversarially - a workflow of three
@@ -384,12 +384,12 @@ passed. The page's suite ran first against the tree without this page and withou
 **Pin moves, each with its reason written next to it in the suite.**
 - `b21-b-scheduler.test.ts` cases 1, 3, 5, 6, 7, 8, 9, 11, 12, 13 and 14: the replacement DAG gained the schematic specialist (task 3, the
   critic task 4) - read-only in the rig (no head mark); counts, task ids, not-started lists, the token ceiling (6 x (2 + 2 x 4) x 4 096)
-  moved with it. Stale titles kept (case 1 "three specialists", case 5 "task 3"), retitled at the closeout (OD-113's pattern).
+  moved with it. Stale titles kept (case 1 "three specialists", case 5 "task 3"), retitled at the closeout (OD-113's pattern). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled; assertions unchanged]
 - `b21-b-router.test.ts` case 3 (the replacement phrasings' roles and the DAG data) and case 6 (a rule's list matched to its shape by
   identity: the replacement and full-circuit creation lists are now equal, role for role). [B21 D3 fix] Case 7 (review tests-6): the
   router's replacement rule is the composer's pairing OR the kind swap, a superset of the composer's grammar - the case now pins the
   divergence (the scenario-17 sentences the composer sends to the editor route to the DAG; value changes naming an active kind stay
-  single) and the rule's call; its title ("one grammar") is kept for the closeout.
+  single) and the rule's call; its title ("one grammar") is kept for the closeout. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): not retitled: since B21-E4 the router imports the composer's one predicate, so case 7's title holds again and the divergence it pinned is gone - `b21-b-router.test.ts` case 7's E4 note, `composer-and-first-turn.md`]
 - [B21 D3 fix] The D3 suites' own titles that stated the review's overclaims were retitled in this uncommitted increment (scenario17
   case 1, route cases 3 and 5, page case 7, replacement-roles case 5 - the page cites them by index only); page cases 4 and 7 moved
   with the restated variants and the D21-16 clause, each with its reason next to it.
@@ -397,12 +397,12 @@ passed. The page's suite ran first against the tree without this page and withou
   11), 11 (the second specialist to RUN is now the schematic one, which hangs - its title stays true), 12b and 15 (starts, records), 16
   (the loop run ids) and 17 (six starts, the schematic offered both proposals with the authority loaded; revision 10 -> 13). Stale
   titles kept (cases 4 and 17 name B's and C's counts), retitled at the closeout; B's page case 8 still pins case 4's title to its
-  "revision 8" - that pin and the title move together at the closeout.
+  "revision 8" - that pin and the title move together at the closeout. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): cases 4 and 17 retitled - four specialists, revisions 11 and 13 - assertions unchanged; case 4's new title keeps "revision 8 when written", so B's page case 8's pin holds unmoved]
 - `b21-c-least-privilege.test.ts` case 1 (`FULL_CONTEXT_OFFERED`: the schematic specialist is offered the replacement over
   `fullContext`), 8 and 9 (the schematic task in the replacement DAG).
 - `b21-d-chat-merge.test.ts` cases 2 to 5 (the schematic task, proposing nothing; revision 8 -> 11).
 - `b21-d2-proposing-roles.test.ts` cases 1, 3, 4 and 8 and `b21-d2-provenance.test.ts` case 6: the replacement is live for the schematic
-  role (its wrapper passes it; a gateway without the reads still blocks it). Stale titles kept ("stays DORMANT", "those five").
+  role (its wrapper passes it; a gateway without the reads still blocks it). Stale titles kept ("stays DORMANT", "those five"). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled - proposing-roles cases 1, 3, 4 and 8, provenance case 6; assertions unchanged]
 - Pages: the A..D2 pages carry dated `[B21 D3, 2026-09-26]` notes where D3 changed what they state; B's rule table row and DAG list, C's
   role table cell, D2's three tables move with the data they are; B's C46 and C's C33 are re-pinned (the specialist gateway's
   construction line, anchor moved, line unchanged); B's page states route cases 4 and 17 at revisions 11 and 13. [B21 D3 fix] The
@@ -595,8 +595,8 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 
 | # | file | line | within | anchor | what it shows |
 |---|---|---|---|---|---|
-| C1 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the specialist gateway, built over the one option |
-| C2 | `app/api/chat/orchestration-runtime.ts` | 500 | — | `export function specialistGatewayOptions(` | the route's source and reader, nothing else |
+| C1 | `app/api/chat/orchestration-runtime.ts` | 240 | — | `const specialistGateway = createAgentToolGateway(deps.registry, specialistGatewayOptions(request.signal));` | the specialist gateway, built over the one option |
+| C2 | `app/api/chat/orchestration-runtime.ts` | 480 | — | `export function specialistGatewayOptions(` | the route's source and reader, nothing else |
 | C3 | `app/api/chat/route.ts` | 407 | — | `loadRunReplacementPinFacts(replacementFactsSource, atomicPartRevisionId, signal, DEFAULT_PIN_FACTS_DEADLINE_MS, role)` | the coordinator's reader, unchanged |
 | C4 | `app/lib/agent/orchestration/role-tools.ts` | 244 | — | `export const SPECIALIST_PROPOSAL_TOOL_IDS: readonly string[] = Object.freeze([` | the live proposals, the replacement among them |
 | C5 | `app/lib/agent/orchestration/role-tools.ts` | 251 | — | `is no longer dormant: live for the schematic role` | the dormant list without it |
@@ -632,4 +632,4 @@ the base, for the reader (none of them changed in D3; the workflow gained one li
 | C35 | `app/lib/agent/orchestration/scheduler.ts` | 507 | — | `const objective = specialistObjective(task.role, coordinator.userMessage, offersProposal(allowed));` | [B21 D3 fix] a specialist's objective: the coordinator's user message alone |
 | C36 | `app/lib/agent/orchestration/scheduler.ts` | 550 | — | `{ runId, provider: route?.provider ?? coordinator.provider, history: [], userMessage: objective, budget, signal: controller.signal },` | [B21 D3 fix] its loop history is empty: no earlier result reaches it ([B21 E1, 2026-09-27] anchor re-pinned, line unchanged: the run carries the provider it runs on, so its seals name it) |
 | C37 | `app/lib/agent/gateway.ts` | 330 | — | `const compilation = compileTier1Proposal(schematic, { ops, pinsByPartId: new Map() });` | [B21 D3 fix] every agent Tier 1 proposal compiles with an empty pin map: any KiCad delete blocks |
-| C38 | `app/api/chat/route.ts` | 367 | — | `run-${randomUUID()}` | [B21 D3 fix] a fresh run id per POST: the route never resumes |
+| C38 | `app/api/chat/route.ts` | 367 | — | `run-${randomUUID()}` | [B21 D3 fix] a fresh run id per POST: the route never resumes [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): a POST without `resumeRunId`; since B21-E3 one carrying it resumes the run under its own id, `route-resume.md`] |

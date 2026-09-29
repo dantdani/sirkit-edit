@@ -8,7 +8,7 @@
  * schematic specialist seals the replacement, the merge accepts it, the stream carries the run's one `proposal_ready` and the human
  * APPROVES it through the replacement family's existing path with the run's principal; BOTH SEAL, ESCALATED - both parties seal and
  * verify, both are contradicted, one escalation, nothing presented; the envelope RENDERS OD-130's part review through the scheduler
- * seam (case 5: a test-built resume) while a production POST cannot produce it - [B21 D3 fix] (review coverage-2, tests-3) case 7:
+ * seam (case 5: a test-built resume) while a production POST cannot produce it [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E3 a production POST carrying `resumeRunId` reaches OD-130's part review through the route-level resume - b21-e3-chat-resume case 8; case 7 still pins that two POSTs without it are two runs] - [B21 D3 fix] (review coverage-2, tests-3) case 7:
  * a fresh run id per POST, no resume, the seal always the exact target (the route-level resume is B21-E's, D21-4); an ABSENT
  * pin-facts source blocks the coordinator's and the specialist's replacement alike, `current-pin-authority-unavailable`.
  */
@@ -244,7 +244,7 @@ describe("[B21 D3] scenario 17 through the chat route: the replacement live for 
     expect(editor.executed()).toBe(0);
   });
 
-  it("5. flag ON, the route's envelope RENDERS OD-130's part review - through the scheduler SEAM ([B21 D3 fix] retitled - review coverage-2 / tests-3: the route itself never resumes, case 7): an injected scheduler runs the DAG twice inside ONE POST, first over a test-built context whose authority is the catalog's EARLIER selection for U1 (the real scheduler and the specialist gateway the runtime built for this request), then over the route's own context - a replay the route never performs (it mints a fresh run id per POST; the route-level resume is B21-E's, D21-4); the merge contradicts the replayed seal (`part-not-exact-authority`) and writes a part review request for `request_atomic_review`; the stream carries the part review line and NO artifact event; the envelope's approval block says `review_requested`", async () => {
+  it("5. flag ON, the route's envelope RENDERS OD-130's part review - through the scheduler SEAM ([B21 D3 fix] retitled - review coverage-2 / tests-3: a POST without `resumeRunId` never resumes, case 7): an injected scheduler runs the DAG twice inside ONE POST, first over a test-built context whose authority is the catalog's EARLIER selection for U1 (the real scheduler and the specialist gateway the runtime built for this request), then over the route's own context - a replay no POST without `resumeRunId` performs (it mints a fresh run id; since B21-E3 the route-level resume reaches the part review from a production POST - b21-e3-chat-resume case 8, D21-4); the merge contradicts the replayed seal (`part-not-exact-authority`) and writes a part review request for `request_atomic_review`; the stream carries the part review line and NO artifact event; the envelope's approval block says `review_requested`", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the route-level resume since B21-E3 (D21-4); assertions unchanged
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const store = inMemoryStore();
     const catalog = await installCatalog(SCOPE);

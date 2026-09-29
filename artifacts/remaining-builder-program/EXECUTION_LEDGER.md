@@ -3592,3 +3592,26 @@ _(discovery, reproduction and results appended below as they are observed)_
   tsc 0; eslint clean on every changed and new TypeScript file; the generators with zero drift (the B09, B11 and B21 outputs, 24
   files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged); then the orchestration config once
   on the final spec (4 of 4, 2.4 min; F2's five evidence PNGs it rewrote restored from HEAD by blob hash). Logs under `b21/f2blead/gates/`.
+
+### B21 closeout (1/2) — the standing single-agent statements superseded, the stale titles retitled, D21-36 retired, the tripwire (2026-09-29 local; increment workflow + lead; this commit)
+
+- The standing single-agent statements are superseded IN PLACE with dated notes (D21-27; OD-113 applied as its default): 16 production
+  lines in 11 files (the notes add or remove no line); `route.ts:14` stands un-noted; 13 test-file notes; 53 page notes in 17 pages; ONE
+  dated README note for the 73 B07.5..B16 stop-condition lines, which stay as written (`closeout-statements.md` section 2).
+- 36 stale titles retitled in 23 suites, assertions and `it(` counts unchanged - the run's 35 and the lead's one
+  (`b19-e-ci-job-scope.test.ts`'s "[B21 A] the B21 suites ride ONE directory filter", stale since B21-B's route suites took explicit
+  entries; now "every B21 suite is selected by exactly ONE filter", added to the tripwire's retired titles, red on revert).
+- D21-36 retired: B's `specialistResultsEnvelope` and `ENVELOPE_HEADER`, one tombstone line; B's route case 12 kept as the retirement's
+  tripwire; its assertions moved to D's route case 6 (the over-budget bound, the `summaries` stage with each kept summary, the redaction,
+  the directive as data, the sources) and B's route case 4; ONE assertion retired - two models of one provider as `sameSource:false`, which
+  contradicts the one-provider-one-source rule since B21-D `21ae845`. 117 citation rows re-pinned by -20 and 3 re-anchored to the
+  tombstone across 10 pages. The 34 B21 exports with no production caller RECORDED, none retired (`closeout-statements.md` section 3.2).
+- The tripwire `b21-closeout-statements.test.ts` (10 cases), failing first at `d8680ea`: no production source states the old claim
+  uncorrected outside a six-entry allow-list and three wrapped statements; every production, test and page note stays; a note claiming the
+  trace records a line states the recorder's shared 32-warning bound.
+- The adversarial review: 11 findings, 9 confirmed and fixed test-first (two trace notes state the 32-warning bound; the `route.ts:3` note
+  states one sealed proposal per specialist RUN; the page's sections 2 and 3.2; D's route case 6 pins the `summaries` stage; every note
+  count pinned; the next-line allowance limited to three wrapped statements); the check's two low page-wording residuals fixed by the lead
+  (the README and discovery now point to the page, as it says; "no line added or removed" narrowed to the notes). D21-48 opened (low).
+- Lead gates (2026-09-29, one job at a time): every B21 suite with the eight route suites and the CI guard (59 files, 547 of 547); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); every changed or new test file of every chapter with `app/lib/auth` (67 files, 800 passed, 9 opt-in live skipped); the proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on its noted line 4760), every other changed file clean; the generators with zero drift (the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged). Logs under `b21/c1lead/gates/`.
+- No behaviour change, no verdict (commit 2/2).

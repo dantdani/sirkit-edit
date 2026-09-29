@@ -281,7 +281,7 @@ describe("B11.4 §G8–G12 — earlier closures and pins remain intact", () => {
     for (const descriptor of exposed) expect(isAgentExposableDescriptor(descriptor), descriptor.toolId).toBe(true);
   });
 
-  it("the wire contract did NOT change: the committed versions are unchanged", () => { // [B21 F, 2026-09-28] B11.4's title, true for B11.4: since B21-F the capsule is v4 (the pin below); the closeout retitles it
+  it("the wire contract did NOT change in B11.4: the context is v2 and the capsule v4 (v3 when written; B21-F's reviewed bump to v4 grew the capsule's own field set, not B11.4's handling)", () => { // [B21 F, 2026-09-28] B11.4's title, true for B11.4: since B21-F the capsule is v4 (the pin below); the closeout retitles it; [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): capsule v3 -> v4 (B21-F), B11.4's own handling unchanged; assertions unchanged
     // B11.4 changed how documents are HANDLED (captured, owned, frozen), not
     // what a conforming document looks like. Every committed capsule still
     // validates unchanged, so no version bump is warranted [B21 F, 2026-09-28: B11.4's reasoning for B11.4; B21-F grew the capsule's own field set and bumped it to v4 below] — see

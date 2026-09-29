@@ -2,11 +2,11 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B21",
-  "currentCheckpoint": "B21-F2b committed on chapter/b21-specialist-orchestration: the browser half of human rejection and resume (D21-45 closed, the lead's option (a)) - the scripted fixture agent's script table gains one sentence whose coordinator follow-up turn fails with a scripted provider failure (overloaded, case 12's vocabulary) only while its request presents, and the orchestration spec's fourth test presents the schematic specialist's replacement once, rejects it through its review's own Cancel, stands down, offers and resumes the run under the same run id - the first answer and the four specialists replayed, nothing presented again (already_presented), one follow-up; F12's browser cell PROVEN; no production change, no control; red first (four browser runs, the offline suite); the adversarial review's six findings fixed test-first (test 4's page checks counted and literal, red under four mutations of the page's source; page case 16's nextAction rule tolerating a later state; the offline suite claiming no rejection); both browser runs 402 s (253 + 149) of OD-30's 30 minutes; next the B21 closeout",
+  "currentCheckpoint": "B21 closeout (1/2) committed on chapter/b21-specialist-orchestration: the standing single-agent statements superseded in place with dated notes (16 production lines, 13 test-file notes, 53 page notes, one README note for 73 B07.5..B16 lines), 36 stale titles retitled in 23 suites (assertions unchanged), B's specialistResultsEnvelope retired (D21-36; 117 citation rows re-pinned), the tripwire b21-closeout-statements.test.ts; OD-113 applied, OD-108 amended; D21-27 and D21-36 closed, D21-48 opened (low); no behaviour change; next the closeout's commit 2/2",
   "status": "in_progress",
   "baseSha": "6fd5a7b",
   "branch": "chapter/b21-specialist-orchestration",
-  "lastGreenSha": "b52a26a",
+  "lastGreenSha": "d8680ea",
   "pullRequest": "draft PR #11 (every increment gets CI; not to be merged before the B21 validation checkpoint)",
   "openBlockers": [],
   "liveBlockers": [
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "The B21 closeout (commit 1/2: the single-agent statements superseded, the stale titles retitled, B's specialistResultsEnvelope retired (D21-36), a tripwire; commit 2/2: the four validation artifacts, the verdict, README, ledger and state; PR #11 undrafted, green CI, a normal merge); the one live run under OD-125 if credits exist; OD-126's older-page question, OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's first-turn options stay with the owner; D21-47 (a page-side rejection never reaches the run; the lead's options (a) record it on the resume record, (b) narrow the resumed line) for a later product increment",
+  "nextAction": "B21 closeout (2/2): changed-files.md, test-and-validation-report.md, unknowns-and-owner-decisions.md, final-verdict.md (PARTIAL: live qualification BLOCKED under LB-9; D21-42, D21-47, D21-48 open; the caps, roles and no-model path in part), the README validation row, the ledger and PROGRAM_STATE, the MULTI-AGENT STATUS lines; PR #11 undrafted, green CI, a normal merge; then B22 (sandboxed engineering computation and simulation), starting with its discovery",
   "updatedAt": "2026-09-29T01:21:56-04:00",
   "previousChapter": "B20 merged normally into main as 6fd5a7b (PR #10, 2026-09-24) after green CI on 96a0314; verdict PARTIAL (inert proposals over MCP deferred, OD-87)"
 }

@@ -13,7 +13,7 @@ facts in `provider-reference-notes.md` (OD-118) and the installed SDK packages i
 run's no-network rule); no model is called in any E1 suite - every provider is an in-process FAKE SDK client injected into the REAL
 adapters (the b09-provider-contracts pattern), so the adapters' own request building, output guard, normalisation and error
 classification run. [B21 E2, 2026-09-27] E2's first run (the additive run events and the status line; the trace block stopped - D21-41) is on
-its own page, `run-events-and-trace.md`; this page keeps the E1 sections.
+its own page, `run-events-and-trace.md`; this page keeps the E1 sections. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): each landed on its own page - the run events, the status line and the trace block B21-E2's (`run-events-and-trace.md`), the route-level resume B21-E3's (`route-resume.md`), the composer's routing and the first-turn gate B21-E4's (`composer-and-first-turn.md`)]
 
 ## 0. What E1 delivers, and what it is not
 
@@ -194,7 +194,7 @@ never re-sent the message - exactly where switching is the recovery; tests-retry
 page.tsx edit is in place (the card's state type, the listener's state line, the Retry's `disabled`; no line moved), adds and removes
 no control (the B17-A inventory's key has no `disabled` expression - regenerated with zero drift; the B18-D wires untouched). Before
 E1 a no-credits failure was offered Retry (D21-18). No run in E1 ends with `provider_breaker_open` (the coordinator's turn is not
-gated); the rule is in place for B21-E2. **CONFIRMED** (retry-card cases 1 to 4; B09.2's recovery case 2 green again at its base
+gated); the rule is in place for B21-E2. [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E4, not E2, the first turn is gated: a request on a paused provider ends with ONE `run_failed` `provider_breaker_open` and no Retry, the Switch still re-sending - `composer-and-first-turn.md` section 2] **CONFIRMED** (retry-card cases 1 to 4; B09.2's recovery case 2 green again at its base
 text: a no-credits settlement dispatches the new-run closure).
 
 **The B19-D closure gate's reviewed exemption.** The chat route's model-facing closure now reaches `admission-control.ts` through the
@@ -328,7 +328,7 @@ deviation stands for the owner.
   control (the card's existing Retry reads the dispatch's `retryOffered` - an in-place page.tsx edit); no new run event (the stand-down, fallback and pause facts ride
   warning lines until B21-E2's events); no request key outside the pinned sets (no `text.format`, no `output_config`, no `background`, no
   batch); no edit to the nine B11-scanned files (the provider literal and the orchestration-identifier tripwires untouched); no trace
-  block (B21-E2); no route-level resume or `userMessageDigest` ledger (B21-E2); no composer routing (B21-E2, D21-38).
+  block (B21-E2); no route-level resume or `userMessageDigest` ledger (B21-E2); no composer routing (B21-E2, D21-38). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the resume and the ledger were delivered by B21-E3 (`route-resume.md`) and the composer routing by B21-E4 (D21-38, `composer-and-first-turn.md`), not by B21-E2]
 - No provider SDK outside the adapters (the policy names none: A's gate, policy case 6); no new SDK client construction (the retries ride
   the existing two); no new runtime dependency; no change to the coordinator's adapter, the loop, the gateway or the router. No per-tenant
   or per-run sub-ceiling of the agent share (a window pause escalates only the task it refuses; recorded for the owner under OD-115).
@@ -687,8 +687,8 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C46 | `app/lib/agent/orchestration/scheduler.ts` | 633 | — | `if ((!route || route.provider === coordinator.provider) && !(retryable && paused?.reason === "quota_exhausted")) stop = "provider_outage";` | only the coordinator's provider's outage stops the DAG; another provider's, or a retry a window pause withheld, stops only its task |
 | C47 | `app/lib/agent/orchestration/scheduler.ts` | 796 | — | `function routeAttempt(` | the attempt's routing |
 | C48 | `app/lib/agent/orchestration/scheduler.ts` | 344 | — | `specialistResultToolRule(task.role), ...specialistResultRules(task.role),` | the frame's result rule |
-| C49 | `app/api/chat/orchestration-runtime.ts` | 285 | — | `const followUpPause = input.providers ?` | the follow-up turn never made against a paused provider |
-| C50 | `app/api/chat/orchestration-runtime.ts` | 516 | — | `export function productionSpecialistProviders(): SpecialistProviders {` | the production provider layer: agentAdapterForRole, the meters, process.env |
+| C49 | `app/api/chat/orchestration-runtime.ts` | 265 | — | `const followUpPause = input.providers ?` | the follow-up turn never made against a paused provider |
+| C50 | `app/api/chat/orchestration-runtime.ts` | 496 | — | `export function productionSpecialistProviders(): SpecialistProviders {` | the production provider layer: agentAdapterForRole, the meters, process.env |
 | C51 | `app/api/chat/route.ts` | 520 | — | `providers: productionSpecialistProviders()` | the route binds it |
 | C52 | `app/api/chat/route.ts` | 14 | — | `No silent cross-provider fallback exists;` | the coordinator never switches provider (stands) |
 | C53 | `app/lib/ai-preferences.ts` | 193 | — | `export const PROVIDER_FAILURES_WITHOUT_RETRY = Object.freeze(` | the failures without Retry: the ONE list, beside the owned dispatch |
@@ -707,7 +707,7 @@ checks it; for every other file the line is as of the base. C61-C72 and the re-a
 | C66 | `app/lib/acquisition/admission-control.ts` | 416 | — | `if (ticket.generation !== generationOf(meterKey)) { recordStaleNoCredits(` | an outcome under an earlier generation never moves the breaker - [B21 E1 lead] except a no-credits answer, a fact about the account: it still opens the long window unless an operator reset came after its call's admission |
 | C67 | `app/lib/acquisition/admission-control.ts` | 436 | — | `if (outcome === "inconclusive") return;` | an abandoned call, the trial included, is not counted |
 | C68 | `app/lib/agent/orchestration/scheduler.ts` | 585 | — | `if (admitted.capture.paused.reason === "breaker_open" && route?.provider === coordinator.provider) stop = "provider_paused";` | a mid-run refusal stops the DAG only on the coordinator's open breaker |
-| C69 | `app/api/chat/orchestration-runtime.ts` | 287 | — | `const followUpMeters = input.providers ? admittedAdapter(` | the follow-up turn's calls metered |
-| C70 | `app/api/chat/orchestration-runtime.ts` | 274 | — | `if (outcome.stop === "provider_paused") return standDown(` | the paused stand-down, never claiming a failure |
+| C69 | `app/api/chat/orchestration-runtime.ts` | 267 | — | `const followUpMeters = input.providers ? admittedAdapter(` | the follow-up turn's calls metered |
+| C70 | `app/api/chat/orchestration-runtime.ts` | 254 | — | `if (outcome.stop === "provider_paused") return standDown(` | the paused stand-down, never claiming a failure |
 | C71 | `app/lib/agent/orchestration/merge.ts` | 310 | — | `const sourceOf = (task: SpecialistTaskOutcome): string =>` | the provider is the source, whatever model or adapter |
 | C72 | `app/lib/agent/orchestration/scheduler.ts` | 88 | — | `"provider_outage", "provider_paused",` | the stop the meters make |

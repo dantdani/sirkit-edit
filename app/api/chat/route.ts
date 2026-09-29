@@ -1,6 +1,6 @@
 /**
  * B09 — the agent chat route: a versioned NDJSON streaming event protocol
- * over the provider-neutral single-agent tool loop.
+ * over the provider-neutral single-agent tool loop [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): with SIRKIT_ORCHESTRATION_ENABLED off - the default - every message runs this one loop exactly as before; with it on (exactly "1") a message the task-complexity router plans as a DAG runs this loop's coordinator turn, then at most four zero-authority specialists one at a time (reads, and at most one inert sealed proposal per specialist run - one per attempt, at most 2 attempts per task, SPECIALIST_CAPS; a failed attempt's seal, which no merge judged, withholds the presentation), then at most ONE follow-up coordinator turn, all in this one stream under one run id, and a Tier 3 ask is refused with no provider call - ./orchestration-runtime.ts, artifacts/ai-control-plane-b21/].
  *
  * Every line is one JSON event `{ v: 1, runId, seq, ...AgentRunEvent }`.
  * The route assembles the run context server-side (LOCAL_ONLY actor —

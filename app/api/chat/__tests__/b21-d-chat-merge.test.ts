@@ -255,7 +255,7 @@ describe("[B21 D] the merge through the chat route", () => {
     expect(seen).toEqual(["task-2-component-sourcing-evidence:dissent:escalated", "task-1-circuit-topology.merge-*:dissent:contradicted", "task-3-schematic.merge-*:decision:accepted", "task-4-verification-critic.merge-*:dissent:contradicted", "merge:decision:escalated"]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3, which proposes nothing here; the critic is task 4)
   });
 
-  it("5. a merge that cannot record its decisions STANDS DOWN visibly: the coordinator's own answer is the one terminal under a reason-only warning, no follow-up turn is made, and the store's driver text never reaches the stream", async () => {
+  it("5. a merge that cannot record its decisions STANDS DOWN visibly: the coordinator's own answer is the one terminal under a reason-only line (a warning when written; since B21-E2 a `degraded` event, `merge_unrecorded`, OD-126), no follow-up turn is made, and the store's driver text never reaches the stream", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-E2's degraded event; assertions unchanged
     vi.stubEnv(ORCHESTRATION_ENABLED_ENV, "1");
     const { store } = inMemoryStore();
     const connection = ["postgres", "://", "merge_user", ":", "hunter2", "@", "db.internal.example", ":5432/sirkit"].join("");
@@ -307,10 +307,24 @@ describe("[B21 D] the merge through the chat route", () => {
       unresolvedQuestions: many("q", () => ({ question: filler(1_000), blocking: false })),
     });
     const big = ran([task("task-1-circuit-topology", "circuit-topology", maximal("circuit-topology")), task("task-2-component-sourcing-evidence", "component-sourcing-evidence", maximal("component-sourcing-evidence")), task("task-3-verification-critic", "verification-critic", maximal("verification-critic")), task("task-4-schematic", "schematic", maximal("schematic"))]);
+    expect(JSON.stringify(big.tasks.map((entry) => entry.result)).length).toBeGreaterThan(MAX_RESULT_CHARS); // [B21 closeout, 2026-09-29] moved from B's route case 12 (D21-36): the input is over the budget, so the bound below is not vacuous
     const bigMerge = await judge(big, "run-envelope-big");
     expect(bigMerge.tasks.map((entry) => entry.decision)).toEqual(["stale", "stale", "stale", "stale"]);
     const bounded = mergedResultsEnvelope(big, bigMerge).text;
     expect(bounded.length).toBeLessThanOrEqual(MAX_RESULT_CHARS);
+    // [B21 closeout, 2026-09-29] B's route case 12 checked ITS fallback (summaries only, never a truncated document); retired with it
+    // (D21-36), the same checks read the production envelope's stages: the stage this view lands in named (summaries), each
+    // specialist's summary kept through it, the claims cut (no assumption record), a WHOLE document after the header - and a view
+    // that fits keeps its assumption records (the contrast). [B21 closeout-1 fix] tests-1 / coverage-3: B's "the summary survives"
+    // check moved too - any fallback stage used to pass here, so a summaries stage that dropped every summary stayed green
+    expect(bounded).toContain('"fallback":"summaries: ');
+    expect(bounded.match(/"claims":\{"summary":"The board was read and nothing was changed\. /g) ?? []).toHaveLength(4);
+    expect(bounded).not.toContain('"assumptions":[{');
+    expect(() => JSON.parse(bounded.slice(bounded.indexOf("\n{") + 1))).not.toThrow();
+    const fits = ran([task("task-1-circuit-topology", "circuit-topology", validated("circuit-topology", { assumptions: [{ id: "a-1", statement: "The board was read.", evidenceIds: [] }] }))]);
+    const fitsText = mergedResultsEnvelope(fits, await judge(fits, "run-envelope-fits")).text;
+    expect(fitsText).toContain('"assumptions":[{');
+    expect(fitsText).not.toContain('"fallback":');
     expect(bounded).toContain(bigMerge.digest);
     expect(bounded.match(/"decision":"stale"/g)?.length).toBeGreaterThanOrEqual(4);
     // a merged view no single fallback can hold: every stage still ends under the budget, the digest and the counts kept

@@ -168,7 +168,7 @@ const operationClass = (toolId: string): string | undefined => registry.list().f
 const warningsOf = (events: AgentRunEvent[]): string[] => events.flatMap((event) => ((event.type === "warning" || event.type === "plan" || event.type === "specialist_finished" || event.type === "degraded") ? [event.message] : [])); // [B21 E2] pin move (OD-126): B's plan, status and stand-down lines are now the plan / specialist_finished / degraded events carrying the same sentence
 
 describe("[B21 B] the bounded sequential scheduler", () => {
-  it("1. sequential (parallelism 1): three specialists run ONE AT A TIME in plan order as separate loop runs under `<coordinatorRunId>:<taskId>`; the store holds the plan, then per task its request and its result, every result committed BEFORE the next task's adapter is called; one warning line per scheduled specialist; the token ceiling covers both coordinator turns and every attempt (6 x (2 + 2 x specialists) x 4096), reported", async () => {
+  it("1. sequential (parallelism 1): the replacement DAG's four specialists (three when written; the schematic specialist since B21-D3) run ONE AT A TIME in plan order as separate loop runs under `<coordinatorRunId>:<taskId>`; the store holds the plan, then per task its request and its result, every result committed BEFORE the next task's adapter is called; one status line per scheduled specialist (a warning when written; since B21-E2 a `specialist_finished` event carrying the same sentence, OD-126); the token ceiling covers both coordinator turns and every attempt (6 x (2 + 2 x specialists) x 4096), reported", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-D3's fourth specialist and B21-E2's status event; assertions unchanged
     const seen: Array<{ role: string; resultsBefore: string[] }> = [];
     let r: Rig | null = null;
     r = await rig({}, { onStart: async (role) => { const history = await r!.store.history(r!.scope); seen.push({ role, resultsBefore: history.filter((entry) => entry.record.kind === "result").map((entry) => entry.taskId) }); } });
@@ -301,7 +301,7 @@ describe("[B21 B] the bounded sequential scheduler", () => {
     expect(outcome.tasks.map((task) => task.toolCalls)).toEqual([1, 1]);
   });
 
-  it("5. resume after a scripted provider outage: run 1 commits task 1, task 2 fails `network` twice (one attempt plus one retry) and the DAG stops; run 2 for the SAME coordinator run and scope replays task 1 from the record - its adapter is never called again - and runs task 2 at the next attempt and task 3; the store holds exactly one result for task 1", async () => {
+  it("5. resume after a scripted provider outage: run 1 commits task 1, task 2 fails `network` twice (one attempt plus one retry) and the DAG stops; run 2 for the SAME coordinator run and scope replays task 1 from the record - its adapter is never called again - and runs task 2 at the next attempt and tasks 3 and 4 (task 3 alone when written; the schematic specialist since B21-D3); the store holds exactly one result for task 1", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-D3's fourth task; assertions unchanged
     const first = await rig({ "component-sourcing-evidence": { kind: "throw", reason: "network", times: 2 } });
     const outcome1 = await runSpecialistDag({ roles: REPLACEMENT }, first.coordinator, first.deps);
     expect(outcome1.kind).toBe("ran");

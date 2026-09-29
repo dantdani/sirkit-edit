@@ -150,7 +150,7 @@ describe("[B21 E1] the provider layer through the production POST", () => {
     }
   });
 
-  it("3. a provider out of credits: the first specialist's 429 opens the breaker at once and its request stands down on the coordinator's answer - ONE paid specialist call, no follow-up turn; the NEXT request's specialists make no call at all and it stands down visibly too; one terminal per stream", async () => {
+  it("3. a provider out of credits: the first specialist's 429 opens the breaker at once and its request stands down on the coordinator's answer - ONE paid specialist call, no follow-up turn; the NEXT request makes no call at all - since B21-E4 not even the coordinator's first turn (D21-39) - and answers ONE run_failed `provider_breaker_open` with no orchestration line; one terminal per stream", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the first turn gated since B21-E4 (D21-39); assertions unchanged
     state.quota = true;
     const first = await post(REPLACEMENT);
     expect(terminals(first)).toEqual([expect.objectContaining({ type: "run_completed", finalText: "(fake) the coordinator's answer." })]);

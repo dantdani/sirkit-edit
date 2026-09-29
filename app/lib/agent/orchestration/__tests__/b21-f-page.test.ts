@@ -219,12 +219,12 @@ describe("[B21 F] the evaluation-matrix page", () => {
       expect(flat(text.slice(text.indexOf(NOTE))).slice(0, 600), doc).toContain(`\`${AGENT_REPLAY_CAPSULE_SCHEMA}\``);
     }
     const statements: ReadonlyArray<readonly [string, string]> = [
-      ["app/lib/agent/__tests__/b11-4-capture-ownership.test.ts", 'it("the wire contract did NOT change: the committed versions are unchanged"'],
+      ["app/lib/agent/__tests__/b11-4-capture-ownership.test.ts", 'it("the wire contract did NOT change in B11.4: the context is v2 and the capsule v4 (v3 when written'], // [B21 closeout, 2026-09-29] reviewed pin move: the title retitled (D21-27, OD-113), its [B21 F] note kept on its line
       ["app/lib/agent/__tests__/b11-4-capture-ownership.test.ts", "validates unchanged, so no version bump is warranted"],
-      ["app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts", 'it("the context is v2 and the capsule v3; older versions refuse EXPLICITLY"'],
+      ["app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts", 'it("the context is v2 and the capsule v4 (v3 when written'], // [B21 closeout, 2026-09-29] reviewed pin move: the title retitled (D21-27, OD-113), its [B21 F] note kept on its line
       ["app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts", "/** sha256 of the nine B11-scanned files at HEAD 41330e6"],
-      ["app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts", 'it("8. the nine B11-scanned files are byte-identical to HEAD'],
-      ["app/lib/agent/orchestration/__tests__/b21-e2b-page.test.ts", "(byte-identical to HEAD 41330e6)"],
+      ["app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts", 'it("8. the nine B11-scanned files hash to their pinned digests'], // [B21 closeout, 2026-09-29] reviewed pin move: the title retitled (D21-27, OD-113), its [B21 F] note kept on its line
+      ["app/lib/agent/orchestration/__tests__/b21-e2b-page.test.ts", "(byte-identical to HEAD 41330e6 but the replay capsule"], // [B21 closeout, 2026-09-29] reviewed pin move: the title retitled (D21-27, OD-113), its [B21 F] note kept on its line
     ];
     for (const [path, statement] of statements) {
       const lines = read(path).split(NEWLINE).filter((line) => line.includes(statement));
@@ -239,7 +239,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
     expect(b113[744], "b11-3:745").toContain(".not.toMatch(/modelcontextprotocol|mcpServer|spawnAgent|multiAgent/i)");
   });
 
-  it("10. [B21 F2] section 4 IS the delivered browser proof (D21-43 decided): the orchestration config runs the base config's web server (imported, its environment spread) with the flag on its own origin and nothing else changed but the blanked role-model override, never reusing a server, with its own test dir, report and output folders (ignored by git), workers 1, retries 0 and the base's per-test timeout; the base config and e2e/ carry no flag; the spec's three tests send the case table's sentences under their own namespace; the CI job runs it AFTER the existing suite and uploads both folders; the matrix's browser cells are the delivered classes", () => {
+  it("10. [B21 F2] section 4 IS the delivered browser proof (D21-43 decided): the orchestration config runs the base config's web server (imported, its environment spread) with the flag on its own origin and nothing else changed but the blanked role-model override, never reusing a server, with its own test dir, report and output folders (ignored by git), workers 1, retries 0 and the base's per-test timeout; the base config and e2e/ carry no flag; the spec's four tests (three when written; B21-F2b appended test 4) send the case table's sentences under their own namespace; the CI job runs it AFTER the existing suite and uploads both folders; the matrix's browser cells are the delivered classes", () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-F2b's fourth test; assertions unchanged
     const config = read(ORCHESTRATION_CONFIG);
     for (const line of ['import base from "./playwright.config";', 'testDir: "./e2e-orchestration",', "workers: 1,", "retries: 0,", "timeout: base.timeout,", 'outputDir: "test-results-orchestration",', 'outputFolder: "playwright-report-orchestration"', "reuseExistingServer: false,", "...baseServer,", "...baseServer.env,", `${ORCHESTRATION_ENABLED_ENV}: "1",`, `${ROLE_MODELS_ENV}: JSON.stringify({ "circuit-topology": { provider: "anthropic", model: "inherit" } }),`]) expect(config, line).toContain(line); // [B21 F2 fix: security-1] reviewed pin move: the role-model override was blanked ("") - one provider, one source; F6's two parties now run on two providers (case 12)
     const env = config.slice(config.indexOf("...baseServer.env,"), config.indexOf("},", config.indexOf("...baseServer.env,")));
@@ -249,7 +249,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
     const ignored = read(".gitignore").split(NEWLINE);
     for (const folder of ["/playwright-report/", "/test-results/", "/playwright-report-orchestration/", "/test-results-orchestration/"]) expect(ignored, folder).toContain(folder);
     const spec = read(BROWSER_SPEC);
-    expect(spec.match(/^test\(/gm) ?? []).toHaveLength(4); // [B21 F2b, 2026-09-29] reviewed pin move: B21-F2 wrote three tests; B21-F2b appended test 4 (F12 presented, rejected, stood down and resumed in the browser: D21-45, the lead's option (a)) - this title's "three tests" is kept for the closeout's retitling
+    expect(spec.match(/^test\(/gm) ?? []).toHaveLength(4); // [B21 F2b, 2026-09-29] reviewed pin move: B21-F2 wrote three tests; B21-F2b appended test 4 (F12 presented, rejected, stood down and resumed in the browser: D21-45, the lead's option (a)) - this title's "three tests" is kept for the closeout's retitling; [B21 closeout, 2026-09-29] retitled
     expect(spec).toContain('from "../e2e/fixture-journey";');
     expect(spec).toContain('const EVIDENCE = "artifacts/ai-control-plane-b21/evidence";');
     const namespace = /const UUID_NAMESPACE = "([0-9a-f]{8})";/.exec(spec)?.[1];

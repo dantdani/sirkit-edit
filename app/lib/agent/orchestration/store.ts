@@ -344,7 +344,7 @@ type Factory = () => OrchestrationRunStore;
 const unavailableFactory: Factory = () => UNAVAILABLE_STORE;
 let factory: Factory = unavailableFactory;
 
-/** Never throws: a factory that fails resolves to the unavailable store. The composition root installs the production factory. */
+/** Never throws: a factory that fails resolves to the unavailable store. The composition root installs the production factory [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the composition root binds ITS OWN factory (orchestration-runtime.ts) and calls this only as the unavailable fallback; the setter below is a test seam, store case 11]. */
 export function resolveOrchestrationRunStore(): OrchestrationRunStore {
   try {
     return factory();

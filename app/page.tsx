@@ -4757,7 +4757,7 @@ export default function Home() {
         // B09.2 — the settlement is PRODUCTION-owned (run-consumer.ts):
         // recoverable provider_* failures on the CURRENT generation dispatch
         // the owned Retry / Use-other-provider event; retry starts a NEW
-        // send() run (fresh scope + fresh AbortController); stale/cancelled/
+        // send() run (fresh scope + fresh AbortController [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): with the orchestration flag on, that send resumes an offered orchestrated run of the same message on the same provider under its run id - B21-E3, D21-4]); stale/cancelled/
         // deadline runs recover nothing.
         settleAgentRunFailure({
           reason: failure.reason,

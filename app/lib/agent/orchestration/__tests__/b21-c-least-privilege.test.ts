@@ -1,6 +1,6 @@
 /**
  * [B21 C] Least privilege per role (OD-120, OD-121) over the REAL loop, the REAL gateway (built bare, as the composition root
- * builds the specialists') and the production registry, driven by a scripted per-role adapter, with the in-memory durable
+ * builds the specialists') [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the composition root builds the specialists' gateway with ONE option, the route's pin-facts reader - this suite's gateway is bare - and since B21-D2 / D3 a proposing role is also offered its row's live proposals, FULL_CONTEXT_OFFERED, case 1] and the production registry, driven by a scripted per-role adapter, with the in-memory durable
  * record: for EVERY role a specialist run is offered exactly `roleAllowedToolIds(role)` intersected with the reads the derived
  * context admits, and its persisted request says the same; `buildRunToolset`'s optional `allowedToolIds` is applied AFTER every
  * existing gate and can only narrow; an over-long, unsorted, duplicated, unexposed, never-exposed or malformed list approves
@@ -27,7 +27,6 @@ import { createAgentToolGateway } from "@/app/lib/agent/gateway";
 import { RUN_ALLOWLIST_MAX_IDS, approvedRunAllowlist, buildRunToolset, runAgentLoop, type AgentLoopDeps } from "@/app/lib/agent/loop";
 import { DEFAULT_AGENT_BUDGET, type AgentRunContext, type AgentRunEvent, type AgentToolInvocationGateway } from "@/app/lib/agent/contracts";
 import { composition, runContext } from "@/app/lib/engineering/__tests__/b18c-harness";
-import { specialistResultsEnvelope } from "@/app/api/chat/orchestration-runtime";
 import { ORCHESTRATION_BOUNDS, SPECIALIST_ROLES, type SpecialistRole } from "../contracts";
 import { DurableOrchestrationRunStore, type OrchestrationRunEntry, type OrchestrationRunScope } from "../store";
 import { roleAllowedToolIds, roleProposalToolIds } from "../role-tools";
@@ -83,7 +82,7 @@ const notRunLines = (events: AgentRunEvent[]): string[] => warningsOf(events).fi
 const coveredTaskIds = (outcome: Extract<SchedulerOutcome, { kind: "ran" }>): string[] => [...new Set([...outcome.tasks.map((task) => task.taskId), ...outcome.notStarted.map((task) => task.taskId)])].sort();
 
 describe("[B21 C] least privilege per role", () => {
-  it("1. for EVERY role: the specialist is offered exactly its reviewed list intersected with the reads the derived context admits, its loop receives that list, and its persisted request says the same; the cost/latency router (no tools) is NOT RUN (`role_has_no_tools`, a visible warning): its task stays in the plan and records the missing evidence (dissent `escalated`); the plan record's reason names it", async () => {
+  it("1. for EVERY role: the specialist is offered exactly its reviewed list intersected with the reads the derived context admits - plus, since B21-D2 / D3, its row's live proposals whose sealer's fact the context holds (FULL_CONTEXT_OFFERED) - its loop receives that list, and its persisted request says the same; the cost/latency router (no tools) is NOT RUN (`role_has_no_tools`, a visible line - a warning when written, a `degraded` event since B21-E2, OD-126): its task stays in the plan and records the missing evidence (dissent `escalated`); the plan record's reason names it", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the live proposals (B21-D2 / D3) and B21-E2's degraded event; assertions unchanged
     const context = fullContext();
     const derived = deriveSpecialistContext(context);
     const admitted = specialistAllowedToolIds(registry, derived, buildRunToolset, "coordinator");
@@ -197,7 +196,7 @@ describe("[B21 C] least privilege per role", () => {
     expect(warningsOf(events).filter((message) => message.includes("allowlist_invalid"))).toHaveLength(1);
   });
 
-  it("4. a role whose effective set is EMPTY is not run with `role_has_no_tools` (a visible warning, never run with the coordinator's set) and the DAG continues: on a board-only run the schematic specialist and the cost/latency router are not run - each task stays in the plan under its own id and records the missing evidence as dissent `escalated` - and the verification critic runs; a fresh plan whose every role has no tools is refused `plan_empty` with nothing written and no adapter call", async () => {
+  it("4. a role whose effective set is EMPTY is not run with `role_has_no_tools` (a visible line - a warning when written, a `degraded` event since B21-E2, OD-126 - never run with the coordinator's set) and the DAG continues: on a board-only run the schematic specialist and the cost/latency router are not run - each task stays in the plan under its own id and records the missing evidence as dissent `escalated` - and the verification critic runs; a fresh plan whose every role has no tools is refused `plan_empty` with nothing written and no adapter call", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-E2's degraded event; assertions unchanged
     const boardOnly = runContext(await composition("proposal_only"));
     const derived = deriveSpecialistContext(boardOnly);
     expect(specialistAllowedToolIds(registry, derived, buildRunToolset, "schematic")).toEqual([]);
@@ -295,7 +294,7 @@ describe("[B21 C] least privilege per role", () => {
     expect(approvedRunAllowlist(["sirkit.pcb.board-inspect"], namingRelease)).toEqual(new Set(["sirkit.pcb.board-inspect"]));
   });
 
-  it("8. [B21 C fix] the plan and its task ids come from the plan's roles ONLY (review: a plan that depended on this run's resources refused a same-scope resume `plan_mismatch` and renumbered the kept tasks): a role with no tools this run keeps its task, which records the missing evidence (dissent `escalated`, `role_has_no_tools`) and is reported in the outcome and in the follow-up envelope - every planned task is in `tasks` or `notStarted`; a resume for the same coordinator run and scope replays every committed result whether or not the authority loaded this time, and a role that now has tools runs at its next attempt", async () => {
+  it("8. [B21 C fix] the plan and its task ids come from the plan's roles ONLY (review: a plan that depended on this run's resources refused a same-scope resume `plan_mismatch` and renumbered the kept tasks): a role with no tools this run keeps its task, which records the missing evidence (dissent `escalated`, `role_has_no_tools`) and is reported in the outcome (and in the follow-up envelope when written - since the D21-36 retirement that carriage is D's route case 6, attempt 1, and B's route case 4 through the production POST, attempt 0) - every planned task is in `tasks` or `notStarted`; a resume for the same coordinator run and scope replays every committed result whether or not the authority loaded this time, and a role that now has tools runs at its next attempt", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): D21-36 retired B's envelope - this case's two envelope assertions moved as the retirement map lists them (the attempt-0 reason now checked on the outcome); assertions otherwise unchanged
     const REPLACEMENT = DAG_ROLE_LISTS["component-replacement"];
     const planned = planTasks(REPLACEMENT).map((task) => task.taskId).sort();
     const withAuthority = fullContext();
@@ -326,9 +325,6 @@ describe("[B21 C] least privilege per role", () => {
     expect(historyA.filter((entry) => entry.record.kind === "plan")).toHaveLength(1);
     expect(historyA.filter((entry) => entry.taskId === "task-1-circuit-topology" && entry.record.kind === "result")).toHaveLength(1);
     expect(historyA.find((entry) => entry.taskId === "task-2-component-sourcing-evidence" && entry.attempt === 1)!.record).toMatchObject({ kind: "dissent", decision: "escalated", reason: expect.stringMatching(/^role_has_no_tools: /) });
-    // the follow-up turn is told which evidence is missing: the not-run task is in the envelope with its reason
-    const envelope = specialistResultsEnvelope(resumedA).text;
-    expect(envelope).toContain('"taskId":"task-2-component-sourcing-evidence","role":"component-sourcing-evidence","attempt":1,"status":"escalated","reason":"role_has_no_tools: ');
 
     // B: no authority first (the sourcing task records its missing evidence), resumed WITH the authority: the same ids, the
     // committed results replayed, the sourcing role runs at its next attempt
@@ -337,7 +333,7 @@ describe("[B21 C] least privilege per role", () => {
     expect(firstB.kind).toBe("ran");
     if (firstB.kind !== "ran") return;
     expect(firstB.tasks.map((task) => [task.taskId, task.attempt, task.status])).toEqual([["task-1-circuit-topology", 0, "accepted"], ["task-2-component-sourcing-evidence", 0, "escalated"], ["task-3-schematic", 0, "accepted"], ["task-4-verification-critic", 0, "accepted"]]); // [B21 D3] pin move (OD-107 amended): the replacement DAG gained the schematic specialist (task 3; the critic is task 4)
-    expect(specialistResultsEnvelope(firstB).text).toContain('"role":"component-sourcing-evidence","attempt":0,"status":"escalated","reason":"role_has_no_tools: ');
+    expect(firstB.tasks[1]!.reason).toMatch(/^role_has_no_tools: /); // [B21 closeout, 2026-09-29] reviewed pin move (D21-36): the outcome's reason; the envelope's carriage of this attempt-0 string is B's route case 4 (the production POST), and of the attempt-1 string above D's route case 6
     const resumeB = rig(withAuthority, {}, "run-b21c-resume-b", b.store);
     const resumedB = await runSpecialistDag({ roles: REPLACEMENT }, resumeB.coordinator, resumeB.deps);
     expect(resumedB.kind).toBe("ran");

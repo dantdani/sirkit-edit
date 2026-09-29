@@ -986,6 +986,10 @@ Amendments to existing entries:
   nothing (route case 12b). **Closed by:** B21-E's strict result tool (OD-116), which makes the result a true tool result on both
   providers.
 
+**Amendment (B21 closeout (1/2), 2026-09-29) — B21-E did not close the deviation**
+
+[B21 closeout (1/2)] B21-E1's strict result tool is the specialist's OUTPUT channel; the follow-up turn still takes the merge's view (`mergedResultsEnvelope`) as its user message, so the deviation this entry records stands for the owner. B's `specialistResultsEnvelope` is retired (D21-36).
+
 ## OD-109 — Specialists never hold the three availability facts (B21-A records; B21-C proves) (2026-09-24)
 
 - **Question:** `assembleAgentRunContext` takes `executionGrantsAvailable`, `externalAcquisitionAvailable` and `mcpObservationAvailable`
@@ -1622,3 +1626,16 @@ Amendments to existing entries:
   catalog in the replay context, per-role routing kept live - a harness change); a flag-gated live block in a suite (a permanently skipped
   test on every CI run, which OD-102 declined); or a live run under Anthropic's Message Batches at half price (OD-119 declined batches for
   interactive work; an offline evaluation could use them).
+
+## OD-113 — The B11/B20 tripwires and titles ("carry no MCP or multi-agent identifier"), as applied (B21 closeout (1/2), 2026-09-29)
+
+- **Question:** keep the B11/B20 tripwires and their titles verbatim (orchestration lives elsewhere) or re-scope them?
+- **Default applied:** kept verbatim - the B11/B20 tripwire cases, their three "carry no MCP or multi-agent identifier" titles and the pinned
+  `provider: "openai" | "anthropic";` are unchanged; orchestration lives under `app/lib/agent/orchestration/`, outside the nine scanned
+  files. The closeout retitled the two "ELEVEN" titles (`b09-2-closure.test.ts:74`, `b09-3-closure.test.ts:162`) and 34 other stale titles
+  (assertions unchanged), superseded the standing single-agent statements in place with dated notes, and added the tripwire
+  `b21-closeout-statements.test.ts` (the D20-30 pattern) that no file outside its allow-list states the old claim uncorrected.
+- **Evidence:** `closeout-statements.md`; `b21-closeout-statements.test.ts`; `b20-b2-import-gates.test.ts` case 3 and `b21-a-import-gates`
+  unchanged.
+- **The owner may choose otherwise:** re-scope the B11/B20 tripwires to name orchestration explicitly (a reviewed pin move of two chapters'
+  suites).

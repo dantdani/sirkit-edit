@@ -28,7 +28,7 @@ verifiers.
   before the envelope; the follow-up turn receives the MERGE's view (`mergedResultsEnvelope`, bounded by staged fallbacks whatever the
   merge holds) instead of the raw outcomes; a merge that cannot record its decisions stands down like B's other stand-downs (the
   coordinator's answer is the one terminal under a reason-only warning, no follow-up turn); the merge's lines ride the run log's
-  `warning` channel; no new run event; B's `specialistResultsEnvelope` is marked superseded (no production caller - D21-36).
+  `warning` channel; no new run event; B's `specialistResultsEnvelope` is marked superseded (no production caller - D21-36). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E2 the merge's stand-down is a `degraded` event, `merge_unrecorded`, carrying the same sentence while the merge's own lines stay warnings - `run-events-and-trace.md`, OD-126; B's envelope is retired, D21-36, C74 citing its tombstone]
   **CONFIRMED** by `app/api/chat/__tests__/b21-d-chat-merge.test.ts` (7 cases) and B's route suite (its pin moves, section 7).
 - The scheduler, in place and appended (C32, C68..C71; no line any B21 page cites moved): after a `stale` dissent the task re-runs at
   the NEXT attempt, so the re-run's own dissent (`malformed`, `escalated`) never shares an idempotency key with the stale dissent about
@@ -466,7 +466,7 @@ it now records `Section 7, B21-D: amended` between its Section 6 and Section 8 c
   [B21 D2, 2026-09-26] Reachable since B21-D2: a proposing specialist carries the artifact its own run sealed, so two conflicting seals escalate in production (`specialist-proposals.md`); the B21-D suites now relay their test-sealed artifacts as the runs' own seal events.
 - No provenance of an artifact is established (who sealed it); no mid-DAG commit is seen: the merge judges against the snapshot the
   request assembled - no server-side live head exists to re-read - and every apply re-verifies against the live head.
-  [B21 D2, 2026-09-26] Provenance is established since B21-D2 (`sealed-in-run`); the mid-DAG commit stays B21-E/F's (`specialist-proposals.md`).
+  [B21 D2, 2026-09-26] Provenance is established since B21-D2 (`sealed-in-run`); the mid-DAG commit stays B21-E/F's (`specialist-proposals.md`). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): B21-E3 closed only the live-head half - a resume judges the head the resuming request carries; a commit that lands DURING one request's DAG is still not seen by that request's merge, RECORDED, and every apply re-verifies - `route-resume.md` section 3 and its D21-17 closure clause]
 - No model anywhere in the merge; no provider routing, breaker, strict result tool or trace block (B21-E); no evaluations (B21-F).
 - No UI, no new run event, no new route, no new exposed tool, no new discovery channel, no generator input change.
 - No proposal_ready (or any other presentation for approval) of a specialist's artifact: an accepted action reaches the read-only
@@ -548,7 +548,7 @@ count; B's page restates the two revisions and case 13's attempts and re-pins C4
 
 **Gates** (one heavy job at a time, through the lock runner; figures in the report). Live behaviour with a real model:
 **BLOCKED-LIVE-QUALIFICATION** (LB-9). **UNKNOWN**: whether a live proposing role would ever carry a sealed artifact (none can today:
-section 6). **INFERRED**: the merge adds a DRC and a readiness evaluation per merge only when a result requests them or a reviewer runs
+section 6) [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D2 a proposing role can - it carries what its own run's gateway sealed, section 6's D2 notes; whether a LIVE model does stays BLOCKED-LIVE-QUALIFICATION, LB-9]. **INFERRED**: the merge adds a DRC and a readiness evaluation per merge only when a result requests them or a reviewer runs
 (memoized once per merge), and two DRC and two connectivity runs per surviving layout candidate.
 
 ## 8. For the lead — the reserved texts, in full
@@ -1019,11 +1019,11 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C24 | `app/lib/agent/orchestration/merge.ts` | 1005 | — | `const written = await deps.store.append({ scope: runScope, taskId: entry.taskId, attempt: entry.attempt,` | every verdict persisted before hand-on |
 | C25 | `app/lib/agent/orchestration/merge.ts` | 755 | — | `function standingOf(reference: ValidatedSpecialistResult["evidence"][number]): MergeEvidenceStanding {` | B19's evidence classes as standings (labels) |
 | C26 | `app/lib/agent/orchestration/merge.ts` | 541 | — | `digest: engineeringDigest({ schema: "sirkit.orchestration-merge-verification.v1"` | a verification's result digest as deterministic_verifier evidence |
-| C27 | `app/api/chat/orchestration-runtime.ts` | 280 | — | `const merged = await mergeSpecialistOutcome({ runId: request.runId, context: deps.context, outcome }, specialistMergeDeps(deps.context, deps.now));` | the merge between the scheduler and the envelope |
-| C28 | `app/api/chat/orchestration-runtime.ts` | 281 | — | `if (merged.kind === "refused") return standDown(` | a merge that cannot record stands down |
-| C29 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `for (const line of merged.lines) warn(line);` | one warning line per dissent, escalation and review request |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 330 | — | `export function specialistMergeDeps(context: AgentRunContext, now: () => number = Date.now): MergeDeps {` | the injected verifier and preset, bound outside the prefix |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 355 | — | `export function mergedResultsEnvelope(` | the merge's view for the follow-up turn |
+| C27 | `app/api/chat/orchestration-runtime.ts` | 260 | — | `const merged = await mergeSpecialistOutcome({ runId: request.runId, context: deps.context, outcome }, specialistMergeDeps(deps.context, deps.now));` | the merge between the scheduler and the envelope |
+| C28 | `app/api/chat/orchestration-runtime.ts` | 261 | — | `if (merged.kind === "refused") return standDown(` | a merge that cannot record stands down |
+| C29 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `for (const line of merged.lines) warn(line);` | one warning line per dissent, escalation and review request |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 310 | — | `export function specialistMergeDeps(context: AgentRunContext, now: () => number = Date.now): MergeDeps {` | the injected verifier and preset, bound outside the prefix |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 335 | — | `export function mergedResultsEnvelope(` | the merge's view for the follow-up turn |
 | C32 | `app/lib/agent/orchestration/scheduler.ts` | 488 | — | `const attempt = baseAttempt + (staleWritten ? 1 : 0) + offset;` | the re-run after a stale dissent at the next attempt |
 | C33 | `app/lib/engineering/schematic-proposals.ts` | 237 | — | `export function verifySealedTier1Proposal(proposal: SealedTier1Proposal, input: {` | the Tier 1 family's verifier |
 | C34 | `app/lib/engineering/replacement-proposals.ts` | 263 | — | `export function verifySealedReplacementProposal(proposal: SealedReplacementProposal, input: {` | the replacement family's verifier |
@@ -1064,9 +1064,9 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C69 | `app/lib/agent/orchestration/scheduler.ts` | 462 | — | `&& !mergeJudgedStale(history, task.taskId, committed.attempt) ? engineeringDigest(answered.record.document.scope) : null;` | a result judged stale or expired is never replayed |
 | C70 | `app/lib/agent/orchestration/scheduler.ts` | 669 | — | `export const READINESS_CITATION_RULE =` | the reviewer's citation form |
 | C71 | `app/lib/agent/orchestration/scheduler.ts` | 344 | — | `...specialistResultRules(task.role),` | a role's output rules in its frame |
-| C72 | `app/api/chat/orchestration-runtime.ts` | 345 | — | `export const MERGED_ENVELOPE_STAGES = Object.freeze([` | the envelope's stages |
-| C73 | `app/api/chat/orchestration-runtime.ts` | 414 | — | `for (const stage of MERGED_ENVELOPE_STAGES) {` | the first stage that fits |
-| C74 | `app/api/chat/orchestration-runtime.ts` | 190 | — | `[B21 D fix] SUPERSEDED since B21-D` | B's envelope superseded (D21-36) |
+| C72 | `app/api/chat/orchestration-runtime.ts` | 325 | — | `export const MERGED_ENVELOPE_STAGES = Object.freeze([` | the envelope's stages |
+| C73 | `app/api/chat/orchestration-runtime.ts` | 394 | — | `for (const stage of MERGED_ENVELOPE_STAGES) {` | the first stage that fits |
+| C74 | `app/api/chat/orchestration-runtime.ts` | 189 | — | `specialistResultsEnvelope RETIRED (D21-36)` | B's envelope superseded (D21-36); [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retired - this row cites its one-line tombstone] |
 | C75 | `app/lib/pcb/proposal/bounded-edit-compiler.ts` | 419 | — | `return refuse("drc-regression",` | the compiler's regression rules the candidate check mirrors |
 | C76 | `app/lib/pcb/candidates/layout-candidate.ts` | 352 | — | `const command = buildAutorouteImportCommand(board, candidate.routes);` | the apply's routing build the candidate check mirrors |
 | C77 | `app/lib/agent/orchestration/merge.ts` | 137 | — | `{ code: "evidence-missing", decision: "accepted"` | [B21 F3] the gap's own code, the LAST row of MERGE_OWN_CODES |
@@ -1074,9 +1074,9 @@ The anchor is what is checked (it occurs exactly once in its file). For `merge.t
 | C79 | `app/lib/agent/orchestration/merge.ts` | 929 | — | `merge accepted${evidenceGapReason(entry.findings)}` | [B21 F3] the accepted decision record's reason names the gap |
 | C80 | `app/lib/agent/orchestration/merge.ts` | 1094 | — | `export const EVIDENCE_GATHERING_ROLES` | [B21 F3] the evidence-gathering roles: the sourcing specialist alone |
 | C81 | `app/lib/agent/orchestration/merge.ts` | 1107 | — | `function withEvidenceGap(` | [B21 F3] the rule: an accepted, evidence-free result of such a role gains ONE finding |
-| C82 | `app/api/chat/orchestration-runtime.ts` | 880 | — | `function evidenceGapMark(` | [B21 F3] the envelope's closed marker on that entry |
-| C83 | `app/api/chat/orchestration-runtime.ts` | 890 | — | `export const EVIDENCE_GAP_HEADER_NOTE` | [B21 F3] the header's one closed sentence |
-| C84 | `app/api/chat/orchestration-runtime.ts` | 415 | — | `${MERGED_ENVELOPE_HEADER}${evidenceGapHeader(merged)}` | [B21 F3] the sentence only when an entry carries the marker |
+| C82 | `app/api/chat/orchestration-runtime.ts` | 860 | — | `function evidenceGapMark(` | [B21 F3] the envelope's closed marker on that entry |
+| C83 | `app/api/chat/orchestration-runtime.ts` | 870 | — | `export const EVIDENCE_GAP_HEADER_NOTE` | [B21 F3] the header's one closed sentence |
+| C84 | `app/api/chat/orchestration-runtime.ts` | 395 | — | `${MERGED_ENVELOPE_HEADER}${evidenceGapHeader(merged)}` | [B21 F3] the sentence only when an entry carries the marker |
 | C85 | `app/lib/agent/orchestration/scheduler.ts` | 480 | — | `its evidence stays missing` | the tool-less task: the scheduler's dissent, never the merge's gap |
 | C86 | `app/lib/agent/orchestration/merge.ts` | 931 | — | `${evidenceGapReason(entry.findings)}: findings withheld from the record` | [B21 F3 review: regressions-2] a withheld reason keeps the gap's closed clause |
 | C87 | `app/lib/agent/orchestration/merge.ts` | 992 | — | `records[records.indexOf(planned)] = { ...entry, taskId: latest.taskId,` | [B21 D4] D21-46: a pass that writes nothing names the attempt's LATEST verdict record (chained or not) in `records` |

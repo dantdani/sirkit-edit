@@ -3,7 +3,7 @@
  * the REAL scheduler and the production registry. Per role, the advertised set - what the model is offered, what the request
  * persists and what the loop narrows to - is the role's row intersected with (the reads its context admits and, for a proposing
  * role, the row's LIVE, non-long-running proposals); a read-only role is never offered a proposal; a granted execution, a
- * view-session control, a Tier 3 id, a long-running proposal (placement / routing) and the replacement proposal (its sealer needs
+ * view-session control, a Tier 3 id, a long-running proposal (placement / routing) and the replacement proposal [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the replacement is LIVE for the schematic role, the runtime handing the specialist gateway the published pin-facts reads - b21-d3-pin-facts; it is never offered to any other role] (its sealer needs
  * the pin-facts reads only the coordinator's gateway holds) are never offered and the wrapper refuses each before the gateway.
  * The proposing context (OD-109 amended) gains exactly the fact its sealer needs from the coordinator's verified context - the
  * schematic head mark for the Tier 1 edit, the PCB proposal basis for the bounded edit - and still claims none of the eight
@@ -72,8 +72,8 @@ function expectFrame(start: { role: string; system: string; userMessage: string 
 }
 
 describe("[B21 D2] the proposing roles are offered their reviewed proposals, nothing more", () => {
-  it("1. the live and dormant proposals are DATA: SPECIALIST_PROPOSAL_TOOL_IDS is the Tier 1 edit and the bounded PCB edit - each an exposed, interactive (never long-running) `propose` descriptor in a proposing role's row; the placement and routing proposals (long-running) and the replacement proposal (its sealer needs the coordinator gateway's pin-facts reads) are dormant for specialists, each with its reason; roleProposalToolIds is the row intersected with the live list - the coordinator (never a specialist) and every read-only role get none", () => {
-    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's dormant replacement is D2's, kept for the closeout's retitle (OD-113's pattern)
+  it("1. the live and dormant proposals are DATA: SPECIALIST_PROPOSAL_TOOL_IDS is the bounded PCB edit, the replacement and the Tier 1 edit (the replacement dormant when written - its sealer needs the pin-facts reads - and live for the schematic role since B21-D3, OD-120 amended) - each an exposed, interactive (never long-running) `propose` descriptor in a proposing role's row; the placement and routing proposals (long-running) are dormant for specialists, each with its reason; roleProposalToolIds is the row intersected with the live list - the coordinator (never a specialist) and every read-only role get none", () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replacement live for the schematic role since B21-D3; assertions unchanged
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's dormant replacement is D2's, kept for the closeout's retitle (OD-113's pattern) [B21 closeout, 2026-09-29: retitled]
     expect([...SPECIALIST_PROPOSAL_TOOL_IDS]).toEqual([PCB_EDIT, REPLACEMENT, TIER1]);
     for (const toolId of SPECIALIST_PROPOSAL_TOOL_IDS) {
       const descriptor = registry.get(toolId)!;
@@ -111,7 +111,7 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
     }
   });
 
-  it("3. per role, through the REAL scheduler over a context with a head mark AND a PCB basis: the model is offered, the loop narrows to and the request persists EXACTLY the role's row intersected with (the reads its context admits and the row's live proposals) - the circuit and schematic specialists the Tier 1 edit, the PCB specialist the bounded edit, every other role reads only; never the replacement, a layout proposal, an execution or a view control", async () => {
+  it("3. per role, through the REAL scheduler over a context with a head mark AND a PCB basis: the model is offered, the loop narrows to and the request persists EXACTLY the role's row intersected with (the reads its context admits and the row's live proposals) - the circuit specialist the Tier 1 edit, the schematic specialist the Tier 1 edit and (since B21-D3) the replacement, the PCB specialist the bounded edit, every other role reads only; never a layout proposal, an execution or a view control, and the replacement to no role but the schematic one", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replacement live for the schematic role since B21-D3; assertions unchanged
     const context = coordinatorContext();
     expect(context.schematicHeadMark).not.toBeNull();
     expect(context.pcbProposalBasis).not.toBeNull();
@@ -145,7 +145,7 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
     }
   });
 
-  it("4. over the WORST coordinator context (the minter, both ports, a head mark, a PCB basis, a captured view, a project admin): no role is ever offered a granted execution, a view-session control, a Tier 3 or never-exposed id, a long-running proposal or the replacement - not in its view, not in its effective set - and the wrapper the scheduler builds refuses each `role_not_permitted_tool` before the gateway is asked", async () => {
+  it("4. over the WORST coordinator context (the minter, both ports, a head mark, a PCB basis, a captured view, a project admin): no role is ever offered a granted execution, a view-session control, a Tier 3 or never-exposed id or a long-running proposal, and no role but the schematic one (live for its row since B21-D3; no role when written) the replacement - not in its view, not in its effective set - and the wrapper the scheduler builds refuses each `role_not_permitted_tool` before the gateway is asked", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replacement live for the schematic role since B21-D3; assertions unchanged
     const worst = grantableContext();
     // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts): it is forbidden to every role but the schematic one, whose row lists it
     const forbiddenFor = (role: SpecialistRole) => (toolId: string): boolean => {
@@ -259,11 +259,11 @@ describe("[B21 D2] the proposing roles are offered their reviewed proposals, not
     }
   });
 
-  it("8. the wrapper's own class check is a SECOND line of defense, pinned apart from the list: handed a HAND-BUILT list that names both long-running proposals, the replacement, a granted execution and a view control beside a read and the live Tier 1 edit, it still refuses each of those five `role_not_permitted_tool` before the gateway (spy: never asked) and passes only the read and the live proposal through", async () => {
+  it("8. the wrapper's own class check is a SECOND line of defense, pinned apart from the list: handed a HAND-BUILT list that names both long-running proposals, the replacement, a granted execution and a view control beside a read and the live Tier 1 edit, it still refuses the four that are not live (both long-running proposals, the execution and the view control - five when written; the replacement live since B21-D3) `role_not_permitted_tool` before the gateway (spy: never asked) and passes the read and the live proposals (the Tier 1 edit and the replacement) through", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): four refused, the replacement passed since B21-D3; assertions unchanged
     const context = specialistContextFor(coordinatorContext(), "schematic");
     // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts): a LIVE proposal the list names now passes the class check, so the hand-built list's refused ids are the
     // two long-running proposals, the execution and the view control; the replacement passes with the read and the Tier 1 edit (the
-    // title's five refused ids are D2's, kept for the closeout's retitle - that no other role's list ever names it is b21-d3-replacement-roles case 4)
+    // title's five refused ids are D2's, kept for the closeout's retitle - that no other role's list ever names it is b21-d3-replacement-roles case 4) [B21 closeout, 2026-09-29: retitled]
     const outside = [...LONG_RUNNING, "sirkit.pcb.move-footprint", "sirkit.view.layers"];
     expect(outside.map((toolId) => classOf(toolId))).toEqual(["propose", "propose", "mutate", "view-session"]);
     const underlying = spy();

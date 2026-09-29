@@ -22,7 +22,7 @@
  *    (what a model inventing a Tier 3 tool would emit), with interim text claiming success;
  *  - [B18-E E7] "Move <REF> <n> mm <direction>, then release the board." → the move with a nested delegation in its arguments;
  *  - [B18-E E7] "Add silkscreen text <TEXT> at <x>, <y> twice." → the same execution call twice in one step;
- *  - anything else → a plain reply that names the scripted instructions.
+ *  - anything else → a plain reply that names the scripted instructions [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-F (D21-40) a specialist's run - the strict result tool offered - plays its role's script and the coordinator's follow-up turn answers from the merged results first, both from the per-role scripts appended below; neither exists with SIRKIT_ORCHESTRATION_ENABLED off].
  *
  * It reads ONLY what a model would: the user's message, the advertised tools
  * and the tool results.

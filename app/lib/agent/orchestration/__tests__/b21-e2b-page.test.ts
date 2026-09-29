@@ -106,7 +106,7 @@ describe("[B21 E2b] E2's second run on the run-events-and-trace page", () => {
     for (const claim of ["`Task: <taskId>`", "the prompt digest", "`b21-e2b-task-identity.test.ts` case 3", "`ta[redacted]`", "no string or key"]) expect(text, claim).toContain(claim);
   });
 
-  it("4. what stands unchanged is stated and TRUE: the hashes 3.7 quotes for the nine B11-scanned files and redaction.ts ARE the files' (byte-identical to HEAD 41330e6), the provider literal and the five pinned run events stand, and every committed pin E2b left green is named", () => { // [B21 F, 2026-09-28] E2b's title: since B21-F 3.7's replay-capsule hash is F's (its dated note), the other eight and redaction.ts 41330e6's; the closeout retitles it
+  it("4. what stands unchanged is stated and TRUE: the hashes 3.7 quotes for the nine B11-scanned files and redaction.ts ARE the files' (byte-identical to HEAD 41330e6 but the replay capsule, whose hash is B21-F's with its dated note), the provider literal and the five pinned run events stand, and every committed pin E2b left green is named", () => { // [B21 F, 2026-09-28] E2b's title: since B21-F 3.7's replay-capsule hash is F's (its dated note), the other eight and redaction.ts 41330e6's; the closeout retitles it; [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replay capsule's hash is B21-F's; assertions unchanged
     const page = read(PAGE);
     const unchanged = flat(subsection(page, "3.7"));
     for (const file of [...B11_SCANNED_FILES, "app/lib/agent/redaction.ts"]) {

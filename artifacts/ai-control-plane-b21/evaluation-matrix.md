@@ -156,7 +156,7 @@ failed only under M1's harness swap).
 `SPECIALIST_RESULT_TOOL_NAME`, C24 - case 13 pins it) is a specialist run: its role is read from the frame's machine-readable `Role:` line
 (C25), its sentence from the objective's tail (C26), and the script table chooses its steps - a read it is offered, a proposal, or a
 proposal whose target is first resolved by the schematic read - then ONE result call; a sentence with no script answers a plain result. A
-coordinator turn whose user message starts with `ORCHESTRATION RESULTS` (the runtime's envelope headers, C30, C31) answers from the merged
+coordinator turn whose user message starts with `ORCHESTRATION RESULTS` (the runtime's envelope headers, C30, C31 [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): one header since the D21-36 retirement, C31's; C30 cites B's envelope's tombstone]) answers from the merged
 envelope's own counts. The scripted sentences (every one routes to a DAG, case 13):
 
 - `replace the ne555 timer u1 with a lower-power timer`
@@ -246,7 +246,7 @@ byte-identical output. **CONFIRMED.**
   `chat-execution-ux.md` (574 to 674). The B20 discovery's reader citation (`replay-capsule.ts:477`, now 571) is the lead's file and is
   listed in section 7. No line cited above F's two in-place hooks in `fixture-agent-adapter.ts` moved.
 - The B11 pages that stated the capsule is v3 carry dated notes naming v4 (the head of this page lists them; page case 9) - the titles
-  above are the closeout's to retitle with OD-113's set (section 7).
+  above are the closeout's to retitle with OD-113's set (section 7). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled, assertions unchanged; page case 9's title pins moved with them]
 
 ## 3. Model-in-loop, record-only (OD-125, D21-25)
 
@@ -830,7 +830,7 @@ The stale test titles the closeout retitles with OD-113's set (each carries its 
 files are byte-identical to HEAD ..."; `b21-e2b-page.test.ts` case 4 "... (byte-identical to HEAD 41330e6) ..." (`b21-f-page.test.ts` case 1, F's own new suite, was
 retitled "ten pages" by the lead before the commit).
 [B21 F2b, 2026-09-29] And `b21-f-page.test.ts` case 10 "... the spec's three tests send the case table's sentences under their own namespace ...": four
-tests since B21-F2b (its count's pin moved with its reason beside it; the title kept, never retitled, for the closeout's set).
+tests since B21-F2b (its count's pin moved with its reason beside it; the title kept, never retitled, for the closeout's set). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the five titles above retitled, assertions unchanged and every `it(` count unchanged; page case 9's title pins moved with them]
 
 ### B21-F2 — the reserved texts, in full (the lead's to apply)
 
@@ -1015,7 +1015,7 @@ decision (OD-30's rule applied, not changed). These texts are pinned by `b21-f-p
   C19-C21 hold; the generator re-run: only that cell moved, `replay-trace-pins-b21.json` byte-identical); page cases 15 and 16 added,
   and 17 to 19 for the adversarial review's fixes (case 16's `nextAction` check moved onto their shared rule); section 6's counts (the
   spec 3 -> 4, the page suite 14 -> 19, the new suite 2); citation rows C105-C129 (C115-C119 re-pinned by the review's fixes). Case 10's title ("the
-  spec's three tests") kept for the closeout's retitling (section 7's list).
+  spec's three tests") kept for the closeout's retitling (section 7's list). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retitled "the spec's four tests (three when written ...)"]
 - Budget (OD-30), after the review's fixes: the existing suite 48 of 48 in 253 s of wall time and the orchestration config 4 of 4
   in 149 s, one after the other: 402 s, about 6.7 minutes of OD-30's 30 minutes (about 23.3 minutes of headroom, above the
   five-minute split rule; before the fixes 412 s, 263 + 149); the 30 tracked evidence PNGs the runs rewrote restored from HEAD by blob
@@ -1117,11 +1117,11 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C27 | `app/lib/agent/orchestration/__tests__/_f-fixture-clients.ts` | 56 | — | `export function fixtureOpenAIClient(` | the OpenAI fake client over one fixture agent |
 | C28 | `app/lib/agent/orchestration/__tests__/_f-fixture-clients.ts` | 87 | — | `export function fixtureAnthropicClient(` | the Anthropic fake client |
 | C29 | `app/lib/agent/orchestration/__tests__/_f-fixture-clients.ts` | 49 | — | `function fault(log: FixtureClientLog, role: string, followUp: boolean): void {` | the two provider faults, the client's |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 188 | — | `const ENVELOPE_HEADER = "ORCHESTRATION RESULTS - data` | B's envelope head |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 340 | — | `const MERGED_ENVELOPE_HEADER = "ORCHESTRATION RESULTS, JUDGED` | the merged envelope head |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 189 | — | `specialistResultsEnvelope RETIRED (D21-36)` | B's envelope head; [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): retired with B's envelope (D21-36) - this row cites its one-line tombstone; the one envelope head is C31's] |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 320 | — | `const MERGED_ENVELOPE_HEADER = "ORCHESTRATION RESULTS, JUDGED` | the merged envelope head |
 | C32 | `app/lib/agent/orchestration/scheduler.ts` | 619 | — | `if (failure === "cancelled") stop = "cancelled";` | a deadline ends its task only (F9) |
 | C33 | `app/lib/agent/orchestration/scheduler.ts` | 463 | — | `if (committedScopeDigest === currentScopeDigest) {` | a committed result replays only under its own scope (F8) |
-| C34 | `app/api/chat/orchestration-runtime.ts` | 744 | — | `return { ok: true, alreadyPresented: !read.ok` | OD-122's ledger across resumes (F12) |
+| C34 | `app/api/chat/orchestration-runtime.ts` | 724 | — | `return { ok: true, alreadyPresented: !read.ok` | OD-122's ledger across resumes (F12) |
 | C35 | `app/lib/agent/orchestration/__tests__/_f-capsules.ts` | 46 | — | `export const ORCHESTRATION_EVALUATION_CATEGORY = "orchestration" as const;` | the category, outside the nine files |
 | C36 | `app/lib/agent/orchestration/__tests__/_f-capsules.ts` | 188 | — | `return runOrchestratedChat({` | the task-graph runner: the real runtime |
 | C37 | `app/lib/agent/orchestration/__tests__/_f-capsules.ts` | 227 | — | `export async function runOrchestrationCase(` | one case, offline or (record-only) live |
@@ -1166,7 +1166,7 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C76 | `app/lib/agent/orchestration/__tests__/_f-fixture-clients.ts` | 68 | — | `provider: "openai", role, turn: outputs.length > 0 ? "continue" : "start", model: String(params.model), followUp, tools:` | every call records the tools it offered |
 | C77 | `app/api/chat/orchestration-runtime.ts` | 178 | — | `export function followUpDeps(deps: AgentLoopDeps, specialistGateway: AgentToolInvocationGateway): AgentLoopDeps {` | the follow-up turn's narrowed deps (F11; M14) |
 | C78 | `app/lib/agent/orchestration/scheduler.ts` | 399 | — | `coordinator.artifactHeld === true ? deriveSpecialistContext(context) : specialistContextFor(context, task.role)` | OD-122: no proposal beside the coordinator's artifact (F1; M9) |
-| C79 | `app/api/chat/orchestration-runtime.ts` | 287 | — | `const followUpMeters = input.providers ? admittedAdapter(` | only a specialist's or the follow-up's call is metered (D21-42; M15) |
+| C79 | `app/api/chat/orchestration-runtime.ts` | 267 | — | `const followUpMeters = input.providers ? admittedAdapter(` | only a specialist's or the follow-up's call is metered (D21-42; M15) |
 | C80 | `app/lib/agent/orchestration/merge.ts` | 869 | — | `if (shared.length > 0) edges.push(` | two different changes to one identity escalate (F6; M11) |
 | C81 | `app/lib/agent/orchestration/provider-policy.ts` | 110 | — | `const choice = override ?? ROLE_PROVIDER_POLICY[role];` | the server env routes a role to its provider (F6; M10) |
 | C82 | `playwright.orchestration.config.ts` | 15 | — | `import base from "./playwright.config";` | [B21 F2] the base config imported: its web server, never copied |
@@ -1207,9 +1207,9 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C117 | `e2e-orchestration/specialist-orchestration.spec.ts` | 406 | — | `"Orchestration: nothing from the specialists is presented for approval (already_presented): "` | [B21 F2b] the resume presents nothing again: the run log's `already_presented` line ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
 | C118 | `e2e-orchestration/specialist-orchestration.spec.ts` | 414 | — | `"one presentation across both requests"` | [B21 F2b] ONE presentation in all ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
 | C119 | `e2e-orchestration/specialist-orchestration.spec.ts` | 402 | — | `"every committed specialist replayed, none run again"` | [B21 F2b] the four committed specialists replayed ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
-| C120 | `app/api/chat/orchestration-runtime.ts` | 470 | — | `decision.outcome === "already_presented" ? "an earlier request of this run presented this user message` | [B21 F2b] the `already_presented` line the page renders (E3's ledger) |
+| C120 | `app/api/chat/orchestration-runtime.ts` | 450 | — | `decision.outcome === "already_presented" ? "an earlier request of this run presented this user message` | [B21 F2b] the `already_presented` line the page renders (E3's ledger) |
 | C121 | `app/lib/project/chat-run-view.ts` | 596 | — | `export const CHAT_RESUME_STAND_DOWN_REASONS = Object.freeze(["follow_up_failed"` | [B21 F2b] a failed follow-up is a stand-down the page offers a resume for |
-| C122 | `app/api/chat/orchestration-runtime.ts` | 312 | — | `return standDown(down("follow_up_failed", ` | [B21 F2b] the runtime stands the run down when the follow-up turn fails |
+| C122 | `app/api/chat/orchestration-runtime.ts` | 292 | — | `return standDown(down("follow_up_failed", ` | [B21 F2b] the runtime stands the run down when the follow-up turn fails |
 | C123 | `app/lib/agent/loop.ts` | 767 | — | `provider_${error.reason}` | [B21 F2b] a provider error fails the turn `provider_<reason>`: `provider_overloaded` |
 | C124 | `e2e-orchestration/specialist-orchestration.spec.ts` | 340 | — | `.and(page.locator('xpath=//*[not(ancestor-or-self::*[@role="status"])]'))` | [B21 F2b review, 2026-09-29] the chat's own lines, the transient toast excluded: every line an earlier test also renders is counted before and after (regressions-2, tests-2, tests-3) |
 | C125 | `e2e-orchestration/specialist-orchestration.spec.ts` | 376 | — | `"the Cancel applied nothing: no applied line"` | [B21 F2b review, 2026-09-29] the Cancel applied nothing: no applied line appears (tests-3) |

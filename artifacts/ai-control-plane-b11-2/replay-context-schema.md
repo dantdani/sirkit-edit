@@ -16,7 +16,7 @@
 > `PCB_BOARD_REQUIRED_KEYS` / `PCB_BOARD_OPTIONAL_KEYS` are deleted, the board
 > is validated against a descriptor generated from `app/lib/pcb/types.ts` by
 > the TypeScript compiler API, and the contract is versioned
-> `sirkit.agent-replay-context.v2` (capsule `…capsule.v3`). See
+> `sirkit.agent-replay-context.v2` (capsule `…capsule.v3` [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2]). See
 > [../ai-control-plane-b11-3/generated-pcb-type-graph.md](../ai-control-plane-b11-3/generated-pcb-type-graph.md)
 > and [../ai-control-plane-b11-3/recursive-board-projection.md](../ai-control-plane-b11-3/recursive-board-projection.md).
 > The historical record below is retained unchanged as evidence.

@@ -590,59 +590,59 @@ in its file - and, for every production file E3 changed, it is on the line state
 | C4 | `app/api/chat/route.ts` | 367 | — | `const runId = resume.kind === "resume" ? resume.runId` | the run id reused - in place |
 | C5 | `app/api/chat/route.ts` | 508 | — | `resumeChatRun(request, resume);` | the grant for THIS request object - in place |
 | C6 | `app/api/chat/route.ts` | 35 | — | `resolveChatResume, resumeChatRun, routerFactsOf` | the import, in place |
-| C7 | `app/api/chat/orchestration-runtime.ts` | 577 | — | `export const CHAT_RESUME_BODY_KEY` | `resumeRunId` |
-| C8 | `app/api/chat/orchestration-runtime.ts` | 578 | — | `export function chatResumeBodyKeyAdmitted(` | admitted under the flag only |
-| C9 | `app/api/chat/orchestration-runtime.ts` | 582 | — | `export const CHAT_RUN_ID_PATTERN` | the run-id grammar |
-| C10 | `app/api/chat/orchestration-runtime.ts` | 586 | — | `export const CHAT_RESUME_REFUSALS = Object.freeze({` | the closed refusals, in order |
-| C11 | `app/api/chat/orchestration-runtime.ts` | 589 | — | `resume_unusable: { status: 409` | [fix: coverage-7] a record that cannot serve a resume, for good |
-| C12 | `app/api/chat/orchestration-runtime.ts` | 595 | — | `resume_in_progress: { status: 409` | one request of a run at a time |
-| C13 | `app/api/chat/orchestration-runtime.ts` | 600 | — | `export interface ChatResumeGrant` | what a resume hands the runtime |
-| C14 | `app/api/chat/orchestration-runtime.ts` | 604 | — | `export const RESUME_LEASE_MS = 600_000;` | the lease |
-| C15 | `app/api/chat/orchestration-runtime.ts` | 607 | — | `export const RESUME_RECORD_DEADLINE_MS` | every record call bounded |
-| C16 | `app/api/chat/orchestration-runtime.ts` | 611 | — | `export async function boundedRecordCall<T>(` | a closed reason, never a driver's message; a timed-out call is unknown |
-| C17 | `app/api/chat/orchestration-runtime.ts` | 622 | — | `"record_mismatch" : "record_unavailable"` | [fix: coverage-7] a verification failure told apart |
-| C18 | `app/api/chat/orchestration-runtime.ts` | 630 | — | `export function resumeOwnerDigest(` | the owner: principal and scope |
-| C19 | `app/api/chat/orchestration-runtime.ts` | 633 | — | `export function resumePlanDigest(` | the plan as a digest |
-| C20 | `app/api/chat/orchestration-runtime.ts` | 641 | — | `export async function resolveChatResume(` | the resolution |
-| C21 | `app/api/chat/orchestration-runtime.ts` | 648 | — | `if (!store) return refused("resume_unusable");` | [fix: coverage-7] no durable record bound: for good |
-| C22 | `app/api/chat/orchestration-runtime.ts` | 652 | — | `turn.kind !== "coordinator") return refused("resume_unknown");` | unknown in THIS scope |
-| C23 | `app/api/chat/orchestration-runtime.ts` | 653 | — | `if (turn.ownerDigest !== resumeOwnerDigest(input.context)) return refused("resume_foreign");` | the owner before anything else about the run |
-| C24 | `app/api/chat/orchestration-runtime.ts` | 654 | — | `return refused("resume_mismatch");` | the message and the provider |
-| C25 | `app/api/chat/orchestration-runtime.ts` | 656 | — | `return refused("resume_plan_changed");` | the plan |
-| C26 | `app/api/chat/orchestration-runtime.ts` | 657 | — | `return refused("resume_completed");` | a finished run |
-| C27 | `app/api/chat/orchestration-runtime.ts` | 664 | — | `Date.parse(latest.at) < RESUME_LEASE_MS) return refused("resume_in_progress");` | an unsettled start within the lease |
-| C28 | `app/api/chat/orchestration-runtime.ts` | 665 | — | `(entry.entry.kind === "settled" ? [entry.entry.ordinal] : []))) + 1;` | [fix: coverage-5] the next ordinal, past every start and end |
-| C29 | `app/api/chat/orchestration-runtime.ts` | 666 | — | `entry: { kind: "resume", ordinal, claim }, expectedRevision:` | the start claimed against the head read |
-| C30 | `app/api/chat/orchestration-runtime.ts` | 667 | — | `if (!claimed.ok) { await markUnknownClaim({ store,` | [fix: coverage-5] a claim of unknown outcome: its end marked - [lead] only its own (C122) |
-| C31 | `app/api/chat/orchestration-runtime.ts` | 668 | — | `claimed.value.code === "invalid_record") return refused("resume_unusable");` | [fix: coverage-7] a start the record refuses: for good |
-| C32 | `app/api/chat/orchestration-runtime.ts` | 674 | — | `export function resumeChatRun(` | the grant keyed by the request object |
-| C33 | `app/api/chat/orchestration-runtime.ts` | 677 | — | `export function chatResumeOf(` | read back for that request only |
-| C34 | `app/api/chat/orchestration-runtime.ts` | 682 | — | `export function resumedRunLine(` | the resumed line |
-| C35 | `app/api/chat/orchestration-runtime.ts` | 686 | — | `export function unrecordedFirstAnswer(` | the closed placeholder |
-| C36 | `app/api/chat/orchestration-runtime.ts` | 692 | — | `function replayFirstTurn(` | the first turn replayed, no model call |
-| C37 | `app/api/chat/orchestration-runtime.ts` | 718 | — | `async function recordCoordinatorTurn(` | the coordinator entry |
-| C38 | `app/api/chat/orchestration-runtime.ts` | 733 | — | `async function claimMessageArtifact(` | the ledger's claim |
-| C39 | `app/api/chat/orchestration-runtime.ts` | 741 | — | `could not be claimed on the run's resume record` | [fix: regressions-1] the claim's own stand-down line |
-| C40 | `app/api/chat/orchestration-runtime.ts` | 748 | — | `function voidClaim(` | [fix: coverage-5] a claim no request presented |
-| C41 | `app/api/chat/orchestration-runtime.ts` | 758 | — | `async function recordFollowUpAnswered(` | the follow-up entry |
-| C42 | `app/api/chat/orchestration-runtime.ts` | 771 | — | `async function settleChatRequest(` | a request's settled end, with whether it presented |
-| C43 | `app/api/chat/orchestration-runtime.ts` | 784 | — | `export interface OrchestratedChatInput` | [fix] the DAG path's input |
-| C44 | `app/api/chat/orchestration-runtime.ts` | 789 | — | `recordDeadlineMs?: number;` | [fix: tests-2] the record deadline, a test seam |
-| C45 | `app/api/chat/orchestration-runtime.ts` | 796 | — | `async function settledOnThrow(` | [fix: regressions-2] a throw settles the start first |
-| C46 | `app/api/chat/orchestration-runtime.ts` | 215 | — | `return settledOnThrow(input, orchestratedChat);` | [fix: regressions-2] the DAG path under the guard - in place |
-| C47 | `app/api/chat/orchestration-runtime.ts` | 230 | — | `const cancelled = async (steps: number, toolCalls: number): Promise<AgentRunResult> =>` | a cancellation settles before its terminal - in place |
-| C48 | `app/api/chat/orchestration-runtime.ts` | 237 | — | `const settleStarted = ` | this request's start - in place |
-| C49 | `app/api/chat/orchestration-runtime.ts` | 237 | — | `onStart(settleStarted);` | [fix: regressions-2] handed to the guard - in place |
-| C50 | `app/api/chat/orchestration-runtime.ts` | 239 | — | `const replayed = chatResumeOf(request); if (replayed)` | the replay in the loop's place - in place |
-| C51 | `app/api/chat/orchestration-runtime.ts` | 250 | — | `const standDown = async (reason` | every stand-down settles - in place |
-| C52 | `app/api/chat/orchestration-runtime.ts` | 252 | — | `const unsettled = await settleStarted(); if (unsettled) warn(unsettled, true); const terminal` | before its terminal - in place |
-| C53 | `app/api/chat/orchestration-runtime.ts` | 258 | — | `const recorded = replayed ? null : await recordCoordinatorTurn(` | before any specialist - in place |
-| C54 | `app/api/chat/orchestration-runtime.ts` | 263 | — | `...(replayed ? { resumed: true } : {})` | [fix: security-2, coverage-2] a route-level resume's replay rule - in place |
-| C55 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `for (const line of merged.lines) warn(line); judged = merged; const ledger = await claimMessageArtifact(` | [fix: regressions-1] the claim once the merge's verdicts and lines stand - in place |
-| C56 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `alreadyPresented: ledger.alreadyPresented` | handed to the presentation - in place |
-| C57 | `app/api/chat/orchestration-runtime.ts` | 282 | — | `presented = approval.outcome === "presented";` | [fix: coverage-5] whether this request presented - in place |
-| C58 | `app/api/chat/orchestration-runtime.ts` | 314 | — | `await recordFollowUpAnswered(` | the follow-up once - in place |
-| C59 | `app/api/chat/orchestration-runtime.ts` | 470 | — | `decision.outcome === "already_presented" ?` | its withheld line - in place |
+| C7 | `app/api/chat/orchestration-runtime.ts` | 557 | — | `export const CHAT_RESUME_BODY_KEY` | `resumeRunId` |
+| C8 | `app/api/chat/orchestration-runtime.ts` | 558 | — | `export function chatResumeBodyKeyAdmitted(` | admitted under the flag only |
+| C9 | `app/api/chat/orchestration-runtime.ts` | 562 | — | `export const CHAT_RUN_ID_PATTERN` | the run-id grammar |
+| C10 | `app/api/chat/orchestration-runtime.ts` | 566 | — | `export const CHAT_RESUME_REFUSALS = Object.freeze({` | the closed refusals, in order |
+| C11 | `app/api/chat/orchestration-runtime.ts` | 569 | — | `resume_unusable: { status: 409` | [fix: coverage-7] a record that cannot serve a resume, for good |
+| C12 | `app/api/chat/orchestration-runtime.ts` | 575 | — | `resume_in_progress: { status: 409` | one request of a run at a time |
+| C13 | `app/api/chat/orchestration-runtime.ts` | 580 | — | `export interface ChatResumeGrant` | what a resume hands the runtime |
+| C14 | `app/api/chat/orchestration-runtime.ts` | 584 | — | `export const RESUME_LEASE_MS = 600_000;` | the lease |
+| C15 | `app/api/chat/orchestration-runtime.ts` | 587 | — | `export const RESUME_RECORD_DEADLINE_MS` | every record call bounded |
+| C16 | `app/api/chat/orchestration-runtime.ts` | 591 | — | `export async function boundedRecordCall<T>(` | a closed reason, never a driver's message; a timed-out call is unknown |
+| C17 | `app/api/chat/orchestration-runtime.ts` | 602 | — | `"record_mismatch" : "record_unavailable"` | [fix: coverage-7] a verification failure told apart |
+| C18 | `app/api/chat/orchestration-runtime.ts` | 610 | — | `export function resumeOwnerDigest(` | the owner: principal and scope |
+| C19 | `app/api/chat/orchestration-runtime.ts` | 613 | — | `export function resumePlanDigest(` | the plan as a digest |
+| C20 | `app/api/chat/orchestration-runtime.ts` | 621 | — | `export async function resolveChatResume(` | the resolution |
+| C21 | `app/api/chat/orchestration-runtime.ts` | 628 | — | `if (!store) return refused("resume_unusable");` | [fix: coverage-7] no durable record bound: for good |
+| C22 | `app/api/chat/orchestration-runtime.ts` | 632 | — | `turn.kind !== "coordinator") return refused("resume_unknown");` | unknown in THIS scope |
+| C23 | `app/api/chat/orchestration-runtime.ts` | 633 | — | `if (turn.ownerDigest !== resumeOwnerDigest(input.context)) return refused("resume_foreign");` | the owner before anything else about the run |
+| C24 | `app/api/chat/orchestration-runtime.ts` | 634 | — | `return refused("resume_mismatch");` | the message and the provider |
+| C25 | `app/api/chat/orchestration-runtime.ts` | 636 | — | `return refused("resume_plan_changed");` | the plan |
+| C26 | `app/api/chat/orchestration-runtime.ts` | 637 | — | `return refused("resume_completed");` | a finished run |
+| C27 | `app/api/chat/orchestration-runtime.ts` | 644 | — | `Date.parse(latest.at) < RESUME_LEASE_MS) return refused("resume_in_progress");` | an unsettled start within the lease |
+| C28 | `app/api/chat/orchestration-runtime.ts` | 645 | — | `(entry.entry.kind === "settled" ? [entry.entry.ordinal] : []))) + 1;` | [fix: coverage-5] the next ordinal, past every start and end |
+| C29 | `app/api/chat/orchestration-runtime.ts` | 646 | — | `entry: { kind: "resume", ordinal, claim }, expectedRevision:` | the start claimed against the head read |
+| C30 | `app/api/chat/orchestration-runtime.ts` | 647 | — | `if (!claimed.ok) { await markUnknownClaim({ store,` | [fix: coverage-5] a claim of unknown outcome: its end marked - [lead] only its own (C122) |
+| C31 | `app/api/chat/orchestration-runtime.ts` | 648 | — | `claimed.value.code === "invalid_record") return refused("resume_unusable");` | [fix: coverage-7] a start the record refuses: for good |
+| C32 | `app/api/chat/orchestration-runtime.ts` | 654 | — | `export function resumeChatRun(` | the grant keyed by the request object |
+| C33 | `app/api/chat/orchestration-runtime.ts` | 657 | — | `export function chatResumeOf(` | read back for that request only |
+| C34 | `app/api/chat/orchestration-runtime.ts` | 662 | — | `export function resumedRunLine(` | the resumed line |
+| C35 | `app/api/chat/orchestration-runtime.ts` | 666 | — | `export function unrecordedFirstAnswer(` | the closed placeholder |
+| C36 | `app/api/chat/orchestration-runtime.ts` | 672 | — | `function replayFirstTurn(` | the first turn replayed, no model call |
+| C37 | `app/api/chat/orchestration-runtime.ts` | 698 | — | `async function recordCoordinatorTurn(` | the coordinator entry |
+| C38 | `app/api/chat/orchestration-runtime.ts` | 713 | — | `async function claimMessageArtifact(` | the ledger's claim |
+| C39 | `app/api/chat/orchestration-runtime.ts` | 721 | — | `could not be claimed on the run's resume record` | [fix: regressions-1] the claim's own stand-down line |
+| C40 | `app/api/chat/orchestration-runtime.ts` | 728 | — | `function voidClaim(` | [fix: coverage-5] a claim no request presented |
+| C41 | `app/api/chat/orchestration-runtime.ts` | 738 | — | `async function recordFollowUpAnswered(` | the follow-up entry |
+| C42 | `app/api/chat/orchestration-runtime.ts` | 751 | — | `async function settleChatRequest(` | a request's settled end, with whether it presented |
+| C43 | `app/api/chat/orchestration-runtime.ts` | 764 | — | `export interface OrchestratedChatInput` | [fix] the DAG path's input |
+| C44 | `app/api/chat/orchestration-runtime.ts` | 769 | — | `recordDeadlineMs?: number;` | [fix: tests-2] the record deadline, a test seam |
+| C45 | `app/api/chat/orchestration-runtime.ts` | 776 | — | `async function settledOnThrow(` | [fix: regressions-2] a throw settles the start first |
+| C46 | `app/api/chat/orchestration-runtime.ts` | 195 | — | `return settledOnThrow(input, orchestratedChat);` | [fix: regressions-2] the DAG path under the guard - in place |
+| C47 | `app/api/chat/orchestration-runtime.ts` | 210 | — | `const cancelled = async (steps: number, toolCalls: number): Promise<AgentRunResult> =>` | a cancellation settles before its terminal - in place |
+| C48 | `app/api/chat/orchestration-runtime.ts` | 217 | — | `const settleStarted = ` | this request's start - in place |
+| C49 | `app/api/chat/orchestration-runtime.ts` | 217 | — | `onStart(settleStarted);` | [fix: regressions-2] handed to the guard - in place |
+| C50 | `app/api/chat/orchestration-runtime.ts` | 219 | — | `const replayed = chatResumeOf(request); if (replayed)` | the replay in the loop's place - in place |
+| C51 | `app/api/chat/orchestration-runtime.ts` | 230 | — | `const standDown = async (reason` | every stand-down settles - in place |
+| C52 | `app/api/chat/orchestration-runtime.ts` | 232 | — | `const unsettled = await settleStarted(); if (unsettled) warn(unsettled, true); const terminal` | before its terminal - in place |
+| C53 | `app/api/chat/orchestration-runtime.ts` | 238 | — | `const recorded = replayed ? null : await recordCoordinatorTurn(` | before any specialist - in place |
+| C54 | `app/api/chat/orchestration-runtime.ts` | 243 | — | `...(replayed ? { resumed: true } : {})` | [fix: security-2, coverage-2] a route-level resume's replay rule - in place |
+| C55 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `for (const line of merged.lines) warn(line); judged = merged; const ledger = await claimMessageArtifact(` | [fix: regressions-1] the claim once the merge's verdicts and lines stand - in place |
+| C56 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `alreadyPresented: ledger.alreadyPresented` | handed to the presentation - in place |
+| C57 | `app/api/chat/orchestration-runtime.ts` | 262 | — | `presented = approval.outcome === "presented";` | [fix: coverage-5] whether this request presented - in place |
+| C58 | `app/api/chat/orchestration-runtime.ts` | 294 | — | `await recordFollowUpAnswered(` | the follow-up once - in place |
+| C59 | `app/api/chat/orchestration-runtime.ts` | 450 | — | `decision.outcome === "already_presented" ?` | its withheld line - in place |
 | C60 | `app/api/chat/orchestration-runtime.ts` | 22 | — | `RESUMES this run under its own id` | the module header's stand-down rule - in place |
 | C61 | `app/lib/agent/orchestration/store.ts` | 34 | — | `import { containsTokenAnchoredSecretShapedText, redactPathSegment } from "../redaction";` | the one import name, in place |
 | C62 | `app/lib/agent/orchestration/store.ts` | 383 | — | `export const ORCHESTRATION_RESUME_AGGREGATE_TYPE` | the sibling aggregate |
@@ -705,7 +705,7 @@ in its file - and, for every production file E3 changed, it is on the line state
 | C119 | `app/api/chat/route.ts` | 311 | — | `const recomputed = pcbRevisionId(assembly.context.canonicalState.pcb);` | the revision recomputed server-side (unchanged) |
 | C120 | `app/api/chat/route.ts` | 208 | — | `if (editorContext.authoritySource !== "local-working-copy") {` | the editor context is the local working copy (unchanged) |
 | C121 | `app/page.tsx` | 4766 | — | `startNewRun: () => void send(text),` | the card's Retry, the same send (unchanged) |
-| C122 | `app/api/chat/orchestration-runtime.ts` | 819 | — | `async function markUnknownClaim(` | [lead] a claim of unknown outcome marks only its own end |
-| C123 | `app/api/chat/orchestration-runtime.ts` | 810 | — | `function resumeClaimId(` | [lead] a request's own claim id |
+| C122 | `app/api/chat/orchestration-runtime.ts` | 799 | — | `async function markUnknownClaim(` | [lead] a claim of unknown outcome marks only its own end |
+| C123 | `app/api/chat/orchestration-runtime.ts` | 790 | — | `function resumeClaimId(` | [lead] a request's own claim id |
 | C124 | `app/lib/agent/orchestration/store.ts` | 491 | — | `if (entry.kind === "resume" && !isOrchestrationDigest(entry.claim))` | [lead] a start without its claim id is refused - in place |
 | C125 | `app/lib/agent/orchestration/scheduler.ts` | 462 | — | `context, Math.max(now(), dagDeadline)) : null;` | [lead] the approval window measured at the DAG's deadline - in place |

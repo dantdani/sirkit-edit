@@ -752,7 +752,7 @@ export function selectorEnvelopeJsonRoute<B = Record<string, unknown>>(
 
 /**
  * [B16.0.24 §E/§F] The body-scope STREAMING agent boundary. The single agent
- * chat surface differs from every other canonical wrapper in three ways that
+ * chat surface [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): /api/chat stays this boundary's sole adopter; behind SIRKIT_ORCHESTRATION_ENABLED=1 - off by default, and off every stream is the single-agent loop's - one of its streams may carry a coordinator and up to four zero-authority specialists; nothing in this boundary changed] differs from every other canonical wrapper in three ways that
  * cannot be expressed by the JSON/selector wrappers, so it gets its own narrow,
  * declarative boundary (gated sole-adopter):
  *

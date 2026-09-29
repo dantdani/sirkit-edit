@@ -2,7 +2,7 @@
  * [B21 D2] Shared state for the D2 suites (not a test file): a scripted specialist adapter that, per task or role, CALLS one of
  * the tools its run was offered (resolved from the advertised declarations - never a name the run did not offer) and then answers
  * with a result document, so a proposing role's specialist really seals through its own gateway; and a DAG runner over the REAL
- * scheduler, the REAL loop, the production registry and the bare specialist gateway (as the composition root builds it), with the
+ * scheduler, the REAL loop, the production registry and the bare specialist gateway (as the composition root builds it [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 the composition root builds it with ONE option, the route's pin-facts reader - no option only when no catalog source is configured; this fixture's gateway is bare, as D2's was]), with the
  * in-memory durable record. The coordinator's context is the B21-D merge fixture's (a schematic with U1 and its canonical head
  * mark, the routed board with a PCB history basis, U1's exact authority), assembled by the production assembler.
  */

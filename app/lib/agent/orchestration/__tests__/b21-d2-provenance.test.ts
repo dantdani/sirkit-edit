@@ -7,7 +7,7 @@
  * run sealed is refused BEFORE the merge (`proposal_not_sealed_in_run`, dissent `malformed`); the merge accepts the sealed ones
  * with `provenance: sealed-in-run` and never says "provenance not established" of a specialist's action, and refuses on its own
  * an action outside a task's sealed set (`proposal-not-sealed-in-run`). The never-execution sweep through the D2 specialist
- * wrapper, with a real minter under it, still mints nothing. The replacement proposal stays dormant: its sealer needs the pin-facts
+ * wrapper, with a real minter under it, still mints nothing. The replacement proposal stays dormant [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D3 it is LIVE for the schematic role and the composition root builds the specialist gateway with ONE option, the route's pin-facts reader - no option only when no catalog source is configured; the bare gateway here is the D2 evidence for that option, case 6]: its sealer needs the pin-facts
  * reads only the coordinator's gateway holds - through the bare specialist gateway it blocks (the evidence for OD-120's option).
  */
 import { describe, expect, it } from "vitest";
@@ -168,12 +168,12 @@ describe("[B21 D2] provenance is the gateway's own seal", () => {
     expect(calls).toBe(0);
   }, 180_000);
 
-  it("6. the replacement proposal stays DORMANT for specialists (OD-120 amended; the D2 stop condition): even with U1's exact authority and the head mark in the coordinator's context the schematic specialist is never offered it and the wrapper refuses it; through the bare specialist gateway its sealer BLOCKS for want of the server's published pin facts, and through a gateway that holds them (the coordinator's composition) the same call seals - the pin-facts reads are the one thing a specialist seal of it would need, and the specialist gateway is never given them", async () => {
+  it("6. the replacement proposal (DORMANT for specialists when written - OD-120, the D2 stop condition; LIVE for the schematic role since B21-D3, OD-120 amended): with U1's exact authority and the head mark in the coordinator's context the schematic specialist IS offered it and the wrapper passes it; through a gateway without the published pin facts (the bare gateway, or the wrapper over it) its sealer BLOCKS `current-pin-authority-unavailable`, and through a gateway that holds them the same call seals - the pin-facts reads are the one thing a specialist seal of it needs (the runtime's specialist gateway holds them since B21-D3 - b21-d3-pin-facts)", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the replacement live for the schematic role since B21-D3; assertions unchanged
     const context = coordinatorContext();
     expect(context.componentAuthority).not.toBeNull();
     const proposing = specialistContextFor(context, "schematic");
     const allowed = specialistAllowedToolIds(registry, proposing, buildRunToolset, "schematic");
-    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's "stays DORMANT" is D2's, kept for the closeout's retitle
+    // [B21 D3] pin move (OD-120 amended): the replacement is LIVE for the schematic role since D3 - the runtime hands the specialist gateway the published pin-facts reads (b21-d3-pin-facts); the title's "stays DORMANT" is D2's, kept for the closeout's retitle [B21 closeout, 2026-09-29: retitled]
     // (OD-113's pattern): the schematic specialist IS offered it and the wrapper passes it; a gateway WITHOUT the reads still blocks it
     expect(allowed).toEqual(["sirkit.schematic.inspect", REPLACEMENT, TIER1]);
     const descriptor = registry.get(REPLACEMENT)!;

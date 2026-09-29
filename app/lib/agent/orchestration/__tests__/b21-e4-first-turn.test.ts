@@ -103,9 +103,9 @@ describe("[B21 E4] the coordinator's first turn behind the llm-provider breaker 
     expect(PROCESS_LLM_PROVIDER_ADMISSION.request("openai", undefined, "interactive", later)).toMatchObject({ allowed: true, ticket: { trial: true } });
   });
 
-  it("4. a WINDOW pause (the person's whole share of the provider's minute used up) gates the first turn with the window's own sentence and the same no-Retry reason; the AGENT's share used up does not (a person's request is `interactive`, as the follow-up turn's is)", () => {
+  it("4. a WINDOW pause (the `interactive` purpose's ceiling - the whole PROCESS-WIDE provider minute, which every principal's metered calls fill, case 7 - used up) gates the first turn with the window's own sentence and the same no-Retry reason; the AGENT's share used up does not (a person's request is `interactive`, as the follow-up turn's is)", () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): the window is PROCESS-WIDE (the B21-E4 review's security-1); assertions unchanged
     // [B21 E4 fix: security-1] the title's "the person's whole share" is the `interactive` purpose's ceiling: the whole PROCESS-WIDE window,
-    // which every principal's metered calls fill (case 7) - kept as titled (the stale-title convention)
+    // which every principal's metered calls fill (case 7) - kept as titled (the stale-title convention) [B21 closeout, 2026-09-29: retitled]
     for (let index = 0; index < 60; index += 1) expect(PROCESS_LLM_PROVIDER_ADMISSION.request("openai", undefined, "agent", NOW).allowed).toBe(true);
     expect(currentLlmProviderPause({ kind: "llm-provider", provider: "openai" }, NOW, "agent")).toMatchObject({ reason: "quota_exhausted" });
     expect(gate().result).toBeNull();

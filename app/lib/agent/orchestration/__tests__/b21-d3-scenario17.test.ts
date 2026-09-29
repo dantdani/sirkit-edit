@@ -19,7 +19,7 @@
  *    whether scenario 17 presents or escalates follows the circuit specialist's op choice (an open OD-122 question);
  *  - OD-130's part review: a replacement the real sealer sealed to the catalog's EARLIER exact target, replayed by a scheduler resume
  *    after the selection moved - `contradicted` and a part review request for `request_atomic_review`, nothing presented (the
- *    runtime's resume; the route never resumes - route case 7);
+ *    runtime's resume; the route never resumes - route case 7 [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-E3 the route resumes a POST carrying `resumeRunId`, b21-e3-chat-resume case 8; route case 7 pins only that a POST without it is a new run]);
  *  - the order is a presentation and budget order only: no specialist reads another's result (case 8).
  * Every verdict is read back from the persisted record. The parties' provider is the coordinator's (one adapter, B21-E1 routes by
  * role); the rule is provider-blind (one provider = one source; agreement is never proof). The never-execution sweep through the

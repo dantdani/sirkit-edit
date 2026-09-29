@@ -9,7 +9,7 @@
  * context field by field from a GRANTABLE coordinator context and it holds no grant field, no port fact, no head mark, no PCB
  * basis and no view; for every role the scheduler builds the specialist's loop deps with a closed key set and NO
  * `executionGrants` key although its own deps carry the coordinator's minter; it constructs no gateway (every specialist
- * wrapper delegates to the one the composition root built bare); the coordinator's context and gateway are untouched.
+ * wrapper delegates to the one the composition root built bare [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): since B21-D2 a proposing role's loop runs over the proposing context and the 'read + reviewed proposals' view, case 4; since B21-D3 the specialist gateway the composition root builds carries ONE option, the pin-facts reader]); the coordinator's context and gateway are untouched.
  * [B21 C fix] (review) Each port claim also holds by its discovery authority alone; the nested payloads reach a read the role may
  * call and are handed on verbatim, never re-dispatched; the wrapper the scheduler builds refuses a read outside the role's row.
  */
@@ -209,7 +209,7 @@ describe("[B21 C] no elevation: a specialist can never hold, claim or reach auth
     expect(m.calls()).toBe(1);
   }, 180_000);
 
-  it("4. structural, per role: the scheduler builds every specialist's loop deps with a CLOSED key set and no `executionGrants` key although its own deps carry the coordinator's minter; each specialist's gateway delegates to the ONE gateway the composition root handed it (built bare) and the scheduler constructs none; each loop runs over the read-only registry, the derived context and its own list; the minter is never called; the coordinator's context and gateway are untouched by the DAG", async () => {
+  it("4. structural, per role: the scheduler builds every specialist's loop deps with a CLOSED key set and no `executionGrants` key although its own deps carry the coordinator's minter; each specialist's gateway delegates to the ONE gateway the composition root handed it (built bare when written; since B21-D3 its one option is the pin-facts reader) and the scheduler constructs none; each loop runs over its role's view and context and its own list - the read-only registry and the derived context for a read-only role, since B21-D2 the 'read + reviewed proposals' view and the proposing context (claiming nothing) for a proposing role; the minter is never called; the coordinator's context and gateway are untouched by the DAG", async () => { // [B21 closeout, 2026-09-29] retitled (D21-27, OD-113): B21-D2's proposing view and context, B21-D3's one gateway option; assertions unchanged
     const coordinator = fullContext();
     const before = structuredClone(coordinator);
     const underlying = spyGateway();

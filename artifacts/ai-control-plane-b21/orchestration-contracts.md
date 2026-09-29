@@ -286,7 +286,7 @@ capsule key below the top level.]
   to B21-B's runtime file (recorded here, in OD-111 and in the ledger paragraph), or have the binder added now OUTSIDE the gated prefix
   (a production factory `new DurableOrchestrationRunStore(getDurableWorkflowRepository())`, a test setter, a reset, a never-throwing
   resolve, with a case proving the fixture runtime yields the in-memory repository — the gate stays green because it walks the
-  orchestration modules' imports, not who imports them).
+  orchestration modules' imports, not who imports them). [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): closed by B21-B in its runtime file, as deferred: `app/api/chat/orchestration-runtime.ts` binds the production repository - the in-memory one under the fixture runtime, B's route case 7; `task-complexity-router.md` sections 0 and 4]
 - **Retention — RECORDED, not implemented.** OD-111's default: an explicit setting defaulting to the grant retention. Today the
   durable-workflow substrate purges nothing for any aggregate (no purge exists in `app/lib/durable-workflow/` or `app/lib/execution-grant/`
   — grep, CONFIRMED); execution grants EXPIRE (`GRANT_PREVIEW_TTL_MS` 10 min, `GRANT_EXPLICIT_TTL_MS` 60 s, C37) but their records remain
