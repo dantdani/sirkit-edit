@@ -11,14 +11,15 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { anchorOccurrences, pageCitations } from "@/app/lib/mcp/server/__tests__/_citations";
-import { FIXTURE_RESULT_TOOL_NAME, FIXTURE_ROLE_SCRIPTS } from "@/app/lib/agent/fixture-agent-adapter";
+import { FIXTURE_FOLLOW_UP_FAILURE, FIXTURE_FOLLOW_UP_FAILURES, FIXTURE_RESULT_TOOL_NAME, FIXTURE_ROLE_SCRIPTS, fixtureSentenceKey } from "@/app/lib/agent/fixture-agent-adapter";
 import { AGENT_REPLAY_CAPSULE_SCHEMA } from "@/app/lib/agent/replay-capsule";
 import { ORCHESTRATION_ENABLED_ENV } from "@/app/api/chat/orchestration-runtime";
+import { routeComposerMessage } from "@/app/lib/project/composer-routing";
 import { SPECIALIST_RESULT_TOOL_NAME } from "../result-tool";
 import { ROLE_MODELS_ENV, parseRoleModelOverrides } from "../provider-policy";
 import { routeTaskComplexity } from "../router";
 import { B11_SCANNED_FILES } from "../tripwires";
-import { B21_F_CASES, B21_F_SENTENCES, BROWSER_PROVEN, BROWSER_PROVEN_IN_PART_F6, BROWSER_PROVEN_IN_PART_F12, MODEL_IN_LOOP_LIVE_DAG, MODEL_IN_LOOP_NO_PATH, MODEL_IN_LOOP_SHAPE_ONLY } from "./_f-cases";
+import { B21_F_CASES, B21_F_SENTENCES, BROWSER_PROVEN, BROWSER_PROVEN_F12, BROWSER_PROVEN_IN_PART_F6, BROWSER_PROVEN_IN_PART_F12, MODEL_IN_LOOP_LIVE_DAG, MODEL_IN_LOOP_NO_PATH, MODEL_IN_LOOP_SHAPE_ONLY } from "./_f-cases";
 import { B21_REPLAY_PINS_SCHEMA, ORCHESTRATION_EVALUATION_CATEGORY, buildOrchestrationEvaluationCases } from "./_f-capsules";
 
 const ROOT = process.cwd();
@@ -39,7 +40,7 @@ const FACTS = { hasSchematic: true, hasBoard: true, actorRole: "pcb_editor" as c
 /** [B21 F2] the browser proof's own config and spec (D21-43 decided), and the matrix's browser cell per class */
 const ORCHESTRATION_CONFIG = "playwright.orchestration.config.ts";
 const BROWSER_SPEC = "e2e-orchestration/specialist-orchestration.spec.ts";
-const BROWSER_LABELS: Readonly<Record<string, string>> = { [BROWSER_PROVEN]: "| PROVEN (section 4) |", [BROWSER_PROVEN_IN_PART_F6]: "| PROVEN IN PART (section 4) |", [BROWSER_PROVEN_IN_PART_F12]: "| PROVEN IN PART (section 4) |", "not required": "| not required |" };
+const BROWSER_LABELS: Readonly<Record<string, string>> = { [BROWSER_PROVEN]: "| PROVEN (section 4) |", [BROWSER_PROVEN_IN_PART_F6]: "| PROVEN IN PART (section 4) |", [BROWSER_PROVEN_IN_PART_F12]: "| PROVEN IN PART (section 4) |", [BROWSER_PROVEN_F12]: "| PROVEN (section 4) |", "not required": "| not required |" }; // [B21 F2b, 2026-09-29] F12's class since B21-F2b added (D21-45 closed); the in-part classes stay mapped for their record
 /** [B21 F2 fix: tests-05, security-1] One web server of the two Playwright configs, as Playwright loads it: only the fields the cases
  *  compare - never its environment, which spreads this process's own. */
 interface LoadedServer { readonly command: string; readonly url: string; readonly roleModels: string | undefined }
@@ -62,6 +63,18 @@ async function loadWebServers(baseCommand?: (command: string) => string): Promis
     vi.doUnmock(CONFIG_MODULE);
     vi.resetModules();
   }
+}
+
+/** [B21 F2b review: regressions-1, tests-1] B21-F2b's reserved `nextAction` against the APPLIED one (PROGRAM_STATE.json) - case 16
+ *  applies it to the live state, case 17 drives it over the states the program passes through. As b21-d-page case 9 rules it: while
+ *  the applied nextAction still leads with its B21-F2b clause, the reserved one IS it with that clause removed, word for word;
+ *  afterwards the applied nextAction is F2b's (or a LATER state's: the closeout's commit 2/2 writes state), never compared - only a
+ *  reserved text that brings a B21-F2b clause back fails then. The issues found, [] when it holds. */
+function f2bNextActionIssues(reserved: string, applied: string): string[] {
+  const THEN = "; then the B21 closeout";
+  const issues = /B21-F2b/.test(reserved) ? [`the reserved nextAction brings a B21-F2b clause back: ${reserved}`] : [];
+  if (applied.startsWith("B21-F2b:") && (applied.indexOf(THEN) < 0 || reserved !== `The B21 closeout${applied.slice(applied.indexOf(THEN) + THEN.length)}`)) issues.push(`the reserved nextAction is not the applied one without its B21-F2b clause: ${reserved}`);
+  return issues;
 }
 
 describe("[B21 F] the evaluation-matrix page", () => {
@@ -236,7 +249,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
     const ignored = read(".gitignore").split(NEWLINE);
     for (const folder of ["/playwright-report/", "/test-results/", "/playwright-report-orchestration/", "/test-results-orchestration/"]) expect(ignored, folder).toContain(folder);
     const spec = read(BROWSER_SPEC);
-    expect(spec.match(/^test\(/gm) ?? []).toHaveLength(3);
+    expect(spec.match(/^test\(/gm) ?? []).toHaveLength(4); // [B21 F2b, 2026-09-29] reviewed pin move: B21-F2 wrote three tests; B21-F2b appended test 4 (F12 presented, rejected, stood down and resumed in the browser: D21-45, the lead's option (a)) - this title's "three tests" is kept for the closeout's retitling
     expect(spec).toContain('from "../e2e/fixture-journey";');
     expect(spec).toContain('const EVIDENCE = "artifacts/ai-control-plane-b21/evidence";');
     const namespace = /const UUID_NAMESPACE = "([0-9a-f]{8})";/.exec(spec)?.[1];
@@ -252,7 +265,7 @@ describe("[B21 F] the evaluation-matrix page", () => {
     expect([existing > job, orchestration > existing, upload > orchestration]).toEqual([true, true, true]);
     expect(workflow.filter((line) => line.includes("playwright test")), "two browser runs, one after the other").toHaveLength(2);
     for (const folder of ["playwright-report", "test-results", "playwright-report-orchestration", "test-results-orchestration"]) expect(workflow.slice(upload), folder).toContain(`            ${folder}`);
-    expect(B21_F_CASES.filter((entry) => entry.browser !== "not required").map((entry) => [entry.id, entry.browser])).toEqual([["F4", BROWSER_PROVEN], ["F6", BROWSER_PROVEN_IN_PART_F6], ["F12", BROWSER_PROVEN_IN_PART_F12]]); // [B21 F2 fix: security-1] reviewed pin move: F6 was BROWSER_PROVEN, but the browser cancels its review and never receives the envelope (case 12)
+    expect(B21_F_CASES.filter((entry) => entry.browser !== "not required").map((entry) => [entry.id, entry.browser])).toEqual([["F4", BROWSER_PROVEN], ["F6", BROWSER_PROVEN_IN_PART_F6], ["F12", BROWSER_PROVEN_F12]]); // [B21 F2 fix: security-1] reviewed pin move: F6 was BROWSER_PROVEN, but the browser cancels its review and never receives the envelope (case 12); [B21 F2b, 2026-09-29] reviewed pin move: F12 was BROWSER_PROVEN_IN_PART_F12 - test 4 now presents, rejects, stands down and resumes in the browser (D21-45 closed), so F12 is BROWSER_PROVEN_F12 (case 15)
     const four = flat(section(read(PAGE), 4));
     for (const claim of ["[B21 F2, 2026-09-28]", "DELIVERED by B21-F2", "`e2e-orchestration/specialist-orchestration.spec.ts`", `\`${ORCHESTRATION_CONFIG}\``, "`reuseExistingServer: false`", "one `next dev` at a time", "PULL-THROUGH", "F12 in part", "`already_presented`", "stay proven offline (case 12)", "Failing-first", "The budget (OD-30)"]) expect(four, claim).toContain(claim);
   });
@@ -345,5 +358,116 @@ describe("[B21 F] the evaluation-matrix page", () => {
     expect(f2.slice(f2.indexOf("`nextAction`:"), f2.indexOf("#### Discovery closure")), "PROGRAM_STATE's nextAction carries it").toContain("D21-45");
     expect(flat(section(page, 4)), "section 4 names it").toContain("D21-45");
     expect(B21_F_CASES.find((entry) => entry.id === "F12")!.browser, "F12's browser cell names where its remainder is tracked").toContain("D21-45");
+  });
+
+  it("15. [B21 F2b] F12 is PROVEN in the browser (D21-45 closed, the lead's option (a)): the scripted agent's ONE follow-up failure is the browser sentence's alone - keyed on it, overloaded 529 (case 12's vocabulary) - and that sentence routes to the replacement DAG, reaches the assistant from the composer and plays case 12's script; the spec's fourth test sends it, rejects through the review's own Cancel and asserts the stand-down, the offer, the resume, `already_presented` and one presentation in all, with its two evidence PNGs; F12's cell is PROVEN naming D21-45 closed; sections 2 and 4 state the failure, test 4, its failing-first and both wall times, every statement that said F12 is in part carries the dated note, and the offline suite has its row", () => {
+    const NOTE = "[B21 F2b, 2026-09-29]";
+    const key = fixtureSentenceKey(B21_F_SENTENCES.rejectResumeBrowser);
+    expect(FIXTURE_FOLLOW_UP_FAILURES).toEqual([key]);
+    expect(FIXTURE_FOLLOW_UP_FAILURE).toEqual({ reason: "overloaded", status: 529 });
+    expect(FIXTURE_ROLE_SCRIPTS[key], "case 12's script").toEqual(FIXTURE_ROLE_SCRIPTS[fixtureSentenceKey(B21_F_SENTENCES.rejectResume)]);
+    expect(routeTaskComplexity(B21_F_SENTENCES.rejectResumeBrowser, FACTS)).toMatchObject({ kind: "dag", rule: "D-component-replacement" });
+    expect(routeComposerMessage(B21_F_SENTENCES.rejectResumeBrowser, true).route, "E4's composer asks the assistant").toBe("ask");
+    const spec = read(BROWSER_SPEC);
+    const head = 'test("[B21 F2b] F12 / D21-45:';
+    expect(spec.indexOf(head), "test 4 follows test 3").toBeGreaterThan(spec.indexOf("test(\"[B21 F2] F12's"));
+    const four = spec.slice(spec.indexOf(head));
+    for (const claim of ["B21_F_SENTENCES.rejectResumeBrowser", 'name: "Cancel — change nothing" }).click();', '"the run stood down: its follow-up turn failed"', '"(provider_overloaded)"', "chatResumeOfferLine(runId, provider)", "chatResumingLine(runId)", "(already_presented): ", '"approval: already_presented."', '"one presentation across both requests"', "f12-presented-rejected-stood-down.png", "f12-resume-nothing-presented-again.png"]) expect(four, claim).toContain(claim);
+    for (const png of ["f12-presented-rejected-stood-down.png", "f12-resume-nothing-presented-again.png"]) expect(readFileSync(join(ROOT, "artifacts/ai-control-plane-b21/evidence", png)).length, png).toBeGreaterThan(0);
+    const f12 = B21_F_CASES.find((entry) => entry.id === "F12")!;
+    expect(f12.browser).toBe(BROWSER_PROVEN_F12);
+    for (const named of ["PROVEN: ", "tests 3 and 4", "D21-45 closed", "already_presented", "case 12"]) expect(f12.browser, named).toContain(named);
+    const page = read(PAGE);
+    expect(/^\| F12 \|.*$/m.exec(page)![0]).toContain("| PROVEN (section 4) |");
+    const two = flat(section(page, 2));
+    for (const claim of [NOTE, "`FIXTURE_FOLLOW_UP_FAILURES`", "HTTP 529", "`provider_overloaded`", "`already_presented`", "no line cited above moved"]) expect(two, claim).toContain(claim);
+    const fourth = flat(section(page, 4));
+    for (const claim of [`4. **${NOTE} F12, presented then stood down`, "Cancel — change nothing", "ONE presentation in all", `**${NOTE} Failing-first of test 4**`, `**${NOTE} The budget, after B21-F2b**`, "48 of 48", "4 of 4", "Superseded by B21-F2b"]) expect(fourth, claim).toContain(claim);
+    // every statement that said F12 is in part carries the dated note
+    expect(page.slice(0, page.indexOf("## 0. ")), "the head").toContain(NOTE);
+    const zero = section(page, 0);
+    expect(zero.slice(zero.indexOf("- **What it is not:**")), "section 0").toContain(NOTE);
+    const one = section(page, 1);
+    expect(one.slice(0, one.indexOf("| id | runbook |")), "section 1's class note").toContain(NOTE);
+    const inPart = section(page, 4);
+    expect(inPart.slice(inPart.indexOf("**F12 in part (RECORDED).**"), inPart.indexOf("**Failing-first.**")), "section 4's F12 in part note").toContain(NOTE);
+    expect(section(page, 5), "section 5").toContain(NOTE);
+    // the offline suite: its row in section 6 (case 6 checks its count) and the orchestration directory filter, no explicit CI entry
+    const suite = "app/lib/agent/orchestration/__tests__/b21-f2b-follow-up-failure.test.ts";
+    expect(section(page, 6).split(NEWLINE).some((line) => line.startsWith("| `" + suite + "` | ")), "section 6 names the offline suite").toBe(true);
+    expect(read(".github/workflows/deterministic-manufacturing.yml")).not.toContain(suite);
+  });
+
+  it("16. [B21 F2b] B21-F2b's \"For the lead\" texts are in section 7 in full, once, after F2's: the README row, the ledger paragraph, the PROGRAM_STATE texts (next the B21 closeout; the nextAction the applied one with its B21-F2b clause removed, word for word), D21-45 CLOSED and D21-43's addendum, each quoting discovery's title exactly, and the §10 line", () => {
+    const page = read(PAGE);
+    const lead = section(page, 7);
+    const HEADING = "### B21-F2b — the reserved texts, in full (the lead's to apply)";
+    expect(page.split(HEADING).length - 1, "once").toBe(1);
+    expect(lead.indexOf(HEADING), "after F2's texts").toBeGreaterThan(lead.indexOf("### B21-F2 — the reserved texts"));
+    const f2b = lead.slice(lead.indexOf(HEADING));
+    for (const heading of ["#### The README row", "#### The ledger paragraph", "#### PROGRAM_STATE.json", "#### Discovery closure clauses"]) expect(f2b, heading).toContain(heading);
+    expect(f2b).toMatch(/^\| B21-F2b /m);
+    expect(f2b).toMatch(/^### B21-F2b — the browser half of human rejection and resume /m);
+    const flatF2b = flat(f2b);
+    expect(flatF2b).toContain("next the B21 closeout");
+    const discovery = read("artifacts/ai-control-plane-b21/discovery.md");
+    for (const [defect, closure] of [["D21-45", "CLOSED by B21-F2b (the lead's option (a))"], ["D21-43", "addendum by B21-F2b"]] as const) {
+      const title = new RegExp(`\\*\\*${defect} — [^*]+\\*\\*`).exec(discovery)![0].replace(/\s+/g, " ");
+      expect(flatF2b, defect).toContain(`- ${title} — ${closure}`);
+    }
+    expect(flatF2b).toContain("- **§10, B21-F2b (recorded by the lead, 2026-09-29):** Section 4: D21-45 closed");
+    // the nextAction: the one the lead applied, with its leading B21-F2b clause removed word for word (or, once applied, that one)
+    const reserved = /`nextAction`: "([^"]+)"/.exec(flatF2b)![1]!;
+    const applied = (JSON.parse(read("artifacts/remaining-builder-program/PROGRAM_STATE.json")) as { nextAction: string }).nextAction;
+    expect(f2bNextActionIssues(reserved, applied)).toEqual([]); // [B21 F2b review: regressions-1, tests-1] the rule at module scope; case 17 drives it
+  });
+
+  it("17. [B21 F2b review: regressions-1, tests-1] case 16's nextAction rule lets the program move on, as the D page's case 9 does: the reserved nextAction is compared word for word only while the applied one still leads with its B21-F2b clause; the reserved text once the lead applied it, and any LATER state (the closeout's commit 2/2 writes state), pass; a reserved text that drops or changes a clause, or brings a B21-F2b clause back, still fails", () => {
+    const lead = section(read(PAGE), 7);
+    const reserved = /`nextAction`: "([^"]+)"/.exec(flat(lead.slice(lead.indexOf("### B21-F2b — the reserved texts, in full (the lead's to apply)"))))![1]!;
+    expect(reserved.startsWith("The B21 closeout (")).toBe(true);
+    // the states: before the lead applies F2b's texts (the applied one leads with the B21-F2b clause), F2b's applied, a later state's
+    const before = `B21-F2b: the browser half of human rejection and resume (D21-45, option a); then the B21 closeout${reserved.slice("The B21 closeout".length)}`;
+    const later = "The B22 chapter as the runbook assigns it (B21 merged: PR #11 undrafted, green CI, a normal merge); the one live run under OD-125 if credits exist";
+    expect(f2bNextActionIssues(reserved, before), "before the lead applies F2b's texts").toEqual([]);
+    expect(f2bNextActionIssues(reserved, reserved), "F2b's texts applied").toEqual([]);
+    expect(f2bNextActionIssues(reserved, later), "a LATER state: the closeout's commit 2/2 writes state").toEqual([]);
+    // it still bites while the clause stands, and a clause brought back fails in every state
+    expect(f2bNextActionIssues(reserved.replace(" a tripwire;", ""), before), "a dropped clause").toHaveLength(1);
+    expect(f2bNextActionIssues(reserved.replace("a normal merge", "a squash merge"), before), "a changed word").toHaveLength(1);
+    const back = `${reserved}; B21-F2b: the browser half again`;
+    for (const [state, applied] of [["before", before], ["applied", reserved], ["later", later]] as const) expect(f2bNextActionIssues(back, applied).length, `a B21-F2b clause brought back (${state})`).toBeGreaterThan(0);
+  });
+
+  it("18. [B21 F2b review: tests-4] the offline suite claims no rejection it does not drive: the human's rejection - the review's own Cancel, page-side - is proven in the browser alone (spec test 4, C115), so no case title or comment of `b21-f2b-follow-up-failure.test.ts` says the human rejects or that a Cancel applies nothing; its header and case 2 say where the rejection is proven, and case 2 still asserts what the server holds - the page's consumer receives the family's sealed proposal and nothing is applied, before and after the resume", () => {
+    const suite = read("app/lib/agent/orchestration/__tests__/b21-f2b-follow-up-failure.test.ts");
+    const OVERCLAIM = /\bthe human rejects\b|\bCancel applies nothing\b|\brejects it \(nothing applied\)/i;
+    expect(suite.split(NEWLINE).filter((line) => OVERCLAIM.test(line)), "no title or comment claims an offline rejection").toEqual([]);
+    const WHERE = "the human's rejection (the review's own Cancel) is page-side: the browser proves it, spec test 4";
+    const header = suite.slice(0, suite.indexOf("*/"));
+    expect(flat(header), "the header").toContain(WHERE);
+    const two = suite.slice(suite.indexOf('it("2. '));
+    expect(flat(two.slice(0, two.indexOf(NEWLINE))), "case 2's title").toContain(WHERE);
+    expect(two.match(/expect\(receiveReplacementProposalEvent\(artifactsOf\(first\.events\)\[0\]!\)\)\.not\.toBeNull\(\);/g) ?? [], "the page's consumer receives the sealed proposal").toHaveLength(1);
+    expect(two.match(/expect\(editor\.executed\(\)\)\.toBe\(0\);/g) ?? [], "nothing applied, before and after the resume").toHaveLength(2);
+  });
+
+  it("19. [B21 F2b review: regressions-2, tests-2, tests-3] the spec's test 4 cannot pass on a line an earlier test left on the ONE shared page (the spec is serial): it takes no `.last()` - every page line it claims that an earlier test also renders is COUNTED before and after among the chat's own lines (the transient toast, `role=\"status\"`, excluded); the discard line counts one up, no applied line appears; the status lines are literal counters through the page's builder (4 scheduled, 4 finished and ONE degraded notice; then 4 and 4), never the page's own reducer over the stream it received", () => {
+    const spec = read(BROWSER_SPEC);
+    const four = spec.slice(spec.indexOf('test("[B21 F2b] F12 / D21-45:'));
+    expect(four.match(/\.last\(\)/g) ?? [], "no `.last()` in test 4").toEqual([]);
+    expect(four, "no status line from the page's own reducer").not.toContain("reduceRunView");
+    for (const claim of [
+      `.and(page.locator('xpath=//*[not(ancestor-or-self::*[@role="status"])]'))`,
+      "const discardedLines = chatLines(replacementChatLines.discarded());",
+      'toHaveCount(discardedBefore + 1)', '"rejected: nothing applied"',
+      "const appliedLines = chatLines(/^Replacement (?:(?:was already )?applied — |NOT applied: )/);",
+      "toHaveCount(appliedBefore)",
+      "orchestrationStatusLine({ ...initialRunView(), orchestrated: true, specialistsScheduled: 4, specialistsFinished: 4, specialistsDegraded: 1 })!",
+      "toHaveCount(stoodDownStatusBefore + 1)",
+      "const resumedStatusBefore = await chatLines(statusLine(4, 4)).count();",
+      "toHaveCount(resumedStatusBefore + 1)",
+    ]) expect(four, claim).toContain(claim);
+    expect(four.split("toHaveCount(appliedBefore)").length - 1, "no applied line: after the Cancel and after the resume").toBe(2);
   });
 });

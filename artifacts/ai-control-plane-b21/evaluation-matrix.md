@@ -28,6 +28,16 @@ statement below that said the spec is stopped carries this note. B21-F2 changed 
 under `e2e/`, no `next.config.ts` and no B18-E evidence; `b21-f-page.test.ts` pins its statements (cases 10 to 14, and case 2's moved
 browser mapping).
 
+**[B21 F2b, 2026-09-29]** F12's browser remainder (D21-45, the lead's option (a)) is delivered by B21-F2b: the scripted fixture agent's
+script table gains ONE sentence, `B21_F_SENTENCES.rejectResumeBrowser`, whose coordinator follow-up turn fails with a scripted provider
+failure (overloaded, case 12's vocabulary) while its request presents, and the spec's fourth test presents, rejects, stands down and
+resumes in the browser. F12's browser cell moved from PROVEN IN PART to PROVEN (section 1); section 2 lists the sentence and states the
+failure; section 4 gains test 4 with its failing-first and the budget; section 6 the new suite, the counts, the runs and the adversarial
+review's fixes; section 7 B21-F2b's reserved texts (D21-45 closed) and section 8 its citations (C105-C129); every statement below that says F12 is in part
+carries this note. B21-F2b changed no production file (the fixture agent's script table is behind the fixture gate), no control, no
+`playwright.config.ts`, nothing under `e2e/`, no `next.config.ts` and no B18-E evidence; `b21-f-page.test.ts` pins its statements
+(cases 15 and 16, cases 17 to 19 for the adversarial review's fixes, and case 10's two reviewed pin moves).
+
 ## 0. What F delivers, and what it is not
 
 - **The twelve runbook evaluations, offline through the REAL runtime (section 1).** One suite, `b21-f-evaluation.test.ts`, one case per
@@ -60,13 +70,14 @@ browser mapping).
   no production path); no browser spec - STOPPED (section 4, D21-43): the fixture dev server runs one process for every spec, the
   orchestration flag is process-wide, and turning it on changes B18-E's browser proofs; no new control, route, run-event type, request key
   or reason; no live call; no reserved-file edit. **[B21 F2, 2026-09-28]** The browser spec is delivered since, by B21-F2, on its own
-  flag-on config (section 4): F4 in the browser, F6 and F12 in part (section 1's class note).
+  flag-on config (section 4): F4 in the browser, F6 and F12 in part (section 1's class note). **[B21 F2b, 2026-09-29]** F12 PROVEN in
+  the browser since, by B21-F2b (section 4's test 4; D21-45 closed).
 
 ## 1. The twelve runbook evaluations
 
 Each row is `_f-cases.ts` `B21_F_CASES` (C19) - the CSV and JSON are its rendering (C20, C21), byte-gated by case 14. The class
 columns: **offline** (the deterministic suite case through the production POST - every row PROVEN), **browser** (required by the task for
-the three rows marked; STOPPED, section 4 - **[B21 F2, 2026-09-28]** delivered since: F4 PROVEN, F6 and F12 PROVEN IN PART - a cell is PROVEN only where the page shows the row's item as the offline case asserts it for the page; what only the server holds (the record, the trace documents, the follow-up's envelope) stays with the offline case for every row), **model-in-loop** (record-only, OD-125: what the one live command CAN run for the row -
+the three rows marked; STOPPED, section 4 - **[B21 F2, 2026-09-28]** delivered since: F4 PROVEN, F6 and F12 PROVEN IN PART ([B21 F2b, 2026-09-29] F12 PROVEN since B21-F2b's test 4, D21-45 closed) - a cell is PROVEN only where the page shows the row's item as the offline case asserts it for the page; what only the server holds (the record, the trace documents, the follow-up's envelope) stays with the offline case for every row), **model-in-loop** (record-only, OD-125: what the one live command CAN run for the row -
 `b21-f-replay-capsule.test.ts` case 9 derives every cell from the command's own case list and the capsules' scripted faults: a live DAG, the
 DAG's shape only with its scripted fault not reproduced, or no live path). The pins name the `orchestration` capsules that cover the same
 runbook line through the capsule runtime (section 2); a row with none is proven only through the POST (its scenario needs the
@@ -85,7 +96,7 @@ component-authority catalog or a second request, which a replay context does not
 | F9 | :871 | one specialist timeout | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `9. one specialist timeout` | the stalled specialist's own deadline ends it: `escalated` `deadline` for that task only (its trace `failed`, `deadline`); every later specialist runs; the follow-up turn answers over the partial set (`partial_result` 3 of 4); one terminal | `f09-timeout-dag` |
 | F10 | :872 | provider quota failure | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `10. provider quota failure` | a specialist's (metered) `429 insufficient_quota` opens the breaker at once; no further paid call (two calls in all); degraded `provider_outage`; the task's dissent and its trace `provider_insufficient_quota`; no Retry offered; the next request makes no call - one `run_failed` `provider_breaker_open`; case 16, D21-42's limit: a 429 on the coordinator's first turn (gated, not metered) fails the request `provider_insufficient_quota`, the breaker stays closed and the next request pays its one call again | `f10-quota-dag` |
 | F11 | :873 | malicious specialist result | dag `D-full-circuit-creation` | PROVEN | not required | RECORDED (OD-125): DAG shape only | `11. malicious specialist result` | a release tool, an approval claim and a smuggled secret refused by A's gate before content (`tool_request_not_permitted`, `unknown_key`, `secret_shaped_text`), never handed on; a directive in prose stays the specialist's unverified claim inside the envelope that says it is data, never instructions, in a turn OFFERED reads only (the first turn was offered proposals); nothing sealed, presented or applied | `f11-malicious-dag` |
-| F12 | :874 | human rejection and resume | dag `D-component-replacement` | PROVEN | PROVEN IN PART (section 4) | NO LIVE PATH | `12. human rejection and resume` | the first request presents the replacement and stands down (its follow-up turn failed); the human rejects it (nothing applied); the resume replays the first turn (no step) and the four committed specialists, presents nothing again (`already_presented`, one claim) and makes the follow-up turn ONCE; a second resume is `resume_completed` | (none) |
+| F12 | :874 | human rejection and resume | dag `D-component-replacement` | PROVEN | PROVEN (section 4) | NO LIVE PATH | `12. human rejection and resume` | the first request presents the replacement and stands down (its follow-up turn failed); the human rejects it (nothing applied); the resume replays the first turn (no step) and the four committed specialists, presents nothing again (`already_presented`, one claim) and makes the follow-up turn ONCE; a second resume is `resume_completed` | (none) |
 
 **RECORDED on F8.** The runbook names parallel specialists; OD-107 runs them one at a time, and every specialist of ONE request is bound
 to that request's snapshot (the chat path has no server-side live head: D21-17's recorded clause). So a commit landing between two
@@ -152,6 +163,7 @@ envelope's own counts. The scripted sentences (every one routes to a DAG, case 1
 - `swap the ne555 (u1) for a lower-power cmos timer`
 - `replace u1, the ne555, with a low-power cmos timer`
 - `replace u1 with a low-power timer for the blinker`
+- `replace u1 with a lower-power timer for the led circuit`
 - `design a 555 timer led blinker`
 - `create a complete circuit for a usb-powered temperature logger`
 - `compact the placement and reroute the affected traces`
@@ -160,6 +172,22 @@ A stalled specialist (C9) never answers until its run's own signal ends it; the 
 key, a secret assembled at run time from parts (never a literal, C10) and a prose directive. Reachable only where the scripted agent is:
 `agentAdapterForRole` returns it under the fixture runtime's opt-in (C23) - `b18-c-fixture-agent.test.ts`'s tripwire (only `adapters.ts`
 constructs it) and every B18 fixture proof unchanged. **CONFIRMED** by `b21-f-evaluation.test.ts` case 13 and every DAG case.
+
+**[B21 F2b, 2026-09-29] The scripted follow-up failure (D21-45, the lead's option (a)).** The sentence `replace u1 with a lower-power timer
+for the led circuit` (`B21_F_SENTENCES.rejectResumeBrowser`, C111; a genuine replacement request of the router's corpus: the replacement
+DAG, and "ask" from E4's composer) plays the script of case 12's sentence - only the schematic specialist proposes, U1's exact
+replacement (C105) - and its coordinator FOLLOW-UP turn fails with ONE scripted provider failure (`FIXTURE_FOLLOW_UP_FAILURES`, C107): an
+overloaded provider, HTTP 529 (`FIXTURE_FOLLOW_UP_FAILURE`, C108) - the answer case 12's fake SDK client gives that turn - thrown as the
+real adapters hand a provider failure to the loop (an `LLMProviderError`, C110), so the loop fails the turn `provider_overloaded` (C123)
+and the runtime stands the run down `follow_up_failed` (C122), a stand-down reason the page offers a resume for (C121). The failure is
+made only while the merged envelope says THIS request presented the run's artifact (`approval.outcome` "presented", C109), keyed on
+the conversation's LAST user message: a resume's envelope says `already_presented` (C120), so its follow-up turn answers once. The
+start hook's follow-up branch changed in place (C106), the table entry was added on its F12 line (C105) and the failure appended at the
+file's end, so no line cited above moved (C1-C12 hold). Every other script's answer is unchanged: `b21-f2b-follow-up-failure.test.ts`
+case 1 walks every script-table sentence and one with no script under every approval outcome - only this sentence with "presented"
+fails, on either provider - and case 2 sends it through the production POST (the fake SDK clients faulting nothing: the failure is the
+scripted agent's own) with case 12's own sentence beside it, unchanged. The B18-E and F suites and F2's three browser tests stay green
+unchanged (section 6). **CONFIRMED.**
 
 **The fake SDK clients.** `fixtureOpenAIClient` (C27) and `fixtureAnthropicClient` (C28) answer `responses.create` / `messages.create`
 from one fixture agent each, reading the request's instructions, its conversation (the trailing `function_call_output` items or the
@@ -347,6 +375,28 @@ resumed run, and once on a DAG run of well under a second - RECORDED).
    specialist STARTS again (its `specialist_started` at attempt 1, C103) until its OWN deadline ends it (`escalated`, reason `deadline`,
    C104), the other three are `accepted`, the partial result 3 of
    4, ONE follow-up answer and ONE terminal; nothing is presented in either request; no second offer line (the run finished).
+4. **[B21 F2b, 2026-09-29] F12, presented then stood down (C114-C119, C124-C129; D21-45, the lead's option (a)).** The browser's F12 sentence
+   (`B21_F_SENTENCES.rejectResumeBrowser`), sent from the composer ("ask"): ONE `plan` (`D-component-replacement`, 4 scheduled), the
+   four specialists `accepted` (no partial result), ONE `proposal_ready` and ONE "presented for approval" line (the schematic
+   specialist's replacement, task 3), then the stand-down AFTER it - ONE `degraded` `follow_up_failed` whose line names `provider_overloaded` (the scripted follow-up
+   failure, C116), no follow-up answer, ONE terminal `run_completed` (the coordinator's answer stands). The replacement's review opens
+   ("Nothing has been changed yet.") and the human REJECTS it through the review's own "Cancel — change nothing" (no new control):
+   ONE new "Replacement proposal discarded — nothing was changed." line in the chat (C115) and no "Replacement applied" line (C125);
+   the page shows the stand-down line, ONE new status line `Specialists: 4 scheduled · 4 finished · degraded mode (1 notice in the log
+   above)` (literal counters, C126, C127) and E3's offer line, exactly `chatResumeOfferLine(<runId>, <provider>)` - one new offer, one
+   presented line. The same message sent again carries `resumeRunId` =
+   that run id; the page's log opens with `chatResumingLine(<runId>)`; the route answers under the SAME run id; the stream carries the
+   resumed-run line and the recorded first answer verbatim, the four specialists `replayed` (none runs again, C119), NO presenting event
+   and no "presented for approval" line, ONE line "Orchestration: nothing from the specialists is presented for approval
+   (`already_presented`): ..." (C117) - rendered in the run log -, no stand-down, no partial result, ONE follow-up answer ("approval:
+   already_presented.") and ONE terminal, and ONE new status line `Specialists: 4 scheduled · 4 finished` (C128); ONE presentation in
+   all across the two requests (C118), no review opens again, the finished run leaves no second offer and no replacement was applied (no
+   applied line in all, C129). Evidence `f12-presented-rejected-stood-down.png` and `f12-resume-nothing-presented-again.png`.
+   **[B21 F2b review, 2026-09-29]** The spec is serial on ONE page, so every line test 4 claims that an earlier test also renders (test 2's
+   discard line and its `Specialists: 4 scheduled · 4 finished`) is COUNTED before and after among the chat's own lines - the transient
+   toast (`role="status"`), which repeats a discard line for a few seconds, excluded (C124) - and its status lines are literal counters
+   through the page's builder: never `.last()` visible, never the page's own reducer over the stream it received (section 6, B21-F2b's
+   adversarial review).
 
 **F12 in part (RECORDED).** F12's POST case presents the schematic specialist's replacement, the human rejects it and the run stands down
 because its FOLLOW-UP turn failed (the fake SDK client's 529); the resume then presents nothing again (`already_presented`). In the browser
@@ -357,6 +407,12 @@ those stay proven offline (case 12). A browser stand-down after a presentation n
 F2 does not make (no production change). Test 3's nothing-presented checks therefore cannot see a second presentation or a missing
 `already_presented` (nothing is presented before the Stop). **[B21 F2 fix: coverage-2]** That remainder stays OPEN as D21-45 (new, low;
 section 7), with its options for the lead - it is not closed with D21-43.
+**[B21 F2b, 2026-09-29]** Superseded by B21-F2b (D21-45, the lead's option (a)): the scripted fixture agent's one scripted follow-up failure
+(section 2) lets a run that PRESENTED stand down in the browser, and test 4 (item 4 above) presents the replacement, rejects it through
+its review, stands down, offers and resumes the run, asserting `already_presented` and ONE presentation in all - F12's browser cell is
+PROVEN (section 1). What only the server holds - the record's one artifact claim, and a second resume's 409 `resume_completed`, a
+request the page never sends - stays with the offline case (case 12; `b21-f2b-follow-up-failure.test.ts` case 2), as the class note
+states for every row.
 
 **Failing-first.** Each test red first, through the lead's lock script, the spec restored by sha256 after each mutation (logs
 `b21/f2/ff-*.log`): (1) against a flag-OFF server (the same config with the flag "0", a scratchpad config) test 1 fails at the router
@@ -373,6 +429,29 @@ unfinished stalled task at its next attempt WITHOUT running it, reason `deadline
 strengthened test 3 fails at "the stalled specialist starts again in the resumed run, at attempt 1"; `scheduler.ts` restored, its sha256
 and blob hash equal to HEAD's.
 
+**[B21 F2b, 2026-09-29] Failing-first of test 4** (logs `b21/f2b/ff-*.log`; each run ONLY test 4, through the lead's lock script): (1) against
+HEAD's fixture agent (no script for the sentence) test 4 fails at "ONE artifact presented" (nothing sealed, nothing presented); (2) with
+the script entry but no scripted failure it fails at "the run stood down: its follow-up turn failed" (the follow-up answered - D21-45's
+gap exactly); green with the failure. Then two mutations, each restored by sha256: (3) the failure made unconditional (every follow-up
+turn of the sentence fails) - red at "no stand-down: the follow-up answered" (the resume stood down again); (4) OD-122's ledger
+forgetting its claim (`orchestration-runtime.ts`, the claim's read-back forced void; the file restored from HEAD, its sha256 and blob
+hash equal to HEAD's) - red at "NOTHING presented again": test 4 SEES a second presentation, which test 3's nothing-presented checks
+could not (D21-45). Offline, `b21-f2b-follow-up-failure.test.ts` ran red against HEAD's fixture agent (both cases) and under mutation
+(3) (both cases), the fixture restored by sha256 each time.
+
+**[B21 F2b review, 2026-09-29] The review's fixes, red first** (logs `b21/f2bfix/pw-*.log`; `b21/f2bfix/mutate.py` applies each
+mutation to `app/page.tsx` or `app/lib/project/chat-run-view.ts`, keyed on test 4's own sentence, so tests 1 to 3 see the page
+unchanged): (5) under four deliberate mutations at once - the review's Cancel appending NO discard line, the Cancel appending a
+"Replacement applied" line, the run view's reducer ignoring a degraded notice, the resumed run rendering no status line - F2b's test 4
+PASSED in the full spec (4 of 4, 148 s): the findings reproduced - test 2's discard line and status line satisfied its `.last()` checks,
+its status expectation came from the same mutated reducer, and nothing looked for an applied line (its evidence PNG shows the mutated
+"Replacement applied" line). The strengthened test 4 is green without them (tests 1, 2 and 4: 3 of 3) and red under each mutation alone
+(tests 1, 2 and 4; tests 1 and 2 green every time): (6) no discard line - red at "rejected: nothing applied" (expected 2 discard lines,
+received 1: test 2's); (7) an applied line - red at "the Cancel applied nothing: no applied line" (expected 0, received 1); (8) the
+reducer ignoring a degraded notice - red at "the stood-down run's status line" (expected 1, received 0); (9) no resumed status line -
+red at "the resumed run's status line: 4 scheduled, 4 finished, no notice" (expected 2, received 1: test 2's). Both files restored after
+every run, their sha256 and blob hash equal to HEAD's.
+
 **The budget (OD-30).** One after the other through the lead's lock script, on this machine, after the adversarial review's fixes: the
 existing suite 48 of 48 in 769 s of wall time (Playwright's own count 12.8 min; F's run measured 462 s and F2's first 807 s - the same
 suite, the machine's load differs, and the B21 discovery recorded 818 s once) and the orchestration config 3 of 3 in 182 s (3.0 min; test 3
@@ -381,6 +460,19 @@ waits for the stalled specialist's own 120 s deadline, the production `runDeadli
 OD-30's five-minute split rule (F2's first measurement, before the fixes: 807 s and 180 s, 987 s). The 25 evidence PNGs the existing
 suite rewrote were restored from HEAD by blob hash (`git show HEAD:<path>`, `git hash-object` equal to `git ls-tree HEAD`, 25 of
 25). The five F2 evidence PNGs are this orchestration run's.
+
+**[B21 F2b, 2026-09-29] The budget, after B21-F2b** (`b21/f2b/budget-*.log`): one after the other through the lead's lock script - the
+existing suite 48 of 48 in 263 s of wall time (Playwright's own count 4.4 min), then the orchestration config 4 of 4
+in 149 s (Playwright's own count 2.5 min; test 4 takes seconds, test 3 still waits for its stalled specialist's own 120 s deadline): 412 s, about
+6.9 minutes of OD-30's 30 minutes, leaving about 23.1 minutes before the job's timeout - above OD-30's five-minute split rule. Every
+tracked evidence PNG the two runs rewrote was restored from HEAD by blob hash (30 of 30: the existing suite's 25 and the five F2
+PNGs of tests 1 to 3, which B21-F2b did not change); the two B21-F2b PNGs are this run's.
+
+**[B21 F2b review, 2026-09-29] The budget, after the review's fixes** (`b21/f2bfix/budget-*.log`): one after the other through the lead's
+lock script - the existing suite 48 of 48 in 253 s of wall time (Playwright's own count 4.2 min), then the orchestration config
+4 of 4 in 149 s (Playwright's own count 2.5 min): 402 s, about 6.7 minutes of OD-30's 30 minutes, leaving about 23.3
+minutes before the job's timeout - above OD-30's five-minute split rule. Every tracked evidence PNG the two runs rewrote was restored
+from HEAD by blob hash (30 of 30, as before); the two B21-F2b PNGs are this run's, taken after the fixes.
 
 **Findings on the way (RECORDED).** (a) The lead's `pw.sh` stops every process whose command line matches `playwright` after a run -
 including a shell that handed it `-c playwright.orchestration.config.ts`: the first local run killed its own shell and its caller before
@@ -402,7 +494,9 @@ beside the call) - after the run had printed its result (RECORDED; the wrapper i
   `evaluation-cases.ts` and the three pcb-shape files untouched.
 - No live call and no credential read; no browser spec (section 4); no new runtime dependency; no reserved-file edit (their texts are in
   section 7). **[B21 F2, 2026-09-28]** B21-F2 delivered the browser spec on its own flag-on config (section 4) - with no production
-  change, no new control and no new runtime dependency.
+  change, no new control and no new runtime dependency. **[B21 F2b, 2026-09-29]** B21-F2b added one scripted sentence and its follow-up
+  failure to the fixture agent's script table (behind the fixture gate; no production change), a fourth browser test and one offline
+  suite - no new control, route, run-event type, request key, reason or runtime dependency.
 
 
 ## 6. Suites, gates, the browser run
@@ -411,8 +505,9 @@ beside the call) - after the run had printed its result (RECORDED; the wrapper i
 |---|---|---|
 | `app/lib/agent/orchestration/__tests__/b21-f-evaluation.test.ts` | 16 | the twelve runbook evaluations through the production POST (fake SDK clients, the scripted per-role specialists), D21-40 through the fixture gate (case 13), the matrix byte-gate (case 14), the v4 pins with each capsule's route (case 15), D21-42's first-turn leg of F10 (case 16) |
 | `app/lib/agent/orchestration/__tests__/b21-f-replay-capsule.test.ts` | 10 | capsule v4: the id and v3 refused, the task lists validated exactly (plan indexes, one list per role), stalls only in a task's list, no task graph as one loop, the category's replays deterministic under their budgets, the nine files neutral, the live command refusing without its flag (injected throwing factories, no network), its request bound (retries 0, one counter), the matrix's model-in-loop column, the runner refusing an unplanned task |
-| `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 14 | this page, and (case 9) the dated notes on every stale v3 statement and the discovery's b11-3 citations unmoved; [B21 F2, 2026-09-28] cases 10 and 11 added (section 4 delivered: the orchestration config, the spec, the CI step, the matrix's browser cells; every stopped statement noted, F2's reserved texts), case 2's browser mapping moved (BLOCKED to the delivered classes); [B21 F2 fix] cases 12 to 14 added (F6's two providers and its PROVEN IN PART class, the derived command - both configs loaded, `@playwright/test` stubbed - and D21-45), case 10's role-override line and F6 mapping moved |
-| `e2e-orchestration/specialist-orchestration.spec.ts` | 3 | [B21 F2] `test(` blocks, run by `playwright.orchestration.config.ts` (the flag on) after the existing suite: F4 / D21-30's browser half, F6, F12's browser half (section 4) |
+| `app/lib/agent/orchestration/__tests__/b21-f-page.test.ts` | 19 | this page, and (case 9) the dated notes on every stale v3 statement and the discovery's b11-3 citations unmoved; [B21 F2, 2026-09-28] cases 10 and 11 added (section 4 delivered: the orchestration config, the spec, the CI step, the matrix's browser cells; every stopped statement noted, F2's reserved texts), case 2's browser mapping moved (BLOCKED to the delivered classes); [B21 F2 fix] cases 12 to 14 added (F6's two providers and its PROVEN IN PART class, the derived command - both configs loaded, `@playwright/test` stubbed - and D21-45), case 10's role-override line and F6 mapping moved; [B21 F2b, 2026-09-29] cases 15 and 16 added (F12's browser proof and B21-F2b's reserved texts), case 10's spec count (3 -> 4) and F12 mapping (PROVEN IN PART -> PROVEN) moved as reviewed pin moves; [B21 F2b review, 2026-09-29] cases 17 to 19 added (case 16's nextAction rule over the states the program passes through, a later one included; the offline suite claiming no rejection it does not drive; test 4's page checks counted and literal), case 16's nextAction check moved onto the shared rule |
+| `e2e-orchestration/specialist-orchestration.spec.ts` | 4 | [B21 F2] `test(` blocks, run by `playwright.orchestration.config.ts` (the flag on) after the existing suite: F4 / D21-30's browser half, F6, F12's browser half (section 4); [B21 F2b, 2026-09-29] test 4: F12 presented, rejected through its review, stood down and resumed with nothing presented again (D21-45); [B21 F2b review, 2026-09-29] its page lines counted before and after, its status lines literal |
+| `app/lib/agent/orchestration/__tests__/b21-f2b-follow-up-failure.test.ts` | 2 | [B21 F2b, 2026-09-29] the scripted follow-up failure scoped to ONE sentence and ONE approval outcome (every script, every outcome, either provider), and the browser's F12 sentence through the production POST: presented once, stood down, resumed with nothing presented again (`already_presented`) and one follow-up, a second resume `resume_completed`, case 12's sentence unchanged; [B21 F2b review, 2026-09-29] the human's rejection is the browser's (spec test 4): offline, the page's consumer receives the sealed proposal and nothing is applied |
 | `app/lib/agent/__tests__/b11-3-generated-pcb-shape.test.ts` | 34 | B11.3's cases; §D's capsule id moved to v4 and v3 refused, on one line |
 | `app/lib/agent/__tests__/b11-4-capture-ownership.test.ts` | 17 | B11.4's cases; §G's capsule id moved to v4 |
 | `app/lib/agent/orchestration/__tests__/b21-e2b-trace-attribution.test.ts` | 16 | E2b's cases; case 8's replay-capsule hash moved |
@@ -509,6 +604,58 @@ full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/li
 with `app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2
 nine-file pin); tsc 0; eslint clean on the four changed and new TypeScript files; the B09, B11, B21 and B17-A generators with zero drift
 (24 files byte-identical on the re-run, 628 controls identical, the tree's status unchanged); the browser pair above (48 of 48, then 3 of 3).
+
+### [B21 F2b, 2026-09-29] B21-F2b's runs and gates
+
+- **Browser.** Test 4 alone through the lead's lock script while iterating (section 4's failing-first: four red runs, one green); at
+  the end the existing suite and the orchestration config one after the other: 48 of 48 in 263 s, then 4 of 4 in 149 s - 412 s
+  of OD-30's 30 minutes (30 tracked evidence PNGs restored from HEAD by blob hash; `b21/f2b/budget-*.log`).
+- **Gates**, one heavy job at a time through the lock runner (`b21/f2b/gates/`): every B21 suite with the eight route suites, the E4 composer suite and
+  the CI guard (58 files, 534 of 534 - every A..F page suite included, the F page's 16 cases and the F2b suite's 2); `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure and tier suites, the B11
+  suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every
+  B18-C/B18-E scenario suite (16 files, 108 of 108); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added);
+  `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2 nine-file pin); tsc 0;
+  eslint clean on the five changed and new TypeScript files; the generators with zero drift beyond F12's browser cell (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the gate's re-run - against HEAD only F12's browser cell of `evaluation-matrix.csv` and `.json` moved, `replay-trace-pins-b21.json` byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status and every changed file unchanged during the gates).
+
+### [B21 F2b review, 2026-09-29] B21-F2b's adversarial review, fixed
+
+B21-F2b's review confirmed six findings on three defects; each was fixed test-first - the reproducing test red on the unfixed tree, or,
+for a test-strength finding, the strengthened test red under a deliberate mutation of the source (restored by hash) that the unfixed
+test let through - then re-run:
+
+- **regressions-1, tests-1** (page case 16 compared the live PROGRAM_STATE's `nextAction` with F2b's reserved text for good once its
+  B21-F2b clause was gone, so the closeout's own state update would turn it red): the rule is one module-scope function that, as
+  `b21-d-page.test.ts` case 9 rules it, compares word for word only while the applied `nextAction` still leads with its B21-F2b clause
+  and afterwards accepts F2b's or any LATER state, failing only a reserved text that brings a B21-F2b clause back; page case 17 drives it
+  over the states the program passes through (red first: the later state failed the old rule, "the applied nextAction is not the
+  reserved one").
+- **regressions-2, tests-2, tests-3** (test 4's discard-line and status-line checks took `.last()` visible on the ONE shared page, so
+  test 2's lines satisfied them; its status expectations came from the page's own reducer over the stream; nothing checked that the
+  Cancel applied nothing): test 4 counts every line an earlier test also renders before and after, among the chat's own lines (the
+  transient toast excluded, C124), expects ONE new discard line (C115) and no applied line after the Cancel and at the end (C125,
+  C129), and states both status lines as literal counters through the page's builder (C126-C128); page case 19 pins it (red first: four
+  `.last()` in test 4). In the browser (section 4's failing-first (5) to (9)): F2b's test 4 PASSED under four mutations of the page's
+  source at once; the strengthened test 4 fails under each alone.
+- **tests-4** (the offline suite's case 2 said the human rejects and the Cancel applies nothing, but drives no rejection): its title,
+  comment and header say what it asserts - the page's consumer receives the sealed proposal and nothing is applied - and that the
+  human's rejection (the review's own Cancel) is page-side, proven in the browser by spec test 4; page case 18 pins the wording and the
+  two server-side assertions (red first: the title and the comment claimed the rejection). **RECORDED:** the same wording in
+  `b21-f-evaluation.test.ts` case 12 (F's, committed; the matrix's F12 row quotes it) is left as it stands - F12's rejection is the
+  browser's since B21-F2b (section 1's browser cell).
+
+Gates after the fixes, one heavy job at a time through the lock runner (`b21/f2bfix/gates/`): every B21 suite with the eight route suites, the E4
+composer suite and the CI guard (58 files, 537 of 537 - every A..F page suite included, the F page's 19 cases and the F2b suite's 2);
+`app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/lib/agent`
+with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project`
+with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with
+`app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2 nine-file
+pin); tsc 0; eslint clean on the five changed and new TypeScript files; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the re-run - `evaluation-matrix.csv` and `.json` byte-identical to
+B21-F2b's, against HEAD only F12's browser cell, and `replay-trace-pins-b21.json` byte-identical to HEAD's; B17-A 628 controls, CSV and
+summary identical); the tree's status and every changed file unchanged during the gates; the browser pair (section 4: 48 of 48 in
+253 s, then 4 of 4 in 149 s). No production file changed: `app/page.tsx` and `app/lib/project/chat-run-view.ts` equal HEAD's blobs after
+every mutation run.
 
 ## 7. For the lead — the reserved texts, in full
 
@@ -682,6 +829,8 @@ The stale test titles the closeout retitles with OD-113's set (each carries its 
 §D "the context is v2 and the capsule v3; older versions refuse EXPLICITLY"; `b21-e2b-trace-attribution.test.ts` case 8 "the nine B11-scanned
 files are byte-identical to HEAD ..."; `b21-e2b-page.test.ts` case 4 "... (byte-identical to HEAD 41330e6) ..." (`b21-f-page.test.ts` case 1, F's own new suite, was
 retitled "ten pages" by the lead before the commit).
+[B21 F2b, 2026-09-29] And `b21-f-page.test.ts` case 10 "... the spec's three tests send the case table's sentences under their own namespace ...": four
+tests since B21-F2b (its count's pin moved with its reason beside it; the title kept, never retitled, for the closeout's set).
 
 ### B21-F2 — the reserved texts, in full (the lead's to apply)
 
@@ -814,6 +963,124 @@ at-least-once and stale-artifact options, OD-111's retention question and OD-115
   spec restored by sha256); its adversarial review's six confirmed findings fixed test-first (two more red browser runs - a blank role
   override, a scheduler mutation restored by hash - and three red page cases); the budget measured one run after the other.
 
+### B21-F2b — the reserved texts, in full (the lead's to apply)
+
+[B21 F2b, 2026-09-29] B21-F2b closes D21-45 (the lead's option (a)) with a fixture-only change - one scripted sentence and its follow-up failure
+in the scripted fixture agent's script table, behind the fixture gate - a fourth browser test and one offline suite, and adds no owner
+decision (OD-30's rule applied, not changed). These texts are pinned by `b21-f-page.test.ts` case 16 (its `nextAction` rule by case 17).
+
+#### The README row (`artifacts/ai-control-plane-b21/README.md`, a new row "B21-F2b" after B21-F2)
+
+| B21-F2b the browser half of human rejection and resume (D21-45, the lead's option (a)) | `evaluation-matrix.md` (section 4's test 4, its failing-first and the budget; F12's browser cell PROVEN; section 2's scripted follow-up failure; dated [B21 F2b] notes; B21-F2b's reserved texts in section 7; citation rows C105-C129; the adversarial review's fixes in section 6), `evaluation-matrix.{csv,json}` (F12's browser cell), `evidence/f12-presented-rejected-stood-down.png`, `evidence/f12-resume-nothing-presented-again.png`; code (no production file) `app/lib/agent/fixture-agent-adapter.ts` (the browser sentence's script entry on the F12 line and the start hook's follow-up branch, in place; the scripted follow-up failure appended - no cited line moved), `e2e-orchestration/specialist-orchestration.spec.ts` (test 4), `app/lib/agent/orchestration/__tests__/b21-f2b-follow-up-failure.test.ts` (new), `_f-cases.ts` (the sentence and F12's class, in place), `b21-f-page.test.ts` (cases 15 to 19) | CONFIRMED (the scripted fixture agent's script table gains ONE sentence, playing case 12's script, whose coordinator follow-up turn fails with ONE scripted provider failure - overloaded, 529, case 12's vocabulary - only while its envelope says the request presented; no other script's answer changed; in the browser, with the orchestration flag on, test 4 presents the schematic specialist's replacement once, the human rejects it through the review's own Cancel (no new control), the run stands down and the page offers the resume; the same message resumes under the same run id - the first answer and the four specialists replayed, nothing presented again (`already_presented`), one follow-up answer, one terminal - ONE presentation in all; red first against HEAD's fixture and without the failure, and under two mutations (the failure unconditional; OD-122's ledger forgetting its claim - a second presentation seen); the offline suite through the production POST; F12 PROVEN in the browser; the adversarial review's six findings fixed test-first (test 4 counts every line an earlier test also renders and states its status lines literally - F2b's first test 4 passed under four mutations of the page's source that the strengthened one fails; page case 16's `nextAction` rule tolerates a later state; the offline suite claims no rejection it does not drive); both browser runs 402 s (253 + 149) of OD-30's 30 minutes; D21-45 closed) |
+
+#### The ledger paragraph (`artifacts/remaining-builder-program/EXECUTION_LEDGER.md`)
+
+### B21-F2b — the browser half of human rejection and resume (2026-09-28/29 local; increment workflow + lead; this commit)
+
+- D21-45 as the lead decided it (option (a)): the scripted fixture agent's script table (`app/lib/agent/fixture-agent-adapter.ts`,
+  behind `SIRKIT_FIXTURE_AGENT=scripted`, no new adapter class, the constructor tripwire still at `adapters.ts`) gains ONE sentence,
+  "Replace U1 with a lower-power timer for the LED circuit." (`B21_F_SENTENCES.rejectResumeBrowser`; a genuine replacement request of
+  the router's corpus - the replacement DAG, "ask" from the composer) playing case 12's script (the schematic specialist seals U1's
+  exact replacement), and ONE scripted follow-up failure (`FIXTURE_FOLLOW_UP_FAILURES`): its coordinator follow-up turn fails with an
+  overloaded provider (HTTP 529, an `LLMProviderError` - case 12's vocabulary, `provider_overloaded`) only while the merged envelope says
+  that request presented the run's artifact, so the run stands down after presenting and a resume's follow-up turn (its envelope
+  `already_presented`) answers. The entry added on the F12 line and the start hook's follow-up branch changed in place, the failure
+  appended: no cited line moved; no other script's answer changed.
+- `e2e-orchestration/specialist-orchestration.spec.ts` test 4 (the spec's namespace, no new control): the sentence from the composer;
+  one plan, the four specialists accepted, ONE `proposal_ready` and ONE presented line, then ONE `degraded` `follow_up_failed`
+  (`provider_overloaded`) and one terminal; the human rejects the replacement through the review's own "Cancel — change nothing" (one new discard
+  line, no applied line); the page shows the stand-down line, the status line (literal counters: 4 scheduled, 4 finished, one degraded
+  notice) and E3's offer; the same message resumes under the same run id - the resuming line, the first answer and the four specialists
+  replayed, nothing presented again (the run log's `already_presented` line), one follow-up answer, one new status line (4 and 4), one
+  terminal; ONE presentation in all, no second review or offer, no applied line - every line an earlier test also renders counted
+  before and after (the adversarial review's fix). Evidence `f12-presented-rejected-stood-down.png`,
+  `f12-resume-nothing-presented-again.png`.
+- Offline: `b21-f2b-follow-up-failure.test.ts` (2 cases): the failure scoped to ONE sentence and ONE approval outcome over every script
+  and every outcome, on either provider; the sentence through the production POST (the fake SDK clients faulting nothing): presented
+  once (the page's consumer receives the sealed proposal; nothing applied - the human's rejection is the browser's, spec test 4), stood
+  down, resumed with nothing presented again and one follow-up, a second resume `resume_completed`, case 12's sentence unchanged.
+- Failing-first: four red browser runs of test 4 alone (`b21/f2b/ff-*.log`) - HEAD's fixture agent (nothing presented), the entry
+  without the failure (no stand-down: D21-45's gap), the failure made unconditional (the resume stood down again) and OD-122's ledger
+  forgetting its claim (a second presentation SEEN; `orchestration-runtime.ts` restored from HEAD, sha256 and blob hash equal); the
+  offline suite red against HEAD's fixture agent and under the unconditional failure; every mutated source restored by sha256.
+- The adversarial review (six confirmed findings on three defects), fixed test-first (`b21/f2bfix/`): page case 16's `nextAction`
+  check follows b21-d-page case 9's rule (compare only while the B21-F2b clause stands; a later state passes) - page case 17, red first
+  on a later state; test 4 counts every line an earlier test on the shared page also renders (the chat's own lines, the toast excluded),
+  expects one new discard line and no applied line, and states its status lines as literal counters - F2b's test 4 PASSED under four
+  mutations of `app/page.tsx` and `chat-run-view.ts` at once (no discard line, an applied line, the reducer ignoring a degraded notice,
+  no resumed status line), the strengthened test 4 fails under each alone, both files restored (sha256 and blob hash equal to HEAD's),
+  page case 19 pins it; the offline suite's case 2 claims no rejection it does not drive - page case 18.
+- Pins moved (reviewed, reasons beside them): `b21-f-page.test.ts` case 10's spec test count (3 -> 4) and F12 mapping (PROVEN IN
+  PART -> PROVEN), the F12 browser label added; the matrix's F12 browser cell (`_f-cases.ts`, in place, its line count unchanged so
+  C19-C21 hold; the generator re-run: only that cell moved, `replay-trace-pins-b21.json` byte-identical); page cases 15 and 16 added,
+  and 17 to 19 for the adversarial review's fixes (case 16's `nextAction` check moved onto their shared rule); section 6's counts (the
+  spec 3 -> 4, the page suite 14 -> 19, the new suite 2); citation rows C105-C129 (C115-C119 re-pinned by the review's fixes). Case 10's title ("the
+  spec's three tests") kept for the closeout's retitling (section 7's list).
+- Budget (OD-30), after the review's fixes: the existing suite 48 of 48 in 253 s of wall time and the orchestration config 4 of 4
+  in 149 s, one after the other: 402 s, about 6.7 minutes of OD-30's 30 minutes (about 23.3 minutes of headroom, above the
+  five-minute split rule; before the fixes 412 s, 263 + 149); the 30 tracked evidence PNGs the runs rewrote restored from HEAD by blob
+  hash (the existing suite's 25 and F2's five).
+- Gates after the review's fixes, one heavy job at a time through the lock runner (`b21/f2bfix/gates/`): every B21 suite with the eight route suites, the E4
+  composer suite and the CI guard (58 files, 537 of 537 - every A..F page suite included, the F page's 19 cases and the F2b suite's 2);
+  `app/api/chat` and `app/lib/acquisition` in full (37 files: 359 passed, the opt-in live file's 2 skipped as before); `app/lib/agent`
+  with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project`
+  with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); the
+  import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0, no route added); `app/lib/mcp` with
+  `app/api/mcp` (33 files, 737 of 737 - the B20 pages' citations) and `app/lib/mcp/server` (19 files, 183 of 183 - the b20-b2 nine-file
+  pin); tsc 0; eslint clean on the five changed and new TypeScript files; the generators with zero drift (B11 19 of 19 cases and 61 of 61
+  checks; the B09, B11 and B21 outputs, 24 files, byte-identical on the re-run - `evaluation-matrix.csv` and `.json` byte-identical to
+  B21-F2b's, against HEAD only F12's browser cell, and `replay-trace-pins-b21.json` byte-identical to HEAD's; B17-A 628 controls, CSV and
+  summary identical); the tree's status and every changed file unchanged during the gates.
+- Records: `evaluation-matrix.md` (dated [B21 F2b] notes on the head, section 0, section 1's class note and F12 row, section 2's list
+  and the failure, section 4's test 4, failing-first and budget, section 5, section 6, the section-7 stale-title list and these texts,
+  section 8's rows); D21-45 closed. Live: BLOCKED-LIVE-QUALIFICATION (LB-9) - no model is called.
+
+#### PROGRAM_STATE.json (`artifacts/remaining-builder-program/PROGRAM_STATE.json`)
+
+`currentCheckpoint`: "B21-F2b committed on chapter/b21-specialist-orchestration: the browser half of human rejection and resume
+(D21-45 closed, the lead's option (a)) - the scripted fixture agent's script table gains one sentence whose coordinator follow-up turn
+fails with a scripted provider failure (overloaded, case 12's vocabulary) only while its request presents, and the orchestration spec's
+fourth test presents the schematic specialist's replacement once, rejects it through its review's own Cancel, stands down, offers and
+resumes the run under the same run id - the first answer and the four specialists replayed, nothing presented again
+(already_presented), one follow-up; F12's browser cell PROVEN; no production change, no control; red first (four browser runs, the
+offline suite); the adversarial review's six findings fixed test-first (test 4's page checks counted and literal, red under four
+mutations of the page's source; page case 16's nextAction rule tolerating a later state; the offline suite claiming no rejection);
+both browser runs 402 s (253 + 149) of OD-30's 30 minutes; next the B21 closeout".
+`nextAction`: "The B21 closeout (commit 1/2: the single-agent statements superseded, the stale titles retitled, B's
+specialistResultsEnvelope retired (D21-36), a tripwire; commit 2/2: the four validation artifacts, the verdict, README, ledger and
+state; PR #11 undrafted, green CI, a normal merge); the one live run under OD-125 if credits exist; OD-126's older-page question,
+OD-112's option A, OD-122's across-runs, at-least-once and stale-artifact options, OD-111's retention question and OD-115's
+first-turn options stay with the owner".
+
+#### Discovery closure clauses (`discovery.md` §4, appended to D21-45 and D21-43; §10 gains a B21-F2b amendment)
+
+- **D21-45 — No browser run presents a proposal and then stands down: the scripted follow-up turn never fails, so F12's rejected presentation and already_presented are observed only offline.** — CLOSED by B21-F2b (the lead's option (a)): the scripted fixture
+  agent's script table (behind `SIRKIT_FIXTURE_AGENT=scripted`, no new adapter class) gains ONE sentence - "Replace U1 with a
+  lower-power timer for the LED circuit.", playing case 12's script - whose coordinator follow-up turn fails with ONE scripted
+  provider failure (overloaded, 529 - case 12's vocabulary, `provider_overloaded`) only while its merged envelope says the request
+  presented, so no other script's answer changes (`b21-f2b-follow-up-failure.test.ts` case 1: every script under every approval
+  outcome); `e2e-orchestration/specialist-orchestration.spec.ts` test 4, on the flag-on config, presents the schematic specialist's
+  replacement once, the human rejects it through the review's own Cancel (no new control), the run stands down (`follow_up_failed`)
+  and the page shows E3's offer; the same message resumes it under the same run id - the first answer and the four committed
+  specialists replayed, NOTHING presented again (the run log's `already_presented` line), one follow-up answer, one terminal: ONE
+  presentation in all (`evaluation-matrix.md` section 4, F12's browser cell PROVEN), every line an earlier test also renders counted
+  before and after and the status lines literal counters (the adversarial review's fixes); red first against HEAD's fixture agent and
+  without the failure, and under OD-122's ledger forgetting its claim (a second presentation seen), and the strengthened checks under
+  four mutations of the page's source that the first test 4 let through; offline through the production POST
+  (`b21-f2b-follow-up-failure.test.ts` case 2). RECORDED: the record's one claim and a second resume's `resume_completed` (a request the
+  page never sends) stay the server's, case 12.
+- **D21-43 — The fixture browser server cannot observe an orchestrated run: the orchestration flag is process-wide, and turning it on for the suite changes B18-E's browser proofs.** — addendum by B21-F2b: its RECORDED remainder (F12's
+  rejected presentation and `already_presented` offline only) is closed as D21-45 by B21-F2b's scripted follow-up failure and the
+  spec's test 4, on the same flag-on config.
+- **§10, B21-F2b (recorded by the lead, 2026-09-29):** Section 4: D21-45 closed (the lead's option (a)); D21-43's RECORDED remainder
+  met. Section 6: no owner decision. Section 7, B21-F: amended - the browser spec's fourth test (F12 PROVEN in the browser) and ONE
+  scripted sentence with its follow-up failure in the fixture agent's script table (behind the fixture gate; no production change).
+  Section 8: failing-first - four red browser runs of test 4 (HEAD's fixture agent, the entry without the failure, the failure
+  unconditional, OD-122's ledger forgetting its claim; every mutated source restored by sha256) and the offline suite red against
+  HEAD's fixture agent; the adversarial review's six findings fixed test-first (the first test 4 green under four mutations of the
+  page's source, the strengthened test 4 red under each; page case 16's nextAction rule tolerating a later state); the budget measured
+  one run after the other.
+
 ## 8. Citations, as of base d03f182
 
 The anchor is what the tests check - it occurs exactly once in its file - and the line stated is the CURRENT line for every row (page
@@ -925,3 +1192,28 @@ case 6 checks it; the review's fixes re-pinned the rows whose lines moved in F's
 | C102 | `e2e-orchestration/specialist-orchestration.spec.ts` | 207 | — | `const providers = [["circuit-topology", "anthropic"],` | [B21 F2 fix: tests-01] each role's provider, asserted in both requests |
 | C103 | `e2e-orchestration/specialist-orchestration.spec.ts` | 302 | — | `event.role === "circuit-topology").map((event) => event.attempt)` | [B21 F2 fix: tests-02] the stalled specialist STARTS again on the resume, at attempt 1 |
 | C104 | `e2e-orchestration/specialist-orchestration.spec.ts` | 304 | — | `[event.status, event.attempt, event.reason]` | [B21 F2 fix: tests-02] and its own deadline ends it (`deadline`) |
+| C105 | `app/lib/agent/fixture-agent-adapter.ts` | 566 | — | `"replace u1 with a lower-power timer for the led circuit": { schematic: { steps: [U1_REPLACEMENT] } },` | [B21 F2b] the browser's F12 sentence plays case 12's script (the schematic specialist's replacement), added on the F12 line: no line moved |
+| C106 | `app/lib/agent/fixture-agent-adapter.ts` | 638 | — | `? scriptedFollowUp(adapter, input) : null;` | [B21 F2b] the start hook's follow-up branch, in place: the envelope's answer or the scripted failure |
+| C107 | `app/lib/agent/fixture-agent-adapter.ts` | 687 | — | `export const FIXTURE_FOLLOW_UP_FAILURES: readonly string[] = Object.freeze(["replace u1 with a lower-power timer for the led circuit"]);` | [B21 F2b] ONE sentence whose follow-up turn fails |
+| C108 | `app/lib/agent/fixture-agent-adapter.ts` | 690 | — | `export const FIXTURE_FOLLOW_UP_FAILURE = Object.freeze({ reason: "overloaded", status: 529 } as const);` | [B21 F2b] the scripted failure: overloaded, 529 - case 12's vocabulary |
+| C109 | `app/lib/agent/fixture-agent-adapter.ts` | 705 | — | `followUpApprovalOutcome(input.userMessage) === "presented") throw new LLMProviderError(` | [B21 F2b] only while the envelope says this request presented |
+| C110 | `app/lib/agent/fixture-agent-adapter.ts` | 681 | — | `import { LLMProviderError } from "../llm/errors";` | [B21 F2b] the failure is the normalized provider error the real adapters hand the loop (the import appended: hoisted) |
+| C111 | `app/lib/agent/orchestration/__tests__/_f-cases.ts` | 25 | — | `rejectResumeBrowser: "Replace U1 with a lower-power timer for the LED circuit.",` | [B21 F2b] the browser's F12 sentence, on case 12's line |
+| C112 | `app/lib/agent/orchestration/__tests__/_f-cases.ts` | 31 | — | `export const BROWSER_PROVEN_F12 = "PROVEN: e2e-orchestration/specialist-orchestration.spec.ts tests 3 and 4` | [B21 F2b] F12's browser class, on the classes' line |
+| C113 | `app/lib/agent/orchestration/__tests__/_f-cases.ts` | 68 | — | `browser: BROWSER_PROVEN_F12,` | [B21 F2b] F12's row: PROVEN in the browser |
+| C114 | `e2e-orchestration/specialist-orchestration.spec.ts` | 328 | — | `test("[B21 F2b] F12 / D21-45:` | [B21 F2b] test 4: presented, rejected, stood down, resumed |
+| C115 | `e2e-orchestration/specialist-orchestration.spec.ts` | 375 | — | `"rejected: nothing applied"` | [B21 F2b] the human rejects through the review's own Cancel - ONE new discard line, counted ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
+| C116 | `e2e-orchestration/specialist-orchestration.spec.ts` | 364 | — | `"the run stood down: its follow-up turn failed"` | [B21 F2b] the stand-down after the presentation ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
+| C117 | `e2e-orchestration/specialist-orchestration.spec.ts` | 406 | — | `"Orchestration: nothing from the specialists is presented for approval (already_presented): "` | [B21 F2b] the resume presents nothing again: the run log's `already_presented` line ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
+| C118 | `e2e-orchestration/specialist-orchestration.spec.ts` | 414 | — | `"one presentation across both requests"` | [B21 F2b] ONE presentation in all ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
+| C119 | `e2e-orchestration/specialist-orchestration.spec.ts` | 402 | — | `"every committed specialist replayed, none run again"` | [B21 F2b] the four committed specialists replayed ([B21 F2b review, 2026-09-29] re-pinned: test 4's counts added lines above it) |
+| C120 | `app/api/chat/orchestration-runtime.ts` | 470 | — | `decision.outcome === "already_presented" ? "an earlier request of this run presented this user message` | [B21 F2b] the `already_presented` line the page renders (E3's ledger) |
+| C121 | `app/lib/project/chat-run-view.ts` | 596 | — | `export const CHAT_RESUME_STAND_DOWN_REASONS = Object.freeze(["follow_up_failed"` | [B21 F2b] a failed follow-up is a stand-down the page offers a resume for |
+| C122 | `app/api/chat/orchestration-runtime.ts` | 312 | — | `return standDown(down("follow_up_failed", ` | [B21 F2b] the runtime stands the run down when the follow-up turn fails |
+| C123 | `app/lib/agent/loop.ts` | 767 | — | `provider_${error.reason}` | [B21 F2b] a provider error fails the turn `provider_<reason>`: `provider_overloaded` |
+| C124 | `e2e-orchestration/specialist-orchestration.spec.ts` | 340 | — | `.and(page.locator('xpath=//*[not(ancestor-or-self::*[@role="status"])]'))` | [B21 F2b review, 2026-09-29] the chat's own lines, the transient toast excluded: every line an earlier test also renders is counted before and after (regressions-2, tests-2, tests-3) |
+| C125 | `e2e-orchestration/specialist-orchestration.spec.ts` | 376 | — | `"the Cancel applied nothing: no applied line"` | [B21 F2b review, 2026-09-29] the Cancel applied nothing: no applied line appears (tests-3) |
+| C126 | `e2e-orchestration/specialist-orchestration.spec.ts` | 343 | — | `specialistsDegraded: 1 })!;` | [B21 F2b review, 2026-09-29] the stood-down run's status line as literal counters: 4 scheduled, 4 finished, ONE degraded notice (tests-2) |
+| C127 | `e2e-orchestration/specialist-orchestration.spec.ts` | 380 | — | `"the stood-down run's status line"` | [B21 F2b review, 2026-09-29] that status line, one new (regressions-2, tests-2) |
+| C128 | `e2e-orchestration/specialist-orchestration.spec.ts` | 412 | — | `toHaveCount(resumedStatusBefore + 1);` | [B21 F2b review, 2026-09-29] the resumed run's status line `Specialists: 4 scheduled · 4 finished`, one new - test 2's does not satisfy it (regressions-2, tests-2) |
+| C129 | `e2e-orchestration/specialist-orchestration.spec.ts` | 418 | — | `"nothing applied in all: no applied line"` | [B21 F2b review, 2026-09-29] no applied line in all, after the resume (tests-3) |

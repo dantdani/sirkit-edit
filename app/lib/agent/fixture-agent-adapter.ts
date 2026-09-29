@@ -563,7 +563,7 @@ export const FIXTURE_ROLE_SCRIPTS: Readonly<Record<string, Readonly<Record<strin
     },
   },
   // human rejection and resume: only the schematic specialist proposes (the replacement is presented once)
-  "replace u1 with a low-power timer for the blinker": { schematic: { steps: [U1_REPLACEMENT] } },
+  "replace u1 with a low-power timer for the blinker": { schematic: { steps: [U1_REPLACEMENT] } }, /* [B21 F2b] the same in the browser (D21-45): its follow-up turn fails while it presents (FIXTURE_FOLLOW_UP_FAILURES, appended) */ "replace u1 with a lower-power timer for the led circuit": { schematic: { steps: [U1_REPLACEMENT] } },
   // one specialist timeout: the first specialist never answers; its own deadline ends it and the next task runs
   "design a 555 timer led blinker": { "circuit-topology": { stall: true } },
   // malicious specialist results: a release tool, an approval claim, a smuggled secret, a directive in prose
@@ -635,7 +635,7 @@ function followUpAnswer(userMessage: string): string {
 async function scriptedRoleStart(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): Promise<AgentStep | null> {
   ROLE_RUNS.delete(adapter);
   if (!input.tools.some((tool) => tool.providerName === FIXTURE_RESULT_TOOL_NAME)) {
-    return input.userMessage.startsWith(FIXTURE_FOLLOW_UP_HEAD) ? roleStep(adapter, { text: followUpAnswer(input.userMessage) }) : null;
+    return input.userMessage.startsWith(FIXTURE_FOLLOW_UP_HEAD) ? scriptedFollowUp(adapter, input) : null; // [B21 F2b] the envelope's answer, or the scripted follow-up failure (appended below)
   }
   const role = ROLE_LINE.exec(input.system)?.[1] ?? "unknown";
   const sentence = OBJECTIVE_TAIL.exec(input.userMessage)?.[1] ?? input.userMessage;
@@ -671,4 +671,37 @@ function scriptedRoleContinue(adapter: FixtureAgentAdapter, input: Parameters<Pr
   }
   run.notes.push(toolNote(run.called, outputText));
   return nextRoleStep(adapter, run, input.tools);
+}
+
+// ─── [B21 F2b] A scripted follow-up failure (D21-45, the lead's option (a)) ─────────────────────────────────────────────────────────
+// Appended on purpose: an import and a function declaration are hoisted, so no line cited above moves (the start hook's follow-up
+// branch and the script table's F12 line are changed in place). Still never a model: the whole sentence the user sent (the follow-up
+// turn's conversation carries it as its last user message) and the approval outcome the runtime's merged envelope states choose it.
+
+import { LLMProviderError } from "../llm/errors";
+
+/** The whole sentences (keyed as FIXTURE_ROLE_SCRIPTS) whose coordinator FOLLOW-UP turn fails with the scripted provider failure while
+ *  the merged envelope says THIS request presented the run's one artifact (`approval.outcome` "presented"): the run stands down AFTER
+ *  presenting and the page offers the resume; a resume's envelope says `already_presented` (OD-122's ledger), so its follow-up turn
+ *  answers. ONE sentence, the browser's F12 (`B21_F_SENTENCES.rejectResumeBrowser`): no other script's answer changes. */
+export const FIXTURE_FOLLOW_UP_FAILURES: readonly string[] = Object.freeze(["replace u1 with a lower-power timer for the led circuit"]);
+/** The scripted failure: an overloaded provider, HTTP 529 - the answer b21-f-evaluation case 12's fake SDK client gives the follow-up
+ *  turn - normalized as the real adapters hand a provider failure to the loop (an `LLMProviderError`), so the turn fails `provider_overloaded`. */
+export const FIXTURE_FOLLOW_UP_FAILURE = Object.freeze({ reason: "overloaded", status: 529 } as const);
+
+/** The approval outcome the merged envelope's head states (`mergedResultsEnvelope`'s `approval.outcome`), or null. */
+function followUpApprovalOutcome(userMessage: string): string | null {
+  try {
+    const body = JSON.parse(userMessage.slice(userMessage.indexOf(String.fromCharCode(10)) + 1)) as { approval?: { outcome?: unknown } };
+    return typeof body.approval?.outcome === "string" ? body.approval.outcome : null;
+  } catch {
+    return null;
+  }
+}
+/** [B21 F2b] The follow-up turn: the answer from the envelope's counts - or, for a FIXTURE_FOLLOW_UP_FAILURES sentence whose request
+ *  presented the artifact, the scripted provider failure (thrown: the loop fails the turn, the runtime stands the run down). */
+function scriptedFollowUp(adapter: FixtureAgentAdapter, input: Parameters<ProviderAgentAdapter["start"]>[0]): AgentStep {
+  const sentence = [...input.history].reverse().find((entry) => entry.role === "user")?.text ?? "";
+  if (FIXTURE_FOLLOW_UP_FAILURES.includes(fixtureSentenceKey(sentence)) && followUpApprovalOutcome(input.userMessage) === "presented") throw new LLMProviderError(adapter.provider, FIXTURE_FOLLOW_UP_FAILURE.reason, FIXTURE_FOLLOW_UP_FAILURE.status);
+  return roleStep(adapter, { text: followUpAnswer(input.userMessage) });
 }
