@@ -341,14 +341,14 @@ it - while a paired astral character stays text (the check's residual of B21-E2 
 | `app/lib/agent/orchestration/__tests__/b21-a-store.test.ts` | 15 | 15 |
 | `app/lib/agent/orchestration/__tests__/b21-a-import-gates.test.ts` | 7 | 7 |
 | `app/lib/agent/orchestration/__tests__/b21-a-page.test.ts` | 6 | 6 |
-| `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 7 | 7 + 1 per chapter |
+| `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` | 8 | 8 + 1 per chapter |
 
 [B21 C] The gate suite gained case 6 (role-tools.ts joins the entry set; the three pins of cases 1, 3 and 5 moved from five modules
 to six, `specialist-roles.md` section 6); B21-B had moved them from three to five the same way. [B21 D] The gate suite gained case 7
 (merge.ts joins the entry set; the same three pins moved from six modules to seven, `merge-and-disagreement.md` section 7).
 
-The guard's `it.each(CHAPTERS)` adds one runtime test per chapter of its list, so a run prints 7 + 3 = 10 tests today (`b19-`, `b20-`,
-`b21-`) for its 7 `it(` blocks; the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
+The guard's `it.each(CHAPTERS)` adds one runtime test per chapter of its list, so a run prints 8 + 3 = 11 tests today (`b19-`, `b20-`,
+`b21-`) for its 8 `it(` blocks ([SEC-1, 2026-10-01] 7 and 10 until SEC-1 added its explicit-entry case); the page case computes the `it(` count and the rule from the source and pins the rule as a FORMULA, never
 today's total, so the next chapter's admission (`b22-`, an eleventh test) moves nothing in this closed increment (review correction: the
 earlier row said 7 against runs printing 10, and a first correction pinned 10, which the `b22-` probe below showed would break here).
 

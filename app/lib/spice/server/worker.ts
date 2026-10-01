@@ -7,7 +7,7 @@ import { createId } from "../identity";
 import { compileCanonicalIr } from "../ir";
 import { evaluateTestResults } from "../measurements";
 import { assertModelSafeForExecution } from "../models";
-import { compileNgspiceNetlist } from "../netlist";
+import { assertCompiledDeckSafe, compiledDeckExpectation, compileNgspiceNetlist } from "../netlist";
 import { auditCompiledIr } from "../readiness";
 import { parseNgspiceAsciiRaw } from "../waveforms";
 import type {
@@ -57,7 +57,7 @@ export const NGSPICE_EXECUTABLE = process.env.NGSPICE_BIN?.trim() || (process.pl
 async function ngspiceVersion(): Promise<string> {
   if (cachedVersion) return cachedVersion;
   cachedVersion = await new Promise<string>((resolve) => {
-    const child = spawn(NGSPICE_EXECUTABLE, ["-v"], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(NGSPICE_EXECUTABLE, ["-v"], { env: safeEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); // [SEC-1] D22-5: never the inherited server env
     let output = "";
     let settled = false;
     const finish = (value: string) => {
@@ -173,7 +173,7 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
     rawOutputPath: "result.raw",
     pinNodes: compiled.pointNodes,
   });
-  await writeFile(netlistPath, netlist.executed, "utf8");
+  await writeFile(netlistPath, assertCompiledDeckSafe(netlist.executed, compiledDeckExpectation({ rawOutputPath: "result.raw" })), "utf8"); // [SEC-1] final screen: refused -> the run fails, no deck
   const version = await ngspiceVersion();
   const manifest = createRunManifest({ project: input.project, test, runPlan, runPoint: input.runPoint, analysis, ir: compiled.ir, netlist: netlist.executed, simulatorVersion: version });
   await writeFile(join(artifactDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
