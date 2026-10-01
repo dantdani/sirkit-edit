@@ -258,12 +258,12 @@ export function compileNgspiceNetlist(
   }
   writer.push(".end");
 
-  const generated = assertCompiledDeckSafe(writer.lines.join("\n").concat("\n"), compiledDeckExpectation(ir, options)); // [SEC-1]
+  const generated = assertCompiledDeckSafe(writer.lines.join("\n").concat("\n"), compiledDeckExpectation(options)); // [SEC-1]
   const normalized = normalizedNetlist(generated);
   // Model paths and selected run-point values are already resolved in this
   // compiler pass. Keeping a distinct field makes the provenance explicit and
   // leaves a seam for future dialect transforms or remote-worker packaging.
-  const executed = assertCompiledDeckSafe(normalized, compiledDeckExpectation(ir, options)); // [SEC-1] the final deck screen
+  const executed = assertCompiledDeckSafe(normalized, compiledDeckExpectation(options)); // [SEC-1] the final deck screen
   return {
     generated,
     normalized,
@@ -396,41 +396,52 @@ function assertDeckInputsSafe(ir: CanonicalSimulationIr, options: CompileNetlist
 
 /** [SEC-1] What a compiled deck may hold: the compiler's own batch control block when it is executed, none otherwise (the
  *  compile preview, the smoke test); an EXECUTED deck reads no file through `.include`/`.lib` but the includes the compiler
- *  wrote itself. [SEC-1 review] `cards` are the element lines the compiler wrote: a C, L, D or Q element may be named like
- *  a command word (a capacitor CD, an inductor LOAD), and only those exact lines pass the command-word rule. */
+ *  wrote itself. [SEC-1 round 3] No `cards` list any more: the lead's ngspice-46 probes CONFIRM a command word outside a
+ *  control block is read as an element card and never runs (probes p1/p2/p6/p7/p9), so the screen no longer refuses one and
+ *  needs no exemption for the compiler's own cards named like a command word (a capacitor `CD`, an inductor `load`). */
 export interface DeckExpectation {
   controlBlock: boolean;
   executed: boolean;
   includes?: readonly string[];
-  cards?: readonly string[];
 }
 
-/** [SEC-1] The expectation for a deck the compiler writes from `ir` with `options` (the worker screens its deck with it too). */
-export function compiledDeckExpectation(ir: CanonicalSimulationIr, options: CompileNetlistOptions): DeckExpectation {
+/** [SEC-1] The expectation for a deck the compiler writes with `options` (the worker screens its deck with it too). */
+export function compiledDeckExpectation(options: CompileNetlistOptions): DeckExpectation {
   const executed = Boolean(options.rawOutputPath);
   return {
     controlBlock: executed,
     executed,
     includes: Object.values(options.modelPaths ?? {}).map((path) => `.include "${path.replace(/\\/g, "/")}"`),
-    cards: ir.devices.map((device) => emitDevice(ir, device)),
   };
 }
 
 /** The compiler's own batch block, line for line (`write` carries the server-owned raw path and screened output expressions). */
 const OWN_CONTROL_BLOCK: ReadonlyArray<string | RegExp> = [".control", "set filetype=ascii", "run", /^write [A-Za-z0-9._/-]+ [A-Za-z0-9_.,:#@()[\]+*/ -]+$/, "quit", ".endc"];
-/** [SEC-1 review] Every command word the SEC-1 task names; no line from caller or model data starts with one (the compiler's
- *  own element cards excepted, see `DeckExpectation.cards`). */
-const COMMAND_LINE = /^\s*(?:shell|source|cd|load|write|quit|set|unset|alias|define|codemodel|setcs|unsetcs)(?:\s|$)/i;
-/** [SEC-1 review] A vendor banner: a `*#` line whose rest is only `#`, `-`, `=` and whitespace names no command (INFERRED: ngspice
- *  reads the rest as a command line; a `*` is not admitted, the command language expands it as a file pattern). */
+/** [SEC-1 round 3] A vendor banner: a `*#` line whose rest is only `#`, `-`, `=` and whitespace names no command. CONFIRMED by
+ *  probe p3: a `*#` line (after the title) RUNS its rest as an ngspice command, so every other `*#` line is refused; a banner's
+ *  `#...` rest cannot spell a command word (INFERRED), and a `*` is not admitted (the command language expands it as a pattern). */
 const BANNER_LINE = /^\s*\*#[#=\s-]*$/;
 
-/** [SEC-1] The rules every deck line obeys outside the compiler's own block (the title excepted, see below). */
-function assertDeckLineSafe(text: string, expected: DeckExpectation, includes: ReadonlySet<string>, cards: ReadonlySet<string>): void {
-  if (/^\s*\.title\b\s*\*\s*ng_script/i.test(text)) throw new SpiceDeckSafetyError("the deck would run as an ngspice script");
+/** [SEC-1 round 3 review] The title rules, for line 1 and for the text a `.title` line sets. An `*ng_script` title runs the deck
+ *  as a script (CONFIRMED, probe p4). A non-banner `*#` title is refused as defence in depth beyond the ground: p3 ran a `*#` line
+ *  AFTER the title, and the lead's p11-p13 CONFIRM ngspice-46 batch runs nothing from a `*#` title (line 1 or a `.title` line), so
+ *  the refusal fails closed, stricter than the ground - a stated deviation: a project name starting `*#`, which main compiled, is refused. */
+function assertTitleSafe(title: string): void {
+  if (/^\s*\*\s*ng_script/i.test(title)) throw new SpiceDeckSafetyError("the deck would run as an ngspice script");
+  if (/^\s*\*#/.test(title) && !BANNER_LINE.test(title)) throw new SpiceDeckSafetyError("the deck carries a '*#' command line");
+}
+
+/** [SEC-1] The rules every deck line obeys outside the compiler's own block (the title excepted, see below). [SEC-1 round 3]
+ *  There is NO command-word rule: ngspice-46 (the lead's probes p1/p2/p6/p7/p9) reads a command word anywhere but a `.control`
+ *  block, a `*#` line or an `*ng_script` deck as an element card and never runs it, so an element card named `Cd`, `Load`,
+ *  `Set`, `Source` or `Define` in vendor model text is a device, not a command. The `.shell/.cd/...` DOTTED forms stay as
+ *  defence in depth (no legitimate element card is a dotted directive; a superset of the model screen's list, models.ts:200).
+ *  [SEC-1 round 3 review] A `.title` line's text is a title: read as written and as ngspice's prefix match reads it (`.titlex`,
+ *  INFERRED from the ngspice front end, never probed). */
+function assertDeckLineSafe(text: string, expected: DeckExpectation, includes: ReadonlySet<string>): void {
+  if (/^\s*\.title/i.test(text)) for (const title of [text.replace(/^\s*\.title/i, ""), text.replace(/^\s*\.title\S*/i, "")]) assertTitleSafe(title);
   if (/^\s*\*#/.test(text) && !BANNER_LINE.test(text)) throw new SpiceDeckSafetyError("the deck carries a '*#' command line");
   if (/^\s*\.(?:shell|cd|source|quit|exec|system|destroy|remcirc)\b/i.test(text)) throw new SpiceDeckSafetyError("the deck carries a filesystem or shell directive");
-  if (COMMAND_LINE.test(text) && !cards.has(text.trimEnd())) throw new SpiceDeckSafetyError("the deck carries an ngspice command outside the compiler's control block");
   if (/^\s*![^=]/.test(text)) throw new SpiceDeckSafetyError("the deck carries a shell escape");
   if (expected.executed && /^\s*\.(?:inc|lib)/i.test(text) && !includes.has(text)) throw new SpiceDeckSafetyError("the deck reads a file the compiler did not include");
 }
@@ -440,11 +451,14 @@ function assertDeckLineSafe(text: string, expected: DeckExpectation, includes: R
  * written and by the smoke test before its deck is written. The deck breaks lines only with LF and carries no NUL; it holds
  * exactly the compiler's own `.control` block when executed and none otherwise, so no other line is read as a command
  * (`.control` and `.endc` are matched by prefix, as ngspice matches them); it carries no `*#` command line (ngspice runs one
- * as a control command; a vendor banner passes), no script title, no shell or filesystem directive, no command line outside
- * the block, no shell escape and no command substitution; and an executed deck reads no file through `.include`/`.lib` but
- * the compiler's own includes. [SEC-1 review] The first line is the title, which ngspice reads as text, never as a card: only
- * a `*ng_script` title is refused there (a script deck runs every line). A form feed (a legacy page break in model text) is
- * whitespace to SPICE; it is also read as a line break here, so every rule holds for each form-feed piece of a line as well.
+ * as a control command; a vendor banner passes), no script title, no shell or filesystem directive, no shell escape and no
+ * command substitution; and an executed deck reads no file through `.include`/`.lib` but the compiler's own includes.
+ * [SEC-1 round 3] It no longer refuses a command-word line outside the block: the lead's ngspice-46 probes CONFIRM such a
+ * line is read as an element card and never runs (p1/p2/p6/p7/p9), so a vendor card named `Cd`, `Load`, `Set`, `Source` or
+ * `Define` passes. [SEC-1 review] The first line is the title, which ngspice reads as text, never as a card: only the title
+ * rules hold there (`assertTitleSafe`: an `*ng_script` title; a non-banner `*#` title, INFERRED). A form feed (a legacy page
+ * break in model text) is whitespace to SPICE; it is also read as a line break here, so every rule holds for each form-feed
+ * piece of a line as well (the title's pieces after its first one included).
  */
 export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation): string {
   for (let index = 0; index < deck.length; index += 1) {
@@ -455,7 +469,7 @@ export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation):
   }
   if (/`[^`]+`/.test(deck)) throw new SpiceDeckSafetyError("the deck carries command substitution");
   const lines = deck.split("\n");
-  if (/^\s*\*\s*ng_script/i.test(lines[0] ?? "")) throw new SpiceDeckSafetyError("the deck would run as an ngspice script");
+  const first = lines[0] ?? ""; for (const title of [first, first.replace(/^\s*\.title/i, ""), first.replace(/^\s*\.title\S*/i, "")]) assertTitleSafe(title); // [SEC-1 review] line 1 is the title, read as text: the title rules only, never the card rules; [SEC-1 lead] read through a `.title` prefix too - a first line `.title *ng_script` runs the deck as a script (CONFIRMED, the lead's probe p10)
   const controls = lines.flatMap((line, index) => (index > 0 && /^\s*\.control/i.test(line) ? [index] : []));
   const ends = lines.flatMap((line, index) => (index > 0 && /^\s*\.endc/i.test(line) ? [index] : []));
   const start = expected.controlBlock && controls.length === 1 ? controls[0]! : -1;
@@ -463,15 +477,14 @@ export function assertCompiledDeckSafe(deck: string, expected: DeckExpectation):
     && OWN_CONTROL_BLOCK.every((rule, offset) => (typeof rule === "string" ? lines[start + offset] === rule : rule.test(lines[start + offset] ?? "")));
   if (expected.controlBlock ? !own : controls.length > 0 || ends.length > 0) throw new SpiceDeckSafetyError("the deck carries a control block the compiler did not write");
   const includes = new Set(expected.includes ?? []);
-  const cards = new Set((expected.cards ?? []).map((card) => card.trimEnd()));
   lines.forEach((line, index) => {
     if (own && index >= start && index < start + OWN_CONTROL_BLOCK.length) return;
     const pieces = line.includes("\f") ? line.split("\f").slice(index === 0 ? 1 : 0) : [];
     for (const piece of pieces) {
       if (/^\s*\.(?:control|endc)/i.test(piece)) throw new SpiceDeckSafetyError("the deck carries a control block the compiler did not write");
-      assertDeckLineSafe(piece, expected, includes, cards);
+      assertDeckLineSafe(piece, expected, includes);
     }
-    if (index > 0) assertDeckLineSafe(line, expected, includes, cards);
+    if (index > 0) assertDeckLineSafe(line, expected, includes);
   });
   return deck;
 }

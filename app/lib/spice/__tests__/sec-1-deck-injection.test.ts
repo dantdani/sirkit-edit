@@ -17,9 +17,13 @@
  * [SEC-1 review] The adversarial review's confirmed findings are pinned here too: a TAB is SPICE whitespace (admitted where
  * main admitted it; it never opens a line); a vendor `*#` banner and a form-feed page break in model text pass (a form feed
  * is read both as whitespace and as a line break); `ng_script` is refused only as a script title; the title line is never a
- * card; the task's whole command-word list is refused outside the compiler's block (its own element cards excepted);
- * identity names are refused raw, never sanitized into a different deck; the run-plan preflight compiles one deck per test
- * and analysis; and each defence layer is pinned on its own.
+ * card; identity names are refused raw, never sanitized into a different deck; the run-plan preflight compiles one deck per
+ * test and analysis; and each defence layer is pinned on its own.
+ *
+ * [SEC-1 round 3] The contract is the lead's ngspice-46 probe table: only a `.control` block (an included one too), a `*#`
+ * line and an `*ng_script` title execute, so only those (and an `.include`/`.lib` in an executed deck) are refused; a command
+ * word anywhere else is an element card and passes (round 1 refused the task's whole command-word list - moved, see below).
+ * A non-banner `*#` TITLE is refused too, as defence in depth beyond the ground (the lead's p11-p13: a `*#` title runs nothing; a stated deviation).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -181,9 +185,11 @@ function previewOf(project: SimulationProject): string {
   return compileNgspiceNetlist(compiled.ir, { pinNodes: compiled.pointNodes }).executed;
 }
 
-// ─── what a deck may hold (this suite's own reading, independent of the production screen) ───────────────────────────
-
-const COMMAND_WORD = /^\s*(?:shell|source|cd|load|write|quit|set|unset|alias|define|codemodel|setcs|unsetcs)(?:\s|$)/i;
+// ─── what a deck may hold (this suite's own reading of the GROUND — what ngspice executes — not a copy of the screen) ──
+// [SEC-1 round 3] The lead's ngspice-46 probe table: a command runs ONLY inside a `.control` block (including one inside an
+// included file), from a `*#` line, or in an `*ng_script` deck. A command word anywhere else — the top level, a `.subckt`,
+// after a form feed, an included file's body, a top-level `set` — is read as an element card and never runs (probes
+// p1/p2/p6/p7/p9). So this oracle flags only the constructs that execute; it does NOT flag a command-word line.
 const WRITE_LINE = /^write result\.raw [A-Za-z0-9_.,:#@()[\]+*/ -]+$/;
 const OWN_BLOCK = [".control", "set filetype=ascii", "run", null, "quit", ".endc"] as const;
 
@@ -199,9 +205,14 @@ function deckFindings(deck: string): string[] {
   }
   if (deck.includes(C(0x60))) findings.push("a backtick");
   const lines = deckLines(deck);
-  // [SEC-1 review] the first line is the title: ngspice reads it as text, never as a card; it runs the deck as a script only
-  // when the title (or a `.title` line) starts `*ng_script`
-  if (/^\s*\*\s*ng_script/i.test(lines[0] ?? "") || lines.some((line) => /^\s*\.title\b\s*\*\s*ng_script/i.test(line))) findings.push("an ng_script title");
+  // [SEC-1 review] the first line is the title: ngspice reads it as text, never as a card; it runs the deck as a script when
+  // the title starts `*ng_script` (probe p4). A `.title` line sets the title, so the text after its directive word counts too.
+  // [SEC-1 round 3 review] Whether a `*#` TITLE runs is INFERRED (probe p3 ran a `*#` line AFTER the title; no round-3 probe put one on
+  // line 1; [SEC-1 lead] p11-p13 later CONFIRMED it runs nothing - the refusal stays as defence in depth), so this oracle reads the title as conservatively as any other line: every `*#` title is a finding (a banner case
+  // filters its own finding, as for a banner line below); it copies no production pattern.
+  const titles = [lines[0] ?? "", ...lines.filter((line) => /^\s*\.title/i.test(line)).map((line) => line.replace(/^\s*\.title\S*/i, ""))];
+  if (titles.some((title) => /^\s*\*\s*ng_script/i.test(title))) findings.push("an ng_script title");
+  if (titles.some((title) => /^\s*\*#/.test(title))) findings.push("a '*#' title");
   const starts = lines.flatMap((line, index) => (index > 0 && /^\s*\.control/i.test(line) ? [index] : []));
   const ends = lines.filter((line, index) => index > 0 && /^\s*\.endc/i.test(line)).length;
   if (starts.length !== 1 || ends !== 1) findings.push(`${starts.length} .control and ${ends} .endc lines`);
@@ -212,7 +223,7 @@ function deckFindings(deck: string): string[] {
   }
   lines.forEach((line, index) => {
     if (index === 0 || (start >= 0 && index >= start && index < start + OWN_BLOCK.length)) return;
-    if (COMMAND_WORD.test(line)) findings.push(`line ${index + 1} starts with an ngspice command`);
+    // [SEC-1 round 3] no command-word finding: a command word outside the block is a card, not a command (the probe table)
     if (/^\s*\.(?:inc|lib)/i.test(line)) findings.push(`line ${index + 1} reads a file`);
     if (/^\s*\*#/.test(line)) findings.push(`line ${index + 1} is a '*#' command line`);
   });
@@ -448,6 +459,21 @@ describe("[SEC-1] every caller- or model-controlled string the Studio compiler w
 
   it.each([
     ["a project named as an ngspice script", (p: SimulationProject) => { p.name = "*ng_script"; }],
+    // [SEC-1 lead] CONFIRMED by the lead's probe p10: a FIRST line `.title *ng_script` runs the deck as a script, so line 1 is read
+    // through a `.title` prefix too (the check's new issue after round 3: line 1 was screened as written only)
+    ["[SEC-1 lead] a project named as a .title line naming an ngspice script (line 1; probe p10)", (p: SimulationProject) => { p.name = ".title *ng_script"; }],
+    ["[SEC-1 lead] a project named as a prefix-spelled, upper-case .TITLES line naming an ngspice script (line 1)", (p: SimulationProject) => { p.name = ".TITLES  *NG_SCRIPT"; }],
+    // [SEC-1 round 3 review] A non-banner '*#' TITLE is refused as INFERRED defence in depth, NOT on the probes' ground: probe p3
+    // ran a '*#' line after the title and no round-3 probe put one on line 1 ([SEC-1 lead] p11-p13 later CONFIRMED a '*#' title runs nothing). A stated
+    // deviation: main and fe147c9 compiled a project named '*#2 buck stage'; the refusal fails closed (page section 4).
+    ["a project named as a '*#' command line (the deck title, line 1; INFERRED)", (p: SimulationProject) => { p.name = `*# shell ${MARK}`; }],
+    ["[stated deviation] a project named '*#2 buck stage' (a '*#' title; INFERRED, fails closed)", (p: SimulationProject) => { p.name = "*#2 buck stage"; }],
+    // [SEC-1 round 3 review] coverage-1: a `.title` line sets the title, so the same title rules hold for its text, also as
+    // ngspice's prefix match reads `.title` (a `.titlex` line; INFERRED from the ngspice front end, never probed)
+    ["a .title directive naming a '*#' command (INFERRED)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [`.title *# shell ${MARK}`]; }],
+    ["model text with a .TITLE line naming a '*#' command (INFERRED)", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, `.TITLE *# shell ${MARK}`].join(NL); }],
+    ["a prefix-spelled .title directive naming an ngspice script (INFERRED)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".titles *ng_script"]; }],
+    ["a prefix-spelled .title directive naming a '*#' command (INFERRED)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [`.titles *# shell ${MARK}`]; }],
     ["a .title directive naming an ngspice script", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".title *ng_script"]; }],
     ["a one-line .control directive", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".control"]; }],
     ["a prefix-spelled control directive (ngspice matches the prefix)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".controls"]; }],
@@ -486,14 +512,30 @@ describe("[SEC-1 review] legitimate inputs the first screen refused compile agai
     expect(() => previewOf(project)).not.toThrow();
   });
 
-  it("compiler element cards named like a command word (a capacitor CD, an inductor load) compile; only those cards are exempt", () => {
+  // [SEC-1 round 3 review] The title rules refuse no more than they name: a `.title` banner, and a `.title` that merely mentions
+  // a `*#` after its text, compile (the oracle flags every `*#` title, so these assert acceptance, not a clean deck).
+  it.each([
+    ["a .title banner directive", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".title *#====="]; }],
+    ["a .title that mentions '*#' after its text", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".title Buck stage *#2"]; }],
+  ])("[SEC-1 round 3 review] %s is accepted in the run and the preview", (_label, mutate) => {
+    const project = baseProject();
+    mutate(project);
+    expect(refusal(() => compileWith(project))).toBe("accepted");
+    expect(refusal(() => previewOf(project))).toBe("accepted");
+  });
+
+  // [SEC-1 round 3] Pin move (was: "...only those cards are exempt", with a COMMAND_WORD filter over the findings). The ground
+  // shows no command-word line outside the block runs, so the screen no longer refuses one and no `cards` exemption remains:
+  // an element card named like a command word compiles to a clean deck wherever it appears.
+  it("[SEC-1 round 3] element cards named like a command word (a capacitor CD, an inductor load) compile to a clean deck", () => {
     const project = baseProject();
     overlay(project, { id: "ov-c", kind: "capacitive-load", name: "CD", positive: net("VIN"), negative: net("GND"), value: "1u", enabled: true });
     overlay(project, { id: "ov-l", kind: "inductive-load", name: "load", positive: net("VIN"), negative: net("GND"), value: "10u", enabled: true });
     const deck = compileWith(project).executed;
+    expect(deckFindings(deck)).toEqual([]);
     const beforeBlock = deckLines(deck).slice(0, deckLines(deck).indexOf(".control"));
-    expect(beforeBlock.filter((line) => COMMAND_WORD.test(line)).map((line) => line.split(" ")[0])).toEqual(["CD", "load"]);
-    expect(deckFindings(deck).filter((finding) => !/starts with an ngspice command/.test(finding))).toEqual([]);
+    expect(beforeBlock.some((line) => /^CD /.test(line)), "the capacitor card is present").toBe(true);
+    expect(beforeBlock.some((line) => /^load /.test(line)), "the inductor card is present").toBe(true);
   });
 
   const BANNERS = ["*##########################", "*#--------------------", "*#====================", "*#", `*#${TAB}####`];
@@ -522,7 +564,6 @@ describe("[SEC-1 review] legitimate inputs the first screen refused compile agai
     ["a '*#' line with a glob (the command language expands '*')", "*#***"],
     ["a banner that goes on to a command", `*#### load ${MARK}`],
     ["a form feed before a '*#' command", `R2 1 2 1k${FF}*# shell ${MARK}`],
-    ["a form feed before a command word", `R2 1 2 1k${FF}shell ${MARK}`],
     ["a form feed hiding a control block", [".ends AMP", ".control", `shell ${MARK}`, ".endc"].join(FF)],
   ])("model text with %s is still refused", (_label, line) => {
     const project = baseProject();
@@ -533,13 +574,14 @@ describe("[SEC-1 review] legitimate inputs the first screen refused compile agai
 
 describe("[SEC-1] model text is multi-line by nature: the final deck screen holds what the model screen misses", () => {
   const hostile = (lines: string[]) => [SUBCKT, ...lines].join(NL);
+  // [SEC-1 round 3] Only the constructs the probe table shows EXECUTE are pinned refused here (a second control block, a `*#`
+  // line, an include/lib the compiler did not write). A bare command-word line is no longer among them — it is a card (see
+  // the round-3 describe below), so the command-word array that used to live here moved to the accepted cases.
   it.each<[string, (model: ModelAsset) => void]>([
     ["an empty transformedContent over a hostile originalContent (the screen reads one, the deck emits the other)", (model: ModelAsset) => { model.originalContent = hostile([".control", `shell ${MARK}`, ".endc"]); model.transformedContent = ""; }],
     ["a '*#' line (ngspice runs it as a control command)", (model: ModelAsset) => { model.originalContent = hostile([`*# shell ${MARK}`]); }],
     ["a relative .include with no recorded dependency", (model: ModelAsset) => { model.originalContent = hostile([`.include ../../${MARK}.lib`]); }],
     ["a .lib read", (model: ModelAsset) => { model.originalContent = hostile([`.lib /${MARK}.lib tt`]); }],
-    ...["cd /", `load /${MARK}.raw`, "quit", "define f(x) x", `codemodel /${MARK}.cm`, `source /${MARK}`, "set noaskquit", "alias q quit", `write /${MARK}.raw`, "unset noaskquit", "setcs x=1", "unsetcs x", `shell ${MARK}`]
-      .map((line): [string, (model: ModelAsset) => void] => [`[review] a command-word line '${line.split(" ")[0]}'`, (model: ModelAsset) => { model.originalContent = hostile([line]); }]),
   ])("%s: passes the model screen, and the executed deck is refused", (_label, mutate) => {
     const project = baseProject();
     mutate(model0(project));
@@ -600,7 +642,6 @@ describe("[SEC-1] the final deck screen (defence in depth behind the field scree
     ["a second control block", (deck: string) => beforeControl(deck, [".control", `shell ${MARK}`, ".endc"])],
     ["a prefix-spelled second control line", (deck: string) => beforeControl(deck, [".controls", `shell ${MARK}`, ".endc"])],
     ["a '*#' command line", (deck: string) => beforeControl(deck, [`*# shell ${MARK}`])],
-    ["an ngspice command line outside the block", (deck: string) => beforeControl(deck, [`shell ${MARK}`])],
     ["a script title", (deck: string) => `*ng_script${NL}${deck}`],
     ["an include", (deck: string) => beforeControl(deck, [`.include "/${MARK}.lib"`])],
     ["a library read", (deck: string) => beforeControl(deck, [`.lib /${MARK}.lib tt`])],
@@ -617,21 +658,29 @@ describe("[SEC-1] the final deck screen (defence in depth behind the field scree
     ["[review] a U+0085", (deck: string) => beforeControl(deck, [`R9 VIN 0 1k${C(0x85)}${MARK}`])],
     ["[review] a VT", (deck: string) => beforeControl(deck, [`R9 VIN 0 1k${C(11)}${MARK}`])],
     ["[review] a form feed hiding a control block", (deck: string) => beforeControl(deck, [[`R9 VIN 0 1k`, ".control", `shell ${MARK}`, ".endc"].join(FF)])],
-    ["[review] a form feed in the title hiding a command", (deck: string) => [`${deckLines(deck)[0]}${FF}shell ${MARK}`, ...deckLines(deck).slice(1)].join(NL)],
+    // [SEC-1 round 3 review] tests-3: the title's own form-feed pieces are screened too (a form feed in the title hiding a
+    // command word stays accepted, round-3 describe below; these hide an executing construct)
+    ["[round 3 review] a form feed in the title hiding a '*#' command", (deck: string) => [`${deckLines(deck)[0]}${FF}*# shell ${MARK}`, ...deckLines(deck).slice(1)].join(NL)],
+    ["[round 3 review] a form feed in the title hiding a control block", (deck: string) => [[deckLines(deck)[0], ".control", `shell ${MARK}`, ".endc"].join(FF), ...deckLines(deck).slice(1)].join(NL)],
+    // [SEC-1 round 3] The `.shell/.cd/.source/.quit/.exec/.system/.destroy/.remcirc` DOTTED forms stay refused as defence in
+    // depth: no legitimate element card is a dotted directive; the list is a superset of the model screen's own
+    // `.shell/.cd/.source/.quit` (models.ts:200, unchanged). A bare command-word line (no dot) is NOT here any more — the probe
+    // table shows it is a card (round-3 describe).
     ...[".cd /", `.source /${MARK}`, ".quit", `.exec ${MARK}`, `.system ${MARK}`, ".destroy all", ".remcirc"]
       .map((line): [string, (deck: string) => string] => [`[review] a '${line.split(" ")[0]}' directive`, (deck: string) => beforeControl(deck, [line])]),
-    ...["cd /", `load /${MARK}.raw`, "quit", "define f(x) x", `codemodel /${MARK}.cm`, `source /${MARK}`, "set noaskquit", "alias q quit", `write /${MARK}.raw`, "unset noaskquit", "setcs x=1", "unsetcs x"]
-      .map((line): [string, (deck: string) => string] => [`[review] a '${line.split(" ")[0]}' command line`, (deck: string) => beforeControl(deck, [line])]),
   ])("%s is refused with a closed error", (_label, alter) => {
     const outcome = refusal(() => assertCompiledDeckSafe(alter(legit()), EXECUTED));
     expect(outcome, outcome).toBe("refused (closed)");
   });
 
-  it("[review] a compiler element card may spell a command word; the same line from anywhere else is refused", () => {
-    const card = "CD VIN 0 1u";
-    const deck = beforeControl(legit(), [card]);
-    expect(refusal(() => assertCompiledDeckSafe(deck, EXECUTED))).toBe("refused (closed)");
-    expect(refusal(() => assertCompiledDeckSafe(deck, { ...EXECUTED, cards: [card] }))).toBe("accepted");
+  // [SEC-1 round 3] Pin move (was: "a compiler element card may spell a command word; the same line from anywhere else is
+  // refused", which required an exact-line `cards` exemption). The lead's probes show ngspice reads an element card as a
+  // device wherever it appears, so the screen accepts it from anywhere and the `cards` exemption is gone.
+  it("[SEC-1 round 3] an element card that spells a command word is accepted from anywhere: ngspice reads it as a device (the probe table)", () => {
+    for (const card of ["CD VIN 0 1u", "Load VIN 0 10u", "Define VIN 0 DMOD", "Set VIN 0 A B SMOD", "Source VIN 0 A B SMOD"]) {
+      const deck = beforeControl(legit(), [card]);
+      expect(refusal(() => assertCompiledDeckSafe(deck, EXECUTED)), card).toBe("accepted");
+    }
   });
 
   it("a deck that carries no control block (the preview, the smoke test) refuses any; only an executed deck refuses file directives", () => {
@@ -641,6 +690,20 @@ describe("[SEC-1] the final deck screen (defence in depth behind the field scree
     const withInclude = `${preview}.include "models/x.lib"${NL}`;
     expect(refusal(() => assertCompiledDeckSafe(withInclude, { controlBlock: false, executed: false }))).toBe("accepted");
     expect(refusal(() => assertCompiledDeckSafe(withInclude, { controlBlock: false, executed: true }))).toBe("refused (closed)");
+  });
+
+  // [SEC-1 round 3 review] tests-2: the compile preview (`/api/spice/compile`, the export a user runs on their own machine) refuses
+  // every executing construct as the executed deck does: the `*#` line and the title rules are never gated on execution.
+  it.each<[string, (p: SimulationProject) => void]>([
+    ["model text with a '*#' command line", (p) => { model0(p).originalContent = [SUBCKT, `*# shell ${MARK}`].join(NL); }],
+    ["a project named as an ngspice script (the title)", (p) => { p.name = "*ng_script"; }],
+    ["a project named as a '*#' command line (the title; INFERRED)", (p) => { p.name = `*# shell ${MARK}`; }],
+    ["a .title directive naming an ngspice script", (p) => { t0(p).analyses[0]!.advancedDirectives = [".title *ng_script"]; }],
+    ["a .title directive naming a '*#' command (INFERRED)", (p) => { t0(p).analyses[0]!.advancedDirectives = [`.title *# shell ${MARK}`]; }],
+  ])("[round 3 review] the compile preview refuses %s with a closed error", (_label, mutate) => {
+    const project = baseProject();
+    mutate(project);
+    expect(refusal(() => previewOf(project))).toBe("refused (closed)");
   });
 });
 
@@ -751,7 +814,6 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
     ["a model text '*#' command line", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, `*# shell ${MARK}`].join(NL); }] as const,
     ["a one-line .control directive", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".control"]; }] as const,
     ["[review] a net label carrying LF (an identity name)", (p: SimulationProject) => { design0(p).schematic.netLabels![0]!.name = block(NL)("VIN"); }] as const,
-    ["[review] a model text 'codemodel' line", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, `codemodel /${MARK}.cm`].join(NL); }] as const,
     // [SEC-1 review] the first run point is clean; the hostile value is on a later one
     ["[review] a later sweep point", (p: SimulationProject) => { t0(p).variables = [variable("RLOAD", "1k")]; t0(p).sweeps = [sweepList("RLOAD", ["2k", block(NL)("3k")])]; }] as const,
     ["[review] a second analysis", (p: SimulationProject) => { t0(p).analyses.push({ id: "an-tran-2", name: "Second", type: "tran", outputStep: "10u", stopTime: block(NL)("2m"), enabled: true }); }] as const,
@@ -836,6 +898,20 @@ describe("[SEC-1] POST /api/spice/models/smoke-test: the explicit environment an
     expect(outcome, JSON.stringify(outcome)).toEqual({ status: 422, closedError: true, filesWritten: 0, ngspiceRuns: 0 });
   });
 
+  // [SEC-1 round 3 review] tests-1: the model screen refuses only an ABSOLUTE `.include`/`.inc` and has no `.lib` rule, so the
+  // smoke deck's final screen, run as an EXECUTED deck (smoke-test/route.ts), is the only guard against a file read (an included
+  // control block RUNS, probe p7b); each request is refused before any file or process.
+  it.each([
+    ["a relative traversing .include", `.include ../../${MARK}.lib`],
+    ["a .lib read", `.lib /${MARK}.lib tt`],
+  ])("[round 3 review] model text with %s (the model screen admits it) is refused 422 (closed) before any file or process", async (_label, line) => {
+    const model = smokeModel();
+    model.originalContent = [SUBCKT, line].join(NL);
+    expect(() => assertModelSafeForExecution(model), "the existing model screen admits it").not.toThrow();
+    const outcome = await smokeOutcome(model);
+    expect(outcome, JSON.stringify(outcome)).toEqual({ status: 422, closedError: true, filesWritten: 0, ngspiceRuns: 0 });
+  });
+
   it("a Windows (CRLF) model file still smoke-tests, and [review] the deck written is the deck screened: LF only", async () => {
     const model = importModelText("amp.lib", `${[".subckt AMP 1 2", "R1 1 2 1k", ".ends AMP"].join(C(13, 10))}${C(13, 10)}`).candidate;
     const outcome = await smokeOutcome(model);
@@ -867,5 +943,151 @@ describe("[SEC-1 review] the page records this suite's own counts", () => {
     expect(analysis.length, "the page states the analysis field count").toBeGreaterThan(0);
     expect(new Set(fields)).toEqual(new Set([FIELDS.length + ANALYSIS_FIELDS.length]));
     expect(new Set(analysis)).toEqual(new Set([ANALYSIS_FIELDS.length]));
+  });
+});
+
+describe("[SEC-1 round 3 review] the page's record matches the round-3 tree", () => {
+  const read = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
+  const PAGE = "artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md";
+
+  it("its pins into netlist.ts and models.ts land on the code they name (regressions-2, coverage-3, tests-5)", () => {
+    const page = read(PAGE);
+    const source = deckLines(read("app/lib/spice/netlist.ts"));
+    const misplaced: string[] = [];
+    for (const symbol of ["assertDeckText", "assertDeckInputsSafe", "DeckExpectation", "compiledDeckExpectation", "BANNER_LINE", "assertTitleSafe", "assertDeckLineSafe", "assertCompiledDeckSafe", "__deckLayersForTests"]) {
+      const start = source.findIndex((line) => new RegExp(`^(?:export )?(?:function|const|interface) ${symbol}\\b`).test(line)) + 1;
+      const end = /^(?:export )?const /.test(source[start - 1] ?? "") ? start : start + source.slice(start - 1).findIndex((line) => line === "}");
+      const cited = [...page.matchAll(new RegExp(`\`${symbol}\`[^\`\\n]{0,12}\`(?:[\\w/.-]*netlist\\.ts)?:(\\d+)(?:-(\\d+))?\``, "g"))];
+      if (start === 0) misplaced.push(`${symbol} is not declared in netlist.ts`);
+      if (cited.length === 0) misplaced.push(`the page never cites ${symbol}`);
+      for (const match of cited) {
+        if (Number(match[1]) !== start || (match[2] !== undefined && Number(match[2]) !== end)) misplaced.push(`${match[0]} (declared :${start}-${end})`);
+      }
+    }
+    const models = deckLines(read("app/lib/spice/models.ts"));
+    const dotted = [...page.matchAll(/model\s+screen's own[\s\S]{0,80}?`models\.ts:(\d+)`/g)];
+    if (dotted.length === 0) misplaced.push("the page never cites the model screen's dotted list");
+    for (const match of dotted) if (!(models[Number(match[1]) - 1] ?? "").includes("shell|cd|source|quit")) misplaced.push(`${match[0]} (not the dotted list)`);
+    expect(misplaced).toEqual([]);
+  });
+
+  it("it states the round-3 contract, one current suite size and the probes' provenance (regressions-1/3/4, coverage-1/2/4/5/6)", () => {
+    const page = read(PAGE);
+    const stale: Array<[string, RegExp]> = [
+      ["the probes credited to the owner (the lead ran them)", /owner-run|run by the owner/i],
+      ["round 1's suite size stated as the suite's", /The suite has \d+ cases/],
+      ["the 13 command words listed as refused model text", /a line starting with each of the 13 command words/],
+      ["the 12 command words listed as refused final-screen alterations", /the 12\s+command words other than `shell`\): red/],
+      ["the compiler-card exemption stated as current", /passes only as the compiler's own card/],
+      ["a form feed before a command word listed as still refused", /Still refused:[^.]*a command word/],
+      ["a model `codemodel` line listed among the refused run requests", /a model `codemodel`\s+line, and a hostile value/],
+      ["the `*#` title refusal stated as grounded by the probes", /one gap the review found; it is closed|`\*#`\s+title too \(red-on-revert/],
+    ];
+    const problems = stale.filter(([, pattern]) => pattern.test(page)).map(([label]) => `stale: ${label}`);
+    const header = read("app/lib/spice/__tests__/sec-1-deck-injection.test.ts").split("*/")[0] ?? "";
+    if (/command-word list is refused/.test(header)) problems.push("this suite's header states round 1's command-word contract");
+    const sizes = [...new Set([...page.matchAll(/\((\d+) cases\)/g)].map((match) => Number(match[1])))];
+    if (sizes.length !== 1) problems.push(`the page states ${sizes.length} current suite sizes: ${sizes.join(", ")}`);
+    for (const match of page.matchAll(/(\d+) failed \/ (\d+) passed/g)) {
+      if (Number(match[1]) + Number(match[2]) !== sizes[0]) problems.push(`'${match[0]}' is not a run of the ${sizes[0]}-case suite`);
+    }
+    for (const match of page.matchAll(/[Gg]reen (\d+)\/(\d+)/g)) {
+      if (Number(match[1]) !== sizes[0] || Number(match[2]) !== sizes[0]) problems.push(`'${match[0]}' is not the ${sizes[0]}-case suite`);
+    }
+    const inferred = /Still INFERRED[^\n]*(?:\n(?![ \t]*- |[ \t]*\n)[^\n]*)*/.exec(page)?.[0] ?? "";
+    if (!/`\*#` title/i.test(inferred)) problems.push("section 4's 'Still INFERRED' list does not name the `*#` title refusal");
+    expect(problems).toEqual([]);
+  });
+});
+
+// ─── [SEC-1 round 3] vendor element cards named like command words are devices, not commands (red on fe147c9) ─────────
+
+/** A vendor subcircuit whose body holds element cards whose names spell ngspice command words the round-1 screen refused:
+ *  Cd (capacitor), Load (inductor), Define (diode), Set/Source (voltage-controlled switches). The lead's probes p8/p8a/p8b
+ *  parse and simulate each; a command runs only inside a `.control` block, a `*#` line or an `*ng_script` deck. */
+const VENDOR = [
+  ".subckt AMP 1 2",
+  ".model DVEND D",
+  ".model SVEND SW",
+  "R1 1 2 1k",
+  "Cd 1 2 1p",
+  "Load 1 2 10u",
+  "Define 1 2 DVEND",
+  "Set 1 2 1 2 SVEND",
+  "Source 1 2 1 2 SVEND",
+  ".ends AMP",
+].join(NL);
+const VENDOR_CARDS = ["Cd 1 2 1p", "Load 1 2 10u", "Define 1 2 DVEND", "Set 1 2 1 2 SVEND", "Source 1 2 1 2 SVEND"];
+
+describe("[SEC-1 round 3] vendor element cards named like command words compile, preview, smoke-test and run (the regression)", () => {
+  it("the model screen admits the vendor subckt, and compile and the preview accept every command-word element card", () => {
+    const project = baseProject();
+    model0(project).originalContent = VENDOR;
+    expect(() => assertModelSafeForExecution(model0(project)), "the existing model screen admits it").not.toThrow();
+    expect(outcomeOf(() => compileWith(project)), "compile is a clean deck").toBe("compiled: clean deck");
+    expect(() => previewOf(project), "the preview compiles").not.toThrow();
+    const deck = deckLines(compileWith(project).executed);
+    for (const card of VENDOR_CARDS) expect(deck, card).toContain(card);
+  });
+
+  it("the smoke test accepts the vendor subckt: 200 and one ngspice spawn (no refusal before the process)", async () => {
+    const model = importModelText("amp.lib", `${SUBCKT}${NL}`).candidate;
+    model.originalContent = VENDOR;
+    const res = await smokePost(post("/api/spice/models/smoke-test", { model }));
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    expect(spawnState.calls.filter((call) => call.args[0] === "-b"), "ngspice spawned once").toHaveLength(1);
+  });
+
+  it("POST /api/spice/runs accepts the vendor subckt: 202, the deck written, ngspice spawned, no finding", async () => {
+    const project = baseProject();
+    model0(project).originalContent = VENDOR;
+    const outcome = await routeOutcome(project);
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ status: 202, jobs: 1, decksWritten: 1, deckFindings: [], ngspiceRuns: 1 });
+  });
+});
+
+describe("[SEC-1 round 3] a command word outside an executing construct is a card, not a command (moved from refused)", () => {
+  const EXECUTED = { controlBlock: true, executed: true };
+  const legit = () => compileWith(baseProject()).executed;
+  const beforeControl = (deck: string, extra: string[]) => {
+    const all = deckLines(deck);
+    all.splice(all.indexOf(".control"), 0, ...extra);
+    return all.join(NL);
+  };
+  // The 13 command words the round-1 screen (COMMAND_LINE) refused outside the block. The probes show none runs there.
+  const WORDS = ["cd /", `load /${MARK}.raw`, "quit", "define f(x) x", `codemodel /${MARK}.cm`, `source /${MARK}`, "set noaskquit", "alias q quit", `write /${MARK}.raw`, "unset noaskquit", "setcs x=1", "unsetcs x", `shell ${MARK}`];
+
+  it.each(WORDS)("the final screen accepts a '%s' line before the control block (ngspice reads it as a card)", (line) => {
+    expect(refusal(() => assertCompiledDeckSafe(beforeControl(legit(), [line]), EXECUTED)), line).toBe("accepted");
+  });
+
+  it.each(WORDS)("model text carrying a '%s' line compiles to a clean deck (the run and the preview)", (line) => {
+    const project = baseProject();
+    model0(project).originalContent = [SUBCKT, line].join(NL);
+    expect(() => assertModelSafeForExecution(model0(project)), "the model screen admits it").not.toThrow();
+    expect(outcomeOf(() => compileWith(project)), line).toBe("compiled: clean deck");
+    expect(() => previewOf(project), line).not.toThrow();
+  });
+
+  it("a form feed before a command word is one card (the form feed is whitespace): the deck compiles", () => {
+    const project = baseProject();
+    model0(project).originalContent = [SUBCKT, `R2 1 2 1k${FF}shell ${MARK}`].join(NL);
+    expect(() => compileWith(project), "production accepts the form-feed card").not.toThrow();
+    // the form feed is a legacy page break (control character 12): the oracle flags it but no executing construct remains
+    const findings = deckFindings(compileWith(project).executed).filter((finding) => !/control character 12/.test(finding));
+    expect(findings, "no '*#', command block or file read — only the form-feed page break").toEqual([]);
+  });
+
+  it("a command line outside the block, and a form feed in the title, are accepted by the final screen", () => {
+    expect(refusal(() => assertCompiledDeckSafe(beforeControl(legit(), [`shell ${MARK}`]), EXECUTED)), "command line outside the block").toBe("accepted");
+    const titled = [`${deckLines(legit())[0]}${FF}shell ${MARK}`, ...deckLines(legit()).slice(1)].join(NL);
+    expect(refusal(() => assertCompiledDeckSafe(titled, EXECUTED)), "a form feed in the title").toBe("accepted");
+  });
+
+  it("POST /api/spice/runs runs a model whose text carries a command-word element line: 202, the deck written, ngspice spawned", async () => {
+    const project = baseProject();
+    model0(project).originalContent = [SUBCKT, `codemodel /${MARK}.cm`, `shell ${MARK}`].join(NL);
+    const outcome = await routeOutcome(project);
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({ status: 202, jobs: 1, decksWritten: 1, deckFindings: [], ngspiceRuns: 1 });
   });
 });

@@ -173,7 +173,7 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
     rawOutputPath: "result.raw",
     pinNodes: compiled.pointNodes,
   });
-  await writeFile(netlistPath, assertCompiledDeckSafe(netlist.executed, compiledDeckExpectation(compiled.ir, { rawOutputPath: "result.raw" })), "utf8"); // [SEC-1] final screen: refused -> the run fails, no deck
+  await writeFile(netlistPath, assertCompiledDeckSafe(netlist.executed, compiledDeckExpectation({ rawOutputPath: "result.raw" })), "utf8"); // [SEC-1] final screen: refused -> the run fails, no deck
   const version = await ngspiceVersion();
   const manifest = createRunManifest({ project: input.project, test, runPlan, runPoint: input.runPoint, analysis, ir: compiled.ir, netlist: netlist.executed, simulatorVersion: version });
   await writeFile(join(artifactDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
