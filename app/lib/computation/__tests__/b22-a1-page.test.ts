@@ -94,7 +94,7 @@ describe("[B22-A1] the page", () => {
 
   it("6. section 8 names every B22-A1 suite with its it( / it.each( block count", () => {
     const eight = section(read(PAGE), SECTIONS[8]!);
-    const suites = readdirSync(join(ROOT, SUITES_DIR)).filter((name) => name.endsWith(".test.ts")).sort();
+    const suites = readdirSync(join(ROOT, SUITES_DIR)).filter((name) => name.startsWith("b22-a1-") && name.endsWith(".test.ts")).sort(); // [B22-A2] reviewed pin move: the folder is shared by every B22 increment; A1's page names A1's suites (was: every suite in the folder)
     expect(suites.length).toBeGreaterThanOrEqual(6);
     for (const name of suites) {
       const path = `${SUITES_DIR}/${name}`;

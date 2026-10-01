@@ -38,7 +38,7 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/calculation/propose,POST,false,none,caller-supplied-only,true,,false,false,false,false
 /api/calculation/report,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/calculation/transaction,POST,false,write,project-durable,false,,false,true,false,false
-/api/chat,POST,false,read-write,session-identity,true,,false,false,false,false
+/api/chat,POST,false,read-write,session-identity,true,freerouting (java),false,false,false,false
 /api/circuit-knowledge/applicability,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/circuit-knowledge/compile,POST,false,none,caller-supplied-only,false,,false,false,false,false
 /api/circuit-knowledge/compose,POST,false,none,caller-supplied-only,false,,false,false,false,false
@@ -115,8 +115,8 @@ path,method,is_public,durable_access,project_data_sensitivity,provider_credit,ex
 /api/pcb/footprints/resolve,GET,true,none,none,false,,false,false,false,true
 /api/pcb/footprints/search,GET,true,none,none,false,,false,false,false,true
 /api/pcb/placement/preview,POST,true,none,none,false,,false,false,false,true
-/api/pcb/qualify,POST,false,read-write,project-durable,false,,true,true,true,false
-/api/pcb/release,POST,false,read-write,project-durable,false,kicad-cli (server-authoritative),true,true,true,false
+/api/pcb/qualify,POST,false,read-write,project-durable,false,freerouting (java),true,true,true,false
+/api/pcb/release,POST,false,read-write,project-durable,false,,true,true,true,false
 /api/pcb/repair/agent,POST,false,none,caller-supplied-only,true,,false,false,false,false
 /api/physical-bindings,GET,false,read-write,project-durable,false,,false,false,false,false
 /api/physical-bindings,POST,false,read-write,project-durable,false,,false,true,false,false

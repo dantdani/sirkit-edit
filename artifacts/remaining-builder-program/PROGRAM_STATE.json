@@ -2,20 +2,21 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B22",
-  "currentCheckpoint": "B22-A1 committed on chapter/b22-sandboxed-computation: the model screen reads the emitted text and XSPICE over joined cards (non-ASCII continuations included, probes p14-p22), kicad-cli's explicit env, output caps for kicad-cli and FreeRouting, SPICE AI approval levels, b22- in CI; next B22-A2 (threat model, runtime profiles, process census, isolation verdict)",
+  "currentCheckpoint": "B22-A2 committed on chapter/b22-sandboxed-computation: the immutable runtime profile contract and registry (no profile validated), the connective process census (three classification rows corrected), the isolation verdict (production BLOCKED, LB-10); next B22-A3 (the diagnostic-only local runner)",
   "status": "in_progress",
   "baseSha": "d0d2ec8",
   "branch": "chapter/b22-sandboxed-computation",
-  "lastGreenSha": "0d38504",
+  "lastGreenSha": "50fe156",
   "pullRequest": "draft PR (chapter/b22-sandboxed-computation -> main) opened after the discovery commit; merge only after green CI, never auto-merge",
   "openBlockers": [],
   "liveBlockers": [
     "production Supabase authentication E2E: BLOCKED-LIVE-QUALIFICATION (no isolated project/account)",
     "real LLM provider turn: UNKNOWN (no credits)",
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
-    "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
+    "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)",
+    "authoritative sandboxed simulation on a qualified OCI platform: BLOCKED-LIVE-QUALIFICATION (LB-10)"
   ],
-  "nextAction": "B22-A2 (task scratchpad/b22/task-A2.md), then A3, B, C, D, closeout; then B23 (discovery draft ready in scratchpad/b23). Carried to the owner: OD-146, OD-148, OD-150, OD-151, OD-152, OD-153 and the B21 items.",
-  "updatedAt": "2026-10-01T09:00:00-04:00",
+  "nextAction": "B22-A3 (task scratchpad/b22/task-A3.md; the lead's probes p23-p26 feed it), then B, C, D, closeout; then B23 (discovery draft ready) and B24 (discovery draft ready). Carried to the owner: OD-134, OD-135, OD-146, OD-147, OD-148, OD-150..OD-154 and the B21 items.",
+  "updatedAt": "2026-10-01T11:00:00-04:00",
   "previousChapter": "B21 merged normally into main as e109d76 (PR #11, 2026-10-01) after green CI on b11ef18; verdict PARTIAL (live qualification BLOCKED under LB-9). SEC-1 (corrective security branch fix/spice-deck-injection; D22-3 and D22-5's ngspice half) merged normally as d0d2ec8 (PR #12) after green CI on 0d38504"
 }

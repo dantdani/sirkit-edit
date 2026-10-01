@@ -481,6 +481,11 @@ B22-A2 records the verdict "production runner BLOCKED" (OD-134); not closable on
 (LB-10, OD-147). Sources: S1-G2, S2-G1, S3-G4, S5-G1, S5-G2, S5-G3, S5-G9, S6-G1, S7 host fact.
 
 - [B22 lead, 2026-10-01] Re-verification (section 9): Re-verified on the SEC-1 tree `1ff9d81`: all five spawners are still plain host child processes with no memory, CPU, process-count, file-size or network limit, there is still no container definition, image digest or CI container, and the CD-10 runner still throws behind the 501; the only moved citation is the smoke-test spawn (`smoke-test/route.ts:58` -> `:59`), where SEC-1 added the worker's env allowlist, which narrows inherited secrets but is no isolation boundary, so D22-1 stands unchanged (high).
+- D22-1: **Recorded by B22-A2** (2026-10-01).
+  - `isolation-verdict.md` states that production authority stays BLOCKED (OD-134): every spawner is a plain host process with no OS limit, and the local profiles record `enforcedBy: "none"` for CPU, memory, processes, file size and network.
+  - The lead's 2026-10-01T09:20:48Z probe reached no Docker engine and found the WSL distros Stopped (RECORDED), and no production host is named (B24-A).
+  - The stub and the 501 are pinned by `b22-a2-blocked-runner`.
+  - Not closable on this host; LB-10, BLOCKED-LIVE-QUALIFICATION.
 
 **D22-2 - No immutable runtime profile binds any executable.** Requirement: B22-A `:890-904`; B22-C "exact simulator ... pinned" (`:926`).
 Finding: ngspice resolves from `NGSPICE_BIN` or PATH in all three spawners (`worker.ts:55`; `app/api/simulate/route.ts:46`; smoke test
@@ -494,6 +499,12 @@ provenance or digest (`git grep` for `ngspice-46|Spice64` empty, reader 5) while
 S3-G2, S5-G1, S5-G8, S7-G1, S7-G2.
 
 - [B22 lead, 2026-10-01] Re-verification (section 9): Re-verified on `1ff9d81` and not closed by SEC-1: ngspice still resolves from `NGSPICE_BIN` or PATH with no digest check (`worker.ts:55`, `simulate/route.ts:46`, with the smoke test's import moved from `smoke-test/route.ts:8` to `:9`), and the manifest, kicad-cli, FreeRouting and CD-10 citations are unchanged (JAVA_HOME is at `runtime.ts:94-97`); the `git grep` for `ngspice-46|Spice64` now hits only SEC-1's probe record (version and `ngspice_con -b`, with no path, provenance or hash), and because SEC-1's final deck screen is cut to ngspice-46's probed behaviour, the unpinned executable now also bears on that screen's correctness.
+- D22-2: **Contract closed by B22-A2**.
+  - `app/lib/computation/runtime-profile.ts` binds every runbook `:892-904` item. Executable identity is an install-tree digest (or OCI image digest) read only from a named server setting, unpinned when absent. A container profile also binds the host docker CLI that runs its argv (`hostClient`).
+  - The registry holds `ngspice-local-diagnostic`, `ngspice-oci`, kicad-cli and FreeRouting profiles, none validated.
+  - 9.5 item 13: (b) applied: the profile adds parser, validator and qualification-evidence bindings to the environment type, the provider type already carrying corpus refs. (c) applied: `runtime-profiles.md` and the FreeRouting legacy record cite `runtime.ts:59-69`, `:94-97`, `:104-115` and `:119-126`, and record the source-build JAR candidate outside the install root; case 13 derives the candidates from the resolver. (a) is a restatement of the discovery's own evidence text, left to the lead.
+  - Open: the digest check before spawn and `NGSPICE_BIN`/PATH no longer choosing the binary are B22-A3's (OD-135); the docker CLI pin is B22-A4's.
+  - [B22-A2 lead] An `os` claim is refused on every backend kind but a container (whose claims are tied to its docker flags), CD-10's own `sandboxed_process` included (the check's new issue; red, then green).
 
 **D22-3 - The SPICE Studio deck path admits caller and model text as live deck lines; a second `.control` block with `shell` is
 probably reachable.** Requirement: B22-B "never generic code execution" (`:908`, `:918`); global `:157`; B22-D "child processes",
@@ -615,6 +626,11 @@ diagnostic environment says `"uncontrolled-local"` and `["uncontrolled"]` (`prov
 (`manifest.ts:22-42`, reader 1). Severity medium. **CONFIRMED** (code), **RECORDED** (spinit). Closes: B22-A2/A3 (profile env `LC_ALL=C`,
 `TZ=UTC`, pinned seed and threads; results labelled environment-dependent unless the profile is qualified). Sources: S1-G12, S2-G8,
 S7 facts.
+- D22-11: **Contract recorded by B22-A2**.
+  - Every profile's exact environment pins LC_ALL=C and TZ=UTC.
+  - The ngspice profiles pin the seed by `.options seed=1` and the threads by the install digest. The installed `spinit:14` num_threads=8 and `:5` rndseed commented out are recorded (9.5 item 11).
+  - 9.5 item 22's `.spiceinit` and locale points are recorded: HOME/USERPROFILE are dropped from the contract, `-n` is B22-A3's, and the Windows locale effect is INFERRED.
+  - Runtime: B22-A3.
 
 **D22-12 - No server-held, durable, digest-bound simulation evidence exists, and the records call the in-memory runs durable.**
 Requirement: B22-C results are evidence (`:933`); pass `:942` "import only validated artifacts"; global `:139-140`. Finding: section 2.5:
@@ -672,6 +688,13 @@ pass `:942` "measurable isolation boundary". Finding: `/api/chat` and `/api/pcb/
 claims `kicad-cli (server-authoritative)` (`:54`) and spawns nothing (section 0); only the durable annotation has a connective test (reader 2,
 `b16-0-3-effective-classification.test.ts:44-59`). Severity medium. **CONFIRMED**. Closes: B22-A2 (a connective test from each route's
 import closure to the spawners; rows corrected). Source: S2-G13.
+- D22-18: **Closed by B22-A2**.
+  - `b22-a2-process-census` derives the process-reaching routes from the source and compares them with the CSV's `external_process`. Red first on exactly the three rows.
+  - `/api/chat` and `/api/pcb/qualify` now carry `freerouting (java)`; `/api/pcb/release` carries none.
+  - qualify starts FreeRouting outside fixture mode, and inside it when `SIRKIT_FIXTURE_ROUTER` is `record` or `live` (`fixture-runtime/router.ts:54-60`); only `replay` starts nothing.
+  - 9.5 item 28 applied: the four `/api/spice/runs/[id]*` routes are reviewed exemptions, checked over each route's whole closure and the job store's every top-level binding (only `startRunPlan` reaches `executeRunPoint`; DELETE stops a live child through `cancelRun`). The census drops an exemption whose check fails.
+  - The CSV was regenerated by `scripts/generate-b16-0-2-artifacts.ts`, three rows only.
+  - [B22-A2 lead] The census exemption also counts a binding the job store forwards by a re-export from another module, and refuses `export *` (the check's new issue; two cases red, then green).
 
 **D22-19 - CD-10 authority has no execution or import path and no evidence corpus; the live decks are not CD-10 decks.** Requirement:
 B22-C `:924-930`. Finding: the runner throws (2.1); nothing creates a `SimulationRun` or `WaveformArtifact` from a simulator; the 102
@@ -704,10 +727,12 @@ five-item summary (projection, propose delegation, pool and windows, replay, clo
 **D22-23 - No live-blocker row names the blocked simulation runner or an isolation platform.** Requirement: pass `:942` "the verdict must
 say so". Finding: LB-1..LB-9 (`LIVE_BLOCKERS.md`) name none; LB-3 waits on "a container profile (B22)" (`:9`); LB-6 concerns container
 PostgreSQL (`:12`). Severity low. **CONFIRMED**. Closes: B22-A2 adds LB-10 (OD-147). Sources: S1 fact, S6-G7.
+- D22-23: **Closed by B22-A2**: LB-10 "authoritative sandboxed simulation on a qualified OCI platform", BLOCKED-LIVE-QUALIFICATION (OD-147).
 
 **D22-24 - CI admits no B22 suite.** Requirement: OD-59/OD-124 practice (every chapter suite runs in CI). Finding: `CHAPTERS = ["b19-",
 "b20-", "b21-"]` (`b19-e-ci-job-scope.test.ts:54`); OD-124 says a later chapter extends it without touching B21's suites
 (`OWNER_DECISIONS.md:1131-1139`, reader 6). Severity low. **CONFIRMED**. Closes: B22-A2 (OD-146).
+- D22-24: **Confirmed closed by B22-A1**. `b22-` is in `CHAPTERS` and one directory filter admits `app/lib/computation/__tests__`. B22-A2's three suites ride that filter with no new CI line, and the guard is green.
 
 ---
 
@@ -1292,3 +1317,5 @@ The "high" severity still holds, through kicad-cli.
 
 - SEC-1 (`d0d2ec8`) landed D22-3 and D22-5's ngspice half on a corrective branch from main before B22 (OD-137's alternative); B22-A1's `b22-a-deck-injection` scope shrinks to what SEC-1 left (D22-4 with the XSPICE file parameters, kicad-cli, OD-150).
 - [B22-A1, 2026-10-01] B22-A1 closed what SEC-1 left of D22-4 (the model screen, its differential, client dependencies, XSPICE file parameters and program- or library-loading code models over joined cards, the bounded return channels), kicad-cli's half of D22-5, D22-8's output caps for kicad-cli and FreeRouting (OD-148) and OD-150's approval half, and admitted `b22-` to CI (OD-146); D22-7 was observed at the fake seam (B22-C); the shared deck validator is left to B22-A3.
+- [B22-A2, 2026-10-01] B22-A2 defined the immutable runtime profile contract and registry (D22-2 contract, D22-11 contract; OD-135, OD-148) – with a closed docker-argv grammar tying each designed OCI `os` claim to its flag and a bound host docker CLI – closed D22-18 with a connective process census and three corrected classification rows, recorded the isolation verdict (D22-1; OD-134) and LB-10 (D22-23; OD-147), and pinned the stub and the 501; D22-24 was A1's.
+- [B22-A2, 2026-10-01] Discovery correction (for 9.5 item 28 and section 10): "qualify reaches FreeRouting only outside fixture mode (`production-router.ts:23-24`)" is wrong. Fixture mode with `SIRKIT_FIXTURE_ROUTER` `record` or `live` also starts it (`production-router.ts:39` → `fixture-runtime/router.ts:54-60`). Fixture mode is honoured only in non-production local development (`fixture-runtime/mode.ts:18-21`).

@@ -1700,3 +1700,40 @@ Amendments to existing entries:
   so named is refused too (the check's low issue, kept fail-closed); a `+` line opened by a non-ASCII character is joined to its card
   as ngspice does (probes p14-p15).
 - **Evidence:** the page sections 0, 1, 2 and 12. Owner confirmation pending.
+
+## OD-134 — the isolation verdict and the production runner, as applied (B22-A2, 2026-10-01)
+
+- **Question:** may any engineering executable produce authoritative simulation evidence in B22?
+- **Default applied:** no. Production simulation authority stays BLOCKED. `executeAuthoritativeSimulation` still throws `CD10_AUTHORITATIVE_RUNNER_BLOCKED_NO_VALIDATED_SANDBOX`, and the CD-10 execute route still answers 501 with its unchanged text, even for a request body that declares itself validated (D22-6 is latent behind the 501; B22-C closes it). No B22-A2 runtime profile is `validated` or authoritative-eligible. The `ngspice-oci` profile is defined and tested offline only: the discovery's flag vector, `unvalidated`, no evidence, its docker argv read by a closed grammar that ties each designed `os` claim to its flag, and the host's docker CLI bound by `hostClient` (unpinned). B22 delivers a diagnostic-only local runner (B22-A3) that is never called authoritative. No docker, podman, runsc or wsl command was run. The lead's 2026-10-01T09:20:48Z probe reached no Docker engine (CLI 29.3.1, context `desktop-linux`, npipe not found); WSL's `docker-desktop`, `kali-linux` and `Ubuntu` were all Stopped; no production host is named (B24-A decides).
+- **Evidence:** `artifacts/ai-control-plane-b22/isolation-verdict.md`; `b22-a2-blocked-runner` (6 cases); `b22-a2-runtime-profile` cases 8, 16 and 18.
+- **The owner may choose otherwise:** supply an OCI engine (a repaired Docker Desktop with a recorded backend, or a Linux host or CI runner) and approve the opt-in B22-A4 qualification there. Production stays BLOCKED even then until B24-A names the production host. Owner confirmation pending.
+
+## OD-135 — which ngspice build each profile pins, as applied (B22-A2, 2026-10-01)
+
+- **Question:** which ngspice does each runtime profile bind, and how is it identified?
+- **Default applied:** `ngspice-local-diagnostic` binds the owner's local ngspice-46 Windows build (`Spice64`, `bin/ngspice_con.exe`). Its identity is the install-tree digest (`sirkit-install-tree-sha256/1`: SHA-256 over the sorted `[relative path, size, per-file SHA-256]` lines of the whole tree, covering the executables, `libomp140`, `spinit` and the code-model libraries; files are stat'ed exactly, as bigint, and a file changed while hashed is refused). The digest is read only from `SIRKIT_NGSPICE_INSTALL_SHA256`, with the root in `SIRKIT_NGSPICE_INSTALL_ROOT`, and is unpinned until the owner sets it. B22-A3 refuses a mismatch or an unpinned profile before any spawn, and from then on `NGSPICE_BIN` and PATH no longer choose the binary. `ngspice-oci` plans ngspice `47+ds-1` from a dated Debian snapshot on `debian:trixie-slim` pinned by a digest re-resolved before use, read from `SIRKIT_NGSPICE_OCI_IMAGE` (a `<repository>@sha256:<hex>` reference). Its host docker CLI is bound by `SIRKIT_OCI_CLI_PATH` and the file's SHA-256 in `SIRKIT_OCI_CLI_SHA256`; its context and configuration are UNKNOWN until B22-A4. The image is not built, and the licence set is recorded. kicad-cli and FreeRouting carry full diagnostic profiles with their own digest settings (OD-148). FreeRouting's digest covers only `freerouting-2.2.4.jar` and `jdk-25.0.3+9-jre`, because `scripts/setup-freerouting.ps1:93-104` rewrites `sirkit-runtime.json` with the time of the run beside them on every run.
+- **Evidence:** `artifacts/ai-control-plane-b22/runtime-profiles.md`; `b22-a2-runtime-profile` cases 4, 5, 10, 15 and 18 (digest on temporary fixture trees and fs seams only, never the real install).
+- **The owner may choose otherwise:** a different local build, or a distro package instead of the snapshot. Owner confirmation pending.
+
+## OD-147 — live-blocker rows, as applied (B22-A2, 2026-10-01)
+
+- **Question:** how is the blocked authoritative runner recorded?
+- **Default applied:** LB-10, "authoritative sandboxed simulation on a qualified OCI platform", BLOCKED-LIVE-QUALIFICATION. It unblocks when the owner supplies a reachable OCI engine, B22-A4 pins the image and the docker CLI and records qualification evidence in the `ngspice-oci` profile, and B24-A names the production host.
+- **Evidence:** `isolation-verdict.md` sections 3 and 5; the LB-10 row below.
+- Owner confirmation pending.
+
+## OD-154 — B22-A2: stated choices beyond its task text, as applied (B22-A2, 2026-10-01)
+
+- **Default applied:**
+  - Every profile also carries `legacySpawn` (what the live spawn sites do today and their closed deviations), plus a `readBackBytes` limit and a `waveformPoints` limit.
+  - The environment rule also refuses `HOMEDRIVE`/`HOMEPATH` and secret-shaped keys.
+  - The kicad-cli and FreeRouting contract environments drop HOME, USERPROFILE and APPDATA (adequacy UNKNOWN; neither tool was run). kicad-cli gets `KICAD_CONFIG_HOME={runDir}`.
+  - The OCI flag-vector values are designed, unqualified choices: memory 1024m (swap equal), pids 64, `--cpus 1`, `--ulimit cpu=120:120`, `/out` tmpfs 128m, `/tmp` tmpfs 16m, user 65534. How output leaves the tmpfs is left to B22-A4.
+  - The seed is pinned as `.options seed=1`, to be emitted by the runner.
+  - The census treats a route reaching a spawner as starting it, unless one of four reviewed exemptions holds. An exemption is checked over the route's whole closure and the job store's every top-level binding, and the census drops it when the check fails.
+  - [Review fixes] The contract validator reads a container profile's docker argv by a closed grammar. It allows exactly the `run` and `kill` operations and a long-option allowlist up to the one `{image}`. It refuses short flags, every `=` form, `--env-file`, a bare-name `--env`, `--privileged`, `-v`/`--volume` and `--cap-add`. It requires `--cap-drop ALL`, `no-new-privileges`, a non-root numeric user and group, and a positive `--cpus`, and ties every `os` claim to its flag. Any `--mount` must be the read-only input bind, so a writable output bind for B22-A4's transport would be a reviewed grammar change.
+  - [Review fixes] A container profile binds its host client (`hostClient`: `SIRKIT_OCI_CLI_PATH`, `SIRKIT_OCI_CLI_SHA256`), and `validated` needs it pinned.
+  - [Review fixes] Install digests may name root members; only FreeRouting does.
+  - [Review fixes] The input mount is typed and validated read-only.
+  - [Review fixes] The digest stats files as bigint, because Windows file ids exceed 2^53.
+- Owner confirmation pending.

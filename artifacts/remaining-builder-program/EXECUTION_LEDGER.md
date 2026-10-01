@@ -3829,3 +3829,73 @@ Test-first on `chapter/b22-sandboxed-computation` from `0432fb8`: six suites und
   so SEC-1's line screen stands. (2) Low, kept: `d_process`/`d_cosim`/`process_file` refused on any card (a net so named is refused) -
   fail-closed, recorded in OD-153. Numbering: OD-153..OD-159 are reserved for B22's increments (A1 took OD-153); B23's discovery starts
   at OD-160. Lead gates on the final tree are listed in the commit message.
+
+### B22-A2 - the threat model, immutable runtime profiles, the process census and the isolation verdict (2026-10-01 local; increment workflow + lead; this commit)
+
+**Test-first** on `chapter/b22-sandboxed-computation` from `50fe156`. A baseline of 20 files / 348 passed came first. Then three suites under `app/lib/computation/__tests__/` and the A1 page ran red before any production edit: 7 failed / 13 passed of 20, with `b22-a2-runtime-profile` unloadable. The census was red on exactly D22-18's three rows. One red case was a test bug (151 route files compared with 165 policy rows), fixed before any production edit. After the module was written, one case was narrowed to code references so a doc comment naming the stub no longer counts. Then 27 green, and five deliberate breakages of the source were each caught, the source restored by hash.
+
+**PROFILES (D22-2 contract, D22-11 contract, OD-135, OD-148):** `runtime-profile.ts` defines a closed, deep-frozen `RuntimeProfile` that extends CD-10's `SimulationExecutionEnvironment`, validated at registry construction. It binds:
+- the executable identity: an install-tree SHA-256 digest from one named server setting, unpinned when absent or malformed, the value never echoed; FreeRouting's covers its JAR and JRE only;
+- for a container profile, the host client that runs its argv;
+- version, provenance and formats;
+- argv templates with server-named placeholders only;
+- a read-only input and a per-run output policy;
+- the network;
+- an exact environment (LC_ALL=C, TZ=UTC, no HOME/USERPROFILE, never inherited);
+- eight limits, each with `enforcedBy` os/runner/none;
+- the seed and threads (spinit's num_threads=8 pinned by the digest; the seed by `.options seed=1`);
+- the kill, parser, validator, qualification evidence and `validationState`;
+- a `legacySpawn` record of today's spawns.
+
+The registry holds `ngspice-local-diagnostic`, `ngspice-oci` (the discovery's flag vector, `unvalidated`, its docker argv read by a closed grammar with each `os` claim tied to its flag), kicad-cli and FreeRouting. None is validated or authoritative-eligible, and local profiles claim no OS limit. An unknown id gets a closed error.
+
+**CENSUS (D22-18):** a connective test derives the routes that reach a spawner from the runtime import closure on the gates' edges. Four exemptions (`/api/spice/runs/[id]*`) are reviewed by reachability over each route's whole closure and the job store's every top-level binding, and the census drops an exemption whose check fails. `/api/chat` and `/api/pcb/qualify` now classify `freerouting (java)`; qualify starts it outside fixture mode and in fixture mode's `record` and `live` router modes. `/api/pcb/release` no longer claims kicad-cli. The CSV was regenerated only by its generator; three rows changed.
+
+**BLOCKED (OD-134):** the stub and the 501 text are pinned byte-for-byte; a body-declared validated profile still ends at 501; every registry profile ends at 409.
+
+**Review fixes** (13 confirmed findings): red first on the unmodified source, 10 failed / 21 passed of 31. Three test bugs in the red tests were fixed before any source edit (a fixture out of scope, `toContain` on an object, a regex for a row format the page never has). Fixes:
+- the OCI env forms refused (`-e`, `--env=`, `--env-file`, a bare name);
+- an option allowlist and the isolation baseline;
+- every `os` claim tied to its flag;
+- the input typed and validated read-only;
+- named digest members for FreeRouting;
+- the FreeRouting legacy record completed (the source-build JAR, `runtime.ts` citations);
+- a re-stat after each file read;
+- the host docker CLI bound;
+- the census exemption checked over the whole closure;
+- qualify's fixture wording corrected.
+
+A real nondeterminism was found and fixed: Windows file ids on this host exceed 2^53, so the digest now stats files as bigint. Then 31 green, and nine breakages of `runtime-profile.ts` and two of the census's source files were each caught and restored by hash.
+
+**Pages:** `threat-model.md`, `runtime-profiles.md` (section 8: the review fixes), `isolation-verdict.md` (the lead's 2026-10-01T09:20:48Z probe RECORDED). LB-10 added (OD-147).
+
+**Reviewed pin moves:**
+- `b22-a1-page` case 6 now lists only `b22-a1-` suites.
+- The three classification rows, edited in place without shifting lines; the qualify comment re-worded in place.
+- `b22-a2-runtime-profile` case 7's env counterexample now sits among the docker options.
+
+**Gates:**
+- A (computation, spice, CD-10, CI guard): 19 files, 482 passed, 3 skipped.
+- B (classification and CSV readers, import gates, census 165 / 162 / 3 / 0, 501 pins, process gate with the five spawners unchanged): 34 files, 448 passed.
+- C (B21 orchestration): 49 files, 460 passed.
+- tsc and eslint clean; four generators zero drift.
+
+**Not changed:** spawns, routes, the CD-10 routes, the 501, the stub, dependencies.
+
+**Open:**
+- B22-A3 executes the ngspice profile.
+- The OCI output transport, the docker CLI's context and configuration, and qualification are B22-A4's.
+- The kicad-cli and FreeRouting contract environments are UNKNOWN in adequacy.
+
+Pages: `artifacts/ai-control-plane-b22/`.
+- Lead close (2026-10-01): the check of the review fixes raised four new lows. (1) The census's exemption check ignored a re-export
+  from another module: a job-store `export { executeRunPoint as resume } from "./worker"` imported by `_scope.ts` kept the exemption -
+  red first, then `exportsReaching` counts every forwarded name as reaching and `export *` refuses the exemption (cases (g), (h)).
+  (2) `os` claims were refused only for the exact local kind: a profile with CD-10's own `sandboxed_process` kind kept them - red
+  first, then every non-container kind is refused an `os` claim (in place, line-neutral). (3) `isolation-verdict.md` section 4 said
+  only the `--env` pairs reach a container; corrected in place (Docker adds `HOSTNAME`/`HOME`, and the CLI may inject configured proxy
+  variables - B22-A4 pins its configuration). (4) The README row's breakage count is sixteen, not fourteen. Computation suites 168
+  green. The lead's benign probes for B22-A3 (ngspice-46, `ngspice_con -b`, ngspice's own `echo` only): p23 a `.spiceinit` in the run
+  directory RUNS without `-n` and does not with `-n` (CONFIRMED); p24 `.options seed=1` is accepted with no error; p25 the profile's
+  exact environment (PATH = the bin directory, `SystemRoot`, `TEMP`/`TMP` = the run directory, `LC_ALL=C`, `TZ=UTC`, no
+  HOME/USERPROFILE) starts the binary and simulates; p26 under it `spinit` loads (`num_threads` = 8).
