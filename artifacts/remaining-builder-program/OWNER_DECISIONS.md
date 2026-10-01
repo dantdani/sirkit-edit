@@ -1643,3 +1643,29 @@ Amendments to existing entries:
   unchanged.
 - **The owner may choose otherwise:** re-scope the B11/B20 tripwires to name orchestration explicitly (a reviewed pin move of two chapters'
   suites).
+
+## OD-151 — SEC-1: the SPICE deck screen refuses a non-banner `*#` title, as applied (SEC-1, 2026-10-01)
+
+- **Question:** keep or drop the refusal of a deck whose title - line 1, built as `<project name> — <test name>`, or the text of a
+  `.title` line in a directive or model text - is a `*#` line other than a pure banner (`*#` then only `#`, `=`, `-` and whitespace)?
+- **Default applied:** kept, as fail-closed defence in depth. The lead's probes CONFIRM that ngspice-46 in batch mode does NOT run a
+  `*#` title (p13: a `*#` line as line 1 is printed as the circuit title; p11/p12: a `.title *# ...` line, on line 1 or after it,
+  likewise), so the refusal is stricter than the ground; it would matter only for another ngspice build or mode. Its cost: a project
+  whose name starts `*#` (for example `*#2 buck stage`), which main compiled, is refused with `SPICE_DECK_UNSAFE` in compile, the
+  preview, the runs preflight and the worker.
+- **Evidence:** `artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md` sections 1b (probes p0-p13), 4 and 7; `netlist.ts`
+  `assertTitleSafe`; the refused-title rows of `sec-1-deck-injection.test.ts`.
+- **The owner may choose otherwise:** drop it, restoring main's behaviour (the probes support this); or keep it (recommended for a
+  corrective security branch: the input is unusual and the error names the rule). Owner confirmation pending.
+
+## OD-152 — SEC-1: the stated deviations from its task text, as applied (SEC-1, 2026-10-01)
+
+- **Question:** the SEC-1 task asked to refuse "every other control character" and the command words outside the control block.
+- **Default applied:** the deck screen admits a TAB in single-line fields (SPICE whitespace, never a line) and, in model text, a form
+  feed (read both as whitespace and as a line break, so neither reading hides a line) and other control characters that are not line
+  breaks, as main did; it keeps the `.shell/.cd/...` dotted-directive refusal as defence in depth though the probes neither require nor
+  contradict it; every line-break form, NUL and a backtick stay refused everywhere, and a command word is accepted only where the
+  probes show it is read as a card (an element named by its first letter, never run).
+- **Evidence:** the SEC-1 page sections 1b, 4 and 8; `sec-1-deck-injection.test.ts`.
+- **The owner may choose otherwise:** refuse a TAB or the other non-line-break controls (refusing whole run plans pasted from
+  tab-formatted netlists), or drop the dotted-directive refusal. Owner confirmation pending.

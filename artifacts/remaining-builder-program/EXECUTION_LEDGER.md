@@ -3724,3 +3724,96 @@ _(discovery, reproduction and results appended below as they are observed)_
   discovery.md section 7's closeout bullet scoped "D21-1..31" while the numbering runs to D21-48 - the section-10 block records it; the
   B21-D3 title's "deterministically resolved" stands as written in the ledger heading, the README row and the D3 page, and the verdict
   states the deviation (scenario 17's disagreement is escalated, never resolved to a winner).
+
+### B21 — merged (2026-10-01 local; lead)
+
+- PR #11 (`chapter/b21-specialist-orchestration` -> `main`) merged normally as `e109d76` at 03:46 UTC after all four checks passed on
+  `b11ef18` (benchmark-core, database-delivery, prompt-to-gerber, page-browser-e2e 17m56s with both Playwright configs;
+  benchmark-nightly skipped). No auto-merge, no force-push. Verdict PARTIAL (`artifacts/ai-control-plane-b21/final-verdict.md`).
+
+### SEC-1 - the SPICE Studio deck injection (corrective security branch `fix/spice-deck-injection` from main `6fd5a7b`; closes D22-3 and the ngspice half of D22-5) (2026-10-01 local; three rounds of the security increment workflow + lead)
+
+Test-first, three rounds. ROUND 1 (`fe147c9`): `app/lib/spice/__tests__/sec-1-deck-injection.test.ts` ran 227 red / 17 green against
+`6fd5a7b`. Every one of the 79 fields the Studio compiler writes from caller or model data admitted all 12 hostile payloads (LF, CR, CRLF,
+U+0085, U+2028, U+2029, VT, FF, NUL, ESC, DEL, a backtick), 70 as a live second `.control` block with `shell`; output expressions carried
+`;` and `>` onto the compiler's own `write` line; model text reached the deck with a `*#` line or, through the model screen's `??`/`||`
+differential, a whole control block; and through `POST /api/spice/runs` (spawn and files faked) a hostile source value answered 202, the
+deck was written with the injected block and ngspice was spawned; the smoke test and the `-v` probe passed no environment. Fix: one
+single-line screen `assertDeckText` (/api/simulate's B19-D `unsafe()` rule extended to U+0085, the C1 controls, U+2028 and U+2029; a TAB
+passes as SPICE whitespace) applied raw to every field at the IR->deck boundary; output expressions allowlisted; the writer pushing one line
+per string; `assertSafeDirective` one line and closed; the `.options` screen space/tab only; a final deck screen `assertCompiledDeckSafe`
+run in the compiler, before the worker writes `executed.cir` and before the smoke test writes its deck; `startRunPlan` compiling one deck
+per test and analysis and screening each run point, so the route answers 422 before any job; and the smoke test and `-v` probe passing the
+worker's env allowlist, pinned literally across the three ngspice spawners. A round-1 adversarial review confirmed 21 findings, each
+reproduced red or proved by a source breakage, then fixed. Round 1 left one regression: the final screen's command-word rule refused
+legitimate vendor model text whose element cards are named like ngspice command words (a capacitor `Cd`, an inductor `Load`, switches
+`Set`/`Source`, a diode `Define`). ROUND 2 made no code change (a safety stop during its probe step). ROUND 3: the lead ran benign
+ngspice-46 probes (section 1b of the page) establishing that ngspice executes a command ONLY inside a `.control` block (including an
+included one), from a `*#` line, and in an `*ng_script` deck; a command word anywhere else is read as an element card and never runs.
+Grounded on that, round 3 removed the command-word rule (and its `cards` exemption), so vendor element cards compile, preview, smoke-test
+and run again while every executing construct stays refused. Its adversarial review confirmed 15 findings, each reproduced red or proved by
+a source breakage, then fixed: a `.title` line could set a non-banner `*#` title that the line-1 rule refused (now one title rule for line 1
+and every `.title` line, also read as ngspice's prefix match `.titlex`); the `*#`-title refusal round 3 had added was recorded as CONFIRMED
+by probe p3 although no probe put a `*#` line on the title - it is now recorded as INFERRED defence in depth and a stated deviation (a
+project name starting `*#`, which main compiled, is refused; owner decision proposed); the smoke test's executed-deck include/lib refusal,
+the compile preview's `*#` and title refusals and the title's form-feed pieces gained red-on-breakage pins; and the page's stale round-1
+statements, citations and counts were corrected, with page cases that check them. THE LEAD'S CLOSE: the round-3 check found line 1 (the
+title) screened only as written; the lead's probe p10 CONFIRMED that a first line `.title *ng_script` runs the deck as a script (in which,
+with command-word cards accepted, a vendor card line would run), so line 1 is now read through a `.title` prefix too, test-first (two cases
+red, then green); and the lead's probes p11-p13 CONFIRMED that a `*#` title runs nothing, so the `*#`-title refusal is kept as defence in
+depth beyond the ground. Green 268/268 (red 44 on `fe147c9` and 229 on `6fd5a7b`, re-run by the lead after the line-1 `.title` fix); the
+SPICE and importing suites (10 files, 1 skipped opt-in, 348 passed; round 1's broader SPICE-importing set, 8 files, 195 passed), the import
+gates and census (16 files, 194 passed; 165 / 162 / 3 / 0, no route added), tsc, eslint and the three route-source generators with zero
+drift, all on the final tree; CI admits the suite as an explicit prompt-to-gerber entry, pinned by `b19-e-ci-job-scope`. Not changed:
+kicad-cli, FreeRouting, the SPICE AI `"automatic"` pre-selection (its strings are screened at the compiler; OD-150 open), HOME/USERPROFILE
+in the allowlist (B22-A3), the rest of D22-4 (XSPICE file parameters in model text, a recorded residual), routes, authentication, CSRF,
+roles; no dependency. Stated deviations from the task text: a TAB, and in model text a form feed, pass; the `.shell/.cd/...`
+dotted-directive refusal is kept as defence in depth (no legitimate card is a dotted directive; the ground is silent on it); and a
+non-banner `*#` title is refused as defence in depth beyond the ground (p11-p13; section 4). The behaviour the screen is cut to is CONFIRMED
+by the lead's probes; end-to-end exploitation through a real ngspice stays INFERRED (never run). Page:
+`artifacts/ai-control-plane-b22/sec-1-spice-deck-injection.md`.
+- Commits on `fix/spice-deck-injection`: `fe147c9` (round 1), `aafa2a8` (round 3 and the lead's close: line 1 read through a `.title`
+  prefix after the lead's probe p10; probes p11-p13 recorded), `1ff9d81` (main `e109d76` merged in; one conflict in
+  `b19-e-ci-job-scope.test.ts`, both cases kept), `0d38504` (CI on `1ff9d81` failed prompt-to-gerber with two B21 page pins that SEC-1's
+  changes moved - `b21-a-page` case 4, the guard's `it(` count 7 -> 8; `b21-f-page` case 6, three workflow citations +1 - re-pinned in
+  place with dated notes; the orchestration folder 51 files / 739 green). The lead's merged-tree gates had not run the B21 page suites;
+  that is the lesson recorded.
+- PR #12 (`fix/spice-deck-injection` -> `main`) merged normally as `d0d2ec8` at 09:15 UTC after every check passed on `0d38504`. Owner decisions
+  OD-151 (the `*#`-title refusal) and OD-152 (the other stated deviations) recorded with the B22 discovery below.
+
+### B22 — chapter start and discovery (2026-09-30/10-01 local; read-only workflows + lead; this commit)
+
+- Read-only discovery over the tree at `b11ef18` (= `e109d76` after PR #11): seven parallel readers (the simulation code and the
+  blocked runner; every process-execution surface; the tool registry and how a named computation would be exposed; results as
+  evidence, the import path and long-running jobs; the host and deployment platform; prior records, obligations and tests; external
+  references) returned 70 gap candidates, every claim with a file:line or a URL; one synthesizer re-read every defect-bearing fact,
+  resolved the reader disagreements (section 0) and merged the gaps into D22-1..24. Readers 5 and 7 ran read-only host probes
+  (`docker version`, `docker info`, `where ngspice`, `wsl -l -v`): no container engine was reachable.
+- The discovery's D22-3 (high: SPICE Studio deck injection reaching a live second `.control` block) was confirmed by the lead in the
+  code and fixed first on the corrective branch SEC-1 (above), OD-137's alternative. After SEC-1 a second read-only workflow
+  (`b22-discovery-verify`, eight verifiers and a synthesizer) re-read every citation of D22-1..24 on the SEC-1 tree `1ff9d81`: 0
+  refuted, D22-3 closed by SEC-1, D22-4 and D22-5 partly closed, five defects standing with moved citations, sixteen standing
+  unchanged; 27 citations moved, changed or wrong (one wrong: the installed spinit sets `num_threads=8`, not 4). Section 9 records
+  the verdicts, every moved citation, what SEC-1 closed and what stays open, the consequences for the plan and 33 corrections; the
+  false statements are corrected in place with dated markers, the rest is carried to the increment that closes each defect.
+- What exists: a CD-10 authoritative runner that throws behind a 501 (no validated sandbox), and three live legacy ngspice paths
+  (`/api/simulate`, the Studio worker, the smoke test) plus FreeRouting and kicad-cli as plain host child processes with no memory,
+  CPU, process, file or network limit; no container definition, image digest or CI container; ngspice resolved from `NGSPICE_BIN` or
+  PATH with no digest; a Studio job store that very probably drops every completed run's results (D22-7); no named computation and no
+  registry vocabulary for one.
+- Defects D22-1..24: no measurable isolation boundary and none qualifiable on this host (D22-1); no immutable runtime profile (D22-2);
+  deck injection (D22-3, closed by SEC-1); the model screen's file reads and differential (D22-4); inherited environments (D22-5,
+  ngspice half closed by SEC-1); CD-10 routes trust a body-supplied provider, environment and manifest (D22-6); dropped results
+  (D22-7); unbounded output (D22-8); direct-child kill and unbounded concurrency (D22-9); lossy parsers (D22-10); uncontrolled locale,
+  randomness and threads (D22-11); no durable digest-bound evidence (D22-12, D22-13); "sandbox"/"authoritative" wording (D22-14); no
+  named computation (D22-15); pins and titles (D22-16); in-process engines cannot be stopped (D22-17); the process census (D22-18);
+  CD-10 has no execution path (D22-19); no adversarial process test (D22-20); browser-supplied evidence (D22-21); the reserved-OD
+  design not in the repository (D22-22); no live-blocker row (D22-23); CI admission (D22-24).
+- Owner decisions drafted OD-134..OD-150 with safe defaults (section 6), the verdict default being that production authority stays
+  BLOCKED (no qualified OCI boundary on this host; a diagnostic-only runner); OD-137 answered for D22-3 and D22-5's ngspice half by
+  SEC-1; OD-151/OD-152 are SEC-1's; OD-83..86 and OD-88 stay reserved. Plan (section 7, narrowed by section 9.4): A1 the security
+  corrections SEC-1 left (D22-4, kicad-cli's env, output caps, OD-150), A2 threat model, profiles and the isolation verdict, A3 the
+  diagnostic-only local runner, B named computations, C simulation authority, D adversarial tests, closeout.
+- Records: `artifacts/ai-control-plane-b22/{discovery.md, README.md}` (the SEC-1 page is already there); `OWNER_DECISIONS.md` OD-151,
+  OD-152; `PROGRAM_STATE.json` -> B22 (base `d0d2ec8`, last green `0d38504`); draft PR after this commit so every increment gets CI. Gates for
+  this commit: documents only - no suite, generator or production file changed.
