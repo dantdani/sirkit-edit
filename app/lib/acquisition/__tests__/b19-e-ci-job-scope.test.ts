@@ -206,6 +206,14 @@ describe("[B19-E E2 review] CI job scope", () => {
     expect([...explicit, ...byDirectory].filter(startsPostgres)).toEqual([]);
   });
 
+  it("[SEC-1] the SPICE deck-injection suite runs in prompt-to-gerber as an explicit entry (app/lib/spice is no directory filter) and starts no PGlite", () => {
+    const file = "app/lib/spice/__tests__/sec-1-deck-injection.test.ts";
+    const filters = jobFilters("prompt-to-gerber");
+    expect(filters).toContain(file);
+    expect(filters.some((filter) => filter !== file && file.includes(filter))).toBe(false);
+    expect(startsPostgres(file)).toBe(false);
+  });
+
   it("no explicit test file in prompt-to-gerber is already selected by one of its directory filters", () => {
     const filters = jobFilters("prompt-to-gerber");
     const redundant = filters.filter((filter) => /\.test\.tsx?$/.test(filter) && filters.some((other) => other !== filter && filter.includes(other)));

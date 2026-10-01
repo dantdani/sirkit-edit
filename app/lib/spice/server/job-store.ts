@@ -19,6 +19,9 @@
  */
 
 import { createId, nowIso } from "../identity";
+import { compileCanonicalIr, type CompileIrResult } from "../ir";
+import { assertModelSafeForExecution } from "../models";
+import { assertRunPointSafe, compileNgspiceNetlist, SpiceDeckSafetyError } from "../netlist";
 import { estimateRunPlan } from "../run-plan";
 import type { RunBatchRecord, RunEvent, RunPoint, RunRecord, RunStatus, SimulationPartSnapshot, SimulationProject } from "../types";
 import { executeRunPoint } from "./worker";
@@ -176,6 +179,7 @@ export function startRunPlan(input: {
   const maxRuns = input.maxRuns ?? 500;
   if (estimate.totalRuns === 0) throw new Error("Run plan expands to zero runs");
   if (estimate.totalRuns > maxRuns) throw new Error(`Run plan expands to ${estimate.totalRuns} runs; API limit is ${maxRuns}`);
+  assertRunPlanDecksSafe(input.project, estimate.runPoints, input.parts ?? []); // [SEC-1] before any job exists
   const plan = input.project.runPlans.find((candidate) => candidate.id === input.runPlanId)!;
   const batchId = createId("batch");
   const runIds: string[] = [];
@@ -304,4 +308,43 @@ export function __resetJobStoreForTests(): void {
   state.jobs.clear();
   state.batches.clear();
   state.listeners.clear();
+}
+
+/**
+ * [SEC-1] Refuse a run plan whose deck would carry caller or model text as a live ngspice line BEFORE any job exists, so
+ * POST /api/spice/runs answers a closed 4xx and no deck is written or run. The deck is compiled exactly as the worker
+ * compiles it, and only the deck-safety refusal is raised: a test whose model the existing model screen refuses is skipped
+ * (the worker refuses it first, before any deck, with that screen's message), and every other compile error stays the
+ * per-run failure the worker reports, as before. [SEC-1 review] One deck per test and analysis: its run points differ only
+ * in their label, variable values and temperature, screened per point by `assertRunPointSafe`, so a large plan never holds
+ * the request for one compile per point; the worker still screens each point's own deck before writing it.
+ */
+function assertRunPlanDecksSafe(project: SimulationProject, runPoints: RunPoint[], parts: SimulationPartSnapshot[]): void {
+  const compiled = new Map<string, CompileIrResult | null>();
+  const screened = new Set<string>();
+  for (const point of runPoints) {
+    if (!compiled.has(point.testId)) compiled.set(point.testId, screenableIr(project, point.testId, parts));
+    const entry = compiled.get(point.testId);
+    if (!entry) continue;
+    assertRunPointSafe(point);
+    const key = JSON.stringify([point.testId, point.analysisId]);
+    if (screened.has(key)) continue;
+    screened.add(key);
+    try {
+      compileNgspiceNetlist(entry.ir, { analysisId: point.analysisId, runPoint: point, rawOutputPath: "result.raw", pinNodes: entry.pointNodes });
+    } catch (error) {
+      if (error instanceof SpiceDeckSafetyError) throw error;
+    }
+  }
+}
+
+/** The IR the worker would compile for a test, or null when the worker refuses it before any deck is written. */
+function screenableIr(project: SimulationProject, testId: string, parts: SimulationPartSnapshot[]): CompileIrResult | null {
+  try {
+    const compiled = compileCanonicalIr({ project, testId, parts });
+    for (const model of compiled.ir.models) assertModelSafeForExecution(model);
+    return compiled;
+  } catch {
+    return null;
+  }
 }

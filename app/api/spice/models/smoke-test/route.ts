@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { diagnoseNgspiceLog } from "@/app/lib/spice/diagnostics";
 import { createId, nowIso } from "@/app/lib/spice/identity";
 import { assertModelSafeForExecution } from "@/app/lib/spice/models";
+import { assertCompiledDeckSafe, assertDeckText } from "@/app/lib/spice/netlist";
 import { NGSPICE_EXECUTABLE } from "@/app/lib/spice/server/worker";
 import type { ModelAsset } from "@/app/lib/spice/types";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
@@ -55,7 +56,7 @@ function fixture(model: ModelAsset): string {
 
 async function execute(path: string, cwd: string): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(NGSPICE_EXECUTABLE, ["-b", path], { cwd, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(NGSPICE_EXECUTABLE, ["-b", path], { cwd, env: safeEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); // [SEC-1] D22-5
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -82,7 +83,7 @@ export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
   let directory: string | null = null;
   try {
     assertModelSafeForExecution(model);
-    const deck = fixture(model);
+    const deck = screenedSmokeDeck(model); // [SEC-1] before any file or process
     directory = await mkdtemp(join(tmpdir(), "sirkit-model-smoke-"));
     const path = join(directory, "smoke.cir");
     await writeFile(path, deck, "utf8");
@@ -106,3 +107,22 @@ export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
     if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
   });
+
+/**
+ * [SEC-1] The smoke deck carries the caller's subcircuit name and model text: the name is one line (the shared screen) and
+ * the whole deck passes the final deck screen with no control block at all. A Windows model file's CRLF is written as LF
+ * (ngspice reads both as one break), so it still passes and [SEC-1 review] the deck written is the deck screened, byte for
+ * byte; a lone CR is still refused.
+ */
+function screenedSmokeDeck(model: ModelAsset): string {
+  if (model.subcircuitName !== undefined) assertDeckText(model.subcircuitName, "the subcircuit name");
+  return assertCompiledDeckSafe(fixture(model).replace(/\r\n/g, "\n"), { controlBlock: false, executed: true });
+}
+
+/** [SEC-1] D22-5: the worker's exact allowlist (as /api/simulate), never the whole inherited server environment. */
+function safeEnvironment(): NodeJS.ProcessEnv {
+  const allowed = ["PATH", "Path", "PATHEXT", "SystemRoot", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE", "LD_LIBRARY_PATH"];
+  const env: NodeJS.ProcessEnv = { NODE_ENV: process.env.NODE_ENV ?? "production" };
+  for (const key of allowed) if (process.env[key] !== undefined) env[key] = process.env[key];
+  return env;
+}
