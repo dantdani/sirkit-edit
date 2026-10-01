@@ -5,7 +5,7 @@ import JSZip from "jszip";
 import { getRun } from "@/app/lib/spice/server/job-store";
 import { authenticatedRoute } from "@/app/lib/auth/route-handlers";
 import { runNotFound, spiceRunScopeFromContext } from "../../_scope";
-
+import { DIAGNOSTIC_OUTPUT_MAX_BYTES, OUTPUT_TRUNCATION_MARKER } from "@/app/lib/computation/output-bounds"; // [B22-A1 review] regressions-4: the README states the logs' bound
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export const GET = authenticatedRoute({ querySelector: true, routeParams: ["id"]
   zip.file("logs/stdout.log", run.stdout);
   zip.file("logs/stderr.log", run.stderr);
   zip.file("diagnostics.json", JSON.stringify(run.diagnostics, null, 2));
-  zip.file("README.txt", `Sirkit SPICE Studio reproducibility bundle\n\nRun: ${run.id}\nManifest: ${run.manifest.id}\nSimulator: ${run.manifest.simulator.version}\nNetlist SHA-256: ${run.manifest.netlistChecksum}\n\nThe executed netlist, source map, logs, measurements, and raw vectors are preserved. Re-run with the same ngspice version and compare scalar results within the tolerance defined by your test suite.\n`);
+  zip.file("README.txt", `Sirkit SPICE Studio reproducibility bundle\n\nRun: ${run.id}\nManifest: ${run.manifest.id}\nSimulator: ${run.manifest.simulator.version}\nNetlist SHA-256: ${run.manifest.netlistChecksum}\n\nThe executed netlist, source map, measurements, and raw vectors are preserved. The logs are the run record's, each bounded to its last ${DIAGNOSTIC_OUTPUT_MAX_BYTES / 1024} KiB; a cut log opens with "${OUTPUT_TRUNCATION_MARKER.trim()}". Re-run with the same ngspice version and compare scalar results within the tolerance defined by your test suite.\n`); // [B22-A1 review] regressions-4: the logs are no longer said to be preserved whole (the worker bounds what a record carries, D22-4)
   if (run.artifactId) {
     const root = resolve(join(tmpdir(), "sirkit-spice"));
     const artifact = resolve(run.artifactId);

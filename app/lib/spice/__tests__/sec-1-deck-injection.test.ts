@@ -577,15 +577,15 @@ describe("[SEC-1] model text is multi-line by nature: the final deck screen hold
   // [SEC-1 round 3] Only the constructs the probe table shows EXECUTE are pinned refused here (a second control block, a `*#`
   // line, an include/lib the compiler did not write). A bare command-word line is no longer among them — it is a card (see
   // the round-3 describe below), so the command-word array that used to live here moved to the accepted cases.
-  it.each<[string, (model: ModelAsset) => void]>([
-    ["an empty transformedContent over a hostile originalContent (the screen reads one, the deck emits the other)", (model: ModelAsset) => { model.originalContent = hostile([".control", `shell ${MARK}`, ".endc"]); model.transformedContent = ""; }],
-    ["a '*#' line (ngspice runs it as a control command)", (model: ModelAsset) => { model.originalContent = hostile([`*# shell ${MARK}`]); }],
-    ["a relative .include with no recorded dependency", (model: ModelAsset) => { model.originalContent = hostile([`.include ../../${MARK}.lib`]); }],
-    ["a .lib read", (model: ModelAsset) => { model.originalContent = hostile([`.lib /${MARK}.lib tt`]); }],
-  ])("%s: passes the model screen, and the executed deck is refused", (_label, mutate) => {
+  it.each<[string, (model: ModelAsset) => void, "admits" | "refuses"]>([ // [B22-A1, 2026-10-01] reviewed pin move: the model screen now reads exactly the text the deck emits and refuses a file read outside the run directory (D22-4), so it refuses three of these four (was "the existing model screen admits it" for all four); the case's point is unchanged - compileWith never runs the model screen, so the final deck screen refuses each executed deck on its own
+    ["an empty transformedContent over a hostile originalContent (the screen reads one, the deck emits the other)", (model: ModelAsset) => { model.originalContent = hostile([".control", `shell ${MARK}`, ".endc"]); model.transformedContent = ""; }, "refuses"],
+    ["a '*#' line (ngspice runs it as a control command)", (model: ModelAsset) => { model.originalContent = hostile([`*# shell ${MARK}`]); }, "admits"],
+    ["a relative .include with no recorded dependency", (model: ModelAsset) => { model.originalContent = hostile([`.include ../../${MARK}.lib`]); }, "refuses"],
+    ["a .lib read", (model: ModelAsset) => { model.originalContent = hostile([`.lib /${MARK}.lib tt`]); }, "refuses"],
+  ])("%s: the executed deck is refused by the final screen on its own (the model screen %s it)", (_label, mutate, screen) => {
     const project = baseProject();
     mutate(model0(project));
-    expect(() => assertModelSafeForExecution(model0(project)), "the existing model screen admits it").not.toThrow();
+    expect(refusal(() => assertModelSafeForExecution(model0(project))) === "accepted" ? "admits" : "refuses", "the model screen (B22-A1)").toBe(screen);
     const outcome = outcomeOf(() => compileWith(project));
     expect(outcome, outcome).toBe("refused (closed)");
   });
@@ -812,6 +812,7 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
     ["an output expression with a command separator", (p: SimulationProject) => { t0(p).outputs = [{ id: "out-x", label: "X", expression: `v(VIN);shell ${MARK}`, enabled: true }]; }] as const,
     ["a model whose empty transformedContent hides a hostile originalContent", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, ".control", `shell ${MARK}`, ".endc"].join(NL); model0(p).transformedContent = ""; }] as const,
     ["a model text '*#' command line", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, `*# shell ${MARK}`].join(NL); }] as const,
+    ["a model with a recorded include dependency, on a plan whose source value carries LF", (p: SimulationProject) => { model0(p).dependencies = ["amp-extra.lib"]; design0(p).schematic.components[0]!.value = block(NL)("5"); }] as const, // [B22-A1, 2026-10-01] reviewed pin move from the 202 cases below, its input unchanged: the model screen judges include dependencies by the model text, never by the client's `dependencies` (D22-4), so it admits this model and the preflight refuses the plan's LF source value - 422 before any job (was 202, the worker's "unresolved include dependency"); a text include is refused 422 (closed) in b22-a1-model-screen
     ["a one-line .control directive", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = [".control"]; }] as const,
     ["[review] a net label carrying LF (an identity name)", (p: SimulationProject) => { design0(p).schematic.netLabels![0]!.name = block(NL)("VIN"); }] as const,
     // [SEC-1 review] the first run point is clean; the hostile value is on a later one
@@ -834,7 +835,6 @@ describe("[SEC-1] POST /api/spice/runs: a hostile run request is refused with a 
 
   it.each([
     ["a model the existing model screen refuses (a .control line in its text)", (p: SimulationProject) => { model0(p).originalContent = [SUBCKT, ".control", `shell ${MARK}`, ".endc"].join(NL); }, /contains forbidden \.control blocks/],
-    ["a model with a recorded include dependency, on a plan whose source value carries LF", (p: SimulationProject) => { model0(p).dependencies = ["amp-extra.lib"]; design0(p).schematic.components[0]!.value = block(NL)("5"); }, /unresolved include dependency/],
     ["a compile error that is no deck refusal (a directive without its period)", (p: SimulationProject) => { t0(p).analyses[0]!.advancedDirectives = ["save v(VIN)"]; }, /must start with a period/],
   ])("[review] %s: the preflight leaves it to the worker, which fails the run before any deck (202, the run's own message)", async (_label, mutate, message) => {
     const project = baseProject();
@@ -901,13 +901,13 @@ describe("[SEC-1] POST /api/spice/models/smoke-test: the explicit environment an
   // [SEC-1 round 3 review] tests-1: the model screen refuses only an ABSOLUTE `.include`/`.inc` and has no `.lib` rule, so the
   // smoke deck's final screen, run as an EXECUTED deck (smoke-test/route.ts), is the only guard against a file read (an included
   // control block RUNS, probe p7b); each request is refused before any file or process.
-  it.each([
+  it.each([ // [B22-A1, 2026-10-01] reviewed pin move: the model screen now refuses both first, closed (D22-4; was "the model screen admits it"); the outcome is unchanged, and the final screen's executed reading (the tests-1 breakage, `executed: false` at smoke-test/route.ts:119) stays pinned in b22-a1-model-screen with the model screen switched off
     ["a relative traversing .include", `.include ../../${MARK}.lib`],
     ["a .lib read", `.lib /${MARK}.lib tt`],
-  ])("[round 3 review] model text with %s (the model screen admits it) is refused 422 (closed) before any file or process", async (_label, line) => {
+  ])("[round 3 review] model text with %s (the model screen refuses it first since B22-A1) is refused 422 (closed) before any file or process", async (_label, line) => {
     const model = smokeModel();
     model.originalContent = [SUBCKT, line].join(NL);
-    expect(() => assertModelSafeForExecution(model), "the existing model screen admits it").not.toThrow();
+    expect(refusal(() => assertModelSafeForExecution(model)), "the model screen (B22-A1)").toBe("refused (closed)");
     const outcome = await smokeOutcome(model);
     expect(outcome, JSON.stringify(outcome)).toEqual({ status: 422, closedError: true, filesWritten: 0, ngspiceRuns: 0 });
   });

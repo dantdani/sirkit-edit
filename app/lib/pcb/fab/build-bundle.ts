@@ -6,7 +6,7 @@
 // our own pick-and-place + BOM CSVs → zip (jszip) with a README → cleanup.
 // Every failure is a typed exception the API route maps to an HTTP status.
 
-import { mkdtemp, readdir, readFile, rm, writeFile } from "fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import JSZip from "jszip";
@@ -22,7 +22,7 @@ import { emitPositionCsv } from "./emit-position";
 import { evaluatePcbFabricationReadiness } from "../readiness/evaluate";
 import { createManufacturingReleaseManifest, prepareManufacturingRelease } from "../readiness/release";
 import { sha256 } from "./native/stable";
-
+import { readBoundedFile, TOOL_OUTPUT_FILE_MAX_BYTES } from "@/app/lib/computation/output-bounds"; // [B22-A1] D22-8 (OD-148)
 const CLI_TIMEOUT_MS = 60_000; // per invocation (pinned)
 
 /** Test seam + env plumbing; production callers pass nothing. */
@@ -179,7 +179,7 @@ export async function buildFabBundle(
         );
       }
       const target = `${boardName}${entry.fileSuffix}`;
-      add(target, await readFile(join(gerberDir, found)));
+      add(target, await readKicadCliOutput(join(gerberDir, found), "gerber")); // [B22-A1] D22-8: bounded
       gerberFiles.push(target);
     }
 
@@ -205,7 +205,7 @@ export async function buildFabBundle(
 
     const drillFiles: string[] = [];
     for (const name of (await readdir(drillDir)).filter((f) => f.endsWith(".drl")).sort()) {
-      add(name, await readFile(join(drillDir, name)));
+      add(name, await readKicadCliOutput(join(drillDir, name), "drill")); // [B22-A1] D22-8: bounded
       drillFiles.push(name);
     }
     if (drillFiles.length === 0) {
@@ -291,4 +291,18 @@ export async function buildFabBundle(
   } finally {
     await rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/**
+ * [B22-A1] D22-8 (OD-148): a file kicad-cli wrote, read through the bounded reader. One over `TOOL_OUTPUT_FILE_MAX_BYTES` is
+ * refused unread with a closed error (it names the step and the bound, never the content); an unreadable one fails with its
+ * own file-system error, as the unbounded read did.
+ */
+async function readKicadCliOutput(path: string, step: "gerber" | "drill"): Promise<Buffer> {
+  const read = await readBoundedFile(path);
+  if (read.ok) return read.bytes;
+  if (read.reason === "over-limit") {
+    throw new KicadCliError("cli-failed", `kicad-cli wrote a ${step} file over the ${TOOL_OUTPUT_FILE_MAX_BYTES}-byte bound; it was not read`);
+  }
+  throw read.error;
 }

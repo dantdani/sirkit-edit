@@ -312,7 +312,7 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
     const badExt = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "evil.exe", content: "x" })));
     expect(badExt.status).toBe(422);
     expect(String((await payload(badExt)).error)).toContain("Unsupported model file extension");
-    const nul = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content: "a b" })));
+    const nul = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content: `a${String.fromCharCode(0)}b` }))); // [B22-A1] the same NUL, built at run time (the file held a raw NUL byte, which a staged file may not carry)
     expect(nul.status).toBe(422);
     const content = ".model DGOOD D(IS=1e-14)\n";
     const ok = await importPost(post("/api/spice/models/import", JSON.stringify({ fileName: "m.lib", content })));
@@ -336,8 +336,7 @@ describe("B16.0.23 §D — model import and smoke testing", () => {
   });
   it("smoke-test: unresolved include dependencies fail closed before any spawn", async () => {
     authed("editor");
-    const model = modelBody();
-    (model as { dependencies: unknown[] }).dependencies = [{ fileName: "ext.lib" }];
+    const model = modelBody(".model DTEST D(IS=1e-14)\n.include ext.lib\n"); // [B22-A1, 2026-10-01] reviewed pin move: the model screen recomputes the dependencies from the model text and never takes them from the client (D22-4), so the dependency is now an include in the text (was a client `dependencies` entry the text did not carry, which no longer refuses); the refusal, its message and the zero spawns are unchanged
     const res = await smokePost(post("/api/spice/models/smoke-test", JSON.stringify({ model })));
     expect(res.status).toBe(422);
     expect(String((await payload(res)).error)).toContain("unresolved include dependency");
@@ -625,7 +624,7 @@ describe("B16.0.23 §G — the AI studio provider boundary", () => {
     const res = await aiPost(post("/api/spice/ai", JSON.stringify({ instruction: "run it", project, testId: project.tests[0].id })));
     expect(res.status).toBe(200);
     const proposal = (await payload(res)).proposal as { operations: Array<{ approval: string; operation: { op: string } }> };
-    expect(proposal.operations).toEqual([{ approval: "automatic", operation: { op: "request-run", runPlanId: project.runPlans[0].id } }]);
+    expect(proposal.operations).toEqual([{ approval: "review", operation: { op: "request-run", runPlanId: project.runPlans[0].id } }]); // [B22-A1, 2026-10-01] reviewed pin move (OD-150): the run request is "review" - the studio never pre-selects it, a human selects it before Apply (was "automatic")
     expect(getRuns(SCOPE)).toEqual([]); // proposal-only: nothing was created or run
   });
 });

@@ -1669,3 +1669,34 @@ Amendments to existing entries:
 - **Evidence:** the SEC-1 page sections 1b, 4 and 8; `sec-1-deck-injection.test.ts`.
 - **The owner may choose otherwise:** refuse a TAB or the other non-line-break controls (refusing whole run plans pasted from
   tab-formatted netlists), or drop the dotted-directive refusal. Owner confirmation pending.
+
+## OD-146 — CI admission for B22 suites, as applied (B22-A1, 2026-10-01)
+
+- **Question:** how do the B22 suites enter CI?
+- **Default applied:** the first `b22-` suites (`app/lib/computation/__tests__/b22-a1-*.test.ts`, six suites) ride ONE directory filter, `app/lib/computation/__tests__`, in the `prompt-to-gerber` job, and `b22-` joined `CHAPTERS` in `app/lib/acquisition/__tests__/b19-e-ci-job-scope.test.ts` in the same change; no `it(` was added to the guard (B21's `b21-a-page` case 4 pin of 8 blocks stands; a run prints 8 + 4 = 12 tests); no `b22-` suite starts PGlite; live suites stay opt-in (`SIRKIT_B22_LIVE_RUNNER=1` when one exists) and never run in CI - A1 has none.
+- **Evidence:** `artifacts/ai-control-plane-b22/deck-and-secret-corrections.md` section 6 (the guard red with `b22-` and no filter, then green); the workflow line `:226`; B21's matrix citations C49/C93/C94 re-pinned +1.
+- **The owner may choose otherwise:** explicit per-suite entries (each then exempt from a directory filter by the guard's redundancy rule). Owner confirmation pending.
+
+## OD-148 — kicad-cli and FreeRouting in B22, as applied (B22-A1, 2026-10-01)
+
+- **Question:** what does B22 do about kicad-cli's and FreeRouting's secret inheritance and unbounded output?
+- **Default applied:** kicad-cli spawns with an explicit environment allowlist (`KICAD_CLI_ENV_KEYS`: the search path, the Windows system root and drive, temp directories, the user profile, application-data and home directories, the locale, `LD_LIBRARY_PATH`, the XDG configuration, cache and data directories and `KICAD_CONFIG_HOME`, plus `NODE_ENV` as the FreeRouting precedent) and `windowsHide: true`; both runners hold each output stream to at most twice the one 64 KiB diagnostic bound in memory, counted in bytes, and return it within the bound with a truncation marker, FreeRouting's stderr keeping up to half the bound beside its stdout so an exception survives; the files Sirkit reads back - FreeRouting's `.ses`, kicad-cli's gerber and drill files - go through a bounded reader that refuses a file over 64 MiB unread with a closed error. Their full profiles (digest pins at run time) are B22-A2's, diagnostic-only; their containers are LB-3/LB-10's.
+- **Evidence:** the page sections 3 and 4; `b22-a1-secret-env`, `b22-a1-tool-output-bounds` (with the review's fake-handle and collector cases and their deliberate breakages); the existing runner, bundle and route suites unchanged and green.
+- **Limits recorded:** the allowlist's adequacy is INFERRED (kicad-cli was never run here; the opt-in kicad-cli oracle is the live check); the processes may still write files of any size (no file-size limit on any spawn).
+- **The owner may choose otherwise:** a narrower allowlist after a live oracle run, or different bounds. Owner confirmation pending.
+
+## OD-150 — SPICE AI approvals, the approval half, as applied (B22-A1, 2026-10-01)
+
+- **Question:** which SPICE AI operations may arrive pre-selected?
+- **Default applied:** every operation whose strings reach an ngspice deck (a test's name, overlay elements, variables, analyses, sweeps, corners, model bindings, solver options) and the run request are "review" and never pre-selected - a human selects each before Apply; a measurement and a specification (never written to a deck) stay "automatic"; a design patch stays "explicit". One table (`app/lib/spice/ai-approval.ts`) decides the route's labels and the studio's pre-selection, which also refuses a forged "automatic" on any other kind and a non-automatic level on an automatic kind. The evidence half (D22-21: evidence references resolve to server-held records or carry a "caller-supplied" label) is NOT applied; it stays with B22-C.
+- **Evidence:** the page section 5; `b22-a1-spice-ai-approval`; the reviewed pin move in `b16-0-23-tranche-parity.test.ts:627`.
+- **The owner may choose otherwise:** keep a measurement and a specification "review" too (nothing would then arrive selected). Owner confirmation pending.
+
+## OD-153 — B22-A1: the stated additions to its task text, as applied (B22-A1, 2026-10-01)
+
+- **Question:** the task named the forms the model screen refuses; B22-A1 refuses more, fail-closed.
+- **Default applied:** a one-token `.lib` line is refused (whether ngspice-46 reads its token as a file is UNKNOWN; no executed deck accepted any `.lib` line since SEC-1); a path must be a plain relative name, so a home (`~`) path, a variable, a Windows device name, a space and a quote are refused too (a quoted vendor data file name with a space is the cost); the executed-deck screen also refuses an XSPICE file parameter (an advanced directive can carry the `.model` card the model screen never reads) and reads the whole deck's cards as ngspice joins them, across model boundaries; the code models of the installed ngspice-46 that start a program or load a library (`d_process`, `d_cosim`) are refused whatever they name; a `.model` card is read token by token, so a file parameter must be followed by a plain relative name (a value spelled exactly `file` at a card's end is the cost); model text that opens with a `+` line is refused; every model-screen refusal of text SEC-1's final screen refused is closed, so the runs preflight still answers it 422 before any job, while the screen's own messages stay the worker's (202) as SEC-1 designed; the smoke deck reads the emitted model text; the reproducibility bundle's README states the logs' bound.
+- **[B22-A1 lead]** the code-model refusal reads `d_process`, `d_cosim` and `process_file` on ANY card, so a net, element or output
+  so named is refused too (the check's low issue, kept fail-closed); a `+` line opened by a non-ASCII character is joined to its card
+  as ngspice does (probes p14-p15).
+- **Evidence:** the page sections 0, 1, 2 and 12. Owner confirmation pending.

@@ -2,7 +2,7 @@
   "programVersion": "1.0.0",
   "runbook": "Sirkit_Remaining_Builder_Master_Runbook.md (prepared 2026-09-07)",
   "currentChapter": "B22",
-  "currentCheckpoint": "B22 discovery committed on chapter/b22-sandboxed-computation: D22-1..24 (re-verified on the SEC-1 tree: 0 refuted; D22-3 closed by SEC-1, D22-4 and D22-5 partly), OD-134..OD-150 drafted, OD-151/OD-152 recorded for SEC-1; plan A1 (what SEC-1 left), A2, A3, B, C, D, closeout; expected verdict: production runner stays BLOCKED (no qualified OCI boundary on this host), diagnostic-only runner",
+  "currentCheckpoint": "B22-A1 committed on chapter/b22-sandboxed-computation: the model screen reads the emitted text and XSPICE over joined cards (non-ASCII continuations included, probes p14-p22), kicad-cli's explicit env, output caps for kicad-cli and FreeRouting, SPICE AI approval levels, b22- in CI; next B22-A2 (threat model, runtime profiles, process census, isolation verdict)",
   "status": "in_progress",
   "baseSha": "d0d2ec8",
   "branch": "chapter/b22-sandboxed-computation",
@@ -15,7 +15,7 @@
     "bundled FreeRouting runtime is local-only; CI replays committed recordings",
     "real specialist disagreement / provider fallback / quota failure with live models: BLOCKED-LIVE-QUALIFICATION (LB-9)"
   ],
-  "nextAction": "B22-A1 on chapter/b22-sandboxed-computation: the security corrections SEC-1 left (D22-4's model screen, differential, client dependencies and XSPICE file parameters; kicad-cli's explicit env; output caps for kicad-cli and FreeRouting, OD-148; SPICE AI approval levels, OD-150), test-first; then A2, A3, B, C, D, closeout. Carried to the owner: OD-151, OD-152, OD-134..OD-150 defaults, and the B21 items.",
-  "updatedAt": "2026-10-01T05:20:00-04:00",
+  "nextAction": "B22-A2 (task scratchpad/b22/task-A2.md), then A3, B, C, D, closeout; then B23 (discovery draft ready in scratchpad/b23). Carried to the owner: OD-146, OD-148, OD-150, OD-151, OD-152, OD-153 and the B21 items.",
+  "updatedAt": "2026-10-01T09:00:00-04:00",
   "previousChapter": "B21 merged normally into main as e109d76 (PR #11, 2026-10-01) after green CI on b11ef18; verdict PARTIAL (live qualification BLOCKED under LB-9). SEC-1 (corrective security branch fix/spice-deck-injection; D22-3 and D22-5's ngspice half) merged normally as d0d2ec8 (PR #12) after green CI on 0d38504"
 }

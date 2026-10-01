@@ -31,7 +31,7 @@ import type {
   Specification,
   Sweep,
 } from "@/app/lib/spice/types";
-
+import { spiceAiApproval } from "@/app/lib/spice/ai-approval"; // [B22-A1] OD-150
 export const runtime = "nodejs";
 
 const MAX_ITERATIONS = 18;
@@ -66,9 +66,9 @@ function activeTest(project: SimulationProject, id: string) {
 }
 
 function approvalFor(operation: AiStudioOperation): ApprovalLevel {
-  if (operation.op === "assign-model" || operation.op === "configure-analysis" || operation.op === "configure-sweep" || operation.op === "configure-corners" || operation.op === "set-solver-profile") return "review";
-  if (operation.op === "propose-design-patch") return "explicit";
-  return "automatic";
+  // [B22-A1] OD-150: the one table (app/lib/spice/ai-approval.ts) - every deck-reaching operation and the run request are
+  // "review", never pre-selected; only a measurement or a specification (never in a deck) is "automatic"
+  return spiceAiApproval(operation);
 }
 
 function schematicDigest(project: SimulationProject, parts: SimulationPartSnapshot[]) {
@@ -203,7 +203,7 @@ export const POST = authenticatedJsonRoute<{ instruction?: string; project?: Sim
       } else if (tool.name === "set_design_variable") {
         const testId = string(raw, "test_id"); activeTest(project, testId);
         const operation: AiStudioOperation = { op: "set-variable", testId, variable: { id: createId("variable"), name: string(raw, "name"), value: string(raw, "value"), unit: string(raw, "unit", false), description: typeof raw.description === "string" ? raw.description : undefined, min: typeof raw.min === "string" ? raw.min : undefined, max: typeof raw.max === "string" ? raw.max : undefined, distribution: typeof raw.distribution === "object" && raw.distribution !== null ? raw.distribution as never : undefined, enabled: true } };
-        operations.push({ approval: raw.distribution ? "review" : "automatic", operation }); toolResult = { recorded: true };
+        operations.push({ approval: approvalFor(operation), operation }); toolResult = { recorded: true }; // [B22-A1] OD-150: "review" with or without a distribution
       } else if (tool.name === "configure_analysis") {
         const operation = analysisOperation(raw); activeTest(project, operation.testId); operations.push({ approval: approvalFor(operation), operation }); toolResult = { recorded: true, analysis_id: operation.analysis.id, approval: "review" };
       } else if (tool.name === "configure_sweep") {
@@ -225,7 +225,7 @@ export const POST = authenticatedJsonRoute<{ instruction?: string; project?: Sim
         const operation: AiStudioOperation = { op: "define-specification", testId, specification }; operations.push({ approval: approvalFor(operation), operation }); toolResult = { recorded: true, specification_id: specification.id };
       } else if (tool.name === "estimate_run_plan") toolResult = estimateRunPlan(project, string(raw, "run_plan_id"));
       else if (tool.name === "run_simulation") {
-        const runPlanId = string(raw, "run_plan_id"); estimateRunPlan(project, runPlanId); const operation: AiStudioOperation = { op: "request-run", runPlanId }; operations.push({ approval: "automatic", operation }); toolResult = { recorded: true, note: "Execution begins only after the user applies this proposal." };
+        const runPlanId = string(raw, "run_plan_id"); estimateRunPlan(project, runPlanId); const operation: AiStudioOperation = { op: "request-run", runPlanId }; operations.push({ approval: approvalFor(operation), operation }); toolResult = { recorded: true, note: "Execution begins only after the user applies this proposal." };
       } else if (tool.name === "read_results") {
         const run = runs.find((candidate) => candidate.id === string(raw, "run_id")); if (!run) throw new Error("Run was not found in supplied evidence set");
         const requested = Array.isArray(raw.signals) ? raw.signals.filter((item): item is string => typeof item === "string") : [];

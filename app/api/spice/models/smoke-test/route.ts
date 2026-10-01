@@ -5,11 +5,11 @@ import { join } from "node:path";
 import { diagnoseNgspiceLog } from "@/app/lib/spice/diagnostics";
 import { createId, nowIso } from "@/app/lib/spice/identity";
 import { assertModelSafeForExecution } from "@/app/lib/spice/models";
-import { assertCompiledDeckSafe, assertDeckText } from "@/app/lib/spice/netlist";
+import { assertCompiledDeckSafe, assertDeckText, emittedModelText } from "@/app/lib/spice/netlist";
 import { NGSPICE_EXECUTABLE } from "@/app/lib/spice/server/worker";
 import type { ModelAsset } from "@/app/lib/spice/types";
 import { authenticatedJsonRoute } from "@/app/lib/auth/route-handlers";
-
+import { boundDiagnosticText } from "@/app/lib/computation/output-bounds"; // [B22-A1] D22-4: the returned ngspice output is bounded
 export const runtime = "nodejs";
 
 /** [B16.0.2 §A/§D] a single model asset travels in the body. */
@@ -17,7 +17,7 @@ const MAX_BODY_BYTES = 2_000_000;
 const BODY_DEADLINE_MS = 15_000;
 
 function fixture(model: ModelAsset): string {
-  const content = model.transformedContent ?? model.originalContent;
+  const content = emittedModelText(model); // [B22-A1] D22-4: the run deck's model text, the text the model screen reads
   if (model.modelType === "subckt") {
     if (!model.subcircuitName || model.externalPins.length === 0) throw new Error("Subcircuit smoke test requires a name and external pins");
     const nodes = model.externalPins.sort((a, b) => a.position - b.position).map((_, index) => `n${index + 1}`);
@@ -100,7 +100,7 @@ export const POST = authenticatedJsonRoute<{ model?: ModelAsset }>(
     model.validationChecks = [...model.validationChecks.filter((candidate) => candidate.kind !== "smoke"), check];
     if (passed && ["unverified", "syntax-checked"].includes(model.validationStatus)) model.validationStatus = "smoke-tested";
     model.updatedAt = nowIso();
-    return Response.json({ ok: passed, model, check, stdout: result.stdout, stderr: result.stderr, diagnostics: passed ? [] : diagnoseNgspiceLog(log) }, { status: passed ? 200 : 422 });
+    return Response.json({ ok: passed, model, check, stdout: boundDiagnosticText(result.stdout), stderr: boundDiagnosticText(result.stderr), diagnostics: passed ? [] : diagnoseNgspiceLog(log) }, { status: passed ? 200 : 422 }); // [B22-A1] D22-4: bounded, the tail kept, the marker first
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : String(error) }, { status: 422 });
   } finally {

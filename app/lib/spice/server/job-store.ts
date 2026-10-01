@@ -338,13 +338,16 @@ function assertRunPlanDecksSafe(project: SimulationProject, runPoints: RunPoint[
   }
 }
 
-/** The IR the worker would compile for a test, or null when the worker refuses it before any deck is written. */
+/** The IR the worker would compile for a test, or null when the worker refuses it before any deck is written. [B22-A1] The model
+ *  screen's CLOSED refusals (a file read, an include, a blank transformedContent hiding a refused original: D22-4) are raised, so
+ *  the route answers 422 before any job, as SEC-1's final deck screen answered that text; its own messages stay the worker's. */
 function screenableIr(project: SimulationProject, testId: string, parts: SimulationPartSnapshot[]): CompileIrResult | null {
   try {
     const compiled = compileCanonicalIr({ project, testId, parts });
     for (const model of compiled.ir.models) assertModelSafeForExecution(model);
     return compiled;
-  } catch {
+  } catch (error) {
+    if (error instanceof SpiceDeckSafetyError) throw error;
     return null;
   }
 }

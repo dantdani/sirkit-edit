@@ -19,7 +19,7 @@ import type {
   SimulationProject,
 } from "../types";
 import { createRunManifest } from "./manifest";
-
+import { boundDiagnosticText, DIAGNOSTIC_EXCERPT_MAX_BYTES } from "@/app/lib/computation/output-bounds"; // [B22-A1] D22-4: what a run record carries is bounded
 export interface WorkerLimits {
   timeoutMs: number;
   maxOutputBytes: number;
@@ -183,21 +183,21 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
   const processResult = await runNgspice(netlistPath, artifactDir, input.signal, limits, (channel, chunk) => {
     const now = Date.now();
     if (now - lastLogEmit > 120) {
-      input.onEvent({ status: "running", progress: 45, message: "ngspice is solving", log: `[${channel}] ${chunk.slice(-1500)}` });
+      input.onEvent({ status: "running", progress: 45, message: "ngspice is solving", log: `[${channel}] ${boundDiagnosticText(chunk, DIAGNOSTIC_EXCERPT_MAX_BYTES)}` }); // [B22-A1] D22-4
       lastLogEmit = now;
     }
   });
   await writeFile(join(artifactDir, "stdout.log"), processResult.stdout, "utf8");
   await writeFile(join(artifactDir, "stderr.log"), processResult.stderr, "utf8");
   if (processResult.cancelled) {
-    return { status: "cancelled", stdout: processResult.stdout, stderr: processResult.stderr, diagnostics: diagnoseNgspiceLog("cancelled by user", netlist), manifest, netlist, artifactId: artifactDir };
+    return { status: "cancelled", stdout: boundDiagnosticText(processResult.stdout), stderr: boundDiagnosticText(processResult.stderr), diagnostics: diagnoseNgspiceLog("cancelled by user", netlist), manifest, netlist, artifactId: artifactDir }; // [B22-A1] D22-4
   }
   if (processResult.timedOut) {
-    return { status: "failed", error: `Simulation timed out after ${limits.timeoutMs} ms`, stdout: processResult.stdout, stderr: processResult.stderr, diagnostics: diagnoseNgspiceLog(`timeout\n${processResult.stderr}`, netlist), manifest, netlist, artifactId: artifactDir };
+    return { status: "failed", error: `Simulation timed out after ${limits.timeoutMs} ms`, stdout: boundDiagnosticText(processResult.stdout), stderr: boundDiagnosticText(processResult.stderr), diagnostics: diagnoseNgspiceLog(`timeout\n${processResult.stderr}`, netlist), manifest, netlist, artifactId: artifactDir };
   }
   if (processResult.code !== 0) {
     const log = `${processResult.stderr}\n${processResult.stdout}`;
-    return { status: "failed", error: processResult.stderr.slice(-3000) || `ngspice exited with code ${processResult.code}`, stdout: processResult.stdout, stderr: processResult.stderr, diagnostics: diagnoseNgspiceLog(log, netlist), manifest, netlist, artifactId: artifactDir };
+    return { status: "failed", error: boundDiagnosticText(processResult.stderr, DIAGNOSTIC_EXCERPT_MAX_BYTES) || `ngspice exited with code ${processResult.code}`, stdout: boundDiagnosticText(processResult.stdout), stderr: boundDiagnosticText(processResult.stderr), diagnostics: diagnoseNgspiceLog(log, netlist), manifest, netlist, artifactId: artifactDir }; // [B22-A1] D22-4
   }
   input.onEvent({ status: "post-processing", progress: 78, message: "Parsing waveforms and evaluating specifications" });
   let raw: string;
@@ -209,8 +209,8 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
       status: "failed",
       progress: 100,
       error: "ngspice exited without producing the requested waveform artifact",
-      stdout: processResult.stdout,
-      stderr: processResult.stderr,
+      stdout: boundDiagnosticText(processResult.stdout), // [B22-A1] D22-4
+      stderr: boundDiagnosticText(processResult.stderr),
       diagnostics: diagnoseNgspiceLog(log, netlist),
       manifest,
       netlist,
@@ -240,8 +240,8 @@ export async function executeRunPoint(input: ExecuteRunInput): Promise<Partial<R
       sourceRefs: [],
       suggestions: [],
     })),
-    stdout: processResult.stdout,
-    stderr: processResult.stderr,
+    stdout: boundDiagnosticText(processResult.stdout), // [B22-A1] D22-4
+    stderr: boundDiagnosticText(processResult.stderr),
     artifactId: artifactDir,
   };
 }
