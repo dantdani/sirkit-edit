@@ -3615,3 +3615,112 @@ _(discovery, reproduction and results appended below as they are observed)_
   (the README and discovery now point to the page, as it says; "no line added or removed" narrowed to the notes). D21-48 opened (low).
 - Lead gates (2026-09-29, one job at a time): every B21 suite with the eight route suites and the CI guard (59 files, 547 of 547); `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, the opt-in live file's 2 skipped as before); `app/lib/agent` with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project` with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); every changed or new test file of every chapter with `app/lib/auth` (67 files, 800 passed, 9 opt-in live skipped); the proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104; census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183); tsc 0; eslint: `app/page.tsx`'s 14 pre-existing `react-hooks/refs` errors only (none on its noted line 4760), every other changed file clean; the generators with zero drift (the B09, B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged). Logs under `b21/c1lead/gates/`.
 - No behaviour change, no verdict (commit 2/2).
+
+### B21 closeout (2/2) — the four validation artifacts, the final validation run, the verdict (2026-09-29/30 local; increment workflow + adversarial review + lead; this commit)
+
+- The four artifacts in `artifacts/ai-control-plane-b21/`: `changed-files.md` (every path since `6fd5a7b` - 160: 114 added, 46
+  modified, 0 deleted - grouped by area with the first commit that touched it, each checked against `git log -- <path>`; the 22
+  first-parent commits), `test-and-validation-report.md` (59 suites / 541 cases as `it(` blocks - 58 vitest suites / 537, each equal to
+  what the final run executed, and the orchestration browser spec / 4; which cases read the real clock, two of them passing by a margin;
+  the final validation run at HEAD with every number; CI on every B21 commit; each increment's gate lines as this ledger records them),
+  `unknowns-and-owner-decisions.md` (OD-106..OD-133 all recorded with their state and 21 amendments, the owner's open questions named;
+  D21-1..48 with their closing increment - 32 closed, D21-3, D21-12 and D21-20 in part, 8 RECORDED, 2 follow-ups outside B21, 3 open:
+  D21-42 (medium), D21-47 and D21-48 (low); discovery section 8's unknowns with their state - 6 resolved, 5 and 7 moot, 1 to 4 standing;
+  LB-1..LB-9) and `final-verdict.md` (PARTIAL: a bounded DAG of zero-authority specialists behind the off-by-default
+  `SIRKIT_ORCHESTRATION_ENABLED`, every runbook evaluation proven offline through the real runtime and three in the browser (F4, F12; F6
+  in part); nothing qualified live (LB-9 - and credits alone would not qualify disagreement or fallback: the record-only command runs 4
+  of the 12 cases on one provider; that needs a two-provider live capsule); the caps, roles, the no-model Tier 0 read (and the Tier 3
+  head-verb rule's false refusals), the breaker's arming (D21-42), the browser coverage, the tracing and a replayed result's provenance met
+  in part; scenario 17's disagreement never resolved to a winner; the propose routes' strict schemas unchecked; D21-42, D21-47, D21-48
+  open). The first three drafted by the lead's read-only generator and corrected by hand (its clause parser missed "CLOSED at the route
+  by", "CLOSED AS POLICY by", "CLOSED by the B21 closeout (1/2)", D21-3's finishing clause, D21-12's open remainder, UNKNOWN 6's
+  resolution and the closeout (1/2)'s OD-108 amendment); the verdict is the lead's draft, filled and checked - its judgement unchanged.
+  Factual details corrected in the draft: the specialists are zero-authority, not read-only, since D2; with the flag off the chat
+  route's stream is byte-identical, while two page-side changes reach flag-off users (E4's composer and E1's withheld Retry); three of
+  the twelve evaluations are proven in the browser, not all twelve; an escalation cites the exact authority for a part conflict, not
+  for every conflict; D21-15 and D21-16 are closed with prose residues, not recorded; the documentation UNKNOWNs include the Anthropic
+  Agent SDK pages; A's gate refuses what a result's structure carries (`tool_request_not_permitted`, `unknown_key`,
+  `secret_shaped_text`), not "a release, approval or directive" - a directive written in prose passes as the specialist's own
+  unverified claim and reaches the read-only follow-up turn as its user message (OD-108) inside the data-only envelope (F11);
+  "verifiers outrank consensus" qualified (no verifier picks a winner between two sealed parties: scenario 17); "simple work on one
+  direct coordinator turn" qualified (OD-110's recorded Tier 3 head-verb cost); "the record-only command has never run" completed
+  (credits alone would not qualify the live behaviours). Open items the draft omitted, added: the browser coverage, D21-12 and D21-3 in
+  part (the coordinator's trace in B11's run-local sink), D21-17's and D21-4's residuals, OD-108's standing deviation, scenario 17's
+  RECORDED deviation (`gateway.ts:330`'s empty-pin-map compile pre-empts the circuit specialist's delete; a sealed edit escalates), a
+  replayed result's missing provider and model (OD-132; runbook :843), D21-20 in part (the propose routes' `strict: true` schemas with
+  `maxLength` and a forced tool choice, unchanged and unchecked - UNKNOWN 2's offline half not run), the recorded defects (D21-33 and
+  D21-35 RECORDED, as their clauses close them) and two follow-ups outside B21 (D21-32, D21-34).
+- The adversarial review of the closeout (eleven findings, nine distinct - security-1 and coverage-3 one issue, security-2 and
+  coverage-6 another; all in the documents, low after verification but coverage-4, medium) fixed test-first through a transient probe
+  (`b21/c2fix/r3/c2fix-doc-probe.test.ts`, 13 cases - one per finding, the defect counts, and the lead's texts complete with the
+  standalone PR description equal to section 4 - copied into the tree only for its runs through the lock runner and deleted, never
+  committed; with `C2FIX_DOCS` set it reads the five documents from that folder). Red first: 13 of 13 against the documents as first
+  reviewed and 11 of 13 against the documents as the review verified them, both rebuilt byte-exact by sha256
+  (`b21/c2fix/r3/rebuild_prefix.py`; `probe-red0.clean.log`, `probe-red.clean.log` - cases 1 and 2 hold on the second set because an
+  earlier attempt had already corrected the verdict's item 1, and the lead's texts they also read are the corrected ones; the lead
+  texts' own red state is that attempt's run, 13 of 13, `b21/c2fix/r2/probe-red.clean.log`); green after the fixes, 13 of 13. Two
+  defects found while fixing: the report's real-clock list missed `b21-e3-resume-runtime` cases 17 and 20 (injected clocks minutes
+  ahead of a seal stamped from the real clock - about a minute of margin; now listed, and every other real-clock read classified), and
+  the interrupted earlier attempt had left this paragraph's post-fix gate line a placeholder (filled below; the probe's case 13 now
+  refuses any placeholder in the lead's texts and the documents). Beyond the verdict: the report no longer says "the fixture server
+  holds no provider key" - no provider was called because the fixture router answers `missing_credentials` whether or not a key is
+  configured and the scripted fixture agent serves every chat and specialist turn; whether a key was present is UNKNOWN (the server's
+  environment spreads the shell's; `next dev` loaded `.env.local`; no environment file read) - and it no longer calls every suite
+  deterministic: it names the cases that read the real clock, and `b21-b-scheduler` case 7 passes by about 100 ms of real time (a start
+  read from the real clock before the rig's async setup, against `minTaskMs`) - RECORDED follow-up: inject `deps.now` in that case (a
+  test change for a later increment).
+- The final validation run at HEAD `6cff540` (2026-09-29, `b21/c2/gates/`, one heavy job at a time through the lock scripts, the tree
+  clean before and after): every B21 suite with the eight route suites, the E4 composer suite and the CI guard (59 files, 547 of 547);
+  `app/api/chat`, `app/lib/llm` and `app/lib/acquisition` in full (45 files: 384 passed, `b19-e-live-contract`'s 2 skipped); `app/lib/agent`
+  with the exposure and tier suites, the B11 suites, the B17-A inventory and the B18-D UI gates (63 files, 646 of 646); `app/lib/project`
+  with `app/components/chat` (40 files, 318 of 318); the fixture agent and every B18-C/B18-E scenario suite (16 files, 108 of 108); every
+  changed or new test file of every chapter with `app/lib/auth` (67 files, 800 passed, `b16-1b-live-qualification`'s 9 skipped); the
+  proposal families and approval paths (34 files, 513 of 513); the import gates, census ratchets and route matrices (10 files, 104 of 104;
+  census 165/162/3/0); `app/lib/mcp` with `app/api/mcp` (33 files, 737 of 737) and `app/lib/mcp/server` (19 files, 183 of 183) - 4 340
+  passed, 11 opt-in live skipped, no failure; tsc 0; eslint over the 113 TypeScript files B21 changed since `main`: 112 clean, `app/page.tsx`
+  the 14 pre-existing react-hooks errors (13 `react-hooks/refs`, 1 `react-hooks/set-state-in-effect`), the same 14 on the same lines and
+  source as `main`'s `page.tsx` linted through stdin; the generators with zero drift (B11 19 of 19 cases and 61 of 61 checks; the B09,
+  B11 and B21 outputs, 24 files, byte-identical; B17-A 628 controls, CSV and summary identical; the tree's status unchanged); then the
+  full existing browser suite 48 of 48 in 288 s and the orchestration config 4 of 4 in 153 s, one after the other: 441 s, about 7.3
+  minutes of OD-30's 30 minutes; the 32 tracked evidence PNGs the runs rewrote (the existing suite's 25 under the B17 and B18 evidence
+  folders, the orchestration config's 7 under B21's) restored from HEAD by blob hash, `git status` clean. Logs under `b21/c2/gates/`.
+- With the four artifacts and the README row in place, after the review's fixes (documents only; `b21/c2fix/r3/gates/`, 2026-09-30
+  22:41 to 22:52, one heavy job at a time through the lock scripts, the gates in the final run's order): the ten vitest gates green with
+  the final run's numbers - 59 files / 547; 45 / 384 passed and 2 skipped; 63 / 646; 40 / 318; 16 / 108; 67 / 800 passed and 9 skipped;
+  34 / 513; 10 / 104 (census 165/162/3/0); 33 / 737; 19 / 183 - 4 340 passed, 11 opt-in live skipped, no failure; tsc 0; eslint once over
+  the same 113 TypeScript files (none changed in the working tree): 112 clean, `app/page.tsx` the same 14 pre-existing errors (13
+  `react-hooks/refs`, 1 `react-hooks/set-state-in-effect`) at the same positions as the final run; the four generators with zero drift
+  (B11 19 of 19 cases and 61 of 61 checks; the B09, B11 and B21 outputs, 24 files, byte-identical by sha256; B17-A 628 controls, CSV and
+  summary identical); no tracked file changed but the README, the five documents unchanged during the gates, the tree's status at the
+  end equal to its start. No browser run: no page, spec, source or generator input changed. An interrupted earlier attempt's run of
+  this chain (`b21/c2fix/r2/gates/`) stalled in gate 3: 49 of its 63 files passed, then no output for 29 minutes until that attempt
+  was stopped (exit 1, no failing test reported, 14 files never reported); gate 3 then passed twice here, 63 of 63 files and 646 of 646
+  tests each (61.5 s and 63.8 s) - the stall was not reproduced and its cause is UNKNOWN.
+- CI (read-only, `gh run list`): all 22 B21 commits ran both workflows; `b3d168b` (B21-B) and `e19033f` (B21-E2 (1/2)) failed in
+  prompt-to-gerber and were fixed by the next commit (`0396c9e`, `41330e6`); every other run green, `6cff540` included
+  (deterministic-manufacturing `36534663137` - its page-browser-e2e job, both Playwright configs, 17 min 48 s - and benchmark-quality
+  `36534662961`).
+- README: the validation row (written by this increment). PROGRAM_STATE: B21 complete on the branch pending PR #11's green CI and a normal
+  merge; next B22.
+- Report lines: `MULTI-AGENT STATUS: bounded zero-authority specialist DAG behind SIRKIT_ORCHESTRATION_ENABLED (off); simple and 3D work
+  one coordinator turn, a Tier 3 head verb refused with no model (OD-110); the twelve B21-F evaluations proven offline through the real
+  runtime (fake SDK clients and the scripted fixture agent, named as such), three of them also in the browser on a flag-on fixture
+  server (F4, F12; F6 in part); live disagreement / fallback / quota / timeout BLOCKED-LIVE-QUALIFICATION under LB-9 (the model-in-loop
+  command record-only, never run: 4 of the 12 cases on one provider, no scripted fault reproduced, no disagreement or fallback it can
+  produce)`; `ROUTE RATCHET: 165 = 162 canonical + 3 factories + 0 raw (unchanged)`.
+- Documents only: no production, test, generator or page file changed in this commit.
+- Lead follow-up on the check (2026-09-30; the check confirmed the eleven fixes and raised two new low issues): the report's real-clock
+  bullet named resume case 20 as margin-bound - only case 17's in-time contrast is (case 20 and case 17's late leg only grow more
+  certain as time passes); the bullet, the README row and these texts now say two cases pass by a real-time margin (`b21-b-scheduler`
+  case 7, about 100 ms; `b21-e3-resume-runtime` case 17's contrast, about a minute); and the section-10 text no longer says the verdict
+  names the closed defects' RECORDED residuals - `unknowns-and-owner-decisions.md` lists them, the verdict names those that bear on the
+  pass criteria. The closeout (2/2) run itself was cut twice by the lead's session ending (once at its fix stage) and resumed under the
+  same run id from its cached stages.
+- Record corrections the closeout's review named (this ledger is append-only, so they are stated here): B21-F2's lead-gate line says
+  "the fixture server holds no key" - that was not measured; what holds is that no provider was called (under the fixture runtime the
+  LLM router answers `missing_credentials` before any request and the scripted fixture agent serves every turn;
+  `test-and-validation-report.md` section 2). OD-123's default ("both proposals dormant while specialists read only") is dated since
+  B21-D2/D3 - amended in OWNER_DECISIONS.md; LB-9's "suite" is ONE record-only command, not a test (OD-125) - noted in its row;
+  discovery.md section 7's closeout bullet scoped "D21-1..31" while the numbering runs to D21-48 - the section-10 block records it; the
+  B21-D3 title's "deterministically resolved" stands as written in the ledger heading, the README row and the D3 page, and the verdict
+  states the deviation (scenario 17's disagreement is escalated, never resolved to a winner).

@@ -1505,3 +1505,35 @@ Lead decisions on the defaults (recorded here; each becomes the OD entry when it
 - **Section 4:** D21-27 and D21-36 closed; D21-48 opened (low: the merged envelope header's per-specialist proposal wording).
 - **Section 6:** OD-113 applied as its default (recorded in OWNER_DECISIONS.md); OD-108 amended (B21-E did not close its deviation).
 - **Section 7, closeout:** commit 1/2 as the plan states it - the statements superseded in place, 36 stale titles retitled, D21-36 retired, the tripwire, one dated README note for the B07.5..B16 lines; the verdict is commit 2/2.
+
+### B21 closeout (2/2) (recorded by the lead, 2026-09-29/30)
+
+- **Section 4:** no code change and no new defect. The closeout counts two defects in part that their clauses leave counted closed,
+  and each gains one addendum (appended to its paragraph):
+  - D21-3: "— addendum by the B21 closeout (2/2): counted in part - the finding's run-local sink and discarded digest stay true for the
+    coordinator: its own trace, its tool calls included, stays in B11's run-local in-memory sink (`route.ts:437`;
+    `trace-recorder.ts:108-113`, no production sink factory) and its digest is computed and discarded (`route.ts:463`) - B11's
+    retention deferral, with OD-111's retention question (INFERRED from the code)."
+  - D21-20: "— addendum by the B21 closeout (2/2): counted in part - E1's policy clause covers the specialists' result tool only; the
+    propose routes (B16's, unchanged by B21) still send `strict: true` schemas carrying `maxLength` with a forced tool choice on both
+    providers (`b16-0-17-2-adapter-schema-parity`), and UNKNOWN 2's planned offline check (the propose-route schemas through
+    `validateWireSubset`, recording the violations) was not run."
+  The verdict names every defect whose clauses do not close it: D21-42 (medium), D21-47 and D21-48 (low) open; D21-3, D21-12 and D21-20
+  in part; D21-9, D21-14, D21-25, D21-28, D21-29, D21-31, D21-33 and D21-35 RECORDED (D21-35's follow-up optional); D21-32 and D21-34
+  follow-ups outside B21; the closed defects' RECORDED residuals (D21-4, D21-8, D21-15, D21-16, D21-17, D21-21, D21-22, D21-24,
+  D21-36, D21-37, D21-38, D21-41, D21-44) are listed in `unknowns-and-owner-decisions.md`, and the verdict names those that bear on
+  the pass criteria (D21-4, D21-15, D21-16, D21-17, D21-22).
+- **Section 6:** no owner decision recorded or amended; the owner's open questions at the close: OD-108, OD-110 (the no-model Tier 0 read;
+  the Tier 3 head-verb rule's false refusals), OD-111, OD-112 (option A), OD-115 (D21-42), OD-120, OD-122, OD-125 (credits; a
+  two-provider live capsule for disagreement and fallback), OD-126, OD-132 (keying sources by provider and model; persisting them per
+  result so a replay keeps them) (`unknowns-and-owner-decisions.md`).
+- **Section 7, closeout:** commit 2/2 as the plan states it - `changed-files.md`, `test-and-validation-report.md`,
+  `unknowns-and-owner-decisions.md` (OD-106..OD-133, and D21-1..48 rather than the plan's "D21-1..31": the numbering continued from
+  D21-32), `final-verdict.md` (PARTIAL), the README validation row, the ledger and `PROGRAM_STATE.json`; the final validation run at HEAD
+  `6cff540` green (`test-and-validation-report.md` section 2); the adversarial review's eleven findings (nine distinct) fixed in the four documents; PR #11
+  to be undrafted and merged normally after green CI.
+- **Section 8:** UNKNOWN 6 resolved (section 9); UNKNOWNs 1 to 4 stand (Anthropic's credits unrecorded; the strict-schema keywords -
+  the planned offline check of the propose-route schemas not run, and live; the OpenAI reference defaults; the Agents SDK pages); 5 and 7
+  moot (no exposed tool added; no B21 suite under `app/lib/engineering/__tests__`); item 9 BLOCKED-LIVE-QUALIFICATION under LB-9.
+- **The lead's note:** discovery section 7's closeout bullet scoped D21-1..31; the numbering runs to D21-48, every one of which
+  `unknowns-and-owner-decisions.md` carries with its state.

@@ -1327,6 +1327,10 @@ Amendments to existing entries:
 - **The owner may choose otherwise:** remove the two families (a reviewed pin move of `b18-b-execution-grant.test.ts`), or open
   schematic execution (reverses OD-15; its own chapter).
 
+**Amendment (B21 closeout (2/2), 2026-09-30) — the dormant proposals, dated**
+
+[B21 closeout (2/2)] "Both proposals dormant while specialists read only" is superseded for the replacement: since B21-D2/D3 specialists propose through their own gateways and the component replacement is live for the schematic role (OD-120 amended); the two schematic Tier 1 families stay reserved and unchanged, and no schematic descriptor is a granted execution.
+
 ## OD-114 — Merge decisions and dissent as closed records, as applied (B21-D, 2026-09-26)
 
 - **Question:** should merge-layer rejections of specialist results (and pre-invocation refusals) become traced events with a closed
