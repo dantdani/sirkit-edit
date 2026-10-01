@@ -73,5 +73,14 @@ counter-argument for bumping, is in
 [immutable-replay-ownership.md](immutable-replay-ownership.md), and a
 regression pins both strings.
 
+> [B21 F, 2026-09-28] True for B11.4's own stage; superseded for the capsule by
+> B21-F: the capsule is now `sirkit.agent-replay-capsule.v4` - its own field
+> set grew (optional per-task step lists of a task graph, each task at its
+> plan's index with one list per role, and a scripted stall only in a task's
+> step list); a capsule with no tasks replays exactly as v3 did and a v3
+> document is refused explicitly; the context stays
+> `sirkit.agent-replay-context.v2`. See
+> `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2.
+
 Static exposure remains exactly **NINE** read/propose tools. B12 was not
 started.

@@ -32,7 +32,7 @@
 | The no-execution guard is **not vacuous** | §E "MUTATION TEST: a guard that lets execution happen FAILS" |
 | A valid control capsule triggers every instrumented boundary | §E "the CONTROL capsule triggers EVERY probe" |
 | The sink supplied through `ReplayOptions` is untouched for an invalid capsule | §E "the sink supplied through ReplayOptions is untouched" |
-| The wire contract did not change | §G "the wire contract did NOT change: the committed versions are unchanged" |
+| The wire contract did not change [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): true for B11.4's own stage; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2] | §G "the wire contract did NOT change in B11.4: the context is v2 and the capsule v4 (v3 when written; B21-F's reviewed bump to v4 grew the capsule's own field set, not B11.4's handling)" (retitled by the B21 closeout, 2026-09-29; assertions unchanged) |
 | No test writes under `app/`, `lib/`, `scripts/`, `artifacts/` | §F "NO test in the repository writes under app/, lib/, scripts/ or artifacts/" |
 | Drift gates are fully in memory | B11.3 §E/B11.4 §F block (4 tests) |
 

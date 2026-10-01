@@ -24,7 +24,7 @@ import { PCB_DECLARED_FIELD_NAMES, validateCapturedReplayContext, type ReplayCon
 import { capturePlainJson, type DeepReadonly } from "./plain-capture";
 import { createAgentToolGateway } from "./gateway";
 import { buildRunToolset, runAgentLoop } from "./loop";
-import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentStep, type ProviderAgentAdapter } from "./contracts";
+import { DEFAULT_AGENT_BUDGET, type AgentRunContext, type AgentRunEvent, type AgentRunResult, type AgentStep, type ProviderAgentAdapter } from "./contracts";
 import { sirkitToolRegistry } from "../engineering/tool-catalog";
 import { AGENT_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT_VERSION } from "../prompts";
 import { engineeringDigest } from "../engineering/stable";
@@ -55,8 +55,17 @@ import { AgentTraceRecorder, InMemoryTraceSink, type AgentTraceSink } from "./tr
  *
  * Capsules are authored in-repo fixtures and are never persisted from live
  * runs, so no stored document is invalidated by either bump.
+ *
+ * [B21 F] v4 - the capsule's OWN field set grew, so the outer version moves
+ * (the B11.3 rule above): an optional `tasks` list - one step list per task
+ * of a task graph, each with its role label and provider - and an optional
+ * `stall` on any step (a scripted turn that never answers until the run's
+ * own signal ends it: a scripted timeout, beside the scripted `failure`). A
+ * capsule with no tasks replays exactly as v3 did; one with tasks is replayed
+ * ONLY through an injected task-graph runner (`ReplayOptions.taskGraph`),
+ * never by the single-loop engine here, which reports it as a failure.
  */
-export const AGENT_REPLAY_CAPSULE_SCHEMA = "sirkit.agent-replay-capsule.v3" as const;
+export const AGENT_REPLAY_CAPSULE_SCHEMA = "sirkit.agent-replay-capsule.v4" as const;
 
 /** A scripted normalized model turn — provider-neutral, bounded, no
  *  provider continuation state (the runner supplies an inert one). */
@@ -69,6 +78,18 @@ export interface CapsuleStep {
   /** Optional scripted provider failure INSTEAD of a step (normalized
    *  classification only — never a raw upstream body). */
   failure?: { reason: string; message: string };
+  /** [B21 F] Optional scripted STALL instead of a step: the turn never answers until the run's own
+   *  signal ends it (a timeout). Exactly `true`, and only in a task's step list (never the run's own). */
+  stall?: true;
+}
+
+/** [B21 F] One task of a task graph: its 1-based index IN THE GRAPH'S PLAN (the runner refuses a task its plan does not schedule
+ *  at that index), its role label (one step list per role), the provider it runs on, and its own ordered step list. */
+export interface CapsuleTask {
+  index: number;
+  role: string;
+  provider: "openai" | "anthropic";
+  steps: CapsuleStep[];
 }
 
 export interface ReplayCapsule {
@@ -84,6 +105,8 @@ export interface ReplayCapsule {
   context: ReplayContextFixture;
   userMessage: string;
   steps: CapsuleStep[];
+  /** [B21 F] v4: the per-task step lists of a task graph (absent or empty: one run, as v3) */
+  tasks?: CapsuleTask[];
   expected: {
     discoveredTools: string[];
     toolOutcomes: Array<{ toolId: string; outcomeClass: string; status: string }>;
@@ -104,6 +127,9 @@ export const REPLAY_CAPSULE_BOUNDS = Object.freeze({
   maxTextChars: 20_000,
   maxSerializedBytes: 2_000_000,
   maxIssues: 12,
+  /** [B21 F] v4: at most this many task step lists (each bounded by maxSteps) */
+  maxTasks: 8,
+  maxRoleChars: 64,
 });
 
 /**
@@ -157,9 +183,12 @@ function isForbiddenCapsuleKey(key: string): boolean {
 }
 
 const CAPSULE_KEYS = ["schema", "caseId", "provider", "promptVersion", "promptDigest", "registryDigest", "scope", "context", "userMessage", "steps", "expected"] as const;
+const CAPSULE_OPTIONAL_KEYS = ["tasks"] as const; // [B21 F] v4
+const CAPSULE_TASK_KEYS = ["index", "role", "provider", "steps"] as const; // [B21 F] v4
+const CAPSULE_ROLE = /^[a-z][a-z-]*$/; // [B21 F] a role label: lower-case words joined by hyphens
 const CAPSULE_SCOPE_KEYS = ["tenantId", "projectId", "branchId"] as const;
 const CAPSULE_STEP_KEYS = ["text", "toolCalls", "stopReason", "model", "usage"] as const;
-const CAPSULE_STEP_OPTIONAL_KEYS = ["failure"] as const;
+const CAPSULE_STEP_OPTIONAL_KEYS = ["failure", "stall"] as const; // [B21 F] v4: + `stall`
 const CAPSULE_TOOL_CALL_KEYS = ["callId", "providerName", "argumentsText"] as const;
 const CAPSULE_USAGE_KEYS = ["inputTokens", "outputTokens"] as const;
 const CAPSULE_FAILURE_KEYS = ["reason", "message"] as const;
@@ -281,7 +310,7 @@ function validateCapturedCapsule(raw: unknown): string[] {
   try { serialized = JSON.stringify(capsule); } catch { return ["capsule is not serializable"]; }
   if (serialized.length > REPLAY_CAPSULE_BOUNDS.maxSerializedBytes) return [`capsule exceeds the ${REPLAY_CAPSULE_BOUNDS.maxSerializedBytes}-byte size bound`];
 
-  if (!capsuleExactKeys(capsule, CAPSULE_KEYS, [], "capsule", issues)) return issues.value();
+  if (!capsuleExactKeys(capsule, CAPSULE_KEYS, CAPSULE_OPTIONAL_KEYS, "capsule", issues)) return issues.value();
   if (capsule.schema !== AGENT_REPLAY_CAPSULE_SCHEMA) return [`capsule.schema: expected ${AGENT_REPLAY_CAPSULE_SCHEMA}`];
   boundedCapsuleString(capsule.caseId, "capsule.caseId", issues, REPLAY_CAPSULE_BOUNDS.maxIdChars);
   if (capsule.provider !== "openai" && capsule.provider !== "anthropic") issues.push("capsule.provider: unknown provider");
@@ -305,13 +334,35 @@ function validateCapturedCapsule(raw: unknown): string[] {
   if (!contextResult.ok) for (const issue of contextResult.issues) issues.push(`capsule.${issue}`);
 
   // steps
-  const steps = capsule.steps;
+  validateCapsuleSteps(capsule.steps, "capsule.steps", issues);
+  // [B21 F] v4: the per-task step lists of a task graph
+  if (capsule.tasks !== undefined) validateCapsuleTasks(capsule.tasks, issues);
+
+  // expected
+  validateCapsuleExpected(capsule.expected, issues);
+
+  // [B11.2] R3 — whole-capsule secret scan. The DIRECT recursive walk
+  // inspects every key name and every ORIGINAL string value; the serialized
+  // scan is kept as an independent second net. Serialization escapes nested
+  // quotes, so credential-shaped JSON embedded in `argumentsText`,
+  // `userMessage`, step text, or failure text is invisible to the serialized
+  // form alone — it is not invisible to the direct walk.
+  if (issues.length === 0) {
+    const secretPath = findSecretShapedPath(capsule, "capsule", 0, { nodes: 0 }, PCB_DECLARED_FIELD_NAMES);
+    if (secretPath !== null) issues.push(secretPath);
+  }
+  if (issues.length === 0 && containsSecretShapedText(serialized)) issues.push("capsule: contains secret-shaped content");
+  return issues.value();
+}
+
+/** One ordered step list (the run's own, or [B21 F] one task's - the only list a stall may be scripted in): non-empty, bounded, each step exact. */
+function validateCapsuleSteps(steps: unknown, at: string, issues: CapsuleIssues, stallAllowed = false): void {
   if (!Array.isArray(steps) || steps.length === 0 || steps.length > REPLAY_CAPSULE_BOUNDS.maxSteps) {
-    issues.push(`capsule.steps: must be a non-empty array of at most ${REPLAY_CAPSULE_BOUNDS.maxSteps}`);
+    issues.push(`${at}: must be a non-empty array of at most ${REPLAY_CAPSULE_BOUNDS.maxSteps}`);
   } else {
     for (const [index, item] of steps.entries()) {
       if (issues.length >= REPLAY_CAPSULE_BOUNDS.maxIssues) break;
-      const label = `capsule.steps[${index}]`;
+      const label = `${at}[${index}]`;
       if (typeof item !== "object" || item === null || Array.isArray(item)) { issues.push(`${label}: not an object`); continue; }
       const step = item as Record<string, unknown>;
       if (!capsuleExactKeys(step, CAPSULE_STEP_KEYS, CAPSULE_STEP_OPTIONAL_KEYS, label, issues)) continue;
@@ -345,11 +396,32 @@ function validateCapturedCapsule(raw: unknown): string[] {
           boundedCapsuleString((failure as Record<string, unknown>).message, `${label}.failure.message`, issues, 300, true);
         }
       }
+      if (step.stall !== undefined) { if (!stallAllowed) issues.push(`${label}.stall: a stall is scripted only in a task's step list`); else if (step.stall !== true) issues.push(`${label}.stall: must be exactly true`); } // [B21 F] v4; [B21 F fix: coverage-9] never on the run's own steps (the single-loop engine's production timer)
+      if (step.stall === true && step.failure !== undefined) issues.push(`${label}: a stall and a failure are exclusive`); // [B21 F] v4
     }
   }
+}
 
-  // expected
-  const expected = capsule.expected;
+/** [B21 F] v4: the task step lists - bounded, each exact, plan indexes ascending from 1, one list per role label, a known provider, its own steps. */
+function validateCapsuleTasks(tasks: unknown, issues: CapsuleIssues): void {
+  if (!Array.isArray(tasks) || tasks.length > REPLAY_CAPSULE_BOUNDS.maxTasks) {
+    issues.push(`capsule.tasks: must be an array of at most ${REPLAY_CAPSULE_BOUNDS.maxTasks}`);
+    return;
+  }
+  const roles = new Set<string>(); let previous = 0; for (const [position, item] of tasks.entries()) { // [B21 F fix: tests-09] the plan's index (ascending) and one list per role
+    if (issues.length >= REPLAY_CAPSULE_BOUNDS.maxIssues) break;
+    const label = `capsule.tasks[${position}]`;
+    if (typeof item !== "object" || item === null || Array.isArray(item)) { issues.push(`${label}: not an object`); continue; }
+    const task = item as Record<string, unknown>;
+    if (!capsuleExactKeys(task, CAPSULE_TASK_KEYS, [], label, issues)) continue;
+    if (!Number.isSafeInteger(task.index) || (task.index as number) <= previous) issues.push(`${label}.index: must be a positive integer above the previous task's (its index in the plan, listed in order)`); else previous = task.index as number;
+    if (boundedCapsuleString(task.role, `${label}.role`, issues, REPLAY_CAPSULE_BOUNDS.maxRoleChars) && !CAPSULE_ROLE.test(task.role as string)) issues.push(`${label}.role: must be a role label (lower-case words joined by hyphens)`); else if (typeof task.role === "string" && roles.has(task.role)) issues.push(`${label}.role: duplicate (a role has one step list)`); if (typeof task.role === "string") roles.add(task.role);
+    if (task.provider !== "openai" && task.provider !== "anthropic") issues.push(`${label}.provider: unknown provider`);
+    validateCapsuleSteps(task.steps, `${label}.steps`, issues, true);
+  }
+}
+
+function validateCapsuleExpected(expected: unknown, issues: CapsuleIssues): void {
   if (typeof expected !== "object" || expected === null || Array.isArray(expected)) issues.push("capsule.expected: must be an object");
   else if (capsuleExactKeys(expected as Record<string, unknown>, CAPSULE_EXPECTED_KEYS, [], "capsule.expected", issues)) {
     const expectedRecord = expected as Record<string, unknown>;
@@ -380,19 +452,6 @@ function validateCapturedCapsule(raw: unknown): string[] {
     }
     boundedCapsuleString(expectedRecord.traceDigest, "capsule.expected.traceDigest", issues, 128);
   }
-
-  // [B11.2] R3 — whole-capsule secret scan. The DIRECT recursive walk
-  // inspects every key name and every ORIGINAL string value; the serialized
-  // scan is kept as an independent second net. Serialization escapes nested
-  // quotes, so credential-shaped JSON embedded in `argumentsText`,
-  // `userMessage`, step text, or failure text is invisible to the serialized
-  // form alone — it is not invisible to the direct walk.
-  if (issues.length === 0) {
-    const secretPath = findSecretShapedPath(capsule, "capsule", 0, { nodes: 0 }, PCB_DECLARED_FIELD_NAMES);
-    if (secretPath !== null) issues.push(secretPath);
-  }
-  if (issues.length === 0 && containsSecretShapedText(serialized)) issues.push("capsule: contains secret-shaped content");
-  return issues.value();
 }
 
 // ─── Scripted adapter (no provider, no network) ─────────────────────────────
@@ -403,10 +462,11 @@ class ScriptedReplayAdapter implements ProviderAgentAdapter {
   constructor(provider: "openai" | "anthropic", private readonly steps: readonly CapsuleStep[], private readonly failureFactory?: (failure: { reason: string; message: string }) => Error) {
     this.provider = provider;
   }
-  private next(): AgentStep {
+  private next(signal?: AbortSignal): AgentStep | Promise<AgentStep> {
     const scripted = this.steps[this.index];
     this.index += 1;
     if (!scripted) throw new Error("REPLAY_SCRIPT_EXHAUSTED: the capsule supplied fewer steps than the loop requested");
+    if (scripted.stall) return stalled(signal); // [B21 F] v4: a scripted timeout - no answer until the run's own signal ends the turn
     if (scripted.failure) {
       throw this.failureFactory ? this.failureFactory(scripted.failure) : new Error(scripted.failure.message);
     }
@@ -419,8 +479,23 @@ class ScriptedReplayAdapter implements ProviderAgentAdapter {
       continuation: { provider: this.provider, state: null }, // inert by construction
     };
   }
-  async start(): Promise<AgentStep> { return this.next(); }
-  async continueWith(): Promise<AgentStep> { return this.next(); }
+  async start(input?: { signal?: AbortSignal }): Promise<AgentStep> { return this.next(input?.signal); }
+  async continueWith(input?: { signal?: AbortSignal }): Promise<AgentStep> { return this.next(input?.signal); }
+}
+
+/** [B21 F] v4: a task graph with no runner: the run started and failed at once - no step, no tool invocation, one valid trace. */
+function unrunTaskGraph(recorder: AgentTraceRecorder, runId: string): AgentRunResult {
+  try { recorder.recordRunStarted(); } catch { /* tracing is passive */ }
+  return { runId, status: "failed", finalText: "", steps: 0, toolCalls: 0, failureReason: "internal_error" };
+}
+
+/** [B21 F] v4: a stalled scripted turn - it never answers; it rejects only when the run's own signal ends it (its deadline or a
+ *  cancellation), so the loop's own deadline decides the outcome. With no signal it never settles. */
+function stalled(signal?: AbortSignal): Promise<AgentStep> {
+  return new Promise<AgentStep>((_resolve, reject) => {
+    const end = (): void => reject(new Error("REPLAY_SCRIPTED_STALL: the stalled turn was ended by the run's signal"));
+    if (signal?.aborted) end(); else signal?.addEventListener("abort", end, { once: true });
+  });
 }
 
 export interface ReplayOutcome {
@@ -432,13 +507,32 @@ export interface ReplayOutcome {
   discoveredTools: string[];
 }
 
+/** [B21 F] v4: what a task-graph runner receives - the replay's own validated snapshot, context, registry, recorder and clock, the
+ *  scripted adapter of the run's own turns (the capsule's `steps`, in order) and a scripted adapter per task (a FRESH one over that
+ *  task's own step list on every call, so a re-run attempt replays its steps from the start). The runner lives outside this module. */
+export interface TaskGraphRunInput {
+  capsule: DeepReadonly<ReplayCapsule>;
+  runId: string;
+  context: AgentRunContext;
+  contextWarnings: readonly string[];
+  registry: ReturnType<typeof sirkitToolRegistry>;
+  recorder: AgentTraceRecorder;
+  clock: () => number;
+  emit(event: AgentRunEvent): void;
+  adapter: ProviderAgentAdapter;
+  taskAdapter(role: string): ProviderAgentAdapter | null;
+}
+export type TaskGraphRunner = (input: TaskGraphRunInput) => Promise<AgentRunResult>;
+
 export interface ReplayOptions {
-  /** Deterministic clock — replay never reads wall time. */
+  /** Deterministic clock — replay never reads wall time (the loop's deadline timer is real; [B21 F] only a task's scripted stall, run by a task-graph runner, may reach it). */
   clock?: () => number;
   sink?: AgentTraceSink;
   failureFactory?: (failure: { reason: string; message: string }) => Error;
   /** Assemble but do not compare against `expected` (generator mode). */
   computeOnly?: boolean;
+  /** [B21 F] v4: the runner of a capsule WITH tasks (a task graph); without it such a capsule fails, never replayed as one loop. */
+  taskGraph?: TaskGraphRunner;
 }
 
 /**
@@ -527,7 +621,13 @@ export async function replayCapsule(untrustedCapsule: ReplayCapsule, options?: R
   }, options?.sink ?? new InMemoryTraceSink(), clock);
 
   const events: AgentRunEvent[] = [];
-  const result = await runAgentLoop(
+  const tasks = capsule.tasks ?? []; // [B21 F] v4: a task graph runs through its injected runner, never as the one loop below
+  if (tasks.length > 0 && !options?.taskGraph) failures.push(`capsule.tasks: ${tasks.length} task step list(s) need a task-graph runner (ReplayOptions.taskGraph); nothing was run as one loop`);
+  const result = tasks.length > 0 ? (options?.taskGraph ? await options.taskGraph({
+    capsule: parsed.value, runId: `replay-${capsule.caseId}`, context, contextWarnings: assembly.warnings, registry, recorder, clock, emit: (event) => events.push(event),
+    adapter: new ScriptedReplayAdapter(capsule.provider, capsule.steps, options.failureFactory),
+    taskAdapter: (role) => { const task = tasks.find((entry) => entry.role === role); return task ? new ScriptedReplayAdapter(task.provider, task.steps, options.failureFactory) : null; },
+  }) : unrunTaskGraph(recorder, `replay-${capsule.caseId}`)) : await runAgentLoop(
     {
       runId: `replay-${capsule.caseId}`,
       provider: capsule.provider,

@@ -58,7 +58,7 @@ import { judgeProviderOutput } from "./provider-output-guard"; // [B20 A5] OD-91
 import { fixtureRuntimeEnabled } from "../fixture-runtime/mode"; // [B18-C I10]
 import { FIXTURE_AGENT_ENV, FIXTURE_AGENT_SCRIPTED, FixtureAgentAdapter } from "./fixture-agent-adapter"; // [B18-C I10]
 
-const MAX_OUTPUT_TOKENS = 4096;
+export const MAX_OUTPUT_TOKENS = 4096; // [B21 B] exported as data only: the scheduler's per-step token figure is pinned equal to it
 
 // ─── OpenAI (Responses API, manual conversation state) ───────────────────────
 
@@ -84,7 +84,7 @@ function normalizeOpenAIStep(response: OpenAIResponse, state: OpenAIContinuation
   return {
     text: response.output_text ?? "",
     toolCalls,
-    stopReason: response.status ?? null,
+    stopReason: response.status ?? null, stop: openAIStepStop(response, items), // [B21 E1] D21-21, derived here, from the judged list
     usage: { inputTokens: response.usage?.input_tokens, outputTokens: response.usage?.output_tokens },
     model: response.model,
     continuation: {
@@ -103,13 +103,13 @@ export class OpenAIAgentAdapter implements ProviderAgentAdapter {
   constructor(
     client?: OpenAIClient,
     private readonly model = configuredOpenAIModel(),
-    private readonly reasoningEffort: OpenAIReasoningEffort | undefined = configuredOpenAIReasoningEffort(model),
+    private readonly reasoningEffort: OpenAIReasoningEffort | undefined = configuredOpenAIReasoningEffort(model), private readonly maxRetries: number = 2, // [B21 E1] OD-115: 0 for a specialist (agentAdapterForRole)
   ) {
     this.client = client;
   }
 
   private getClient(): OpenAIClient {
-    this.client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 2, timeout: 120_000 });
+    this.client ??= new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: this.maxRetries, timeout: 120_000 });
     return this.client;
   }
 
@@ -186,7 +186,7 @@ function normalizeAnthropicStep(message: AnthropicMessage, state: AnthropicConti
   return {
     text,
     toolCalls,
-    stopReason: message.stop_reason,
+    stopReason: message.stop_reason, stop: anthropicStepStop(message.stop_reason), // [B21 E1] D21-21
     usage: { inputTokens: message.usage.input_tokens, outputTokens: message.usage.output_tokens },
     model: message.model,
     continuation: {
@@ -205,12 +205,12 @@ export class AnthropicAgentAdapter implements ProviderAgentAdapter {
   readonly provider = "anthropic" as const;
   private client?: AnthropicClient;
 
-  constructor(client?: AnthropicClient, private readonly model = process.env.SIRKIT_ANTHROPIC_MODEL ?? "claude-opus-4-7") {
+  constructor(client?: AnthropicClient, private readonly model = configuredAnthropicModel(), private readonly maxRetries?: number) { // [B21 E1] OD-115: 0 for a specialist; unset, the SDK default (2) as before
     this.client = client;
   }
 
   private getClient(): AnthropicClient {
-    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    this.client ??= new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, maxRetries: this.maxRetries });
     return this.client;
   }
 
@@ -267,3 +267,68 @@ export function agentAdapterFor(provider: "openai" | "anthropic"): ProviderAgent
   if (fixtureRuntimeEnabled() && process.env[FIXTURE_AGENT_ENV]?.trim() === FIXTURE_AGENT_SCRIPTED) return new FixtureAgentAdapter(provider);
   return provider === "openai" ? new OpenAIAgentAdapter() : new AnthropicAgentAdapter();
 }
+
+// ─── [B21 E1] Normalized stop reasons (D21-21) and a role's adapter (OD-115, OD-117) ─────────────────────────────
+// Appended on purpose: a function declaration and an import are hoisted, so no line the B18..B21 pages cite in this file moves.
+
+/** OpenAI (the dated facts, and the installed SDK's `ResponseStatus`, `incomplete_details.reason` and `ResponseOutputRefusal`):
+ *  `completed` ends the turn as asked unless an output message carries a `refusal` part; `incomplete` for `max_output_tokens` is the
+ *  output limit, any other `incomplete` stays `incomplete`; `failed`, `cancelled`, `queued`, `in_progress` or no status is `unknown`.
+ *  Reads the list the guard already judged (never the response's own field again) and the response's status fields only. */
+function openAIStepStop(response: OpenAIResponse, items: OpenAIResponse["output"]): StepStop {
+  const status: unknown = (response as { status?: unknown }).status;
+  if (status === "completed") {
+    const refused = items.some((item) => item.type === "message" && Array.isArray((item as { content?: unknown }).content) && ((item as { content: unknown[] }).content).some((part) => typeof part === "object" && part !== null && (part as { type?: unknown }).type === "refusal"));
+    return refused ? "refusal" : "end_turn";
+  }
+  if (status === "incomplete") return (response as { incomplete_details?: { reason?: unknown } | null }).incomplete_details?.reason === "max_output_tokens" ? "max_tokens" : "incomplete";
+  return "unknown";
+}
+
+/** Anthropic `stop_reason`, the dated page's seven values (the installed SDK's type lists six; the value is matched, never the type):
+ *  `end_turn` and `tool_use` end the turn as asked; `max_tokens`, `refusal` (not retryable on another model), `pause_turn` and
+ *  `model_context_window_exceeded` map to their closed values; `stop_sequence` (Sirkit sets none), null and anything new are `unknown`. */
+function anthropicStepStop(stopReason: unknown): StepStop {
+  switch (stopReason) {
+    case "end_turn":
+    case "tool_use":
+      return "end_turn";
+    case "max_tokens":
+      return "max_tokens";
+    case "refusal":
+      return "refusal";
+    case "pause_turn":
+      return "pause_turn";
+    case "model_context_window_exceeded":
+      return "context_exceeded";
+    default:
+      return "unknown";
+  }
+}
+
+/** [B21 E1] A specialist's SDK retries (OD-115): none - every retry of a specialist call is the scheduler's own, counted against its
+ *  attempt ceiling, admitted by the llm-provider breaker and recorded. The coordinator's adapter keeps its 2 (OpenAI) and the SDK
+ *  default (Anthropic, 2), unchanged. */
+export const SPECIALIST_SDK_MAX_RETRIES = 0;
+
+/**
+ * [B21 E1] The adapter for ONE role's route (OD-117: its effective provider and model, resolved by the orchestration role policy).
+ * The coordinator's is `agentAdapterFor`'s, unchanged. A specialist's is constructed like it: the scripted fixture agent under the
+ * fixture runtime's explicit opt-in (never a model, never in production), otherwise the real adapter for that provider and model -
+ * its SDK client built lazily on the first call, exactly as agentAdapterFor's is - with `maxRetries: 0`. The model defaults to the
+ * provider's one configured model; the caller (the scheduler, through the route's provider layer) passes the route's.
+ */
+export function agentAdapterForRole(role: SpecialistRole, provider: "openai" | "anthropic", model?: string): ProviderAgentAdapter {
+  if (role === "coordinator") return agentAdapterFor(provider);
+  if (fixtureRuntimeEnabled() && process.env[FIXTURE_AGENT_ENV]?.trim() === FIXTURE_AGENT_SCRIPTED) return agentAdapterFor(provider);
+  if (provider === "openai") {
+    const chosen = model ?? configuredOpenAIModel();
+    return new OpenAIAgentAdapter(undefined, chosen, configuredOpenAIReasoningEffort(chosen), SPECIALIST_SDK_MAX_RETRIES);
+  }
+  return new AnthropicAgentAdapter(undefined, model ?? configuredAnthropicModel(), SPECIALIST_SDK_MAX_RETRIES);
+}
+
+// [B21 E1] on their own lines at the end (an import is hoisted): the stop vocabulary, the role type and the Anthropic default model
+import type { StepStop } from "./contracts";
+import type { SpecialistRole } from "./orchestration/contracts";
+import { configuredAnthropicModel } from "../llm/anthropic-config";

@@ -32,6 +32,8 @@ describe("[B20 A0] the admission key", () => {
     expect(admissionKeyString({ kind: "acquisition-source", id: "digikey" })).toBe("acquisition-source:digikey");
     expect(admissionKeyString({ kind: "mcp-server", serverId: "docs-example" })).toBe("mcp-server:docs-example");
     expect(admissionKeyString({ kind: "mcp-server", serverId: "docs-example", tool: "search" })).toBe("mcp-server:docs-example/tool:search");
+    // [B21 E1] a reviewed extension of the kind union (OD-115): an LLM provider, with an optional model window - the three kinds above unchanged
+    expect(admissionKeyString({ kind: "llm-provider", provider: "openai", model: "gpt-5.6-sol" })).toBe("llm-provider:openai/model:gpt-5.6-sol");
   });
 
   it("the fixture rows are valid registry rows", () => {

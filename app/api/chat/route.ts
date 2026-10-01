@@ -1,6 +1,6 @@
 /**
  * B09 — the agent chat route: a versioned NDJSON streaming event protocol
- * over the provider-neutral single-agent tool loop.
+ * over the provider-neutral single-agent tool loop [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): with SIRKIT_ORCHESTRATION_ENABLED off - the default - every message runs this one loop exactly as before; with it on (exactly "1") a message the task-complexity router plans as a DAG runs this loop's coordinator turn, then at most four zero-authority specialists one at a time (reads, and at most one inert sealed proposal per specialist run - one per attempt, at most 2 attempts per task, SPECIALIST_CAPS; a failed attempt's seal, which no merge judged, withholds the presentation), then at most ONE follow-up coordinator turn, all in this one stream under one run id, and a Tier 3 ask is refused with no provider call - ./orchestration-runtime.ts, artifacts/ai-control-plane-b21/].
  *
  * Every line is one JSON event `{ v: 1, runId, seq, ...AgentRunEvent }`.
  * The route assembles the run context server-side (LOCAL_ONLY actor —
@@ -19,7 +19,7 @@ import { randomUUID } from "node:crypto";
 import { agentAdapterFor } from "@/app/lib/agent/adapters";
 import { assembleAgentRunContext, parseSelectionRef } from "@/app/lib/agent/context";
 import { agentStreamRoute } from "@/app/lib/auth/route-handlers";
-import { DEFAULT_AGENT_BUDGET, type AgentRunEvent } from "@/app/lib/agent/contracts";
+import { DEFAULT_AGENT_BUDGET, type AgentRunEvent, type AgentRunResult } from "@/app/lib/agent/contracts";
 import { createAgentToolGateway } from "@/app/lib/agent/gateway";
 import { runAgentLoop } from "@/app/lib/agent/loop";
 import { sirkitToolRegistry } from "@/app/lib/engineering/tool-catalog";
@@ -32,6 +32,7 @@ import { resolveComponentAuthoritySource } from "./component-authority-runtime";
 import { DEFAULT_PIN_FACTS_DEADLINE_MS, loadRunReplacementPinFacts, resolveReplacementPinFactsSource } from "./replacement-facts-runtime";
 import { resolveExternalAcquisitionPort } from "./external-acquisition-runtime"; // [B19-E E6] the one approved acquisition boundary
 import { resolveMcpObservationPort } from "./mcp-observation-runtime"; // [B20 A4] the one approved MCP client boundary
+import { chatResumeBodyKeyAdmitted, emitRefusedRun, pausedFirstTurn, planChatRun, productionSpecialistProviders, resolveChatResume, resumeChatRun, routerFactsOf, runOrchestratedChat } from "./orchestration-runtime"; // [B21 B] the one orchestration seam (flag-gated; off, every message is single); [B21 E1] + its provider layer; [B21 E3] + the route-level resume; [B21 E4] + the first turn behind the breaker
 import type { ReplacementPinFactsRole } from "@/app/lib/engineering/replacement-pin-facts";
 import { pcbBoardInstanceId, PCB_BOARD_ASSEMBLY_VARIANT_ID, PCB_BOARD_HIERARCHY_PATH } from "@/app/lib/pcb/board-identity";
 import { engineeringDigest } from "@/app/lib/engineering/stable";
@@ -136,7 +137,7 @@ export const POST = agentStreamRoute(
   // authority/actor/role/capability/approval/idempotency claim refuse
   // EXPLICITLY (bounded key echo only; never the body).
   for (const key of Object.keys(parsedBody)) {
-    if (!ALLOWED_BODY_KEYS.has(key)) {
+    if (!ALLOWED_BODY_KEYS.has(key) && !chatResumeBodyKeyAdmitted(key)) { // [B21 E3] + `resumeRunId`, flag on only: a flag-off request is refused exactly as before
       const detail = key === "boardState"
         ? "the top-level boardState contract is obsolete — supply the versioned atomic editorContext instead"
         : `unexpected request key "${key.slice(0, 40)}" (authority, actor, role, capability, approval, durable-board, release, and idempotency claims are refused)`;
@@ -362,8 +363,8 @@ export const POST = agentStreamRoute(
       }
     }
   }
-
-  const runId = `run-${randomUUID()}`;
+  const resume = await resolveChatResume({ body: parsedBody, context: runContext, userMessage, provider, signal }); if (resume.kind === "refused") return Response.json({ ok: false, error: resume.error, code: resume.code }, { status: resume.status }); // [B21 E3] OD-122, D21-4 at the route: the resume authorized by its record's owner (this principal, this project), message, provider and plan - a closed refusal before any provider call
+  const runId = resume.kind === "resume" ? resume.runId : `run-${randomUUID()}`; // [B21 E3] a resume reuses its run id
   const registry = sirkitToolRegistry();
   // [B18-B] the execution-grant MINTER — the only place a grant is created —
   // is built HERE from the trusted request context (verified principal, role,
@@ -420,6 +421,9 @@ export const POST = agentStreamRoute(
       return { ok: true, executor: createFreeroutingPassExecutor({ runtimeInfo, deadline: Date.now() + timeoutMs, signal: controller.signal }) };
     },
   });
+  // [B21 B] deterministic policy BEFORE any model judgment (OD-110): the router runs only under SIRKIT_ORCHESTRATION_ENABLED=1;
+  // off, every message is `single` and nothing below changes. A refused plan never invokes the adapter.
+  const plan = planChatRun(userMessage, routerFactsOf(runContext));
   const adapter = agentAdapterFor(provider);
   // [B11] every run produces ONE bounded, redacted, provider-neutral trace.
   // Identity is frozen at construction; the recorder observes normalized
@@ -495,9 +499,14 @@ export const POST = agentStreamRoute(
       try {
         // [B09.1] run_started is emitted FIRST (inside the loop, exactly
         // once); context warnings follow it via contextWarnings.
-        const result = await runAgentLoop(
-          { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal },
-          {
+        // [B21 B] a refused Tier 3 ask answers with NO provider call; a dag plan runs this same coordinator turn, then the
+        // specialists and one follow-up turn (one stream, one terminal); a single plan is exactly the call below.
+        let result: AgentRunResult; const paused = plan.kind === "refused" ? null : pausedFirstTurn({ runId, provider, resume, emit, trace: traceRecorder }); // [B21 E4] D21-39: a coordinator provider paused by the llm-provider meters gets NO call on either path - run_started and ONE run_failed `provider_breaker_open` (no Retry); a resumed first turn is replayed, never gated; not paused, nothing changes
+        if (plan.kind === "refused") {
+          result = emitRefusedRun({ runId, provider, reason: plan.reason, emit, trace: traceRecorder });
+        } else if (paused) { result = paused; } else { // [B21 E4] the first turn below runs only when the gate above stood nothing down
+          const request = { runId, provider, history: priorHistory, userMessage, budget: DEFAULT_AGENT_BUDGET, signal: abort.signal }; resumeChatRun(request, resume); // [B21 E3] the grant for THIS request: a resumed run's first turn is replayed, never re-run
+          const deps = {
             adapter,
             gateway,
             registry,
@@ -507,8 +516,9 @@ export const POST = agentStreamRoute(
             contextWarnings: [...assembly.warnings, ...autonomyWarnings],
             trace: traceRecorder,
             ...(executionGrants ? { executionGrants } : {}),
-          },
-        );
+          };
+          result = plan.kind === "dag" ? await runOrchestratedChat({ request, deps, plan, startedAt: Date.now(), providers: productionSpecialistProviders() }) : await runAgentLoop(request, deps); // [B21 E1] the provider layer (OD-115, OD-117)
+        }
         // [B11] finalize + validate the trace. A trace/sink failure is
         // classified inside the recorder and can NEVER emit a second
         // terminal event or change the run's outcome. Normal completion,

@@ -129,6 +129,7 @@ jobs:
           app/api/schematic/__tests__/b19-cross-verify-egress.test.ts
           app/lib/acquisition
           app/lib/mcp
+          app/lib/agent/orchestration/__tests__
           app/lib/engineering/__tests__/b20-b1-mcp-exposure.test.ts
           app/api/mcp/__tests__
           app/lib/auth/__tests__/b20-b2-mcp-access-token.test.ts
@@ -141,6 +142,15 @@ jobs:
           app/lib/agent/__tests__/b20-a4-trace-attribution.test.ts
           app/lib/engineering/__tests__/b20-a4-observation-descriptor.test.ts
           app/api/chat/__tests__/b20-a4-chat-mcp-runtime.test.ts
+          app/api/chat/__tests__/b21-b-chat-router.test.ts
+          app/api/chat/__tests__/b21-d-chat-merge.test.ts
+          app/api/chat/__tests__/b21-d2-chat-proposals.test.ts
+          app/api/chat/__tests__/b21-d3-chat-replacement.test.ts
+          app/api/chat/__tests__/b21-e1-chat-provider.test.ts
+          app/api/chat/__tests__/b21-e2-chat-events.test.ts
+          app/api/chat/__tests__/b21-e3-chat-resume.test.ts
+          app/api/chat/__tests__/b21-e4-chat-first-turn.test.ts
+          app/lib/project/__tests__/b21-e4-composer-routing.test.ts
           app/lib/distributors/__tests__/b19-connector-policy.test.ts
           app/lib/distributors/__tests__/b19-source-admission.test.ts
           app/lib/distributors/__tests__/b19-quota-breaker-coalescing.test.ts
@@ -318,6 +328,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
+      # [B21 F2] D21-43: the orchestration spec on its own config and flag-on server, AFTER the step above - one next dev at a time
+      - name: Orchestration browser proof (B21 F2)
+        run: pnpm exec playwright test -c playwright.orchestration.config.ts
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -326,5 +339,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            playwright-report-orchestration
+            test-results-orchestration
           if-no-files-found: ignore
           retention-days: 14

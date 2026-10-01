@@ -100,6 +100,12 @@ source after parsing cannot reach the snapshot.
 
 ## Versioning decision — NO bump
 
+> [B21 F, 2026-09-28] Superseded for the capsule by B21-F (B11.4's decision stands for B11.4, which changed handling
+> only): the capsule is now `sirkit.agent-replay-capsule.v4` - its own field set grew (optional per-task step lists
+> of a task graph, each task at its plan's index with one list per role, and a scripted stall only in a task's step
+> list); a capsule with no tasks replays exactly as v3 did and a v3 document is refused explicitly; the context stays
+> `sirkit.agent-replay-context.v2`. See `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2.
+
 `sirkit.agent-replay-capsule.v3` and `sirkit.agent-replay-context.v2` are
 **unchanged**, deliberately.
 

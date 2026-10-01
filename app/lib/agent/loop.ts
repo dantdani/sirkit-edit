@@ -74,7 +74,7 @@ export interface AgentLoopDeps {
    *  (read from the durable record, never from the browser directly) and to
    *  retire this run's still-issued explicit grants when the run ends without
    *  them. Minting itself happens in the gateway. */
-  executionGrants?: AgentExecutionGrantMinter;
+  executionGrants?: AgentExecutionGrantMinter; /** [B21 C] a specialist role's allowlist (A4L): buildRunToolset narrows to it after every gate; absent on every coordinator run (today's set) */ allowedToolIds?: readonly string[];
 }
 
 /**
@@ -143,7 +143,7 @@ function describeGrant(grant: PublicExecutionGrant, decision: ExecutionDecisionM
 const LAYOUT_PROPOSAL_TOOL_IDS = new Set(["sirkit.placement.propose", "sirkit.routing.propose"]);
 
 /** Build the exact provider-exposed declaration subset for this run. */
-export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void): {
+export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext, warn: (message: string) => void, allowedToolIds?: readonly string[]): {
   declarations: ProviderToolDeclaration[];
   resolve(providerName: string): { toolId: string; version: string } | null;
 } {
@@ -263,7 +263,7 @@ export function buildRunToolset(registry: ToolRegistry, context: AgentRunContext
       if (!strict.ok) warn(`Tool ${descriptor.toolId} excluded: schema is not wire-strict compatible.`);
       return strict.ok;
     });
-  return buildAgentToolDeclarations(descriptors);
+  return buildAgentToolDeclarations(allowedToolIds === undefined ? descriptors : narrowToRunAllowlist(descriptors, allowedToolIds, warn)); // [B21 C] AFTER every gate above: it only narrows (OD-121)
 }
 
 export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps): Promise<AgentRunResult> {
@@ -347,7 +347,7 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
 
     let toolset: ReturnType<typeof buildRunToolset>;
     try {
-      toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }));
+      toolset = buildRunToolset(deps.registry, deps.context, (message) => emitOnce({ type: "warning", runId: request.runId, message }), deps.allowedToolIds);
     } catch (error) {
       return fail("toolset_invalid", error instanceof Error ? error.message.slice(0, 300) : "Tool rendering failed.");
     }
@@ -782,3 +782,42 @@ export async function runAgentLoop(request: AgentRunRequest, deps: AgentLoopDeps
     }
   }
 }
+
+/** [B21 C] The largest role allowlist a run accepts: the A4L bound (the orchestration contracts bound a request's list the same). */
+export const RUN_ALLOWLIST_MAX_IDS = 32;
+
+/**
+ * [B21 C] The A4L judgement of a run allowlist (OD-121): the ids it approves, or null when it approves NOTHING. Sound is an array
+ * of at most RUN_ALLOWLIST_MAX_IDS ids, strictly ascending (sorted, duplicate-free), every id in the exposure list and matching no
+ * never-exposed pattern; anything else - or a list that throws while it is read - is null, never a truncated or partly read list.
+ * An empty list is sound and approves nothing. `exposed` is the reviewed exposure list; it is a parameter only so the suite can
+ * reach the pattern clause, which no id of the reviewed list reaches today (defense in depth, b21-c-least-privilege case 7).
+ */
+export function approvedRunAllowlist(allowedToolIds: unknown, exposed: readonly string[] = INTENTIONAL_AGENT_EXPOSED_TOOL_IDS): ReadonlySet<string> | null {
+  try {
+    if (!Array.isArray(allowedToolIds) || allowedToolIds.length > RUN_ALLOWLIST_MAX_IDS) return null;
+    const ids: unknown[] = Array.from(allowedToolIds as unknown[]);
+    const sound = ids.length <= RUN_ALLOWLIST_MAX_IDS && ids.every((id, index) => typeof id === "string" && exposed.includes(id) && !NEVER_EXPOSED_TOOL_PATTERNS.some((pattern) => pattern.test(id)) && (index === 0 || (ids[index - 1] as string) < id));
+    return sound ? new Set(ids as string[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * [B21 C] A specialist role's allowlist, applied by `buildRunToolset` AFTER every gate above: it only NARROWS the set those gates
+ * admitted and can never bring back a tool one of them withheld. A list `approvedRunAllowlist` refuses approves NOTHING: an empty
+ * toolset and one warning naming `allowlist_invalid`.
+ */
+function narrowToRunAllowlist<T extends { toolId: string }>(descriptors: T[], allowedToolIds: unknown, warn: (message: string) => void): T[] {
+  const approved = approvedRunAllowlist(allowedToolIds);
+  if (approved === null) {
+    warn(`The run's tool allowlist is invalid (allowlist_invalid): it must hold at most ${RUN_ALLOWLIST_MAX_IDS} reviewed, exposed tool ids, sorted and duplicate-free; it approves nothing, so no tool is offered to this run.`);
+    return [];
+  }
+  return descriptors.filter((descriptor) => approved.has(descriptor.toolId));
+}
+
+// [B21 C] the allowlist's ids, on their own line at the END (an import is hoisted): the B20 pages cite this file by line, and a
+// line-anchored import gate (the B19-D chat-closure walker) sees an import only where a line starts with it
+import { INTENTIONAL_AGENT_EXPOSED_TOOL_IDS, NEVER_EXPOSED_TOOL_PATTERNS } from "../engineering/agent-exposure";

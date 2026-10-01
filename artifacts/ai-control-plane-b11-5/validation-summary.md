@@ -86,6 +86,8 @@ generator runs: `e01 eng1-0cbbe78e7b980149`, `e02 eng1-1f1ff2fab230d7c9`,
 
 ## Versioning — capsule v3 / context v2 remain correct
 
+> [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): true for B11.5's own stage; the capsule is `sirkit.agent-replay-capsule.v4` since B21-F, a v3 document refused explicitly, and the context stays `sirkit.agent-replay-context.v2` - `artifacts/ai-control-plane-b21/evaluation-matrix.md` section 2]
+
 **No bump.** This is a handling correction, and it does not narrow the accepted
 document set:
 

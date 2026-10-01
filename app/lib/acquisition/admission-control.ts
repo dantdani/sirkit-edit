@@ -16,7 +16,7 @@
  * window, so the agent can never starve a person of a source's quota.
  *
  * [B20 A0] GENERALISED KEY: the meters are keyed by an `AdmissionKey` — a distributor source (exactly as before), an MCP
- * server, or one tool of an MCP server (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
+ * server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider with an optional model - the llm-provider kind below, OD-115] (`app/lib/mcp/server-registry.ts` is the policy: `limits.requestsPerMinute`,
  * `limits.perTool[tool].requestsPerMinute`, `limits.breaker`). An MCP call (`requestMcpAdmission`) is admitted only when
  * the server's window AND, where the row names the tool, the tool's window both admit it; a refusal by either reserves
  * nothing in the other. The breaker is per server — a tool never has one, and an open server breaker refuses every tool.
@@ -44,14 +44,14 @@ export type RequestOutcome = "success" | "failure" | "rate_limited" | "neutral";
  */
 export type McpRequestOutcome = RequestOutcome | "inconclusive";
 
-/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server. */
+/** [B20 A0] What a meter is for: a distributor source, an MCP server, or one tool of an MCP server [superseded 2026-09-29 by the B21 closeout (D21-27, OD-113): or, since B21-E1, an LLM provider, OD-115]. */
 export type AdmissionKey =
   | { kind: "acquisition-source"; id: AcquisitionSourceId }
-  | { kind: "mcp-server"; serverId: string; tool?: string };
+  | { kind: "mcp-server"; serverId: string; tool?: string } | { kind: "llm-provider"; provider: "openai" | "anthropic"; model?: string }; // [B21 E1] + an LLM provider with an optional model (OD-115): a reviewed extension of the union
 
 /** [B20 A0] The map key of one meter; tool names are registry-validated (`[A-Za-z0-9_.-]`), so the separators are unambiguous. */
 export function admissionKeyString(key: AdmissionKey): string {
-  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`;
+  if (key.kind === "acquisition-source") return `acquisition-source:${key.id}`; if (key.kind === "llm-provider") return key.model === undefined ? `llm-provider:${key.provider}` : `llm-provider:${key.provider}/model:${key.model}`; // [B21 E1] model ids are policy-validated `[a-z0-9._-]`
   return key.tool === undefined ? `mcp-server:${key.serverId}` : `mcp-server:${key.serverId}/tool:${key.tool}`;
 }
 
@@ -302,7 +302,7 @@ export function currentMcpPause(server: McpServerRegistryEntry, tool: string | u
 
 /** Test hook: forget every meter and breaker. */
 export function resetAdmissionControl(): void {
-  states.clear();
+  states.clear(); resetLlmProviderGenerations(); // [B21 E1] and why each LLM provider breaker opened, and its generation (every earlier ticket stale)
 }
 
 /** One in-flight map per client: a second identical lookup joins the first instead of calling the vendor again. */
@@ -315,4 +315,156 @@ export function makeCoalescer<T>(): (key: string, run: () => Promise<T>) => Prom
     inflight.set(key, started);
     return started;
   };
+}
+
+// ─── [B21 E1] The llm-provider meters and breaker (OD-115, D21-18) ────────────────────────────────────────────────────────
+// Appended on purpose: a function declaration is hoisted and the maps below are read only once a request runs, so no line the B19-B20
+// pages cite in this file moves.
+//
+// The same machinery as a distributor source or an MCP server, keyed `llm-provider:<provider>` (the breaker and a minute window) with
+// an optional `.../model:<model>` minute window, and the agent held to its purpose share (OD-40) on both windows. The windows are
+// PROCESS-WIDE: every user's and every concurrent request's specialist calls share the agent's 60 a minute (a window pause refuses
+// only the call it meets; the scheduler escalates only that task). What differs is the breaker's opening: a provider OUT OF CREDITS
+// (`insufficient_quota`) opens it AT ONCE for a long window - until the window passes or an operator resets it
+// (`resetLlmProviderBreaker`; the meters live in this process, so a restart resets them too) - a rate limit opens it at once for its
+// short window (the `rate_limited` handling), and three consecutive transient failures (overloaded, timeout, network) open it for
+// that same window; after the window ONE trial call goes (half-open). [B21 E1 fix] Every admitted call carries a TICKET - the
+// breaker generation it was admitted under (every opening and every operator reset starts a new one) and whether it is the trial -
+// and its outcome is recorded with it: a call admitted before the latest opening says nothing about the provider since (a late
+// success can never close a breaker another call opened), only the trial's own outcome settles the trial, and an ABANDONED trial (its
+// run's signal aborted first: the client left, its deadline passed) learnt nothing and is not counted - the breaker stays half-open
+// and the next call is the trial, one at a time (never the long window re-armed by a call nobody finished). The window sizes are
+// Sirkit's own spend guard, not a provider's documented quota (none is recorded in the dated notes). The orchestration scheduler
+// meters every specialist call here and consults the pause before each specialist attempt; the runtime consults it before the
+// follow-up coordinator turn and meters that turn's calls; the coordinator's own first turn is not metered in B21-E1.
+
+export const LLM_PROVIDER_ADMISSION = Object.freeze({
+  /** each window's size (the provider's and the model's): the agent may use its share (OD-40: 25%, i.e. 60) of it, process-wide */
+  requestsPerMinute: 240,
+  /** consecutive transient failures (overloaded, timeout, network) that open the breaker */
+  consecutiveFailuresToOpen: 3,
+  /** how long a rate limit, or those failures, keep it open */
+  rateLimitOpenMs: 60_000,
+  /** how long a provider out of credits keeps it open, unless an operator resets it first */
+  quotaOpenMs: 3_600_000,
+});
+export type LlmProviderKey = Extract<AdmissionKey, { kind: "llm-provider" }>;
+/** How an admitted LLM call ended: its answer, a transient failure, a rate limit, no credits, or nothing learnt (it was abandoned). */
+export type LlmProviderOutcome = "success" | "failure" | "rate_limited" | "insufficient_quota" | "inconclusive";
+/** Why an LLM provider's breaker last opened (named in its pause sentence). */
+export type LlmProviderOpenCause = "insufficient_quota" | "rate_limit" | "failures";
+/** [B21 E1 fix] An admitted call's ticket: the breaker generation it was admitted under, and whether it is the half-open trial. */
+export interface LlmProviderTicket { readonly generation: number; readonly trial: boolean }
+/** [B21 E1 fix] An LLM call's admission: allowed with its ticket (recorded with its outcome), or refused with the pause. */
+export type LlmProviderAdmission = { allowed: true; ticket: LlmProviderTicket } | ({ allowed: false } & AdmissionPause);
+const llmProviderOpenCauses = new Map<string, LlmProviderOpenCause>();
+/** each provider breaker's current generation; a value is drawn from one counter that never goes back, so no two ever collide */
+const llmProviderGenerations = new Map<string, number>();
+const llmProviderGenerationCounter = { last: 0, floor: 0 };
+const generationOf = (meterKey: string): number => llmProviderGenerations.get(meterKey) ?? llmProviderGenerationCounter.floor;
+const nextGeneration = (meterKey: string): void => { llmProviderGenerationCounter.last += 1; llmProviderGenerations.set(meterKey, llmProviderGenerationCounter.last); };
+/** The test hook's part (`resetAdmissionControl`): every breaker forgets why it opened, and every ticket issued before is stale. */
+function resetLlmProviderGenerations(): void {
+  llmProviderOpenCauses.clear();
+  llmProviderGenerations.clear(); llmProviderResetGenerations.clear();
+  llmProviderGenerationCounter.last += 1;
+  llmProviderGenerationCounter.floor = llmProviderGenerationCounter.last;
+}
+
+function llmProviderMeter(provider: LlmProviderKey["provider"]): Meter {
+  const subject = `LLM provider "${provider}"`;
+  return {
+    key: admissionKeyString({ kind: "llm-provider", provider }),
+    policy: { subject, shareSubject: subject, limits: [{ window: "minute", max: LLM_PROVIDER_ADMISSION.requestsPerMinute, unit: "request" }], breaker: { consecutiveFailuresToOpen: LLM_PROVIDER_ADMISSION.consecutiveFailuresToOpen, openMs: LLM_PROVIDER_ADMISSION.rateLimitOpenMs } },
+  };
+}
+/** The model's own window (no breaker: the provider's covers it), or null when the key names no model. */
+function llmModelMeter(key: LlmProviderKey): Meter | null {
+  if (key.model === undefined) return null;
+  const subject = `LLM provider "${key.provider}" model "${key.model}"`;
+  return { key: admissionKeyString(key), policy: { subject, shareSubject: subject, limits: [{ window: "minute", max: LLM_PROVIDER_ADMISSION.requestsPerMinute, unit: "request" }], breaker: null } };
+}
+/** A breaker pause re-worded with its cause (the shared sentence says "after repeated failures", untrue for a quota or a rate limit). */
+function llmPause(key: LlmProviderKey, pause: AdmissionPause): AdmissionPause {
+  if (pause.reason !== "breaker_open") return pause;
+  const cause = llmProviderOpenCauses.get(admissionKeyString({ kind: "llm-provider", provider: key.provider })) ?? "failures";
+  const until = `${new Date(pause.retryAtMs).toISOString()}${cause === "insufficient_quota" ? " or until an operator resets it" : ""}`;
+  return { ...pause, message: `LLM provider "${key.provider}" is paused (${cause}) until ${until}; no call is made to it before then (OD-115).` };
+}
+
+/** Ask to send ONE call to an LLM provider (and its model's window). An allowed call MUST be followed by `recordLlmProviderOutcome`
+ *  with its ticket. */
+export function requestLlmProviderAdmission(key: LlmProviderKey, now: number = Date.now(), purpose: AdmissionPurpose = "agent"): LlmProviderAdmission {
+  const meter = llmProviderMeter(key.provider);
+  const state = stateOf(meter.key);
+  const trial = state.openUntil !== 0 && state.openUntil <= now; // admitted now, this call IS the one half-open trial (`admit` marks it)
+  const admission = admit(meter, llmModelMeter(key), 1, now, purpose);
+  return admission.allowed ? { allowed: true, ticket: Object.freeze({ generation: generationOf(meter.key), trial }) } : { allowed: false, ...llmPause(key, admission) };
+}
+
+/** Why an LLM provider (or its model's window) is paused right now, per purpose, without reserving anything (half-open admits a trial). */
+export function currentLlmProviderPause(key: LlmProviderKey, now: number = Date.now(), purpose: AdmissionPurpose = "agent"): AdmissionPause | null {
+  const pause = preview(llmProviderMeter(key.provider), llmModelMeter(key), 1, now, purpose, { halfOpenAdmits: true });
+  return pause === null ? null : llmPause(key, pause);
+}
+
+/** Record how an admitted LLM call ended, with the ticket it was admitted under; the breaker is the provider's, whichever model was
+ *  called. A ticket of an earlier generation is ignored: that call was admitted before the breaker's latest opening (or an operator's
+ *  reset), so its outcome never closes, re-opens or counts; only the trial's own outcome settles the trial. */
+export function recordLlmProviderOutcome(key: LlmProviderKey, ticket: LlmProviderTicket, outcome: LlmProviderOutcome, now: number = Date.now()): void {
+  const meterKey = admissionKeyString({ kind: "llm-provider", provider: key.provider });
+  if (ticket.generation !== generationOf(meterKey)) { recordStaleNoCredits(meterKey, ticket, outcome, now); return; } // [B21 E1 lead] a stale no-credits answer still holds (below)
+  const state = stateOf(meterKey);
+  if (ticket.trial) state.trialInFlight = false;
+  const open = (cause: LlmProviderOpenCause, ms: number): void => {
+    state.consecutiveFailures = Math.max(state.consecutiveFailures, LLM_PROVIDER_ADMISSION.consecutiveFailuresToOpen);
+    state.openUntil = now + ms;
+    state.trialInFlight = false;
+    llmProviderOpenCauses.set(meterKey, cause);
+    nextGeneration(meterKey);
+  };
+  if (outcome === "success") {
+    // this generation's call: the breaker is closed, or this is the trial - either way it closes
+    state.consecutiveFailures = 0;
+    state.openUntil = 0;
+    llmProviderOpenCauses.delete(meterKey);
+    return;
+  }
+  if (outcome === "insufficient_quota") return open("insufficient_quota", LLM_PROVIDER_ADMISSION.quotaOpenMs);
+  if (outcome === "rate_limited") return open("rate_limit", LLM_PROVIDER_ADMISSION.rateLimitOpenMs);
+  // nothing was learnt (an abandoned call): not counted - an abandoned trial leaves the breaker half-open, the next call the trial
+  if (outcome === "inconclusive") return;
+  state.consecutiveFailures += 1;
+  if (ticket.trial || state.consecutiveFailures >= LLM_PROVIDER_ADMISSION.consecutiveFailuresToOpen) open("failures", LLM_PROVIDER_ADMISSION.rateLimitOpenMs);
+}
+
+/** The operator's reset: the provider's breaker closes now and every ticket issued before is stale (no route exposes it; a server
+ *  restart does the same). */
+export function resetLlmProviderBreaker(provider: LlmProviderKey["provider"]): void {
+  const meterKey = admissionKeyString({ kind: "llm-provider", provider });
+  const state = stateOf(meterKey);
+  state.consecutiveFailures = 0;
+  state.openUntil = 0;
+  state.trialInFlight = false;
+  llmProviderOpenCauses.delete(meterKey);
+  nextGeneration(meterKey); llmProviderResetGenerations.set(meterKey, generationOf(meterKey)); // [B21 E1 lead] an answer admitted before the reset never undoes it
+}
+
+/** [B21 E1 lead] The generation each provider breaker was last reset in by an operator (`resetLlmProviderBreaker`). */
+const llmProviderResetGenerations = new Map<string, number>();
+/** [B21 E1 lead] A no-credits answer is a fact about the ACCOUNT, not about the breaker generation its call was admitted in (the check's
+ *  residual: a rate-limit opening followed by an `insufficient_quota` from a call admitted before it paused a provider that is out of
+ *  credits for the rate-limit minute, and the half-open trial then made another paid-path call). From a call admitted under an earlier
+ *  opening it still opens the breaker for the long window, it never shortens a longer opening, and it never undoes an operator reset
+ *  that came after the call's admission. */
+function recordStaleNoCredits(meterKey: string, ticket: LlmProviderTicket, outcome: LlmProviderOutcome, now: number): void {
+  if (outcome !== "insufficient_quota" || ticket.generation < (llmProviderResetGenerations.get(meterKey) ?? llmProviderGenerationCounter.floor)) return;
+  const state = stateOf(meterKey);
+  const until = now + LLM_PROVIDER_ADMISSION.quotaOpenMs;
+  if (llmProviderOpenCauses.get(meterKey) === "insufficient_quota" && state.openUntil >= until) return;
+  state.consecutiveFailures = Math.max(state.consecutiveFailures, LLM_PROVIDER_ADMISSION.consecutiveFailuresToOpen);
+  state.openUntil = Math.max(state.openUntil, until);
+  state.trialInFlight = false;
+  llmProviderOpenCauses.set(meterKey, "insufficient_quota");
+  nextGeneration(meterKey);
 }
